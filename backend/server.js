@@ -90,6 +90,53 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// ── Origin / Referer validation (CSRF mitigation) ─────────────────────────
+// For state-mutating methods (POST/PUT/PATCH/DELETE) we check that the
+// Origin (or Referer) header matches our allowed-origins list.  This stops
+// cross-site form submissions and CSRF attacks without requiring a token.
+//
+// Exemptions (no Origin header expected or safe to allow):
+//   - GET / HEAD / OPTIONS — no state changes
+//   - /auth/oauth/callback  — Microsoft OAuth redirect (browser navigation, no Origin)
+//   - /api/auth/verify-email — email link redirect (no Origin)
+//   - Same-origin requests (no Origin header set by the browser)
+//
+// In production this check is strict.  In development we warn and continue
+// so the app can be tested from file:// or non-listed dev tooling.
+app.use((req, res, next) => {
+  const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+  if (!UNSAFE_METHODS.has(req.method)) return next();
+
+  // OAuth callback and email verification link arrive without an Origin header
+  const ORIGIN_EXEMPT = ['/auth/oauth/callback', '/api/auth/verify-email'];
+  if (ORIGIN_EXEMPT.some(p => req.path.startsWith(p))) return next();
+
+  const origin  = req.get('origin');
+  const referer = req.get('referer');
+
+  // No Origin header → same-origin browser request or non-browser client (server-to-server)
+  if (!origin) return next();
+
+  // Normalise the Referer to its origin for comparison
+  let refOrigin = null;
+  if (referer) {
+    try { refOrigin = new URL(referer).origin; } catch (_) {}
+  }
+
+  const candidate = origin || refOrigin;
+  // Allow 'null' (file:// page in development) only in non-production
+  if (candidate === 'null' && process.env.NODE_ENV !== 'production') return next();
+
+  if (!allowedOrigins.includes(candidate)) {
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd) {
+      return res.status(403).json({ error: 'Request origin not permitted' });
+    }
+    console.warn(`⚠️  CSRF check: origin '${candidate}' not in ALLOWED_ORIGINS (dev-mode passthrough)`);
+  }
+  next();
+});
+
 // ── Startup security guards ────────────────────────────────────────────────
 // Refuse to start in production with insecure defaults.
 // In development (NODE_ENV !== 'production') we warn but keep going so

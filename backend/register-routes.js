@@ -31,10 +31,12 @@ const SALT_ROUNDS = 12;
 // ALLOWED_DOMAINS: comma-separated, e.g. "opaltherapy.com.au"
 // ALLOWED_EMAILS:  comma-separated exact addresses, e.g. "ant.manixavier@gmail.com"
 
-const ALLOWED_DOMAINS = (process.env.ALLOWED_DOMAINS || 'opaltherapy.com.au')
+// Defaults are empty strings — production MUST set these env vars explicitly.
+// No personal email is ever hardcoded here; configure via ALLOWED_EMAILS in .env.
+const ALLOWED_DOMAINS = (process.env.ALLOWED_DOMAINS || '')
   .split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
 
-const ALLOWED_EMAILS  = (process.env.ALLOWED_EMAILS  || 'ant.manixavier@gmail.com')
+const ALLOWED_EMAILS  = (process.env.ALLOWED_EMAILS  || '')
   .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
 /**
