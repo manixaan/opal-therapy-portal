@@ -5905,8 +5905,8 @@ const PLACES_CACHE = new Map(); // key → { fetchedAt, places:[{ name, type, su
 const ROUTE_INFLIGHT = new Map(); // dedupe concurrent fetches per key
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min — route conditions change throughout the day
 
-// Set at runtime by the caller / settings panel. When empty the stub paths run.
-let GOOGLE_MAPS_API_KEY = 'AIzaSyB-s5CVYxyBLOxsw7gyo425m5eNL0TOyOA';
+// API key removed — this is an archived file. The live app uses /api/maps/* proxies.
+let GOOGLE_MAPS_API_KEY = '';
 
 /* Canonicalise any address-like input so "Willetton", "Willetton WA",
    and "100 Burrendah Blvd, Willetton WA 6155" collapse into a stable

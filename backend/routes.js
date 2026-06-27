@@ -1247,7 +1247,7 @@ router.get('/api/splose/appointments', requireAuth, async (req, res) => {
  * Use this to see exactly what fields Splose sends without any app mapping.
  * Dev/diagnostic only — requires auth.
  */
-router.get('/api/splose/debug/raw-appointment/:id', requireAuth, async (req, res) => {
+router.get('/api/splose/debug/raw-appointment/:id', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const c = sploseApi._client ? sploseApi._client() : null;
     if (!c) {
@@ -1271,7 +1271,7 @@ router.get('/api/splose/debug/raw-appointment/:id', requireAuth, async (req, res
  * Returns the completely unmodified Splose API response for one patient.
  * This is the primary diagnostic for seeing which address fields Splose actually sends.
  */
-router.get('/api/splose/debug/raw-patient/:id', requireAuth, async (req, res) => {
+router.get('/api/splose/debug/raw-patient/:id', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const axios = require('axios');
     const response = await axios.get(
@@ -1304,7 +1304,7 @@ router.get('/api/splose/debug/raw-patient/:id', requireAuth, async (req, res) =>
  * Returns a full location diagnostic table for every appointment in the date range.
  * Shows exactly why each appointment is or isn't routable.
  */
-router.get('/api/splose/debug/location-report', requireAuth, async (req, res) => {
+router.get('/api/splose/debug/location-report', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     if (!startDate || !endDate) return res.status(400).json({ error: 'startDate and endDate required' });

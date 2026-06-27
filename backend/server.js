@@ -24,6 +24,7 @@ process.env.TZ = 'UTC';
 
 require('dotenv').config(); // Load environment variables from .env file
 const express = require('express'); // Web server framework
+const helmet  = require('helmet');  // Security headers (HSTS, X-Frame, X-Content-Type, etc.)
 const session = require('express-session'); // User login sessions
 const cors = require('cors'); // Allow frontend to talk to backend
 const PgSessionStore = require('./session-store'); // Persistent session store
@@ -61,6 +62,18 @@ const io = socketIO(server, {
 // ===== MIDDLEWARE SETUP =====
 // Middleware = instructions that run on every request
 // Think of it as a checklist the server goes through
+
+// Security headers — applied before every route.
+// CSP is disabled here because the main frontend (mockup_v3.html) uses inline
+// scripts and a dynamically-loaded Maps SDK; enabling the default strict CSP
+// would break it. All other Helmet protections are active:
+//   X-Frame-Options: SAMEORIGIN (clickjacking protection)
+//   X-Content-Type-Options: nosniff
+//   Strict-Transport-Security (HSTS) in production
+//   Referrer-Policy: no-referrer
+//   X-DNS-Prefetch-Control: off
+// TODO: tighten CSP once the frontend is refactored to remove inline scripts.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // CORS — locked to localhost only. Update ALLOWED_ORIGINS in .env before cloud deployment.
 // allowedOrigins is defined above (shared with Socket.IO CORS).
@@ -115,8 +128,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 })();
 
 // Session — 8-hour timeout, httpOnly cookie.
+// Saved to a variable so it can be shared with Socket.IO middleware below.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
-app.use(session({
+const sessionMiddleware = session({
   store: new PgSessionStore(dbPool, SESSION_TTL_MS),
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
@@ -128,7 +142,13 @@ app.use(session({
     sameSite: 'lax',
     maxAge: SESSION_TTL_MS,
   }
-}));
+});
+app.use(sessionMiddleware);
+
+// Share Express session with Socket.IO so we can read req.session.userId
+// from the handshake and assign each socket to a per-user room.
+// This prevents calendar update events from broadcasting to all connected clients.
+io.use((socket, next) => sessionMiddleware(socket.request, socket.request.res || {}, next));
 
 // ===== SERVE FRONTEND FILES =====
 // Serve the frontend from the backend to avoid CORS issues with file:// URLs
@@ -213,14 +233,22 @@ app.get('/health', (req, res) => {
 });
 
 // ===== WEBSOCKET CONNECTION =====
-// This handles real-time communication with the frontend
+// Each authenticated client joins a private room keyed to their user ID so that
+// calendar update events are only sent to the user whose data changed, plus any
+// owner/admin watching the master calendar.  Unauthenticated sockets receive the
+// initial handshake message but no private data events.
 
 io.on('connection', (socket) => {
-  console.log(`✓ Client connected: ${socket.id}`);
+  const userId = socket.request.session?.userId;
+  console.log(`✓ Client connected: ${socket.id}${userId ? ` (user ${userId})` : ' (unauthenticated)'}`);
+
+  // Join user-specific room — only this socket (and server) can emit to it.
+  if (userId) socket.join(`user:${userId}`);
 
   socket.emit('connected', {
     message: 'Connected to Therapy Scheduler Backend',
-    clientId: socket.id
+    clientId: socket.id,
+    authenticated: !!userId,
   });
 
   socket.on('disconnect', () => {
@@ -284,6 +312,10 @@ app.use('/', profileRoutes);
 // App-level routes: notifications, settings, search, user list
 const appRoutes = require('./app-routes');
 app.use('/', appRoutes);
+
+// Google Maps proxy — keeps the API key server-side, away from browser HTML
+const mapsRoutes = require('./maps-routes');
+app.use('/', mapsRoutes);
 
 console.log('✅ Routes registered');
 
@@ -372,7 +404,9 @@ async function runDeltaSyncForAllUsers() {
 
         if (upserted > 0 || cancelled > 0 || removed > 0) {
           console.log(`🔄 [Auto delta] ${user.email}: +${upserted} updated, ${cancelled} cancelled, -${removed} removed`);
-          io.emit('calendarUpdated', { email: user.email, upserted, cancelled, removed });
+          // Emit only to the user whose calendar changed (private room) —
+          // never broadcast to all connected clients.
+          io.to(`user:${user.id}`).emit('calendarUpdated', { upserted, cancelled, removed });
         } else {
           console.log(`✅ [Auto delta] ${user.email}: no changes`);
         }

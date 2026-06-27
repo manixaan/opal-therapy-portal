@@ -9267,12 +9267,12 @@ function qaUpdateRecurringSummary() {
    restriction covers it. */
 async function geocodeAddress(rawAddress) {
   if (!GOOGLE_MAPS_API_KEY) {
-    // No key configured — accept the address as-is so the mockup still works
-    // when the API hasn't been provisioned (e.g. fresh clone, demo machine).
+    // Maps not configured — accept address as-is so the app still works without a key.
     return { formattedAddress: rawAddress, lat: null, lng: null, fallback: true };
   }
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(rawAddress)}&key=${GOOGLE_MAPS_API_KEY}&region=au&components=country:AU|administrative_area:WA`;
-  const resp = await fetch(url);
+  const resp = await fetch(`/api/maps/geocode?address=${encodeURIComponent(rawAddress)}`, {
+    credentials: 'same-origin',
+  });
   const data = await resp.json();
   if (data.status !== 'OK' || !data.results || !data.results.length) {
     throw new Error(`Address could not be verified (${data.status || 'no result'}).`);
@@ -13154,8 +13154,10 @@ const PLACES_CACHE = new Map(); // key → { fetchedAt, places:[{ name, type, su
 const ROUTE_INFLIGHT = new Map(); // dedupe concurrent fetches per key
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min — route conditions change throughout the day
 
-// Set at runtime by the caller / settings panel. When empty the stub paths run.
-let GOOGLE_MAPS_API_KEY = 'AIzaSyB-s5CVYxyBLOxsw7gyo425m5eNL0TOyOA';
+// API key removed from frontend — Maps calls are proxied through /api/maps/*.
+// This variable is kept as a feature-flag: truthy = live API, falsy = fallback estimates.
+// The backend proxy injects the real key server-side.
+let GOOGLE_MAPS_API_KEY = true; // presence flag only — key is never in browser code
 
 /* Canonicalise any address-like input so "Willetton", "Willetton WA",
    and "100 Burrendah Blvd, Willetton WA 6155" collapse into a stable
@@ -13192,19 +13194,11 @@ async function fetchRoute(origin, destination, mode) {
     let result;
     if (GOOGLE_MAPS_API_KEY) {
       try {
-        const resp = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+        const resp = await fetch('/api/maps/routes', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-            'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
-          },
-          body: JSON.stringify({
-            origin: { address: origin },
-            destination: { address: destination },
-            travelMode: (mode || 'driving').toUpperCase() === 'WALKING' ? 'WALK' : 'DRIVE',
-            routingPreference: 'TRAFFIC_AWARE'
-          })
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ origin, destination, mode: mode || 'driving' })
         });
         const json = await resp.json();
         const r0 = json.routes && json.routes[0];
@@ -13308,14 +13302,12 @@ async function fetchPlacesNear(anchorSuburb, types) {
   let places;
   if (GOOGLE_MAPS_API_KEY) {
     try {
-      const resp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      const query = `${(types||['cafe']).join(' or ')} near ${anchorSuburb} WA`;
+      const resp = await fetch('/api/maps/places', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.primaryType,places.location,places.id'
-        },
-        body: JSON.stringify({ textQuery: `${(types||['cafe']).join(' or ')} near ${anchorSuburb} WA`, maxResultCount: 8 })
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ query, maxResultCount: 8 })
       });
       const json = await resp.json();
       places = (json.places || []).map(p => ({
@@ -18349,9 +18341,24 @@ window.showQuickAdd = function(...args) {
   }
 </style>
 
-<!-- Google Maps JS SDK — v=weekly loads latest stable (required for PlaceAutocompleteElement) -->
-<script async
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-s5CVYxyBLOxsw7gyo425m5eNL0TOyOA&v=weekly&libraries=places&callback=onGoogleMapsReady">
+<!-- Google Maps JS SDK — loaded dynamically so the API key stays server-side.
+     The backend /api/maps/sdk-url endpoint returns the URL with the key injected. -->
+<script>
+(function loadMapsSDK() {
+  fetch('/api/maps/sdk-url', { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(({ url }) => {
+      const s = document.createElement('script');
+      s.async = true;
+      s.src   = url;
+      document.head.appendChild(s);
+    })
+    .catch(err => {
+      // Maps unavailable (not configured or user not logged in yet) — app
+      // continues using the suburb-estimate fallback for travel times.
+      console.warn('Google Maps SDK not loaded:', err);
+    });
+})();
 </script>
 
 <!-- ══════════════════════════════════════════════════════════════════
