@@ -481,6 +481,34 @@ const INIT_QUERIES = `
   CREATE INDEX IF NOT EXISTS idx_credentials_user_id    ON credentials(user_id);
   CREATE INDEX IF NOT EXISTS idx_credentials_org_id     ON credentials(organisation_id);
   CREATE INDEX IF NOT EXISTS idx_credentials_expiry     ON credentials(expiry_date);
+
+  -- ── Role CHECK constraint migration ───────────────────────────────────────
+  -- Add 'read_only' to the user_invites.role constraint idempotently.
+  -- The original auto-named constraint is dropped and replaced with a versioned
+  -- one so re-running on an already-migrated database is a no-op.
+  DO $$
+  BEGIN
+    -- Drop old constraint (original auto-generated name)
+    IF EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+       WHERE table_name = 'user_invites'
+         AND constraint_type = 'CHECK'
+         AND constraint_name = 'user_invites_role_check'
+    ) THEN
+      ALTER TABLE user_invites DROP CONSTRAINT user_invites_role_check;
+    END IF;
+    -- Add updated constraint only if it doesn't already exist
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+       WHERE table_name = 'user_invites'
+         AND constraint_type = 'CHECK'
+         AND constraint_name = 'user_invites_role_check_v2'
+    ) THEN
+      ALTER TABLE user_invites
+        ADD CONSTRAINT user_invites_role_check_v2
+        CHECK (role IN ('owner', 'admin', 'therapist', 'read_only'));
+    END IF;
+  END $$;
 `;
 
 // ===== INITIALIZE DATABASE =====

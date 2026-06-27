@@ -1,9 +1,11 @@
 /**
  * PERMISSIONS & ROLE-BASED ACCESS CONTROL
  *
- * Defines the three user roles (owner / admin / therapist) and maps each to
- * the permissions it grants. Provides Express middleware helpers that can be
- * dropped into any route to enforce access rules on the backend.
+ * Roles (least → most privileged):
+ *   read_only  — view calendars and client summaries; no writes of any kind
+ *   therapist  — own calendar, own schedule, assigned clients, Outlook write
+ *   admin      — all calendars, all clients, operational management; no financials
+ *   owner      — full access including financials, billing, users, integrations
  *
  * IMPORTANT: Frontend role checks are UI-only conveniences.
  * These backend helpers are the authoritative enforcement layer.
@@ -16,6 +18,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ROLE_PERMISSIONS = {
+  // read_only: view-only access — cannot write to Outlook/Splose, cannot manage
+  // users, approve accounts, change settings, or edit any schedules.
+  read_only: [
+    'view_all_calendars',
+    'view_own_calendar',
+    'view_all_clients',
+    'view_assigned_clients',
+    'view_all_therapists',
+    'view_own_travel',
+    'view_all_travel',
+    'view_own_hours',
+    'view_all_hours',
+    'view_own_kilometres',
+    'view_all_kilometres',
+    'view_sync_status',
+  ],
+
   owner: [
     'view_all_calendars',
     'view_own_calendar',
@@ -69,7 +88,7 @@ const ROLE_PERMISSIONS = {
  * Return the permissions array for a given role.
  * Also merges any custom per-user permissions stored in the DB.
  *
- * @param {string}   role        - 'owner' | 'admin' | 'therapist'
+ * @param {string}   role        - 'owner' | 'admin' | 'therapist' | 'read_only'
  * @param {string[]} [extraPerms] - additional permissions from user.permissions column
  */
 function getPermissions(role, extraPerms = []) {

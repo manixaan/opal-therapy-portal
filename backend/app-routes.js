@@ -26,7 +26,7 @@
 
 const express = require('express');
 const router  = express.Router();
-const { requireAuth } = require('./permissions');
+const { requireAuth, requireRole } = require('./permissions');
 const { pool } = require('./database');
 
 // ─────────────────────────────────────────────────────────────
@@ -831,10 +831,7 @@ router.patch('/api/settings', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 //  SETTINGS — PATCH (organisation, owner only)
 // ─────────────────────────────────────────────────────────────
-router.patch('/api/settings/organisation', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') {
-    return res.status(403).json({ error: 'Only owners can change organisation settings' });
-  }
+router.patch('/api/settings/organisation', requireAuth, requireRole('owner'), async (req, res) => {
   const allowed = ['name','kilometreRate','featureFlags','syncSettings','dataRetention'];
   const payload = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
@@ -1107,10 +1104,7 @@ router.get('/api/search', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 //  USERS LIST (Owner only)
 // ─────────────────────────────────────────────────────────────
-router.get('/api/users', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') {
-    return res.status(403).json({ error: 'Access denied' });
-  }
+router.get('/api/users', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, email, role, display_name, profile_completed, created_at
@@ -1209,8 +1203,7 @@ const emailSvcAdmin = require('./email');
  * GET /api/admin/users
  * Returns all users with rich status info. Owner-only.
  */
-router.get('/api/admin/users', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.get('/api/admin/users', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT u.id, u.email, u.name, u.display_name, u.role, u.role_title,
@@ -1257,8 +1250,7 @@ router.get('/api/admin/users', requireAuth, async (req, res) => {
  * PATCH /api/admin/users/:id/approve
  * Approve a pending_approval account and make it active. Owner-only.
  */
-router.patch('/api/admin/users/:id/approve', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(
@@ -1295,11 +1287,10 @@ router.patch('/api/admin/users/:id/approve', requireAuth, async (req, res) => {
  * Change a user's role. Owner-only.
  * Body: { role: 'owner'|'admin'|'therapist' }
  */
-router.patch('/api/admin/users/:id/role', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.patch('/api/admin/users/:id/role', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   const { role } = req.body || {};
-  if (!['owner','admin','therapist'].includes(role)) {
+  if (!['owner','admin','therapist','read_only'].includes(role)) {
     return res.status(400).json({ error: 'role must be owner, admin, or therapist' });
   }
   if (id === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
@@ -1330,8 +1321,7 @@ router.patch('/api/admin/users/:id/role', requireAuth, async (req, res) => {
  * Suspend an active account. Owner-only.
  * Body: { reason?: string }
  */
-router.patch('/api/admin/users/:id/suspend', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.patch('/api/admin/users/:id/suspend', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   if (id === req.user.id) return res.status(400).json({ error: 'You cannot suspend your own account' });
   const { reason } = req.body || {};
@@ -1367,8 +1357,7 @@ router.patch('/api/admin/users/:id/suspend', requireAuth, async (req, res) => {
  * PATCH /api/admin/users/:id/activate
  * Re-activate a suspended or deactivated account. Owner-only.
  */
-router.patch('/api/admin/users/:id/activate', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.patch('/api/admin/users/:id/activate', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(
@@ -1399,8 +1388,7 @@ router.patch('/api/admin/users/:id/activate', requireAuth, async (req, res) => {
  * PATCH /api/admin/users/:id/deactivate
  * Permanently deactivate an account. Data is preserved. Owner-only.
  */
-router.patch('/api/admin/users/:id/deactivate', requireAuth, async (req, res) => {
-  if (req.user?.role !== 'owner') return res.status(403).json({ error: 'Owner access required' });
+router.patch('/api/admin/users/:id/deactivate', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   if (id === req.user.id) return res.status(400).json({ error: 'You cannot deactivate your own account' });
   try {
