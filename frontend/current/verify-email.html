@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify your email — Opal Therapy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #5b6af0;
+      --brand-dark:  #4452d8;
+      --ink:         #1a1a2e;
+      --ink-soft:    #6b7280;
+      --surface:     #ffffff;
+      --bg:          #f4f5fb;
+      --border:      #dde3ec;
+      --danger:      #dc2626;
+      --success:     #16a34a;
+      --radius:      12px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      color: var(--ink);
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+    }
+
+    .logo-mark {
+      width: 56px; height: 56px;
+      background: var(--brand);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .logo-mark svg { width: 28px; height: 28px; fill: white; }
+
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .sub {
+      font-size: 14px;
+      color: var(--ink-soft);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .sub strong { color: var(--ink); }
+
+    /* Success state */
+    .success-icon {
+      width: 56px; height: 56px;
+      background: #f0fdf4;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .success-icon svg { width: 28px; height: 28px; fill: #16a34a; }
+
+    /* Error / info */
+    .msg-box {
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: none;
+      text-align: left;
+    }
+    .msg-box.visible { display: block; }
+    .msg-box.error   { background: #fef2f2; border: 1px solid #fca5a5; color: var(--danger); }
+    .msg-box.info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+    .msg-box.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, opacity 0.15s;
+      text-decoration: none;
+    }
+    .btn-primary { background: var(--brand); color: #fff; width: 100%; }
+    .btn-primary:hover   { background: var(--brand-dark); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--brand);
+      border: 1.5px solid var(--border);
+      margin-top: 10px;
+      width: 100%;
+    }
+    .btn-ghost:hover { border-color: var(--brand); }
+    .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .btn.loading .spinner   { display: block; }
+    .btn.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .footer {
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-top: 24px;
+    }
+    .footer a { color: var(--brand); text-decoration: none; font-weight: 500; }
+    .footer a:hover { text-decoration: underline; }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .cooldown-text {
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-top: 8px;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <!-- ── View: Pending (email sent, waiting for click) ── -->
+  <div class="view active" id="view-pending">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>
+    </div>
+    <h1>Check your email</h1>
+    <p class="sub" id="pending-sub">
+      We've sent a verification link to <strong id="pending-email">your email address</strong>.<br>
+      Click the link in the email to activate your account.
+    </p>
+
+    <div class="msg-box" id="pending-msg"></div>
+
+    <button class="btn btn-ghost" id="resend-btn" onclick="resendVerification()">
+      <span class="btn-label">Resend verification email</span>
+      <span class="spinner"></span>
+    </button>
+    <p class="cooldown-text" id="cooldown-text"></p>
+
+    <p class="footer">
+      Wrong email? <a href="/register">Start over</a> &nbsp;·&nbsp;
+      Already verified? <a href="/login">Sign in</a>
+    </p>
+  </div>
+
+  <!-- ── View: Success (token verified) ── -->
+  <div class="view" id="view-success">
+    <div class="success-icon">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    </div>
+    <h1>Email verified!</h1>
+    <p class="sub">Your email address has been confirmed. Your account is now pending approval by the practice owner. You'll receive an email when you're approved.</p>
+    <a href="/pending-approval" class="btn btn-primary">Check approval status →</a>
+    <p class="footer" style="margin-top:16px;">
+      <a href="/login">Back to sign in</a>
+    </p>
+  </div>
+
+  <!-- ── View: Token error ── -->
+  <div class="view" id="view-error">
+    <div class="logo-mark" style="background:#fef2f2">
+      <svg viewBox="0 0 24 24" style="fill:#dc2626"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    </div>
+    <h1>Link expired</h1>
+    <p class="sub" id="error-sub">This verification link has expired or has already been used. Request a new one below.</p>
+    <div class="msg-box" id="error-msg"></div>
+    <button class="btn btn-primary" id="error-resend-btn" onclick="resendVerification()">
+      <span class="btn-label">Send new verification email</span>
+      <span class="spinner"></span>
+    </button>
+    <p class="cooldown-text" id="error-cooldown-text"></p>
+    <p class="footer" style="margin-top: 16px;">
+      <a href="/login">Back to sign in</a>
+    </p>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ── Routing ────────────────────────────────────────────────────────────────────
+const params   = new URLSearchParams(window.location.search);
+const token    = params.get('token');
+const state    = params.get('state'); // 'sent' | 'pending'
+const email    = sessionStorage.getItem('pending_verification_email') || '';
+
+// Populate email display
+if (email) document.getElementById('pending-email').textContent = email;
+
+// If we have a token, verify it immediately
+if (token) {
+  verifyToken(token);
+} else {
+  // Show pending view (arrived from register or login redirect)
+  showView('view-pending');
+  if (email) {
+    document.getElementById('pending-sub').innerHTML =
+      `We've sent a verification link to <strong>${escHtml(email)}</strong>.<br>Click the link in the email to activate your account.`;
+  }
+}
+
+async function verifyToken(tok) {
+  try {
+    const r    = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(tok)}`, { credentials: 'include' });
+    const data = await r.json().catch(() => ({}));
+
+    if (r.ok && data.ok) {
+      showView('view-success');
+    } else if (data.code === 'already_verified') {
+      // Already done — redirect to login
+      window.location.replace('/login?reason=verified');
+    } else {
+      showView('view-error');
+      const sub = document.getElementById('error-sub');
+      if (data.error) sub.textContent = data.error;
+    }
+  } catch (_) {
+    showView('view-error');
+  }
+}
+
+// ── Resend ─────────────────────────────────────────────────────────────────────
+let cooldownUntil = 0;
+let cooldownTimer = null;
+
+async function resendVerification() {
+  if (Date.now() < cooldownUntil) return;
+
+  const pendingBtn  = document.getElementById('resend-btn');
+  const errorBtn    = document.getElementById('error-resend-btn');
+  const activeBtn   = document.querySelector('.view.active #resend-btn') || errorBtn;
+  const msgBox      = document.getElementById('pending-msg') || document.getElementById('error-msg');
+
+  // Use whichever button is in the active view
+  const btn = document.querySelector('.view.active .btn');
+
+  [pendingBtn, errorBtn].forEach(b => { if (b) { b.classList.add('loading'); b.disabled = true; } });
+
+  try {
+    const r    = await fetch('/api/auth/resend-verification', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email }),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    // Always show generic success (enumeration-safe)
+    showMsg('pending-msg',    'info', 'If an account exists for that email, a new verification link has been sent.');
+    showMsg('error-msg',      'info', 'If an account exists for that email, a new verification link has been sent.');
+    showView('view-pending');
+
+    // Start cooldown
+    cooldownUntil = Date.now() + 2 * 60 * 1000; // 2 minutes
+    startCooldown();
+  } catch (_) {
+    showMsg('pending-msg', 'error', 'Could not send email. Please try again.');
+    showMsg('error-msg',   'error', 'Could not send email. Please try again.');
+  } finally {
+    [pendingBtn, errorBtn].forEach(b => { if (b) { b.classList.remove('loading'); b.disabled = false; } });
+  }
+}
+
+function startCooldown() {
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  cooldownTimer = setInterval(() => {
+    const remaining = Math.ceil((cooldownUntil - Date.now()) / 1000);
+    const text = remaining > 0
+      ? `You can resend again in ${remaining}s`
+      : '';
+    ['cooldown-text', 'error-cooldown-text'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    });
+    if (remaining <= 0) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+      // Re-enable resend buttons
+      ['resend-btn', 'error-resend-btn'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.disabled = false;
+      });
+    }
+  }, 1000);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showMsg(id, type, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `msg-box ${type} visible`;
+  el.textContent = msg;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>

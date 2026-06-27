@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Opal Therapy Scheduler — v1 Mockup</title>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --panel: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #4b5563;
+    --muted: #9ca3af;
+    --border: #e5e7eb;
+    --accent: #2d7a7a;
+    --accent-soft: #e5f2f2;
+    --nonworking: #f3f4f6;
+
+    /* Appointment colours (we choose — Splose doesn't assign colours to services) */
+    --c-initial: #2e7d32;
+    --c-therapy: #0ea5a4;
+    --c-assessment: #7c3aed;
+    --c-mdt: #ef8a17;
+
+    /* Support-activity colours (we choose — billable non-face-to-face) */
+    --c-report: #1d4ed8;
+    --c-casenote: #a78bfa; /* TBD pending workflow confirmation with Ann */
+
+    /* Busy-time colours — straight from Splose busy-time-types */
+    --c-travel: #00C887;   /* busy-time-type 55337 */
+    --c-cpd: #5578FF;      /* busy-time-type 55338 */
+    --c-admin: #F064E1;    /* busy-time-type 55339 */
+    --c-lunch: #8250FF;    /* busy-time-type 55340 */
+    --c-meeting: #121212;  /* busy-time-type 55341 */
+
+    /* Leave colours — also from Splose */
+    --c-personal: #216947;   /* 55333 */
+    --c-sick: #FFB852;       /* 55334 */
+    --c-annual: #D2EA79;     /* 55335 */
+    --c-holiday: #A03264;    /* 55336 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header .logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+  .prac-badge {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .prac-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .prac-badge .prac-meta { color: var(--ink-soft); font-size: 11px; }
+  .sync-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--ink-soft);
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34,197,94,0.2);
+  }
+  .top-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  select, button, input {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 11px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  button.primary:hover { opacity: 0.92; }
+  button.ghost {
+    background: transparent;
+    cursor: pointer;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    gap: 16px;
+    padding: 16px;
+    min-height: calc(100vh - 62px);
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .panel h3 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .panel h3 .count-badge {
+    font-size: 11px;
+    background: #f3f4f6;
+    color: var(--ink-soft);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Left panel */
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 8px;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .nav-item.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .nav-item:hover { background: #f3f4f6; }
+
+  .legend-section {
+    margin-bottom: 14px;
+  }
+  .legend-section:last-child { margin-bottom: 0; }
+  .legend-cat {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .legend-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0;
+    font-size: 13px;
+  }
+  .legend-left { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+  .dot.ring {
+    background: transparent !important;
+    border: 2px solid var(--ink-soft);
+  }
+  .legend-duration { font-size: 11px; color: var(--muted); }
+
+  /* Calendar */
+  .cal-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .cal-toolbar .spacer { flex: 1; }
+  .week-label { font-weight: 600; font-size: 15px; }
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .view-toggle button {
+    border: none; background: white; padding: 6px 12px; cursor: pointer;
+  }
+  .view-toggle button.active { background: var(--accent); color: white; }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: 56px repeat(5, 1fr);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: white;
+  }
+  .cal-head {
+    padding: 10px 8px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    background: #fafafa;
+  }
+  .cal-head .date-sub { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .cal-head.today { background: var(--accent-soft); color: var(--accent); }
+
+  /* Calendar shows 7am–6pm (11 hours), working hours 9–5 */
+  .cal-col {
+    position: relative;
+    border-left: 1px solid var(--border);
+    min-height: 770px; /* 11 hours × 70px */
+  }
+  .cal-col.first { border-left: none; }
+  .time-col {
+    position: relative;
+    min-height: 770px;
+    background: #fafafa;
+    border-bottom: 1px solid var(--border);
+  }
+  .time-label {
+    position: absolute;
+    right: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    transform: translateY(-50%);
+  }
+  .hour-line {
+    position: absolute;
+    left: 0; right: 0;
+    border-top: 1px dashed #eef0f4;
+  }
+  .nonworking-band {
+    position: absolute;
+    left: 0; right: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,0.025),
+      rgba(0,0,0,0.025) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+    background-color: var(--nonworking);
+    pointer-events: none;
+  }
+  .session {
+    position: absolute;
+    left: 4px; right: 4px;
+    border-radius: 7px;
+    padding: 6px 8px;
+    color: white;
+    font-size: 12px;
+    line-height: 1.25;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    overflow: hidden;
+    border-left: 3px solid rgba(0,0,0,0.18);
+  }
+  .session .s-title { font-weight: 600; display: block; }
+  .session .s-sub { opacity: 0.9; font-size: 11px; display: block; }
+
+  /* Secondary activities — same colour, softened so they recede visually. */
+  .session.secondary {
+    opacity: 0.58;
+    box-shadow: none;
+    border-left-color: rgba(0,0,0,0.12);
+  }
+  .session.secondary:hover { opacity: 0.85; }
+
+  /* Drag / resize affordances */
+  .session { user-select: none; }
+  .session.draggable { cursor: grab; }
+  .session.draggable:active { cursor: grabbing; }
+  .session.dragging {
+    opacity: 0.75;
+    z-index: 20;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  }
+  .resize-handle {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 6px;
+    cursor: ns-resize;
+    background: linear-gradient(to top, rgba(0,0,0,0.12), transparent);
+    border-bottom-left-radius: 7px;
+    border-bottom-right-radius: 7px;
+  }
+  .drop-preview {
+    position: absolute;
+    left: 4px; right: 4px;
+    border: 2px dashed var(--accent);
+    border-radius: 7px;
+    background: var(--accent-soft);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .session.billable-support::after {
+    content: "$";
+    position: absolute;
+    top: 4px; right: 6px;
+    font-size: 10px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-weight: 600;
+  }
+  /* Flags on session blocks */
+  .session .s-badge {
+    display: inline-block;
+    font-size: 9px; font-weight: 700;
+    background: rgba(255,255,255,0.28);
+    padding: 1px 5px; border-radius: 3px;
+    margin-right: 4px;
+    letter-spacing: 0.3px;
+  }
+  .session.mandatory { box-shadow: 0 0 0 2px rgba(255,255,255,0.35) inset, 0 1px 2px rgba(0,0,0,0.06); }
+  .session.flexible { border-left-style: dashed; border-left-width: 4px; }
+  /* Lunch-move banner in results */
+  .fs-lunch-banner {
+    background: #fff4e5;
+    border: 1px solid #ffca88;
+    color: #7a3e00;
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 11px; line-height: 1.45;
+    margin-bottom: 10px;
+  }
+  .fs-lunch-banner b { color: #5a2e00; }
+
+  /* Right panel */
+  .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  .stat-row:last-child { border: none; }
+  .stat-row .k { color: var(--ink-soft); }
+  .stat-row .v { font-weight: 600; }
+  .mini-progress {
+    height: 6px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .mini-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--c-therapy), var(--c-initial));
+  }
+
+  .suggestion-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    background: #fafafa; border: 1px solid var(--border);
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .suggestion-score {
+    background: var(--accent); color: white;
+    font-weight: 700; font-size: 11px;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .suggestion-meta { color: var(--ink-soft); font-size: 11px; }
+
+  .splose-status {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 12px;
+    font-size: 12px;
+  }
+  .splose-status .k { color: var(--ink-soft); }
+
+  /* "Find slots" scheduler form */
+  .find-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .find-field label { font-size: 11px; color: var(--ink-soft); font-weight: 500; }
+  .find-field select,
+  .find-field input[type="time"] {
+    width: 100%; padding: 6px 8px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: white; color: var(--ink);
+  }
+  .find-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .day-checks { display: flex; gap: 4px; flex-wrap: wrap; }
+  .day-checks label {
+    display: flex; align-items: center; gap: 3px; font-size: 11px;
+    font-weight: 500; color: var(--ink); cursor: pointer;
+    padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
+    background: white;
+  }
+  .day-checks input { margin: 0; }
+  .find-advanced { margin: 6px 0 10px 0; font-size: 11px; }
+  .find-advanced summary {
+    cursor: pointer; color: var(--accent);
+    padding: 4px 0; user-select: none; font-weight: 500;
+  }
+  .find-advanced summary:hover { text-decoration: underline; }
+  .find-advanced[open] { padding: 6px 0 0 0; }
+
+  .find-btn {
+    width: 100%; margin-top: 4px;
+    background: var(--accent); color: white; border: none;
+    border-radius: 6px; padding: 9px 14px; cursor: pointer;
+    font-weight: 600; font-size: 13px;
+  }
+  .find-btn:hover { filter: brightness(1.05); }
+  .mini-btn {
+    background: white; border: 1px solid var(--border);
+    border-radius: 5px; padding: 4px 9px; cursor: pointer;
+    font-size: 11px; color: var(--ink-soft); font-weight: 500;
+  }
+  .mini-btn:hover { background: #f9fafb; color: var(--ink); }
+
+  /* Ranked slot result card */
+  .slot-result {
+    padding: 10px 12px; border-radius: 8px;
+    background: #fafafa; border: 1px solid var(--border);
+    margin-bottom: 8px; font-size: 12px; position: relative;
+  }
+  .slot-result.top { border-color: var(--accent); background: var(--accent-soft); }
+  .slot-result-head {
+    display: flex; justify-content: space-between;
+    align-items: baseline; margin-bottom: 5px; gap: 8px;
+  }
+  .slot-result-when { font-weight: 600; color: var(--ink); font-size: 13px; }
+  .slot-result-score {
+    background: var(--accent); color: white; font-size: 11px;
+    font-weight: 700; padding: 2px 7px; border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .slot-result-reasons { color: var(--ink-soft); font-size: 11px; line-height: 1.55; }
+  .slot-result-reasons > div { display: flex; gap: 6px; align-items: flex-start; }
+  .slot-result-reason-delta {
+    font-weight: 700; min-width: 30px; flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .slot-result-reason-delta.pos { color: #1b5e20; }
+  .slot-result-reason-delta.neg { color: #b71c1c; }
+  .fs-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(17,24,39,0.45);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 14px;
+    padding: 22px;
+    width: 500px;
+    max-width: 92vw;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  }
+  .modal h2 { margin: 0 0 6px 0; font-size: 18px; }
+  .modal p.sub { margin: 0 0 16px 0; color: var(--ink-soft); }
+  .modal .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .field label { font-size: 12px; color: var(--ink-soft); }
+  .field input, .field select { width: 100%; }
+  .capacity-bar-wrap {
+    background: #f3f4f6; height: 14px; border-radius: 7px; overflow: hidden; margin-top: 6px;
+  }
+  .capacity-bar {
+    background: linear-gradient(90deg, var(--c-therapy), var(--c-initial));
+    height: 100%; border-radius: 7px;
+    transition: width 0.4s ease;
+  }
+  .capacity-msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  .capacity-msg.ok { background: #e8f5e9; color: #1b5e20; }
+  .capacity-msg.warn { background: #fff4e5; color: #7a3e00; }
+  .capacity-msg.fail { background: #fdecea; color: #7a1f1f; }
+
+  .footer-tip {
+    text-align: center; padding: 12px; color: var(--muted); font-size: 12px;
+  }
+
+  /* -----------------------------------------------------------
+     Page switching — one page visible at a time.
+     When a non-calendar page is active the right panel collapses
+     so the page can use the full width.
+     ----------------------------------------------------------- */
+  .page { display: none; }
+  .page.active { display: block; }
+  body.wide .layout { grid-template-columns: 280px 1fr; }
+  body.wide .right-aside { display: none; }
+
+  /* Working-base strip — sits above the calendar, lets the therapist pick
+     what base each day starts from. Per-day cells make mixed weeks possible. */
+  .base-strip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .base-strip .bs-label {
+    font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: 11px;
+  }
+  .base-strip .bs-days { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+  .base-strip .bs-day {
+    display: flex; flex-direction: column; gap: 2px;
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 4px 8px; background: #fafafa;
+    min-width: 96px;
+  }
+  .base-strip .bs-day.remote { background: #fff4e5; border-color: #ffca88; }
+  .base-strip .bs-day .bs-day-label {
+    font-size: 10px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase;
+  }
+  .base-strip .bs-day select {
+    border: none; background: transparent; font-weight: 600;
+    font-size: 12px; padding: 0; color: var(--ink);
+  }
+  .base-strip .bs-whole {
+    background: white;
+  }
+  .base-strip .bs-note {
+    color: var(--muted); font-size: 11px; max-width: 220px; line-height: 1.4;
+  }
+
+  /* Month-view grid (activated by the Month toggle). Each day is a cell with dots. */
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .month-grid .mg-dow {
+    font-size: 11px; font-weight: 600; color: var(--ink-soft);
+    text-transform: uppercase; text-align: center; padding: 6px 4px;
+  }
+  .month-grid .mg-cell {
+    min-height: 90px;
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px; font-size: 11px;
+    background: #fafafa;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .month-grid .mg-cell.off { background: #f5f5f5; color: var(--muted); }
+  .month-grid .mg-cell.today { background: var(--accent-soft); border-color: var(--accent); }
+  .month-grid .mg-cell.weekend { background: #fafafa; color: var(--muted); }
+  .month-grid .mg-cell.current-week { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .month-grid .mg-date { font-weight: 700; font-size: 12px; }
+  .month-grid .mg-count { font-size: 10px; color: var(--ink-soft); }
+  .month-grid .mg-dots { display: flex; flex-wrap: wrap; gap: 2px; margin-top: auto; }
+  .month-grid .mg-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* -----------------------------------------------------------
+     Generic page styles (shared by Clients / NDIS / Util / Settings).
+     ----------------------------------------------------------- */
+  .page-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .page-header h2 {
+    margin: 0; font-size: 22px; font-weight: 600;
+  }
+  .page-header .page-sub {
+    color: var(--ink-soft); font-size: 13px; margin-top: 2px;
+  }
+  .page-header .page-actions { display: flex; gap: 8px; }
+
+  .data-table {
+    width: 100%; border-collapse: collapse; background: white;
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  .data-table thead th {
+    font-size: 11px; color: var(--ink-soft); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    text-align: left; padding: 10px 12px;
+    border-bottom: 1px solid var(--border); background: #fafafa;
+  }
+  .data-table tbody td {
+    padding: 10px 12px; font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:hover { background: #f9fbfa; }
+  .data-table tbody tr.clickable { cursor: pointer; }
+
+  .pill {
+    display: inline-block; padding: 2px 8px; font-size: 11px;
+    border-radius: 10px; font-weight: 500;
+  }
+  .pill.ok { background: #e8f5e9; color: #1b5e20; }
+  .pill.warn { background: #fff4e5; color: #7a3e00; }
+  .pill.alert { background: #fdecea; color: #7a1f1f; }
+  .pill.muted { background: #f3f4f6; color: var(--ink-soft); }
+  .pill.info { background: var(--accent-soft); color: var(--accent); }
+
+  .bar-inline {
+    display: inline-block; width: 100px; height: 8px;
+    background: #f3f4f6; border-radius: 4px; overflow: hidden;
+    vertical-align: middle; margin-right: 6px;
+  }
+  .bar-inline > span {
+    display: block; height: 100%;
+    background: linear-gradient(90deg, var(--c-therapy), var(--c-initial));
+  }
+  .bar-inline.warn > span { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+  .kpi-card {
+    background: white; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+  }
+  .kpi-card .k {
+    font-size: 11px; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+  }
+  .kpi-card .v {
+    font-size: 24px; font-weight: 700; margin-top: 4px;
+  }
+  .kpi-card .sub {
+    font-size: 11px; color: var(--muted); margin-top: 2px;
+  }
+
+  .settings-section {
+    background: white; border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; margin-bottom: 14px;
+  }
+  .settings-section h3 {
+    margin: 0 0 4px 0; font-size: 15px; font-weight: 600;
+    color: var(--ink); text-transform: none; letter-spacing: 0;
+  }
+  .settings-section .section-desc {
+    color: var(--ink-soft); font-size: 12px; margin: 0 0 14px 0;
+  }
+  .settings-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .settings-grid .field { margin-bottom: 0; }
+
+  .weight-row {
+    display: grid; grid-template-columns: 140px 1fr 40px;
+    align-items: center; gap: 12px; padding: 6px 0;
+    font-size: 13px;
+  }
+  .weight-row input[type="range"] { width: 100%; }
+  .weight-row .weight-val {
+    font-variant-numeric: tabular-nums; color: var(--ink-soft);
+    text-align: right;
+  }
+
+  /* Simple horizontal bar chart (used on Utilisation page) */
+  .hbar {
+    display: grid; grid-template-columns: 60px 1fr 90px;
+    align-items: center; gap: 10px; font-size: 12px;
+    padding: 4px 0;
+  }
+  .hbar .hbar-label { color: var(--ink-soft); font-weight: 500; }
+  .hbar .hbar-track { height: 14px; background: #f3f4f6; border-radius: 3px; overflow: hidden; }
+  .hbar .hbar-fill { height: 100%; background: var(--c-therapy); border-radius: 3px; }
+  .hbar .hbar-val { font-variant-numeric: tabular-nums; color: var(--ink-soft); text-align: right; }
+
+  .stacked-bar {
+    display: flex; height: 20px; border-radius: 4px; overflow: hidden;
+    background: #f3f4f6; font-size: 0;
+  }
+  .stacked-bar > span {
+    display: block; height: 100%;
+  }
+  .legend-strip {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    margin-top: 8px; font-size: 11px; color: var(--ink-soft);
+  }
+  .legend-strip .ls-item { display: flex; align-items: center; gap: 5px; }
+  .legend-strip .ls-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Day-view: show only one column at full width */
+  .cal-grid.day-view { grid-template-columns: 56px 1fr; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">OT</div>
+  <h1>Opal Therapy Scheduler</h1>
+
+  <!-- Single-practitioner badge (v1 scope: Ann only). Multi-practitioner UI deferred. -->
+  <div class="prac-badge" title="v1 is scoped to a single practitioner">
+    <div class="prac-avatar">AM</div>
+    <div>
+      <div>Ann Mary Mathew</div>
+      <div class="prac-meta">Willetton WA · Australia/Perth</div>
+    </div>
+  </div>
+
+  <!-- Splose sync status (read+write source of truth) -->
+  <div class="sync-indicator" title="Splose is the source of truth. We read from and write to it.">
+    <span class="sync-dot"></span> Synced with Splose · 2 min ago
+  </div>
+
+  <div class="top-actions">
+    <button class="primary" onclick="openModal()">+ New appointment</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL: NAV + LEGEND -->
+  <aside>
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Menu</h3>
+      <div class="nav-item active" data-page="pageCalendar">📅 Calendar</div>
+      <div class="nav-item" data-page="pageClients">👥 Clients</div>
+      <div class="nav-item" data-page="pageNDIS">📋 NDIS cases</div>
+      <div class="nav-item" data-page="pageUtil">📊 Utilisation report</div>
+      <div class="nav-item" data-page="pageSettings">⚙️ Settings</div>
+    </div>
+
+    <div class="panel" id="legendPanel">
+      <h3>Activity types</h3>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 10px 0;line-height:1.4;">
+        Durations are defaults from Splose — every block is editable.
+      </p>
+
+      <!-- Appointments: client-facing bookings from Splose /services (for=appointment) -->
+      <div class="legend-section">
+        <div class="legend-cat">Appointments</div>
+        <div class="legend-row" data-splose-service-id="125821">
+          <span class="legend-left"><span class="dot" style="background:var(--c-initial)"></span>Initial Assessment</span>
+          <span class="legend-duration">60 min</span>
+        </div>
+        <div class="legend-row" data-splose-service-id="125320">
+          <span class="legend-left"><span class="dot" style="background:var(--c-therapy)"></span>Therapy Session</span>
+          <span class="legend-duration">60 min</span>
+        </div>
+        <div class="legend-row" data-splose-service-id="131003">
+          <span class="legend-left"><span class="dot" style="background:var(--c-assessment)"></span>Assessment Session</span>
+          <span class="legend-duration">60 min</span>
+        </div>
+        <div class="legend-row" data-splose-service-id="166733">
+          <span class="legend-left"><span class="dot" style="background:var(--c-mdt)"></span>MDT Meeting</span>
+          <span class="legend-duration">60 min</span>
+        </div>
+      </div>
+
+      <!-- Busy-times: internal/non-client blocks from Splose /busy-time-types. Colours come from Splose. -->
+      <div class="legend-section">
+        <div class="legend-cat">Busy-time blocks</div>
+        <div class="legend-row" data-splose-busytime-type-id="55337">
+          <span class="legend-left"><span class="dot" style="background:var(--c-travel)"></span>Travel</span>
+          <span class="legend-duration">30 min</span>
+        </div>
+        <div class="legend-row" data-splose-busytime-type-id="55339">
+          <span class="legend-left"><span class="dot" style="background:var(--c-admin)"></span>Admin</span>
+          <span class="legend-duration">30 min</span>
+        </div>
+        <div class="legend-row" data-splose-busytime-type-id="55340">
+          <span class="legend-left"><span class="dot" style="background:var(--c-lunch)"></span>Lunch</span>
+          <span class="legend-duration">30 min</span>
+        </div>
+        <div class="legend-row" data-splose-busytime-type-id="55338">
+          <span class="legend-left"><span class="dot" style="background:var(--c-cpd)"></span>CPD</span>
+          <span class="legend-duration">30 min</span>
+        </div>
+        <div class="legend-row" data-splose-busytime-type-id="55341">
+          <span class="legend-left"><span class="dot" style="background:var(--c-meeting)"></span>Meeting</span>
+          <span class="legend-duration">30 min</span>
+        </div>
+      </div>
+
+      <!-- Support-activities: billable non-face-to-face work (Splose /services for=support activity) -->
+      <div class="legend-section">
+        <div class="legend-cat">Billable (non-face-to-face)</div>
+        <div class="legend-row">
+          <span class="legend-left"><span class="dot" style="background:var(--c-report)"></span>Report writing</span>
+          <span class="legend-duration">60 min</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-left"><span class="dot ring" style="border-color:var(--c-casenote)"></span>Case noting *</span>
+          <span class="legend-duration">TBD</span>
+        </div>
+        <p style="font-size:10px;color:var(--muted);margin:4px 0 0 0;line-height:1.4;">
+          * Case-noting workflow to be confirmed with Ann
+        </p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN: pages -->
+  <main>
+
+    <!-- ============================ CALENDAR PAGE ============================ -->
+    <section id="pageCalendar" class="page active">
+      <div class="cal-toolbar">
+        <button class="ghost" id="prevWeekBtn" title="Previous week">‹</button>
+        <div class="week-label" id="weekLabel">Week of Mon 20 Apr 2026</div>
+        <button class="ghost" id="nextWeekBtn" title="Next week">›</button>
+        <span class="spacer"></span>
+        <div class="view-toggle" id="viewToggle">
+          <button data-view="day">Day</button>
+          <button data-view="week" class="active">Week</button>
+          <button data-view="month">Month</button>
+        </div>
+      </div>
+
+      <!-- Working-base strip: where Ann is based each day this week. Drives travel baseline. -->
+      <div class="base-strip" id="baseStrip"></div>
+
+      <div class="cal-grid" id="calGrid">
+        <!-- Header -->
+        <div class="cal-head"></div>
+        <div class="cal-head today" data-head="colMon">Mon<span class="date-sub">20 Apr</span></div>
+        <div class="cal-head" data-head="colTue">Tue<span class="date-sub">21 Apr</span></div>
+        <div class="cal-head" data-head="colWed">Wed<span class="date-sub">22 Apr</span></div>
+        <div class="cal-head" data-head="colThu">Thu<span class="date-sub">23 Apr</span></div>
+        <div class="cal-head" data-head="colFri">Fri<span class="date-sub">24 Apr</span></div>
+
+        <!-- Time column -->
+        <div class="time-col" id="timeCol"></div>
+
+        <!-- Day columns (Mon–Fri, matches Ann's availability pattern) -->
+        <div class="cal-col first" id="colMon" data-day-col="colMon"></div>
+        <div class="cal-col" id="colTue" data-day-col="colTue"></div>
+        <div class="cal-col" id="colWed" data-day-col="colWed"></div>
+        <div class="cal-col" id="colThu" data-day-col="colThu"></div>
+        <div class="cal-col" id="colFri" data-day-col="colFri"></div>
+      </div>
+
+      <!-- Month view — populated by renderMonthView() when user toggles Month. -->
+      <div class="month-grid" id="monthGrid" style="display:none;"></div>
+
+      <div class="footer-tip">
+        Shaded bands = outside working hours (Mon–Fri 9:00–17:00 from Splose availability).
+        Click any block to view or edit · drag body to move · drag bottom edge to resize.
+      </div>
+    </section>
+
+    <!-- ============================ CLIENTS PAGE ============================ -->
+    <section id="pageClients" class="page">
+      <div class="page-header">
+        <div>
+          <h2>Clients</h2>
+          <div class="page-sub">Active caseload from Splose — tap a row to open the client file.</div>
+        </div>
+        <div class="page-actions">
+          <button class="ghost">Export CSV</button>
+          <button class="primary">+ New client</button>
+        </div>
+      </div>
+      <div class="card-grid">
+        <div class="kpi-card"><div class="k">Active clients</div><div class="v" id="kpiClientsActive">—</div><div class="sub">seen in last 90 days</div></div>
+        <div class="kpi-card"><div class="k">NDIS-funded</div><div class="v" id="kpiClientsNdis">—</div><div class="sub">of active caseload</div></div>
+        <div class="kpi-card"><div class="k">Due for review</div><div class="v" id="kpiClientsDue">—</div><div class="sub">case review ≥ 6 months old</div></div>
+        <div class="kpi-card"><div class="k">No session this week</div><div class="v" id="kpiClientsIdle">—</div><div class="sub">regular clients not booked</div></div>
+      </div>
+      <div id="clientsTableWrap"></div>
+    </section>
+
+    <!-- ============================ NDIS CASES PAGE ============================ -->
+    <section id="pageNDIS" class="page">
+      <div class="page-header">
+        <div>
+          <h2>NDIS cases</h2>
+          <div class="page-sub">Funding buckets by client. Flags expiring plans and near-exhausted hours.</div>
+        </div>
+        <div class="page-actions">
+          <button class="ghost">Export for billing</button>
+        </div>
+      </div>
+      <div class="card-grid">
+        <div class="kpi-card"><div class="k">Open cases</div><div class="v" id="kpiNdisOpen">—</div><div class="sub">plans in use</div></div>
+        <div class="kpi-card"><div class="k">Hours remaining</div><div class="v" id="kpiNdisHoursLeft">—</div><div class="sub">total across all clients</div></div>
+        <div class="kpi-card"><div class="k">Expiring in 30 days</div><div class="v" id="kpiNdisExpiring">—</div><div class="sub">review or renewal needed</div></div>
+        <div class="kpi-card"><div class="k">Low-balance warn</div><div class="v" id="kpiNdisLow">—</div><div class="sub">&lt; 3 hours remaining</div></div>
+      </div>
+      <div id="ndisTableWrap"></div>
+    </section>
+
+    <!-- ============================ UTILISATION PAGE ============================ -->
+    <section id="pageUtil" class="page">
+      <div class="page-header">
+        <div>
+          <h2>Utilisation report</h2>
+          <div class="page-sub">Week of Mon 20 Apr 2026 — how Ann's billable time broke down.</div>
+        </div>
+        <div class="page-actions">
+          <select id="utilRange">
+            <option>This week</option>
+            <option>Last week</option>
+            <option>Last 4 weeks</option>
+            <option>This quarter</option>
+          </select>
+          <button class="ghost">Export PDF</button>
+        </div>
+      </div>
+      <div id="utilContent"></div>
+    </section>
+
+    <!-- ============================ SETTINGS PAGE ============================ -->
+    <section id="pageSettings" class="page">
+      <div class="page-header">
+        <div>
+          <h2>Settings</h2>
+          <div class="page-sub">Preferences that drive how the scheduler behaves. Splose remains the source of truth for calendar data.</div>
+        </div>
+      </div>
+      <div id="settingsContent"></div>
+    </section>
+
+  </main>
+
+  <!-- RIGHT PANEL: STATS + SPLOSE + SUGGESTIONS -->
+  <aside>
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>This week at a glance</h3>
+      <div class="stat-row">
+        <span class="k">Client sessions</span>
+        <span class="v" id="statAppts">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="k">Billable hours</span>
+        <span class="v" id="statBillable">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="k">Travel time</span>
+        <span class="v" id="statTravel">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="k">Admin / lunch</span>
+        <span class="v" id="statAdmin">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="k">Utilisation*</span>
+        <span class="v" id="statUtil">—</span>
+      </div>
+      <div class="mini-progress"><div class="mini-progress-bar" id="utilBar" style="width:0"></div></div>
+      <p style="font-size:10px;color:var(--muted);margin:6px 0 0 0;line-height:1.4;">
+        * Utilisation = face-to-face time / working time. All busy-types have isUtilisationIncluded=false.
+      </p>
+    </div>
+
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Splose sync</h3>
+      <div class="splose-status">
+        <span class="k">Status</span>  <span>● Connected</span>
+        <span class="k">Last poll</span> <span>2 min ago</span>
+        <span class="k">Cadence</span>   <span>every 90s</span>
+        <span class="k">Location</span>  <span>Opal Therapy (9456)</span>
+        <span class="k">Home base</span>    <span id="sploseHomeBase">Willetton (clinic)</span>
+        <span class="k">This week</span>    <span id="sploseWeekBase">—</span>
+        <span class="k">Practitioner</span> <span>Ann Mathew (19521)</span>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin:10px 0 0 0;line-height:1.4;">
+        Travel legs are computed from the working base for that day. Case notes (★ REQ) are mandatory per session — batched where sensible. Lunch (⇄ FLEX) can move if the calendar is tight.
+      </p>
+    </div>
+
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Find slots for a client</h3>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 10px 0;line-height:1.4;">
+        Ranks Ann's free slots by drivability and day balance. Paste the top choices into an email.
+      </p>
+
+      <div class="find-field">
+        <label>Client suburb</label>
+        <select id="fsSuburb"></select>
+      </div>
+      <div class="find-row">
+        <div class="find-field">
+          <label>Session type</label>
+          <select id="fsService">
+            <option value="125821">Initial Assessment</option>
+            <option value="125320" selected>Therapy Session</option>
+            <option value="131003">Assessment Session</option>
+            <option value="166733">MDT Meeting</option>
+          </select>
+        </div>
+        <div class="find-field">
+          <label>Duration</label>
+          <select id="fsDuration">
+            <option value="30">30 min</option>
+            <option value="45">45 min</option>
+            <option value="60" selected>60 min</option>
+            <option value="90">90 min</option>
+            <option value="120">120 min</option>
+          </select>
+        </div>
+      </div>
+
+      <details class="find-advanced">
+        <summary>Client availability filter (optional)</summary>
+        <div class="find-field" style="margin-top:8px;">
+          <label>Days the client can attend</label>
+          <div class="day-checks" id="fsDays">
+            <label><input type="checkbox" value="colMon" checked>Mon</label>
+            <label><input type="checkbox" value="colTue" checked>Tue</label>
+            <label><input type="checkbox" value="colWed" checked>Wed</label>
+            <label><input type="checkbox" value="colThu" checked>Thu</label>
+            <label><input type="checkbox" value="colFri" checked>Fri</label>
+          </div>
+        </div>
+        <div class="find-row">
+          <div class="find-field">
+            <label>Earliest</label>
+            <input type="time" id="fsEarliest" value="09:00">
+          </div>
+          <div class="find-field">
+            <label>Latest</label>
+            <input type="time" id="fsLatest" value="17:00">
+          </div>
+        </div>
+      </details>
+
+      <button class="find-btn" id="fsFindBtn">Find slots</button>
+    </div>
+
+    <div class="panel" id="fsResultsPanel" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;">Top slots</h3>
+        <button class="mini-btn" id="fsCopyBtn">Copy as email</button>
+      </div>
+      <div id="fsResults"></div>
+      <p style="font-size:10px;color:var(--muted);margin:10px 0 0 0;line-height:1.4;">
+        Aggressive clustering. Top card wins on drivability + day balance; others ranked behind.
+      </p>
+    </div>
+  </aside>
+</div>
+
+<!-- NEW APPOINTMENT MODAL — capacity check + smart suggestion -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2>New appointment — capacity check</h2>
+    <p class="sub">Confirm funding and pick the best slot before writing to Splose.</p>
+
+    <div class="field">
+      <label>Patient (from Splose)</label>
+      <select id="mPatient">
+        <option>Select a patient…</option>
+        <option>Ava M. (case: NDIS 2024-Therapy, 14 hrs left)</option>
+        <option>Liam W. (case: NDIS 2025-OT, 2 hrs left ⚠)</option>
+        <option>Noah K. (case: NDIS 2024-Assessment, expiring 12 May)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Patient area (for clustering)</label>
+        <select id="mRegion">
+          <option>Local — Canning Vale / Willetton / Leeming</option>
+          <option>East — Thornlie / Gosnells / Maddington</option>
+          <option>West — Fremantle / Cockburn</option>
+          <option>North — Perth CBD / Subiaco</option>
+          <option>South — Cockburn / Coogee</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Recurrence</label>
+        <select id="mOccurrence">
+          <option>One-off</option>
+          <option selected>Weekly</option>
+          <option>Fortnightly</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Service (Splose)</label>
+        <select id="mService">
+          <option value="125821">Initial Assessment — $193.99</option>
+          <option value="125320" selected>Therapy Session — $193.99</option>
+          <option value="131003">Assessment Session — $193.99</option>
+          <option value="166733">MDT Meeting — $193.99</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Funded capacity remaining</label>
+        <input type="text" value="14 hrs (of 40)" readonly>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink-soft);">
+        <span>Weekly utilisation</span>
+        <span id="capPct">58% → 63%</span>
+      </div>
+      <div class="capacity-bar-wrap"><div class="capacity-bar" style="width:63%"></div></div>
+    </div>
+
+    <div class="capacity-msg ok" id="capMsg">
+      ✓ Room available. Recommended slot: <b>Wed 11:00 am</b> — groups with 2 other Canning Vale clients
+      (minimal travel), leaves Tuesday free for admin/reports.
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="ghost" onclick="closeModal()">Cancel</button>
+      <button class="primary" onclick="closeModal()">Write to Splose</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -------------------------------------------------------------
+   Data model — mirrors Splose API shape so the rendering code
+   is a short step from the real integration.
+   ------------------------------------------------------------- */
+
+// From /services (for=appointment)
+const SERVICES = {
+  125320: { name: "Therapy Session",            colour: "var(--c-therapy)",    duration: 60 },
+  125821: { name: "Initial Assessment",         colour: "var(--c-initial)",    duration: 60 },
+  131003: { name: "Assessment Session",         colour: "var(--c-assessment)", duration: 60 },
+  166733: { name: "MDT Meeting",                colour: "var(--c-mdt)",        duration: 60 },
+};
+
+// From /busy-time-types (colours come from Splose directly)
+const BUSY_TYPES = {
+  55333: { title: "Personal appointment", colour: "var(--c-personal)", duration: 450 },
+  55334: { title: "Sick leave",           colour: "var(--c-sick)",     duration: 450 },
+  55335: { title: "Annual leave",         colour: "var(--c-annual)",   duration: 450 },
+  55336: { title: "Public holiday",       colour: "var(--c-holiday)",  duration: 450 },
+  55337: { title: "Travel",               colour: "var(--c-travel)",   duration: 30  },
+  55338: { title: "CPD",                  colour: "var(--c-cpd)",      duration: 30  },
+  55339: { title: "Admin",                colour: "var(--c-admin)",    duration: 30  },
+  55340: { title: "Lunch",                colour: "var(--c-lunch)",    duration: 30  },
+  55341: { title: "Meeting",              colour: "var(--c-meeting)",  duration: 30  },
+};
+
+// Support-activities (billable non-face-to-face) — use separate colour registry
+const SUPPORT_KINDS = {
+  report:   { title: "Report writing", colour: "var(--c-report)",   duration: 60 },
+  casenote: { title: "Case noting",    colour: "var(--c-casenote)", duration: 20 }, // TBD
+};
+
+// Home base — Opal Therapy's clinic at Willetton. This is the default for any day
+// where the therapist hasn't set a different working base (e.g. travelling up to Broome
+// for a week of regional outreach).
+//
+// In the real app this is sourced from /locations for the practitioner's primary location,
+// with the per-day override stored on our side (Splose doesn't have a "base-of-day" concept).
+const HOME_BASE = 'Willetton';
+
+// Per-day working base for the current week. Each day resolves independently so mixed
+// weeks work (e.g. "Mon–Tue in Broome, Wed–Fri back home"). Every travel leg computed
+// by the scheduler uses baseForDay() as the implicit start/end point of the day.
+const WEEK_BASE = {
+  colMon: 'Willetton',
+  colTue: 'Willetton',
+  colWed: 'Willetton',
+  colThu: 'Willetton',
+  colFri: 'Willetton',
+};
+
+function baseForDay(dayId) { return WEEK_BASE[dayId] || HOME_BASE; }
+
+// Bases the therapist can select — home clinic + the remote outreach hubs they travel to.
+// Listed in the Settings page and the calendar's top strip. Each option must appear in
+// SUBURB_COORDS below so travel distances from/to the base are computable.
+const BASE_OPTIONS = [
+  { id: 'Willetton',     label: 'Willetton (home clinic)', kind: 'home'   },
+  { id: 'Broome',        label: 'Broome (Kimberley)',      kind: 'remote' },
+  { id: 'South Hedland', label: 'South Hedland (Pilbara)', kind: 'remote' },
+  { id: 'Karratha',      label: 'Karratha (Pilbara)',      kind: 'remote' },
+  { id: 'Bunbury',       label: 'Bunbury (South West)',    kind: 'remote' },
+  { id: 'Albany',        label: 'Albany (Great Southern)', kind: 'remote' },
+  { id: 'Geraldton',     label: 'Geraldton (Mid West)',    kind: 'remote' },
+];
+
+// Kept as an alias so any code still reading it in the mock notes continues to work.
+// (The rendered travel notes in WEEK_DATA are just strings and don't drive logic.)
+const OFFICE_SUBURB = HOME_BASE;
+
+// Mock week — 10 real clients across Mon–Fri, regionally clustered.
+// Shape mirrors Splose response format (start/end as Perth-local strings for readability).
+// Flags:
+//   travel:true   → leg between office ↔ suburb (or suburb ↔ suburb). Rendered as Travel busy-time.
+//   flexible:true → block is movable if scheduler is tight (lunch). Triggers "Move lunch?" prompt.
+//   mandatory:true→ required follow-up work that must be logged. Case notes attach to sessions
+//                   and can be BATCHED (one block covering multiple clients' notes).
+const WEEK_DATA = [
+  // ======================= MON — East cluster (Thornlie, Gosnells) =======================
+  { kind:'busy',    day:'colMon', busyTypeId:55337, start:'08:45', end:'09:00', travel:true,
+      note:`${OFFICE_SUBURB} → Thornlie` },
+  { kind:'appt',    day:'colMon', serviceId:125320, start:'09:00', end:'10:00',
+      patient:'Liam W.',  region:'Thornlie', note:'weekly therapy' },
+  { kind:'busy',    day:'colMon', busyTypeId:55337, start:'10:00', end:'10:15', travel:true,
+      note:'Thornlie → Gosnells' },
+  { kind:'appt',    day:'colMon', serviceId:125320, start:'10:15', end:'11:15',
+      patient:'Ava M.',   region:'Gosnells', note:'' },
+  { kind:'busy',    day:'colMon', busyTypeId:55337, start:'11:15', end:'11:40', travel:true,
+      note:`Gosnells → ${OFFICE_SUBURB}` },
+  { kind:'busy',    day:'colMon', busyTypeId:55339, start:'11:40', end:'12:30',
+      note:'emails + invoicing' },
+  { kind:'busy',    day:'colMon', busyTypeId:55340, start:'12:30', end:'13:30', flexible:true,
+      note:'lunch — can move if client needs slot' },
+  { kind:'support', day:'colMon', kindId:'casenote', start:'13:30', end:'14:15', mandatory:true,
+      covers:['Liam W.','Ava M.'], note:'Liam + Ava · batched notes' },
+  { kind:'support', day:'colMon', kindId:'report', start:'14:15', end:'16:30',
+      note:'Liam W. — FCA draft' },
+  { kind:'busy',    day:'colMon', busyTypeId:55339, start:'16:30', end:'17:00',
+      note:'wrap-up' },
+
+  // ======================= TUE — admin/reports + 1 local client =======================
+  { kind:'busy',    day:'colTue', busyTypeId:55339, start:'09:00', end:'10:30',
+      note:'emails + admin catch-up' },
+  { kind:'appt',    day:'colTue', serviceId:125320, start:'10:30', end:'11:30',
+      patient:'Sophie B.', region:'Willetton', note:'' },
+  { kind:'support', day:'colTue', kindId:'casenote', start:'11:30', end:'11:50', mandatory:true,
+      covers:['Sophie B.'], note:'Sophie — session note' },
+  { kind:'support', day:'colTue', kindId:'report', start:'11:50', end:'12:30',
+      note:'Ava M. — progress report' },
+  { kind:'busy',    day:'colTue', busyTypeId:55340, start:'12:30', end:'13:30', flexible:true,
+      note:'lunch — can move if client needs slot' },
+  { kind:'appt',    day:'colTue', serviceId:166733, start:'13:30', end:'14:30',
+      patient:'MDT — NDIS team', region:'Zoom', note:'co-ordination meeting' },
+  { kind:'support', day:'colTue', kindId:'report', start:'14:30', end:'16:00',
+      note:'Harrison B. — FCA write-up' },
+  { kind:'busy',    day:'colTue', busyTypeId:55338, start:'16:00', end:'17:00',
+      note:'NDIS update CPD webinar' },
+
+  // ======================= WED — local cluster (Canning Vale + Willetton) =======================
+  { kind:'busy',    day:'colWed', busyTypeId:55337, start:'08:45', end:'09:00', travel:true,
+      note:`${OFFICE_SUBURB} → Canning Vale` },
+  { kind:'appt',    day:'colWed', serviceId:125821, start:'09:00', end:'10:00',
+      patient:'Sarah N. (NEW)', region:'Canning Vale', note:'initial assessment' },
+  { kind:'busy',    day:'colWed', busyTypeId:55337, start:'10:00', end:'10:15', travel:true,
+      note:`Canning Vale → ${OFFICE_SUBURB}` },
+  { kind:'appt',    day:'colWed', serviceId:125320, start:'10:15', end:'11:15',
+      patient:'Ethan P.', region:'Willetton', note:'' },
+  { kind:'support', day:'colWed', kindId:'casenote', start:'11:15', end:'11:30', mandatory:true,
+      covers:['Ethan P.'], note:'Ethan — quick note' },
+  { kind:'busy',    day:'colWed', busyTypeId:55339, start:'11:30', end:'12:30',
+      note:'prep / emails' },
+  { kind:'busy',    day:'colWed', busyTypeId:55340, start:'12:30', end:'13:30', flexible:true,
+      note:'lunch — can move if client needs slot' },
+  { kind:'busy',    day:'colWed', busyTypeId:55337, start:'13:30', end:'13:45', travel:true,
+      note:`${OFFICE_SUBURB} → Canning Vale` },
+  { kind:'appt',    day:'colWed', serviceId:125320, start:'13:45', end:'14:45',
+      patient:'Oliver P.', region:'Canning Vale', note:'' },
+  { kind:'busy',    day:'colWed', busyTypeId:55337, start:'14:45', end:'15:00', travel:true,
+      note:`Canning Vale → ${OFFICE_SUBURB}` },
+  { kind:'support', day:'colWed', kindId:'casenote', start:'15:00', end:'15:45', mandatory:true,
+      covers:['Sarah N.','Oliver P.'], note:'Sarah + Oliver · batched notes' },
+  { kind:'busy',    day:'colWed', busyTypeId:55339, start:'15:45', end:'17:00',
+      note:'emails + billing prep' },
+
+  // ======================= THU — mid-range (Bateman + Willetton 90-min assessment) =======================
+  { kind:'busy',    day:'colThu', busyTypeId:55339, start:'09:00', end:'10:00',
+      note:'admin + emails' },
+  { kind:'busy',    day:'colThu', busyTypeId:55337, start:'10:00', end:'10:15', travel:true,
+      note:`${OFFICE_SUBURB} → Bateman` },
+  { kind:'appt',    day:'colThu', serviceId:125320, start:'10:15', end:'11:15',
+      patient:'Chloe D.', region:'Bateman', note:'' },
+  { kind:'busy',    day:'colThu', busyTypeId:55337, start:'11:15', end:'11:30', travel:true,
+      note:`Bateman → ${OFFICE_SUBURB}` },
+  { kind:'appt',    day:'colThu', serviceId:131003, start:'11:30', end:'13:00',
+      patient:'Isla R.',  region:'Willetton', note:'FCA assessment · 90 min' },
+  { kind:'support', day:'colThu', kindId:'casenote', start:'13:00', end:'13:30', mandatory:true,
+      covers:['Chloe D.','Isla R.'], note:'Chloe + Isla · batched notes' },
+  { kind:'busy',    day:'colThu', busyTypeId:55340, start:'13:30', end:'14:30', flexible:true,
+      note:'lunch — moved late because of assessment' },
+  { kind:'support', day:'colThu', kindId:'report', start:'14:30', end:'16:00',
+      note:'Isla R. — assessment write-up' },
+  { kind:'busy',    day:'colThu', busyTypeId:55341, start:'16:00', end:'17:00',
+      note:'internal team mtg' },
+
+  // ======================= FRI — coastal (Cockburn + Coogee) =======================
+  { kind:'busy',    day:'colFri', busyTypeId:55337, start:'09:00', end:'09:30', travel:true,
+      note:`${OFFICE_SUBURB} → Cockburn` },
+  { kind:'appt',    day:'colFri', serviceId:125320, start:'09:30', end:'10:30',
+      patient:'Ruby S.',  region:'Cockburn', note:'' },
+  { kind:'busy',    day:'colFri', busyTypeId:55337, start:'10:30', end:'11:00', travel:true,
+      note:'Cockburn → Coogee' },
+  { kind:'appt',    day:'colFri', serviceId:125320, start:'11:00', end:'12:00',
+      patient:'Max L.',   region:'Coogee', note:'' },
+  { kind:'busy',    day:'colFri', busyTypeId:55337, start:'12:00', end:'12:30', travel:true,
+      note:`Coogee → ${OFFICE_SUBURB}` },
+  { kind:'busy',    day:'colFri', busyTypeId:55340, start:'12:30', end:'13:30', flexible:true,
+      note:'lunch — can move if client needs slot' },
+  { kind:'support', day:'colFri', kindId:'casenote', start:'13:30', end:'14:15', mandatory:true,
+      covers:['Ruby S.','Max L.'], note:'Ruby + Max · batched notes' },
+  { kind:'support', day:'colFri', kindId:'report', start:'14:15', end:'16:00',
+      note:'Ruby S. — progress report' },
+  { kind:'busy',    day:'colFri', busyTypeId:55339, start:'16:00', end:'17:00',
+      note:'weekly billing + wrap-up' },
+];
+
+/* -------------------------------------------------------------
+   Rendering
+   ------------------------------------------------------------- */
+
+// Grid shows 07:00–18:00 (11 hours). Working hours 09:00–17:00 are highlighted;
+// 07:00–09:00 and 17:00–18:00 are shaded as "outside working hours".
+const GRID_START_HOUR = 7;
+const GRID_END_HOUR   = 18;
+const WORK_START_HOUR = 9;
+const WORK_END_HOUR   = 17;
+const PX_PER_HOUR     = 70;
+
+function hoursToPx(h) { return (h - GRID_START_HOUR) * PX_PER_HOUR; }
+function hhmmToHours(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h + m / 60;
+}
+
+// Time labels + hour lines
+const timeCol = document.getElementById('timeCol');
+for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) {
+  const label = document.createElement('div');
+  label.className = 'time-label';
+  label.style.top = hoursToPx(h) + 'px';
+  const hr12 = ((h + 11) % 12) + 1;
+  const ampm = h < 12 ? 'am' : 'pm';
+  label.textContent = hr12 + ' ' + ampm;
+  timeCol.appendChild(label);
+}
+
+// Per day column: dashed hour lines + non-working bands
+const DAY_IDS = ['colMon','colTue','colWed','colThu','colFri'];
+DAY_IDS.forEach(id => {
+  const col = document.getElementById(id);
+
+  // Non-working bands (morning + evening)
+  const morning = document.createElement('div');
+  morning.className = 'nonworking-band';
+  morning.style.top = '0px';
+  morning.style.height = hoursToPx(WORK_START_HOUR) + 'px';
+  col.appendChild(morning);
+
+  const evening = document.createElement('div');
+  evening.className = 'nonworking-band';
+  evening.style.top = hoursToPx(WORK_END_HOUR) + 'px';
+  evening.style.height = hoursToPx(GRID_END_HOUR) - hoursToPx(WORK_END_HOUR) + 'px';
+  col.appendChild(evening);
+
+  // Hour lines
+  for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) {
+    const line = document.createElement('div');
+    line.className = 'hour-line';
+    line.style.top = hoursToPx(h) + 'px';
+    col.appendChild(line);
+  }
+});
+
+// ------- Renderer — rebuilds all session blocks from WEEK_DATA. -------
+function redrawSchedule() {
+  DAY_IDS.forEach(id => {
+    const col = document.getElementById(id);
+    // Remove existing session blocks (leave non-working bands + hour lines)
+    col.querySelectorAll('.session').forEach(n => n.remove());
+  });
+
+  WEEK_DATA.forEach((b, idx) => renderBlock(b, idx));
+  recomputeStats();
+}
+
+function renderBlock(b, idx) {
+  const col = document.getElementById(b.day);
+  if (!col) return;
+  const startH = hhmmToHours(b.start);
+  const endH   = hhmmToHours(b.end);
+  const top = hoursToPx(startH);
+  const h   = (endH - startH) * PX_PER_HOUR;
+
+  const el = document.createElement('div');
+  el.className = 'session draggable';
+  el.style.top = top + 'px';
+  el.style.height = (h - 2) + 'px';
+  el.dataset.blockIdx = idx;
+
+  let title, sub, colour, detail, badges = '';
+  const isSecondary =
+    (b.kind === 'busy' && b.busyTypeId === 55337) ||   // travel
+    (b.kind === 'support' && b.kindId === 'casenote'); // case-note
+  if (isSecondary) el.classList.add('secondary');
+
+  if (b.kind === 'appt') {
+    const svc = SERVICES[b.serviceId];
+    title = b.patient;
+    sub = svc.name + (b.region ? ' · ' + b.region : '');
+    colour = svc.colour;
+    detail = `Service ID: ${b.serviceId}\nDuration: ${Math.round((endH - startH) * 60)} min`;
+  } else if (b.kind === 'busy') {
+    const bt = BUSY_TYPES[b.busyTypeId];
+    title = bt.title;
+    sub = b.note || '';
+    colour = bt.colour;
+    detail = `Busy-time type ID: ${b.busyTypeId}\nDuration: ${Math.round((endH - startH) * 60)} min`;
+    if (b.flexible) { badges += '<span class="s-badge">⇄ FLEX</span>'; el.classList.add('flexible'); }
+  } else if (b.kind === 'support') {
+    const sp = SUPPORT_KINDS[b.kindId];
+    title = sp.title;
+    sub = b.note || '';
+    colour = sp.colour;
+    el.classList.add('billable-support');
+    detail = `Support-activity (billable)\nDuration: ${Math.round((endH - startH) * 60)} min`;
+    if (b.mandatory) { badges += '<span class="s-badge">★ REQ</span>'; el.classList.add('mandatory'); }
+    if (b.covers && b.covers.length > 1) {
+      detail += `\nBatched for: ${b.covers.join(', ')}`;
+    }
+  }
+
+  el.style.background = colour;
+  el.innerHTML =
+    `<span class="s-title">${badges}${title}</span>` +
+    (sub ? `<span class="s-sub">${sub}</span>` : '') +
+    `<div class="resize-handle" data-resize="1"></div>`;
+
+  // Separate click vs drag: a real click fires only if there was no appreciable movement.
+  el._openDetails = () => alert(
+    `${title}\n${sub || ''}\n\n${detail}\n\n(In the real app this would open an edit panel that writes back to Splose.)`
+  );
+  attachDragHandlers(el, b);
+  col.appendChild(el);
+}
+
+/* -------------------------------------------------------------
+   Stats derivation — re-run whenever WEEK_DATA changes.
+   ------------------------------------------------------------- */
+
+function durMin(b) { return (hhmmToHours(b.end) - hhmmToHours(b.start)) * 60; }
+
+function fmt(m) {
+  const h = Math.floor(m / 60);
+  const mm = Math.round(m % 60);
+  return mm === 0 ? `${h}h` : `${h}h ${mm}m`;
+}
+
+function recomputeStats() {
+  let apptCount = 0, apptMin = 0, supportMin = 0, travelMin = 0, adminLunchMin = 0;
+  WEEK_DATA.forEach(b => {
+    const m = durMin(b);
+    if (b.kind === 'appt')    { apptCount++; apptMin += m; }
+    if (b.kind === 'support') supportMin += m;
+    if (b.kind === 'busy' && b.busyTypeId === 55337) travelMin += m;
+    if (b.kind === 'busy' && (b.busyTypeId === 55339 || b.busyTypeId === 55340)) adminLunchMin += m;
+  });
+  // Ann's working canvas: Mon–Fri 9–5 = 5 × 8h × 60 = 2400 min
+  const workMin = 5 * 8 * 60;
+  document.getElementById('statAppts').textContent    = apptCount;
+  document.getElementById('statBillable').textContent = fmt(apptMin + supportMin);
+  document.getElementById('statTravel').textContent   = fmt(travelMin);
+  document.getElementById('statAdmin').textContent    = fmt(adminLunchMin);
+  const utilPct = Math.round(apptMin / workMin * 100);
+  document.getElementById('statUtil').textContent = `${utilPct}%`;
+  document.getElementById('utilBar').style.width = `${utilPct}%`;
+}
+
+/* -------------------------------------------------------------
+   Drag & resize — lets Ann/Antony move blocks and change duration
+   the way a normal calendar app works.
+
+   - Click + drag body → move (snap to 15-min, supports cross-day).
+   - Drag bottom handle → resize (duration only).
+   - Click without movement → open details.
+   ------------------------------------------------------------- */
+
+const SNAP_MIN = 15;
+const DRAG_THRESHOLD_PX = 4;
+
+function attachDragHandlers(el, block) {
+  el.addEventListener('pointerdown', e => {
+    // Don't hijack text selection from nested buttons etc.
+    if (e.button !== 0) return;
+
+    const isResize = e.target && e.target.dataset && e.target.dataset.resize === '1';
+    const mode = isResize ? 'resize' : 'move';
+
+    const startH = hhmmToHours(block.start);
+    const endH   = hhmmToHours(block.end);
+    const startTopPx = hoursToPx(startH);
+    const heightPx   = (endH - startH) * PX_PER_HOUR - 2;
+
+    const state = {
+      block, el, mode,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startTopPx,
+      heightPx,
+      moved: false,
+    };
+
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+
+    function onMove(ev) {
+      const dy = ev.clientY - state.startClientY;
+      const dx = ev.clientX - state.startClientX;
+      if (!state.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) state.moved = true;
+      if (!state.moved) return;
+
+      if (state.mode === 'move') {
+        // Vertical → time change within day
+        el.style.top = (state.startTopPx + dy) + 'px';
+        // Horizontal → maybe move to another day column
+        const newCol = columnFromClientX(ev.clientX);
+        if (newCol && newCol !== el.parentElement) {
+          // Visually migrate while dragging
+          el.style.pointerEvents = 'none'; // avoid flicker
+          newCol.appendChild(el);
+          el.style.pointerEvents = '';
+          el.style.top = (state.startTopPx + dy) + 'px';
+        }
+      } else {
+        // Resize: change height only
+        const newH = Math.max(PX_PER_HOUR * SNAP_MIN / 60, state.heightPx + dy);
+        el.style.height = newH + 'px';
+      }
+    }
+
+    function onUp(ev) {
+      el.classList.remove('dragging');
+      el.releasePointerCapture(e.pointerId);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+
+      if (!state.moved) {
+        // It was a plain click — open details.
+        if (el._openDetails) el._openDetails();
+        return;
+      }
+
+      if (state.mode === 'move') {
+        const newCol = el.parentElement;
+        const newDay = newCol && newCol.id ? newCol.id : block.day;
+        const newTopPx = parseFloat(el.style.top) || state.startTopPx;
+        const newStartH = snapHours(newTopPx / PX_PER_HOUR + GRID_START_HOUR);
+        const dur = endH - startH;
+        const newEndH = newStartH + dur;
+        applyTimeChange(block, newDay, newStartH, newEndH);
+      } else {
+        const newHeightPx = parseFloat(el.style.height) || state.heightPx;
+        const durH = snapHours(newHeightPx / PX_PER_HOUR);
+        const newEndH = startH + Math.max(SNAP_MIN/60, durH);
+        applyTimeChange(block, block.day, startH, newEndH);
+      }
+      redrawSchedule();
+    }
+
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+  });
+}
+
+function columnFromClientX(x) {
+  for (const id of DAY_IDS) {
+    const c = document.getElementById(id);
+    const r = c.getBoundingClientRect();
+    if (x >= r.left && x <= r.right) return c;
+  }
+  return null;
+}
+
+function snapHours(h) {
+  const snapStep = SNAP_MIN / 60;
+  return Math.round(h / snapStep) * snapStep;
+}
+
+function hoursToHHMM(h) {
+  h = Math.max(0, Math.min(24 - 0.01, h));
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+
+function applyTimeChange(block, newDay, newStartH, newEndH) {
+  // Clamp inside the grid window
+  newStartH = Math.max(GRID_START_HOUR, Math.min(GRID_END_HOUR - SNAP_MIN/60, newStartH));
+  newEndH   = Math.max(newStartH + SNAP_MIN/60, Math.min(GRID_END_HOUR, newEndH));
+  block.day   = newDay;
+  block.start = hoursToHHMM(newStartH);
+  block.end   = hoursToHHMM(newEndH);
+}
+
+/* =============================================================
+   SCHEDULER — free-slot computation + aggressive scoring.
+
+   Pure functions. The only "IO" is against WEEK_DATA above.
+   When we wire to live Splose data, WEEK_DATA gets swapped for
+   a normalised list of { day, start, end, kind, region } blocks
+   from /appointments + /busy-times + /support-activities, and
+   this module works unchanged.
+
+   Drivability is straight-line (haversine). To swap to Google
+   Route Matrix later, only replace distanceProvider.kmBetween().
+   ============================================================= */
+
+// Perth-metro suburbs around Willetton (Opal Therapy's base).
+// v1 static table; later read from /patients[*].address → geocode cache.
+const SUBURB_COORDS = {
+  'Willetton':    [-32.0469, 115.8867],
+  'Canning Vale': [-32.0547, 115.9106],
+  'Leeming':      [-32.0786, 115.8642],
+  'Thornlie':     [-32.0633, 115.9597],
+  'Gosnells':     [-32.0836, 115.9969],
+  'Maddington':   [-32.0511, 115.9722],
+  'Cockburn':     [-32.1264, 115.8306],
+  'Coogee':       [-32.1181, 115.7636],
+  'Bateman':      [-32.0603, 115.8481],
+  'Bull Creek':   [-32.0597, 115.8503],
+  'Murdoch':      [-32.0675, 115.8339],
+  'Riverton':     [-32.0419, 115.8889],
+  'Shelley':      [-32.0308, 115.8797],
+  'Rossmoyne':    [-32.0356, 115.8625],
+  'Applecross':   [-32.0164, 115.8342],
+  'Booragoon':    [-32.0336, 115.8369],
+  'Fremantle':    [-32.0569, 115.7439],
+  'Perth CBD':    [-31.9505, 115.8605],
+  'Subiaco':      [-31.9474, 115.8258],
+
+  // Regional WA hubs — used when the therapist sets their weekly base away from Perth.
+  // Distances to Perth-metro suburbs from these will be huge; that's the point —
+  // the scheduler will refuse to cluster Perth clients on a Broome-base day.
+  'Broome':        [-17.9614, 122.2359],
+  'South Hedland': [-20.4108, 118.6014],
+  'Karratha':      [-20.7364, 116.8463],
+  'Bunbury':       [-33.3267, 115.6410],
+  'Albany':        [-35.0269, 117.8837],
+  'Geraldton':     [-28.7774, 114.6150],
+};
+
+// Appointments flagged with these "regions" shouldn't count toward clustering.
+const VIRTUAL_REGIONS = new Set(['Zoom', 'On-site']);
+
+function haversineKm(a, b) {
+  const R = 6371;
+  const rad = d => d * Math.PI / 180;
+  const dLat = rad(b[0] - a[0]);
+  const dLon = rad(b[1] - a[1]);
+  const s = Math.sin(dLat/2)**2
+          + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+const distanceProvider = {
+  /** @returns {number|null} km between suburbs, or null if either is unknown / virtual. */
+  kmBetween(a, b) {
+    if (!a || !b) return null;
+    if (a === b) return 0;
+    if (VIRTUAL_REGIONS.has(a) || VIRTUAL_REGIONS.has(b)) return null;
+    const p = SUBURB_COORDS[a], q = SUBURB_COORDS[b];
+    if (!p || !q) return null;
+    return haversineKm(p, q);
+  }
+};
+
+// Time helpers — everything is minutes-since-midnight internally.
+function toMin(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+function fromMin(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m).padStart(2,'0')}${ampm}`;
+}
+
+const DAY_LABELS = { colMon:'Mon', colTue:'Tue', colWed:'Wed', colThu:'Thu', colFri:'Fri' };
+const DAY_DATES  = { colMon:'20 Apr', colTue:'21 Apr', colWed:'22 Apr', colThu:'23 Apr', colFri:'24 Apr' };
+const DAY_ORDER  = { colMon:0, colTue:1, colWed:2, colThu:3, colFri:4 };
+
+/* -------------------------------------------------------------
+   Free-slot computation: subtract every block from the working
+   window. Emits candidate starts at 30-minute increments.
+   ------------------------------------------------------------- */
+function computeFreeSlots(durationMin, allowedDays, earliestMin, latestMin, opts = {}) {
+  const { ignoreFlexible = false } = opts;
+  const workStart = WORK_START_HOUR * 60;
+  const workEnd   = WORK_END_HOUR   * 60;
+  const earliest  = earliestMin != null ? Math.max(earliestMin, workStart) : workStart;
+  const latest    = latestMin   != null ? Math.min(latestMin,   workEnd)   : workEnd;
+  const out = [];
+
+  DAY_IDS.forEach(dayId => {
+    if (allowedDays && !allowedDays.includes(dayId)) return;
+
+    const blocks = WEEK_DATA
+      .filter(b => b.day === dayId)
+      .filter(b => !(ignoreFlexible && b.flexible))     // optionally treat lunch as not-there
+      .map(b => ({ start: toMin(b.start), end: toMin(b.end), flexible: !!b.flexible }))
+      .sort((a, b) => a.start - b.start);
+
+    let cursor = earliest;
+    for (const block of blocks) {
+      if (block.end <= cursor)  continue;
+      if (block.start >= latest) break;
+      if (block.start > cursor) emitSlots(dayId, cursor, Math.min(block.start, latest), durationMin, out);
+      cursor = Math.max(cursor, block.end);
+      if (cursor >= latest) break;
+    }
+    if (cursor < latest) emitSlots(dayId, cursor, latest, durationMin, out);
+  });
+
+  return out;
+}
+
+// Does a slot on this day overlap what would otherwise be a flexible lunch block?
+function slotOverlapsFlexible(slot) {
+  return WEEK_DATA.some(b =>
+    b.day === slot.day && b.flexible &&
+    toMin(b.start) < slot.endMin && toMin(b.end) > slot.startMin
+  );
+}
+
+function emitSlots(dayId, gapStart, gapEnd, durationMin, out) {
+  let t = Math.ceil(gapStart / 30) * 30; // snap to :00 / :30
+  while (t + durationMin <= gapEnd) {
+    out.push({ day: dayId, startMin: t, endMin: t + durationMin });
+    t += 30;
+  }
+}
+
+/* -------------------------------------------------------------
+   Slot scoring — aggressive clustering.
+   Signals: drivability (dominant), day intensity (secondary).
+   Score = 0–100, each signal contributes a reason string.
+   ------------------------------------------------------------- */
+function scoreSlot(slot, newClient) {
+  const breakdown = [];
+  let score = 50;
+  breakdown.push({ label:'Base', delta:50, reason:'starting score' });
+
+  // -- Drivability: nearest existing client on this day --
+  const sameDayAppts = WEEK_DATA.filter(b => b.day === slot.day && b.kind === 'appt' && b.region);
+  let minKm = Infinity, sameSuburb = 0;
+  for (const a of sameDayAppts) {
+    if (a.region === newClient.suburb) sameSuburb++;
+    const d = distanceProvider.kmBetween(newClient.suburb, a.region);
+    if (d != null && d < minKm) minKm = d;
+  }
+
+  // -- Working base for this day — if client is too far from the therapist's base
+  //    it's basically undrivable regardless of who else is booked. --
+  const base = baseForDay(slot.day);
+  const baseKm = distanceProvider.kmBetween(newClient.suburb, base);
+  if (baseKm != null && baseKm > 60) {
+    const penalty = baseKm > 200 ? -45 : -25;
+    score += penalty;
+    breakdown.push({
+      label: 'Off-base',
+      delta: penalty,
+      reason: `client is ~${Math.round(baseKm)} km from ${base} (base that day)`,
+    });
+  }
+
+  let dDelta, dReason;
+  if (sameDayAppts.length === 0) {
+    dDelta = 0;  dReason = 'empty day — no cluster to join';
+  } else if (minKm === Infinity) {
+    dDelta = 0;  dReason = `${sameDayAppts.length} existing clients (suburbs unknown)`;
+  } else if (sameSuburb > 0) {
+    dDelta = 40; dReason = `${sameSuburb} client(s) in ${newClient.suburb} already that day`;
+  } else if (minKm < 5) {
+    dDelta = 28; dReason = `close cluster — nearest client ${minKm.toFixed(1)} km away`;
+  } else if (minKm < 10) {
+    dDelta = 12; dReason = `nearby — ~${minKm.toFixed(0)} km to closest client`;
+  } else if (minKm < 20) {
+    dDelta = -5; dReason = `moderate drive — ~${minKm.toFixed(0)} km to closest client`;
+  } else {
+    dDelta = -22; dReason = `long drive — ~${minKm.toFixed(0)} km to nearest client`;
+  }
+  score += dDelta;
+  breakdown.push({ label:'Drivability', delta:dDelta, reason:dReason });
+
+  // -- Day intensity: how many client appts that day already --
+  const apptCount = WEEK_DATA.filter(b => b.day === slot.day && b.kind === 'appt').length;
+  let iDelta, iReason;
+  if (apptCount <= 1)       { iDelta = 10;  iReason = `light day (${apptCount} appt${apptCount===1?'':'s'} so far)`; }
+  else if (apptCount <= 3)  { iDelta = 15;  iReason = `well-balanced day (${apptCount} appts)`; }
+  else if (apptCount <= 5)  { iDelta = 0;   iReason = `busy day (${apptCount} appts)`; }
+  else                      { iDelta = -15; iReason = `day already full (${apptCount} appts)`; }
+  score += iDelta;
+  breakdown.push({ label:'Day balance', delta:iDelta, reason:iReason });
+
+  return {
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    breakdown
+  };
+}
+
+/* -------------------------------------------------------------
+   Orchestrator — compute, score, rank, de-dup by day, trim.
+   ------------------------------------------------------------- */
+function rankSlots(newClient, opts = {}) {
+  const {
+    durationMin = 60,
+    topN = 5,
+    allowedDays = null,
+    earliestMin = null,
+    latestMin   = null,
+  } = opts;
+
+  // First pass — respect all blocks including lunch.
+  let free = computeFreeSlots(durationMin, allowedDays, earliestMin, latestMin);
+  let lunchMoveUsed = false;
+
+  // If nothing fits, try again pretending flexible (lunch) blocks aren't there.
+  // Any slot returned that overlaps the original lunch window is flagged so the UI
+  // can show "Move lunch?" — we don't silently move it.
+  if (free.length === 0) {
+    const fallback = computeFreeSlots(durationMin, allowedDays, earliestMin, latestMin, { ignoreFlexible: true });
+    if (fallback.length) {
+      free = fallback;
+      lunchMoveUsed = true;
+    }
+  }
+
+  const scored = free.map(s => {
+    const sc = scoreSlot(s, newClient);
+    const overlap = slotOverlapsFlexible(s);
+    if (overlap) {
+      sc.score = Math.max(0, sc.score - 8);
+      sc.breakdown.push({ label:'Lunch move', delta:-8, reason:'overlaps lunch — requires moving it' });
+      sc.requiresLunchMove = true;
+    }
+    return { ...s, ...sc };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (DAY_ORDER[a.day] !== DAY_ORDER[b.day]) return DAY_ORDER[a.day] - DAY_ORDER[b.day];
+    return a.startMin - b.startMin;
+  });
+
+  // One slot per day in the top-N — avoids "5 Wednesdays" result.
+  const picks = [];
+  const seen = new Set();
+  for (const s of scored) {
+    if (seen.has(s.day)) continue;
+    picks.push(s); seen.add(s.day);
+    if (picks.length >= topN) break;
+  }
+  // Fill if we have fewer than N days available.
+  if (picks.length < topN) {
+    for (const s of scored) {
+      if (picks.includes(s)) continue;
+      picks.push(s);
+      if (picks.length >= topN) break;
+    }
+  }
+
+  // Attach metadata for the UI.
+  picks.lunchMoveFallbackTriggered = lunchMoveUsed;
+  return picks;
+}
+
+/* -------------------------------------------------------------
+   Find-slots panel wiring
+   ------------------------------------------------------------- */
+(function initFindSlots() {
+  const suburbSelect = document.getElementById('fsSuburb');
+  Object.keys(SUBURB_COORDS).sort().forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === 'Canning Vale') opt.selected = true;
+    suburbSelect.appendChild(opt);
+  });
+
+  const findBtn      = document.getElementById('fsFindBtn');
+  const copyBtn      = document.getElementById('fsCopyBtn');
+  const resultsPanel = document.getElementById('fsResultsPanel');
+  const resultsDiv   = document.getElementById('fsResults');
+  let lastPicks = [];
+
+  findBtn.addEventListener('click', () => {
+    const suburb   = suburbSelect.value;
+    const duration = parseInt(document.getElementById('fsDuration').value, 10);
+    const dayChecks = [...document.querySelectorAll('#fsDays input:checked')].map(c => c.value);
+    const earliestStr = document.getElementById('fsEarliest').value;
+    const latestStr   = document.getElementById('fsLatest').value;
+    const earliestMin = earliestStr ? toMin(earliestStr) : null;
+    const latestMin   = latestStr   ? toMin(latestStr)   : null;
+
+    const picks = rankSlots(
+      { suburb },
+      {
+        durationMin: duration,
+        topN: 5,
+        allowedDays: dayChecks.length ? dayChecks : null,
+        earliestMin, latestMin,
+      }
+    );
+    lastPicks = picks;
+    renderResults(picks, suburb);
+  });
+
+  copyBtn.addEventListener('click', () => {
+    if (!lastPicks.length) return;
+    const lines = lastPicks.map(p =>
+      `  • ${DAY_LABELS[p.day]} ${DAY_DATES[p.day]}, ${fromMin(p.startMin)} – ${fromMin(p.endMin)}`
+    ).join('\n');
+    const text =
+`Hi,
+
+I have the following availability this week:
+${lines}
+
+Please let me know which of these would work for you.
+
+Kind regards,
+Opal Therapy`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => { copyBtn.textContent = '✓ Copied'; setTimeout(() => copyBtn.textContent = 'Copy as email', 1400); },
+        () => { fallbackCopy(text); }
+      );
+    } else {
+      fallbackCopy(text);
+    }
+  });
+
+  function fallbackCopy(text) {
+    // Window prompt lets the user copy manually if clipboard API is blocked.
+    window.prompt('Copy the suggested email text:', text);
+  }
+
+  function renderResults(picks, suburb) {
+    resultsPanel.style.display = 'block';
+    if (!picks.length) {
+      resultsDiv.innerHTML = '<div class="fs-empty">No free slots match those constraints, even if lunch was moved. Try widening the availability filter.</div>';
+      return;
+    }
+
+    const banner = picks.lunchMoveFallbackTriggered
+      ? `<div class="fs-lunch-banner">
+           <b>No slots fit with lunch where it is.</b> The options below require moving Ann's lunch block.
+           Adjust lunch in Splose or keep looking with a wider day filter.
+         </div>`
+      : picks.some(p => p.requiresLunchMove)
+        ? `<div class="fs-lunch-banner">
+             One or more of these slots would <b>require moving lunch</b> — flagged inline below.
+           </div>`
+        : '';
+
+    resultsDiv.innerHTML = banner + picks.map((p, i) => {
+      const when = `${DAY_LABELS[p.day]} ${DAY_DATES[p.day]} · ${fromMin(p.startMin)}–${fromMin(p.endMin)}`;
+      const moveTag = p.requiresLunchMove
+        ? '<span class="s-badge" style="background:#ffca88;color:#5a2e00;margin-left:6px;">⇄ move lunch</span>'
+        : '';
+      const bullets = p.breakdown
+        .filter(b => b.label !== 'Base')
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+        .map(b => {
+          const cls = b.delta > 0 ? 'pos' : b.delta < 0 ? 'neg' : '';
+          const sign = b.delta > 0 ? '+' : (b.delta < 0 ? '' : '·');
+          const val  = b.delta === 0 ? '0' : `${sign}${b.delta}`;
+          return `<div><span class="slot-result-reason-delta ${cls}">${val}</span><span>${b.reason}</span></div>`;
+        }).join('');
+      return `
+        <div class="slot-result ${i === 0 ? 'top' : ''}">
+          <div class="slot-result-head">
+            <div class="slot-result-when">${when}${moveTag}</div>
+            <div class="slot-result-score">${p.score}</div>
+          </div>
+          <div class="slot-result-reasons">${bullets}</div>
+        </div>`;
+    }).join('');
+  }
+})();
+
+/* -------------------------------------------------------------
+   Modal
+   ------------------------------------------------------------- */
+function openModal()  { document.getElementById('modal').classList.add('open'); }
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+/* -------------------------------------------------------------
+   Initial render — must be the last step so every data structure
+   and helper above is in place.
+   ------------------------------------------------------------- */
+redrawSchedule();
+renderBaseStrip();
+wireNav();
+wireViewToggle();
+wireWeekNav();
+renderClientsPage();
+renderNdisPage();
+renderUtilisationPage();
+renderSettingsPage();
+</script>
+
+</body>
+</html>

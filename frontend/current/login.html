@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — Opal Therapy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #5b6af0;
+      --brand-dark:  #4452d8;
+      --ink:         #1a1a2e;
+      --ink-soft:    #6b7280;
+      --surface:     #ffffff;
+      --bg:          #f4f5fb;
+      --border:      #dde3ec;
+      --danger:      #dc2626;
+      --radius:      12px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink);
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-mark {
+      width: 48px;
+      height: 48px;
+      background: var(--brand);
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .logo-mark svg { width: 26px; height: 26px; fill: white; }
+    .logo h1 { font-size: 20px; font-weight: 700; color: var(--ink); }
+    .logo p  { font-size: 13px; color: var(--ink-soft); margin-top: 4px; }
+
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-soft);
+      margin-bottom: 6px;
+    }
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    input:focus { border-color: var(--brand); }
+
+    .btn-primary {
+      width: 100%;
+      padding: 13px;
+      background: var(--brand);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:hover  { background: var(--brand-dark); }
+    .btn-primary:active { transform: scale(0.99); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: var(--danger);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .error-box.visible { display: block; }
+
+    .divider {
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 12px;
+      margin: 24px 0;
+      position: relative;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: calc(50% - 28px);
+      height: 1px;
+      background: var(--border);
+    }
+    .divider::before { left: 0; }
+    .divider::after  { right: 0; }
+
+    .forgot-link {
+      display: block;
+      text-align: right;
+      font-size: 12px;
+      color: var(--brand);
+      text-decoration: none;
+      margin-top: 5px;
+      font-weight: 500;
+    }
+    .forgot-link:hover { text-decoration: underline; }
+
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .info-box.visible { display: block; }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      margin-top: 28px;
+      line-height: 1.5;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .btn-primary.loading .spinner { display: block; }
+    .btn-primary.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">
+      <!-- Calendar icon -->
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V2h-2v2H9V2H8zm-3 6h14v10H5V8zm2 2v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 14v2h2v-2H7zm4 0v2h2v-2h-2z"/>
+      </svg>
+    </div>
+    <h1>Opal Therapy</h1>
+    <p>Scheduling &amp; Practice Management</p>
+  </div>
+
+  <div class="info-box"  id="info-box"  role="status"></div>
+  <div class="error-box" id="error-box" role="alert"></div>
+
+  <form id="login-form" novalidate>
+    <div class="field">
+      <label for="email">Email address</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        placeholder="you@example.com"
+        autocomplete="email"
+        required
+      />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input
+        type="password"
+        id="password"
+        name="password"
+        placeholder="••••••••"
+        autocomplete="current-password"
+        required
+      />
+      <a href="/forgot-password" class="forgot-link">Forgot password?</a>
+    </div>
+
+    <button type="submit" class="btn-primary" id="login-btn">
+      <span class="btn-label">Sign in</span>
+      <span class="spinner"></span>
+    </button>
+  </form>
+
+  <p class="footer-note">
+    Your role and permissions are managed by the practice owner.<br>
+    Contact your administrator if you cannot log in.
+  </p>
+  <p class="footer-note" style="margin-top: 12px;">
+    Don't have an account? <a href="/register" style="color: var(--brand); text-decoration: none; font-weight: 500;">Create account</a>
+  </p>
+</div>
+
+<script>
+  // ── Handle ?reason= query param (redirected from server-side route guards) ──
+  (function handleReasonParam() {
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('reason');
+    if (reason === 'suspended') {
+      showInfo('Your account has been suspended. Please contact the practice owner for assistance.');
+    } else if (reason === 'deactivated') {
+      showInfo('This account is no longer active. Please contact the practice owner if you believe this is a mistake.');
+    } else if (reason === 'verified') {
+      showInfo('Your email has been verified. You can now sign in.');
+    } else if (reason === 'reset') {
+      showInfo('Your password has been reset. You can now sign in with your new password.');
+    }
+  })();
+
+  // ── If already authenticated, skip the login screen ────────────────────────
+  (async function checkExistingSession() {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'include' });
+      if (r.ok) {
+        const redirect = new URLSearchParams(window.location.search).get('next') || '/';
+        window.location.replace(redirect);
+      }
+    } catch (_) {}
+  })();
+
+  // ── Handle login form submission ────────────────────────────────────────────
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn      = document.getElementById('login-btn');
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    clearMessages();
+
+    if (!email || !password) {
+      showError('Please enter your email and password.');
+      return;
+    }
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method:      'POST',
+        headers:     { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body:        JSON.stringify({ email, password }),
+      });
+
+      const json = await r.json().catch(() => ({}));
+
+      if (r.ok && json.ok) {
+        // Successful login — redirect to main app
+        const redirect = new URLSearchParams(window.location.search).get('next') || '/';
+        window.location.replace(redirect);
+        return;
+      }
+
+      // Handle specific account-status error codes
+      const code = json.code;
+      if (code === 'pending_verification') {
+        // Store email for resend flow, then redirect
+        sessionStorage.setItem('pending_verification_email', email);
+        window.location.replace('/verify-email?state=pending');
+        return;
+      }
+      if (code === 'pending_approval') {
+        window.location.replace('/pending-approval');
+        return;
+      }
+      if (code === 'suspended') {
+        showError('Your account has been suspended. Please contact the practice owner for assistance.');
+        return;
+      }
+      if (code === 'deactivated') {
+        showError('This account is no longer active. Please contact the practice owner if you believe this is a mistake.');
+        return;
+      }
+
+      showError(json.error || 'Sign in failed. Please check your credentials and try again.');
+    } catch (err) {
+      showError('Could not connect to the server. Please check your connection.');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  });
+
+  function showError(msg) {
+    const box = document.getElementById('error-box');
+    box.textContent = msg;
+    box.classList.add('visible');
+    document.getElementById('password').value = '';
+  }
+
+  function showInfo(msg) {
+    const box = document.getElementById('info-box');
+    box.textContent = msg;
+    box.classList.add('visible');
+  }
+
+  function clearMessages() {
+    document.getElementById('error-box').classList.remove('visible');
+    document.getElementById('info-box').classList.remove('visible');
+  }
+</script>
+
+</body>
+</html>

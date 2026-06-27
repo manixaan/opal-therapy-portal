@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create account — Opal Therapy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #5b6af0;
+      --brand-dark:  #4452d8;
+      --ink:         #1a1a2e;
+      --ink-soft:    #6b7280;
+      --surface:     #ffffff;
+      --bg:          #f4f5fb;
+      --border:      #dde3ec;
+      --danger:      #dc2626;
+      --success:     #16a34a;
+      --success-bg:  #f0fdf4;
+      --success-bdr: #bbf7d0;
+      --radius:      12px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px 60px;
+      color: var(--ink);
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 440px;
+    }
+
+    /* ── Logo ── */
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-mark {
+      width: 48px; height: 48px;
+      background: var(--brand);
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .logo-mark svg { width: 26px; height: 26px; fill: white; }
+    .logo h1 { font-size: 20px; font-weight: 700; color: var(--ink); }
+    .logo p  { font-size: 13px; color: var(--ink-soft); margin-top: 4px; }
+
+    /* ── Step indicator ── */
+    .steps {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.2s;
+    }
+    .step-dot.active  { background: var(--brand); width: 20px; border-radius: 4px; }
+    .step-dot.done    { background: var(--success); }
+
+    /* ── Section heading ── */
+    .section-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+    .section-sub {
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    /* ── Fields ── */
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-soft);
+      margin-bottom: 6px;
+    }
+    input[type="email"],
+    input[type="text"],
+    input[type="password"],
+    input[type="tel"] {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    input:focus { border-color: var(--brand); }
+    input[readonly] {
+      background: #f8f9fc;
+      color: var(--ink-soft);
+      cursor: default;
+    }
+
+    /* ── Role badge ── */
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .role-badge.owner     { background: #f0f0ff; color: #5b6af0; }
+    .role-badge.admin     { background: #fff7ed; color: #c2410c; }
+    .role-badge.therapist { background: #f0fdf4; color: #16a34a; }
+
+    /* ── Invite info card ── */
+    .invite-card {
+      background: #f0fdf4;
+      border: 1.5px solid var(--success-bdr);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #166534;
+      display: none;
+    }
+    .invite-card.visible { display: block; }
+    .invite-card strong  { color: #14532d; }
+
+    /* ── Password strength ── */
+    .pw-rules {
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+    .pw-rules span {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin: 1px 2px;
+      background: #f1f1f5;
+      transition: background 0.15s, color 0.15s;
+    }
+    .pw-rules span.met { background: var(--success-bg); color: var(--success); }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      width: 100%;
+      padding: 13px;
+      background: var(--brand);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:hover   { background: var(--brand-dark); }
+    .btn-primary:active  { transform: scale(0.99); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* ── Error / info boxes ── */
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: var(--danger);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .error-box.visible { display: block; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .btn-primary.loading .spinner   { display: block; }
+    .btn-primary.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ── */
+    .footer-note {
+      text-align: center;
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-top: 24px;
+    }
+    .footer-note a {
+      color: var(--brand);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .footer-note a:hover { text-decoration: underline; }
+
+    /* ── Panels (steps) ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V2h-2v2H9V2H8zm-3 6h14v10H5V8zm2 2v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 14v2h2v-2H7zm4 0v2h2v-2h-2z"/>
+      </svg>
+    </div>
+    <h1>Opal Therapy</h1>
+    <p>Create your account</p>
+  </div>
+
+  <!-- Step indicator: 2 dots (email check → account details) -->
+  <div class="steps">
+    <div class="step-dot active" id="dot-1"></div>
+    <div class="step-dot" id="dot-2"></div>
+  </div>
+
+  <div class="error-box" id="error-box" role="alert"></div>
+
+  <!-- ── PANEL 1: Email check ── -->
+  <div class="panel active" id="panel-email">
+    <p class="section-title">Let's get started</p>
+    <p class="section-sub">Enter your email address to get started. Opal Therapy accounts are restricted to authorised staff.</p>
+
+    <form id="check-form" novalidate>
+      <div class="field">
+        <label for="input-email">Email address</label>
+        <input type="email" id="input-email" placeholder="you@example.com"
+               autocomplete="email" required />
+      </div>
+      <button type="submit" class="btn-primary" id="check-btn">
+        <span class="btn-label">Continue →</span>
+        <span class="spinner"></span>
+      </button>
+    </form>
+  </div>
+
+  <!-- ── PANEL 2: Account details ── -->
+  <div class="panel" id="panel-register">
+    <p class="section-title">Create your account</p>
+    <p class="section-sub" id="register-sub">Complete the fields below to set up your login.</p>
+
+    <div class="invite-card" id="invite-card"></div>
+    <div id="role-badge-wrap"></div>
+
+    <form id="register-form" novalidate>
+      <div class="field">
+        <label for="reg-email">Email address</label>
+        <input type="email" id="reg-email" readonly autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <label for="reg-name">Full name</label>
+        <input type="text" id="reg-name" placeholder="Your full name"
+               autocomplete="name" required />
+      </div>
+
+      <div class="field">
+        <label for="reg-phone">Phone number <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+        <input type="tel" id="reg-phone" placeholder="+61 4xx xxx xxx"
+               autocomplete="tel" />
+      </div>
+
+      <div class="field">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" placeholder="At least 8 characters"
+               autocomplete="new-password" required />
+        <div class="pw-rules">
+          Must include:
+          <span id="req-len">8+ characters</span>
+          <span id="req-upper">uppercase</span>
+          <span id="req-lower">lowercase</span>
+          <span id="req-num">number</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="reg-confirm">Confirm password</label>
+        <input type="password" id="reg-confirm" placeholder="Re-enter password"
+               autocomplete="new-password" required />
+      </div>
+
+      <button type="submit" class="btn-primary" id="register-btn">
+        <span class="btn-label">Create account →</span>
+        <span class="spinner"></span>
+      </button>
+    </form>
+  </div>
+
+  <p class="footer-note">
+    Already have an account? <a href="/login">Sign in</a>
+  </p>
+</div>
+
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let inviteData = null; // { email, role, isTreatingTherapist, displayNameHint, organisationName }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = msg;
+  box.classList.add('visible');
+}
+function clearError() {
+  const box = document.getElementById('error-box');
+  box.textContent = '';
+  box.classList.remove('visible');
+}
+function setLoading(btn, on) {
+  btn.classList.toggle('loading', on);
+  btn.disabled = on;
+}
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+const ROLE_LABELS = { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist' };
+
+// ── On load: check for ?token= in the URL ────────────────────────────────────
+(async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('token');
+
+  if (token) {
+    // Token from invite email — validate immediately
+    try {
+      const r    = await fetch('/api/auth/check-invite', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ token }),
+      });
+      const data = await r.json().catch(() => ({}));
+
+      if (data.canRegister) {
+        inviteData = { ...data, token };
+        populateRegisterPanel();
+        showPanel('panel-register');
+        updateStepDots(2);
+      } else {
+        showPanel('panel-email');
+        showError(reasonMessage(data.reason));
+      }
+    } catch (_) {
+      // Network error — show email panel and let them try manually
+    }
+  }
+})();
+
+// ── Panel 1: email check ──────────────────────────────────────────────────────
+document.getElementById('check-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError();
+  const btn   = document.getElementById('check-btn');
+  const email = document.getElementById('input-email').value.trim();
+
+  if (!email) { showError('Please enter your email address.'); return; }
+
+  setLoading(btn, true);
+  try {
+    const r    = await fetch('/api/auth/check-invite', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email }),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (data.canRegister) {
+      inviteData = { ...data };
+      populateRegisterPanel();
+      showPanel('panel-register');
+      updateStepDots(2);
+    } else {
+      showError(reasonMessage(data.reason));
+    }
+  } catch (_) {
+    showError('Could not connect to the server. Please try again.');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+// ── Panel 2: registration form ───────────────────────────────────────────────
+document.getElementById('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError();
+
+  if (!inviteData) { showError('Session expired. Please refresh and try again.'); return; }
+
+  const btn       = document.getElementById('register-btn');
+  const name      = document.getElementById('reg-name').value.trim();
+  const phone     = document.getElementById('reg-phone').value.trim();
+  const password  = document.getElementById('reg-password').value;
+  const confirm   = document.getElementById('reg-confirm').value;
+
+  if (!name)              { showError('Full name is required.'); return; }
+  if (password !== confirm) { showError('Passwords do not match.'); return; }
+  if (!passwordValid(password)) {
+    showError('Password must be at least 8 characters and include uppercase, lowercase, and a number.');
+    return;
+  }
+
+  setLoading(btn, true);
+  try {
+    const body = {
+      password,
+      confirmPassword: confirm,
+      profile: { name, phone: phone || undefined, displayName: name },
+    };
+    // Attach either the token (from URL) or the email (from manual entry)
+    if (inviteData.token) {
+      body.token = inviteData.token;
+    } else {
+      body.email = inviteData.email;
+    }
+
+    const r    = await fetch('/api/auth/register', {
+      method:      'POST',
+      headers:     { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body:        JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (r.ok && data.ok) {
+      if (data.requiresVerification) {
+        // Email verification required — store email for resend, go to verify page
+        sessionStorage.setItem('pending_verification_email', data.email || inviteData.email || '');
+        window.location.replace('/verify-email?state=sent');
+      } else {
+        // Bootstrap owner: auto-active — go straight to onboarding
+        window.location.replace('/onboarding');
+      }
+    } else {
+      showError(data.error || 'Account creation failed. Please try again.');
+    }
+  } catch (_) {
+    showError('Could not connect to the server. Please try again.');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+// ── Password strength hints ───────────────────────────────────────────────────
+document.getElementById('reg-password').addEventListener('input', function () {
+  const v = this.value;
+  toggle('req-len',   v.length >= 8);
+  toggle('req-upper', /[A-Z]/.test(v));
+  toggle('req-lower', /[a-z]/.test(v));
+  toggle('req-num',   /[0-9]/.test(v));
+});
+function toggle(id, met) {
+  document.getElementById(id).classList.toggle('met', met);
+}
+function passwordValid(v) {
+  return v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v);
+}
+
+// ── Populate register panel from invite data ──────────────────────────────────
+function populateRegisterPanel() {
+  if (!inviteData) return;
+
+  // Pre-fill email (locked)
+  document.getElementById('reg-email').value = inviteData.email || '';
+
+  // Pre-fill name hint if provided
+  if (inviteData.displayNameHint) {
+    const nameInput = document.getElementById('reg-name');
+    if (!nameInput.value) nameInput.value = inviteData.displayNameHint;
+  }
+
+  // Invite / allowlist confirmation card
+  const card = document.getElementById('invite-card');
+  const org  = inviteData.organisationName || 'Opal Therapy';
+  const path = inviteData.registrationPath;
+  if (path === 'allowlist') {
+    card.innerHTML = `✓ Email verified — <strong>${inviteData.email}</strong> is authorised to create an Opal Therapy account.`;
+  } else {
+    card.innerHTML = `✓ Invitation confirmed for <strong>${inviteData.email}</strong> at <strong>${org}</strong>`;
+  }
+  card.classList.add('visible');
+
+  // Role badge
+  const role  = inviteData.role || 'therapist';
+  const label = ROLE_LABELS[role] || role;
+  const icons = { owner: '👑', admin: '🛡️', therapist: '🩺' };
+  document.getElementById('role-badge-wrap').innerHTML =
+    `<div class="role-badge ${role}">${icons[role] || ''} ${label}</div>`;
+
+  // Update subtitle
+  document.getElementById('register-sub').textContent =
+    `You're joining as ${label === 'Owner' ? 'an' : 'a'} ${label}. Fill in the details below to complete setup.`;
+}
+
+// ── Step dots ──────────────────────────────────────────────────────────────────
+function updateStepDots(activeStep) {
+  document.getElementById('dot-1').className = 'step-dot ' + (activeStep > 1 ? 'done' : 'active');
+  document.getElementById('dot-2').className = 'step-dot ' + (activeStep >= 2 ? 'active' : '');
+}
+
+// ── Human-readable reason messages ────────────────────────────────────────────
+function reasonMessage(reason) {
+  switch (reason) {
+    case 'not_authorised':   return 'This email is not authorised to create an Opal Therapy account. Please contact the practice owner if you believe this is a mistake.';
+    case 'not_invited':      return 'This email is not authorised to create an Opal Therapy account. Please contact the practice owner if you believe this is a mistake.';
+    case 'expired':          return 'This invitation has expired. Please contact the practice owner for a new invite.';
+    case 'revoked':          return 'This invitation has been cancelled. Please contact the practice owner.';
+    case 'already_accepted':
+    case 'account_exists':   return 'An account already exists for this email. Please sign in instead.';
+    default:                 return 'Unable to verify your access. Please try again or contact the practice owner.';
+  }
+}
+</script>
+
+</body>
+</html>

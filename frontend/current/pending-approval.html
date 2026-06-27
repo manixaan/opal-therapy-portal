@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Awaiting approval — Opal Therapy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:      #5b6af0;
+      --brand-dark: #4452d8;
+      --ink:        #1a1a2e;
+      --ink-soft:   #6b7280;
+      --surface:    #ffffff;
+      --bg:         #f4f5fb;
+      --border:     #dde3ec;
+      --radius:     12px;
+      --shadow:     0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      color: var(--ink);
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 52px 40px;
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+    }
+
+    .icon-wrap {
+      width: 64px; height: 64px;
+      background: #fffbeb;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .icon-wrap svg { width: 32px; height: 32px; fill: #d97706; }
+
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+    .sub {
+      font-size: 14px;
+      color: var(--ink-soft);
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .sub strong { color: var(--ink); }
+
+    .info-list {
+      background: #f8f9fc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      text-align: left;
+      margin-bottom: 28px;
+    }
+    .info-list li {
+      list-style: none;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      padding: 5px 0;
+    }
+    .info-list li .check { color: var(--brand); font-size: 15px; flex-shrink: 0; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-soft);
+      border: 1.5px solid var(--border);
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+
+    .footer {
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+    .footer a { color: var(--brand); text-decoration: none; font-weight: 500; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Pulse animation on the icon */
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.08); opacity: 0.8; }
+    }
+    .icon-wrap { animation: pulse 2.5s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="icon-wrap">
+    <!-- Hourglass icon -->
+    <svg viewBox="0 0 24 24"><path d="M6 2v6l2.5 2.5L6 13v9h12v-9l-2.5-2.5L18 8V2H6zm10 11.5V20H8v-6.5l4-4 4 4zm-4-5-4-4V4h8v.5l-4 4z"/></svg>
+  </div>
+
+  <h1>Account pending approval</h1>
+  <p class="sub">
+    Your email has been verified. Your account is now awaiting approval by the <strong>Opal Therapy</strong> practice owner before you can sign in.
+  </p>
+
+  <ul class="info-list">
+    <li><span class="check">✓</span> Email verified</li>
+    <li><span class="check" style="color:#d97706">○</span> Account approval — pending</li>
+    <li><span class="check" style="color:#9ca3af">○</span> Access granted</li>
+  </ul>
+
+  <p style="font-size:13px;color:var(--ink-soft);margin-bottom:20px;line-height:1.6">
+    You'll receive an email at <strong id="email-display">your registered address</strong> once the practice owner approves your account. This usually happens within one business day.
+  </p>
+
+  <a href="mailto:admin@opaltherapy.com.au" class="btn btn-ghost">Contact the practice owner</a>
+
+  <p class="footer">
+    <a href="/login">Back to sign in</a>
+    &nbsp;·&nbsp;
+    <a href="/register">Create a different account</a>
+  </p>
+</div>
+
+<script>
+  // Show the user's email if we have it stored
+  const email = sessionStorage.getItem('pending_verification_email') || '';
+  if (email) {
+    document.getElementById('email-display').textContent = email;
+  }
+</script>
+
+</body>
+</html>

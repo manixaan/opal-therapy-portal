@@ -1,0 +1,45 @@
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+.npm/
+
+# ── Environment / secrets (NEVER commit these) ───────────────────────────────
+.env
+.env.*
+*.save
+backend/.env
+backend/.env.*
+backend/*.save
+frontend/.env
+frontend/.env.*
+
+# Allow .env.example files (templates with no real secrets)
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# ── Build / cache ─────────────────────────────────────────────────────────────
+.next/
+dist/
+build/
+coverage/
+.cache/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ── Sensitive documents ───────────────────────────────────────────────────────
+*.docx
+*.xlsx
+*.pdf
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Test output ───────────────────────────────────────────────────────────────
+junit.xml

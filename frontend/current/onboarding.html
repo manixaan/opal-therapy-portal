@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set up your profile — Opal Therapy</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #5b6af0;
+      --brand-dark:  #4452d8;
+      --ink:         #1a1a2e;
+      --ink-soft:    #6b7280;
+      --surface:     #ffffff;
+      --bg:          #f4f5fb;
+      --border:      #dde3ec;
+      --danger:      #dc2626;
+      --success:     #16a34a;
+      --success-bg:  #f0fdf4;
+      --warn-bg:     #fffbeb;
+      --warn-bdr:    #fcd34d;
+      --warn-txt:    #92400e;
+      --radius:      12px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px 80px;
+      color: var(--ink);
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 500px;
+    }
+
+    /* ── Logo ── */
+    .logo { text-align: center; margin-bottom: 24px; }
+    .logo-mark {
+      width: 44px; height: 44px;
+      background: var(--brand);
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .logo-mark svg { width: 24px; height: 24px; fill: white; }
+    .logo h1 { font-size: 18px; font-weight: 700; color: var(--ink); }
+
+    /* ── Progress bar ── */
+    .progress-wrap { margin-bottom: 28px; }
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--brand);
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .progress-label {
+      font-size: 11.5px;
+      color: var(--ink-soft);
+      margin-top: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── Headings ── */
+    .section-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .section-sub   { font-size: 13px; color: var(--ink-soft); margin-bottom: 22px; line-height: 1.6; }
+
+    /* ── Fields ── */
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-soft);
+      margin-bottom: 6px;
+    }
+    label .required { color: var(--danger); margin-left: 2px; }
+    label .optional { font-weight: 400; color: #9ca3af; }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="email"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--brand); }
+    input[readonly] { background: #f8f9fc; color: var(--ink-soft); cursor: default; }
+    textarea { resize: vertical; min-height: 80px; }
+    .field-hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.5; }
+
+    /* ── Callout boxes ── */
+    .callout {
+      display: flex;
+      gap: 10px;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      font-size: 13px;
+      line-height: 1.5;
+      background: var(--warn-bg);
+      border: 1.5px solid var(--warn-bdr);
+      color: var(--warn-txt);
+    }
+    .callout .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+    .callout.info    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+    .callout.success { background: var(--success-bg); border-color: #bbf7d0; color: #166534; }
+
+    /* ── Toggle switch ── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 14px;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color 0.15s;
+    }
+    .toggle-row:hover { border-color: var(--brand); }
+    .toggle-row-text  { font-size: 14px; color: var(--ink); }
+    .toggle-row-sub   { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+    .toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: var(--border); border-radius: 11px; transition: background 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--brand); }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 16px; height: 16px;
+      background: #fff; border-radius: 50%;
+      transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+    /* ── Role badge ── */
+    .role-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 600; margin-bottom: 16px;
+    }
+    .role-badge.owner     { background: #f0f0ff; color: #5b6af0; }
+    .role-badge.admin     { background: #fff7ed; color: #c2410c; }
+    .role-badge.therapist { background: #f0fdf4; color: #16a34a; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+    .btn-primary {
+      flex: 1; padding: 12px;
+      background: var(--brand); color: #fff; border: none;
+      border-radius: 8px; font-size: 15px; font-weight: 600;
+      font-family: inherit; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover    { background: var(--brand-dark); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+      padding: 12px 18px; background: none;
+      color: var(--ink-soft); border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 14px; font-weight: 500;
+      font-family: inherit; cursor: pointer; transition: border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn-secondary:hover { border-color: var(--ink-soft); }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .btn-primary.loading .spinner   { display: block; }
+    .btn-primary.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .skip-link {
+      display: block; text-align: center;
+      font-size: 12px; color: var(--ink-soft);
+      margin-top: 12px; cursor: pointer; text-decoration: underline;
+    }
+    .skip-link:hover { color: var(--ink); }
+
+    /* ── Error ── */
+    .error-box {
+      background: #fef2f2; border: 1px solid #fca5a5;
+      color: var(--danger); border-radius: 8px;
+      padding: 10px 14px; font-size: 13px;
+      margin-bottom: 16px; display: none;
+    }
+    .error-box.visible { display: block; }
+
+    /* ── Panels ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Location wrap ── */
+    .location-wrap { position: relative; }
+    .location-wrap input { padding-left: 38px; }
+    .location-icon {
+      position: absolute; left: 12px; top: 50%;
+      transform: translateY(-50%); font-size: 16px; pointer-events: none;
+    }
+
+    /* ── Notification toggles ── */
+    .notif-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+
+    /* ── Review checklist ── */
+    .review-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+    .review-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13.5px;
+    }
+    .review-item .badge {
+      font-size: 11px; font-weight: 600; padding: 2px 7px;
+      border-radius: 10px; margin-left: auto; flex-shrink: 0;
+    }
+    .review-item .badge.done   { background: #f0fdf4; color: #16a34a; }
+    .review-item .badge.skip   { background: #f8f9fc; color: #9ca3af; }
+    .review-item .step-icon { font-size: 16px; }
+
+    /* ── Outlook connect card ── */
+    .outlook-card {
+      border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 20px; display: flex; align-items: center; gap: 16px;
+      margin-bottom: 18px;
+    }
+    .outlook-logo {
+      width: 44px; height: 44px; border-radius: 8px;
+      background: #0078d4; display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .outlook-card .label { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .outlook-card .sub   { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+    /* ── Tag pills (specialisations) ── */
+    .tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #f0f0ff; color: var(--brand);
+      border-radius: 20px; padding: 4px 10px;
+      font-size: 12.5px; font-weight: 500; cursor: pointer;
+    }
+    .tag .rm { font-size: 14px; line-height: 1; color: #888; }
+    .tag-input-wrap { display: flex; gap: 8px; margin-top: 8px; }
+    .tag-input-wrap input { flex: 1; }
+    .tag-add-btn {
+      padding: 10px 14px;
+      background: var(--brand); color: #fff;
+      border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .tag-add-btn:hover { background: var(--brand-dark); }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><path d="M8 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3V2h-2v2H9V2H8zm-3 6h14v10H5V8zm2 2v2h2v-2H7zm4 0v2h2v-2h-2zm4 0v2h2v-2h-2zM7 14v2h2v-2H7zm4 0v2h2v-2h-2z"/></svg>
+    </div>
+    <h1>Opal Therapy</h1>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress-label">
+      <span id="progress-step-label">Step 1 of 9</span>
+      <span id="progress-pct">0%</span>
+    </div>
+  </div>
+
+  <div class="error-box" id="error-box" role="alert"></div>
+
+  <!-- Loading -->
+  <div class="panel active" id="panel-loading">
+    <p style="text-align:center;color:var(--ink-soft);padding:32px 0;">Loading your profile…</p>
+  </div>
+
+  <!-- ══ STEP 1: Personal details ══════════════════════════════════════════ -->
+  <div class="panel" id="panel-1">
+    <div id="role-badge-wrap"></div>
+    <p class="section-title">Your details</p>
+    <p class="section-sub" id="step1-sub">How you'll appear in the app — your name, role, and contact info.</p>
+
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="s1-email" readonly />
+    </div>
+    <div class="field">
+      <label for="s1-display-name">Display name <span class="required">*</span></label>
+      <input type="text" id="s1-display-name" placeholder="e.g. Ann or Ann Smith" />
+      <p class="field-hint">Appears on calendar tiles and to other staff.</p>
+    </div>
+    <div class="field">
+      <label for="s1-role-title">Job title <span class="optional">(optional)</span></label>
+      <input type="text" id="s1-role-title" placeholder="e.g. Occupational Therapist" />
+    </div>
+    <div class="field">
+      <label for="s1-phone">Phone <span class="optional">(optional)</span></label>
+      <input type="tel" id="s1-phone" placeholder="+61 4xx xxx xxx" />
+    </div>
+
+    <div id="treating-toggle-wrap" style="display:none;">
+      <hr class="divider" />
+      <p style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px;">Calendar setup</p>
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">I am also a treating therapist</div>
+          <div class="toggle-row-sub">I have my own clinical calendar and see clients directly</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="s1-is-treating" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-1-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2: Professional details ══════════════════════════════════════ -->
+  <div class="panel" id="panel-2">
+    <p class="section-title">Professional details</p>
+    <p class="section-sub">Your registration and practice information. You can update these any time in My Profile.</p>
+
+    <div class="field">
+      <label for="s2-ahpra">AHPRA registration number <span class="optional">(optional)</span></label>
+      <input type="text" id="s2-ahpra" placeholder="e.g. OCC0001234567" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="s2-years">Years of experience <span class="optional">(optional)</span></label>
+      <input type="number" id="s2-years" placeholder="e.g. 5" min="0" max="50" />
+    </div>
+    <div class="field">
+      <label>Areas of specialisation <span class="optional">(optional)</span></label>
+      <div class="tags-wrap" id="spec-tags"></div>
+      <div class="tag-input-wrap">
+        <input type="text" id="spec-input" placeholder="Add a specialisation…" />
+        <button type="button" class="tag-add-btn" onclick="addSpec()">Add</button>
+      </div>
+      <p class="field-hint">e.g. Paediatrics, NDIS, Mental Health, Stroke Rehabilitation</p>
+    </div>
+    <div class="field">
+      <label for="s2-insurance">Professional indemnity insurance provider <span class="optional">(optional)</span></label>
+      <input type="text" id="s2-insurance" placeholder="e.g. MIPS, Avant" />
+    </div>
+    <div class="field">
+      <label for="s2-bio">Short bio <span class="optional">(optional)</span></label>
+      <textarea id="s2-bio" placeholder="Brief description for client-facing use…"></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(1)">← Back</button>
+      <button class="btn-primary" id="btn-2-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <a class="skip-link" onclick="skipStep(2)">Skip for now</a>
+  </div>
+
+  <!-- ══ STEP 3: Connect Outlook ═══════════════════════════════════════════ -->
+  <div class="panel" id="panel-3">
+    <p class="section-title">Connect your calendar</p>
+    <p class="section-sub">Sync your Outlook calendar so appointments appear automatically — no manual imports needed.</p>
+
+    <div class="outlook-card">
+      <div class="outlook-logo">📅</div>
+      <div>
+        <div class="label">Microsoft Outlook</div>
+        <div class="sub">Sync appointments, availability, and Teams meetings</div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <span class="icon">ℹ️</span>
+      <span>Connecting Outlook allows the scheduler to read your calendar and automatically populate your appointments. Your calendar data stays private — it's only used within Opal Therapy.</span>
+    </div>
+
+    <div id="outlook-status-connected" class="callout success" style="display:none;">
+      <span class="icon">✅</span>
+      <span>Outlook is connected. Your calendar will begin syncing shortly.</span>
+    </div>
+
+    <div class="btn-row" id="outlook-connect-row">
+      <button class="btn-secondary" onclick="goTo(2)">← Back</button>
+      <button class="btn-primary" id="btn-outlook-connect" onclick="connectOutlook()">
+        <span class="btn-label">Connect Outlook →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <div class="btn-row" id="outlook-continue-row" style="display:none;">
+      <button class="btn-secondary" onclick="goTo(2)">← Back</button>
+      <button class="btn-primary" onclick="goTo(4)">
+        <span class="btn-label">Next →</span>
+      </button>
+    </div>
+    <a class="skip-link" onclick="skipStep(3)">Skip — I'll connect Outlook later</a>
+  </div>
+
+  <!-- ══ STEP 4: Work location ══════════════════════════════════════════════ -->
+  <div class="panel" id="panel-4">
+    <p class="section-title" id="step4-title">Work location</p>
+    <p class="section-sub" id="step4-sub">Your default starting location is used to calculate travel time between appointments.</p>
+
+    <div class="callout" id="step4-callout">
+      <span class="icon">📍</span>
+      <span id="step4-callout-text">Enter your default base — usually your home address or clinic. The scheduler uses this to estimate drive time to each appointment.</span>
+    </div>
+
+    <div class="field">
+      <label for="s4-location" id="step4-location-label">Default base location <span class="required">*</span></label>
+      <div class="location-wrap">
+        <span class="location-icon">📍</span>
+        <input type="text" id="s4-location" placeholder="Start typing an address…" autocomplete="off" />
+      </div>
+      <p class="field-hint">Full street address. You can update this any time in My Profile.</p>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(3)">← Back</button>
+      <button class="btn-primary" id="btn-4-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <a class="skip-link" id="skip-4" onclick="skipStep(4)">Skip — I'll add my location later</a>
+  </div>
+
+  <!-- ══ STEP 5: Travel bases ═══════════════════════════════════════════════ -->
+  <div class="panel" id="panel-5">
+    <p class="section-title">Travel bases</p>
+    <p class="section-sub">Add any additional bases you work from — satellite clinics, schools, or community locations. These let the scheduler choose the nearest start point for each appointment.</p>
+
+    <div id="bases-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+
+    <div class="field">
+      <label for="s5-base-name">Base name <span class="optional">(optional)</span></label>
+      <input type="text" id="s5-base-name" placeholder="e.g. Murdoch Clinic" />
+    </div>
+    <div class="field">
+      <label for="s5-base-addr">Address</label>
+      <div class="location-wrap">
+        <span class="location-icon">🏢</span>
+        <input type="text" id="s5-base-addr" placeholder="Full address…" autocomplete="off" />
+      </div>
+    </div>
+    <button type="button" class="btn-secondary" style="width:100%;margin-bottom:4px;" onclick="addBase()">+ Add base</button>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(4)">← Back</button>
+      <button class="btn-primary" id="btn-5-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <a class="skip-link" onclick="skipStep(5)">Skip — no additional bases yet</a>
+  </div>
+
+  <!-- ══ STEP 6: Credentials ════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-6">
+    <p class="section-title">Credentials &amp; registration</p>
+    <p class="section-sub">Expiry dates help the app warn you before renewals are due. All fields are optional — fill in what's relevant to you.</p>
+
+    <div class="field">
+      <label for="s6-ahpra-expiry">AHPRA registration expiry <span class="optional">(optional)</span></label>
+      <input type="text" id="s6-ahpra-expiry" placeholder="e.g. 30/11/2025" />
+    </div>
+    <div class="field">
+      <label for="s6-insurance-expiry">Insurance expiry <span class="optional">(optional)</span></label>
+      <input type="text" id="s6-insurance-expiry" placeholder="e.g. 01/07/2026" />
+    </div>
+    <div class="field">
+      <label for="s6-wwc">Working With Children check expiry <span class="optional">(optional)</span></label>
+      <input type="text" id="s6-wwc" placeholder="e.g. 15/03/2027" />
+    </div>
+    <div class="field">
+      <label for="s6-police">Police check date <span class="optional">(optional)</span></label>
+      <input type="text" id="s6-police" placeholder="e.g. 01/01/2024" />
+    </div>
+    <div class="field">
+      <label for="s6-ndis">NDIS Worker Screening expiry <span class="optional">(optional)</span></label>
+      <input type="text" id="s6-ndis" placeholder="e.g. 01/01/2028" />
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(5)">← Back</button>
+      <button class="btn-primary" id="btn-6-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <a class="skip-link" onclick="skipStep(6)">Skip for now</a>
+  </div>
+
+  <!-- ══ STEP 7: CPD ════════════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-7">
+    <p class="section-title">CPD &amp; professional development</p>
+    <p class="section-sub">Set your annual CPD hour targets so the app can track your progress and send reminders.</p>
+
+    <div class="callout info">
+      <span class="icon">📚</span>
+      <span>AHPRA requires OTs to complete <strong>30 hours</strong> of CPD per registration year. You can adjust targets and add entries any time in My Profile.</span>
+    </div>
+
+    <div class="field">
+      <label for="s7-cpd-target">Annual CPD target (hours) <span class="optional">(optional)</span></label>
+      <input type="number" id="s7-cpd-target" placeholder="30" min="0" max="200" value="30" />
+    </div>
+    <div class="field">
+      <label for="s7-pd-target">Annual PD target (hours) <span class="optional">(optional)</span></label>
+      <input type="number" id="s7-pd-target" placeholder="e.g. 10" min="0" max="200" />
+      <p class="field-hint">Professional development events, workshops, conferences.</p>
+    </div>
+    <div class="field">
+      <label for="s7-reg-year-start">Registration year start <span class="optional">(optional)</span></label>
+      <select id="s7-reg-year-start">
+        <option value="">-- Select month --</option>
+        <option value="1">January</option>
+        <option value="2">February</option>
+        <option value="3">March</option>
+        <option value="4">April</option>
+        <option value="5">May</option>
+        <option value="6">June</option>
+        <option value="7">July</option>
+        <option value="8" selected>August</option>
+        <option value="9">September</option>
+        <option value="10">October</option>
+        <option value="11">November</option>
+        <option value="12">December</option>
+      </select>
+      <p class="field-hint">OT registration typically renews in November — the year is counted from December to November.</p>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(6)">← Back</button>
+      <button class="btn-primary" id="btn-7-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <a class="skip-link" onclick="skipStep(7)">Skip for now</a>
+  </div>
+
+  <!-- ══ STEP 8: Notifications ═════════════════════════════════════════════ -->
+  <div class="panel" id="panel-8">
+    <p class="section-title">Notification preferences</p>
+    <p class="section-sub">Choose which alerts you'd like to receive. You can change these at any time in My Profile.</p>
+
+    <div class="notif-list">
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">Work location reminders</div>
+          <div class="toggle-row-sub">Friday afternoon nudge to set next week's locations</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="n-location" checked />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">Credential expiry warnings</div>
+          <div class="toggle-row-sub">Alerts when AHPRA, insurance, or WWC are due for renewal</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="n-plan-expiry" checked />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">Appointment cancellations</div>
+          <div class="toggle-row-sub">In-app alert when a client cancels</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="n-cancellation" checked />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">Weekly schedule digest</div>
+          <div class="toggle-row-sub">Monday morning summary of the week ahead</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="n-weekly-digest" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+
+      <label class="toggle-row">
+        <div>
+          <div class="toggle-row-text">CPD reminders</div>
+          <div class="toggle-row-sub">Quarterly check on your CPD progress</div>
+        </div>
+        <div class="toggle">
+          <input type="checkbox" id="n-cpd-reminder" checked />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(7)">← Back</button>
+      <button class="btn-primary" id="btn-8-next">
+        <span class="btn-label">Next →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 9: Review & finish ════════════════════════════════════════════ -->
+  <div class="panel" id="panel-9">
+    <p class="section-title">Review &amp; finish</p>
+    <p class="section-sub">Here's a summary of what you've set up. You can always update anything in My Profile.</p>
+
+    <div class="review-list" id="review-list"></div>
+
+    <div class="callout info" style="margin-bottom:20px;">
+      <span class="icon">💡</span>
+      <span>Skipped sections can be completed any time from <strong>My Profile</strong> in the app.</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="goTo(8)">← Back</button>
+      <button class="btn-primary" id="btn-finish">
+        <span class="btn-label">Finish setup →</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ Done ══════════════════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-done">
+    <div style="text-align:center;padding:16px 0 28px;">
+      <div style="font-size:52px;margin-bottom:16px;">🎉</div>
+      <p class="section-title">You're all set!</p>
+      <p class="section-sub" style="margin-bottom:0;">
+        Your profile is ready. Taking you to the app now…
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TOTAL_STEPS   = 9;
+const STEP_KEYS     = ['profile','professional','outlook','work-location','travel-bases','credentials','cpd','notifications','review'];
+const STEP_LABELS   = ['Your details','Professional details','Connect Outlook','Work location','Travel bases','Credentials & registration','CPD & PD goals','Notifications','Review & finish'];
+const STEP_ICONS    = ['👤','🩺','📅','📍','🏢','📋','📚','🔔','✅'];
+const OPTIONAL_STEPS = [2,3,4,5,6,7]; // step numbers that can be skipped (1-indexed; 8 is notifs which always saves; 9 is review)
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let USER         = null;
+let currentStep  = 1;
+let completedSteps = new Set();
+let skippedSteps   = new Set();
+let specialisations = [];
+let travelBases     = [];
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+(async function init() {
+  try {
+    const r    = await fetch('/api/auth/onboarding', { credentials: 'include' });
+    if (r.status === 401) { window.location.replace('/login'); return; }
+    const data = await r.json().catch(() => ({}));
+
+    USER = data.user;
+    if (!USER) { window.location.replace('/login'); return; }
+
+    if (USER.profileCompleted) {
+      window.location.replace('/');
+      return;
+    }
+
+    // Restore progress from server
+    (USER.onboardingCompletedSteps || []).forEach((k,i) => completedSteps.add(STEP_KEYS.indexOf(k) + 1));
+    (USER.onboardingSkippedSteps   || []).forEach((k,i) => skippedSteps.add(STEP_KEYS.indexOf(k) + 1));
+
+    populateStep1();
+    goTo(1, true);
+  } catch (_) {
+    showError('Could not load your profile. Please refresh the page.');
+    goTo(1, true);
+  }
+})();
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function goTo(step, skipSave) {
+  clearError();
+  currentStep = step;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + step).classList.add('active');
+  updateProgress(step);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (step === 9) buildReviewList();
+}
+
+function updateProgress(step) {
+  const pct = step > TOTAL_STEPS ? 100 : Math.round((step / TOTAL_STEPS) * 100);
+  document.getElementById('progress-fill').style.width  = pct + '%';
+  document.getElementById('progress-step-label').textContent = step > TOTAL_STEPS ? 'Complete!' : `Step ${step} of ${TOTAL_STEPS}`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+}
+
+async function skipStep(step) {
+  skippedSteps.add(step);
+  completedSteps.delete(step);
+  await postStep(STEP_KEYS[step - 1], null, true);
+  goTo(step + 1);
+}
+
+// ── Step 1: Personal details ──────────────────────────────────────────────────
+function populateStep1() {
+  if (!USER) return;
+  const role   = USER.role || 'therapist';
+  const labels = { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist' };
+  const icons  = { owner: '👑', admin: '🛡️', therapist: '🩺' };
+  document.getElementById('role-badge-wrap').innerHTML =
+    `<div class="role-badge ${role}">${icons[role]} ${labels[role]}</div>`;
+  document.getElementById('s1-email').value        = USER.email || '';
+  document.getElementById('s1-display-name').value = USER.therapistProfile?.displayName || USER.name || '';
+  document.getElementById('s1-role-title').value   = USER.therapistProfile?.roleTitle || '';
+  if (role === 'owner') {
+    document.getElementById('treating-toggle-wrap').style.display = 'block';
+    document.getElementById('s1-is-treating').checked = !!USER.isTreatingTherapist;
+  }
+  const subs = {
+    owner:     'Set up your personal details. You can configure practice settings once in the app.',
+    admin:     'Set up your personal details as an administrator.',
+    therapist: 'Your display name appears on calendar tiles and appointment cards.',
+  };
+  document.getElementById('step1-sub').textContent = subs[role] || subs.therapist;
+}
+
+document.getElementById('btn-1-next').addEventListener('click', async () => {
+  clearError();
+  const displayName = document.getElementById('s1-display-name').value.trim();
+  if (!displayName) { showError('Display name is required.'); return; }
+
+  const payload = {
+    displayName,
+    roleTitle:       document.getElementById('s1-role-title').value.trim() || undefined,
+    phone:           document.getElementById('s1-phone').value.trim()       || undefined,
+    isTreatingTherapist: USER?.role === 'owner'
+      ? document.getElementById('s1-is-treating').checked
+      : undefined,
+  };
+
+  setLoading('btn-1-next', true);
+  const ok = await postStep('profile', payload);
+  setLoading('btn-1-next', false);
+  if (ok) { completedSteps.add(1); goTo(2); }
+});
+
+// ── Step 2: Professional details ──────────────────────────────────────────────
+document.getElementById('btn-2-next').addEventListener('click', async () => {
+  const payload = {
+    ahpraNumber:  document.getElementById('s2-ahpra').value.trim()    || undefined,
+    yearsExp:     document.getElementById('s2-years').value           || undefined,
+    specialisations: specialisations.length ? specialisations : undefined,
+    insuranceProvider: document.getElementById('s2-insurance').value.trim() || undefined,
+    bio:          document.getElementById('s2-bio').value.trim()      || undefined,
+  };
+  setLoading('btn-2-next', true);
+  const ok = await postStep('professional', payload);
+  setLoading('btn-2-next', false);
+  if (ok) { completedSteps.add(2); skippedSteps.delete(2); goTo(3); }
+});
+
+// Tags (specialisations)
+document.getElementById('spec-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addSpec(); }
+});
+function addSpec() {
+  const v = document.getElementById('spec-input').value.trim();
+  if (!v || specialisations.includes(v)) return;
+  specialisations.push(v);
+  document.getElementById('spec-input').value = '';
+  renderSpecs();
+}
+function removeSpec(val) {
+  specialisations = specialisations.filter(s => s !== val);
+  renderSpecs();
+}
+function renderSpecs() {
+  document.getElementById('spec-tags').innerHTML = specialisations.map(s =>
+    `<span class="tag" onclick="removeSpec('${escHtml(s)}')">${escHtml(s)} <span class="rm">×</span></span>`
+  ).join('');
+}
+
+// ── Step 3: Outlook connect ───────────────────────────────────────────────────
+async function connectOutlook() {
+  setLoading('btn-outlook-connect', true);
+  try {
+    // Fetch the OAuth URL from the backend
+    const r = await fetch('/api/auth/outlook/url', { credentials: 'include' });
+    if (r.ok) {
+      const { url } = await r.json().catch(() => ({}));
+      if (url) {
+        // Store that we're in onboarding flow so the OAuth callback can redirect back
+        sessionStorage.setItem('oauth_return', '/onboarding?step=4');
+        window.location.href = url;
+        return;
+      }
+    }
+    showError('Could not get Outlook connect URL. Try again or skip for now.');
+  } catch (_) {
+    showError('Could not connect to the server.');
+  }
+  setLoading('btn-outlook-connect', false);
+}
+
+// Check if we were returned from OAuth (e.g. ?step=4 in URL)
+(function checkOAuthReturn() {
+  const p    = new URLSearchParams(window.location.search);
+  const step = parseInt(p.get('step'));
+  if (step === 4) {
+    completedSteps.add(3);
+    document.getElementById('outlook-status-connected').style.display = 'flex';
+    document.getElementById('outlook-connect-row').style.display  = 'none';
+    document.getElementById('outlook-continue-row').style.display = 'flex';
+    postStep('outlook', { connected: true }).catch(() => {});
+    // Clean URL
+    history.replaceState(null, '', '/onboarding');
+  }
+})();
+
+// ── Step 4: Work location ─────────────────────────────────────────────────────
+function setupStep4() {
+  const role       = USER?.role || 'therapist';
+  const isTreating = role === 'therapist' || (role === 'owner' && document.getElementById('s1-is-treating')?.checked);
+  const callout    = document.getElementById('step4-callout');
+  if (!isTreating) {
+    callout.className = 'callout info';
+    document.getElementById('step4-callout-text').textContent =
+      'As an administrator, a work location is optional. You can add it any time in My Profile.';
+    document.getElementById('step4-location-label').innerHTML =
+      'Work location <span class="optional">(optional)</span>';
+    document.getElementById('skip-4').textContent = 'Skip — I\'ll add this later';
+  }
+}
+
+document.getElementById('btn-4-next').addEventListener('click', async () => {
+  clearError();
+  const role       = USER?.role || 'therapist';
+  const isTreating = role === 'therapist' || (role === 'owner' && document.getElementById('s1-is-treating')?.checked);
+  const location   = document.getElementById('s4-location').value.trim();
+  if (isTreating && !location) {
+    showError('Please enter your base location, or use "Skip" to add it later.');
+    return;
+  }
+  const payload = location ? { defaultWorkLocation: { formattedAddress: location } } : {};
+  setLoading('btn-4-next', true);
+  const ok = await postStep('work-location', payload);
+  setLoading('btn-4-next', false);
+  if (ok) { completedSteps.add(4); skippedSteps.delete(4); goTo(5); }
+});
+
+// ── Step 5: Travel bases ──────────────────────────────────────────────────────
+function addBase() {
+  const name = document.getElementById('s5-base-name').value.trim();
+  const addr = document.getElementById('s5-base-addr').value.trim();
+  if (!addr) { showError('Please enter an address for the base.'); return; }
+  travelBases.push({ name: name || addr, address: addr });
+  document.getElementById('s5-base-name').value = '';
+  document.getElementById('s5-base-addr').value = '';
+  clearError();
+  renderBases();
+}
+function removeBase(i) {
+  travelBases.splice(i, 1);
+  renderBases();
+}
+function renderBases() {
+  const el = document.getElementById('bases-list');
+  el.innerHTML = travelBases.map((b, i) =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+       border:1px solid var(--border);border-radius:8px;font-size:13.5px;">
+       <span>🏢</span>
+       <div style="flex:1"><strong>${escHtml(b.name)}</strong>
+         ${b.name !== b.address ? `<br><span style="font-size:12px;color:var(--ink-soft)">${escHtml(b.address)}</span>` : ''}
+       </div>
+       <button onclick="removeBase(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;">×</button>
+     </div>`
+  ).join('');
+}
+
+document.getElementById('btn-5-next').addEventListener('click', async () => {
+  const payload = { travelBases };
+  setLoading('btn-5-next', true);
+  const ok = await postStep('travel-bases', payload);
+  setLoading('btn-5-next', false);
+  if (ok) { completedSteps.add(5); skippedSteps.delete(5); goTo(6); }
+});
+
+// ── Step 6: Credentials ───────────────────────────────────────────────────────
+document.getElementById('btn-6-next').addEventListener('click', async () => {
+  const payload = {
+    ahpraExpiry:    document.getElementById('s6-ahpra-expiry').value.trim()    || undefined,
+    insuranceExpiry: document.getElementById('s6-insurance-expiry').value.trim() || undefined,
+    wwcExpiry:      document.getElementById('s6-wwc').value.trim()             || undefined,
+    policeCheckDate: document.getElementById('s6-police').value.trim()         || undefined,
+    ndisExpiry:     document.getElementById('s6-ndis').value.trim()            || undefined,
+  };
+  const hasAny = Object.values(payload).some(Boolean);
+  setLoading('btn-6-next', true);
+  const ok = await postStep('credentials', hasAny ? payload : {});
+  setLoading('btn-6-next', false);
+  if (ok) { completedSteps.add(6); skippedSteps.delete(6); goTo(7); }
+});
+
+// ── Step 7: CPD ───────────────────────────────────────────────────────────────
+document.getElementById('btn-7-next').addEventListener('click', async () => {
+  const payload = {
+    cpdTargetHours: parseInt(document.getElementById('s7-cpd-target').value) || undefined,
+    pdTargetHours:  parseInt(document.getElementById('s7-pd-target').value)  || undefined,
+    regYearStartMonth: parseInt(document.getElementById('s7-reg-year-start').value) || undefined,
+  };
+  setLoading('btn-7-next', true);
+  const ok = await postStep('cpd', payload);
+  setLoading('btn-7-next', false);
+  if (ok) { completedSteps.add(7); skippedSteps.delete(7); goTo(8); }
+});
+
+// ── Step 8: Notifications ─────────────────────────────────────────────────────
+document.getElementById('btn-8-next').addEventListener('click', async () => {
+  const payload = {
+    locationAlarm: document.getElementById('n-location').checked,
+    planExpiry:    document.getElementById('n-plan-expiry').checked,
+    cancellation:  document.getElementById('n-cancellation').checked,
+    weeklyDigest:  document.getElementById('n-weekly-digest').checked,
+    cpdReminder:   document.getElementById('n-cpd-reminder').checked,
+  };
+  setLoading('btn-8-next', true);
+  const ok = await postStep('notifications', payload);
+  setLoading('btn-8-next', false);
+  if (ok) { completedSteps.add(8); goTo(9); }
+});
+
+// ── Step 9: Review ────────────────────────────────────────────────────────────
+function buildReviewList() {
+  const list = document.getElementById('review-list');
+  list.innerHTML = STEP_KEYS.slice(0, 8).map((key, i) => {
+    const stepNum = i + 1;
+    const done    = completedSteps.has(stepNum);
+    const skipped = skippedSteps.has(stepNum);
+    const badge   = done
+      ? '<span class="badge done">Done</span>'
+      : '<span class="badge skip">Skipped</span>';
+    return `<div class="review-item">
+      <span class="step-icon">${STEP_ICONS[i]}</span>
+      <span>${STEP_LABELS[i]}</span>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-finish').addEventListener('click', async () => {
+  setLoading('btn-finish', true);
+  const ok = await postStep('review', {});
+  setLoading('btn-finish', false);
+  if (ok) {
+    updateProgress(TOTAL_STEPS + 1);
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-done').classList.add('active');
+    setTimeout(() => window.location.replace('/'), 2200);
+  }
+});
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function postStep(stepKey, data, isSkip = false) {
+  try {
+    const r = await fetch('/api/auth/complete-onboarding-step', {
+      method:      'POST',
+      headers:     { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body:        JSON.stringify({ step: stepKey, data: data || {}, skipped: isSkip }),
+    });
+    const json = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showError(json.error || `Could not save step "${stepKey}". Please try again.`);
+      return false;
+    }
+    return true;
+  } catch (_) {
+    showError('Could not connect to the server. Please try again.');
+    return false;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = msg;
+  box.classList.add('visible');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearError() {
+  const box = document.getElementById('error-box');
+  box.textContent = '';
+  box.classList.remove('visible');
+}
+function setLoading(btnId, on) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.classList.toggle('loading', on);
+  btn.disabled = on;
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>

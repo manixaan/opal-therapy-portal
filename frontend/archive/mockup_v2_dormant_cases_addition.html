@@ -1,0 +1,370 @@
+<!-- ============ NEW DORMANT CASES TAB INTEGRATION ============ -->
+<!-- Add this to the <nav class="tabs"> section after the "Reschedule Inbox" tab (around line 1682) -->
+
+<button class="tab" data-tab="dormant-cases">
+  <span class="tab-icon">⚠</span> Dormant Cases
+  <span class="tab-badge" id="dormant-count"></span>
+</button>
+
+<!-- ============ NEW DORMANT CASES VIEW ============ -->
+<!-- Add this new <section> after the </section> closing tag for view-inbox (around line 2830) -->
+
+<section class="view" id="view-dormant-cases">
+  <div style="padding:16px; max-width:1200px;">
+    <div class="panel">
+      <h2>Dormant Cases <span class="h2-sub">6+ weeks with no interaction</span></h2>
+
+      <div style="padding:16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px;">
+        <button class="btn primary" onclick="runDormantCheckNow()" id="dormant-check-btn">
+          🔍 Check now
+        </button>
+        <span style="font-size:12px; color:var(--muted);" id="check-status">
+          Last check: Never
+        </span>
+      </div>
+
+      <div style="overflow:auto; position:relative;">
+        <table class="dormant-tbl" id="dormant-cases-table">
+          <thead>
+            <tr>
+              <th>Client Name</th>
+              <th>Case ID</th>
+              <th>Region</th>
+              <th>Last Activity</th>
+              <th style="text-align:right;">NDIS Hours</th>
+              <th style="text-align:center;">Plan Expires</th>
+              <th>Suggested Action</th>
+            </tr>
+          </thead>
+          <tbody id="dormant-cases-body">
+            <tr style="text-align:center; color:var(--muted);">
+              <td colspan="7" style="padding:40px; border:none;">
+                Click "Check now" to detect dormant cases.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="padding:14px 16px; background:var(--bg); font-size:12px; color:var(--muted); border-top:1px solid var(--border);">
+        <strong>Dormancy criteria:</strong> No appointments booked, no invoices, no case notes in past 6 weeks.
+        <strong style="margin-left:16px;">⚠ Yellow rows:</strong> Plan expires within 14 days — action required.
+      </div>
+    </div>
+
+    <!-- Email configuration panel -->
+    <div class="panel" style="margin-top:16px;">
+      <h2>Dormant Case Reminder Settings</h2>
+
+      <div style="padding:16px;">
+        <div class="form-section">
+          <h4>Email Notification</h4>
+
+          <div class="form-grid">
+            <div class="form-field" style="grid-column:1/-1;">
+              <label>Enable daily dormant case check</label>
+              <div class="toggle">
+                <input type="checkbox" id="dormant-enabled" checked onchange="saveDormantConfig()">
+                <span class="track"></span>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label>Check time (AWST)</label>
+              <input type="time" id="dormant-time" value="06:00" onchange="saveDormantConfig()">
+              <div class="hint">Recommended: before 09:00 clinic start</div>
+            </div>
+
+            <div class="form-field">
+              <label>Check frequency</label>
+              <select id="dormant-frequency" onchange="saveDormantConfig()">
+                <option value="daily">Daily</option>
+                <option value="mon">Monday only</option>
+                <option value="fri">Friday only</option>
+                <option value="mon-fri">Monday & Friday</option>
+              </select>
+            </div>
+
+            <div class="form-field" style="grid-column:1/-1;">
+              <label>Recipient email</label>
+              <input type="email" id="dormant-email" value="ann@opaltherapy.com.au" onchange="saveDormantConfig()"
+                     style="width:100%;">
+            </div>
+
+            <div class="form-field" style="grid-column:1/-1;">
+              <label>Inactivity threshold (weeks)</label>
+              <input type="number" id="dormant-weeks" value="6" min="2" max="26" onchange="saveDormantConfig()">
+              <div class="hint">Mark case dormant after this many weeks of no activity</div>
+            </div>
+          </div>
+
+          <div class="form-actions" style="margin-top:16px;">
+            <button class="btn" onclick="testDormantEmail()">Send test email</button>
+            <button class="btn primary" onclick="saveDormantConfig()">Save settings</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ADD TO <style> BLOCK ============ -->
+<!-- Add these styles to the main <style> section (around line 1640) -->
+
+<style>
+  .dormant-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .dormant-tbl th {
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border: 1px solid var(--border);
+    padding: 12px;
+    text-align: left;
+  }
+  .dormant-tbl td {
+    border: 1px solid var(--border);
+    padding: 12px;
+  }
+  .dormant-tbl tbody tr:hover {
+    background: #f9fafb;
+  }
+  .dormant-tbl tbody tr.urgent {
+    background: var(--warn-soft);
+  }
+  .dormant-action {
+    display: flex;
+    gap: 6px;
+    flex-direction: column;
+  }
+  .dormant-action a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .dormant-action a:hover {
+    text-decoration: underline;
+  }
+  .dormant-region-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .dormant-region-tag.east { background: #fef3c7; color: #92400e; }
+  .dormant-region-tag.west { background: #cffafe; color: #155e75; }
+  .dormant-region-tag.south { background: #ede9fe; color: #5b21b6; }
+  .dormant-region-tag.central { background: #dcfce7; color: #14532d; }
+</style>
+
+<!-- ============ ADD TO <script> BLOCK (before closing </script>) ============ -->
+
+<script>
+/**
+ * Dormant Cases Management
+ */
+
+// Load configuration from localStorage on page load
+function initDormantCases() {
+  const config = JSON.parse(localStorage.getItem('dormantCaseConfig') || '{}');
+  if (Object.keys(config).length > 0) {
+    document.getElementById('dormant-enabled').checked = config.enabled !== false;
+    document.getElementById('dormant-time').value = config.checkTime || '06:00';
+    document.getElementById('dormant-frequency').value = config.frequency || 'daily';
+    document.getElementById('dormant-email').value = config.email || 'ann@opaltherapy.com.au';
+    document.getElementById('dormant-weeks').value = config.thresholdWeeks || 6;
+  }
+
+  // Check on page load if haven't checked today
+  const lastCheck = localStorage.getItem('lastDormantCheck');
+  if (!lastCheck) {
+    runDormantCheckNow();
+  } else {
+    const lastCheckDate = new Date(lastCheck).toLocaleDateString('en-AU');
+    const today = new Date().toLocaleDateString('en-AU');
+    if (lastCheckDate !== today) {
+      runDormantCheckNow();
+    }
+  }
+}
+
+function saveDormantConfig() {
+  const config = {
+    enabled: document.getElementById('dormant-enabled').checked,
+    checkTime: document.getElementById('dormant-time').value,
+    frequency: document.getElementById('dormant-frequency').value,
+    email: document.getElementById('dormant-email').value,
+    thresholdWeeks: parseInt(document.getElementById('dormant-weeks').value),
+    savedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem('dormantCaseConfig', JSON.stringify(config));
+  alert('Settings saved. Check will run at ' + config.checkTime + ' AWST daily.');
+}
+
+async function runDormantCheckNow() {
+  const btn = document.getElementById('dormant-check-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Checking...';
+
+  try {
+    // MOCK DATA for demonstration
+    // In production, this would call the backend scheduler
+    const mockDormantCases = [
+      {
+        caseId: 'C-4521',
+        clientId: 'PT-2891',
+        clientName: 'James Wellington',
+        region: 'East',
+        lastActivityDate: '2026-03-28',
+        hoursUsed: 8,
+        hoursTotal: 40,
+        budgetUsed: 240,
+        budgetTotal: 1200,
+        planExpiryDate: '2026-06-15',
+        daysUntilExpiry: 36,
+        isUrgent: false,
+        suggestedAction: 'Resume therapy — adequate funding available',
+        trackType: 'Hours',
+      },
+      {
+        caseId: 'C-4687',
+        clientId: 'PT-3104',
+        clientName: 'Sarah Chen',
+        region: 'South',
+        lastActivityDate: '2026-03-12',
+        hoursUsed: 18,
+        hoursTotal: 20,
+        budgetUsed: 540,
+        budgetTotal: 600,
+        planExpiryDate: '2026-05-22',
+        daysUntilExpiry: 12,
+        isUrgent: true,
+        suggestedAction: 'Plan window closing — book urgently or seek extension',
+        trackType: 'Hours',
+      },
+      {
+        caseId: 'C-4703',
+        clientId: 'PT-3287',
+        clientName: 'Michael Torres',
+        region: 'West',
+        lastActivityDate: '2026-03-05',
+        hoursUsed: 40,
+        hoursTotal: 40,
+        budgetUsed: 1200,
+        budgetTotal: 1200,
+        planExpiryDate: '2026-05-01',
+        daysUntilExpiry: -9,
+        isUrgent: true,
+        suggestedAction: 'Discharge review — zero hours remaining',
+        trackType: 'Hours',
+      },
+    ];
+
+    renderDormantCases(mockDormantCases);
+
+    // Store last check time
+    localStorage.setItem('lastDormantCheck', new Date().toISOString());
+    const now = new Date();
+    document.getElementById('check-status').textContent =
+      `Last check: ${now.toLocaleTimeString('en-AU', { timeZone: 'Australia/Perth' })} AWST`;
+
+  } catch (error) {
+    console.error('Error checking dormant cases:', error);
+    alert('Error checking dormant cases. See console for details.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+function renderDormantCases(cases) {
+  const tbody = document.getElementById('dormant-cases-body');
+  let html = '';
+
+  if (cases.length === 0) {
+    html = `
+      <tr style="text-align:center; color:var(--ok);">
+        <td colspan="7" style="padding:20px; border:none;">
+          ✓ No dormant cases detected!
+        </td>
+      </tr>
+    `;
+  } else {
+    for (const c of cases) {
+      const urgentClass = c.isUrgent ? ' urgent' : '';
+      const regionClass = c.region.toLowerCase();
+      const warningStyle = c.daysUntilExpiry < 0 ? 'color:var(--danger);' : '';
+
+      html += `
+        <tr class="dormant-row${urgentClass}">
+          <td>${c.clientName}</td>
+          <td><code style="background:#f5f5f5; padding:2px 6px; border-radius:4px; font-size:11px;">${c.caseId}</code></td>
+          <td><span class="dormant-region-tag ${regionClass}">${c.region}</span></td>
+          <td>${c.lastActivityDate}</td>
+          <td style="text-align:right;">${c.hoursUsed} / ${c.hoursTotal}</td>
+          <td style="text-align:center; font-weight:600; ${warningStyle}">${c.planExpiryDate}</td>
+          <td>
+            <strong>${c.suggestedAction}</strong><br/>
+            <div class="dormant-action" style="margin-top:6px;">
+              <a href="#" onclick="quickScheduleClient('${c.clientId}', '${c.clientName}'); return false;">📌 Book session</a>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  tbody.innerHTML = html;
+
+  // Update badge
+  const badge = document.getElementById('dormant-count');
+  if (cases.length > 0) {
+    badge.textContent = cases.length;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+async function testDormantEmail() {
+  const email = document.getElementById('dormant-email').value;
+  alert('Test email would be sent to: ' + email + '\n\n(Production: integrate with SendGrid, AWS SES, or Azure Mail)');
+}
+
+function quickScheduleClient(clientId, clientName) {
+  // Switch to Smart Booking tab and pre-fill client
+  document.querySelector('[data-tab="book"]').click();
+  alert('Booking session for: ' + clientName);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof initDormantCases === 'function') {
+    initDormantCases();
+  }
+});
+
+// Tab switching (add this if not already present)
+if (!window.dormantTabInitialized) {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const tabName = this.getAttribute('data-tab');
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('view-' + tabName).classList.add('active');
+      this.classList.add('active');
+    });
+  });
+  window.dormantTabInitialized = true;
+}
+</script>

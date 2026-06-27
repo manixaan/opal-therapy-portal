@@ -1,0 +1,525 @@
+/**
+ * MICROSOFT OUTLOOK OAUTH SETUP
+ *
+ * What this does:
+ * - Handles login with Microsoft accounts
+ * - Gets permission to access Outlook calendar
+ * - Securely stores access tokens
+ * - Refreshes tokens when they expire
+ *
+ * OAuth = A safe way for users to give us permission without sharing passwords
+ * Think of it like: "Tell Microsoft I trust this app with my calendar"
+ */
+
+const axios = require('axios');
+
+// ===== MICROSOFT OAUTH CONFIGURATION =====
+// These constants define the OAuth flow
+
+const MICROSOFT_OAUTH_CONFIG = {
+  clientId: process.env.MICROSOFT_CLIENT_ID,
+  clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+  redirectUri: process.env.MICROSOFT_REDIRECT_URI || 'http://localhost:5001/auth/oauth/callback',
+  tenantId: 'ab55fe6c-cf70-4452-87aa-5c017960d362', // Your Azure tenant ID
+
+  // Endpoints - using tenant-specific endpoint instead of /common
+  authorizationUri: 'https://login.microsoftonline.com/ab55fe6c-cf70-4452-87aa-5c017960d362/oauth2/v2.0/authorize',
+  tokenUri: 'https://login.microsoftonline.com/ab55fe6c-cf70-4452-87aa-5c017960d362/oauth2/v2.0/token',
+  graphBaseUri: 'https://graph.microsoft.com/v1.0',
+
+  // Permissions (scopes) we need
+  scopes: [
+    'Calendars.ReadWrite', // Read and write calendar events
+    'offline_access', // Get refresh tokens for offline access
+    'User.Read' // Read user profile
+  ]
+};
+
+// ===== STEP 1: GENERATE LOGIN URL =====
+// This creates the URL user clicks to login with Microsoft
+
+function getAuthorizationUrl(returnUrl) {
+  const csrf = require('crypto').randomBytes(16).toString('hex');
+  // Encode returnUrl into state so it survives the Microsoft redirect round-trip
+  // Format: "<csrf>|<base64(returnUrl)>" — the | separator is safe in base64url
+  const state = returnUrl
+    ? `${csrf}|${Buffer.from(returnUrl).toString('base64')}`
+    : csrf;
+
+  const params = new URLSearchParams({
+    client_id: MICROSOFT_OAUTH_CONFIG.clientId,
+    redirect_uri: MICROSOFT_OAUTH_CONFIG.redirectUri,
+    response_type: 'code',
+    scope: MICROSOFT_OAUTH_CONFIG.scopes.join(' '),
+    state: state,
+    response_mode: 'query',
+    prompt: 'select_account'
+  });
+
+  return {
+    url: `${MICROSOFT_OAUTH_CONFIG.authorizationUri}?${params.toString()}`,
+    state: state
+  };
+}
+
+// ===== STEP 2: EXCHANGE CODE FOR TOKEN =====
+// After user clicks "Allow", Microsoft gives us a code
+// We exchange that code for an access token
+
+async function getAccessToken(code) {
+  try {
+    console.log('Exchanging authorization code for access token...');
+
+    // Microsoft OAuth token endpoint requires form-encoded data, not JSON
+    const params = new URLSearchParams();
+    params.append('client_id', MICROSOFT_OAUTH_CONFIG.clientId);
+    params.append('client_secret', MICROSOFT_OAUTH_CONFIG.clientSecret);
+    params.append('code', code);
+    params.append('redirect_uri', MICROSOFT_OAUTH_CONFIG.redirectUri);
+    params.append('grant_type', 'authorization_code');
+
+    const response = await axios.post(MICROSOFT_OAUTH_CONFIG.tokenUri, params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    // Response contains:
+    // - access_token: Used to access Outlook
+    // - refresh_token: Used to get a new access_token when it expires
+    // - expires_in: Seconds until token expires (usually 3600 = 1 hour)
+
+    return {
+      accessToken: response.data.access_token,
+      refreshToken: response.data.refresh_token,
+      expiresIn: response.data.expires_in,
+      tokenType: response.data.token_type
+    };
+  } catch (error) {
+    console.error('Error getting access token:', error.response?.data || error.message);
+    throw new Error('Failed to authenticate with Microsoft');
+  }
+}
+
+// ===== STEP 3: REFRESH TOKEN =====
+// When token expires, use refresh token to get a new one
+// No user interaction needed
+
+async function refreshAccessToken(refreshToken) {
+  try {
+    console.log('Refreshing access token...');
+
+    // Microsoft OAuth token endpoint requires form-encoded data, not JSON
+    const params = new URLSearchParams();
+    params.append('client_id', MICROSOFT_OAUTH_CONFIG.clientId);
+    params.append('client_secret', MICROSOFT_OAUTH_CONFIG.clientSecret);
+    params.append('refresh_token', refreshToken);
+    params.append('grant_type', 'refresh_token');
+
+    const response = await axios.post(MICROSOFT_OAUTH_CONFIG.tokenUri, params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    return {
+      accessToken: response.data.access_token,
+      refreshToken: response.data.refresh_token || refreshToken, // Microsoft may or may not return new refresh token
+      expiresIn: response.data.expires_in
+    };
+  } catch (error) {
+    console.error('Error refreshing token:', error.response?.data || error.message);
+    throw new Error('Failed to refresh authentication token');
+  }
+}
+
+// ===== STEP 4: GET USER INFO FROM MICROSOFT =====
+// Use the access token to get user's profile
+
+async function getMicrosoftUser(accessToken) {
+  try {
+    const response = await axios.get(`${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    return {
+      id: response.data.id,
+      email: response.data.userPrincipalName || response.data.mail,
+      displayName: response.data.displayName
+    };
+  } catch (error) {
+    console.error('Error getting Microsoft user:', error.response?.data || error.message);
+    throw new Error('Failed to get user information from Microsoft');
+  }
+}
+
+// ===== STEP 5: GET USER'S CALENDAR EVENTS =====
+// Fetch events from Outlook calendar
+
+async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
+  try {
+    // If no dates provided, use a wide range (past 2 years to future 2 years)
+    if (!startDate || !endDate) {
+      const now = new Date();
+      startDate = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate()).toISOString();
+      endDate = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()).toISOString();
+      console.log(`📅 Using default date range: ${startDate} to ${endDate}`);
+    }
+
+    // Construct the query with StartDateTime and EndDateTime parameters
+    // Note: calendarview endpoint requires these specific parameter names
+    // $top=250 requests more events per page (faster pagination, but within API limits)
+    const query = `?startDateTime=${encodeURIComponent(startDate)}&endDateTime=${encodeURIComponent(endDate)}&$top=250&$select=id,iCalUId,changeKey,subject,start,end,location,categories,organizer,responseStatus,isCancelled,showAs,lastModifiedDateTime,onlineMeetingUrl,isOnlineMeeting,type,seriesMasterId`;
+
+    console.log('📍 Fetching Outlook events with query:', query.substring(0, 100) + '...');
+
+    let allEvents = [];
+    let nextLink = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/calendarview${query}`;
+    let pageCount = 0;
+    const maxPages = 50; // Safety limit: max 50 pages × 10 events = 500 events
+    const seenEventIds = new Set();
+
+    // Handle pagination - keep fetching until no more pages or max pages reached
+    while (nextLink && pageCount < maxPages) {
+      pageCount++;
+      console.log(`📄 [Page ${pageCount}/${maxPages}] Fetching events...`);
+
+      const response = await axios.get(nextLink, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          // Force Graph to return event start/end in UTC. Without this header
+          // Graph returns times in the mailbox's default zone (Perth/AWST here),
+          // and toUtcIso() then stamps that Perth wall-clock with 'Z', shifting
+          // every event +8h. With this header dateTime is true UTC and the 'Z'
+          // append is correct. This is the root-cause fix for the timezone bug.
+          'Prefer': 'outlook.timezone="UTC"'
+        }
+      });
+
+      if (response.data.value && response.data.value.length > 0) {
+        let newCount = 0;
+        response.data.value.forEach(event => {
+          if (!seenEventIds.has(event.id)) {
+            seenEventIds.add(event.id);
+            allEvents.push(event);
+            newCount++;
+          }
+        });
+        console.log(`✅ Page ${pageCount}: Got ${response.data.value.length} events (${newCount} new, ${response.data.value.length - newCount} duplicates)`);
+      }
+
+      // Check if there's a next page
+      nextLink = response.data['@odata.nextLink'] || null;
+      if (nextLink && pageCount < maxPages) {
+        console.log(`🔗 Found next page link, continuing... (Page ${pageCount + 1}/${maxPages})`);
+      } else if (pageCount >= maxPages) {
+        console.log(`⚠️ Reached max pages limit (${maxPages}). Stopping pagination.`);
+        nextLink = null;
+      }
+    }
+
+    console.log(`✅ Total Outlook events fetched: ${allEvents.length} events across ${pageCount} pages`);
+
+    if (allEvents.length === 0) {
+      return [];
+    }
+
+    // Normalize Graph datetimes to a real UTC ISO string. The default Graph
+    // response uses { dateTime: "2026-05-15T01:30:00.0000000", timeZone: "UTC" }
+    // — the dateTime string has no Z suffix, so JS / Postgres can mis-parse it
+    // as local time. We honour the embedded timeZone when present.
+    const toUtcIso = (slot) => {
+      if (!slot || !slot.dateTime) return null;
+      const raw = String(slot.dateTime);
+      if (/Z$|[+\-]\d{2}:?\d{2}$/.test(raw)) return raw; // already has TZ marker
+      const tz = slot.timeZone || 'UTC';
+      if (tz === 'UTC') return raw + 'Z';
+      // Last-resort fallback: trust JS engine's IANA handling via Date.UTC
+      // (rarely hit because Graph defaults to UTC).
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? raw + 'Z' : d.toISOString();
+    };
+
+    return allEvents.map(event => ({
+      id:                  event.id,
+      outlookId:           event.id,
+      iCalUId:             event.iCalUId || null,
+      changeKey:           event.changeKey || null,
+      lastModifiedAt:      event.lastModifiedDateTime || null,
+      title:               event.subject || null,  // null kept deliberately — callers log/skip empty
+      startTime:           toUtcIso(event.start),
+      endTime:             toUtcIso(event.end),
+      location:            event.location?.displayName || '',
+      organizer:           event.organizer?.emailAddress?.address || '',
+      isTeamsMeeting:      !!(event.isOnlineMeeting || event.onlineMeetingUrl),
+      teamsJoinLink:       event.onlineMeetingUrl || null,
+      categories:          event.categories || [],
+      isCancelled:         !!(event.isCancelled),
+      showAs:              event.showAs || null,
+      type:                event.type || 'singleInstance',
+      seriesMasterId:      event.seriesMasterId || null,
+    }));
+  } catch (error) {
+    console.error('Error getting Outlook events:', error.response?.data || error.message);
+    throw new Error('Failed to fetch Outlook calendar events');
+  }
+}
+
+// ===== STEP 6: CREATE EVENT IN OUTLOOK =====
+// Create a new event in user's calendar
+
+async function createOutlookEvent(accessToken, eventData) {
+  try {
+    const outlookEvent = {
+      subject: eventData.title,
+      start: {
+        dateTime: eventData.startTime,
+        timeZone: 'Australia/Perth' // Adjust to user's timezone
+      },
+      end: {
+        dateTime: eventData.endTime,
+        timeZone: 'Australia/Perth'
+      },
+      location: {
+        displayName: eventData.location || ''
+      },
+      categories: eventData.categories || ['Therapy'],
+
+      // Store our app's event ID in the event's properties
+      extensions: [{
+        id: 'com.therapyscheduler.appEventId',
+        extensionData: {
+          appEventId: eventData.appEventId,
+          sploseId: eventData.sploseId,
+          lastModifiedBy: 'app'
+        }
+      }],
+
+      isReminderOn: true,
+      reminderMinutesBeforeStart: 15
+    };
+
+    const response = await axios.post(
+      `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/events`,
+      outlookEvent,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return {
+      outlookId: response.data.id,
+      subject: response.data.subject,
+      created: true
+    };
+  } catch (error) {
+    console.error('Error creating Outlook event:', error.response?.data || error.message);
+    throw new Error('Failed to create event in Outlook');
+  }
+}
+
+// ===== STEP 7: UPDATE EVENT IN OUTLOOK =====
+// Partial-update aware: only fields present in eventData are sent in the PATCH
+// body. This lets callers update just the location without touching start/end/title.
+
+async function updateOutlookEvent(accessToken, outlookEventId, eventData) {
+  try {
+    const outlookEvent = {};
+
+    if (eventData.title      !== undefined) outlookEvent.subject    = eventData.title;
+    if (eventData.startTime  !== undefined) outlookEvent.start      = { dateTime: eventData.startTime, timeZone: 'Australia/Perth' };
+    if (eventData.endTime    !== undefined) outlookEvent.end        = { dateTime: eventData.endTime,   timeZone: 'Australia/Perth' };
+    if (eventData.location   !== undefined) outlookEvent.location   = { displayName: eventData.location || '' };
+    if (eventData.categories !== undefined) outlookEvent.categories = eventData.categories;
+    if (eventData.body       !== undefined) outlookEvent.body       = { contentType: 'text', content: eventData.body };
+
+    const response = await axios.patch(
+      `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/events/${outlookEventId}`,
+      outlookEvent,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return {
+      outlookId: response.data.id,
+      updated: true
+    };
+  } catch (error) {
+    console.error('Error updating Outlook event:', error.response?.data || error.message);
+    throw new Error('Failed to update event in Outlook');
+  }
+}
+
+// ===== STEP 8: DELETE EVENT IN OUTLOOK =====
+
+async function deleteOutlookEvent(accessToken, outlookEventId) {
+  try {
+    await axios.delete(
+      `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/events/${outlookEventId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return { deleted: true };
+  } catch (error) {
+    console.error('Error deleting Outlook event:', error.response?.data || error.message);
+    throw new Error('Failed to delete event from Outlook');
+  }
+}
+
+// ===== DELTA SYNC =====
+// Uses Microsoft Graph /calendarView/delta to fetch only what changed since
+// the last sync. On the very first call (no deltaToken), pass null — Graph
+// will do a full pass and return a deltaToken for future incremental calls.
+//
+// Returns:
+//   { changed: [...], deleted: [...], deltaToken: "..." }
+//
+// changed = events created or updated since last token
+// deleted = event IDs removed from Outlook since last token
+// deltaToken = store this and pass it next time
+
+async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
+  const baseUrl = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendarView/delta`;
+
+  // When bootstrapping (no prior token) use a wide window so we get the
+  // current token without re-importing the full history.
+  const now = new Date();
+  const startDateTime = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate()).toISOString();
+  const endDateTime   = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()).toISOString();
+
+  const firstUrl = deltaToken
+    ? `${baseUrl}?$deltaToken=${encodeURIComponent(deltaToken)}`
+    : `${baseUrl}?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&$select=id,iCalUId,changeKey,subject,start,end,location,categories,isCancelled,showAs,lastModifiedDateTime,type,seriesMasterId`;
+
+  const changed = [];
+  const deleted = [];
+  let nextLink = firstUrl;
+  let newDeltaToken = null;
+  let pageCount = 0;
+  const MAX_PAGES = 100;
+
+  // Normalize a Graph date slot to a true UTC ISO instant. Because the delta
+  // fetch below sends `Prefer: outlook.timezone="UTC"`, Graph returns dateTime
+  // in UTC (no 'Z' suffix) with timeZone:"UTC", so appending 'Z' is correct.
+  // Any slot that already carries a TZ marker is passed through unchanged.
+  const toUtcIso = (slot) => {
+    if (!slot || !slot.dateTime) return null;
+    const raw = String(slot.dateTime);
+    if (/Z$|[+\-]\d{2}:?\d{2}$/.test(raw)) return raw; // already has a TZ marker
+    return raw + 'Z';                                  // UTC (guaranteed by Prefer header)
+  };
+
+  while (nextLink && pageCount < MAX_PAGES) {
+    pageCount++;
+    const response = await axios.get(nextLink, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        // Same root-cause fix as the initial sync: force UTC so toUtcIso()'s
+        // 'Z' append is correct and delta-synced events aren't shifted +8h.
+        'Prefer': 'outlook.timezone="UTC"'
+      }
+    });
+
+    const items = response.data.value || [];
+    for (const item of items) {
+      if (item['@removed']) {
+        deleted.push(item.id);
+      } else {
+        changed.push({
+          outlookId:      item.id,
+          iCalUId:        item.iCalUId || null,
+          changeKey:      item.changeKey || null,
+          lastModifiedAt: item.lastModifiedDateTime || null,
+          title:          item.subject || null,
+          startTime:      toUtcIso(item.start),
+          endTime:        toUtcIso(item.end),
+          location:       item.location?.displayName || '',
+          categories:     item.categories || [],
+          isCancelled:    !!(item.isCancelled),
+          showAs:         item.showAs || null,
+          type:           item.type || 'singleInstance',
+          seriesMasterId: item.seriesMasterId || null,
+        });
+      }
+    }
+
+    // Graph returns either @odata.nextLink (more pages) or
+    // @odata.deltaLink (we're done — contains the new token).
+    if (response.data['@odata.deltaLink']) {
+      const deltaLink = response.data['@odata.deltaLink'];
+      const match = deltaLink.match(/[?&]\$deltaToken=([^&]+)/);
+      newDeltaToken = match ? decodeURIComponent(match[1]) : deltaLink;
+      break;
+    }
+    nextLink = response.data['@odata.nextLink'] || null;
+  }
+
+  return { changed, deleted, deltaToken: newDeltaToken };
+}
+
+// ===== SUBSCRIBE TO OUTLOOK WEBHOOKS =====
+// Get real-time notifications when Outlook calendar changes
+
+async function subscribeToCalendarChanges(accessToken) {
+  try {
+    const subscription = {
+      changeType: 'created,updated,deleted',
+      notificationUrl: `${process.env.WEBHOOK_URL || 'http://localhost:5000'}/webhooks/outlook`,
+      resource: 'me/calendar/events',
+      expirationDateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      clientState: 'therapyScheduler' // Token to verify webhook
+    };
+
+    const response = await axios.post(
+      `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/subscriptions`,
+      subscription,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return {
+      subscriptionId: response.data.id,
+      expiresAt: response.data.expirationDateTime
+    };
+  } catch (error) {
+    console.error('Error subscribing to calendar changes:', error.response?.data || error.message);
+    // This might fail in development - not critical
+    return null;
+  }
+}
+
+// ===== EXPORTS =====
+
+module.exports = {
+  MICROSOFT_OAUTH_CONFIG,
+  getAuthorizationUrl,
+  getAccessToken,
+  refreshAccessToken,
+  getMicrosoftUser,
+  getOutlookCalendarEvents,
+  getOutlookCalendarDelta,
+  createOutlookEvent,
+  updateOutlookEvent,
+  deleteOutlookEvent,
+  subscribeToCalendarChanges
+};
