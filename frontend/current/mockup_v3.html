@@ -7581,28 +7581,48 @@ function renderSlotSuggestions() {
   const ps  = BOOKING_STATE.selectedSlot;
   const pf  = BOOKING_STATE.prefillTime;
 
-  let prefillDay, prefillStartH, prefillStartM;
-  if (bsp && bsp.day && bsp.startH !== undefined) {
-    // Calendar drag/click path — already integers
+  let prefillDay, prefillStartH, prefillStartM, prefillDur;
+
+  // Priority 1: live panel fields — always reflect what the user has set right now.
+  // The slider/time inputs are the truth; _bspPrefill only holds the original open data.
+  const _liveDay   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
+  const _liveStart = document.getElementById('bsp-start')?.value; // "HH:MM" 24-h
+  const _liveDur   = parseInt(document.getElementById('bsp-dur-slider')?.value);
+  if (_liveDay && _liveStart) {
+    const parts = _liveStart.split(':');
+    prefillDay    = _liveDay;
+    prefillStartH = parseInt(parts[0], 10);
+    prefillStartM = parseInt(parts[1], 10) || 0;
+    prefillDur    = (_liveDur > 0) ? _liveDur : dur;
+  } else if (bsp && bsp.day && bsp.startH !== undefined) {
+    // Fallback: original drag data if panel fields aren't available
     prefillDay    = bsp.day;
     prefillStartH = bsp.startH;
     prefillStartM = bsp.startM || 0;
+    if (bsp.endH !== undefined) {
+      const dragEnd   = bsp.endH * 60 + (bsp.endM || 0);
+      const dragStart = bsp.startH * 60 + (bsp.startM || 0);
+      prefillDur = dragEnd > dragStart ? dragEnd - dragStart : dur;
+    } else {
+      prefillDur = dur;
+    }
   } else if (ps && ps.day && ps.time) {
-    // Quick-book path — time is "HH:MM" string
     const parts = ps.time.split(':');
     prefillDay    = ps.day;
     prefillStartH = parseInt(parts[0], 10);
     prefillStartM = parseInt(parts[1], 10) || 0;
+    prefillDur    = ps.duration || dur;
   } else if (pf && pf.day && pf.time) {
     const parts = pf.time.split(':');
     prefillDay    = pf.day;
     prefillStartH = parseInt(parts[0], 10);
     prefillStartM = parseInt(parts[1], 10) || 0;
+    prefillDur    = dur;
   }
 
   if (prefillDay && !isNaN(prefillStartH)) {
     const startMin = prefillStartH * 60 + prefillStartM;
-    const endMin   = startMin + dur;
+    const endMin   = startMin + prefillDur;
     const hasConflict = dayHasConflict(prefillDay, startMin, endMin);
     prefillCard = {
       day:         prefillDay,
@@ -7610,14 +7630,14 @@ function renderSlotSuggestions() {
       startM:      prefillStartM,
       startMin,
       endMin,
-      durationMin: dur,
+      durationMin: prefillDur,
       dayLabel:    DAY_LABELS[prefillDay] || prefillDay,
-      score:       hasConflict ? 50 : scoreSlot({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: dur }, patient, type),
+      score:       hasConflict ? 50 : scoreSlot({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: prefillDur }, patient, type),
       isPrefill:   true,
       reasons:     hasConflict
         ? [{ text: 'Overlaps an existing session — check before confirming', tone: 'bad' }]
         : [{ text: 'Your calendar selection', tone: 'good' },
-           ...reasonChipsFor({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: dur, dayLabel: DAY_LABELS[prefillDay] || prefillDay }, patient, type)],
+           ...reasonChipsFor({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: prefillDur, dayLabel: DAY_LABELS[prefillDay] || prefillDay }, patient, type)],
     };
   }
 
