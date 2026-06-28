@@ -10904,27 +10904,40 @@ async function confirmBooking() {
       console.log(`✅ Written to Splose: ${sploseId}`);
     }
 
-    // Write to Outlook (best-effort — failure is logged but doesn't block UX)
+    // Write to Outlook — always attempted, result shown in the success modal
     const _outlookTherapistUserId = _bspSelectedTherapist?.userId || null;
-    const _patName  = patient ? `${patient.first} ${patient.last}` : '';
+    const _patName      = patient ? `${patient.first} ${patient.last}` : '';
     const _outlookTitle = _patName
       ? `${TYPE_LABEL[type] || 'Session'} — ${_patName}`
       : (TYPE_LABEL[type] || 'Session');
-    fetch('/api/outlook/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        title:    _outlookTitle,
-        startTime: startISO,
-        endTime:   endISO,
-        ...(sploseId           ? { sploseId }                                           : {}),
-        ...(_outlookTherapistUserId ? { targetTherapistUserId: _outlookTherapistUserId } : {}),
-      }),
-    })
-      .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(new Error(j.error || r.status))))
-      .then(j => console.log('✅ Outlook event created:', j.outlookId))
-      .catch(e => console.warn('⚠️ Outlook write-back skipped (non-fatal):', e.message));
+    let outlookId   = null;
+    let outlookNote = '';
+    try {
+      const oResp = await fetch('/api/outlook/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          title:     _outlookTitle,
+          startTime: startISO,
+          endTime:   endISO,
+          ...(sploseId                 ? { sploseId }                                           : {}),
+          ...(_outlookTherapistUserId  ? { targetTherapistUserId: _outlookTherapistUserId }     : {}),
+        }),
+      });
+      const oResult = await oResp.json();
+      if (oResp.ok) {
+        outlookId   = oResult.outlookId;
+        outlookNote = 'Added to Outlook calendar ✓';
+        console.log('✅ Outlook event created:', outlookId);
+      } else {
+        outlookNote = `Outlook: ${oResult.error || 'write failed — check Outlook connection'}`;
+        console.warn('⚠️ Outlook write failed:', oResult.error);
+      }
+    } catch (oErr) {
+      outlookNote = 'Outlook not connected — event not added to calendar';
+      console.warn('⚠️ Outlook write skipped:', oErr.message);
+    }
 
     // Add to local calendar canvas
     const col = document.getElementById('day-' + slot.day);
@@ -10950,8 +10963,9 @@ async function confirmBooking() {
     if (body) {
       const refId = sploseId ? `#${sploseId}` : `#A-${Math.floor(10000 + Math.random()*89999)}`;
       body.innerHTML = `
-        <p style="margin:0 0 10px;">Appointment <code>${refId}</code> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
-        <p style="margin:0;font-size:12px;color:var(--muted);">${sploseId ? 'Written to Splose ✓ · Outlook sync queued ✓' : 'Added to calendar (Splose IDs not yet loaded — retry after config loads).'}</p>`;
+        <p style="margin:0 0 8px;">Appointment <code>${refId}</code> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
+        <p style="margin:0 0 4px;font-size:12px;color:var(--muted);">${sploseId ? 'Written to Splose ✓' : 'Splose IDs not loaded — retry after config loads.'}</p>
+        <p style="margin:0;font-size:12px;color:${outlookId ? 'var(--muted)' : 'var(--warn, #b45309)'};">${outlookNote}</p>`;
     }
     if (modal) modal.classList.add('show');
     WIZARD_BOOKED = true;
