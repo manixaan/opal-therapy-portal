@@ -10742,10 +10742,12 @@ function renderConfirmSummary() {
     ${t?.location ? `<div class="confirm-row"><span class="k">Location</span><span class="v">${t.location}</span></div>` : ''}
     ${fd.notes ? `<div class="confirm-row"><span class="k">Notes</span><span class="v">${fd.notes}</span></div>` : ''}
   `;
-  if (apiPv && t?.startISO) {
-    const previewTypeId = pickBusyTimeTypeId(cat) || '(loading…)';
-    apiPv.innerHTML = `<span class="c">// POST https://api.splose.com/v1/busy-times</span>
-{ <span class="k">"start"</span>: <span class="s">"${t.startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${t.endISO}"</span>, <span class="k">"busyTimeTypeId"</span>: <span class="n">${previewTypeId}</span> }`;
+  if (apiPv) {
+    // Splose does not expose POST /busy-times — non-client blocks go to Outlook only
+    apiPv.innerHTML = t?.startISO
+      ? `<span class="c">// POST https://graph.microsoft.com/v1.0/me/events  (Outlook only)</span>
+{ <span class="k">"subject"</span>: <span class="s">"${fd.title || fd.name || fd.taskType || CAT_NAMES[cat] || cat}"</span>, <span class="k">"start"</span>: <span class="s">"${t.startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${t.endISO}"</span> }`
+      : `<span class="c">// set day + time in step 1</span>`;
   }
 }
 
@@ -10758,6 +10760,9 @@ async function confirmBooking() {
   };
 
   // ── Non-client fast path (email / admin / bulk-noting / custom) ────────────
+  // Note: Splose's API does not expose POST /busy-times — that endpoint returns
+  // 404 "Cannot POST". Non-client blocks are written to Outlook only; the user
+  // must create matching Splose busy-time entries manually in the Splose UI.
   if (cat && cat !== 'client') {
     const fd = BOOKING_STATE.formData || {};
     const t  = fd.timing;
@@ -10765,52 +10770,39 @@ async function confirmBooking() {
       showToast('No time set', 'Please go back to step 1 and set a day and start time.', 'warn');
       return;
     }
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving to Splose…'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding to Outlook…'; }
+
+    const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
+    const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
+
     try {
-      const practitionerId = _bspSelectedTherapist?.sploseUserId || window.SPLOSE_CONFIG?.practitionerId;
-      if (!practitionerId) {
-        showToast('Configuration error', 'Practitioner ID not configured — check Splose settings.', 'warn');
-        resetBtn(); return;
+      // Write to Outlook
+      let outlookId = null;
+      try {
+        const oResp = await fetch('/api/outlook/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO }),
+        });
+        const oResult = await oResp.json();
+        if (oResp.ok) {
+          outlookId = oResult.outlookId;
+          console.log('✅ Outlook event created:', outlookId);
+        } else {
+          console.warn('⚠️ Outlook write failed (non-fatal):', oResult.error);
+        }
+      } catch (oErr) {
+        console.warn('⚠️ Outlook write skipped (non-fatal):', oErr.message);
       }
-
-      // Resolve the correct Splose busy-time type ID (not a service ID)
-      const busyTimeTypeId = pickBusyTimeTypeId(cat);
-      if (!busyTimeTypeId) {
-        showToast('Splose not ready', 'Busy-time types have not loaded yet — wait a moment and try again.', 'warn');
-        resetBtn(); return;
-      }
-
-      const sploseResp = await fetch('/api/splose/busy-times', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ start: t.startISO, end: t.endISO, busyTimeTypeId, practitionerIds: [practitionerId] }),
-      });
-      const sploseResult = await sploseResp.json();
-      if (!sploseResp.ok) throw new Error(sploseResult.details || sploseResult.error || `HTTP ${sploseResp.status}`);
-      const sploseId = sploseResult.id;
-      console.log(`✅ Non-client block written to Splose: ${sploseId}`);
-
-      // Write to Outlook (best-effort)
-      const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
-      const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
-      fetch('/api/outlook/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO, ...(sploseId ? { sploseId } : {}) }),
-      })
-        .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(new Error(j.error || r.status))))
-        .then(j => console.log('✅ Outlook event created:', j.outlookId))
-        .catch(e => console.warn('⚠️ Outlook write-back skipped (non-fatal):', e.message));
 
       // Add to local calendar canvas
       const col = document.getElementById('day-' + t.day);
       if (col) {
         addSession(col, {
-          day: t.day, type: cat === 'admin' ? 'admin' : (cat === 'bulk-noting' ? 'admin' : 'admin'),
+          day: t.day, type: 'admin',
           startH: t.startH, startM: t.startM, endH: t.endH, endM: t.endM,
-          title: outlookTitle, sub: CAT_LABELS[cat] || cat, sploseId,
+          title: outlookTitle, sub: CAT_LABELS[cat] || cat,
         });
         if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
       }
@@ -10819,17 +10811,20 @@ async function confirmBooking() {
       const modal = document.getElementById('modal-booked');
       const body  = modal?.querySelector('.modal-body');
       if (body) {
-        const ref = sploseId ? `#${sploseId}` : `#B-${Math.floor(10000 + Math.random() * 89999)}`;
+        const outlookLine = outlookId
+          ? `<p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Added to Outlook calendar ✓</p>`
+          : `<p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Outlook not connected — event added to app calendar only.</p>`;
         body.innerHTML = `
-          <p style="margin:0 0 10px;">${CAT_LABELS[cat] || cat} block <code>${ref}</code> created for <strong>${DAY_LABELS[t.day] || t.day} ${fmtTime(t.startH, t.startM)} AWST · ${t.durationMin} min</strong>.</p>
-          <p style="margin:0;font-size:12px;color:var(--muted);">Written to Splose ✓ · Outlook sync queued ✓</p>`;
+          <p style="margin:0 0 6px;"><strong>${outlookTitle}</strong> added for <strong>${DAY_LABELS[t.day] || t.day} ${fmtTime(t.startH, t.startM)} – ${fmtTime(t.endH, t.endM)} AWST · ${t.durationMin} min</strong>.</p>
+          ${outlookLine}
+          <p style="margin:6px 0 0;font-size:12px;color:var(--muted);">ℹ️ Splose does not support creating busy-time blocks via API — add this manually in Splose if needed.</p>`;
       }
       if (modal) modal.classList.add('show');
       WIZARD_BOOKED = true;
 
     } catch (err) {
       console.error('confirmBooking (non-client) error:', err.message);
-      showToast('Splose write failed', err.message, 'warn');
+      showToast('Something went wrong', err.message, 'warn');
       resetBtn();
     }
     return;
