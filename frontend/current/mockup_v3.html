@@ -11457,11 +11457,9 @@ function reflowDayOverlaps(col) {
   // now-line on today's column so the user has a temporal anchor
   // even when the calendar is otherwise empty.
   const todayKey = (function() {
-    // currentDate 2026-04-25 Sat → no weekday match; default mon for visual consistency.
+    // Calendar now shows all 7 days (Mon–Sun) so every weekday key has a column.
     const wk = ['sun','mon','tue','wed','thu','fri','sat'];
-    const now = new Date();
-    const k = wk[now.getDay()];
-    return ['mon','tue','wed','thu','fri'].includes(k) ? k : 'mon';
+    return wk[new Date().getDay()];
   })();
   const todayCol = document.getElementById('day-' + todayKey);
   if (todayCol) {
