@@ -1757,7 +1757,38 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       targetUser = await db.getUser(req.session.userId);
     }
 
-    const accessToken = await getValidAccessToken(targetUser);
+    // If the resolved user has no Outlook token, fall back to any active org member
+    // who does. This covers the common case where an owner/admin account was never
+    // connected to Outlook but the therapist account in the same org was.
+    let accessToken;
+    try {
+      accessToken = await getValidAccessToken(targetUser);
+    } catch (tokenErr) {
+      const orgId = targetUser?.organisation_id || req.user?.organisation_id;
+      if (orgId) {
+        const fallback = await db.pool.query(
+          `SELECT id FROM users
+           WHERE organisation_id = $1
+             AND access_token IS NOT NULL AND access_token != ''
+             AND is_active = true
+           ORDER BY created_at
+           LIMIT 1`,
+          [orgId]
+        );
+        if (fallback.rows.length) {
+          const fallbackUser = await db.getUser(fallback.rows[0].id);
+          accessToken = await getValidAccessToken(fallbackUser);
+          console.log(`🔄 Outlook write: using token from ${fallbackUser.email} (fallback — caller had no token)`);
+        } else {
+          return res.status(400).json({
+            error: 'No Outlook account connected',
+            message: 'No user in this organisation has linked their Outlook account. Connect Outlook via the Settings → Integrations page.',
+          });
+        }
+      } else {
+        return res.status(400).json({ error: 'Outlook not connected', message: tokenErr.message });
+      }
+    }
 
     if (!title || !startTime || !endTime) {
       return res.status(400).json({ error: 'title, startTime, and endTime are required' });
