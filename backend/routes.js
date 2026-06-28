@@ -1418,6 +1418,22 @@ router.put('/api/splose/appointments/:id', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/splose/busy-time-types
+ * Returns the list of busy-time type objects { id, title, colour } from Splose.
+ * These IDs are required when creating busy-time blocks — they are NOT the same
+ * as service IDs used for client appointments.
+ */
+router.get('/api/splose/busy-time-types', requireAuth, async (req, res) => {
+  try {
+    const types = await sploseApi.getBusyTimeTypes();
+    res.json({ data: types });
+  } catch (err) {
+    console.error('Splose busy-time-types error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch busy-time types', details: err.message });
+  }
+});
+
+/**
  * GET /api/splose/busy-times?startDate=...&endDate=...&practitionerId=...
  */
 router.get('/api/splose/busy-times', requireAuth, async (req, res) => {

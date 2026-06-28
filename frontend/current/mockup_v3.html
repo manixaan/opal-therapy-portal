@@ -7203,6 +7203,7 @@ window.SPLOSE_CONFIG = {
   practitionerId: null,   // set by bootstrapSploseConfig()
   locationId:     null,
   services:       [],
+  busyTimeTypes:  [],     // { id, title, colour } — fetched from /api/splose/busy-time-types
 };
 
 async function bootstrapSploseConfig() {
@@ -7243,6 +7244,15 @@ async function bootstrapSploseConfig() {
         window.SPLOSE_CONFIG.locationId = locations[0].id;
         console.log('✅ Location ID:', window.SPLOSE_CONFIG.locationId, locations[0].title);
       }
+    }
+
+    // Load busy-time types — IDs are distinct from service IDs and required
+    // when creating non-client blocks (email/admin/bulk-noting/custom).
+    const bttResp = await fetch('/api/splose/busy-time-types', { credentials: 'include' });
+    if (bttResp.ok) {
+      const { data: bttypes } = await bttResp.json();
+      window.SPLOSE_CONFIG.busyTimeTypes = bttypes || [];
+      console.log('✅ Busy-time types loaded:', bttypes.map(t => `${t.id} ${t.title}`));
     }
   } catch (err) {
     console.warn('bootstrapSploseConfig error:', err.message);
@@ -10564,6 +10574,28 @@ function selectBookingCat(cat) {
   }
 }
 
+/* ---------- Pick the right Splose busy-time type ID for a booking category ----------
+   Busy-time type IDs are separate from service IDs — they live in Splose's
+   /busy-time-types table and are fetched on boot into SPLOSE_CONFIG.busyTimeTypes.
+   We match by title keywords; fall back to the first available type if nothing matches. */
+function pickBusyTimeTypeId(cat) {
+  const types = window.SPLOSE_CONFIG?.busyTimeTypes || [];
+  if (!types.length) return null;
+
+  const keywords = {
+    email:         ['admin', 'other', 'general'],
+    admin:         ['admin', 'other', 'general'],
+    'bulk-noting': ['case', 'noting', 'admin', 'other'],
+    custom:        ['other', 'admin', 'general'],
+  }[cat] || [];
+
+  for (const kw of keywords) {
+    const match = types.find(t => (t.title || '').toLowerCase().includes(kw));
+    if (match) return match.id;
+  }
+  return types[0].id; // fallback: first available type
+}
+
 /* ---------- Read live BSP panel timing fields ---------- */
 function _getBspTiming() {
   const day   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
@@ -10711,8 +10743,9 @@ function renderConfirmSummary() {
     ${fd.notes ? `<div class="confirm-row"><span class="k">Notes</span><span class="v">${fd.notes}</span></div>` : ''}
   `;
   if (apiPv && t?.startISO) {
+    const previewTypeId = pickBusyTimeTypeId(cat) || '(loading…)';
     apiPv.innerHTML = `<span class="c">// POST https://api.splose.com/v1/busy-times</span>
-{ <span class="k">"start"</span>: <span class="s">"${t.startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${t.endISO}"</span>, <span class="k">"busyTimeTypeId"</span>: <span class="n">55339</span> }`;
+{ <span class="k">"start"</span>: <span class="s">"${t.startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${t.endISO}"</span>, <span class="k">"busyTimeTypeId"</span>: <span class="n">${previewTypeId}</span> }`;
   }
 }
 
@@ -10740,9 +10773,12 @@ async function confirmBooking() {
         resetBtn(); return;
       }
 
-      // All non-client types map to busy-times in Splose
-      const busyTypeMap = { email: 55339, admin: 55339, 'bulk-noting': 55339, custom: 55339 };
-      const busyTimeTypeId = busyTypeMap[cat] || 55339;
+      // Resolve the correct Splose busy-time type ID (not a service ID)
+      const busyTimeTypeId = pickBusyTimeTypeId(cat);
+      if (!busyTimeTypeId) {
+        showToast('Splose not ready', 'Busy-time types have not loaded yet — wait a moment and try again.', 'warn');
+        resetBtn(); return;
+      }
 
       const sploseResp = await fetch('/api/splose/busy-times', {
         method: 'POST',
