@@ -7552,6 +7552,13 @@ function renderSlotSuggestions() {
   const dur     = getSelectedTypeDuration();
   const lead    = document.getElementById('step3-lead');
 
+  // Remember which slot the user had selected before this re-render so we can
+  // restore it (handles: back→forward navigation, filter changes, etc.)
+  const prevSel = container.querySelector('.slot-card.selected');
+  const prevKey = prevSel
+    ? `${prevSel.dataset.day}:${prevSel.dataset.startH}:${prevSel.dataset.startM}`
+    : null;
+
   if (!patient && ['therapy','initial','assessment','mdt'].includes(type)) {
     container.innerHTML = '<div class="empty-state" style="padding:24px;text-align:center;">Pick a patient on step 1 to see slot suggestions.</div>';
     if (lead) lead.textContent = 'Pick a patient first.';
@@ -7564,8 +7571,49 @@ function renderSlotSuggestions() {
     lead.innerHTML = `Top suggestions for ${who} · ${TYPE_LABEL[type] || type} · ${dur} min · ranked against your <em>actual</em> weekly calendar (${Object.keys(SESSIONS).length} session${Object.keys(SESSIONS).length===1?'':'s'} booked).`;
   }
 
+  // Build the user's pre-selected slot card (from calendar drag or quick-book).
+  // This slot always appears first so the user's original choice is never lost.
+  let prefillCard = null;
+  const pf = BOOKING_STATE.prefillTime;
+  const ps = BOOKING_STATE.selectedSlot;
+  if (pf || ps) {
+    const timeStr = (ps && ps.time) || (pf && pf.time) || '';
+    const day     = (ps && ps.day)  || (pf && pf.day)  || '';
+    const parts   = timeStr.split(':');
+    const startH  = parseInt(parts[0], 10);
+    const startM  = parseInt(parts[1], 10) || 0;
+    if (day && !isNaN(startH)) {
+      const startMin = startH * 60 + startM;
+      const endMin   = startMin + dur;
+      const hasConflict = dayHasConflict(day, startMin, endMin);
+      prefillCard = {
+        day,
+        startH,
+        startM,
+        startMin,
+        endMin,
+        durationMin: dur,
+        dayLabel:    DAY_LABELS[day] || day,
+        score:       hasConflict ? 50 : scoreSlot({ day, startH, startM, startMin, endMin, durationMin: dur }, patient, type),
+        isPrefill:   true,
+        reasons:     hasConflict
+          ? [{ text: 'Overlaps an existing session — check before confirming', tone: 'bad' }]
+          : [{ text: 'Your calendar selection', tone: 'good' },
+             ...reasonChipsFor({ day, startH, startM, startMin, endMin, durationMin: dur, dayLabel: DAY_LABELS[day] || day }, patient, type)],
+      };
+    }
+  }
+
   const top = computeSlotSuggestions(patient, type, dur);
-  if (!top.length) {
+
+  // Merge: user's pre-selected slot first, then computed alternatives (deduplicated,
+  // capped at 3 alts so total stays at 4 cards).
+  const alts = prefillCard
+    ? top.filter(c => !(c.day === prefillCard.day && c.startH === prefillCard.startH && c.startM === prefillCard.startM)).slice(0, 3)
+    : top;
+  const slots = prefillCard ? [prefillCard, ...alts] : alts;
+
+  if (!slots.length) {
     container.innerHTML = '<div class="empty-state" style="padding:24px;text-align:center;">No conflict-free slots in working hours this week — try a different duration or clear an existing block.</div>';
     document.getElementById('step3-confirm-btn').disabled = true;
     return;
@@ -7574,10 +7622,16 @@ function renderSlotSuggestions() {
   document.getElementById('step3-confirm-btn').disabled = false;
 
   const scoreClass = sc => sc >= 80 ? '' : (sc >= 60 ? ' med' : ' low');
-  const html = top.map((c, idx) => {
-    const reasons = c.reasons.map(r => `<span class="reason ${r.tone}">${r.text}</span>`).join('');
-    const isBest = idx === 0;
-    return `<div class="slot-card${isBest ? ' top selected' : ''}"
+  const html = slots.map((c, idx) => {
+    const slotKey    = `${c.day}:${c.startH}:${c.startM}`;
+    // Restore the previously selected card; if none, default to the first card
+    const isSelected = prevKey ? (slotKey === prevKey) : (idx === 0);
+    const isUserPick = !!c.isPrefill;
+    const isBest     = idx === 0 && !isUserPick;
+    const rankLabel  = isUserPick ? '★ Your selection' : (isBest ? '★ Best fit' : 'Alt');
+    const rankClass  = (isUserPick || isBest) ? '' : ' alt';
+    const reasons    = c.reasons.map(r => `<span class="reason ${r.tone}">${r.text}</span>`).join('');
+    return `<div class="slot-card${isSelected ? ' selected' : ''}${(isUserPick || isBest) ? ' top' : ''}"
                  onclick="selectSlot(this)"
                  data-day="${c.day}"
                  data-day-label="${c.dayLabel}"
@@ -7585,7 +7639,7 @@ function renderSlotSuggestions() {
                  data-start-m="${c.startM}"
                  data-duration="${c.durationMin}"
                  data-score="${c.score}">
-      <span class="slot-rank${isBest ? '' : ' alt'}">${isBest ? '★ Best fit' : 'Alt'}</span>
+      <span class="slot-rank${rankClass}">${rankLabel}</span>
       <div class="slot-head">
         <div class="slot-when"><span class="day">${c.dayLabel}</span> · ${fmtTime(c.startH, c.startM)} – ${fmtTime(Math.floor((c.startMin+c.durationMin)/60), (c.startMin+c.durationMin)%60)} AWST</div>
         <span class="slot-score${scoreClass(c.score)}">Score ${c.score}</span>
