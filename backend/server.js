@@ -437,16 +437,28 @@ async function runDeltaSyncForAllUsers() {
         );
 
         let upserted = 0, cancelled = 0, removed = 0;
-        for (const ev of changed) {
-          if (ev.isCancelled) {
-            const g = await db.softDeleteEventByOutlookId(user.id, ev.outlookId);
-            if (g) cancelled++;
-          } else {
-            await db.upsertOutlookEvent(user.id, ev);
-            upserted++;
-          }
+
+        // Process in batches of 20 to avoid serialising thousands of DB
+        // roundtrips (a ±2-year re-bootstrap previously froze the server by
+        // awaiting 5,000+ upserts one at a time).
+        const BATCH = 20;
+        for (let i = 0; i < changed.length; i += BATCH) {
+          await Promise.all(changed.slice(i, i + BATCH).map(async ev => {
+            if (ev.isCancelled) {
+              const g = await db.softDeleteEventByOutlookId(user.id, ev.outlookId);
+              if (g) cancelled++;
+            } else {
+              await db.upsertOutlookEvent(user.id, ev);
+              upserted++;
+            }
+          }));
         }
-        for (const outlookId of deleted) { const g = await db.softDeleteEventByOutlookId(user.id, outlookId); if (g) removed++; }
+        for (let i = 0; i < deleted.length; i += BATCH) {
+          await Promise.all(deleted.slice(i, i + BATCH).map(async outlookId => {
+            const g = await db.softDeleteEventByOutlookId(user.id, outlookId);
+            if (g) removed++;
+          }));
+        }
         if (newToken) await db.saveDeltaState(user.id, newToken);
 
         if (upserted > 0 || cancelled > 0 || removed > 0) {

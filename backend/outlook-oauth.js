@@ -391,11 +391,13 @@ async function deleteOutlookEvent(accessToken, outlookEventId) {
 async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
   const baseUrl = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendarView/delta`;
 
-  // When bootstrapping (no prior token) use a wide window so we get the
-  // current token without re-importing the full history.
+  // Bootstrap window: 90 days back + 180 days forward from today.
+  // A ±2-year window previously caused the app to freeze on re-bootstrap by
+  // fetching thousands of historical events (Ann has 5,292) and upserting them
+  // one by one. A tighter window keeps the initial fetch to ~few hundred events.
   const now = new Date();
-  const startDateTime = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate()).toISOString();
-  const endDateTime   = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()).toISOString();
+  const startDateTime = new Date(now.getTime() - 90  * 24 * 60 * 60 * 1000).toISOString();
+  const endDateTime   = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
 
   const firstUrl = deltaToken
     ? `${baseUrl}?$deltaToken=${encodeURIComponent(deltaToken)}`

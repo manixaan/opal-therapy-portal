@@ -46,9 +46,14 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'therapy_scheduler',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD,
-  max: 20, // Maximum number of connections
+  max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // Set UTC timezone at the connection level so every session is consistent.
+  // Using options= is cleaner than pool.on('connect') + client.query() which
+  // can trigger the pg@9 deprecation warning if the SET runs while pg's own
+  // connection-init query is still in flight.
+  options: '-c TimeZone=UTC',
 });
 
 pool.on('error', (err) => {
@@ -62,11 +67,9 @@ pool.on('error', (err) => {
 // frontend converted UTC→Perth again on read, leaving every event 8 hours
 // late. Pinning the session to UTC keeps the TIMESTAMP columns honest as
 // UTC wallclock values end-to-end.
-pool.on('connect', (client) => {
-  client.query("SET TIME ZONE 'UTC'").catch(err => {
-    console.error('Failed to set Postgres session TZ to UTC:', err);
-  });
-});
+// Timezone is set via the pool options: '-c TimeZone=UTC' above — no per-connect
+// client.query() needed. Removed to eliminate the pg@9 deprecation warning that
+// fires when client.query() is called while pg's own connection-init is in flight.
 
 // ===== TABLE SCHEMAS =====
 // This defines the structure of our data
