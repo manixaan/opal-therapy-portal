@@ -7571,37 +7571,54 @@ function renderSlotSuggestions() {
     lead.innerHTML = `Top suggestions for ${who} · ${TYPE_LABEL[type] || type} · ${dur} min · ranked against your <em>actual</em> weekly calendar (${Object.keys(SESSIONS).length} session${Object.keys(SESSIONS).length===1?'':'s'} booked).`;
   }
 
-  // Build the user's pre-selected slot card (from calendar drag or quick-book).
-  // This slot always appears first so the user's original choice is never lost.
+  // Build the user's pre-selected slot card.  There are three sources depending
+  // on how the booking panel was opened:
+  //   1. _bspPrefill      — calendar drag/click: { day, startH, startM, ... }
+  //   2. BOOKING_STATE.selectedSlot — quick-book "book now": { day, time:"HH:MM", duration }
+  //   3. BOOKING_STATE.prefillTime  — older path: { day, time:"HH:MM" }
   let prefillCard = null;
-  const pf = BOOKING_STATE.prefillTime;
-  const ps = BOOKING_STATE.selectedSlot;
-  if (pf || ps) {
-    const timeStr = (ps && ps.time) || (pf && pf.time) || '';
-    const day     = (ps && ps.day)  || (pf && pf.day)  || '';
-    const parts   = timeStr.split(':');
-    const startH  = parseInt(parts[0], 10);
-    const startM  = parseInt(parts[1], 10) || 0;
-    if (day && !isNaN(startH)) {
-      const startMin = startH * 60 + startM;
-      const endMin   = startMin + dur;
-      const hasConflict = dayHasConflict(day, startMin, endMin);
-      prefillCard = {
-        day,
-        startH,
-        startM,
-        startMin,
-        endMin,
-        durationMin: dur,
-        dayLabel:    DAY_LABELS[day] || day,
-        score:       hasConflict ? 50 : scoreSlot({ day, startH, startM, startMin, endMin, durationMin: dur }, patient, type),
-        isPrefill:   true,
-        reasons:     hasConflict
-          ? [{ text: 'Overlaps an existing session — check before confirming', tone: 'bad' }]
-          : [{ text: 'Your calendar selection', tone: 'good' },
-             ...reasonChipsFor({ day, startH, startM, startMin, endMin, durationMin: dur, dayLabel: DAY_LABELS[day] || day }, patient, type)],
-      };
-    }
+  const bsp = (typeof _bspPrefill !== 'undefined') ? _bspPrefill : null;
+  const ps  = BOOKING_STATE.selectedSlot;
+  const pf  = BOOKING_STATE.prefillTime;
+
+  let prefillDay, prefillStartH, prefillStartM;
+  if (bsp && bsp.day && bsp.startH !== undefined) {
+    // Calendar drag/click path — already integers
+    prefillDay    = bsp.day;
+    prefillStartH = bsp.startH;
+    prefillStartM = bsp.startM || 0;
+  } else if (ps && ps.day && ps.time) {
+    // Quick-book path — time is "HH:MM" string
+    const parts = ps.time.split(':');
+    prefillDay    = ps.day;
+    prefillStartH = parseInt(parts[0], 10);
+    prefillStartM = parseInt(parts[1], 10) || 0;
+  } else if (pf && pf.day && pf.time) {
+    const parts = pf.time.split(':');
+    prefillDay    = pf.day;
+    prefillStartH = parseInt(parts[0], 10);
+    prefillStartM = parseInt(parts[1], 10) || 0;
+  }
+
+  if (prefillDay && !isNaN(prefillStartH)) {
+    const startMin = prefillStartH * 60 + prefillStartM;
+    const endMin   = startMin + dur;
+    const hasConflict = dayHasConflict(prefillDay, startMin, endMin);
+    prefillCard = {
+      day:         prefillDay,
+      startH:      prefillStartH,
+      startM:      prefillStartM,
+      startMin,
+      endMin,
+      durationMin: dur,
+      dayLabel:    DAY_LABELS[prefillDay] || prefillDay,
+      score:       hasConflict ? 50 : scoreSlot({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: dur }, patient, type),
+      isPrefill:   true,
+      reasons:     hasConflict
+        ? [{ text: 'Overlaps an existing session — check before confirming', tone: 'bad' }]
+        : [{ text: 'Your calendar selection', tone: 'good' },
+           ...reasonChipsFor({ day: prefillDay, startH: prefillStartH, startM: prefillStartM, startMin, endMin, durationMin: dur, dayLabel: DAY_LABELS[prefillDay] || prefillDay }, patient, type)],
+    };
   }
 
   const top = computeSlotSuggestions(patient, type, dur);
