@@ -1820,9 +1820,30 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       sploseId:   sploseId  || null,
     });
 
-    // Persist the returned outlook_id so future syncs don't duplicate this event
+    // Link to existing DB record when caller supplied one
     if (dbEventId) {
       await db.updateEventOutlookId(dbEventId, result.outlookId);
+    }
+
+    // Always write to the local DB immediately so the event survives a page
+    // refresh without waiting for the 5-minute delta sync. The upsert is
+    // idempotent — if the delta sync later re-imports the same event it will
+    // just update the existing row rather than creating a duplicate.
+    try {
+      await db.upsertOutlookEvent(req.session.userId, {
+        outlookId:      result.outlookId,
+        title,
+        startTime,
+        endTime,
+        location:       location || '',
+        categories:     categories || [],
+        isCancelled:    false,
+        lastModifiedAt: new Date().toISOString(),
+      });
+      console.log(`💾 Event saved to local DB: ${result.outlookId}`);
+    } catch (dbErr) {
+      // Non-fatal — the Outlook event was created; delta sync will import it
+      console.warn('⚠️  Local DB save failed (non-fatal):', dbErr.message);
     }
 
     console.log(`✅ Outlook event created: ${result.outlookId} — "${title}"`);
