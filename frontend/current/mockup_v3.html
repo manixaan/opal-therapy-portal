@@ -10822,6 +10822,11 @@ async function confirmBooking() {
       if (modal) modal.classList.add('show');
       WIZARD_BOOKED = true;
 
+      // Navigate the calendar to the week of this event so it's visible on
+      // the canvas immediately — and stays visible after Cmd+R because the
+      // week position is now saved to localStorage by gotoWeekOf().
+      if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
+
       // Trigger background delta sync so the event lands in the local DB and
       // survives a page refresh without waiting for the 5-minute automatic tick.
       if (outlookId) {
@@ -10977,6 +10982,11 @@ async function confirmBooking() {
     }
     if (modal) modal.classList.add('show');
     WIZARD_BOOKED = true;
+
+    // Navigate to the event's week and persist the position so Cmd+R stays there
+    if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function') {
+      gotoWeekOf(DAY_DATES[slot.day]);
+    }
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the
@@ -15793,18 +15803,29 @@ function renderCurrentWeek() {
 }
 
 // --- Toolbar handlers (wired up in cal-toolbar) ---
+function _saveWeekPos() {
+  try { localStorage.setItem('opal_calendar_week', __ymd(window.__currentWeekMonday)); } catch (_) {}
+}
 function gotoPrevWeek() {
   if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
   window.__currentWeekMonday.setUTCDate(window.__currentWeekMonday.getUTCDate() - 7);
+  _saveWeekPos();
   renderCurrentWeek();
 }
 function gotoNextWeek() {
   if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
   window.__currentWeekMonday.setUTCDate(window.__currentWeekMonday.getUTCDate() + 7);
+  _saveWeekPos();
   renderCurrentWeek();
 }
 function gotoThisWeek() {
   window.__currentWeekMonday = __thisMondayPerth();
+  _saveWeekPos();
+  renderCurrentWeek();
+}
+function gotoWeekOf(isoDate) {
+  window.__currentWeekMonday = __thisMondayPerth(new Date(isoDate));
+  _saveWeekPos();
   renderCurrentWeek();
 }
 
@@ -15835,10 +15856,25 @@ async function loadOutlookEventsToCalendar() {
       return;
     }
 
-    // Anchor the visible week. Prefer "this week in Perth"; if there are no
-    // events at all in this week, snap to the week of the nearest event so
-    // first-time users immediately see something.
-    if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
+    // Anchor the visible week. Priority:
+    //   1. Saved position from localStorage (persists across Cmd+R)
+    //   2. This week in Perth
+    //   3. Nearest event week (first-time users with no events in current week)
+    if (!window.__currentWeekMonday) {
+      try {
+        const saved = localStorage.getItem('opal_calendar_week');
+        if (saved) {
+          const savedDate = new Date(saved + 'T00:00:00Z');
+          const weeksAway = Math.abs((savedDate - __thisMondayPerth()) / (7 * 86400000));
+          // Only restore if within 8 weeks — discard very stale positions
+          if (weeksAway <= 8) {
+            window.__currentWeekMonday = savedDate;
+            console.log(`📅 Restored calendar week from last session: ${saved}`);
+          }
+        }
+      } catch (_) {}
+      if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
+    }
     if (__eventsInVisibleWeek().length === 0) {
       const now = Date.now();
       let nearest = window.__outlookEventsCache[0];
