@@ -10827,13 +10827,9 @@ async function confirmBooking() {
       // week position is now saved to localStorage by gotoWeekOf().
       if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
 
-      // Trigger background delta sync so the event lands in the local DB and
-      // survives a page refresh without waiting for the 5-minute automatic tick.
-      if (outlookId) {
-        fetch('/api/sync/outlook-delta', { method: 'POST', credentials: 'include' })
-          .then(r => r.ok && console.log('✅ Delta sync triggered — new event will persist on refresh'))
-          .catch(() => {});
-      }
+      // Note: no manual delta sync needed — the backend POST /api/outlook/events
+      // already writes to the local DB synchronously, so the event survives Cmd+R
+      // without any additional sync call.
 
     } catch (err) {
       console.error('confirmBooking (non-client) error:', err.message);
@@ -10990,12 +10986,8 @@ async function confirmBooking() {
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the
-    // 5-minute automatic sync catches up.
-    if (outlookId) {
-      fetch('/api/sync/outlook-delta', { method: 'POST', credentials: 'include' })
-        .then(r => r.ok && console.log('✅ Delta sync triggered — new event will persist on refresh'))
-        .catch(() => {});
-    }
+    // No manual delta sync needed — POST /api/outlook/events already writes
+    // to the local DB synchronously before returning, so Cmd+R shows the event.
 
   } catch (err) {
     console.error('confirmBooking error:', err.message);
