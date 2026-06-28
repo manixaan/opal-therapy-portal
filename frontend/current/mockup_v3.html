@@ -3955,7 +3955,7 @@
         <div class="api-preview" id="confirm-api-preview"><span class="c">// POST https://api.splose.com/v1/appointments</span></div>
 
         <div class="step-actions">
-          <button class="btn" onclick="goStep(3)">← Back</button>
+          <button class="btn" onclick="goStepBack4()">← Back</button>
           <button class="btn primary" onclick="confirmBooking()">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;">
               <polyline points="20 6 9 17 4 12"/>
@@ -6828,8 +6828,10 @@ function goStep(n) {
   // SESSIONS state — empty calendar → empty-state reasons; partial calendar
   // → real cluster/intensity reasons. Right-context panels also refresh so
   // they reflect the actual week.
-  if (n === 3 && typeof renderSlotSuggestions === 'function') {
-    // Load real Splose appointments for current week before computing suggestions
+  // Step 3 (slot suggestions) is only used by the client flow.
+  // Non-client categories skip steps 2 and 3 and go directly to step 4.
+  if (n === 3 && typeof renderSlotSuggestions === 'function' &&
+      (BOOKING_STATE.category === 'client' || !BOOKING_STATE.category)) {
     loadSploseAppointmentsIntoSessions().then(() => renderSlotSuggestions());
   }
   if (n === 4 && typeof renderConfirmSummary === 'function') {
@@ -10562,140 +10564,242 @@ function selectBookingCat(cat) {
   }
 }
 
+/* ---------- Read live BSP panel timing fields ---------- */
+function _getBspTiming() {
+  const day   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
+  const start = document.getElementById('bsp-start')?.value;   // "HH:MM" 24-h
+  const dur   = parseInt(document.getElementById('bsp-dur-slider')?.value) || 60;
+  const loc   = (document.getElementById('bsp-location')?.value || '').trim();
+  if (!day || !start) return null;
+  const parts  = start.split(':');
+  const startH = parseInt(parts[0], 10);
+  const startM = parseInt(parts[1], 10) || 0;
+  const endTot = startH * 60 + startM + dur;
+  const endH   = Math.floor(endTot / 60) % 24;
+  const endM   = endTot % 60;
+  const pad    = n => String(n).padStart(2, '0');
+  const dateStr  = DAY_DATES[day] || null;
+  return {
+    day, startH, startM, startMin: startH * 60 + startM,
+    endH, endM, endMin: endTot, durationMin: dur, location: loc,
+    startISO: dateStr ? `${dateStr}T${pad(startH)}:${pad(startM)}:00+08:00` : null,
+    endISO:   dateStr ? `${dateStr}T${pad(endH)}:${pad(endM)}:00+08:00`     : null,
+    dateStr,
+  };
+}
+
 /* ---------- Step 1: Capture form data and advance ---------- */
 function step1Next() {
   const cat = BOOKING_STATE.category;
 
   if (!cat) {
-    alert('Please select a booking category');
+    showToast('Select a booking type', 'Choose a booking category to continue.', 'warn');
     return;
   }
 
-  // Validate based on category
   if (cat === 'client') {
-    const patient = document.querySelector('.patient-card.selected');
-    if (!patient || !BOOKING_STATE.selectedPatient) {
-      alert('Please select a patient');
+    if (!BOOKING_STATE.selectedPatient) {
+      showToast('Select a patient', 'Please select a patient before continuing.', 'warn');
       return;
     }
-    // selectedPatient + formData.patient are already set by the card click handler
     goStep(2);
-  } else if (cat === 'email') {
+    return;
+  }
+
+  // ── Non-client categories: timing lives in the WHEN & WHERE panel ──────────
+  const timing = _getBspTiming();
+  if (!timing || !timing.day) {
+    showToast('Set a time', 'Please choose a day and start time in the "When & Where" section.', 'warn');
+    return;
+  }
+  if (!timing.startISO) {
+    showToast('Week not loaded', 'Calendar week dates are not ready yet — try again in a moment.', 'warn');
+    return;
+  }
+
+  if (cat === 'email') {
     const title = document.getElementById('email-title').value.trim();
-    if (!title) { alert('Please enter a title'); return; }
-    BOOKING_STATE.formData = {
-      category: 'email',
-      title: title,
-      duration: document.getElementById('email-duration').value,
-      notes: document.getElementById('email-notes').value
-    };
-    showTimeSlotSelection();
+    if (!title) { showToast('Title required', 'Please enter a title for this email block.', 'warn'); return; }
+    BOOKING_STATE.formData = { category: 'email', title, notes: document.getElementById('email-notes').value.trim(), timing };
   } else if (cat === 'admin') {
     const taskType = document.getElementById('admin-task-type').value;
-    if (!taskType) { alert('Please select a task type'); return; }
-    BOOKING_STATE.formData = {
-      category: 'admin',
-      taskType: taskType,
-      duration: document.getElementById('admin-duration').value,
-      notes: document.getElementById('admin-notes').value
-    };
-    showTimeSlotSelection();
+    if (!taskType) { showToast('Task type required', 'Please select a task type.', 'warn'); return; }
+    BOOKING_STATE.formData = { category: 'admin', taskType, notes: document.getElementById('admin-notes').value.trim(), timing };
   } else if (cat === 'bulk-noting') {
-    BOOKING_STATE.formData = {
-      category: 'bulk-noting',
-      duration: document.getElementById('bulk-noting-duration').value,
-      notes: document.getElementById('bulk-noting-notes').value
-    };
-    showTimeSlotSelection();
+    BOOKING_STATE.formData = { category: 'bulk-noting', notes: document.getElementById('bulk-noting-notes').value.trim(), timing };
   } else if (cat === 'custom') {
     const name = document.getElementById('custom-name').value.trim();
-    if (!name) { alert('Please enter an event name'); return; }
-    BOOKING_STATE.formData = {
-      category: 'custom',
-      name: name,
-      duration: document.getElementById('custom-duration').value,
-      notes: document.getElementById('custom-notes').value
-    };
-    showTimeSlotSelection();
+    if (!name) { showToast('Name required', 'Please enter a name for this event.', 'warn'); return; }
+    BOOKING_STATE.formData = { category: 'custom', name, notes: document.getElementById('custom-notes').value.trim(), timing };
   }
-}
 
-/* ---------- Time Slot Selection (for non-client bookings) ---------- */
-function showTimeSlotSelection() {
-  // Reuse Step 3 for non-client time selection
-  const lead = document.getElementById('step3-lead');
-  lead.textContent = 'Choose a time for ' + BOOKING_STATE.category;
-  renderTimeSlots();
-  goStep(3);
-}
-
-function renderTimeSlots() {
-  const container = document.getElementById('slot-suggestions');
-  const duration = parseInt(BOOKING_STATE.formData.duration, 10);
-
-  // Sample time slots for the week
-  const slots = [
-    { day: 'Mon 20', time: '10:00 AM', duration: duration, quality: '★★★★★', label: 'Best fit · morning energy' },
-    { day: 'Mon 20', time: '2:30 PM', duration: duration, quality: '★★★★☆', label: 'Good · after lunch' },
-    { day: 'Tue 21', time: '11:00 AM', duration: duration, quality: '★★★★☆', label: 'Good · mid-morning' },
-    { day: 'Wed 22', time: '3:00 PM', duration: duration, quality: '★★★☆☆', label: 'Available · afternoon' },
-    { day: 'Thu 23', time: '9:30 AM', duration: duration, quality: '★★★★★', label: 'Best fit · start of day' },
-    { day: 'Fri 24', time: '4:00 PM', duration: duration, quality: '★★☆☆☆', label: 'Available · end of day' }
-  ];
-
-  container.innerHTML = slots.map((slot, idx) => `
-    <div style="padding: 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;"
-         onclick="selectTimeSlot('${slot.day}', '${slot.time}', ${slot.duration}); this.style.background='var(--accent-soft)'; this.style.borderColor='var(--accent)';">
-      <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-        <strong>${slot.day} · ${slot.time}</strong>
-        <span style="color: var(--muted);">${slot.duration} min</span>
-      </div>
-      <div style="font-size: 12px; color: var(--muted);">
-        <span style="color: var(--accent);">${slot.quality}</span> ${slot.label}
-      </div>
-    </div>
-  `).join('');
-}
-
-function selectTimeSlot(day, time, duration) {
-  BOOKING_STATE.selectedSlot = { day, time, duration };
+  // Non-client skips steps 2 & 3 — time is already captured above
   goStep(4);
+}
+
+/* ---------- Back navigation from step 4 ---------- */
+function goStepBack4() {
+  // Client flow came through steps 1→2→3→4; non-client skips 2 and 3
+  if (BOOKING_STATE.category === 'client') goStep(3);
+  else goStep(1);
 }
 
 /* ---------- Step 4: Confirmation and Calendar Add ---------- */
 function renderConfirmSummary() {
-  const summary = document.getElementById('confirm-summary');
+  // Client flow uses the richer summary defined earlier in this file (line ~7760).
+  // That function is declared first and then overridden here, but the hook system
+  // at line ~19409 wraps whichever definition is last. To avoid a conflict, we
+  // delegate client back to the canonical version and handle non-client here.
   const cat = BOOKING_STATE.category;
+  if (cat === 'client' || !cat) {
+    // Delegate to the full client summary defined at line ~7760 via its own logic.
+    // It reads getSelectedSlot() / getSelectedPatient() directly, so just call it.
+    const _full = (function(){
+      const patient = getSelectedPatient();
+      const type    = getSelectedType();
+      const slot    = getSelectedSlot();
+      const summary = document.getElementById('confirm-summary');
+      const apiPv   = document.getElementById('confirm-api-preview');
+      if (!summary) return;
+      if (!slot) {
+        summary.innerHTML = '<h4>Appointment summary</h4><div class="micro">Pick a slot on step 3 first.</div>';
+        if (apiPv) apiPv.innerHTML = '<span class="c">// no slot selected</span>';
+        return;
+      }
+      const dur = slot.durationMin;
+      const endMin = slot.startH * 60 + slot.startM + dur;
+      const eh = Math.floor(endMin / 60), em = endMin % 60;
+      const location = patient
+        ? (patient.address || `${patient.suburb} ${patient.postcode}`)
+        : ((typeof WORK_BASES !== 'undefined' && WORK_BASES.office?.addr) || 'Home base');
+      const startISO = `${DAY_DATES[slot.day]}T${String(slot.startH).padStart(2,'0')}:${String(slot.startM).padStart(2,'0')}:00+08:00`;
+      const endISO   = `${DAY_DATES[slot.day]}T${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}:00+08:00`;
+      summary.innerHTML = `
+        <h4>Appointment summary</h4>
+        <div class="confirm-row"><span class="k">Patient</span><span class="v">${patient ? `${patient.first} ${patient.last} (${patient.id})` : '— internal block —'}</span></div>
+        ${patient && (patient.plan || fmtPlanEnd(patient.planEnds)) ? `<div class="confirm-row"><span class="k">Plan</span><span class="v">${[patient.plan, fmtPlanEnd(patient.planEnds) ? 'ends '+fmtPlanEnd(patient.planEnds) : ''].filter(Boolean).join(' · ')}</span></div>` : ''}
+        <div class="confirm-row"><span class="k">Service</span><span class="v">${TYPE_LABEL[type] || type}</span></div>
+        <div class="confirm-row"><span class="k">Location</span><span class="v">${location}</span></div>
+        <div class="confirm-row"><span class="k">When</span><span class="v">${slot.dayLabel || DAY_LABELS[slot.day]} · ${fmtTime(slot.startH, slot.startM)} – ${fmtTime(eh, em)} AWST · ${dur} min</span></div>
+      `;
+      const isAppt = ['initial','therapy','assessment','mdt'].includes(type);
+      if (apiPv) apiPv.innerHTML = `<span class="c">// POST https://api.splose.com/v1/${isAppt ? 'appointments' : 'busy-times'}</span>
+{ <span class="k">"start"</span>: <span class="s">"${startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${endISO}"</span>${patient ? `, <span class="k">"patientId"</span>: <span class="s">"${patient.id}"</span>` : ''} }`;
+    })();
+    return;
+  }
 
-  if (cat === 'client') {
-    // Original client confirmation logic remains
-    summary.innerHTML = `
-      <h4>Appointment summary</h4>
-      <div style="padding: 12px; background: var(--panel); border-radius: 6px;">
-        <div style="margin: 8px 0;"><strong>Patient:</strong> ${BOOKING_STATE.formData.patient}</div>
-        <div style="margin: 8px 0;"><strong>Type:</strong> ${BOOKING_STATE.selectedSessionType || 'Not selected'}</div>
-        <div style="margin: 8px 0;"><strong>Time:</strong> ${BOOKING_STATE.selectedSlot?.day} ${BOOKING_STATE.selectedSlot?.time}</div>
-        <div style="margin: 8px 0;"><strong>Duration:</strong> ${BOOKING_STATE.selectedSlot?.duration} min</div>
-      </div>
-    `;
-  } else {
-    // Non-client confirmation
-    const categoryNames = { email: 'Email', admin: 'Admin Work', 'bulk-noting': 'Case Noting', custom: 'Custom Event' };
-    summary.innerHTML = `
-      <h4>${categoryNames[cat]} Summary</h4>
-      <div style="padding: 12px; background: var(--panel); border-radius: 6px;">
-        <div style="margin: 8px 0;"><strong>Category:</strong> ${categoryNames[cat]}</div>
-        <div style="margin: 8px 0;"><strong>Title:</strong> ${BOOKING_STATE.formData.title || BOOKING_STATE.formData.name || BOOKING_STATE.formData.taskType}</div>
-        <div style="margin: 8px 0;"><strong>Time:</strong> ${BOOKING_STATE.selectedSlot?.day} ${BOOKING_STATE.selectedSlot?.time}</div>
-        <div style="margin: 8px 0;"><strong>Duration:</strong> ${BOOKING_STATE.selectedSlot?.duration} min</div>
-        ${BOOKING_STATE.formData.notes ? `<div style="margin: 8px 0;"><strong>Notes:</strong> ${BOOKING_STATE.formData.notes}</div>` : ''}
-      </div>
-    `;
+  // ── Non-client summary ─────────────────────────────────────────────────────
+  const summary = document.getElementById('confirm-summary');
+  const apiPv   = document.getElementById('confirm-api-preview');
+  if (!summary) return;
+
+  const CAT_NAMES = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
+  const fd  = BOOKING_STATE.formData || {};
+  const t   = fd.timing;
+  const label = fd.title || fd.name || fd.taskType || CAT_NAMES[cat] || cat;
+  const timeLabel = t
+    ? `${DAY_LABELS[t.day] || t.day} · ${fmtTime(t.startH, t.startM)} – ${fmtTime(t.endH, t.endM)} AWST · ${t.durationMin} min`
+    : '— set day and time in step 1 —';
+
+  summary.innerHTML = `
+    <h4>${CAT_NAMES[cat] || cat} summary</h4>
+    <div class="confirm-row"><span class="k">Type</span><span class="v">${CAT_NAMES[cat] || cat}</span></div>
+    <div class="confirm-row"><span class="k">${cat === 'admin' ? 'Task' : 'Title'}</span><span class="v">${label || '—'}</span></div>
+    <div class="confirm-row"><span class="k">When</span><span class="v">${timeLabel}</span></div>
+    ${t?.location ? `<div class="confirm-row"><span class="k">Location</span><span class="v">${t.location}</span></div>` : ''}
+    ${fd.notes ? `<div class="confirm-row"><span class="k">Notes</span><span class="v">${fd.notes}</span></div>` : ''}
+  `;
+  if (apiPv && t?.startISO) {
+    apiPv.innerHTML = `<span class="c">// POST https://api.splose.com/v1/busy-times</span>
+{ <span class="k">"start"</span>: <span class="s">"${t.startISO}"</span>, <span class="k">"end"</span>: <span class="s">"${t.endISO}"</span>, <span class="k">"busyTimeTypeId"</span>: <span class="n">55339</span> }`;
   }
 }
 
 /* ---------- Confirm Booking and Add to Calendar ---------- */
 async function confirmBooking() {
+  const cat = BOOKING_STATE.category;
+  const btn = document.querySelector('#step-4 .btn.primary');
+  const resetBtn = () => {
+    if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Write to Splose`; }
+  };
+
+  // ── Non-client fast path (email / admin / bulk-noting / custom) ────────────
+  if (cat && cat !== 'client') {
+    const fd = BOOKING_STATE.formData || {};
+    const t  = fd.timing;
+    if (!t?.startISO) {
+      showToast('No time set', 'Please go back to step 1 and set a day and start time.', 'warn');
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving to Splose…'; }
+    try {
+      const practitionerId = _bspSelectedTherapist?.sploseUserId || window.SPLOSE_CONFIG?.practitionerId;
+      if (!practitionerId) {
+        showToast('Configuration error', 'Practitioner ID not configured — check Splose settings.', 'warn');
+        resetBtn(); return;
+      }
+
+      // All non-client types map to busy-times in Splose
+      const busyTypeMap = { email: 55339, admin: 55339, 'bulk-noting': 55339, custom: 55339 };
+      const busyTimeTypeId = busyTypeMap[cat] || 55339;
+
+      const sploseResp = await fetch('/api/splose/busy-times', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ start: t.startISO, end: t.endISO, busyTimeTypeId, practitionerIds: [practitionerId] }),
+      });
+      const sploseResult = await sploseResp.json();
+      if (!sploseResp.ok) throw new Error(sploseResult.details || sploseResult.error || `HTTP ${sploseResp.status}`);
+      const sploseId = sploseResult.id;
+      console.log(`✅ Non-client block written to Splose: ${sploseId}`);
+
+      // Write to Outlook (best-effort)
+      const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
+      const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
+      fetch('/api/outlook/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO, ...(sploseId ? { sploseId } : {}) }),
+      })
+        .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(new Error(j.error || r.status))))
+        .then(j => console.log('✅ Outlook event created:', j.outlookId))
+        .catch(e => console.warn('⚠️ Outlook write-back skipped (non-fatal):', e.message));
+
+      // Add to local calendar canvas
+      const col = document.getElementById('day-' + t.day);
+      if (col) {
+        addSession(col, {
+          day: t.day, type: cat === 'admin' ? 'admin' : (cat === 'bulk-noting' ? 'admin' : 'admin'),
+          startH: t.startH, startM: t.startM, endH: t.endH, endM: t.endM,
+          title: outlookTitle, sub: CAT_LABELS[cat] || cat, sploseId,
+        });
+        if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
+      }
+
+      // Success modal
+      const modal = document.getElementById('modal-booked');
+      const body  = modal?.querySelector('.modal-body');
+      if (body) {
+        const ref = sploseId ? `#${sploseId}` : `#B-${Math.floor(10000 + Math.random() * 89999)}`;
+        body.innerHTML = `
+          <p style="margin:0 0 10px;">${CAT_LABELS[cat] || cat} block <code>${ref}</code> created for <strong>${DAY_LABELS[t.day] || t.day} ${fmtTime(t.startH, t.startM)} AWST · ${t.durationMin} min</strong>.</p>
+          <p style="margin:0;font-size:12px;color:var(--muted);">Written to Splose ✓ · Outlook sync queued ✓</p>`;
+      }
+      if (modal) modal.classList.add('show');
+      WIZARD_BOOKED = true;
+
+    } catch (err) {
+      console.error('confirmBooking (non-client) error:', err.message);
+      showToast('Splose write failed', err.message, 'warn');
+      resetBtn();
+    }
+    return;
+  }
+
+  // ── Client session path ───────────────────────────────────────────────────
   const patient = getSelectedPatient();
   const type    = getSelectedType();
   const slot    = getSelectedSlot();
@@ -10705,7 +10809,6 @@ async function confirmBooking() {
     return;
   }
 
-  const btn = document.querySelector('#step-4 .btn.primary');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving to Splose…'; }
 
   try {
@@ -10758,7 +10861,7 @@ async function confirmBooking() {
         ? { start: startISO, end: endISO, serviceId, locationId, practitionerId, patientId, caseId, note: BOOKING_STATE.formData?.notes || '' }
         : { start: startISO, end: endISO, busyTimeTypeId: serviceId, practitionerIds: [practitionerId] };
 
-      const resp = await fetch(`http://localhost:5001${endpoint}`, {
+      const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
