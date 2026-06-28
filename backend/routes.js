@@ -734,19 +734,37 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
   try {
     const user = await db.getUser(req.session.userId);
     const events = await db.getEvents(req.session.userId);
-    // Events from Outlook have an outlook_id field set
     const outlookEvents = events.filter(e => e.outlook_id);
 
-    console.log(`📊 Sync Status Check: Total=${events.length}, Outlook=${outlookEvents.length}`);
+    // Report connected if the caller has a token OR any org member does
+    // (owner/admin accounts often have no personal token but manage a connected therapist)
+    let outlookConnected = !!user.access_token;
+    let connectedEmail   = user.access_token ? user.email : null;
+    if (!outlookConnected) {
+      const orgId = user.organisation_id;
+      const fallback = await db.pool.query(
+        `SELECT email FROM users
+         WHERE access_token IS NOT NULL AND access_token != ''
+           AND is_active = true
+           AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
+         ORDER BY created_at LIMIT 1`,
+        [orgId]
+      );
+      if (fallback.rows.length) {
+        outlookConnected = true;
+        connectedEmail   = fallback.rows[0].email;
+      }
+    }
 
     res.json({
-      outlookConnected: !!user.access_token,
-      totalEvents: events.length,
+      outlookConnected,
+      connectedAs:        connectedEmail,
+      totalEvents:        events.length,
       outlookSyncedEvents: outlookEvents.length,
-      status: outlookEvents.length > 0 ? 'synced' : 'not_synced',
+      status:  outlookEvents.length > 0 ? 'synced' : 'not_synced',
       message: outlookEvents.length > 0
         ? `${outlookEvents.length} events synced from Outlook`
-        : 'No Outlook events synced yet'
+        : 'No Outlook events synced yet',
     });
   } catch (error) {
     console.error('Sync status error:', error);

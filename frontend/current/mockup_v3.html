@@ -11912,23 +11912,87 @@ function filterAlerts(cat) {
 
 /* ---------- Attach click + drag to each session ---------- */
 function attachBlockInteractivity(el, id) {
-  // Pointer-down on a resize handle → start an edge-resize flow instead of a drag.
-  // Otherwise it's a "potential drag". If the pointer moves >4px before up,
-  // it becomes a drag; otherwise it's a click and we open the detail drawer.
   el.addEventListener('pointerdown', (e) => {
-    e.stopPropagation(); // prevent bubbling to cal-col's slot-click handler
+    e.stopPropagation();
     const handle = e.target && e.target.closest && e.target.closest('.resize-handle');
-    if (handle) {
-      onBlockResizeStart(e, id, handle.dataset.resize);
-      return;
-    }
+    if (handle) { onBlockResizeStart(e, id, handle.dataset.resize); return; }
     onBlockPointerDown(e, id);
   });
-  // Also expose keyboard focus → open on Enter
   el.tabIndex = 0;
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBlockDetail(id); }
   });
+  // Right-click → context menu with Delete option
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showCalContextMenu(e.clientX, e.clientY, id);
+  });
+}
+
+/* ── Right-click context menu for calendar events ─────────────────────────── */
+
+function showCalContextMenu(x, y, id) {
+  closeCalContextMenu();
+  const s = SESSIONS[id];
+  if (!s) return;
+
+  const label = s.patient || s.title || 'Event';
+  const menu  = document.createElement('div');
+  menu.className  = 'cal-ctx-menu';
+  menu.id         = 'cal-ctx-menu-active';
+  menu.innerHTML  = `
+    <div class="cal-ctx-menu-item" onclick="closeCalContextMenu(); openBlockDetail('${id}')">
+      <span class="ctx-icon">✏️</span> Open details
+    </div>
+    <div class="cal-ctx-menu-sep"></div>
+    <div class="cal-ctx-menu-item" style="color:var(--danger,#dc2626);"
+         onclick="ctxDeleteEvent('${id}')">
+      <span class="ctx-icon">🗑</span> Delete event
+    </div>
+  `;
+  document.body.appendChild(menu);
+
+  // Position — keep within viewport
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  const r = menu.getBoundingClientRect();
+  if (r.right  > window.innerWidth)  menu.style.left = (x - r.width)  + 'px';
+  if (r.bottom > window.innerHeight) menu.style.top  = (y - r.height) + 'px';
+
+  // Dismiss on any outside click
+  setTimeout(() => document.addEventListener('click', closeCalContextMenu, { once: true }), 0);
+}
+
+function closeCalContextMenu() {
+  const m = document.getElementById('cal-ctx-menu-active');
+  if (m) m.remove();
+}
+
+async function ctxDeleteEvent(id) {
+  closeCalContextMenu();
+  const s = SESSIONS[id];
+  if (!s) return;
+
+  const label = s.patient || s.title || 'this event';
+  if (!confirm(`Delete "${label}"?\n\nThis removes it from Outlook and the database. Cannot be undone.`)) return;
+
+  if (s.dbId) {
+    try {
+      const r    = await fetch(`/api/outlook/events/${s.dbId}`, { method: 'DELETE', credentials: 'include' });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(`Delete failed: ${json.error || 'Unknown error'}`); return; }
+      console.log(`🗑️ Deleted from DB + Outlook: ${id} (Outlook removed: ${json.deletedFromOutlook})`);
+    } catch (err) {
+      alert('Could not delete — check your connection and try again.');
+      return;
+    }
+  }
+
+  // Remove tile from the DOM and SESSIONS registry
+  if (s.element?.parentNode) s.element.parentNode.removeChild(s.element);
+  delete SESSIONS[id];
+  if (typeof reflowDayOverlaps === 'function' && s.col) reflowDayOverlaps(s.col);
 }
 
 /* ---------- Detail drawer ---------- */
@@ -14612,17 +14676,22 @@ function showOutlookLoginPrompt() {
 function showOutlookConnected(status) {
   console.log('✅ Showing connected status');
 
-  // Remove any legacy full-panel or connect banner
   const oldPanel = document.getElementById('outlook-sync-panel');
   if (oldPanel) oldPanel.remove();
   const banner = document.getElementById('outlook-connect-banner');
   if (banner) banner.remove();
 
-  // Update compact strip in toolbar
-  const dot = document.getElementById('cal-sync-dot');
+  const dot   = document.getElementById('cal-sync-dot');
   const label = document.getElementById('cal-sync-label');
-  if (dot) { dot.classList.remove('disconnected'); }
-  if (label) { label.textContent = `${status.outlookSyncedEvents?.toLocaleString() ?? '—'} events synced`; }
+  if (dot) dot.classList.remove('disconnected');
+  if (label) {
+    const who   = status.connectedAs ? ` · ${status.connectedAs}` : '';
+    const count = status.outlookSyncedEvents?.toLocaleString() ?? '—';
+    label.textContent = `Outlook connected${who} · ${count} events`;
+    label.title = status.connectedAs
+      ? `Outlook calendar linked via ${status.connectedAs}`
+      : 'Outlook calendar connected';
+  }
 }
 
 /**
