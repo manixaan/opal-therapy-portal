@@ -1764,29 +1764,27 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
     try {
       accessToken = await getValidAccessToken(targetUser);
     } catch (tokenErr) {
+      // organisation_id may be null — use IS NOT DISTINCT FROM to match nulls,
+      // or just find any connected user when org is unset (single-practice setup).
       const orgId = targetUser?.organisation_id || req.user?.organisation_id;
-      if (orgId) {
-        const fallback = await db.pool.query(
-          `SELECT id FROM users
-           WHERE organisation_id = $1
-             AND access_token IS NOT NULL AND access_token != ''
-             AND is_active = true
-           ORDER BY created_at
-           LIMIT 1`,
-          [orgId]
-        );
-        if (fallback.rows.length) {
-          const fallbackUser = await db.getUser(fallback.rows[0].id);
-          accessToken = await getValidAccessToken(fallbackUser);
-          console.log(`🔄 Outlook write: using token from ${fallbackUser.email} (fallback — caller had no token)`);
-        } else {
-          return res.status(400).json({
-            error: 'No Outlook account connected',
-            message: 'No user in this organisation has linked their Outlook account. Connect Outlook via the Settings → Integrations page.',
-          });
-        }
+      const fallback = await db.pool.query(
+        `SELECT id FROM users
+         WHERE access_token IS NOT NULL AND access_token != ''
+           AND is_active = true
+           AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
+         ORDER BY created_at
+         LIMIT 1`,
+        [orgId]
+      );
+      if (fallback.rows.length) {
+        const fallbackUser = await db.getUser(fallback.rows[0].id);
+        accessToken = await getValidAccessToken(fallbackUser);
+        console.log(`🔄 Outlook write: using token from ${fallbackUser.email} (fallback — caller had no token)`);
       } else {
-        return res.status(400).json({ error: 'Outlook not connected', message: tokenErr.message });
+        return res.status(400).json({
+          error: 'No Outlook account connected',
+          message: 'No user in this organisation has linked their Outlook account. Connect Outlook via the Settings → Integrations page.',
+        });
       }
     }
 
