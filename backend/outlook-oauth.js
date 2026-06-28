@@ -278,29 +278,23 @@ async function createOutlookEvent(accessToken, eventData) {
       subject: eventData.title,
       start: {
         dateTime: eventData.startTime,
-        timeZone: 'Australia/Perth' // Adjust to user's timezone
+        timeZone: 'Australia/Perth',
       },
       end: {
         dateTime: eventData.endTime,
-        timeZone: 'Australia/Perth'
+        timeZone: 'Australia/Perth',
       },
-      location: {
-        displayName: eventData.location || ''
-      },
-      categories: eventData.categories || ['Therapy'],
-
-      // Store our app's event ID in the event's properties
-      extensions: [{
-        id: 'com.therapyscheduler.appEventId',
-        extensionData: {
-          appEventId: eventData.appEventId,
-          sploseId: eventData.sploseId,
-          lastModifiedBy: 'app'
-        }
-      }],
-
+      ...(eventData.location ? { location: { displayName: eventData.location } } : {}),
+      // Only include categories that already exist in the mailbox; sending an
+      // unknown category name causes Graph to silently drop it or reject the call.
+      // We pass an empty array by default — callers may pass known category names.
+      categories: eventData.categories?.length ? eventData.categories : [],
       isReminderOn: true,
-      reminderMinutesBeforeStart: 15
+      reminderMinutesBeforeStart: 15,
+      // Note: Graph open extensions cannot be embedded in the POST body —
+      // they require a separate POST to /events/{id}/extensions after creation.
+      // We track the link between our DB record and Outlook via outlook_id stored
+      // in the events table, so no extension metadata is needed here.
     };
 
     const response = await axios.post(
