@@ -10822,6 +10822,14 @@ async function confirmBooking() {
       if (modal) modal.classList.add('show');
       WIZARD_BOOKED = true;
 
+      // Trigger background delta sync so the event lands in the local DB and
+      // survives a page refresh without waiting for the 5-minute automatic tick.
+      if (outlookId) {
+        fetch('/api/sync/outlook-delta', { method: 'POST', credentials: 'include' })
+          .then(r => r.ok && console.log('✅ Delta sync triggered — new event will persist on refresh'))
+          .catch(() => {});
+      }
+
     } catch (err) {
       console.error('confirmBooking (non-client) error:', err.message);
       showToast('Something went wrong', err.message, 'warn');
@@ -10969,6 +10977,15 @@ async function confirmBooking() {
     }
     if (modal) modal.classList.add('show');
     WIZARD_BOOKED = true;
+
+    // Trigger a background delta sync so the new event lands in the local DB
+    // immediately — without this the event disappears on page refresh until the
+    // 5-minute automatic sync catches up.
+    if (outlookId) {
+      fetch('/api/sync/outlook-delta', { method: 'POST', credentials: 'include' })
+        .then(r => r.ok && console.log('✅ Delta sync triggered — new event will persist on refresh'))
+        .catch(() => {});
+    }
 
   } catch (err) {
     console.error('confirmBooking error:', err.message);
