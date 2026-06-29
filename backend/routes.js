@@ -2009,23 +2009,31 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     let deletedFromOutlook = false;
 
     if (outlookId) {
-      const user = await db.getUser(req.session.userId);
-      const accessToken = await getValidAccessToken(user);
       try {
+        const targetUser  = await db.getUser(req.session.userId);
+        const accessToken = await getValidAccessToken(targetUser).catch(async () => {
+          // Caller has no token — try org fallback (same as write path)
+          const orgId = targetUser?.organisation_id;
+          const fb = await db.pool.query(
+            `SELECT id FROM users WHERE access_token IS NOT NULL AND access_token != ''
+               AND is_active = true AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
+             ORDER BY created_at LIMIT 1`, [orgId]
+          );
+          if (!fb.rows.length) throw new Error('No connected Outlook account');
+          return getValidAccessToken(await db.getUser(fb.rows[0].id));
+        });
         await outlookApi.deleteOutlookEvent(accessToken, outlookId);
         deletedFromOutlook = true;
         console.log(`🗑️ Deleted from Outlook: ${outlookId} — "${title}"`);
       } catch (outlookErr) {
-        if (outlookErr.response?.status === 404) {
-          // Event already gone from Outlook — still soft-delete locally
-          console.warn(`⚠️ Outlook event ${outlookId} was already deleted`);
-        } else {
-          throw outlookErr;
-        }
+        // Treat ALL Outlook errors as non-fatal for delete — the event may already
+        // be gone (ErrorItemNotFound / 404) or the token may be temporarily invalid.
+        // Always proceed with the local soft-delete so the UI stays consistent.
+        console.warn(`⚠️ Outlook delete skipped (non-fatal): ${outlookErr.message}`);
       }
     }
 
-    // Soft-delete locally regardless of Outlook outcome
+    // Soft-delete locally — this is the authoritative action
     await db.pool.query(`
       UPDATE events
       SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP

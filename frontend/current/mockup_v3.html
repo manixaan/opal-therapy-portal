@@ -15271,17 +15271,35 @@ function __renderWeekHeader() {
   order.forEach((key, i) => {
     const d = new Date(startDate);
     d.setUTCDate(startDate.getUTCDate() + i);
+
+    // Keep DAY_DATES and DAY_LABELS in sync with the current visible week so that
+    // the Smart Booking panel and confirmBooking() always write to the right date.
+    const ymd = __ymd(d); // YYYY-MM-DD
+    _weekDates[key]  = ymd;
+    _weekLabels[key] = `${__DAY_LABEL_BY_KEY[key]} ${d.getUTCDate()} ${d.toLocaleString('en-AU',{month:'short',timeZone:'UTC'})}`;
+
     const head = document.querySelector(`.cal-head[data-day="${key}"]`);
     const col  = document.getElementById('day-' + key);
     if (head) {
       head.innerHTML = `<div class="day-num">${d.getUTCDate()}</div><div class="day-name">${__DAY_LABEL_BY_KEY[key]}</div>`;
-      head.classList.toggle('today', __ymd(d) === todayKey);
+      head.classList.toggle('today', ymd === todayKey);
       head.style.order = String(i + 1);
-      const clickDate = new Date(d); // capture for closure
+      const clickDate = new Date(d);
       head.onclick = () => switchToCalDay(clickDate);
       head.title = `Open Day View for ${__DAY_LABEL_BY_KEY[key]} ${d.getUTCDate()}`;
     }
     if (col) col.style.order = String(i + 11);
+  });
+
+  // Update the BSP booking panel day chips to show the actual date for each
+  // day in the visible week (e.g. "Wed 1" instead of just "Wed")
+  document.querySelectorAll('.bsp-day-chip').forEach(chip => {
+    const dayKey = chip.dataset.day;
+    if (_weekDates[dayKey]) {
+      const parts = _weekDates[dayKey].split('-');
+      const dayNum = parseInt(parts[2], 10);
+      chip.textContent = `${__DAY_LABEL_BY_KEY[dayKey] || dayKey} ${dayNum}`;
+    }
   });
   // Week-label spans the first → last visible date (respects week-start).
   const lbl = document.getElementById('week-label');
