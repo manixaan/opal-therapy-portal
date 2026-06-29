@@ -399,8 +399,12 @@ async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
   const startDateTime = new Date(now.getTime() - 90  * 24 * 60 * 60 * 1000).toISOString();
   const endDateTime   = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
 
+  // When a stored deltaToken is a full Graph URL (Microsoft sometimes returns
+  // the complete @odata.deltaLink rather than a bare token), use it directly.
+  // Assembling baseUrl?$deltaToken=<full URL> produces a malformed request that
+  // Graph rejects with 400 — that was the root cause of the perpetual bootstrap.
   const firstUrl = deltaToken
-    ? `${baseUrl}?$deltaToken=${encodeURIComponent(deltaToken)}`
+    ? (deltaToken.startsWith('https://') ? deltaToken : `${baseUrl}?$deltaToken=${encodeURIComponent(deltaToken)}`)
     : `${baseUrl}?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}&$select=id,iCalUId,changeKey,subject,start,end,location,categories,isCancelled,showAs,lastModifiedDateTime,type,seriesMasterId`;
 
   const changed = [];
