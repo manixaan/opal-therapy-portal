@@ -408,7 +408,12 @@ async function getValidTokenForUser(user) {
   return refreshed.accessToken;
 }
 
+const { classifyEventType } = require('./sync-utils');
+
 let deltaRunning = false; // prevent overlapping runs
+// Track how many delta-sync cycles have run per user so we can trigger
+// periodic full reconciliation without a separate timer.
+const _reconcileCounter = {};
 
 async function runDeltaSyncForAllUsers() {
   if (deltaRunning) {
@@ -448,7 +453,10 @@ async function runDeltaSyncForAllUsers() {
               const g = await db.softDeleteEventByOutlookId(user.id, ev.outlookId);
               if (g) cancelled++;
             } else {
-              await db.upsertOutlookEvent(user.id, ev);
+              await db.upsertOutlookEvent(user.id, {
+                ...ev,
+                eventType: classifyEventType(ev.categories || [], ev.isTeamsMeeting || false),
+              });
               upserted++;
             }
           }));
@@ -468,6 +476,27 @@ async function runDeltaSyncForAllUsers() {
           io.to(`user:${user.id}`).emit('calendarUpdated', { upserted, cancelled, removed });
         } else {
           console.log(`✅ [Auto delta] ${user.email}: no changes`);
+        }
+
+        // ── Periodic full reconciliation (every 60 cycles ≈ 90 min) ──────────
+        // The delta poller only sees changes within the Graph delta window.
+        // Events deleted in Outlook outside that window never trigger @removed,
+        // so they accumulate as ghost rows. Every 60 cycles we fetch a ±90-day
+        // window from Outlook and soft-delete any local rows not in the result.
+        _reconcileCounter[user.id] = (_reconcileCounter[user.id] || 0) + 1;
+        if (_reconcileCounter[user.id] % 60 === 0) {
+          try {
+            const outlookApiReconcile = require('./outlook-oauth');
+            const now = new Date();
+            const recStart = new Date(now.getTime() - 90 * 86400000).toISOString();
+            const recEnd   = new Date(now.getTime() + 90 * 86400000).toISOString();
+            const liveEvents = await outlookApiReconcile.getOutlookCalendarEvents(accessToken, recStart, recEnd);
+            const liveIds = liveEvents.map(e => e.outlookId).filter(Boolean);
+            await db.reconcileOutlookWindow(user.id, recStart, recEnd, liveIds);
+            console.log(`🔍 [Auto reconcile] ${user.email}: full reconcile for ±90 days (${liveIds.length} live events)`);
+          } catch (reconErr) {
+            console.warn(`⚠️  Auto reconcile error for ${user.email}:`, reconErr.message);
+          }
         }
       } catch (userErr) {
         const status = userErr.response?.status;
@@ -560,8 +589,8 @@ async function runSploseSync() {
         } catch (_) { /* non-fatal */ }
       }
 
-      // Notify connected clients in real-time
-      io.emit('calendarUpdated', { upserted: 0, cancelled: 1, removed: 0 });
+      // Notify only the affected user's socket room (not a global broadcast)
+      io.to(`user:${row.user_id}`).emit('calendarUpdated', { upserted: 0, cancelled: 1, removed: 0 });
     }
 
     if (cancelled > 0) {

@@ -19,6 +19,7 @@ const db = require('./database');
 const outlookApi = require('./outlook-oauth');
 const sploseApi = require('./splose-api');
 const { getPermissions, requireRole, requirePermission, hasPermission } = require('./permissions');
+const { classifyEventType } = require('./sync-utils');
 
 // Lazy-load the storeNotification helper (app-routes.js registers it after routes.js)
 function storeNotificationLazy(userId, payload) {
@@ -43,37 +44,7 @@ function recordSploFailure(msg) {
   sploSyncState.errorMsg = msg;
 }
 
-/**
- * Map an Outlook category label to the app's event_type enum
- * ('therapy', 'leave', 'cpd', 'travel', 'admin', 'lunch', 'meeting',
- * 'teams_meeting'). The mapping is forgiving (substring + case-insensitive)
- * so users' real Outlook category names (e.g. "Therapy Session", "MDT
- * Meeting") still classify correctly. Returns 'therapy' as the safe default.
- */
-function classifyEventType(categories = [], isTeams = false) {
-  if (isTeams) return 'teams_meeting';
-  if (!Array.isArray(categories) || categories.length === 0) return 'outlook';
-
-  const blob = categories.join('|').toLowerCase();
-
-  // Opal Therapy exact category names (checked first)
-  if (/client\s*appointment/.test(blob))  return 'therapy';      // face-to-face, full rate, needs location
-  if (/case\s*management/.test(blob))     return 'report';       // billable, full rate, no location needed
-  if (/report\s*writing/.test(blob))      return 'report';       // billable, full rate, no location needed
-  if (/travel/.test(blob))               return 'travel';        // billable, half rate
-  if (/admin/.test(blob))                return 'admin';         // non-billable
-  if (/business\s*related/.test(blob))   return 'admin';         // non-billable
-  if (/cancellation/.test(blob))         return 'admin';         // non-billable
-  if (/do\s*not\s*book/.test(blob))      return 'admin';         // non-billable block
-  if (/\bpd\b|professional\s*dev/.test(blob)) return 'cpd';      // non-billable CPD
-  if (/meeting/.test(blob))              return 'meeting';       // non-billable
-
-  // Generic fallbacks
-  if (/leave|holiday|annual|sick|ooo/.test(blob)) return 'leave';
-  if (/lunch|break/.test(blob))          return 'lunch';
-  if (/therapy|session|assessment|initial/.test(blob)) return 'therapy';
-  return 'outlook';
-}
+// classifyEventType is now imported from ./sync-utils (shared with server.js)
 
 // ===== MIDDLEWARE =====
 
@@ -520,6 +491,7 @@ router.post('/api/sync/outlook-initial', requireAuth, async (req, res) => {
           location:       ev.location || '',
           categories:     ev.categories || [],
           isCancelled:    ev.isCancelled || false,
+          eventType:      classifyEventType(ev.categories || [], ev.isTeamsMeeting || false),
         };
 
         if (eventData.isCancelled) {
@@ -701,7 +673,10 @@ router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
         const gone = await db.softDeleteEventByOutlookId(userId, ev.outlookId);
         if (gone) { cancelled++; console.log(`🚫 Cancelled: "${ev.title}" (${ev.outlookId})`); }
       } else {
-        await db.upsertOutlookEvent(userId, ev);
+        await db.upsertOutlookEvent(userId, {
+          ...ev,
+          eventType: classifyEventType(ev.categories || [], ev.isTeamsMeeting || false),
+        });
         upserted++;
       }
     }
@@ -809,7 +784,13 @@ router.post(
             for (let i = 0; i < changed.length; i += BATCH) {
               await Promise.all(changed.slice(i, i + BATCH).map(async ev => {
                 if (ev.isCancelled) { await db.softDeleteEventByOutlookId(userId, ev.outlookId); }
-                else                { await db.upsertOutlookEvent(userId, ev); upserted++; }
+                else                {
+                  await db.upsertOutlookEvent(userId, {
+                    ...ev,
+                    eventType: classifyEventType(ev.categories || [], ev.isTeamsMeeting || false),
+                  });
+                  upserted++;
+                }
               }));
             }
             for (let i = 0; i < deleted.length; i += BATCH) {
@@ -884,6 +865,89 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Sync status error:', error);
     res.status(500).json({ error: 'Failed to get sync status' });
+  }
+});
+
+/**
+ * GET /api/sync/diagnostics
+ *
+ * Returns a health snapshot of the local sync state:
+ * - Outlook event counts, ghost candidates, possible duplicates
+ * - Last 10 sync_log errors
+ *
+ * Useful for diagnosing sync drift without reading the full DB.
+ */
+router.get('/api/sync/diagnostics', requireAuth, async (req, res) => {
+  try {
+    const pool = db.pool;
+
+    // Overall event stats
+    const statsResult = await pool.query(`
+      SELECT
+        COUNT(*)                                                          AS "totalEvents",
+        COUNT(*) FILTER (WHERE is_deleted IS NOT TRUE)                   AS "activeEvents",
+        COUNT(*) FILTER (WHERE is_deleted = TRUE)                        AS "deletedEvents",
+        COUNT(*) FILTER (WHERE outlook_id IS NULL AND is_deleted IS NOT TRUE) AS "eventsWithoutOutlookId",
+        COUNT(*) FILTER (WHERE splose_id  IS NULL AND is_deleted IS NOT TRUE) AS "eventsWithoutSploseId"
+      FROM events
+    `);
+
+    // Possible duplicates — same outlook_id appearing more than once
+    const dupResult = await pool.query(`
+      SELECT outlook_id, COUNT(*) AS count, ARRAY_AGG(id) AS event_ids
+      FROM events
+      WHERE outlook_id IS NOT NULL
+      GROUP BY outlook_id
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC
+      LIMIT 20
+    `);
+
+    // Ghost candidates — active Outlook-sourced events not synced in the last 3 hours
+    const ghostResult = await pool.query(`
+      SELECT COUNT(*) AS "ghostCandidates"
+      FROM events
+      WHERE source = 'outlook'
+        AND (is_deleted IS NULL OR is_deleted = FALSE)
+        AND outlook_id IS NOT NULL
+        AND (synced_at IS NULL OR synced_at < NOW() - INTERVAL '3 hours')
+    `);
+
+    // Last 10 sync_log errors
+    const errResult = await pool.query(`
+      SELECT id, event_id, action, source, target, error_message, created_at
+      FROM sync_log
+      WHERE status = 'error'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    // Last delta sync timestamp per user
+    const deltaResult = await pool.query(`
+      SELECT u.email, d.last_synced_at
+      FROM outlook_delta_state d
+      JOIN users u ON u.id = d.user_id
+      ORDER BY d.last_synced_at DESC NULLS LAST
+      LIMIT 1
+    `);
+
+    const stats = statsResult.rows[0];
+    res.json({
+      outlookSync: {
+        lastSyncAt:             deltaResult.rows[0]?.last_synced_at || null,
+        totalEvents:            Number(stats.totalEvents),
+        activeEvents:           Number(stats.activeEvents),
+        deletedEvents:          Number(stats.deletedEvents),
+        eventsWithoutOutlookId: Number(stats.eventsWithoutOutlookId),
+        eventsWithoutSploseId:  Number(stats.eventsWithoutSploseId),
+      },
+      possibleDuplicates: dupResult.rows,
+      ghostCandidates:    Number(ghostResult.rows[0]?.ghostCandidates || 0),
+      syncErrors:         errResult.rows,
+    });
+  } catch (err) {
+    console.error('Sync diagnostics error:', err.message);
+    res.status(500).json({ error: 'Failed to get sync diagnostics', details: err.message });
   }
 });
 
@@ -1946,15 +2010,17 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
     // just update the existing row rather than creating a duplicate.
     try {
       await db.upsertOutlookEvent(req.session.userId, {
-        outlookId:      result.outlookId,
+        outlookId:       result.outlookId,
         title,
         startTime,
         endTime,
-        location:       location || '',
-        categories:     categories || [],
-        isCancelled:    false,
-        lastModifiedAt: new Date().toISOString(),
-        sploseId:       sploseId || null,   // stored so the Splose poller can cross-reference
+        location:        location || '',
+        categories:      categories || [],
+        isCancelled:     false,
+        lastModifiedAt:  new Date().toISOString(),
+        sploseId:        sploseId || null,   // stored so the Splose poller can cross-reference
+        createdBySource: 'app',              // this event originated in the app, not Outlook
+        eventType:       classifyEventType(categories || [], false),
       });
       console.log(`💾 Event saved to local DB: ${result.outlookId}`);
     } catch (dbErr) {
