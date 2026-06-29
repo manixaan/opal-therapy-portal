@@ -677,10 +677,21 @@ router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
 
     console.log(`🔄 Delta sync for ${req.session.userEmail} (token: ${storedToken ? 'stored' : 'bootstrap'})`);
 
-    const { changed, deleted, deltaToken: newToken } = await outlookApi.getOutlookCalendarDelta(
-      accessToken,
-      storedToken
-    );
+    let deltaResult;
+    try {
+      deltaResult = await outlookApi.getOutlookCalendarDelta(accessToken, storedToken);
+    } catch (deltaErr) {
+      const status = deltaErr.response?.status;
+      if ((status === 400 || status === 410) && storedToken) {
+        // Stale / invalid delta token — clear it and bootstrap fresh rather than 500ing
+        console.warn(`⚠️  Delta token stale (${status}) — clearing and re-bootstrapping`);
+        await db.saveDeltaState(userId, null);
+        deltaResult = await outlookApi.getOutlookCalendarDelta(accessToken, null);
+      } else {
+        throw deltaErr;
+      }
+    }
+    const { changed, deleted, deltaToken: newToken } = deltaResult;
 
     let upserted = 0, cancelled = 0, removed = 0;
 
@@ -723,6 +734,110 @@ router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Delta sync failed', details: err.message });
   }
 });
+
+// ===== OUTLOOK WEBHOOK ENDPOINT =====
+// Receives real-time change notifications from Microsoft Graph.
+// Requires WEBHOOK_BASE_URL + WEBHOOK_CLIENT_STATE env vars to be configured
+// and a publicly accessible HTTPS URL (not usable on localhost).
+//
+// Flow:
+//   1. On subscription creation, Graph sends a validation POST with ?validationToken
+//      — we must echo it back as text/plain within a few seconds.
+//   2. For subsequent change notifications, Graph posts a JSON body with
+//      subscription details. We verify clientState then run a targeted delta sync.
+
+router.post(
+  '/api/webhooks/outlook',
+  require('express').raw({ type: '*/*' }),   // raw body — Graph sends JSON as text
+  async (req, res) => {
+    // Step 1 — subscription validation
+    if (req.query.validationToken) {
+      return res
+        .set('Content-Type', 'text/plain; charset=utf-8')
+        .send(req.query.validationToken);
+    }
+
+    // Respond 202 immediately — Graph requires < 3 s response time
+    res.sendStatus(202);
+
+    // Step 2 — process notification payload asynchronously
+    setImmediate(async () => {
+      try {
+        const body          = JSON.parse(req.body.toString('utf8'));
+        const notifications = body.value || [];
+        const clientState   = process.env.WEBHOOK_CLIENT_STATE || 'opal-scheduler-webhook';
+
+        for (const notification of notifications) {
+          if (notification.clientState !== clientState) continue;
+
+          // Look up the user from the in-memory subscription map (populated in server.js)
+          const { _webhookSubscriptions } = require('./server');
+          const userId = _webhookSubscriptions?.get(notification.subscriptionId);
+          if (!userId) continue;
+
+          // Trigger an immediate delta sync for this user so changes appear at once
+          console.log(`🔔 Webhook notification received — triggering delta sync for ${userId}`);
+          const { rows } = await db.pool.query(
+            'SELECT id, email, access_token, refresh_token, token_expires_at FROM users WHERE id = $1',
+            [userId]
+          );
+          if (!rows.length) continue;
+
+          const outlookApi  = require('./outlook-oauth');
+          const state       = await db.getDeltaState(userId);
+          let   storedToken = state?.delta_token || null;
+          const user        = rows[0];
+          let   accessToken;
+          try {
+            if (!user.access_token) throw new Error('no token');
+            const exp = user.token_expires_at ? new Date(user.token_expires_at) : null;
+            if (!exp || (exp - Date.now()) < 60000) {
+              const refreshed = await outlookApi.refreshAccessToken(user.refresh_token);
+              await db.updateUserTokens(userId, refreshed.accessToken, refreshed.refreshToken, refreshed.expiresIn);
+              accessToken = refreshed.accessToken;
+            } else {
+              accessToken = user.access_token;
+            }
+          } catch (_) { continue; }
+
+          try {
+            const { changed, deleted, deltaToken: newToken } =
+              await outlookApi.getOutlookCalendarDelta(accessToken, storedToken);
+
+            let upserted = 0, removed = 0;
+            const BATCH = 20;
+            for (let i = 0; i < changed.length; i += BATCH) {
+              await Promise.all(changed.slice(i, i + BATCH).map(async ev => {
+                if (ev.isCancelled) { await db.softDeleteEventByOutlookId(userId, ev.outlookId); }
+                else                { await db.upsertOutlookEvent(userId, ev); upserted++; }
+              }));
+            }
+            for (let i = 0; i < deleted.length; i += BATCH) {
+              await Promise.all(deleted.slice(i, i + BATCH).map(async id => {
+                const g = await db.softDeleteEventByOutlookId(userId, id);
+                if (g) removed++;
+              }));
+            }
+            if (newToken) await db.saveDeltaState(userId, newToken);
+            console.log(`✅ Webhook delta sync: +${upserted} updated, -${removed} removed`);
+
+            const { io } = require('./server');
+            if (upserted > 0 || removed > 0) {
+              io.to(`user:${userId}`).emit('calendarUpdated', { upserted, cancelled: 0, removed });
+            }
+          } catch (deltaErr) {
+            // Stale token — clear so next poll re-bootstraps
+            if (deltaErr.response?.status === 400 || deltaErr.response?.status === 410) {
+              await db.saveDeltaState(userId, null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('⚠️  Webhook processing error:', err.message);
+      }
+    });
+  }
+);
 
 // ===== SYNC STATUS =====
 
@@ -1839,6 +1954,7 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
         categories:     categories || [],
         isCancelled:    false,
         lastModifiedAt: new Date().toISOString(),
+        sploseId:       sploseId || null,   // stored so the Splose poller can cross-reference
       });
       console.log(`💾 Event saved to local DB: ${result.outlookId}`);
     } catch (dbErr) {

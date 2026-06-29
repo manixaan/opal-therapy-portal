@@ -809,6 +809,7 @@ async function upsertOutlookEvent(userId, eventData) {
   const {
     outlookId, startTime, endTime, location, categories,
     iCalUId, changeKey, lastModifiedAt, isCancelled,
+    sploseId,
   } = eventData;
   // Outlook can return events with no subject (private/declined/restricted items).
   // Fall back to '(No title)' so the NOT NULL constraint is always satisfied.
@@ -885,17 +886,17 @@ async function upsertOutlookEvent(userId, eventData) {
     const result = await pool.query(`
       INSERT INTO events (
         user_id, title, start_time, end_time, location,
-        outlook_id, categories, source, sync_status, last_modified_by, event_type,
+        outlook_id, splose_id, categories, source, sync_status, last_modified_by, event_type,
         outlook_ical_uid, outlook_change_key, outlook_last_modified_at,
         synced_at, is_deleted,
         therapist_profile_id, organisation_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
               'outlook', 'synced', 'outlook', 'meeting',
-              $8, $9, $10, CURRENT_TIMESTAMP, FALSE,
-              $11, $12)
+              $9, $10, $11, CURRENT_TIMESTAMP, FALSE,
+              $12, $13)
       RETURNING *
-    `, [userId, title, startTime, endTime, location, outlookId, cats,
+    `, [userId, title, startTime, endTime, location, outlookId, sploseId || null, cats,
         iCalUId, changeKey, lastModifiedAt, therapistProfileId, organisationId]);
     return result.rows[0];
   }

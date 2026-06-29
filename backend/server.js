@@ -388,7 +388,7 @@ server.listen(PORT, () => {
 // Every 5 minutes: ask Microsoft Graph "what changed?" and upsert/delete
 // only the events that actually changed. Runs for every authenticated user.
 
-const DELTA_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const DELTA_SYNC_INTERVAL_MS = 90 * 1000; // 90 seconds
 
 // Get a valid access token for the user, refreshing if expired.
 async function getValidTokenForUser(user) {
@@ -487,12 +487,197 @@ async function runDeltaSyncForAllUsers() {
   }
 }
 
-// Start poller after a short delay so the DB is fully initialised first
+// Start Outlook delta poller after DB is ready
 setTimeout(() => {
-  console.log('⏱️  Background Outlook delta sync started (every 5 minutes)');
+  console.log('⏱️  Background Outlook delta sync started (every 90 seconds)');
   setInterval(runDeltaSyncForAllUsers, DELTA_SYNC_INTERVAL_MS);
-  runDeltaSyncForAllUsers(); // Run once immediately on boot
+  runDeltaSyncForAllUsers();
 }, 5000);
+
+// ===== SPLOSE BACKGROUND POLLER =====
+// Fetches Splose appointments every 15 minutes and soft-deletes any local DB
+// records whose Splose appointment was cancelled or removed in Splose UI.
+// This is the only way to detect Splose-side cancellations since their API
+// does not push change notifications.
+
+const SPLOSE_POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+let sploseRunning = false;
+
+async function runSploseSync() {
+  if (sploseRunning) return;
+  sploseRunning = true;
+  try {
+    const sploseApi = require('./splose-api');
+
+    // Sync window: past 90 days → next 90 days
+    const now       = new Date();
+    const startDate = new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10);
+    const endDate   = new Date(now.getTime() + 90 * 86400000).toISOString().slice(0, 10);
+
+    const sploseAppts = await sploseApi.getAppointments(startDate, endDate);
+
+    // IDs that are live and NOT fully cancelled
+    const liveIds = new Set(
+      sploseAppts
+        .filter(a => !(a.patients.length > 0 && a.patients.every(p => p.status === 'Cancelled')))
+        .map(a => String(a.id))
+    );
+
+    // Find DB events with a splose_id that are now gone or cancelled in Splose
+    const { rows } = await db.pool.query(
+      `SELECT id, splose_id, title, outlook_id, user_id
+         FROM events
+        WHERE splose_id IS NOT NULL AND is_deleted = FALSE`
+    );
+
+    let cancelled = 0;
+    for (const row of rows) {
+      if (liveIds.has(String(row.splose_id))) continue; // still active — no action
+
+      // Splose appointment is gone / fully cancelled — soft-delete locally
+      await db.pool.query(
+        `UPDATE events
+            SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
+          WHERE id = $1`,
+        [row.id]
+      );
+      console.log(`🚫 [Splose poller] Cancelled: "${row.title}" (Splose #${row.splose_id})`);
+      cancelled++;
+
+      // Best-effort Outlook delete so the Outlook calendar stays in sync too
+      if (row.outlook_id) {
+        try {
+          const { rows: userRows } = await db.pool.query(
+            'SELECT access_token, token_expires_at, refresh_token FROM users WHERE id = $1',
+            [row.user_id]
+          );
+          if (userRows.length) {
+            const accessToken = await getValidTokenForUser(userRows[0]);
+            const { deleteOutlookEvent } = require('./outlook-oauth');
+            await deleteOutlookEvent(accessToken, row.outlook_id);
+            console.log(`   🗑️  Also deleted from Outlook: ${row.outlook_id}`);
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+
+      // Notify connected clients in real-time
+      io.emit('calendarUpdated', { upserted: 0, cancelled: 1, removed: 0 });
+    }
+
+    if (cancelled > 0) {
+      console.log(`✅ [Splose poller] Synced ${cancelled} cancellation(s) from Splose`);
+    }
+  } catch (err) {
+    console.error('⚠️  Splose poller error:', err.message);
+  } finally {
+    sploseRunning = false;
+  }
+}
+
+// Start Splose poller 8 seconds after boot to avoid hammering on startup
+setTimeout(() => {
+  console.log('⏱️  Background Splose cancellation sync started (every 15 minutes)');
+  setInterval(runSploseSync, SPLOSE_POLL_INTERVAL_MS);
+  runSploseSync();
+}, 8000);
+
+// ===== OUTLOOK WEBHOOK INFRASTRUCTURE =====
+// When WEBHOOK_BASE_URL is set in .env, the server registers a Microsoft Graph
+// change-notification subscription so Outlook pushes calendar changes in real
+// time instead of relying solely on the 90-second poll.
+//
+// Required env vars:
+//   WEBHOOK_BASE_URL     e.g. https://your-app.example.com  (no trailing slash)
+//   WEBHOOK_CLIENT_STATE A random secret string for request verification
+//
+// Subscriptions expire after ~3 days; the renewal job below keeps them alive.
+
+// subscriptionId → userId (in-memory; rebuilt on restart via re-registration)
+const _webhookSubscriptions = new Map();
+
+async function registerOutlookWebhook(userId, accessToken) {
+  const webhookUrl    = `${process.env.WEBHOOK_BASE_URL}/api/webhooks/outlook`;
+  const clientState   = process.env.WEBHOOK_CLIENT_STATE || 'opal-scheduler-webhook';
+  const expiresAt     = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days
+  try {
+    const axios = require('axios');
+    const resp  = await axios.post(
+      'https://graph.microsoft.com/v1.0/subscriptions',
+      {
+        changeType:           'created,updated,deleted',
+        notificationUrl:      webhookUrl,
+        resource:             '/me/calendar/events',
+        expirationDateTime:   expiresAt.toISOString(),
+        clientState,
+      },
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const subId = resp.data.id;
+    _webhookSubscriptions.set(subId, userId);
+    console.log(`🔔 Outlook webhook registered for user ${userId}: ${subId} (expires ${expiresAt.toDateString()})`);
+    return subId;
+  } catch (err) {
+    console.warn('⚠️  Webhook registration failed (non-fatal):', err.response?.data?.error?.message || err.message);
+    return null;
+  }
+}
+
+async function renewOutlookWebhooks() {
+  if (!process.env.WEBHOOK_BASE_URL) return;
+  const clientState = process.env.WEBHOOK_CLIENT_STATE || 'opal-scheduler-webhook';
+  const expiresAt   = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const axios       = require('axios');
+
+  for (const [subId, userId] of _webhookSubscriptions) {
+    try {
+      const { rows } = await db.pool.query(
+        'SELECT access_token, token_expires_at, refresh_token FROM users WHERE id = $1', [userId]
+      );
+      if (!rows.length) continue;
+      const accessToken = await getValidTokenForUser(rows[0]);
+      await axios.patch(
+        `https://graph.microsoft.com/v1.0/subscriptions/${subId}`,
+        { expirationDateTime: expiresAt.toISOString() },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      console.log(`🔔 Webhook subscription renewed: ${subId}`);
+    } catch (err) {
+      // Subscription may have expired — re-register
+      console.warn(`⚠️  Webhook renewal failed for ${subId}, attempting re-registration`);
+      _webhookSubscriptions.delete(subId);
+      const { rows } = await db.pool.query(
+        'SELECT id, access_token, token_expires_at, refresh_token FROM users WHERE id = $1', [userId]
+      ).catch(() => ({ rows: [] }));
+      if (rows.length) {
+        const accessToken = await getValidTokenForUser(rows[0]).catch(() => null);
+        if (accessToken) await registerOutlookWebhook(userId, accessToken);
+      }
+    }
+  }
+}
+
+// Register webhooks after startup (only when WEBHOOK_BASE_URL is configured)
+setTimeout(async () => {
+  if (!process.env.WEBHOOK_BASE_URL) {
+    console.log('ℹ️  WEBHOOK_BASE_URL not set — using polling only (set it for real-time Outlook sync)');
+    return;
+  }
+  try {
+    const { rows } = await db.pool.query(
+      `SELECT id, access_token, token_expires_at, refresh_token FROM users
+        WHERE access_token IS NOT NULL AND access_token != '' AND is_active = TRUE`
+    );
+    for (const user of rows) {
+      const accessToken = await getValidTokenForUser(user).catch(() => null);
+      if (accessToken) await registerOutlookWebhook(user.id, accessToken);
+    }
+  } catch (err) {
+    console.warn('⚠️  Webhook startup registration error:', err.message);
+  }
+}, 10000);
+
+// Renew subscriptions every 2 days (well before the 3-day expiry)
+setInterval(renewOutlookWebhooks, 2 * 24 * 60 * 60 * 1000);
 
 // ===== FRIDAY LOCATION ALARM CRON =====
 // Fires every Friday at 16:00 AWST (08:00 UTC, since AWST = UTC+8).
@@ -585,4 +770,4 @@ process.on('SIGTERM', () => {
   });
 });
 
-module.exports = { app, io };
+module.exports = { app, io, _webhookSubscriptions };
