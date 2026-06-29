@@ -512,6 +512,34 @@ const INIT_QUERIES = `
         CHECK (role IN ('owner', 'admin', 'therapist', 'read_only'));
     END IF;
   END $$;
+
+  -- ── Sync architecture migrations ───────────────────────────────────────────
+  -- Add UNIQUE constraint on (user_id, outlook_id) to prevent duplicate rows
+  -- from concurrent sync calls. Named so it can be checked idempotently.
+  DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+       WHERE table_name = 'events'
+         AND constraint_type = 'UNIQUE'
+         AND constraint_name = 'events_user_outlook_unique'
+    ) THEN
+      ALTER TABLE events
+        ADD CONSTRAINT events_user_outlook_unique UNIQUE (user_id, outlook_id);
+    END IF;
+  END $$;
+
+  -- Add created_by_source to permanently record which system originated the event
+  -- ('app' or 'outlook') — survives subsequent sync updates unlike source column.
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by_source VARCHAR(20);
+
+  -- Add sync_correlation_id to correlate related sync operations across systems.
+  ALTER TABLE events ADD COLUMN IF NOT EXISTS sync_correlation_id VARCHAR(64);
+
+  -- Backfill created_by_source from source for existing rows.
+  UPDATE events SET created_by_source = source WHERE created_by_source IS NULL AND source IS NOT NULL;
+
+  -- Backfill source='app' for rows that have no outlook_id and no source set.
+  UPDATE events SET source = 'app' WHERE source IS NULL AND outlook_id IS NULL;
 `;
 
 // ===== INITIALIZE DATABASE =====
@@ -704,9 +732,9 @@ async function createEvent(userId, eventData) {
     INSERT INTO events (
       user_id, title, description, start_time, end_time, location,
       event_type, splose_id, outlook_id, client_name, regional_tag, travel_distance,
-      categories, sync_status, last_modified_by
+      categories, sync_status, last_modified_by, source, created_by_source
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', 'app')
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', 'app', 'app', 'app')
     RETURNING *;
   `;
 
@@ -815,6 +843,10 @@ async function upsertOutlookEvent(userId, eventData) {
   // Fall back to '(No title)' so the NOT NULL constraint is always satisfied.
   const title = eventData.title || '(No title)';
   const cats = Array.isArray(categories) ? categories : null;
+  // Accept eventType from caller (classifyEventType in routes/server) or default to 'meeting'
+  const eventType = eventData.eventType || 'meeting';
+  // created_by_source records the origin system permanently ('app' or 'outlook')
+  const createdBySource = eventData.createdBySource || 'outlook';
 
   // Cancelled events: mark the local Outlook-sourced record as deleted.
   if (isCancelled) {
@@ -864,7 +896,9 @@ async function upsertOutlookEvent(userId, eventData) {
           -- has stored (Outlook typically only has suburb-level location).
           location                 = CASE WHEN is_manual_location_override = TRUE THEN location ELSE $4 END,
           categories               = $5,
-          source                   = 'outlook',
+          -- Preserve source: if this event was created by the app, keep it as 'app'.
+          -- Only revert to 'outlook' if it was originally from Outlook.
+          source                   = COALESCE(NULLIF(created_by_source, 'app'), 'outlook'),
           sync_status              = 'synced',
           last_modified_by         = 'outlook',
           is_deleted               = FALSE,
@@ -874,13 +908,15 @@ async function upsertOutlookEvent(userId, eventData) {
           outlook_last_modified_at = COALESCE($8, outlook_last_modified_at),
           synced_at                = CURRENT_TIMESTAMP,
           updated_at               = CURRENT_TIMESTAMP,
+          -- Never overwrite created_by_source — it records the original origin permanently
+          created_by_source        = COALESCE(created_by_source, $12),
           -- Stamp ownership (only update if not already set — backfill is separate)
           therapist_profile_id     = COALESCE(therapist_profile_id, $10),
           organisation_id          = COALESCE(organisation_id,      $11)
       WHERE id = $9
       RETURNING *
     `, [title, startTime, endTime, location, cats, iCalUId, changeKey, lastModifiedAt,
-        existing.rows[0].id, therapistProfileId, organisationId]);
+        existing.rows[0].id, therapistProfileId, organisationId, createdBySource]);
     return result.rows[0];
   } else {
     const result = await pool.query(`
@@ -889,15 +925,18 @@ async function upsertOutlookEvent(userId, eventData) {
         outlook_id, splose_id, categories, source, sync_status, last_modified_by, event_type,
         outlook_ical_uid, outlook_change_key, outlook_last_modified_at,
         synced_at, is_deleted,
-        therapist_profile_id, organisation_id
+        therapist_profile_id, organisation_id,
+        created_by_source
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-              'outlook', 'synced', 'outlook', 'meeting',
+              $14, 'synced', 'outlook', $15,
               $9, $10, $11, CURRENT_TIMESTAMP, FALSE,
-              $12, $13)
+              $12, $13,
+              $14)
       RETURNING *
     `, [userId, title, startTime, endTime, location, outlookId, sploseId || null, cats,
-        iCalUId, changeKey, lastModifiedAt, therapistProfileId, organisationId]);
+        iCalUId, changeKey, lastModifiedAt, therapistProfileId, organisationId,
+        createdBySource, eventType]);
     return result.rows[0];
   }
 }

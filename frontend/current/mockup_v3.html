@@ -14591,6 +14591,14 @@ function connectToBackend() {
       console.error('❌ Backend connection error:', error);
     });
 
+    socket.on('calendarUpdated', (data) => {
+      console.log('📡 Calendar updated via socket:', data);
+      // Refresh the calendar events from the backend
+      if (typeof loadOutlookEventsToCalendar === 'function') {
+        loadOutlookEventsToCalendar();
+      }
+    });
+
     // Store socket globally for use in other functions
     window.backendSocket = socket;
   };
