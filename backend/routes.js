@@ -180,10 +180,27 @@ router.get('/auth/oauth/callback', async (req, res) => {
     const { code, state } = req.query;
 
     console.log('🔐 OAuth callback received');
-    console.log('State match:', state === req.session.oauthState ? 'Yes' : 'No (lenient mode - continuing)');
+    const stateMatches = !!state && state === req.session.oauthState;
 
-    // For development, we're lenient with state validation
-    // In production, this should always match for security
+    // OAuth state = the CSRF binding between the authorize redirect we issued
+    // and this callback. Outside development a mismatch is a hard stop BEFORE
+    // any token exchange. Development stays lenient (session cookies are often
+    // cold when testing callbacks by hand) but logs loudly.
+    if (!stateMatches) {
+      const strict = process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test';
+      if (strict) {
+        console.error('❌ OAuth state mismatch — rejecting callback (possible CSRF or expired session)');
+        return res.status(403).send(
+          '<html><body style="font-family:sans-serif;padding:40px;">' +
+          '<h2>Sign-in could not be verified</h2>' +
+          '<p>The security state of this sign-in attempt did not match. ' +
+          'Please return to the app and connect Outlook again.</p>' +
+          '</body></html>'
+        );
+      }
+      console.warn('⚠️  OAuth state mismatch (development lenient mode — continuing)');
+    }
+
     if (!code) {
       return res.status(400).json({ error: 'Missing authorization code' });
     }
@@ -787,9 +804,10 @@ router.post(
         for (const notification of notifications) {
           if (notification.clientState !== clientState) continue;
 
-          // Look up the user from the in-memory subscription map (populated in server.js)
-          const { _webhookSubscriptions } = require('./server');
-          const userId = _webhookSubscriptions?.get(notification.subscriptionId);
+          // Subscription map shared with server.js via webhook-state.js
+          // (no require('./server') — that was circular and untestable)
+          const { webhookSubscriptions } = require('./webhook-state');
+          const userId = webhookSubscriptions.get(notification.subscriptionId);
           if (!userId) continue;
 
           // Trigger an immediate delta sync for this user so changes appear at once
@@ -869,8 +887,9 @@ router.post(
             if (newToken && !webhookDeleteBlocked) await db.saveDeltaState(userId, newToken);
             console.log(`✅ Webhook delta sync: +${upserted} updated, -${removed} removed`);
 
-            const { io } = require('./server');
-            if (upserted > 0 || removed > 0) {
+            const { getIo } = require('./webhook-state');
+            const io = getIo();
+            if (io && (upserted > 0 || removed > 0)) {
               io.to(`user:${userId}`).emit('calendarUpdated', { upserted, cancelled: 0, removed });
             }
           } catch (deltaErr) {

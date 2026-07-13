@@ -323,6 +323,31 @@ router.get('/api/profile/documents', requireAuth, async (req, res) => {
  * Body: { title, documentType?, fileName?, fileMime?, fileSizeBytes?, fileData?, relatedCpdActivityId? }
  * Max file size enforced here: 5 MB (base64 ≈ 4/3× binary, so ~6.7 MB of base64).
  */
+// Employee-document upload allowlist: certificate/registration/CPD evidence
+// formats only. Executables, HTML and SVG (script-capable) are refused, the
+// extension must agree with the declared MIME type, and file names must not
+// carry path segments.
+const UPLOAD_ALLOWED = {
+  'application/pdf': ['pdf'],
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'application/msword': ['doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+};
+
+function validateUpload({ fileName, fileMime, fileData }) {
+  if (!fileData) return null; // metadata-only records are allowed
+  const exts = UPLOAD_ALLOWED[String(fileMime || '').toLowerCase()];
+  if (!exts) return 'File type not allowed. Accepted: PDF, PNG, JPEG, DOC, DOCX';
+  const ext = String(fileName || '').split('.').pop().toLowerCase();
+  if (!exts.includes(ext)) return `File extension ".${ext}" does not match the declared type`;
+  if (/[/\\]|\.\./.test(String(fileName))) return 'Invalid file name';
+  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(String(fileData).slice(0, 1000))) {
+    return 'File content must be base64-encoded';
+  }
+  return null;
+}
+
 router.post('/api/profile/documents', requireAuth, async (req, res) => {
   try {
     const user = req.user;
@@ -334,6 +359,9 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
     if (fileData && fileData.length > 7 * 1024 * 1024) {
       return res.status(413).json({ error: 'File exceeds 5 MB limit' });
     }
+
+    const uploadError = validateUpload({ fileName, fileMime, fileData });
+    if (uploadError) return res.status(415).json({ error: uploadError });
 
     const record = await db.createPDDocument({
       userId:              user.id,
@@ -584,3 +612,5 @@ router.put('/api/profile/notification-prefs', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+
+module.exports.validateUpload = validateUpload;

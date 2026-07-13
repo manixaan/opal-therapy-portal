@@ -61,7 +61,23 @@ const FROM = () => process.env.EMAIL_FROM || `Opal Therapy <${process.env.EMAIL_
 const BASE = () => (process.env.APP_BASE_URL || 'http://localhost:5001').replace(/\/$/, '');
 
 function roleLabel(role) {
-  return { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist' }[role] || role;
+  return { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist', read_only: 'Read-only user' }[role] || role;
+}
+
+/**
+ * Escape user-supplied values before interpolating them into HTML email
+ * bodies (names, display-name hints, inviter names). Without this, a value
+ * like `<img src=x onerror=…>` would be delivered to the recipient as live
+ * markup inside a trusted practice email.
+ */
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ── Email: User Invite ────────────────────────────────────────────────────────
@@ -77,11 +93,11 @@ function roleLabel(role) {
  * @param {string} [opts.orgName]      Organisation name, e.g. "Opal Therapy"
  */
 async function sendInviteEmail({ toEmail, inviteToken, role, displayName, invitedBy, orgName }) {
-  const registerUrl = `${BASE()}/register?token=${inviteToken}`;
-  const greeting    = displayName ? `Hi ${displayName},` : 'Hello,';
-  const org         = orgName || 'Opal Therapy';
-  const sender      = invitedBy || 'The practice owner';
-  const roleName    = roleLabel(role);
+  const registerUrl = `${BASE()}/register?token=${encodeURIComponent(inviteToken)}`;
+  const greeting    = displayName ? `Hi ${escapeHtml(displayName)},` : 'Hello,';
+  const org         = escapeHtml(orgName || 'Opal Therapy');
+  const sender      = escapeHtml(invitedBy || 'The practice owner');
+  const roleName    = escapeHtml(roleLabel(role));
 
   const html = `
 <!DOCTYPE html>
@@ -169,9 +185,10 @@ If you weren't expecting this, you can ignore it.
  * Send a welcome email after account creation.
  */
 async function sendWelcomeEmail({ toEmail, name, role, orgName }) {
-  const org      = orgName || 'Opal Therapy';
+  const org      = escapeHtml(orgName || 'Opal Therapy');
   const appUrl   = BASE();
-  const roleName = roleLabel(role);
+  const roleName = escapeHtml(roleLabel(role));
+  name           = escapeHtml(name);
 
   const html = `
 <!DOCTYPE html>
@@ -237,7 +254,7 @@ async function sendWelcomeEmail({ toEmail, name, role, orgName }) {
 async function sendVerificationEmail({ toEmail, token, name }) {
   const org      = 'Opal Therapy';
   const verifyUrl = `${BASE()}/verify-email?token=${encodeURIComponent(token)}`;
-  const greeting  = name ? `Hi ${name},` : 'Hello,';
+  const greeting  = name ? `Hi ${escapeHtml(name)},` : 'Hello,';
 
   const html = `
 <!DOCTYPE html>
@@ -304,7 +321,7 @@ async function sendVerificationEmail({ toEmail, token, name }) {
 async function sendPasswordResetEmail({ toEmail, token, name }) {
   const org       = 'Opal Therapy';
   const resetUrl  = `${BASE()}/reset-password?token=${encodeURIComponent(token)}`;
-  const greeting  = name ? `Hi ${name},` : 'Hello,';
+  const greeting  = name ? `Hi ${escapeHtml(name)},` : 'Hello,';
 
   const html = `
 <!DOCTYPE html>
@@ -367,8 +384,8 @@ async function sendPasswordResetEmail({ toEmail, token, name }) {
 async function sendAccountApprovedEmail({ toEmail, name, role }) {
   const org      = 'Opal Therapy';
   const appUrl   = BASE();
-  const roleName = roleLabel(role);
-  const greeting = name ? `Hi ${name},` : 'Hello,';
+  const roleName = escapeHtml(roleLabel(role));
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hello,';
 
   const html = `
 <!DOCTYPE html>
@@ -425,6 +442,7 @@ async function sendAccountApprovedEmail({ toEmail, name, role }) {
 }
 
 module.exports = {
+  escapeHtml,
   sendInviteEmail,
   sendWelcomeEmail,
   sendVerificationEmail,

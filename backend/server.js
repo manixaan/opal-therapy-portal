@@ -64,16 +64,30 @@ const io = socketIO(server, {
 // Think of it as a checklist the server goes through
 
 // Security headers — applied before every route.
-// CSP is disabled here because the main frontend (mockup_v3.html) uses inline
-// scripts and a dynamically-loaded Maps SDK; enabling the default strict CSP
-// would break it. All other Helmet protections are active:
-//   X-Frame-Options: SAMEORIGIN (clickjacking protection)
-//   X-Content-Type-Options: nosniff
-//   Strict-Transport-Security (HSTS) in production
-//   Referrer-Policy: no-referrer
-//   X-DNS-Prefetch-Control: off
-// TODO: tighten CSP once the frontend is refactored to remove inline scripts.
-app.use(helmet({ contentSecurityPolicy: false }));
+// A practical CSP replaces the previously-disabled one. The frontend is a
+// single file with inline scripts, so 'unsafe-inline' is still required for
+// script/style until the progressive modularisation (nonces are the follow-up)
+// — but this policy already pins every network destination: only same-origin
+// plus the Google Maps SDK hosts can be loaded or contacted, object/embed are
+// blocked, and the app cannot be framed by other origins.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:    ["'self'", 'data:', 'https://fonts.gstatic.com'],
+      imgSrc:     ["'self'", 'data:', 'blob:', 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'https://*.googleapis.com', 'https://*.ggpht.com'],
+      connectSrc: ["'self'", 'ws:', 'wss:', 'https://maps.googleapis.com'],
+      workerSrc:  ["'self'", 'blob:'],
+      objectSrc:  ["'none'"],
+      baseUri:    ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+    },
+  },
+}));
 
 // CORS — locked to localhost only. Update ALLOWED_ORIGINS in .env before cloud deployment.
 // allowedOrigins is defined above (shared with Socket.IO CORS).
@@ -87,6 +101,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+// Microsoft Graph webhook notifications MUST be captured raw BEFORE the JSON
+// body parser: Graph posts JSON that the receiver re-parses from the raw
+// buffer. With json() first, req.body arrived pre-parsed and the receiver's
+// Buffer.toString() produced "[object Object]" — every change notification was
+// silently dropped in production (handover KNOWN_ISSUES #6).
+app.use('/api/webhooks/outlook', express.raw({ type: '*/*' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -630,8 +651,11 @@ setTimeout(() => {
 //
 // Subscriptions expire after ~3 days; the renewal job below keeps them alive.
 
-// subscriptionId → userId (in-memory; rebuilt on restart via re-registration)
-const _webhookSubscriptions = new Map();
+// subscriptionId → userId — shared with the receiver via webhook-state.js.
+// Also hand our Socket.IO server to the shared module so the webhook receiver
+// can emit without require('./server').
+const { webhookSubscriptions: _webhookSubscriptions, setIo: _setWebhookIo } = require('./webhook-state');
+_setWebhookIo(io);
 
 async function registerOutlookWebhook(userId, accessToken) {
   const webhookUrl    = `${process.env.WEBHOOK_BASE_URL}/api/webhooks/outlook`;
