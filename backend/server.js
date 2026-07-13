@@ -416,9 +416,16 @@ let deltaRunning = false; // prevent overlapping runs
 const _reconcileCounter = {};
 
 async function runDeltaSyncForAllUsers() {
+  // Aggregate stats returned to the manual "Sync now" route (and useful in logs).
+  const stats = {
+    skipped: false, usersProcessed: 0,
+    upserted: 0, cancelled: 0, removed: 0,
+    blockedDeletions: 0, warnings: [], errors: [],
+  };
   if (deltaRunning) {
     console.log('⏭️  Delta sync already running — skipping this tick');
-    return;
+    stats.skipped = true;
+    return stats;
   }
   deltaRunning = true;
 
@@ -426,7 +433,7 @@ async function runDeltaSyncForAllUsers() {
     const result = await db.pool.query(
       'SELECT id, email, access_token, refresh_token, token_expires_at FROM users WHERE access_token IS NOT NULL'
     );
-    if (result.rows.length === 0) { deltaRunning = false; return; }
+    if (result.rows.length === 0) { deltaRunning = false; return stats; }
 
     const outlookApi = require('./outlook-oauth');
 
@@ -499,6 +506,15 @@ async function runDeltaSyncForAllUsers() {
         }
         if (newToken && !deltaDeletionsBlocked) await db.saveDeltaState(user.id, newToken);
 
+        stats.usersProcessed++;
+        stats.upserted += upserted;
+        stats.cancelled += cancelled;
+        stats.removed += removed;
+        if (deltaDeletionsBlocked) {
+          stats.blockedDeletions += deleted.length;
+          stats.warnings.push({ userId: user.id, warning: 'deletions_blocked_by_safety', count: deleted.length });
+        }
+
         if (upserted > 0 || cancelled > 0 || removed > 0) {
           console.log(`🔄 [Auto delta] ${user.email}: +${upserted} updated, ${cancelled} cancelled, -${removed} removed`);
           // Emit only to the user whose calendar changed (private room) —
@@ -547,17 +563,26 @@ async function runDeltaSyncForAllUsers() {
           // Stale/invalid delta token — clear it so next run bootstraps fresh
           console.warn(`⚠️  Delta token invalid for ${user.email} (${status}) — clearing token, will re-bootstrap next tick`);
           try { await db.saveDeltaState(user.id, null); } catch (_) {}
+          stats.warnings.push({ userId: user.id, warning: 'delta_token_reset' });
         } else {
           console.error(`⚠️  Delta sync failed for ${user.email}:`, userErr.message);
+          // userId + message only — never tokens or event content
+          stats.errors.push({ userId: user.id, message: userErr.message });
         }
       }
     }
   } catch (err) {
     console.error('⚠️  Delta poller error:', err.message);
+    stats.errors.push({ message: err.message });
   } finally {
     deltaRunning = false;
   }
+  return stats;
 }
+
+// Expose the runner for the manual "Sync now" route (app-routes reads this
+// via req.app.get so tests can inject a stub without loading server.js).
+app.set('forceSyncRunner', runDeltaSyncForAllUsers);
 
 // Start Outlook delta poller after DB is ready
 setTimeout(() => {
@@ -779,4 +804,4 @@ process.on('SIGTERM', () => {
   });
 });
 
-module.exports = { app, io, _webhookSubscriptions };
+module.exports = { app, io, _webhookSubscriptions, runDeltaSyncForAllUsers };

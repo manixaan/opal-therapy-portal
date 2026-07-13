@@ -64,14 +64,16 @@ router.post('/api/invites', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'email and role are required' });
   }
 
-  const VALID_ROLES = ['owner', 'admin', 'therapist'];
+  // Matches the DB CHECK constraint (user_invites_role_check_v2) — read_only
+  // was previously missing here, making the role impossible to invite.
+  const VALID_ROLES = ['owner', 'admin', 'therapist', 'read_only'];
   if (!VALID_ROLES.includes(inviteRole)) {
     return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
   }
 
-  // Admin can only invite therapists
-  if (actorRole === 'admin' && inviteRole !== 'therapist') {
-    return res.status(403).json({ error: 'Admin can only invite Therapists. Owner role required for Owner/Admin invites.' });
+  // Admin can invite non-privileged roles only (therapist, read_only)
+  if (actorRole === 'admin' && !['therapist', 'read_only'].includes(inviteRole)) {
+    return res.status(403).json({ error: 'Admin can only invite Therapists or Read-only users. Owner role required for Owner/Admin invites.' });
   }
 
   // Validate email format

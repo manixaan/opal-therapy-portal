@@ -854,14 +854,18 @@ function renderSpecs() {
 async function connectOutlook() {
   setLoading('btn-outlook-connect', true);
   try {
-    // Fetch the OAuth URL from the backend
-    const r = await fetch('/api/auth/outlook/url', { credentials: 'include' });
+    // Real OAuth route (the previous /api/auth/outlook/url endpoint never
+    // existed, so this button silently failed). returnUrl is round-tripped
+    // through the OAuth state parameter, so the Microsoft callback lands
+    // back on this wizard at step 4.
+    const returnUrl = `${window.location.origin}/onboarding?step=4`;
+    const r = await fetch(`/auth/outlook-login?returnUrl=${encodeURIComponent(returnUrl)}`, {
+      credentials: 'include',
+    });
     if (r.ok) {
-      const { url } = await r.json().catch(() => ({}));
-      if (url) {
-        // Store that we're in onboarding flow so the OAuth callback can redirect back
-        sessionStorage.setItem('oauth_return', '/onboarding?step=4');
-        window.location.href = url;
+      const { authUrl } = await r.json().catch(() => ({}));
+      if (authUrl) {
+        window.location.href = authUrl;
         return;
       }
     }

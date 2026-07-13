@@ -250,11 +250,17 @@ async function checkCredentialExpiry(userId) {
 //  CHECK 2: INCOMPLETE PROFILE (own — no base location)
 // ─────────────────────────────────────────────────────────────
 async function checkIncompleteProfile(userId) {
+  // Authoritative source for an employee's base work location is
+  // users.default_work_location (JSONB, written by onboarding and
+  // My Profile → Work Locations). therapist_profiles has no base_location
+  // column — the previous query threw on every run and the check never fired.
   const res = await pool.query(
-    `SELECT base_location, display_name FROM therapist_profiles WHERE user_id = $1 LIMIT 1`,
+    `SELECT default_work_location FROM users WHERE id = $1 LIMIT 1`,
     [userId]
   );
-  if (!res.rows.length || !res.rows[0].base_location) {
+  const loc = res.rows[0]?.default_work_location;
+  const hasBase = loc && typeof loc === 'object' && Object.keys(loc).length > 0;
+  if (!hasBase) {
     await storeNotification(userId, {
       type: 'profile_missing_base_location',
       title: 'Base work location not set',
@@ -938,7 +944,9 @@ router.post('/api/auth/change-password', requireAuth, async (req, res) => {
   }
 
   try {
-    const bcrypt = require('bcrypt');
+    // bcryptjs is the installed dependency — require('bcrypt') crashed this
+    // route with MODULE_NOT_FOUND on every call (handover KNOWN_ISSUES #1).
+    const bcrypt = require('bcryptjs');
     const userRow = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
     if (!userRow.rows[0]) return res.status(404).json({ error: 'User not found' });
 
@@ -947,6 +955,12 @@ router.post('/api/auth/change-password', requireAuth, async (req, res) => {
 
     const newHash = await bcrypt.hash(newPassword, 12);
     await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, userId]);
+
+    const dbMod = require('./database');
+    await dbMod.logAuditEvent({
+      actorUserId: userId, action: 'password.changed',
+      targetType: 'user', targetId: userId, ipAddress: req.ip,
+    }).catch(() => {});
 
     res.json({ ok: true, message: 'Password updated successfully' });
   } catch (err) {
@@ -1120,18 +1134,46 @@ router.get('/api/users', requireAuth, requireRole('owner'), async (req, res) => 
 // ─────────────────────────────────────────────────────────────
 //  FORCE SYNC endpoint (referenced by Settings page)
 // ─────────────────────────────────────────────────────────────
-router.post('/api/sync/force', requireAuth, async (req, res) => {
-  // Trigger the delta sync for this user immediately
-  // The actual delta sync is in server.js — we emit a signal here
+router.post('/api/sync/force', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+  // Settings → "Sync now". Awaits a REAL delta-sync pass and returns its
+  // stats (previously this fire-and-forgot an import that server.js did not
+  // export, i.e. it always reported success while doing nothing).
+  //
+  // The runner is resolved from app settings first so tests can inject a stub
+  // without loading server.js (which starts timers and listens on a port).
   try {
-    const { runDeltaSyncForAllUsers } = require('./server');
-    if (typeof runDeltaSyncForAllUsers === 'function') {
-      runDeltaSyncForAllUsers().catch(() => {});
+    const runner = req.app.get('forceSyncRunner')
+      || (() => { const s = require('./server'); return s.runDeltaSyncForAllUsers; })();
+
+    if (typeof runner !== 'function') {
+      return res.status(503).json({ ok: false, error: 'Sync runner unavailable' });
     }
-  } catch (e) {
-    // server.js doesn't export it directly; that's fine — sync runs on its own schedule
+
+    const stats = await runner();
+
+    const dbMod = require('./database');
+    await dbMod.logAuditEvent({
+      actorUserId: req.user.id, action: 'sync.manual_triggered',
+      targetType: 'sync', targetId: 'outlook_delta', ipAddress: req.ip,
+      metadata: stats || null,
+    }).catch(() => {});
+
+    res.json({
+      ok: true,
+      started: true,
+      completed: true,
+      usersProcessed: stats?.usersProcessed ?? 0,
+      eventsCreatedOrUpdated: stats?.upserted ?? 0,
+      eventsCancelled: stats?.cancelled ?? 0,
+      eventsDeleted: stats?.removed ?? 0,
+      deletionsBlockedBySafety: stats?.blockedDeletions ?? 0,
+      warnings: stats?.warnings ?? [],
+      errors: stats?.errors ?? [],
+    });
+  } catch (err) {
+    console.error('Force sync error:', err.message);
+    res.status(500).json({ ok: false, error: 'Sync failed', details: err.message });
   }
-  res.json({ ok: true, message: 'Sync triggered' });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1210,7 +1252,7 @@ router.get('/api/admin/users', requireAuth, requireRole('owner'), async (req, re
               u.account_status, u.email_verified, u.is_active,
               u.profile_completed, u.onboarding_step,
               u.default_work_location, u.work_location_schedule,
-              u.has_outlook_connected, u.approved_at, u.suspended_at,
+              u.approved_at, u.suspended_at,
               u.last_login_at, u.created_at,
               approver.display_name AS approved_by_name,
               (u.access_token IS NOT NULL AND u.access_token != '') AS has_outlook
@@ -1262,7 +1304,10 @@ router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), 
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found or already active' });
 
-    await pool.logAuditEvent?.call(pool, {
+    // (Was pool.logAuditEvent?.call(...) — pool has no such method, so the
+    //  optional chain silently skipped approval auditing entirely.)
+    const dbModApprove = require('./database');
+    await dbModApprove.logAuditEvent({
       actorUserId: req.user.id, action: 'account.approved', targetType: 'user', targetId: id,
       ipAddress: req.ip, metadata: { newStatus: 'active' },
     }).catch(() => {});

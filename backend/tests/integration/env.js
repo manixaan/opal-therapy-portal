@@ -53,3 +53,8 @@ process.env.EMAIL_PASS = '';
 process.env.SPLOSE_API_KEY = 'integration-test-not-real';
 process.env.GOOGLE_MAPS_API_KEY = '';
 process.env.WEBHOOK_BASE_URL = '';
+// outlook-oauth reads these at module load; fake values let the pure URL
+// builder (/auth/outlook-login) be exercised without any real credentials.
+process.env.MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || 'integration-test-client-id';
+process.env.MICROSOFT_CLIENT_SECRET = 'integration-test-not-real';
+process.env.MICROSOFT_REDIRECT_URI = 'http://localhost:5001/auth/oauth/callback';
