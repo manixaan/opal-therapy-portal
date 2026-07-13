@@ -1010,20 +1010,18 @@ async function deleteEventByOutlookId(userId, outlookId) {
 async function reconcileOutlookWindow(userId, windowStart, windowEnd, knownOutlookIds) {
   // knownOutlookIds is an array of string IDs returned by Outlook for this window.
   // Any local outlook-sourced event in the window that isn't in this array is stale.
+  //
+  // DATA-LOSS GUARD: an empty knownOutlookIds list previously wiped the entire
+  // window. An empty successful response is far more likely an upstream fault
+  // (auth-scope change, truncated fetch, API hiccup) than a genuinely emptied
+  // calendar, so it is now a warned no-op. Genuine bulk clears go through
+  // /api/sync/cleanup with dryRun + explicit thresholds.
   if (!Array.isArray(knownOutlookIds) || knownOutlookIds.length === 0) {
-    // Nothing came back from Outlook for this window — soft-delete everything.
-    const result = await pool.query(`
-      UPDATE events
-      SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = $1
-        AND source = 'outlook'
-        AND outlook_id IS NOT NULL
-        AND (is_deleted IS NULL OR is_deleted = FALSE)
-        AND start_time >= $2
-        AND start_time <= $3
-      RETURNING id, title, outlook_id, start_time
-    `, [userId, windowStart, windowEnd]);
-    return result.rows;
+    console.warn(
+      `🛑 reconcileOutlookWindow: empty live-ID set for user ${userId} ` +
+      `(${windowStart} → ${windowEnd}) — refusing window wipe, no events deleted`
+    );
+    return [];
   }
 
   const result = await pool.query(`
@@ -1041,9 +1039,72 @@ async function reconcileOutlookWindow(userId, windowStart, windowEnd, knownOutlo
   return result.rows;
 }
 
+/**
+ * Threshold-guarded window reconciliation. Counts deletion candidates FIRST,
+ * runs them through sync-safety assessment, and only tombstones when the batch
+ * is within limits and the upstream fetch was complete.
+ *
+ * @returns {{blocked: boolean, reason: string, candidateCount: number,
+ *            localLinkedCount: number, pruned: Array}}
+ */
+async function reconcileOutlookWindowSafe(userId, windowStart, windowEnd, knownOutlookIds, {
+  fetchComplete = true,
+  source = 'outlook_reconcile',
+  dryRun = false,
+} = {}) {
+  const { assessDeletionSafety } = require('./sync-safety');
+  const liveIds = Array.isArray(knownOutlookIds) ? knownOutlookIds : [];
+
+  // Denominator + candidates counted before any write.
+  const denom = await pool.query(`
+    SELECT COUNT(*) AS n FROM events
+    WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
+      AND start_time >= $2 AND start_time <= $3
+  `, [userId, windowStart, windowEnd]);
+  const localLinkedCount = Number(denom.rows[0].n);
+
+  const cand = liveIds.length === 0
+    ? { rows: [{ n: localLinkedCount }] } // empty live set ⇒ every local row is a candidate
+    : await pool.query(`
+        SELECT COUNT(*) AS n FROM events
+        WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+          AND start_time >= $2 AND start_time <= $3
+          AND outlook_id != ALL($4::text[])
+      `, [userId, windowStart, windowEnd, liveIds]);
+  const candidateCount = Number(cand.rows[0].n);
+
+  const verdict = assessDeletionSafety({
+    source,
+    fetchComplete,
+    liveCount: liveIds.length,
+    deletionCandidates: candidateCount,
+    localLinkedCount,
+  });
+
+  if (!verdict.safe) {
+    return { blocked: true, reason: verdict.reason, candidateCount, localLinkedCount, pruned: [], stats: verdict.stats };
+  }
+  if (dryRun || candidateCount === 0) {
+    return { blocked: false, reason: dryRun ? 'dry_run' : 'no_deletions', candidateCount, localLinkedCount, pruned: [], stats: verdict.stats };
+  }
+
+  const pruned = await reconcileOutlookWindow(userId, windowStart, windowEnd, liveIds);
+  return { blocked: false, reason: 'within_thresholds', candidateCount, localLinkedCount, pruned, stats: verdict.stats };
+}
+
 // One-time cleanup: soft-delete all Outlook-sourced events that were not seen
 // in a fresh full Outlook fetch. Returns counts for logging.
 async function cleanupStaleOutlookEvents(userId, knownOutlookIds) {
+  // DATA-LOSS GUARD: previously an empty knownOutlookIds fell back to the
+  // '__none__' sentinel, which matched nothing and therefore tombstoned EVERY
+  // outlook-sourced event for the user. Empty live sets are now a warned no-op;
+  // the cleanup route enforces thresholds and dry-run above this call.
+  if (!Array.isArray(knownOutlookIds) || knownOutlookIds.length === 0) {
+    console.warn(`🛑 cleanupStaleOutlookEvents: empty live-ID set for user ${userId} — refusing full wipe`);
+    return [];
+  }
   const result = await pool.query(`
     UPDATE events
     SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -1053,7 +1114,7 @@ async function cleanupStaleOutlookEvents(userId, knownOutlookIds) {
       AND (is_deleted IS NULL OR is_deleted = FALSE)
       AND outlook_id != ALL($2::text[])
     RETURNING id, title, outlook_id, start_time
-  `, [userId, knownOutlookIds.length > 0 ? knownOutlookIds : ['__none__']]);
+  `, [userId, knownOutlookIds]);
   return result.rows;
 }
 
@@ -1806,6 +1867,7 @@ module.exports = {
   softDeleteEventByOutlookId,
   deleteEventByOutlookId,
   reconcileOutlookWindow,
+  reconcileOutlookWindowSafe,
   cleanupStaleOutlookEvents,
   deduplicateOutlookEvents,
   // Write-back

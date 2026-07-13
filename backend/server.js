@@ -461,13 +461,43 @@ async function runDeltaSyncForAllUsers() {
             }
           }));
         }
-        for (let i = 0; i < deleted.length; i += BATCH) {
-          await Promise.all(deleted.slice(i, i + BATCH).map(async outlookId => {
-            const g = await db.softDeleteEventByOutlookId(user.id, outlookId);
-            if (g) removed++;
-          }));
+        // ── Deletion-volume guard on the @removed batch ────────────────────
+        // A legitimate delta rarely deletes many events at once; a huge batch
+        // usually means an upstream anomaly. When blocked we also skip saving
+        // the new delta token so the SAME deletions are re-presented next tick
+        // (delta tokens are consume-once) — nothing is lost, an owner is
+        // notified, and manual cleanup can confirm a genuine mass-change.
+        let deltaDeletionsBlocked = false;
+        if (deleted.length > 0) {
+          const { assessDeletionSafety, recordSafetyBlock } = require('./sync-safety');
+          const linked = await db.pool.query(
+            `SELECT COUNT(*) AS n FROM events
+             WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+               AND (is_deleted IS NULL OR is_deleted = FALSE)`, [user.id]);
+          const verdict = assessDeletionSafety({
+            source: 'outlook_delta',
+            fetchComplete: !!newToken, // delta paging finished ⇒ Graph returned a deltaLink
+            liveCount: Number(linked.rows[0].n) - deleted.length,
+            deletionCandidates: deleted.length,
+            localLinkedCount: Number(linked.rows[0].n),
+          });
+          if (!verdict.safe) {
+            deltaDeletionsBlocked = true;
+            await recordSafetyBlock(
+              { db, storeNotification: (...a) => require('./app-routes').storeNotification(...a) },
+              { source: 'outlook_delta', reason: verdict.reason, stats: verdict.stats, userId: user.id }
+            );
+          }
         }
-        if (newToken) await db.saveDeltaState(user.id, newToken);
+        if (!deltaDeletionsBlocked) {
+          for (let i = 0; i < deleted.length; i += BATCH) {
+            await Promise.all(deleted.slice(i, i + BATCH).map(async outlookId => {
+              const g = await db.softDeleteEventByOutlookId(user.id, outlookId);
+              if (g) removed++;
+            }));
+          }
+        }
+        if (newToken && !deltaDeletionsBlocked) await db.saveDeltaState(user.id, newToken);
 
         if (upserted > 0 || cancelled > 0 || removed > 0) {
           console.log(`🔄 [Auto delta] ${user.email}: +${upserted} updated, ${cancelled} cancelled, -${removed} removed`);
@@ -492,8 +522,21 @@ async function runDeltaSyncForAllUsers() {
             const recEnd   = new Date(now.getTime() + 90 * 86400000).toISOString();
             const liveEvents = await outlookApiReconcile.getOutlookCalendarEvents(accessToken, recStart, recEnd);
             const liveIds = liveEvents.map(e => e.outlookId).filter(Boolean);
-            await db.reconcileOutlookWindow(user.id, recStart, recEnd, liveIds);
-            console.log(`🔍 [Auto reconcile] ${user.email}: full reconcile for ±90 days (${liveIds.length} live events)`);
+            // Threshold-guarded: empty/truncated fetches and abnormal drops
+            // block the whole batch, audit, and notify — nothing is deleted.
+            const result = await db.reconcileOutlookWindowSafe(user.id, recStart, recEnd, liveIds, {
+              fetchComplete: liveEvents._fetchComplete !== false,
+              source: 'outlook_reconcile',
+            });
+            if (result.blocked) {
+              const { recordSafetyBlock } = require('./sync-safety');
+              await recordSafetyBlock(
+                { db, storeNotification: (...a) => require('./app-routes').storeNotification(...a) },
+                { source: 'outlook_reconcile', reason: result.reason, stats: result.stats, userId: user.id }
+              );
+            } else {
+              console.log(`🔍 [Auto reconcile] ${user.email}: ±90 days, ${liveIds.length} live, ${result.pruned.length} pruned`);
+            }
           } catch (reconErr) {
             console.warn(`⚠️  Auto reconcile error for ${user.email}:`, reconErr.message);
           }
@@ -524,84 +567,21 @@ setTimeout(() => {
 }, 5000);
 
 // ===== SPLOSE BACKGROUND POLLER =====
-// Fetches Splose appointments every 15 minutes and soft-deletes any local DB
-// records whose Splose appointment was cancelled or removed in Splose UI.
-// This is the only way to detect Splose-side cancellations since their API
-// does not push change notifications.
+// Extracted to splose-poller.js (dependency-injected, unit-tested). Detects
+// Splose-side cancellations every 15 minutes and converges local + Outlook.
+// Deletions run behind sync-safety thresholds — an empty/truncated/anomalous
+// Splose response blocks the whole batch, audits, and notifies owners.
 
 const SPLOSE_POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-let sploseRunning = false;
-
-async function runSploseSync() {
-  if (sploseRunning) return;
-  sploseRunning = true;
-  try {
-    const sploseApi = require('./splose-api');
-
-    // Sync window: past 90 days → next 90 days
-    const now       = new Date();
-    const startDate = new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10);
-    const endDate   = new Date(now.getTime() + 90 * 86400000).toISOString().slice(0, 10);
-
-    const sploseAppts = await sploseApi.getAppointments(startDate, endDate);
-
-    // IDs that are live and NOT fully cancelled
-    const liveIds = new Set(
-      sploseAppts
-        .filter(a => !(a.patients.length > 0 && a.patients.every(p => p.status === 'Cancelled')))
-        .map(a => String(a.id))
-    );
-
-    // Find DB events with a splose_id that are now gone or cancelled in Splose
-    const { rows } = await db.pool.query(
-      `SELECT id, splose_id, title, outlook_id, user_id
-         FROM events
-        WHERE splose_id IS NOT NULL AND is_deleted = FALSE`
-    );
-
-    let cancelled = 0;
-    for (const row of rows) {
-      if (liveIds.has(String(row.splose_id))) continue; // still active — no action
-
-      // Splose appointment is gone / fully cancelled — soft-delete locally
-      await db.pool.query(
-        `UPDATE events
-            SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
-          WHERE id = $1`,
-        [row.id]
-      );
-      console.log(`🚫 [Splose poller] Cancelled: "${row.title}" (Splose #${row.splose_id})`);
-      cancelled++;
-
-      // Best-effort Outlook delete so the Outlook calendar stays in sync too
-      if (row.outlook_id) {
-        try {
-          const { rows: userRows } = await db.pool.query(
-            'SELECT access_token, token_expires_at, refresh_token FROM users WHERE id = $1',
-            [row.user_id]
-          );
-          if (userRows.length) {
-            const accessToken = await getValidTokenForUser(userRows[0]);
-            const { deleteOutlookEvent } = require('./outlook-oauth');
-            await deleteOutlookEvent(accessToken, row.outlook_id);
-            console.log(`   🗑️  Also deleted from Outlook: ${row.outlook_id}`);
-          }
-        } catch (_) { /* non-fatal */ }
-      }
-
-      // Notify only the affected user's socket room (not a global broadcast)
-      io.to(`user:${row.user_id}`).emit('calendarUpdated', { upserted: 0, cancelled: 1, removed: 0 });
-    }
-
-    if (cancelled > 0) {
-      console.log(`✅ [Splose poller] Synced ${cancelled} cancellation(s) from Splose`);
-    }
-  } catch (err) {
-    console.error('⚠️  Splose poller error:', err.message);
-  } finally {
-    sploseRunning = false;
-  }
-}
+const { createSplosePoller } = require('./splose-poller');
+const { runSploseSync } = createSplosePoller({
+  db,
+  sploseApi: require('./splose-api'),
+  outlookApi: require('./outlook-oauth'),
+  io,
+  getValidTokenForUser,
+  storeNotification: (...args) => require('./app-routes').storeNotification(...args),
+});
 
 // Start Splose poller 8 seconds after boot to avoid hammering on startup
 setTimeout(() => {

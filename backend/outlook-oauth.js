@@ -179,8 +179,9 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
     let allEvents = [];
     let nextLink = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/calendarview${query}`;
     let pageCount = 0;
-    const maxPages = 50; // Safety limit: max 50 pages × 10 events = 500 events
+    const maxPages = 50; // safety limit (50 pages × $top=250 = 12,500 events)
     const seenEventIds = new Set();
+    let fetchTruncated = false; // set when maxPages is hit with a nextLink remaining
 
     // Handle pagination - keep fetching until no more pages or max pages reached
     while (nextLink && pageCount < maxPages) {
@@ -216,8 +217,9 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
       nextLink = response.data['@odata.nextLink'] || null;
       if (nextLink && pageCount < maxPages) {
         console.log(`🔗 Found next page link, continuing... (Page ${pageCount + 1}/${maxPages})`);
-      } else if (pageCount >= maxPages) {
-        console.log(`⚠️ Reached max pages limit (${maxPages}). Stopping pagination.`);
+      } else if (nextLink && pageCount >= maxPages) {
+        console.log(`⚠️ Reached max pages limit (${maxPages}) with pages remaining — result is TRUNCATED.`);
+        fetchTruncated = true;
         nextLink = null;
       }
     }
@@ -225,7 +227,9 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
     console.log(`✅ Total Outlook events fetched: ${allEvents.length} events across ${pageCount} pages`);
 
     if (allEvents.length === 0) {
-      return [];
+      const empty = [];
+      Object.defineProperty(empty, '_fetchComplete', { value: !fetchTruncated, enumerable: false });
+      return empty;
     }
 
     // Normalize Graph datetimes to a real UTC ISO string. The default Graph
@@ -244,7 +248,7 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
       return isNaN(d.getTime()) ? raw + 'Z' : d.toISOString();
     };
 
-    return allEvents.map(event => ({
+    const mapped = allEvents.map(event => ({
       id:                  event.id,
       outlookId:           event.id,
       iCalUId:             event.iCalUId || null,
@@ -263,6 +267,10 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
       type:                event.type || 'singleInstance',
       seriesMasterId:      event.seriesMasterId || null,
     }));
+    // Deletion-safety consumers must be able to distinguish a complete window
+    // fetch from one truncated at the page cap.
+    Object.defineProperty(mapped, '_fetchComplete', { value: !fetchTruncated, enumerable: false });
+    return mapped;
   } catch (error) {
     console.error('Error getting Outlook events:', error.response?.data || error.message);
     throw new Error('Failed to fetch Outlook calendar events');

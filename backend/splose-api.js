@@ -129,7 +129,20 @@ async function fetchAllPages(path, params = {}) {
       firstRequest = false;
     }
 
-    if (cacheKey) { _cacheSet(cacheKey, allItems); _inflight.delete(cacheKey); }
+    // Completeness metadata: url still set = stopped at MAX_PAGES with pages
+    // remaining, i.e. the list is TRUNCATED. Deletion-safety logic must treat
+    // a truncated fetch as unusable evidence of absence. A truncated list is
+    // never cached (it would poison every consumer for the TTL window).
+    const complete = url === null;
+    Object.defineProperty(allItems, '_fetchComplete', { value: complete, enumerable: false });
+    if (!complete) {
+      console.warn(`⚠️  Splose ${path}: pagination truncated at ${pageCount} pages — result marked incomplete`);
+    }
+
+    if (cacheKey) {
+      if (complete) _cacheSet(cacheKey, allItems);
+      _inflight.delete(cacheKey);
+    }
     return allItems;
   })();
 
@@ -222,7 +235,7 @@ async function getAppointments(startDate, endDate, practitionerId = null) {
   const start = startDate ? new Date(startDate) : null;
   const end   = endDate   ? new Date(endDate + 'T23:59:59') : null;
 
-  return allItems
+  const results = allItems
     .filter(a => !a.archived && !a.deletedAt && !a.isUnavailableBlock)
     .filter(a => !practitionerId || a.practitionerId === practitionerId)
     .filter(a => {
@@ -234,6 +247,13 @@ async function getAppointments(startDate, endDate, practitionerId = null) {
       return true;
     })
     .map(normaliseAppointment);
+
+  // Carry pagination-completeness through the filter/map (new array) so the
+  // deletion-safety layer can tell a truncated fetch from a complete one.
+  Object.defineProperty(results, '_fetchComplete', {
+    value: allItems._fetchComplete !== false, enumerable: false,
+  });
+  return results;
 }
 
 async function getAppointment(id) {

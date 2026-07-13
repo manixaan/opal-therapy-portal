@@ -509,9 +509,22 @@ router.post('/api/sync/outlook-initial', requireAuth, async (req, res) => {
     }
 
     // ── 3. Reconcile: soft-delete local Outlook records not in the latest fetch ─
-    const pruned = await db.reconcileOutlookWindow(userId, windowStart, windowEnd, knownOutlookIds);
-    console.log(`🧹 Reconcile: ${pruned.length} stale Outlook records soft-deleted`);
-    if (pruned.length > 0) {
+    // Threshold-guarded (Phase 3): empty/truncated fetches or abnormal drops
+    // block the deletion batch instead of wiping the window.
+    const reconcileResult = await db.reconcileOutlookWindowSafe(userId, windowStart, windowEnd, knownOutlookIds, {
+      fetchComplete: outlookEvents._fetchComplete !== false,
+      source: 'outlook_reconcile',
+    });
+    const pruned = reconcileResult.pruned;
+    if (reconcileResult.blocked) {
+      const { recordSafetyBlock } = require('./sync-safety');
+      await recordSafetyBlock({ db, storeNotification: storeNotificationLazy }, {
+        source: 'outlook_reconcile', reason: reconcileResult.reason,
+        stats: reconcileResult.stats, userId,
+      });
+      console.warn(`🛑 Initial-sync reconcile blocked (${reconcileResult.reason}) — ${reconcileResult.candidateCount} candidate deletions skipped`);
+    } else {
+      console.log(`🧹 Reconcile: ${pruned.length} stale Outlook records soft-deleted`);
       pruned.forEach(r => console.log(`   ↳ removed: "${r.title}" (${String(r.start_time).slice(0,10)}) outlook_id=${r.outlook_id}`));
     }
 
@@ -532,6 +545,9 @@ router.post('/api/sync/outlook-initial', requireAuth, async (req, res) => {
       staleRemoved: pruned.length,
       duplicatesRemoved: deduped.length,
       errors,
+      safety: reconcileResult.blocked
+        ? { blocked: true, reason: reconcileResult.reason, skippedDeletions: reconcileResult.candidateCount }
+        : { blocked: false },
     });
 
   } catch (error) {
@@ -681,26 +697,52 @@ router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
       }
     }
 
-    // @removed = event hard-deleted in Outlook
-    for (const outlookId of deleted) {
-      const gone = await db.softDeleteEventByOutlookId(userId, outlookId);
-      if (gone) {
-        removed++;
-        console.log(`🗑️  Deleted from Outlook: ${outlookId}`);
+    // @removed = event hard-deleted in Outlook — behind the deletion-volume
+    // guard. When blocked, the delta token is NOT saved so the same deletions
+    // are re-presented next sync (nothing is silently lost).
+    let safety = { blocked: false };
+    if (deleted.length > 0) {
+      const { assessDeletionSafety, recordSafetyBlock } = require('./sync-safety');
+      const linked = await db.pool.query(
+        `SELECT COUNT(*) AS n FROM events
+         WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+           AND (is_deleted IS NULL OR is_deleted = FALSE)`, [userId]);
+      const verdict = assessDeletionSafety({
+        source: 'outlook_delta',
+        fetchComplete: !!newToken,
+        liveCount: Number(linked.rows[0].n) - deleted.length,
+        deletionCandidates: deleted.length,
+        localLinkedCount: Number(linked.rows[0].n),
+      });
+      if (!verdict.safe) {
+        safety = { blocked: true, reason: verdict.reason, skippedDeletions: deleted.length };
+        await recordSafetyBlock({ db, storeNotification: storeNotificationLazy }, {
+          source: 'outlook_delta', reason: verdict.reason, stats: verdict.stats, userId,
+        });
+      }
+    }
+    if (!safety.blocked) {
+      for (const outlookId of deleted) {
+        const gone = await db.softDeleteEventByOutlookId(userId, outlookId);
+        if (gone) {
+          removed++;
+          console.log(`🗑️  Deleted from Outlook: ${outlookId}`);
+        }
       }
     }
 
-    if (newToken) {
+    if (newToken && !safety.blocked) {
       await db.saveDeltaState(userId, newToken);
     }
 
-    console.log(`✅ Delta sync done — upserted=${upserted}, cancelled=${cancelled}, removed=${removed}`);
+    console.log(`✅ Delta sync done — upserted=${upserted}, cancelled=${cancelled}, removed=${removed}${safety.blocked ? ` (⛔ ${safety.skippedDeletions} deletions blocked: ${safety.reason})` : ''}`);
 
     res.json({
       ok: true,
       upserted,
       cancelled,
       removed,
+      safety,
       message: `Delta sync complete: ${upserted} updated, ${cancelled} cancelled, ${removed} removed`
     });
 
@@ -793,13 +835,38 @@ router.post(
                 }
               }));
             }
-            for (let i = 0; i < deleted.length; i += BATCH) {
-              await Promise.all(deleted.slice(i, i + BATCH).map(async id => {
-                const g = await db.softDeleteEventByOutlookId(userId, id);
-                if (g) removed++;
-              }));
+            // Deletion-volume guard (same as the poller): blocked ⇒ skip the
+            // batch AND skip the token save so deletions re-present next sync.
+            let webhookDeleteBlocked = false;
+            if (deleted.length > 0) {
+              const { assessDeletionSafety, recordSafetyBlock } = require('./sync-safety');
+              const linked = await db.pool.query(
+                `SELECT COUNT(*) AS n FROM events
+                 WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+                   AND (is_deleted IS NULL OR is_deleted = FALSE)`, [userId]);
+              const verdict = assessDeletionSafety({
+                source: 'outlook_delta',
+                fetchComplete: !!newToken,
+                liveCount: Number(linked.rows[0].n) - deleted.length,
+                deletionCandidates: deleted.length,
+                localLinkedCount: Number(linked.rows[0].n),
+              });
+              if (!verdict.safe) {
+                webhookDeleteBlocked = true;
+                await recordSafetyBlock({ db, storeNotification: storeNotificationLazy }, {
+                  source: 'outlook_delta', reason: verdict.reason, stats: verdict.stats, userId,
+                });
+              }
             }
-            if (newToken) await db.saveDeltaState(userId, newToken);
+            if (!webhookDeleteBlocked) {
+              for (let i = 0; i < deleted.length; i += BATCH) {
+                await Promise.all(deleted.slice(i, i + BATCH).map(async id => {
+                  const g = await db.softDeleteEventByOutlookId(userId, id);
+                  if (g) removed++;
+                }));
+              }
+            }
+            if (newToken && !webhookDeleteBlocked) await db.saveDeltaState(userId, newToken);
             console.log(`✅ Webhook delta sync: +${upserted} updated, -${removed} removed`);
 
             const { io } = require('./server');
@@ -932,7 +999,9 @@ router.get('/api/sync/diagnostics', requireAuth, async (req, res) => {
     `);
 
     const stats = statsResult.rows[0];
+    const { syncSafetyState } = require('./sync-safety');
     res.json({
+      syncSafety: syncSafetyState,
       outlookSync: {
         lastSyncAt:             deltaResult.rows[0]?.last_synced_at || null,
         totalEvents:            Number(stats.totalEvents),
@@ -1109,6 +1178,7 @@ router.get('/api/sync/reconcile', requireAuth, async (req, res) => {
 router.post('/api/sync/cleanup', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
     const user = await db.getUser(userId);
     const accessToken = await getValidAccessToken(user);
 
@@ -1116,13 +1186,44 @@ router.post('/api/sync/cleanup', requireAuth, async (req, res) => {
     const windowStart = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate()).toISOString();
     const windowEnd   = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()).toISOString();
 
-    console.log(`🧹 Running one-time cleanup for ${user.email}…`);
+    console.log(`🧹 Running one-time cleanup for ${user.email}${dryRun ? ' (DRY RUN)' : ''}…`);
 
     // Fetch full Outlook event set
     const outlookEvents = await outlookApi.getOutlookCalendarEvents(accessToken, windowStart, windowEnd);
     const knownIds = outlookEvents
       .filter(ev => !ev.isCancelled)
       .map(ev => ev.outlookId || ev.id);
+
+    // Safety gate: refuse batch deletion on empty/truncated fetches. Cleanup is
+    // manual and intentionally allowed to exceed the automatic-cycle volume
+    // thresholds, but never on unusable upstream evidence.
+    if (outlookEvents._fetchComplete === false || knownIds.length === 0) {
+      const { recordSafetyBlock } = require('./sync-safety');
+      const reason = knownIds.length === 0 ? 'empty_remote_result' : 'incomplete_fetch';
+      await recordSafetyBlock({ db, storeNotification: storeNotificationLazy }, {
+        source: 'cleanup', reason,
+        stats: { liveCount: knownIds.length, fetchComplete: outlookEvents._fetchComplete !== false, deletionCandidates: null, localLinkedCount: null },
+        userId,
+      });
+      return res.status(409).json({ ok: false, blocked: true, reason,
+        message: 'Cleanup refused: Outlook returned an empty or truncated event list. No events were deleted.' });
+    }
+
+    // Dry run: report what WOULD be removed, change nothing.
+    if (dryRun) {
+      const { rows: wouldDelete } = await db.pool.query(`
+        SELECT id, title, outlook_id, start_time FROM events
+        WHERE user_id = $1 AND source = 'outlook' AND outlook_id IS NOT NULL
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+          AND outlook_id != ALL($2::text[])
+      `, [userId, knownIds]);
+      return res.json({
+        ok: true, dryRun: true,
+        wouldRemoveStale: wouldDelete.length,
+        wouldRemoveCancelled: outlookEvents.filter(e => e.isCancelled).length,
+        staleSample: wouldDelete.slice(0, 20).map(r => ({ title: r.title, start: r.start_time })),
+      });
+    }
 
     // Mark cancelled Outlook events as deleted locally
     let cancelledCount = 0;
