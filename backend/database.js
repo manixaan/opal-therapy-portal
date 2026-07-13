@@ -513,6 +513,45 @@ const INIT_QUERIES = `
     END IF;
   END $$;
 
+  -- ── Sessions (consolidated from session-store.js so the schema has one
+  --    source of truth; PgSessionStore keeps its own IF NOT EXISTS no-op) ────
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid    VARCHAR(255) PRIMARY KEY,
+    sess   JSONB        NOT NULL,
+    expire TIMESTAMPTZ  NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS sessions_expire_idx ON sessions (expire);
+
+  -- ── App-level tables (consolidated from app-routes.js ensureAppTables so the
+  --    schema has ONE source of truth; the app-routes copy is a no-op repeat) ──
+  CREATE TABLE IF NOT EXISTS user_settings (
+    user_id    UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    settings   JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS org_settings (
+    org_id     TEXT PRIMARY KEY DEFAULT 'opal',
+    settings   JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS user_notifications (
+    id             SERIAL PRIMARY KEY,
+    user_id        UUID REFERENCES users(id) ON DELETE CASCADE,
+    type           TEXT,
+    title          TEXT NOT NULL,
+    message        TEXT NOT NULL,
+    severity       TEXT DEFAULT 'info' CHECK (severity IN ('info','warning','error','success')),
+    status         TEXT DEFAULT 'unread'  CHECK (status IN ('unread','read','dismissed')),
+    related_entity TEXT,
+    action_payload JSONB,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_notif_user ON user_notifications(user_id);
+  CREATE INDEX IF NOT EXISTS idx_user_notif_status ON user_notifications(status);
+
   -- ── Sync architecture migrations ───────────────────────────────────────────
   -- Add UNIQUE constraint on (user_id, outlook_id) to prevent duplicate rows
   -- from concurrent sync calls. Named so it can be checked idempotently.
@@ -898,7 +937,9 @@ async function upsertOutlookEvent(userId, eventData) {
           categories               = $5,
           -- Preserve source: if this event was created by the app, keep it as 'app'.
           -- Only revert to 'outlook' if it was originally from Outlook.
-          source                   = COALESCE(NULLIF(created_by_source, 'app'), 'outlook'),
+          -- (Integration-test finding: the previous NULLIF/COALESCE form was
+          --  inverted and stamped app-created rows back to 'outlook'.)
+          source                   = CASE WHEN created_by_source = 'app' THEN 'app' ELSE 'outlook' END,
           sync_status              = 'synced',
           last_modified_by         = 'outlook',
           is_deleted               = FALSE,
@@ -944,10 +985,14 @@ async function upsertOutlookEvent(userId, eventData) {
 // Soft-delete a local Outlook-sourced event when Graph signals @removed or isCancelled.
 // Only targets source = 'outlook' rows so app-created events are never touched.
 async function softDeleteEventByOutlookId(userId, outlookId) {
+  // is_deleted predicate makes the return value mean "newly tombstoned" —
+  // delta-sync echoes of an already-deleted event are a true no-op, so the
+  // callers' removed/cancelled counters stay accurate.
   const result = await pool.query(`
     UPDATE events
     SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE user_id = $1 AND outlook_id = $2 AND source = 'outlook'
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
     RETURNING id
   `, [userId, outlookId]);
   return result.rows[0] || null;
