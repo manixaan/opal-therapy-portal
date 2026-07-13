@@ -43,3 +43,7 @@ npm-debug.log*
 
 # ── Test output ───────────────────────────────────────────────────────────────
 junit.xml
+
+# Transfer snapshots (binary archives stay out of git)
+opal-scheduler-snapshot-*.zip
+.claude/worktrees/
