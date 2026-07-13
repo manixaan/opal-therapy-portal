@@ -16,15 +16,20 @@ const axios = require('axios');
 // ===== MICROSOFT OAUTH CONFIGURATION =====
 // These constants define the OAuth flow
 
+// Tenant is environment configuration (dev/staging/prod may use different
+// Azure app registrations). The historical Opal tenant remains the safe
+// development fallback so local work keeps functioning without a .env change.
+const MICROSOFT_TENANT_ID = process.env.MICROSOFT_TENANT_ID || 'ab55fe6c-cf70-4452-87aa-5c017960d362';
+
 const MICROSOFT_OAUTH_CONFIG = {
   clientId: process.env.MICROSOFT_CLIENT_ID,
   clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
   redirectUri: process.env.MICROSOFT_REDIRECT_URI || 'http://localhost:5001/auth/oauth/callback',
-  tenantId: 'ab55fe6c-cf70-4452-87aa-5c017960d362', // Your Azure tenant ID
+  tenantId: MICROSOFT_TENANT_ID,
 
-  // Endpoints - using tenant-specific endpoint instead of /common
-  authorizationUri: 'https://login.microsoftonline.com/ab55fe6c-cf70-4452-87aa-5c017960d362/oauth2/v2.0/authorize',
-  tokenUri: 'https://login.microsoftonline.com/ab55fe6c-cf70-4452-87aa-5c017960d362/oauth2/v2.0/token',
+  // Endpoints — tenant-specific (not /common) so only org accounts sign in
+  authorizationUri: `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`,
+  tokenUri: `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
   graphBaseUri: 'https://graph.microsoft.com/v1.0',
 
   // Permissions (scopes) we need

@@ -174,6 +174,10 @@ app.use((req, res, next) => {
   }
 })();
 
+// Full environment validation (env-validation.js): warns in development,
+// refuses to boot in production/staging with missing critical configuration.
+require('./env-validation').enforceEnvironmentOrExit();
+
 // Session — 8-hour timeout, httpOnly cookie.
 // Saved to a variable so it can be shared with Socket.IO middleware below.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours

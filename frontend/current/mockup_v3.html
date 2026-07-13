@@ -6851,7 +6851,7 @@ async function loadSploseAppointmentsIntoSessions() {
     if (!start || !end) return;
 
     const resp = await fetch(
-      `http://localhost:5001/api/splose/appointments?startDate=${start}&endDate=${end}`,
+      `/api/splose/appointments?startDate=${start}&endDate=${end}`,
       { credentials: 'include' }
     );
     if (!resp.ok) return;
@@ -6979,7 +6979,7 @@ async function loadSplosePatients() {
   list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">Loading patients from Splose…</div>';
 
   try {
-    const resp = await fetch('http://localhost:5001/api/splose/patients', { credentials: 'include' });
+    const resp = await fetch('/api/splose/patients', { credentials: 'include' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const { data } = await resp.json();
 
@@ -7061,7 +7061,7 @@ function renderPatients() {
       BOOKING_STATE.formData.patient = p.first + ' ' + p.last;
       BOOKING_STATE.selectedCaseId = null; // reset while loading
       // Fetch active case for this patient from Splose
-      fetch(`http://localhost:5001/api/splose/cases?patientId=${p.id}`, { credentials: 'include' })
+      fetch(`/api/splose/cases?patientId=${p.id}`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           const cases = data?.data || [];
@@ -7210,7 +7210,7 @@ window.SPLOSE_CONFIG = {
 async function bootstrapSploseConfig() {
   try {
     // Load services → update TYPE_SERVICE_ID with live IDs
-    const svResp = await fetch('http://localhost:5001/api/splose/services', { credentials: 'include' });
+    const svResp = await fetch('/api/splose/services', { credentials: 'include' });
     if (svResp.ok) {
       const { data: services } = await svResp.json();
       window.SPLOSE_CONFIG.services = services;
@@ -7228,7 +7228,7 @@ async function bootstrapSploseConfig() {
     }
 
     // Load practitioner
-    const prResp = await fetch('http://localhost:5001/api/splose/practitioners', { credentials: 'include' });
+    const prResp = await fetch('/api/splose/practitioners', { credentials: 'include' });
     if (prResp.ok) {
       const { data: practitioners } = await prResp.json();
       if (practitioners.length > 0) {
@@ -7238,7 +7238,7 @@ async function bootstrapSploseConfig() {
     }
 
     // Load location
-    const locResp = await fetch('http://localhost:5001/api/splose/locations', { credentials: 'include' });
+    const locResp = await fetch('/api/splose/locations', { credentials: 'include' });
     if (locResp.ok) {
       const { data: locations } = await locResp.json();
       if (locations.length > 0) {
@@ -7307,7 +7307,7 @@ window.OUTLOOK_CATEGORY_COLOURS = {};
 
 async function loadOutlookCategories() {
   try {
-    const resp = await fetch('http://localhost:5001/api/outlook/categories', { credentials: 'include' });
+    const resp = await fetch('/api/outlook/categories', { credentials: 'include' });
     if (!resp.ok) return;
     const { data } = await resp.json();
     data.forEach(cat => {
@@ -9080,7 +9080,7 @@ async function sendToSplose() {
       return;
     }
 
-    const resp = await fetch('http://localhost:5001/api/splose/appointments', {
+    const resp = await fetch('/api/splose/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -9190,7 +9190,7 @@ async function saveNewPatient() {
       postalCode:  get('postalCode') || get('postcode'),
     };
 
-    const resp = await fetch('http://localhost:5001/api/splose/patients', {
+    const resp = await fetch('/api/splose/patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -14577,11 +14577,11 @@ function connectToBackend() {
   const script = document.createElement('script');
   script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
   script.onload = () => {
-    const socket = io('http://localhost:5001');
+    const socket = io();
 
     socket.on('connect', () => {
       console.log('✅ Connected to therapy scheduler backend');
-      console.log('Backend connection established at http://localhost:5001');
+      console.log('Backend connection established (same origin)');
     });
 
     socket.on('disconnect', () => {
@@ -14636,7 +14636,7 @@ async function initOutlookSync() {
 
   try {
     // Check sync status from backend
-    const statusResponse = await fetch('http://localhost:5001/api/sync-status', {
+    const statusResponse = await fetch('/api/sync-status', {
       credentials: 'include'
     });
 
@@ -14739,7 +14739,7 @@ async function startOutlookSync() {
     console.log('📍 Current app URL:', currentUrl);
 
     // Get OAuth URL from backend, passing the return URL
-    const response = await fetch(`http://localhost:5001/auth/outlook-login?returnUrl=${encodeURIComponent(currentUrl)}`);
+    const response = await fetch(`/auth/outlook-login?returnUrl=${encodeURIComponent(currentUrl)}`);
     const data = await response.json();
 
     console.log('📍 OAuth URL received');
@@ -14775,7 +14775,7 @@ async function completeOutlookSync() {
 
   try {
     // Trigger initial sync from Outlook
-    const syncResponse = await fetch('http://localhost:5001/api/sync/outlook-initial', {
+    const syncResponse = await fetch('/api/sync/outlook-initial', {
       method: 'POST',
       credentials: 'include'
     });
@@ -14826,7 +14826,7 @@ async function refreshOutlookSync() {
   console.log('🔄 Refreshing Outlook sync...');
 
   try {
-    const response = await fetch('http://localhost:5001/api/sync/outlook-initial', {
+    const response = await fetch('/api/sync/outlook-initial', {
       method: 'POST',
       credentials: 'include'
     });
@@ -14873,7 +14873,7 @@ async function resyncAllEvents() {
 
     // Step 1: Clear all events
     console.log('🗑️ Clearing all events from database...');
-    const clearResponse = await fetch('http://localhost:5001/api/sync/outlook-clear', {
+    const clearResponse = await fetch('/api/sync/outlook-clear', {
       method: 'POST',
       credentials: 'include'
     });
@@ -14888,7 +14888,7 @@ async function resyncAllEvents() {
     // Step 2: Fetch fresh from Outlook
     if (btn) btn.textContent = '📡 Syncing from Outlook...';
     console.log('📡 Fetching fresh events from Outlook API...');
-    const syncResponse = await fetch('http://localhost:5001/api/sync/outlook-initial', {
+    const syncResponse = await fetch('/api/sync/outlook-initial', {
       method: 'POST',
       credentials: 'include'
     });
@@ -14942,7 +14942,7 @@ async function fixCalendar() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Fixing...'; }
 
   try {
-    const res = await fetch('http://localhost:5001/api/sync/cleanup', {
+    const res = await fetch('/api/sync/cleanup', {
       method: 'POST',
       credentials: 'include'
     });
@@ -14984,7 +14984,7 @@ window.debugLocationReport = async function() {
     const startDate = new Date(mon.getTime() - perthOffset).toISOString().slice(0,10);
     const endDate   = new Date(mon.getTime() - perthOffset + 7*24*60*60*1000).toISOString().slice(0,10);
     try {
-      const r = await fetch(`http://localhost:5001/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`, { credentials: 'include' });
+      const r = await fetch(`/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`, { credentials: 'include' });
       if (r.ok) { const d = await r.json(); appts = d.data || []; }
     } catch(e) {}
   }
@@ -15054,7 +15054,7 @@ window.debugCalendarSources = async function(dateRange) {
   // 2. What the DB says (fresh fetch)
   let dbEvents = [];
   try {
-    const r = await fetch('http://localhost:5001/api/events', { credentials: 'include' });
+    const r = await fetch('/api/events', { credentials: 'include' });
     dbEvents = await r.json();
     console.log(`DB (non-deleted): ${dbEvents.length} events`);
   } catch (e) {
@@ -15067,7 +15067,7 @@ window.debugCalendarSources = async function(dateRange) {
   const start = dateRange?.start || new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0,10);
   const end   = dateRange?.end   || new Date(today.getFullYear(), today.getMonth() + 2, 0).toISOString().slice(0,10);
   try {
-    const r = await fetch(`http://localhost:5001/api/sync/reconcile?startDate=${start}&endDate=${end}`, { credentials: 'include' });
+    const r = await fetch(`/api/sync/reconcile?startDate=${start}&endDate=${end}`, { credentials: 'include' });
     reconcile = await r.json();
     console.log(`Reconcile window ${start} → ${end}:`, reconcile.summary);
   } catch (e) {
@@ -15860,7 +15860,7 @@ async function loadOutlookEventsToCalendar() {
   }
 
   try {
-    const response = await fetch('http://localhost:5001/api/events', { credentials: 'include' });
+    const response = await fetch('/api/events', { credentials: 'include' });
     if (!response.ok) {
       console.log('⚠️ Failed to load events:', response.status);
       return;
@@ -16139,7 +16139,7 @@ async function enrichOutlookTilesWithSploseAddresses() {
 
   let appts = [];
   try {
-    const r = await fetch(`http://localhost:5001/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`, { credentials: 'include' });
+    const r = await fetch(`/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`, { credentials: 'include' });
     if (!r.ok) return;
     const d = await r.json();
     appts = d.data || [];
@@ -16550,9 +16550,9 @@ async function loadNDISData() {
 
   try {
     const [patResp, caseResp, contactResp] = await Promise.all([
-      SploseSync.apiFetch('http://localhost:5001/api/splose/patients'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/cases'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/contacts'),
+      SploseSync.apiFetch('/api/splose/patients'),
+      SploseSync.apiFetch('/api/splose/cases'),
+      SploseSync.apiFetch('/api/splose/contacts'),
     ]);
 
     const patients = patResp.ok     ? (await patResp.json()).data     || [] : [];
@@ -16870,12 +16870,12 @@ async function openClientProfile(patientId) {
   try {
     // Fetch all data in parallel
     const [caseResp, apptResp, suppResp, invResp, contactResp, patResp] = await Promise.all([
-      fetch(`http://localhost:5001/api/splose/cases?patientId=${patientId}`, { credentials: 'include' }),
-      fetch(`http://localhost:5001/api/splose/appointments?startDate=${new Date(Date.now()-365*24*60*60*1000*2).toISOString().slice(0,10)}&endDate=${new Date().toISOString().slice(0,10)}`, { credentials: 'include' }),
-      fetch('http://localhost:5001/api/splose/support-items', { credentials: 'include' }),
-      fetch(`http://localhost:5001/api/splose/invoices?patientId=${patientId}`, { credentials: 'include' }),
-      fetch(`http://localhost:5001/api/splose/contacts`, { credentials: 'include' }),
-      patient ? Promise.resolve(null) : fetch(`http://localhost:5001/api/splose/patients`, { credentials: 'include' }),
+      fetch(`/api/splose/cases?patientId=${patientId}`, { credentials: 'include' }),
+      fetch(`/api/splose/appointments?startDate=${new Date(Date.now()-365*24*60*60*1000*2).toISOString().slice(0,10)}&endDate=${new Date().toISOString().slice(0,10)}`, { credentials: 'include' }),
+      fetch('/api/splose/support-items', { credentials: 'include' }),
+      fetch(`/api/splose/invoices?patientId=${patientId}`, { credentials: 'include' }),
+      fetch(`/api/splose/contacts`, { credentials: 'include' }),
+      patient ? Promise.resolve(null) : fetch(`/api/splose/patients`, { credentials: 'include' }),
     ]);
 
     const cases    = caseResp.ok    ? (await caseResp.json()).data || []    : [];
@@ -17066,8 +17066,8 @@ async function loadLogbookData() {
     const endDate   = `${fy}-06-30` < today ? `${fy}-06-30` : today;
 
     const [suppResp, apptResp] = await Promise.all([
-      SploseSync.apiFetch('http://localhost:5001/api/splose/support-items'),
-      SploseSync.apiFetch(`http://localhost:5001/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`),
+      SploseSync.apiFetch('/api/splose/support-items'),
+      SploseSync.apiFetch(`/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`),
     ]);
 
     const allSupport = suppResp.ok ? (await suppResp.json()).data || [] : [];
@@ -17243,11 +17243,11 @@ async function loadActivityFeed() {
 
   try {
     const [apptResp, suppActResp, invResp, payResp, patResp] = await Promise.all([
-      SploseSync.apiFetch(`http://localhost:5001/api/splose/appointments?startDate=${new Date(Date.now()-365*24*60*60*1000).toISOString().slice(0,10)}&endDate=${new Date().toISOString().slice(0,10)}`),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/support-activities'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/invoices'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/payments'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/patients'),
+      SploseSync.apiFetch(`/api/splose/appointments?startDate=${new Date(Date.now()-365*24*60*60*1000).toISOString().slice(0,10)}&endDate=${new Date().toISOString().slice(0,10)}`),
+      SploseSync.apiFetch('/api/splose/support-activities'),
+      SploseSync.apiFetch('/api/splose/invoices'),
+      SploseSync.apiFetch('/api/splose/payments'),
+      SploseSync.apiFetch('/api/splose/patients'),
     ]);
 
     const appts    = apptResp.ok    ? (await apptResp.json()).data    || [] : [];
@@ -17402,9 +17402,9 @@ async function loadContactsData() {
 
   try {
     const [ctResp, patResp, invResp] = await Promise.all([
-      SploseSync.apiFetch('http://localhost:5001/api/splose/contacts'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/patients'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/invoices'),
+      SploseSync.apiFetch('/api/splose/contacts'),
+      SploseSync.apiFetch('/api/splose/patients'),
+      SploseSync.apiFetch('/api/splose/invoices'),
     ]);
 
     const contacts = ctResp.ok  ? (await ctResp.json()).data  || [] : [];
@@ -18091,9 +18091,9 @@ async function loadBillingData() {
 
   try {
     const [invResp, payResp, patResp] = await Promise.all([
-      SploseSync.apiFetch('http://localhost:5001/api/splose/invoices'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/payments'),
-      SploseSync.apiFetch('http://localhost:5001/api/splose/patients'),
+      SploseSync.apiFetch('/api/splose/invoices'),
+      SploseSync.apiFetch('/api/splose/payments'),
+      SploseSync.apiFetch('/api/splose/patients'),
     ]);
 
     const invoices = invResp.ok ? (await invResp.json()).data || [] : [];
@@ -18426,7 +18426,7 @@ async function runDormantCheckNow() {
   if (spinner) spinner.style.display = 'inline-block';
 
   try {
-    const resp = await SploseSync.apiFetch('http://localhost:5001/api/splose/dormant-cases');
+    const resp = await SploseSync.apiFetch('/api/splose/dormant-cases');
     if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
     const { data: dormant, thresholdDays, checkedAt } = await resp.json();
 
