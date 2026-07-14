@@ -73,6 +73,13 @@ pool.on('error', (err) => {
 
 // ===== TABLE SCHEMAS =====
 // This defines the structure of our data
+//
+// ⚠️ FROZEN AS MIGRATION BASELINE (v0) — 2026-07-14
+// INIT_QUERIES is recorded by migrations/000_baseline.sql as the version-0
+// schema. Do NOT add new tables/columns here. All schema changes from now on
+// go in a new migrations/NNN_*.sql file applied via `npm run migrate`.
+// (Boot still runs INIT_QUERIES idempotently so dev databases self-create;
+// see migrations/README.md.)
 
 const INIT_QUERIES = `
   -- Users table (stores login info)
@@ -1749,16 +1756,44 @@ async function getPDDocuments({ userId }) {
   return r.rows;
 }
 
-async function createPDDocument({ userId, organisationId, title, documentType, fileName, fileMime, fileSizeBytes, fileData, relatedCpdActivityId }) {
+async function createPDDocument({ userId, organisationId, title, documentType, fileName, fileMime, fileSizeBytes, fileData, relatedCpdActivityId, storageBackend = 'db', storageKey = null }) {
   const r = await pool.query(
     `INSERT INTO pd_documents
-       (user_id, organisation_id, title, document_type, file_name, file_mime, file_size_bytes, file_data, uploaded_by_user_id, related_cpd_activity_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$1,$9)
-     RETURNING id, user_id, organisation_id, title, document_type, file_name, file_mime, file_size_bytes, uploaded_at, status, created_at`,
+       (user_id, organisation_id, title, document_type, file_name, file_mime, file_size_bytes,
+        file_data, storage_backend, storage_key, uploaded_by_user_id, related_cpd_activity_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$1,$11)
+     RETURNING id, user_id, organisation_id, title, document_type, file_name, file_mime, file_size_bytes,
+               storage_backend, uploaded_at, status, created_at`,
     [userId, organisationId, title, documentType || null, fileName || null,
-     fileMime || null, fileSizeBytes || null, fileData || null, relatedCpdActivityId || null]
+     fileMime || null, fileSizeBytes || null, fileData || null,
+     storageBackend, storageKey, relatedCpdActivityId || null]
   );
   return r.rows[0];
+}
+
+// Fetch a single document row INCLUDING storage fields + bytes, ownership-checked.
+// Used by the authenticated download route — never returns a public URL.
+async function getPDDocumentForDownload(id, userId) {
+  const r = await pool.query(
+    `SELECT id, user_id, title, file_name, file_mime, file_data, storage_backend, storage_key
+       FROM pd_documents WHERE id = $1`,
+    [id]
+  );
+  const doc = r.rows[0];
+  if (!doc) return null;
+  return doc; // caller enforces owner/role
+}
+
+// Update the id-less storage record after an external put (blob/local) so the
+// INSERT's id can become part of the storage key.
+async function setPDDocumentStorage(id, { storageBackend, storageKey, clearInline = false }) {
+  await pool.query(
+    `UPDATE pd_documents
+        SET storage_backend = $2, storage_key = $3
+            ${clearInline ? ', file_data = NULL' : ''}
+      WHERE id = $1`,
+    [id, storageBackend, storageKey]
+  );
 }
 
 async function deletePDDocument(id, userId) {
@@ -1907,6 +1942,8 @@ module.exports = {
   // PD documents
   getPDDocuments,
   createPDDocument,
+  getPDDocumentForDownload,
+  setPDDocumentStorage,
   deletePDDocument,
   // Credentials
   getCredentials,

@@ -1,0 +1,20 @@
+-- @norun-baseline
+-- ═══════════════════════════════════════════════════════════════════════════
+--  000_baseline — schema version 0
+--
+--  The complete v0 schema is created by INIT_QUERIES in database.js, applied
+--  idempotently on every server boot (CREATE TABLE / ALTER TABLE IF NOT
+--  EXISTS, guarded DO-blocks). This migration exists ONLY to record that the
+--  INIT_QUERIES schema is the tracked starting point — the runner records it
+--  as applied WITHOUT executing anything (the @norun-baseline marker above).
+--
+--  From migration 001 onward, every schema change is a real, ordered,
+--  checksum-tracked file. Do NOT add new DDL to INIT_QUERIES; add a migration.
+--
+--  Baseline tables (see handover/DATABASE_SCHEMA.md for full detail):
+--    users, events, sessions, outlook_delta_state, sync_log, audit_logs,
+--    organisations, user_invites, therapist_profiles, leave_requests,
+--    cpd_activities, pd_documents, credentials, user_settings, org_settings,
+--    user_notifications, conflicts
+-- ═══════════════════════════════════════════════════════════════════════════
+SELECT 1;

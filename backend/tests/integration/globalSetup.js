@@ -34,10 +34,13 @@ module.exports = async function globalSetup() {
   }
 
   // Apply schema using the application's own initialiser so the test schema
-  // is always exactly what production boot would create.
+  // is always exactly what production boot would create, then run tracked
+  // migrations on top — the same sequence a real deployment performs.
   const db = require('../../database');
   const ok = await db.initializeDatabase();
   if (!ok) throw new Error('[integration] schema initialisation failed');
+  const migrate = require('../../migrate');
+  await migrate.migrate();
   await db.pool.end();
-  console.log(`[integration] schema ready on ${process.env.DB_NAME}`);
+  console.log(`[integration] schema + migrations ready on ${process.env.DB_NAME}`);
 };

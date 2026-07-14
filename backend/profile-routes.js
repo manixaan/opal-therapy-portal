@@ -363,13 +363,34 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
     const uploadError = validateUpload({ fileName, fileMime, fileData });
     if (uploadError) return res.status(415).json({ error: uploadError });
 
-    const record = await db.createPDDocument({
-      userId:              user.id,
-      organisationId:      user.organisation_id,
-      title, documentType, fileName, fileMime, fileSizeBytes,
-      fileData: fileData || null,
-      relatedCpdActivityId: relatedCpdActivityId || null,
-    });
+    const { getBackend, getBackendName } = require('./storage');
+    const backend = getBackend();
+
+    // db backend: bytes go inline via the INSERT. local/blob: create the row
+    // first (to get an id for the storage key), write the object, then link it
+    // and clear the inline column.
+    let record;
+    if (getBackendName() === 'db' || !fileData) {
+      record = await db.createPDDocument({
+        userId: user.id, organisationId: user.organisation_id,
+        title, documentType, fileName, fileMime, fileSizeBytes,
+        fileData: fileData || null,
+        relatedCpdActivityId: relatedCpdActivityId || null,
+        storageBackend: 'db',
+      });
+    } else {
+      record = await db.createPDDocument({
+        userId: user.id, organisationId: user.organisation_id,
+        title, documentType, fileName, fileMime, fileSizeBytes,
+        fileData: null, relatedCpdActivityId: relatedCpdActivityId || null,
+        storageBackend: getBackendName(),
+      });
+      const { backend: b, storageKey } = await backend.put({
+        userId: user.id, docId: record.id, fileName, mime: fileMime, base64: fileData,
+      });
+      await db.setPDDocumentStorage(record.id, { storageBackend: b, storageKey, clearInline: true });
+      record.storage_backend = b;
+    }
 
     res.status(201).json({ document: record });
   } catch (err) {
@@ -379,11 +400,51 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/profile/documents/:id/download
+ * Streams a document's bytes through the backend after an ownership/role check.
+ * This is the ONLY way to read document content — there are no public URLs.
+ * Owner/admin may download any org member's document; others only their own.
+ */
+router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) => {
+  try {
+    const doc = await db.getPDDocumentForDownload(req.params.id, req.user.id);
+    if (!doc) return notFound(res);
+    if (doc.user_id !== req.user.id && !canViewAll(req.user)) return forbidden(res);
+
+    const { getBackend } = require('./storage');
+    const backend = getBackend(doc.storage_backend || 'db');
+    const { base64 } = await backend.get({
+      backend: doc.storage_backend, storageKey: doc.storage_key, fileData: doc.file_data,
+    });
+    if (!base64) return res.status(404).json({ error: 'Document content unavailable' });
+
+    const buf = Buffer.from(base64, 'base64');
+    res.setHeader('Content-Type', doc.file_mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.file_name || 'document')}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(buf);
+  } catch (err) {
+    console.error('GET document download error:', err.message);
+    res.status(500).json({ error: 'Failed to download document' });
+  }
+});
+
+/**
  * DELETE /api/profile/documents/:id
- * Only the document owner may delete.
+ * Only the document owner may delete. Also removes any external blob/file.
  */
 router.delete('/api/profile/documents/:id', requireAuth, async (req, res) => {
   try {
+    const doc = await db.getPDDocumentForDownload(req.params.id, req.user.id);
+    if (!doc || doc.user_id !== req.user.id) return notFound(res);
+
+    if (doc.storage_backend && doc.storage_backend !== 'db' && doc.storage_key) {
+      try {
+        const { getBackend } = require('./storage');
+        await getBackend(doc.storage_backend).remove({ storageBackend: doc.storage_backend, storageKey: doc.storage_key });
+      } catch (e) { console.warn('Blob delete (non-fatal):', e.message); }
+    }
+
     const deleted = await db.deletePDDocument(req.params.id, req.user.id);
     if (!deleted) return notFound(res);
     res.json({ ok: true });
