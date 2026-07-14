@@ -48,3 +48,6 @@ junit.xml
 opal-scheduler-snapshot-*.zip
 .claude/worktrees/
 .local-documents/
+
+# staging synthetic credentials (local only, never committed)
+deploy/staging-synthetic.local.txt
