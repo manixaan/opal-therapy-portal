@@ -63,6 +63,13 @@ const io = socketIO(server, {
 // Middleware = instructions that run on every request
 // Think of it as a checklist the server goes through
 
+// Correlation IDs + structured logging (Phase 8). Mounted first so every
+// subsequent middleware and route logs under the same X-Request-Id.
+const { createLogger, requestContext, requestLogger } = require('./logger');
+const telemetry = require('./telemetry');
+const log = createLogger('server');
+app.use(requestContext);
+
 // Security headers — applied before every route.
 // A practical CSP replaces the previously-disabled one. The frontend is a
 // single file with inline scripts, so 'unsafe-inline' is still required for
@@ -217,6 +224,10 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);
 
+// Structured request log (after session so the internal user id is known).
+// Logs path only — never query strings (OAuth codes / reset tokens) or bodies.
+app.use(requestLogger(createLogger('http')));
+
 // Share Express session with Socket.IO so we can read req.session.userId
 // from the handshake and assign each socket to a per-user room.
 // This prevents calendar update events from broadcasting to all connected clients.
@@ -297,12 +308,13 @@ app.get('/onboarding', async (req, res) => {
   res.sendFile(path.join(frontendPath, 'onboarding.html'));
 });
 
-// ===== HEALTH CHECK =====
-// Used to verify server is running (useful for monitoring)
+// ===== HEALTH + READINESS =====
+// /health (liveness) + /ready (DB / migrations / config, 503 while draining).
+// Extracted to health-routes.js so the integration suite exercises the real
+// probes. setDraining(true) is called from the SIGTERM handler below.
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
+const { router: healthRouter, setDraining } = require('./health-routes');
+app.use(healthRouter);
 
 // ===== WEBSOCKET CONNECTION =====
 // Each authenticated client joins a private room keyed to their user ID so that
@@ -332,7 +344,13 @@ io.on('connection', (socket) => {
 // Catch any errors and send a proper response
 
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  log.error('Unhandled request error', {
+    error: err,
+    path: req.path,
+    method: req.method,
+    userId: req.session?.userId || null,
+  });
+  telemetry.trackException(err, { path: req.path, method: req.method });
   res.status(500).json({
     error: 'Server error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
@@ -394,6 +412,33 @@ console.log('✅ Routes registered');
 // Boot up the server and listen for requests
 
 const PORT = process.env.PORT || 5000;
+
+// Optional Application Insights — no-op locally, enabled by env in Azure.
+telemetry.init(createLogger('telemetry'));
+
+// ===== GRACEFUL SHUTDOWN =====
+// App Service / container platforms send SIGTERM before recycling. Flip the
+// readiness probe first so the load balancer drains us, then close the HTTP
+// server and the DB pool. A hard deadline guarantees exit.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  setDraining(true); // /ready now returns 503 so the LB stops routing to us
+  log.info(`${signal} received — draining connections`);
+  io.close();
+  server.close(() => {
+    db.pool.end()
+      .catch(() => {})
+      .finally(() => process.exit(0));
+  });
+  setTimeout(() => {
+    log.warn('shutdown deadline reached — forcing exit');
+    process.exit(0);
+  }, 10000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
   console.log(`
@@ -593,12 +638,14 @@ async function runDeltaSyncForAllUsers() {
           console.error(`⚠️  Delta sync failed for ${user.email}:`, userErr.message);
           // userId + message only — never tokens or event content
           stats.errors.push({ userId: user.id, message: userErr.message });
+          telemetry.trackException(userErr, { component: 'outlook_delta_sync', userId: user.id });
         }
       }
     }
   } catch (err) {
     console.error('⚠️  Delta poller error:', err.message);
     stats.errors.push({ message: err.message });
+    telemetry.trackException(err, { component: 'outlook_delta_poller' });
   } finally {
     deltaRunning = false;
   }

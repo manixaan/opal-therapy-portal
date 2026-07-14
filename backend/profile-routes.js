@@ -392,6 +392,14 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
       record.storage_backend = b;
     }
 
+    // Audit: title/filename are employee-chosen metadata, never file content.
+    await db.logAuditEvent({
+      actorUserId: user.id, action: 'document.uploaded',
+      targetType: 'pd_document', targetId: record.id, ipAddress: req.ip,
+      organisationId: user.organisation_id,
+      metadata: { fileName, mime: fileMime, sizeBytes: fileSizeBytes || null, backend: record.storage_backend },
+    }).catch(() => {});
+
     res.status(201).json({ document: record });
   } catch (err) {
     console.error('POST /api/profile/documents error:', err);
@@ -410,6 +418,16 @@ router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) 
     const doc = await db.getPDDocumentForDownload(req.params.id, req.user.id);
     if (!doc) return notFound(res);
     if (doc.user_id !== req.user.id && !canViewAll(req.user)) return forbidden(res);
+
+    // Audit cross-user access (owner/admin reading an employee's document).
+    if (doc.user_id !== req.user.id) {
+      await db.logAuditEvent({
+        actorUserId: req.user.id, action: 'document.downloaded',
+        targetType: 'pd_document', targetId: doc.id, ipAddress: req.ip,
+        organisationId: req.user.organisation_id,
+        metadata: { documentOwnerUserId: doc.user_id },
+      }).catch(() => {});
+    }
 
     const { getBackend } = require('./storage');
     const backend = getBackend(doc.storage_backend || 'db');
@@ -447,6 +465,12 @@ router.delete('/api/profile/documents/:id', requireAuth, async (req, res) => {
 
     const deleted = await db.deletePDDocument(req.params.id, req.user.id);
     if (!deleted) return notFound(res);
+    await db.logAuditEvent({
+      actorUserId: req.user.id, action: 'document.deleted',
+      targetType: 'pd_document', targetId: req.params.id, ipAddress: req.ip,
+      organisationId: req.user.organisation_id,
+      metadata: { fileName: doc.file_name },
+    }).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     console.error('DELETE document error:', err);
@@ -542,6 +566,11 @@ router.patch('/api/profile/credentials/:id/verify', requireAuth, async (req, res
   try {
     const record = await db.verifyCredential({ id: req.params.id, verifiedByUserId: req.user.id });
     if (!record) return notFound(res);
+    await db.logAuditEvent({
+      actorUserId: req.user.id, action: 'credential.verified',
+      targetType: 'credential', targetId: req.params.id, ipAddress: req.ip,
+      organisationId: req.user.organisation_id,
+    }).catch(() => {});
     res.json({ credential: record });
   } catch (err) {
     console.error('PATCH credential verify error:', err);

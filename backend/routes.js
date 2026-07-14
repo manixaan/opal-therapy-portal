@@ -242,6 +242,13 @@ router.get('/auth/oauth/callback', async (req, res) => {
 
     console.log(`✅ Outlook connected for: ${user.email} (role: ${user.role || 'owner'})`);
 
+    // Audit the Outlook connection (identifiers only — never tokens).
+    await db.logAuditEvent({
+      actorUserId: user.id, action: 'outlook.connected',
+      targetType: 'user', targetId: user.id, ipAddress: req.ip,
+      organisationId: user.organisation_id || null,
+    }).catch(() => {});
+
     // Decode returnUrl from state param (format: "<csrf>|<base64(returnUrl)>")
     // Fall back to session if state doesn't contain it
     let returnUrl = null;

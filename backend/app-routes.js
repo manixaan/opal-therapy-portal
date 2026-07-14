@@ -854,6 +854,13 @@ router.patch('/api/settings/organisation', requireAuth, requireRole('owner'), as
              updated_at = NOW()`,
       [JSON.stringify(payload)]
     );
+    // Audit which settings keys changed (new values live in org_settings).
+    await require('./database').logAuditEvent({
+      actorUserId: req.user.id, action: 'org_settings.changed',
+      targetType: 'organisation', targetId: 'opal', ipAddress: req.ip,
+      organisationId: req.user.organisation_id,
+      metadata: { changedKeys: Object.keys(payload) },
+    }).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     console.error('Save org settings error:', err.message);

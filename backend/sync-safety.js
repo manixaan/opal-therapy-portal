@@ -118,6 +118,12 @@ async function recordSafetyBlock(deps, { source, reason, stats, userId }) {
     `local=${stats.localLinkedCount} complete=${stats.fetchComplete}`
   );
 
+  // Telemetry (no-op unless Application Insights is configured). Counts and
+  // reason only — never event content.
+  try {
+    require('./telemetry').trackEvent('sync.safety_block', { source, reason, ...stats });
+  } catch (_) { /* telemetry must never break a sync cycle */ }
+
   try {
     await deps.db.logAuditEvent({
       actorUserId: null,
