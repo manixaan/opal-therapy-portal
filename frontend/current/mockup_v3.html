@@ -6666,6 +6666,12 @@ window.APP_USER = null;
     window.APP_USER = await r.json();
     console.log(`🔐 Signed in as ${window.APP_USER.name} (${window.APP_USER.role})`);
 
+    // Role marker class on <body> — CSS hides write affordances for
+    // read-only accounts (server-side enforcement is the real guard;
+    // this keeps the UI honest about what the account can do).
+    document.body.classList.add('role-' + String(window.APP_USER.role || 'therapist').replace(/_/g, '-'));
+    if (window.APP_USER.role === 'read_only') applyReadOnlyGuards();
+
     // Expose a quick helper for permission checks in UI code
     window.currentUserCan = (permission) =>
       Array.isArray(window.APP_USER?.permissions) &&
@@ -6674,7 +6680,7 @@ window.APP_USER = null;
     // Render user identity in the header if the element exists
     const userChip = document.getElementById('app-user-chip');
     if (userChip && window.APP_USER) {
-      const roleBadge = { owner: '👑', admin: '🛠️', therapist: '🩺' }[window.APP_USER.role] || '';
+      const roleBadge = { owner: '👑', admin: '🛠️', therapist: '🩺', read_only: '👁️' }[window.APP_USER.role] || '';
       userChip.textContent = `${roleBadge} ${window.APP_USER.name}`;
       userChip.title = `${window.APP_USER.email} · ${window.APP_USER.role}`;
     }
@@ -6697,6 +6703,65 @@ window.signOut = async function () {
   } catch (_) {}
   window.location.replace('/login');
 };
+
+/* ── Global session-expiry handler (Phase 11) ──────────────────────────────
+   Sessions expire server-side after their TTL. Without this, an expired
+   session surfaces as silent 401s and a frozen UI. Every same-origin /api/*
+   response is inspected once here: a 401 after successful login redirects
+   to the login page with an explanatory flag. Auth endpoints are exempt so
+   a wrong password never bounces the user out of the login flow. */
+(function installSessionExpiryHandler() {
+  const origFetch = window.fetch.bind(window);
+  let redirecting = false;
+  window.fetch = async function (input, init) {
+    const res = await origFetch(input, init);
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const isApi = url.startsWith('/api/') || url.includes(window.location.origin + '/api/');
+      const isAuthEndpoint = url.includes('/api/auth/');
+      if (res.status === 401 && isApi && !isAuthEndpoint && window.APP_USER && !redirecting) {
+        redirecting = true;
+        console.warn('Session expired — redirecting to login');
+        window.location.replace('/login?expired=1&next=' + encodeURIComponent(window.location.pathname));
+      }
+    } catch (_) { /* never let the interceptor break a response */ }
+    return res;
+  };
+})();
+
+/* ── Read-only account UI guards (Phase 11) ─────────────────────────────────
+   The server rejects every business write from read_only accounts (403).
+   These guards keep the UI honest: creation entry points are hidden or
+   answered with a toast instead of a doomed request. */
+function applyReadOnlyGuards() {
+  // 1. CSS: hide write affordances (calendar add button, Smart Booking tab)
+  const style = document.createElement('style');
+  style.textContent = `
+    body.role-read-only .btn-add-event,
+    body.role-read-only .tab[data-tab="book"] { display: none !important; }
+  `;
+  document.head.appendChild(style);
+
+  // 2. JS: intercept write-action entry points that are built dynamically.
+  //    Wrapped on load (functions are declared later in this file).
+  const explain = () => {
+    if (typeof showToast === 'function') showToast('👁️ Read-only account', 'This action is not available for read-only access');
+    else alert('Read-only account — this action is not available.');
+  };
+  const wrapWrites = () => {
+    ['openQuickAdd', 'submitLeaveModal', 'submitCPDModal', 'submitDocumentModal',
+     'submitCredentialModal', 'addTravelAndConfirm'].forEach((fn) => {
+      if (typeof window[fn] === 'function') window[fn] = explain;
+    });
+    // If the deep-link landed on the hidden booking tab, move to the calendar
+    const active = document.querySelector('.tab.active');
+    if (active && active.dataset.tab === 'book' && typeof switchTab === 'function') {
+      switchTab('calendar');
+    }
+  };
+  if (document.readyState === 'complete') wrapWrites();
+  else window.addEventListener('load', wrapWrites);
+}
 </script>
 
 <script>
@@ -17655,11 +17720,15 @@ function applyNavRoleVisibility(role) {
   // Show / hide "Travel & Flights" tab (admin sees team-wide, therapist sees own)
   // All roles can access it — no change needed
 
-  // If current active tab is one that's now hidden, redirect to calendar
+  // If current active tab is one that's now hidden, redirect away from it.
+  // read_only accounts land on the calendar (their Smart Booking tab is
+  // hidden too); everyone else lands on Smart Booking as before.
   if (!isPrivileged) {
     var activeTab = document.querySelector('.tab.active');
     if (activeTab && NAV_ADMIN_ONLY_TABS.includes(activeTab.dataset.tab)) {
-      if (typeof switchTab === 'function') switchTab('book');
+      if (typeof switchTab === 'function') {
+        switchTab(role === 'read_only' ? 'calendar' : 'book');
+      }
     }
   }
 }
