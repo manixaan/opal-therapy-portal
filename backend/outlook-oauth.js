@@ -286,6 +286,10 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
 // Create a new event in user's calendar
 
 async function createOutlookEvent(accessToken, eventData) {
+  const flags = require('./feature-flags');
+  if (!flags.isOutlookWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_OUTLOOK_WRITE', 'Outlook write-back');
+  }
   try {
     const outlookEvent = {
       subject: eventData.title,
@@ -337,6 +341,10 @@ async function createOutlookEvent(accessToken, eventData) {
 // body. This lets callers update just the location without touching start/end/title.
 
 async function updateOutlookEvent(accessToken, outlookEventId, eventData) {
+  const flags = require('./feature-flags');
+  if (!flags.isOutlookWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_OUTLOOK_WRITE', 'Outlook write-back');
+  }
   try {
     const outlookEvent = {};
 
@@ -371,6 +379,10 @@ async function updateOutlookEvent(accessToken, outlookEventId, eventData) {
 // ===== STEP 8: DELETE EVENT IN OUTLOOK =====
 
 async function deleteOutlookEvent(accessToken, outlookEventId) {
+  const flags = require('./feature-flags');
+  if (!flags.isOutlookWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_OUTLOOK_WRITE', 'Outlook write-back');
+  }
   try {
     await axios.delete(
       `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendar/events/${outlookEventId}`,

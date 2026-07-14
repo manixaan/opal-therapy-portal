@@ -21,6 +21,20 @@ const sploseApi = require('./splose-api');
 const { getPermissions, requireRole, requirePermission, hasPermission } = require('./permissions');
 const { classifyEventType } = require('./sync-utils');
 
+/**
+ * Staged-rollout guard (Phase 10): outlook-oauth/splose-api write functions
+ * throw err.code='FEATURE_DISABLED' when their flag is off. User-facing write
+ * routes turn that into an explicit 403 instead of a misleading 500.
+ * Returns true when the response has been sent.
+ */
+function handleFeatureDisabled(err, res) {
+  if (err && err.code === 'FEATURE_DISABLED') {
+    res.status(403).json({ error: err.message, code: 'feature_disabled' });
+    return true;
+  }
+  return false;
+}
+
 // Lazy-load the storeNotification helper (app-routes.js registers it after routes.js)
 function storeNotificationLazy(userId, payload) {
   try {
@@ -1027,6 +1041,7 @@ router.get('/api/sync/diagnostics', requireAuth, async (req, res) => {
     const stats = statsResult.rows[0];
     const { syncSafetyState } = require('./sync-safety');
     res.json({
+      featureFlags: require('./feature-flags').featureFlagState(),
       syncSafety: syncSafetyState,
       outlookSync: {
         lastSyncAt:             deltaResult.rows[0]?.last_synced_at || null,
@@ -1722,6 +1737,7 @@ router.post('/api/splose/appointments', requireAuth, async (req, res) => {
     console.log(`✅ Appointment created in Splose: ${appointment.id}`);
     res.status(201).json(appointment);
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Splose create appointment error:', err.message);
     res.status(500).json({ error: 'Failed to create appointment in Splose', details: err.message });
   }
@@ -1736,6 +1752,7 @@ router.put('/api/splose/appointments/:id', requireAuth, async (req, res) => {
     const appointment = await sploseApi.updateAppointment(req.params.id, req.body);
     res.json(appointment);
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Splose update appointment error:', err.message);
     res.status(500).json({ error: 'Failed to update appointment', details: err.message });
   }
@@ -2158,6 +2175,7 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
     console.log(`✅ Outlook event created: ${result.outlookId} — "${title}"`);
     res.status(201).json({ ok: true, outlookId: result.outlookId });
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook create event error:', err.response?.data || err.message);
     if (req.body.dbEventId) {
       await db.updateEventWriteError(req.body.dbEventId, err.message).catch(() => {});
@@ -2213,6 +2231,7 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
     console.log(`📍 Location written to Outlook ${outlookId}: "${location}"`);
     res.json({ ok: true, savedToDb: true, savedToOutlook: true, outlookId });
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook location update error:', err.response?.data || err.message);
     const userId = req.user?.id || req.session?.userId;
     const { dbId } = req.params;
@@ -2276,6 +2295,7 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     console.log(`✏️ Outlook event updated: ${outlookId}`);
     res.json({ ok: true, outlookId });
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook update error:', err.response?.data || err.message);
     const userId = req.user?.id || req.session?.userId;
     const { dbId } = req.params;
@@ -2415,6 +2435,7 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
     console.log(`🚗 Travel block pushed to Outlook: ${result.outlookId} — ${title}`);
     res.status(201).json({ ok: true, outlookId: result.outlookId, dbId: localEvent.id });
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Travel block create error:', err.response?.data || err.message);
     const userId = req.user?.id || req.session?.userId;
     if (userId) {

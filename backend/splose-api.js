@@ -290,6 +290,10 @@ function normaliseAppointment(a) {
 }
 
 async function createAppointment(data) {
+  const flags = require('./feature-flags');
+  if (!flags.isSploseWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_SPLOSE_WRITE', 'Splose write-back');
+  }
   const c = client();
   const payload = {
     start: data.start,
@@ -312,6 +316,10 @@ async function createAppointment(data) {
 }
 
 async function updateAppointment(id, data) {
+  const flags = require('./feature-flags');
+  if (!flags.isSploseWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_SPLOSE_WRITE', 'Splose write-back');
+  }
   const c = client();
   const payload = {};
   if (data.start)             payload.start     = data.start;

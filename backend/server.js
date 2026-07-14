@@ -437,6 +437,10 @@ const PORT = process.env.PORT || 5000;
 // Optional Application Insights — no-op locally, enabled by env in Azure.
 telemetry.init(createLogger('telemetry'));
 
+// Staged-integration switchboard — logged at boot so every environment's
+// posture is visible in its logs (values only, never secrets).
+log.info('feature flags', require('./feature-flags').featureFlagState());
+
 // ===== GRACEFUL SHUTDOWN =====
 // App Service / container platforms send SIGTERM before recycling. Flip the
 // readiness probe first so the load balancer drains us, then close the HTTP

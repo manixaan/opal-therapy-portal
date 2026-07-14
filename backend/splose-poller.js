@@ -97,19 +97,28 @@ function createSplosePoller(deps) {
         console.log(`🚫 [Splose poller] Cancelled: "${row.title}" (Splose #${row.splose_id})`);
         cancelled++;
 
-        // Best-effort Outlook delete so the Outlook calendar converges too
+        // Best-effort Outlook delete so the Outlook calendar converges too.
+        // Gated (Phase 10): a sync-initiated deletion pushed into a remote
+        // system only runs when ENABLE_AUTOMATIC_REMOTE_DELETE is on — during
+        // staged rollout the local mirror tombstones but never reaches into
+        // employees' Outlook calendars.
         if (row.outlook_id) {
-          try {
-            const { rows: userRows } = await db.pool.query(
-              'SELECT access_token, token_expires_at, refresh_token FROM users WHERE id = $1',
-              [row.user_id]
-            );
-            if (userRows.length) {
-              const accessToken = await getValidTokenForUser(userRows[0]);
-              await outlookApi.deleteOutlookEvent(accessToken, row.outlook_id);
-              console.log(`   🗑️  Also deleted from Outlook: ${row.outlook_id}`);
-            }
-          } catch (_) { /* non-fatal */ }
+          const flags = require('./feature-flags');
+          if (!flags.isAutomaticRemoteDeleteEnabled()) {
+            console.log(`   ⏸  Outlook cascade delete skipped (ENABLE_AUTOMATIC_REMOTE_DELETE=false): ${row.outlook_id}`);
+          } else {
+            try {
+              const { rows: userRows } = await db.pool.query(
+                'SELECT access_token, token_expires_at, refresh_token FROM users WHERE id = $1',
+                [row.user_id]
+              );
+              if (userRows.length) {
+                const accessToken = await getValidTokenForUser(userRows[0]);
+                await outlookApi.deleteOutlookEvent(accessToken, row.outlook_id);
+                console.log(`   🗑️  Also deleted from Outlook: ${row.outlook_id}`);
+              }
+            } catch (_) { /* non-fatal */ }
+          }
         }
 
         if (io) {
