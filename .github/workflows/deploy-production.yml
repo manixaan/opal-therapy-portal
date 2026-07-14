@@ -1,0 +1,104 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Deploy → PRODUCTION (opal-portal-prod)
+#
+#  Trigger: MANUAL ONLY (workflow_dispatch). Never deploys automatically.
+#  Approval: the "production" GitHub environment must be configured with
+#            required reviewers — the run pauses at the deploy job until a
+#            human approves it. This is the manual gate required by policy.
+#  Gate:     full CI suite passes first, same as staging.
+#
+#  Rollback: re-run this workflow selecting the previous known-good run's
+#            artifact commit, or `az webapp deploy` the previous deploy.zip
+#            (kept 14 days as a workflow artifact). See deploy/AZURE_DEPLOYMENT.md
+#            § Rollback.
+# ═══════════════════════════════════════════════════════════════════════════
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy-production" to confirm'
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC federated login
+
+jobs:
+  guard:
+    name: Confirmation guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation phrase
+        run: |
+          if [ "${{ inputs.confirm }}" != "deploy-production" ]; then
+            echo "::error::Confirmation phrase mismatch — refusing to deploy."
+            exit 1
+          fi
+
+  ci:
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to opal-portal-prod (requires environment approval)
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: production # protected environment = human approval before this job runs
+      url: ${{ vars.PRODUCTION_URL || 'https://portal.opaltherapy.com.au' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-package
+
+      - name: Azure login (OIDC — no stored credentials)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy bundle
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: opal-portal-prod
+          package: deploy.zip
+
+      - name: Health gate — /health then /ready
+        run: |
+          set -e
+          BASE="${{ vars.PRODUCTION_URL || 'https://portal.opaltherapy.com.au' }}"
+          echo "── waiting for /health"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$BASE/health" > /tmp/health.json; then
+              cat /tmp/health.json; break
+            fi
+            [ "$i" = 30 ] && { echo "::error::/health never became available"; exit 1; }
+            sleep 10
+          done
+          echo "── checking /ready (database + migrations + config)"
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "$BASE/ready" > /tmp/ready.json; then
+              cat /tmp/ready.json; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::/ready did not pass — investigate immediately (see rollback runbook)"
+          curl -sS --max-time 10 "$BASE/ready" || true
+          exit 1
+
+      - name: Smoke tests
+        run: |
+          set -e
+          BASE="${{ vars.PRODUCTION_URL || 'https://portal.opaltherapy.com.au' }}"
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/")
+          echo "GET / → $code"
+          [ "$code" = "302" ] || [ "$code" = "200" ] || { echo "::error::unexpected / status $code"; exit 1; }
+          curl -s -D - -o /dev/null --max-time 10 "$BASE/login" | grep -i "strict-transport-security" > /dev/null \
+            || { echo "::error::HSTS header missing in production"; exit 1; }

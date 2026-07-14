@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  CI — test, validate migrations, audit, package
+#
+#  Runs on every PR and push. Also callable (workflow_call) so the deploy
+#  workflows reuse the exact same gate — nothing deploys that hasn't passed
+#  the full suite against real PostgreSQL.
+#
+#  NO SECRETS ARE USED IN THIS WORKFLOW. The database is a throwaway service
+#  container; every credential below is a CI-only dummy value.
+# ═══════════════════════════════════════════════════════════════════════════
+name: CI
+
+on:
+  push:
+    branches: [main, production-pilot]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # CI-only values — never real credentials. env.js additionally forces the
+  # integration suite onto "<DB_NAME>_test" and refuses production patterns.
+  DB_HOST: localhost
+  DB_PORT: "5432"
+  DB_USER: postgres
+  DB_PASSWORD: ci_only_password
+  DB_NAME: therapy_scheduler
+  SESSION_SECRET: ci-only-session-secret-at-least-32-characters-long
+  TZ: UTC
+
+jobs:
+  test:
+    name: Unit + integration tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: backend/.nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install exact locked dependencies
+        run: npm ci
+
+      - name: Static syntax check (every backend module parses)
+        run: |
+          set -e
+          for f in *.js storage/*.js tests/*.js tests/integration/*.js; do
+            node --check "$f"
+          done
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Integration tests (real PostgreSQL)
+        run: npm run test:integration
+
+      - name: Migration validation — fresh database, repeatability, status
+        run: |
+          set -e
+          PGPASSWORD=ci_only_password createdb -h localhost -U postgres migration_ci_check
+          echo "── fresh database: baseline + all migrations"
+          DB_NAME=migration_ci_check node migrate.js up
+          echo "── second run must be a no-op (idempotency)"
+          DB_NAME=migration_ci_check node migrate.js up
+          echo "── status must report everything applied"
+          DB_NAME=migration_ci_check node migrate.js status | tee /tmp/mstatus.txt
+          if grep -qE "pending|DRIFT" /tmp/mstatus.txt; then
+            echo "::error::migration status reports pending/drift after apply"
+            exit 1
+          fi
+
+      - name: Dependency security audit (zero known vulnerabilities)
+        run: npm audit
+
+  package:
+    name: Build deployment bundle
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: backend/.nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install production dependencies only
+        working-directory: backend
+        run: |
+          npm ci --omit=dev
+          # Application Insights SDK is a deploy-time addition (kept out of the
+          # repo lockfile; telemetry.js lazy-loads it and no-ops without it).
+          npm install --no-save applicationinsights@3
+
+      - name: Assemble bundle (backend + frontend, no tests, no env files)
+        run: |
+          set -e
+          mkdir -p dist/app
+          rsync -a backend/ dist/app/backend/ \
+            --exclude tests --exclude coverage --exclude '.env' --exclude '.env.*' \
+            --exclude '*.itest.js' --exclude 'jest.*.config.js'
+          rsync -a frontend/current/ dist/app/frontend/current/
+          # Belt-and-braces: fail the build if any env file slipped in
+          if find dist/app -name '.env*' | grep -q .; then
+            echo "::error::.env file found in deployment bundle"
+            exit 1
+          fi
+          cd dist/app && zip -qr ../deploy.zip .
+          echo "bundle contents (top level):" && unzip -l ../deploy.zip | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deploy-package
+          path: dist/deploy.zip
+          retention-days: 14

@@ -1,0 +1,96 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Deploy → STAGING (opal-portal-staging)
+#
+#  Trigger: push to main, or manual dispatch.
+#  Gate:    the full CI workflow (unit + integration + migration validation +
+#           audit) must pass before anything is deployed.
+#
+#  Auth:    OpenID Connect (federated identity) — no publish profiles, no
+#           long-lived credentials in GitHub. Requires the three AZURE_*
+#           secrets on the "staging" environment (see deploy/AZURE_DEPLOYMENT.md).
+#
+#  Migrations run on the App Service itself at startup (backend/startup.sh,
+#  advisory-locked), so this workflow needs no database network access.
+# ═══════════════════════════════════════════════════════════════════════════
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC federated login
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to opal-portal-staging
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL || 'https://opal-portal-staging.azurewebsites.net' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-package
+
+      - name: Azure login (OIDC — no stored credentials)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy bundle
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: opal-portal-staging
+          package: deploy.zip
+
+      - name: Health gate — /health then /ready
+        run: |
+          set -e
+          BASE="${{ vars.STAGING_URL || 'https://opal-portal-staging.azurewebsites.net' }}"
+          echo "── waiting for /health"
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$BASE/health" > /tmp/health.json; then
+              cat /tmp/health.json; break
+            fi
+            [ "$i" = 30 ] && { echo "::error::/health never became available"; exit 1; }
+            sleep 10
+          done
+          echo "── checking /ready (database + migrations + config)"
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "$BASE/ready" > /tmp/ready.json; then
+              cat /tmp/ready.json; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::/ready did not pass — deployment is NOT serving traffic correctly"
+          curl -sS --max-time 10 "$BASE/ready" || true
+          exit 1
+
+      - name: Smoke tests
+        run: |
+          set -e
+          BASE="${{ vars.STAGING_URL || 'https://opal-portal-staging.azurewebsites.net' }}"
+          # Unauthenticated root must redirect to login (302) — proves routing,
+          # session store and static frontend serving are alive.
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/")
+          echo "GET / → $code"
+          [ "$code" = "302" ] || [ "$code" = "200" ] || { echo "::error::unexpected / status $code"; exit 1; }
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/login")
+          echo "GET /login → $code"
+          [ "$code" = "200" ] || { echo "::error::unexpected /login status $code"; exit 1; }
+          # Security headers present (helmet active)
+          curl -s -D - -o /dev/null --max-time 10 "$BASE/login" | grep -i "content-security-policy" > /dev/null \
+            || { echo "::error::CSP header missing"; exit 1; }

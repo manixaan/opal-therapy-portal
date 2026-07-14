@@ -46,6 +46,10 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'therapy_scheduler',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD,
+  // Azure Database for PostgreSQL requires TLS. DB_SSL=true enables verified
+  // TLS (Azure's chain is signed by public CAs, so system roots suffice).
+  // Local development stays plaintext with DB_SSL unset.
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
