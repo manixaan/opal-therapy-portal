@@ -36,7 +36,17 @@ class PgSessionStore extends Store {
     super();
     this.pool  = pool;
     this.ttlMs = ttlMs;
-    this._ready = this._ensureTable();
+    // Best-effort table check. MUST NOT crash the process if the database is
+    // unreachable at boot (transient outage → the app stays alive, /health
+    // reports liveness, /ready reports the DB failure, and sessions work as
+    // soon as the database returns — the table itself persists across
+    // restarts and is also created by INIT_QUERIES and the migration runner).
+    this._ready = this._ensureTable().catch((err) => {
+      console.warn(
+        `⚠️  PgSessionStore: sessions table check failed (${err.message}) — ` +
+        'continuing; sessions resume when the database is reachable'
+      );
+    });
 
     // Prune expired rows periodically
     this._pruneTimer = setInterval(() => this._prune(), PRUNE_INTERVAL_MS);

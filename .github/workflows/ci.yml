@@ -121,7 +121,7 @@ jobs:
           mkdir -p dist/app
           rsync -a backend/ dist/app/backend/ \
             --exclude tests --exclude coverage --exclude '.env' --exclude '.env.*' \
-            --exclude '*.itest.js' --exclude 'jest.*.config.js'
+            --exclude '*.itest.js' --exclude 'jest*.config.js'
           rsync -a frontend/current/ dist/app/frontend/current/
           # Belt-and-braces: fail the build if any env file slipped in
           if find dist/app -name '.env*' | grep -q .; then

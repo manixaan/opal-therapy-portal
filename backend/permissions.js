@@ -234,6 +234,21 @@ async function requireAuth(req, res, next) {
       user.permissions = getPermissions(user.role, user.permissions || []);
       req.user = user;
     }
+
+    // read_only enforcement (server-side, single choke point): no business
+    // writes of any kind. Their own auth endpoints stay available (password
+    // change, logout-all, onboarding — all live under /api/auth/).
+    // req.originalUrl is used because req.path is relative to the router
+    // mount point.
+    const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    if (
+      req.user.role === 'read_only' &&
+      UNSAFE_METHODS.includes(req.method) &&
+      !req.originalUrl.startsWith('/api/auth/')
+    ) {
+      return res.status(403).json({ error: 'Read-only account — this action is not permitted' });
+    }
+
     next();
   } catch (err) {
     console.error('requireAuth error:', err);

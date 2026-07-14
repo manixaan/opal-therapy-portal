@@ -68,6 +68,13 @@ const io = socketIO(server, {
 const { createLogger, requestContext, requestLogger } = require('./logger');
 const telemetry = require('./telemetry');
 const log = createLogger('server');
+
+// Azure App Service (and any cloud LB) terminates TLS in front of the app.
+// Without trusting that proxy hop, express-session sees req.secure=false and
+// REFUSES to set the production secure cookie (nobody could log in), and
+// req.ip would be the load balancer, breaking per-IP rate limiting and audit.
+app.set('trust proxy', 1);
+
 app.use(requestContext);
 
 // Security headers — applied before every route.
@@ -114,6 +121,11 @@ app.use(cors({
 // Buffer.toString() produced "[object Object]" — every change notification was
 // silently dropped in production (handover KNOWN_ISSUES #6).
 app.use('/api/webhooks/outlook', express.raw({ type: '*/*' }));
+
+// Document uploads carry base64 file bytes (documented cap: 5 MB binary ≈
+// 6.7 MB base64) — that one route gets a larger JSON limit. Everything else
+// keeps the small default limit as a request-size defence.
+app.use('/api/profile/documents', bodyParser.json({ limit: '8mb' }));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -344,16 +356,25 @@ io.on('connection', (socket) => {
 // Catch any errors and send a proper response
 
 app.use((err, req, res, next) => {
-  log.error('Unhandled request error', {
-    error: err,
-    path: req.path,
-    method: req.method,
-    userId: req.session?.userId || null,
-  });
-  telemetry.trackException(err, { path: req.path, method: req.method });
-  res.status(500).json({
-    error: 'Server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  // Respect upstream error semantics: body-parser emits 400 (malformed JSON)
+  // and 413 (payload too large) — those are client errors, not server faults.
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) {
+    log.error('Unhandled request error', {
+      error: err,
+      path: req.path,
+      method: req.method,
+      userId: req.session?.userId || null,
+    });
+    telemetry.trackException(err, { path: req.path, method: req.method });
+  } else {
+    log.warn('Request rejected', { status, type: err.type, path: req.path, method: req.method });
+  }
+  res.status(status).json({
+    error: status === 413 ? 'Upload too large'
+         : status < 500   ? 'Invalid request'
+         : 'Server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
 
@@ -439,6 +460,22 @@ function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// ===== PROCESS-LEVEL FAILURE BACKSTOPS =====
+// A rejected background promise (poller tick, webhook fan-out) must not kill
+// the portal — log it, count it, keep serving. A truly uncaught synchronous
+// exception is unrecoverable state: log and exit so the platform restarts us.
+process.on('unhandledRejection', (reason) => {
+  log.error('Unhandled promise rejection', {
+    error: reason instanceof Error ? reason : String(reason),
+  });
+  telemetry.trackException(reason);
+});
+process.on('uncaughtException', (err) => {
+  log.error('Uncaught exception — exiting for platform restart', { error: err });
+  telemetry.trackException(err);
+  process.exit(1);
+});
 
 server.listen(PORT, () => {
   console.log(`

@@ -37,6 +37,11 @@ function canViewAll(user) {
 function notFound(res) { return res.status(404).json({ error: 'Record not found' }); }
 function forbidden(res) { return res.status(403).json({ error: 'Insufficient permissions' }); }
 
+/** Route ids are UUIDs; anything else is a guaranteed miss (and would throw a
+ *  Postgres 22P02 cast error → 500 instead of the correct 404). */
+const isUuid = (s) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  LEAVE REQUESTS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -385,11 +390,18 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
         fileData: null, relatedCpdActivityId: relatedCpdActivityId || null,
         storageBackend: getBackendName(),
       });
-      const { backend: b, storageKey } = await backend.put({
-        userId: user.id, docId: record.id, fileName, mime: fileMime, base64: fileData,
-      });
-      await db.setPDDocumentStorage(record.id, { storageBackend: b, storageKey, clearInline: true });
-      record.storage_backend = b;
+      try {
+        const { backend: b, storageKey } = await backend.put({
+          userId: user.id, docId: record.id, fileName, mime: fileMime, base64: fileData,
+        });
+        await db.setPDDocumentStorage(record.id, { storageBackend: b, storageKey, clearInline: true });
+        record.storage_backend = b;
+      } catch (putErr) {
+        // Storage write failed — remove the metadata row so no orphaned
+        // "document" without content survives, then surface the failure.
+        await db.deletePDDocument(record.id, user.id).catch(() => {});
+        throw putErr;
+      }
     }
 
     // Audit: title/filename are employee-chosen metadata, never file content.
@@ -415,9 +427,19 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
  */
 router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) return notFound(res);
     const doc = await db.getPDDocumentForDownload(req.params.id, req.user.id);
     if (!doc) return notFound(res);
-    if (doc.user_id !== req.user.id && !canViewAll(req.user)) return forbidden(res);
+    if (doc.user_id !== req.user.id && !canViewAll(req.user)) {
+      // Audit the denied cross-user attempt (identifiers only).
+      await db.logAuditEvent({
+        actorUserId: req.user.id, action: 'document.download_denied',
+        targetType: 'pd_document', targetId: doc.id, ipAddress: req.ip,
+        organisationId: req.user.organisation_id,
+        metadata: { documentOwnerUserId: doc.user_id },
+      }).catch(() => {});
+      return forbidden(res);
+    }
 
     // Audit cross-user access (owner/admin reading an employee's document).
     if (doc.user_id !== req.user.id) {
@@ -431,9 +453,16 @@ router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) 
 
     const { getBackend } = require('./storage');
     const backend = getBackend(doc.storage_backend || 'db');
-    const { base64 } = await backend.get({
-      backend: doc.storage_backend, storageKey: doc.storage_key, fileData: doc.file_data,
-    });
+    let base64 = null;
+    try {
+      ({ base64 } = await backend.get({
+        backend: doc.storage_backend, storageKey: doc.storage_key, fileData: doc.file_data,
+      }));
+    } catch (readErr) {
+      // Missing/unreadable stored object (deleted behind the app's back,
+      // blob outage) — a safe 404, never a 500 with backend internals.
+      console.warn(`Document ${doc.id} content unreadable (${readErr.code || readErr.name})`);
+    }
     if (!base64) return res.status(404).json({ error: 'Document content unavailable' });
 
     const buf = Buffer.from(base64, 'base64');
@@ -453,6 +482,7 @@ router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) 
  */
 router.delete('/api/profile/documents/:id', requireAuth, async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) return notFound(res);
     const doc = await db.getPDDocumentForDownload(req.params.id, req.user.id);
     if (!doc || doc.user_id !== req.user.id) return notFound(res);
 
@@ -540,6 +570,7 @@ router.post('/api/profile/credentials', requireAuth, async (req, res) => {
  */
 router.patch('/api/profile/credentials/:id', requireAuth, async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) return notFound(res);
     const { credentialName, issuingBody, registrationNumber, issueDate, expiryDate, notes } = req.body;
     const record = await db.updateCredential(req.params.id, req.user.id, {
       credential_name:     credentialName,
@@ -564,6 +595,7 @@ router.patch('/api/profile/credentials/:id', requireAuth, async (req, res) => {
 router.patch('/api/profile/credentials/:id/verify', requireAuth, async (req, res) => {
   if (!canApprove(req.user)) return forbidden(res);
   try {
+    if (!isUuid(req.params.id)) return notFound(res);
     const record = await db.verifyCredential({ id: req.params.id, verifiedByUserId: req.user.id });
     if (!record) return notFound(res);
     await db.logAuditEvent({
@@ -584,6 +616,7 @@ router.patch('/api/profile/credentials/:id/verify', requireAuth, async (req, res
  */
 router.delete('/api/profile/credentials/:id', requireAuth, async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) return notFound(res);
     const deleted = await db.deleteCredential(req.params.id, req.user.id);
     if (!deleted) return notFound(res);
     res.json({ ok: true });
