@@ -111,9 +111,10 @@ jobs:
         working-directory: backend
         run: |
           npm ci --omit=dev
-          # Application Insights SDK is a deploy-time addition (kept out of the
-          # repo lockfile; telemetry.js lazy-loads it and no-ops without it).
-          npm install --no-save applicationinsights@3
+          # Deploy-time additions (kept out of the repo lockfile; both are
+          # lazy-loaded and no-op locally): App Insights SDK and the Azure
+          # Blob SDK for DOCUMENT_STORAGE_BACKEND=blob.
+          npm install --no-save applicationinsights@3 @azure/storage-blob@12
 
       - name: Assemble bundle (backend + frontend, no tests, no env files)
         run: |

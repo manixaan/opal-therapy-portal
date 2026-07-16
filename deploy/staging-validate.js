@@ -94,8 +94,11 @@ async function login(email) {
   record('7.3', 'session persists across requests (PG session store)', me.status, 200);
   record('7.4', 'me returns correct role', me.json?.role, 'therapist');
 
+  // /api/admin/users is owner-only by design (admin gets 403 like therapist)
+  const ownerUsers = await owner('/api/admin/users');
+  record('7.5', 'owner can list users', ownerUsers.status, 200);
   const adminUsers = await admin('/api/admin/users');
-  record('7.5', 'admin can list users', adminUsers.status, 200);
+  record('7.5b', 'admin blocked from owner-only user list', adminUsers.status, 403);
   const therapistAdmin = await therapist('/api/admin/users');
   record('7.6', 'therapist blocked from admin users', therapistAdmin.status, 403);
 
