@@ -65,7 +65,7 @@ else
     --admin-user "$PG_ADMIN" --admin-password "$PG_PASS" \
     --public-access 0.0.0.0 --yes -o none && echo "✓ $PG"
 fi
-az postgres flexible-server db create -g "$RG" -s "$PG" -d "$DBNAME" -o none 2>/dev/null && echo "✓ db $DBNAME" || echo "✓ db $DBNAME exists"
+az postgres flexible-server db create --resource-group "$RG" --server-name "$PG" --name "$DBNAME" -o none 2>&1 | grep -v "already exists" || true; echo "✓ db $DBNAME"
 
 echo "══ app service ══"
 az appservice plan create -g "$RG" -n "$PLAN" -l "$LOC" --is-linux --sku B1 -o none && echo "✓ $PLAN"
