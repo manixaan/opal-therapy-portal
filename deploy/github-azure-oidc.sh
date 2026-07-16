@@ -26,13 +26,23 @@ fi
 az ad sp create --id "$APP_ID" -o none 2>/dev/null || true
 
 echo "══ federated credentials (per GitHub environment) ══"
+# GitHub presents OIDC subjects in the immutable-ID format for newer repos:
+#   repo:OWNER@OWNER_ID/REPO@REPO_ID:environment:ENV
+# Register BOTH that and the classic repo:OWNER/REPO:environment:ENV form.
+OWNER_LOGIN=${REPO%%/*}
+OWNER_ID=$(gh api "users/$OWNER_LOGIN" --jq .id)
+REPO_ID=$(gh api "repos/$REPO" --jq .id)
+IMMUTABLE_REPO="$OWNER_LOGIN@$OWNER_ID/${REPO##*/}@$REPO_ID"
 for ENVNAME in staging production; do
-  az ad app federated-credential create --id "$APP_ID" --parameters "{
-    \"name\": \"github-$ENVNAME\",
-    \"issuer\": \"https://token.actions.githubusercontent.com\",
-    \"subject\": \"repo:$REPO:environment:$ENVNAME\",
-    \"audiences\": [\"api://AzureADTokenExchange\"]
-  }" -o none 2>/dev/null && echo "✓ federated: $ENVNAME" || echo "✓ federated exists: $ENVNAME"
+  for FORM in "repo:$REPO:environment:$ENVNAME" "repo:$IMMUTABLE_REPO:environment:$ENVNAME"; do
+    SLUG=$(echo "$FORM" | shasum | cut -c1-8)
+    az ad app federated-credential create --id "$APP_ID" --parameters "{
+      \"name\": \"github-$ENVNAME-$SLUG\",
+      \"issuer\": \"https://token.actions.githubusercontent.com\",
+      \"subject\": \"$FORM\",
+      \"audiences\": [\"api://AzureADTokenExchange\"]
+    }" -o none 2>/dev/null && echo "✓ federated: $FORM" || echo "✓ federated exists: $FORM"
+  done
 done
 
 echo "══ role assignment (staging RG only — production RG comes later) ══"
