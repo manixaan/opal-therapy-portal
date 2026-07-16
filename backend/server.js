@@ -23,6 +23,14 @@ process.env.TZ = 'UTC';
 // These are like loading tools from a toolbox before building
 
 require('dotenv').config(); // Load environment variables from .env file
+
+// ===== TELEMETRY FIRST =====
+// Application Insights instruments http/pg by patching the modules at
+// initialisation — it MUST run before express/http are required and before
+// http.createServer, or inbound requests are never captured (found on
+// staging: dependencies flowed, requests didn't). No-op without the env var.
+require('./telemetry').init(require('./logger').createLogger('telemetry'));
+
 const express = require('express'); // Web server framework
 const helmet  = require('helmet');  // Security headers (HSTS, X-Frame, X-Content-Type, etc.)
 const session = require('express-session'); // User login sessions
@@ -434,8 +442,8 @@ console.log('✅ Routes registered');
 
 const PORT = process.env.PORT || 5000;
 
-// Optional Application Insights — no-op locally, enabled by env in Azure.
-telemetry.init(createLogger('telemetry'));
+// (Application Insights is initialised at the very top of this file — it
+// must patch http before the server module loads.)
 
 // Staged-integration switchboard — logged at boot so every environment's
 // posture is visible in its logs (values only, never secrets).
