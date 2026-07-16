@@ -118,7 +118,7 @@ jobs:
       - name: Assemble bundle (backend + frontend, no tests, no env files)
         run: |
           set -e
-          mkdir -p dist/app
+          mkdir -p dist/app/frontend  # GNU rsync does not create intermediate parents
           rsync -a backend/ dist/app/backend/ \
             --exclude tests --exclude coverage --exclude '.env' --exclude '.env.*' \
             --exclude '*.itest.js' --exclude 'jest*.config.js'
