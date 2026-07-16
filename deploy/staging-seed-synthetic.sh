@@ -29,7 +29,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SYN_PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20)
+SYN_PASS=$(openssl rand -hex 10)
 umask 177
 printf 'password for all four synthetic users: %s\n' "$SYN_PASS" > deploy/staging-synthetic.local.txt
 echo "── synthetic password written to deploy/staging-synthetic.local.txt (gitignored)"

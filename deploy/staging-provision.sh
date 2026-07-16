@@ -28,7 +28,7 @@ LAW=opal-portal-staging-law
 AI=opal-portal-staging-ai
 DBNAME=opal_portal
 # Storage account names: 3–24 lowercase alphanumeric, globally unique.
-SA=${SA:-opalstg$(LC_ALL=C tr -dc a-z0-9 < /dev/urandom | head -c 8)}
+SA=${SA:-opalstg$(openssl rand -hex 4)}
 
 echo "══ context ══"
 az account show --query '{subscription:name, tenant:tenantId, user:user.name}' -o table
@@ -48,7 +48,7 @@ AI_CONN=$(az resource show -g "$RG" -n "$AI" --resource-type "microsoft.insights
 
 echo "══ postgresql flexible server (this step takes ~5–10 min) ══"
 PG_ADMIN=opaladmin
-PG_PASS=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)
+PG_PASS=$(openssl rand -hex 20)
 if az postgres flexible-server show -g "$RG" -n "$PG" -o none 2>/dev/null; then
   echo "✓ $PG exists — keeping existing admin password"
   PG_PASS="" # do not rotate on re-run
