@@ -19,13 +19,13 @@ source deploy/staging-resources.txt # APP/RG/PG/KV/...
 
 MYIP=$(curl -s https://api.ipify.org)
 echo "── opening temporary PG firewall rule for $MYIP"
-az postgres flexible-server firewall-rule create -g "$RG" -n "$PG" \
-  --rule-name temp-seed --start-ip-address "$MYIP" --end-ip-address "$MYIP" -o none
+az postgres flexible-server firewall-rule create --resource-group "$RG" --server-name "$PG" \
+  --name temp-seed --start-ip-address "$MYIP" --end-ip-address "$MYIP" -o none
 
 cleanup() {
   echo "── removing temporary PG firewall rule"
-  az postgres flexible-server firewall-rule delete -g "$RG" -n "$PG" \
-    --rule-name temp-seed --yes -o none || true
+  az postgres flexible-server firewall-rule delete --resource-group "$RG" --server-name "$PG" \
+    --name temp-seed --yes -o none || true
 }
 trap cleanup EXIT
 
