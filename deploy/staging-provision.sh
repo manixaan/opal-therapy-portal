@@ -39,9 +39,12 @@ az group create --name "$RG" --location "$LOC" -o none && echo "✓ $RG"
 echo "══ log analytics + app insights ══"
 az monitor log-analytics workspace create -g "$RG" -n "$LAW" -l "$LOC" -o none && echo "✓ $LAW"
 LAW_ID=$(az monitor log-analytics workspace show -g "$RG" -n "$LAW" --query id -o tsv)
-az monitor app-insights component create -g "$RG" --app "$AI" -l "$LOC" \
-  --application-type web --workspace "$LAW_ID" -o none && echo "✓ $AI"
-AI_CONN=$(az monitor app-insights component show -g "$RG" --app "$AI" --query connectionString -o tsv)
+# Created via bare ARM: the `application-insights` CLI extension fails to
+# install under az 2.88 / Python 3.14 (pip wheel incompatibility).
+az resource create -g "$RG" -n "$AI" -l "$LOC" \
+  --resource-type "microsoft.insights/components" \
+  --properties "{\"Application_Type\":\"web\",\"WorkspaceResourceId\":\"$LAW_ID\"}" -o none && echo "✓ $AI"
+AI_CONN=$(az resource show -g "$RG" -n "$AI" --resource-type "microsoft.insights/components" --query properties.ConnectionString -o tsv)
 
 echo "══ postgresql flexible server (this step takes ~5–10 min) ══"
 PG_ADMIN=opaladmin
