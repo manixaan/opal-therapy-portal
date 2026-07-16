@@ -33,6 +33,12 @@ SA=${SA:-opalstg$(openssl rand -hex 4)}
 echo "══ context ══"
 az account show --query '{subscription:name, tenant:tenantId, user:user.name}' -o table
 
+echo "══ resource providers (fresh-subscription registration, idempotent) ══"
+for ns in Microsoft.Web Microsoft.DBforPostgreSQL Microsoft.KeyVault \
+          Microsoft.Storage Microsoft.OperationalInsights microsoft.insights; do
+  az provider register --namespace "$ns" --wait -o none && echo "  ✓ $ns"
+done
+
 echo "══ resource group ══"
 az group create --name "$RG" --location "$LOC" -o none && echo "✓ $RG"
 
