@@ -510,18 +510,26 @@ server.listen(PORT, () => {
 const DELTA_SYNC_INTERVAL_MS = 90 * 1000; // 90 seconds
 
 // Get a valid access token for the user, refreshing if expired.
+//
+// DECRYPTS DEFENSIVELY: callers hand this rows from raw SQL (the delta and
+// Splose pollers SELECT token columns directly), which return the AES-GCM
+// "enc:…" ciphertext when TOKEN_ENCRYPTION_KEY is set. decrypt() passes
+// plaintext values through unchanged, so this is a no-op in environments
+// without the key. Found on staging: Graph received "Bearer enc:…" → 401 on
+// every sync cycle, while development (no key, plaintext at rest) worked.
 async function getValidTokenForUser(user) {
   const outlookApi = require('./outlook-oauth');
+  const { decrypt } = require('./crypto-utils');
   const now = new Date();
   const expiresAt = user.token_expires_at ? new Date(user.token_expires_at) : null;
   const isExpired = !expiresAt || (expiresAt - now) < 60 * 1000; // refresh if < 1 min left
 
-  if (!isExpired) return user.access_token;
+  if (!isExpired) return decrypt(user.access_token);
 
   if (!user.refresh_token) throw new Error('No refresh token stored — user must re-authenticate');
 
   console.log(`🔁 Refreshing token for ${user.email}...`);
-  const refreshed = await outlookApi.refreshAccessToken(user.refresh_token);
+  const refreshed = await outlookApi.refreshAccessToken(decrypt(user.refresh_token));
   await db.updateUserTokens(user.id, refreshed.accessToken, refreshed.refreshToken, refreshed.expiresIn);
   console.log(`✅ Token refreshed for ${user.email}`);
   return refreshed.accessToken;
@@ -684,10 +692,15 @@ async function runDeltaSyncForAllUsers() {
           try { await db.saveDeltaState(user.id, null); } catch (_) {}
           stats.warnings.push({ userId: user.id, warning: 'delta_token_reset' });
         } else {
-          console.error(`⚠️  Delta sync failed for ${user.email}:`, userErr.message);
+          // Include the Graph error CODE (InvalidAuthenticationToken,
+          // MailboxNotEnabledForRESTAPI, …) — an HTTP status alone cost a
+          // diagnosis round-trip on staging. Codes are not sensitive.
+          const graphCode = userErr.response?.data?.error?.code || null;
+          console.error(`⚠️  Delta sync failed for ${user.email}:`, userErr.message,
+            graphCode ? `(graph: ${graphCode})` : '');
           // userId + message only — never tokens or event content
-          stats.errors.push({ userId: user.id, message: userErr.message });
-          telemetry.trackException(userErr, { component: 'outlook_delta_sync', userId: user.id });
+          stats.errors.push({ userId: user.id, message: userErr.message, graphCode });
+          telemetry.trackException(userErr, { component: 'outlook_delta_sync', userId: user.id, graphCode });
         }
       }
     }
