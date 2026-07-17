@@ -153,21 +153,26 @@ describe('OAuth state enforcement', () => {
     expect(outlookApi.getAccessToken).not.toHaveBeenCalled();
   });
 
-  test('matching state proceeds through the callback', async () => {
+  test('matching state WITHOUT a portal session is rejected in production (no auto-provisioning, code not burned)', async () => {
+    // Post-fix contract: a valid state alone is not enough outside
+    // development/test — the callback must belong to a signed-in portal
+    // user. The rejection happens BEFORE the token exchange so the one-time
+    // authorization code is not consumed. (The signed-in success path is
+    // covered end-to-end in tests/integration/oauth-callback.itest.js.)
     process.env.NODE_ENV = 'production';
     db.getUserByEmail.mockResolvedValue({ id: 'u1', email: 'u@test.invalid', microsoft_id: 'ms-1', role: 'owner' });
     const app = buildApp();
     const agent = request.agent(app);
 
-    // Step 1 stores the expected state in the session
+    // Step 1 stores the expected state in the session (public route)
     const init = await agent.get('/auth/outlook-login');
     expect(init.status).toBe(200);
 
-    // Step 2 returns with the SAME state → token exchange happens
+    // Step 2 returns with the SAME state but no signed-in portal user → 401
     const res = await agent.get('/auth/oauth/callback')
       .query({ code: 'auth-code', state: 'expected-state' });
-    expect(res.status).toBe(200);
-    expect(outlookApi.getAccessToken).toHaveBeenCalledWith('auth-code');
+    expect(res.status).toBe(401);
+    expect(outlookApi.getAccessToken).not.toHaveBeenCalled();
   });
 });
 

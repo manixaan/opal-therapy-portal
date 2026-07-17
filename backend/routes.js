@@ -219,26 +219,77 @@ router.get('/auth/oauth/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing authorization code' });
     }
 
+    // ── Attach the mailbox to the RIGHT portal account ──────────────────────
+    // Two flows share this callback:
+    //
+    //  1. Portal-first (the normal flow): a signed-in portal user is
+    //     connecting a mailbox from onboarding or Settings. The mailbox
+    //     address is allowed to differ from the portal email (shared/admin
+    //     mailboxes are legitimate). Tokens attach to the SESSION user and
+    //     the session is NEVER switched. Matching by Microsoft email here
+    //     previously auto-created a second account and silently swapped the
+    //     session onto it — the staging "onboarding loop" bug.
+    //
+    //  2. Bootstrap (development/test ONLY): no portal session — the legacy
+    //     Outlook-first login. Outside development/test an unauthenticated
+    //     callback gets an error page and NO account is ever auto-created.
+    //
+    // Eligibility is decided BEFORE the token exchange so a rejected request
+    // never burns the one-time authorization code.
+    const oauthErrorPage = (title, message) =>
+      '<html><body style="font-family:sans-serif;padding:40px;">' +
+      `<h2>${title}</h2><p>${message}</p></body></html>`;
+
+    const sessionUserId = req.session?.userId || null;
+    const envName = process.env.NODE_ENV || 'development';
+    const bootstrapAllowed = envName === 'development' || envName === 'test';
+    if (!sessionUserId && !bootstrapAllowed) {
+      console.warn('⚠️  OAuth callback without a portal session — rejected (no auto-provisioning outside development)');
+      return res.status(401).send(oauthErrorPage('Sign in first',
+        'Please sign in to the portal first, then connect Outlook from Settings → Integrations.'));
+    }
+
     // Get token from Microsoft
     const tokenData = await outlookApi.getAccessToken(code);
 
     // Get user info
     const microsoftUser = await outlookApi.getMicrosoftUser(tokenData.accessToken);
 
-    // Match the Microsoft account to an existing local user by email.
-    // If no local account exists yet (legacy / first-run), create one with
-    // role='owner' so the first OAuth login still works during development.
-    let user = await db.getUserByEmail(microsoftUser.email);
-    if (!user) {
-      console.warn(`⚠️  No local account found for ${microsoftUser.email} — creating with role=owner (dev mode)`);
-      user = await db.createUser(microsoftUser.email, microsoftUser.id);
-    } else if (microsoftUser.id && !user.microsoft_id) {
-      // Link the Microsoft ID to the existing local account
-      await db.pool.query(
-        'UPDATE users SET microsoft_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [microsoftUser.id, user.id]
-      );
+    let user;
+    if (sessionUserId) {
+      user = await db.getUser(sessionUserId);
+      if (!user) {
+        return res.status(401).send(oauthErrorPage('Session expired',
+          'Your portal session has expired. Please sign in again, then reconnect Outlook.'));
+      }
+      if (microsoftUser.id && !user.microsoft_id) {
+        await db.pool.query(
+          'UPDATE users SET microsoft_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [microsoftUser.id, user.id]
+        );
+      }
+    } else {
+      user = await db.getUserByEmail(microsoftUser.email);
+      if (!user) {
+        console.warn(`⚠️  No local account found for ${microsoftUser.email} — creating (development bootstrap)`);
+        user = await db.createUser(microsoftUser.email, microsoftUser.id);
+      } else if (microsoftUser.id && !user.microsoft_id) {
+        await db.pool.query(
+          'UPDATE users SET microsoft_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [microsoftUser.id, user.id]
+        );
+      }
+      // Bootstrap flow IS the login (development only) — establish the session.
+      req.session.userId = user.id;
+      req.session.userEmail = user.email;
     }
+
+    // Record WHICH mailbox is connected (address only — never token material)
+    // so Settings → Integrations can display it. Guarded for pre-migration DBs.
+    await db.pool.query(
+      'UPDATE users SET outlook_connected_email = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [microsoftUser.email, user.id]
+    ).catch(() => {});
 
     // Store Outlook OAuth tokens so Graph API calls work
     await db.updateUserTokens(
@@ -248,9 +299,6 @@ router.get('/auth/oauth/callback', async (req, res) => {
       tokenData.expiresIn
     );
 
-    // Create session
-    req.session.userId = user.id;
-    req.session.userEmail = user.email;
     req.session.microsoftId = microsoftUser.id;
     req.session.save();
 
@@ -425,7 +473,8 @@ router.get('/auth/user', requireAuth, async (req, res) => {
     res.json({
       id: user.id,
       email: user.email,
-      hasOutlookTokens: !!user.access_token
+      hasOutlookTokens: !!user.access_token,
+      outlookConnectedEmail: user.access_token ? (user.outlook_connected_email || null) : null
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get user info' });
@@ -942,7 +991,11 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
     // Report connected if the caller has a token OR any org member does
     // (owner/admin accounts often have no personal token but manage a connected therapist)
     let outlookConnected = !!user.access_token;
-    let connectedEmail   = user.access_token ? user.email : null;
+    // The connected MAILBOX may differ from the portal email (shared/admin
+    // mailboxes) — prefer the recorded mailbox address.
+    let connectedEmail   = user.access_token
+      ? (user.outlook_connected_email || user.email)
+      : null;
     if (!outlookConnected) {
       const orgId = user.organisation_id;
       const fallback = await db.pool.query(

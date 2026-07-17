@@ -69,8 +69,13 @@ function safeProfile(user, permissions) {
     therapistProfile:     user.therapistProfile || null,
     canViewMasterCalendar: ['owner', 'admin'].includes(user.role || 'therapist'),
     hasOutlookConnected:  !!user.access_token,
+    outlookConnectedEmail: user.access_token ? (user.outlook_connected_email || null) : null,
     profileCompleted:     !!user.profile_completed,
     onboardingStep:       user.onboarding_step || 'account',
+    // Persisted wizard progress — the onboarding page reconciles its UI with
+    // these on load (backend is the source of truth, not localStorage).
+    onboardingCompletedSteps: user.onboarding_completed_steps || [],
+    onboardingSkippedSteps:   user.onboarding_skipped_steps || [],
     permissions,
   };
 }
@@ -487,13 +492,17 @@ router.post('/api/auth/complete-onboarding-step', async (req, res) => {
   try {
     const userId = req.session.userId;
 
-    // Record step in completed/skipped arrays
+    // Record step in completed/skipped arrays. The `?` guard keeps the
+    // arrays idempotent — re-posting a step (page refresh, OAuth return,
+    // wizard back/next) must not append duplicates.
     if (skipped) {
       await db.pool.query(
         `UPDATE users
             SET onboarding_skipped_steps = (
-                  COALESCE(onboarding_skipped_steps, '[]'::jsonb)
-                  || to_jsonb($1::text)
+                  CASE WHEN COALESCE(onboarding_skipped_steps, '[]'::jsonb) ? $1
+                       THEN onboarding_skipped_steps
+                       ELSE COALESCE(onboarding_skipped_steps, '[]'::jsonb) || to_jsonb($1::text)
+                  END
                 ),
                 onboarding_step  = $1,
                 updated_at       = NOW()
@@ -504,8 +513,10 @@ router.post('/api/auth/complete-onboarding-step', async (req, res) => {
       await db.pool.query(
         `UPDATE users
             SET onboarding_completed_steps = (
-                  COALESCE(onboarding_completed_steps, '[]'::jsonb)
-                  || to_jsonb($1::text)
+                  CASE WHEN COALESCE(onboarding_completed_steps, '[]'::jsonb) ? $1
+                       THEN onboarding_completed_steps
+                       ELSE COALESCE(onboarding_completed_steps, '[]'::jsonb) || to_jsonb($1::text)
+                  END
                 ),
                 onboarding_step  = $1,
                 updated_at       = NOW()

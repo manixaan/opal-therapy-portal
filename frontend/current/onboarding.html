@@ -733,12 +733,24 @@ let travelBases     = [];
       return;
     }
 
-    // Restore progress from server
+    // Restore progress from server (backend arrays are the source of truth)
     (USER.onboardingCompletedSteps || []).forEach((k,i) => completedSteps.add(STEP_KEYS.indexOf(k) + 1));
     (USER.onboardingSkippedSteps   || []).forEach((k,i) => skippedSteps.add(STEP_KEYS.indexOf(k) + 1));
 
     populateStep1();
-    goTo(1, true);
+
+    // Resume where the user left off instead of always resetting to Step 1:
+    // an explicit step override (OAuth return stores it before cleaning the
+    // URL) wins; otherwise the first step that is neither completed nor
+    // skipped.
+    let resume = 1;
+    const override = window.__resumeStepOverride;
+    if (override >= 1 && override <= TOTAL_STEPS) {
+      resume = override;
+    } else {
+      while (resume < TOTAL_STEPS && (completedSteps.has(resume) || skippedSteps.has(resume))) resume++;
+    }
+    goTo(resume, true);
   } catch (_) {
     showError('Could not load your profile. Please refresh the page.');
     goTo(1, true);
@@ -886,7 +898,9 @@ async function connectOutlook() {
     document.getElementById('outlook-connect-row').style.display  = 'none';
     document.getElementById('outlook-continue-row').style.display = 'flex';
     postStep('outlook', { connected: true }).catch(() => {});
-    // Clean URL
+    // Hand the resume target to init() (which runs async, after this) —
+    // then clean the URL.
+    window.__resumeStepOverride = step;
     history.replaceState(null, '', '/onboarding');
   }
 })();

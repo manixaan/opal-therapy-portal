@@ -1,0 +1,8 @@
+APP=opal-portal-staging
+RG=opal-portal-staging-rg
+PG=opal-portal-staging-pg
+KV=opal-portal-stg-kv
+SA=opalstg9842d34e
+AI=opal-portal-staging-ai
+LAW=opal-portal-staging-law
+BASE=https://opal-portal-staging.azurewebsites.net
