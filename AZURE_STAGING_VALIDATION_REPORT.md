@@ -22,8 +22,8 @@
 | Entra staging registration (separate app `667a8036…`, tenant-scoped, admin consent, secret in KV only) | **PASS** |
 | **Outlook read-only validation (Stage 12)** | **PASS** — detail below |
 | Outlook write/delete blocked while flags off | **PASS (live)** — create → 403 `feature_disabled`, update → 403, poller cascade delete gated (delete shares the same module guard; unit-proven) |
-| **Splose read-only validation (Stage 13)** | **NOT TESTED — EXTERNAL ACTION REQUIRED** (production API key never provided; placeholder key correctly yields 401s, write route still 403 `feature_disabled`) |
-| Data comparison (Stage 14) | **PASS WITH LIMITATION** — portal DB ↔ API agree (3 events, 3 distinct ids, correct owner, 0 duplicates, 0 ghosts); independent Outlook-side diff not possible without a second read path; Splose comparison blocked with Stage 13 |
+| **Splose read-only validation (Stage 13)** | **PASS** (2026-07-18, real API key in Key Vault) — API auth ✓; practitioners (2) / locations (1) / services (16) / busy-time-types retrieved ✓; appointments via **real 17-page cursor pagination (1,610 records, `_fetchComplete=true`)** ✓; throttled fetching exercised ✓; 15-min cancellation poller cycling with zero errors ✓; empty/truncated-response safety engaged by design (completeness metadata observed true on live data) ✓; **write still 403 `feature_disabled` with a working key** ✓. Ops note: `az webapp restart` alone did **not** re-resolve the Key Vault reference — rewriting the app setting forced it (documented for rotations) |
+| Data comparison (Stage 14) | **PASS** — Splose↔portal exact match on a 14-day live window: counts 3=3, **identical id-set digests**, identical start times, identical practitioner ids; Outlook↔portal previously verified (3 events, distinct ids, correct owner, 0 duplicates/ghosts). No mismatch to correct; no deletion pathways touched |
 | Log hygiene (container logs + telemetry: no tokens, cookies, secrets, `enc:` material, clinical content) | **PASS** (three separate scans) |
 
 ## The onboarding-loop bug — required answers
@@ -62,10 +62,10 @@ With `ENABLE_OUTLOOK_WRITE=false`, `ENABLE_AUTOMATIC_REMOTE_DELETE=false` (boot-
 
 ## Remaining limitations / open items
 
-1. **Splose Stage 13 + its half of Stage 14** — needs the real API key placed in Key Vault by the owner (`az keyvault secret set --vault-name opal-portal-stg-kv --name splose-api-key --value '<KEY>'` + app restart). Flags stay off; reads only.
-2. Small-calendar coverage (pagination/reconcile at scale) — revisit when a fuller test calendar is connected.
-3. Cosmetic: Integrations panel labels the connection with the portal email instead of the recorded mailbox (S-5); Settings “Connect Outlook” button navigates to raw JSON instead of following `authUrl` (S-4) — the flow works via onboarding and direct URL; both are small frontend fixes for the next pass.
-4. Entra edge-flows not exercised: MFA-challenged sign-in, cancelled consent, unapproved employee via SSO (email/password remains the portal login; these belong to the future SSO stage).
+1. **Outlook-side scale coverage** — the connected admin mailbox holds 3 events, so Outlook delta pagination and the ±90-day reconcile ran on a small calendar (Splose-side pagination is now proven at 17 pages / 1,610 records; the Outlook mechanics share the integration-test coverage). Revisit when a fuller calendar is connected during live testing.
+2. Cosmetic: Integrations panel labels the connection with the portal email instead of the recorded mailbox (S-5); Settings “Connect Outlook” button navigates to raw JSON instead of following `authUrl` (S-4) — the flow works via onboarding and direct URL; both are small frontend fixes for the next pass.
+3. Entra edge-flows not exercised: MFA-challenged sign-in, cancelled consent, unapproved employee via SSO (email/password remains the portal login; these belong to the future SSO stage).
+4. **Ops note for secret rotations**: an App Service restart alone may serve a cached Key Vault reference — force re-resolution by rewriting the app setting (same reference string) after rotating a secret; the old worker also keeps serving ~100 s, so verify against a fresh worker (uptime reset).
 
 ---
 
@@ -73,4 +73,4 @@ With `ENABLE_OUTLOOK_WRITE=false`, `ENABLE_AUTOMATIC_REMOTE_DELETE=false` (boot-
 
 > # READY FOR CONTROLLED READ-ONLY LIVE TESTING
 
-Supported by completed cloud evidence: the full platform validation (earlier staging gate, 31/31 probes), the live Outlook read-only pipeline (connect → encrypted tokens → refresh → delta mirror → correct ownership → zero duplicates) and live proof that the portal **cannot write into or delete from** connected calendars while the staged flags are off. Controlled read-only live testing may begin with Outlook scope immediately; **Splose joins that scope only after its key is provided and Stage 13 passes**. This classification is deliberately not LIMITED PILOT: write-back remains off, Splose is unvalidated in cloud, and the small-calendar limitations above stand.
+Supported by completed cloud evidence — now **full scope (Outlook + Splose)**: the platform validation (31/31 probes), the live Outlook read-only pipeline (connect → encrypted tokens → refresh → delta mirror → correct ownership → zero duplicates), the live Splose read-only pipeline (real key, 17-page/1,610-record pagination with completeness metadata, exact source↔portal data fidelity, clean poller cycles), and live proof with working credentials that the portal **cannot write into or delete from either system** while the staged flags are off. Controlled read-only live testing may begin across both integrations immediately. This classification is deliberately not LIMITED PILOT: write-back remains off pending the read-only live period, and the (now small) limitations above stand.
