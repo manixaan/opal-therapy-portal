@@ -1,6 +1,16 @@
-# Parked Future Pipeline — Accounting / Xero Integration
+# Accounting / Xero Integration — Pipeline Spec
 
-> ## Status: **PARKED — DO NOT IMPLEMENT YET**
+> ## Status update (2026-07-26): **BUILT — read-only, awaiting Xero credentials**
+> The module described below has been implemented end-to-end on branch
+> `xero-accounting-module` (merged to azure-staging/main). It is owner-only
+> and read-only, with all write flags fail-closed. Live specifics now live in
+> `ACCOUNTING_TEST_BENCH_REPORT.md`, `docs/accounting/XERO_API_CAPABILITY_MATRIX.md`,
+> and `deploy/XERO_OWNER_ACTIONS_CHECKLIST.md`. The original parked spec is
+> retained below for reference.
+
+---
+
+> ## Original status when parked: **PARKED — DO NOT IMPLEMENT YET**
 >
 > The employee portal is progressing through controlled read-only live
 > testing for Outlook and Splose. Accounting/Xero is a future module and
