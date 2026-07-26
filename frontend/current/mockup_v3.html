@@ -3339,6 +3339,9 @@
   <button class="tab" data-tab="logbook">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg> Travel Logbook
   </button>
+  <button class="tab" data-tab="resources">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Resources
+  </button>
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
   </button>
@@ -4224,6 +4227,20 @@
 
 </section>
 
+
+<!-- ============ RESOURCES TAB (Resource Hub R1) ============ -->
+<section class="view" id="view-resources">
+<div class="acct-page">
+  <h1 style="margin:0 0 4px;">Resource Hub</h1>
+  <p style="color:var(--muted);margin:0 0 12px;">Approved clinical, educational and practice resources. Uploads are reviewed before they appear here.</p>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <input type="text" id="res-search" placeholder="Search resources…" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;min-width:240px;" oninput="resReload()">
+    <select id="res-tag-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;"><option value="">All tags</option></select>
+    <button class="btn" onclick="resReload()">Refresh</button>
+  </div>
+  <div id="res-list" class="acct-note">Loading…</div>
+</div>
+</section>
 
 <!-- ============ ACCOUNTING TAB (owner-only) ============ -->
 <section class="view" id="view-accounting">
@@ -6765,6 +6782,52 @@ window.signOut = async function () {
   } catch (_) {}
   window.location.replace('/login');
 };
+
+/* ── Resource Hub (R1) ──────────────────────────────────────────────────────
+   Backend enforces all RBAC; therapists see approved resources only. */
+window.resTagsLoaded = false;
+async function resReload() {
+  var el = document.getElementById('res-list');
+  if (!el) return;
+  if (!window.resTagsLoaded) {
+    var t = await fetch('/api/resources/tags', { credentials: 'include' }).then(r => r.json()).catch(() => ({}));
+    var sel = document.getElementById('res-tag-filter');
+    (t.tags || []).forEach(function (tag) {
+      var o = document.createElement('option'); o.value = tag.id; o.textContent = tag.category + ': ' + tag.name; sel.appendChild(o);
+    });
+    window.resTagsLoaded = true;
+  }
+  var q = encodeURIComponent(document.getElementById('res-search').value || '');
+  var tagId = document.getElementById('res-tag-filter').value;
+  var url = '/api/resources?q=' + q + (tagId ? '&tagId=' + tagId : '');
+  var d = await fetch(url, { credentials: 'include' }).then(r => r.status === 403 ? { disabled: true } : r.json()).catch(() => ({}));
+  if (d.disabled) { el.innerHTML = 'Resource Hub is disabled on this environment.'; return; }
+  var rows = d.resources || [];
+  if (!rows.length) { el.innerHTML = 'No approved resources yet. Owner/admin can add resources; therapist drafts appear after review.'; return; }
+  el.className = '';
+  el.innerHTML = rows.map(function (r) {
+    var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + t.name + '</span>'; }).join(' ');
+    return '<div class="acct-card" style="margin-bottom:10px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+      '<strong>' + r.title + '</strong><span>' +
+      (Number(r.file_count) > 0 ? '<a class="btn" style="font-size:12px;" href="/api/resources/' + r.id + '/download">Download</a> ' : '') +
+      (r.external_url ? '<a class="btn" style="font-size:12px;" href="' + r.external_url + '" target="_blank" rel="noopener">Open link</a> ' : '') +
+      '<button class="btn" style="font-size:12px;" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ')">' + (r.favourited ? '★' : '☆') + '</button>' +
+      '</span></div>' +
+      (r.description ? '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + r.description + '</div>' : '') +
+      '<div style="margin-top:6px;">' + (r.resource_type ? '<span class="acct-pill">' + r.resource_type + '</span> ' : '') + tags + '</div>' +
+      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">⚠ ' + r.safety_notes + '</div>' : '') +
+      '</div>';
+  }).join('');
+}
+async function resFav(id, on) {
+  await fetch('/api/resources/' + id + '/favourite', { method: on ? 'POST' : 'DELETE', credentials: 'include' });
+  resReload();
+}
+document.addEventListener('click', function (e) {
+  var t = e.target.closest && e.target.closest('.tab[data-tab="resources"]');
+  if (t) setTimeout(resReload, 50);
+});
 
 /* ── Accounting module (owner-only) ─────────────────────────────────────────
    Backend enforces owner-only on every route; this also hides the tab and
