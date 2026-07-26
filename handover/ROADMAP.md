@@ -107,3 +107,12 @@ Goal: pass a basic security review. (See SECURITY_REVIEW.md.)
 | Splose fetch: reduce full-list scans (cache tuning; paginate; incremental) | Med | API load | M | Fewer/cheaper Splose calls; within rate limit |
 | #19 documents → object storage | Low | DB size | M | Files off the DB |
 | Load-test pollers with 10× events; confirm 90 s budget holds | Low | Scale | M | Delta cycle < interval at scale |
+
+## Future Pipeline (parked)
+
+**Accounting/Xero integration** — invoicing, reconciliation, utilisation,
+pricing and finance dashboards. **Status: Parked — do not implement during
+the current staging pilot.** Full specification:
+[docs/future-pipelines/ACCOUNTING_XERO_PIPELINE.md](../docs/future-pipelines/ACCOUNTING_XERO_PIPELINE.md).
+Revisit only after read-only live testing passes, the limited pilot is
+stable, and Outlook/Splose write behaviour is proven safe.
