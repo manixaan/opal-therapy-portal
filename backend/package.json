@@ -48,5 +48,8 @@
   "engines": {
     "node": ">=20 <27",
     "npm": ">=10"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   }
 }
