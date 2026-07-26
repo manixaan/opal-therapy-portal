@@ -549,3 +549,8 @@ router.post('/api/auth/reset-password', async (req, res) => {
 });
 
 module.exports = router;
+
+// Test-only: clear the in-memory login rate-limit window so a test file that
+// logs in many distinct users from the same IP is not throttled. Not used in
+// production; does not weaken the limiter (which stays fully active).
+module.exports._resetLoginRateLimit = () => _loginAttempts.clear();

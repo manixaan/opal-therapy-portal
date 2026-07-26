@@ -29,10 +29,11 @@ describe('migration runner', () => {
     expect(result.applied).toEqual(expect.arrayContaining([
       '000_baseline.sql', '001_perf_indexes_and_blob_storage.sql',
       '002_outlook_connected_email.sql', '003_event_type_vocabulary.sql',
+      '004_accounting_xero_module.sql',
     ]));
 
     const { rows } = await db.pool.query('SELECT id FROM schema_migrations ORDER BY id');
-    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003']);
+    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004']);
   });
 
   test('is idempotent — a second run applies nothing', async () => {
