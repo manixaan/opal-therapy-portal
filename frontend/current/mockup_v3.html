@@ -5337,7 +5337,7 @@
               <span>Re-authorise if your session has expired</span>
             </div>
             <div class="settings-row-control">
-              <button class="btn" onclick="window.location='/auth/outlook-login'" style="font-size:12px;">Connect Outlook</button>
+              <button class="btn" onclick="connectOutlookFromSettings(this)" style="font-size:12px;">Connect Outlook</button>
             </div>
           </div>
         </div>
@@ -6702,6 +6702,27 @@ window.signOut = async function () {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   } catch (_) {}
   window.location.replace('/login');
+};
+
+/* ── Settings → Integrations: Connect Outlook ──────────────────────────────
+   /auth/outlook-login returns JSON { authUrl } — it must be fetched and
+   followed, never navigated to directly (that renders raw JSON). Mirrors the
+   onboarding flow; returnUrl brings the user back to the app afterwards. */
+window.connectOutlookFromSettings = async function (btn) {
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Opening Microsoft sign-in…'; }
+    const returnUrl = window.location.origin + '/';
+    const r = await fetch('/auth/outlook-login?returnUrl=' + encodeURIComponent(returnUrl), {
+      credentials: 'include',
+    });
+    const data = await r.json().catch(() => ({}));
+    if (data.authUrl) { window.location.href = data.authUrl; return; }
+    throw new Error(data.error || 'No authUrl in response');
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect Outlook'; }
+    if (typeof showToast === 'function') showToast('Could not start Outlook sign-in', String(err.message || err));
+    else alert('Could not start Outlook sign-in: ' + (err.message || err));
+  }
 };
 
 /* ── Global session-expiry handler (Phase 11) ──────────────────────────────

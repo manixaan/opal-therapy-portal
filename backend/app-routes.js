@@ -911,7 +911,7 @@ router.get('/api/settings/integrations/status', requireAuth, async (req, res) =>
   // Outlook: check if user has a non-expired OAuth token
   try {
     const userRow = await pool.query(
-      `SELECT access_token, token_expires_at, email FROM users WHERE id = $1`, [userId]
+      `SELECT access_token, token_expires_at, email, outlook_connected_email FROM users WHERE id = $1`, [userId]
     );
     const u = userRow.rows[0];
     const hasToken = !!(u && u.access_token);
@@ -919,7 +919,10 @@ router.get('/api/settings/integrations/status', requireAuth, async (req, res) =>
     statuses.outlook = {
       connected: hasToken && !expired,
       expired: expired,
-      email: u?.email || null,
+      // The connected MAILBOX — may legitimately differ from the portal
+      // email (shared/admin mailboxes). Falls back to the portal email for
+      // pre-migration rows.
+      email: u?.outlook_connected_email || u?.email || null,
       lastChecked: new Date().toISOString(),
     };
   } catch (e) {

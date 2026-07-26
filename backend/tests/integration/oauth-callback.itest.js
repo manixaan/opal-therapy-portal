@@ -45,6 +45,7 @@ function buildApp() {
   app.use('/', require('../../auth'));
   app.use('/', require('../../routes'));
   app.use('/', require('../../register-routes'));
+  app.use('/', require('../../app-routes')); // integrations status panel source
   return app;
 }
 
@@ -100,6 +101,12 @@ describe('portal-first connection (session user)', () => {
     expect(me.body.email).toBe(user.email); // session NOT switched
     expect(me.body.hasOutlookTokens).toBe(true);
     expect(me.body.outlookConnectedEmail).toBe(MAILBOX);
+
+    // Settings → Integrations panel must show the MAILBOX, not the portal email
+    const panel = await agent.get('/api/settings/integrations/status');
+    expect(panel.status).toBe(200);
+    expect(panel.body.outlook.connected).toBe(true);
+    expect(panel.body.outlook.email).toBe(MAILBOX);
   });
 
   test('7: no account is created for the mailbox email; other users untouched', async () => {
