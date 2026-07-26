@@ -105,8 +105,8 @@ describe('portal-first connection (session user)', () => {
     // Settings → Integrations panel must show the MAILBOX, not the portal email
     const panel = await agent.get('/api/settings/integrations/status');
     expect(panel.status).toBe(200);
-    expect(panel.body.outlook.connected).toBe(true);
-    expect(panel.body.outlook.email).toBe(MAILBOX);
+    expect(panel.body.statuses.outlook.connected).toBe(true);
+    expect(panel.body.statuses.outlook.email).toBe(MAILBOX);
   });
 
   test('7: no account is created for the mailbox email; other users untouched', async () => {
