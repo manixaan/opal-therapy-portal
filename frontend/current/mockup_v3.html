@@ -3339,6 +3339,9 @@
   <button class="tab" data-tab="logbook">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg> Travel Logbook
   </button>
+  <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
+  </button>
   <button class="tab" data-tab="settings">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24M19.78 19.78l-4.24-4.24m-2.12-2.12l-4.24-4.24"/></svg> Settings
   </button>
@@ -4221,6 +4224,65 @@
 
 </section>
 
+
+<!-- ============ ACCOUNTING TAB (owner-only) ============ -->
+<section class="view" id="view-accounting">
+<style>
+  .acct-page { padding: 16px; max-width: 1280px; }
+  .acct-subnav { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--border); margin-bottom:16px; padding-bottom:8px; }
+  .acct-subnav button { background:none; border:1px solid transparent; padding:6px 12px; border-radius:8px; cursor:pointer; color:var(--muted); font-size:13px; font-weight:600; }
+  .acct-subnav button.active { color:var(--accent); border-color:var(--border); background:var(--surface-2,rgba(0,0,0,0.03)); }
+  .acct-section { display:none; }
+  .acct-section.active { display:block; }
+  .acct-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+  .acct-card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .acct-card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .acct-card .val { font-size:22px; font-weight:700; margin-top:4px; }
+  .acct-flags { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+  .acct-flag { font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); }
+  .acct-flag.on { color:#16a34a; border-color:#16a34a55; }
+  .acct-flag.off { color:var(--muted); }
+  .acct-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .acct-table th, .acct-table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+  .acct-note { font-size:12px; color:var(--muted); background:var(--surface-2,rgba(0,0,0,0.03)); padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  .acct-pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
+</style>
+<div class="acct-page">
+  <h1 style="margin:0 0 4px;">Accounting</h1>
+  <p style="color:var(--muted);margin:0 0 16px;">Xero finance, invoicing, reconciliation and dashboards. Owner-only.</p>
+
+  <div class="acct-subnav" id="acct-subnav">
+    <button data-acct="overview" class="active">Overview</button>
+    <button data-acct="connection">Xero Connection</button>
+    <button data-acct="invoices">Invoices</button>
+    <button data-acct="candidates">Invoice Candidates</button>
+    <button data-acct="reconciliation">Reconciliation</button>
+    <button data-acct="pricing">Pricing</button>
+    <button data-acct="synclog">Sync Log</button>
+  </div>
+
+  <div class="acct-section active" id="acct-overview"><div class="acct-cards" id="acct-overview-cards"><div class="acct-note">Loading…</div></div></div>
+
+  <div class="acct-section" id="acct-connection">
+    <div id="acct-conn-status" class="acct-note">Loading Xero connection…</div>
+    <div class="acct-flags" id="acct-flag-badges"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn" id="acct-connect-btn" onclick="acctConnectXero(this)">Connect Xero</button>
+      <button class="btn" id="acct-sync-btn" onclick="acctSyncXero(this)">Sync now</button>
+      <button class="btn" id="acct-disconnect-btn" onclick="acctDisconnectXero(this)" style="display:none;">Disconnect</button>
+    </div>
+  </div>
+
+  <div class="acct-section" id="acct-invoices"><div id="acct-invoices-body" class="acct-note">Loading…</div></div>
+  <div class="acct-section" id="acct-candidates"><div id="acct-candidates-body" class="acct-note">Loading…</div></div>
+  <div class="acct-section" id="acct-reconciliation">
+    <div class="acct-note">Suggestions only. Bank reconciliation is performed in Xero — the public API cannot reconcile bank statement lines.</div>
+    <div id="acct-recon-body">Loading…</div>
+  </div>
+  <div class="acct-section" id="acct-pricing"><div id="acct-pricing-body" class="acct-note">Loading…</div></div>
+  <div class="acct-section" id="acct-synclog"><div id="acct-synclog-body" class="acct-note">Loading…</div></div>
+</div>
+</section>
 
 <!-- ============ BILLING DASHBOARD TAB ============ -->
 <section class="view" id="view-billing">
@@ -6703,6 +6765,215 @@ window.signOut = async function () {
   } catch (_) {}
   window.location.replace('/login');
 };
+
+/* ── Accounting module (owner-only) ─────────────────────────────────────────
+   Backend enforces owner-only on every route; this also hides the tab and
+   lazy-loads each sub-section from /api/accounting/*. */
+window.acctState = { loaded: {} };
+
+function acctFmtMoney(n, ccy) {
+  if (n == null) return '—';
+  try { return new Intl.NumberFormat('en-AU', { style: 'currency', currency: ccy || 'AUD' }).format(n); }
+  catch (_) { return (ccy || 'AUD') + ' ' + Number(n).toFixed(2); }
+}
+async function acctGet(path) {
+  const r = await fetch('/api/accounting' + path, { credentials: 'include' });
+  if (r.status === 403 || r.status === 401) return { _denied: true };
+  return r.json().catch(() => ({}));
+}
+async function acctPost(path, body) {
+  const r = await fetch('/api/accounting' + path, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+  });
+  return { status: r.status, json: await r.json().catch(() => ({})) };
+}
+
+// Sub-section navigation
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest && e.target.closest('#acct-subnav button');
+  if (!btn) return;
+  var key = btn.dataset.acct;
+  document.querySelectorAll('#acct-subnav button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+  document.querySelectorAll('.acct-section').forEach(function (s) { s.classList.toggle('active', s.id === 'acct-' + key); });
+  acctLoadSection(key);
+});
+
+async function acctLoadSection(key) {
+  if (key === 'overview') return acctRenderOverview();
+  if (key === 'connection') return acctRenderConnection();
+  if (key === 'invoices') return acctRenderInvoices();
+  if (key === 'candidates') return acctRenderCandidates();
+  if (key === 'reconciliation') return acctRenderReconciliation();
+  if (key === 'pricing') return acctRenderPricing();
+  if (key === 'synclog') return acctRenderSyncLog();
+}
+
+async function acctRenderOverview() {
+  var el = document.getElementById('acct-overview-cards');
+  var d = await acctGet('/dashboard');
+  if (d._denied) { el.innerHTML = '<div class="acct-note">Access denied.</div>'; return; }
+  if (!d.connected) { el.innerHTML = '<div class="acct-note">Xero is not connected. Open <strong>Xero Connection</strong> to connect.</div>'; return; }
+  var o = d.overview || {};
+  var card = function (lbl, val) { return '<div class="acct-card"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>'; };
+  el.innerHTML =
+    card('Revenue this month', acctFmtMoney(o.revenueThisMonth, o.currency)) +
+    card('Outstanding', acctFmtMoney(o.outstandingBalance, o.currency)) +
+    card('Unpaid invoices', (o.invoices && o.invoices.unpaid) || 0) +
+    card('Overdue invoices', (o.invoices && o.invoices.overdue) || 0) +
+    card('Paid invoices', (o.invoices && o.invoices.paid) || 0) +
+    card('Draft invoices', (o.invoices && o.invoices.draft) || 0) +
+    card('Avg invoice value', acctFmtMoney(o.averageInvoiceValue, o.currency)) +
+    card('Uninvoiced candidates', o.uninvoicedCandidates || 0) +
+    card('Needs mapping', o.candidatesNeedingMapping || 0) +
+    card('Needs pricing', o.candidatesNeedingPricing || 0);
+}
+
+async function acctRenderConnection() {
+  var s = await acctGet('/xero/status');
+  var statusEl = document.getElementById('acct-conn-status');
+  var badges = document.getElementById('acct-flag-badges');
+  if (s._denied) { statusEl.textContent = 'Access denied.'; return; }
+  if (!s.configured) {
+    statusEl.innerHTML = '<strong>Xero is not configured on this environment.</strong> The owner must complete the Xero app setup (see deploy/XERO_OWNER_ACTIONS_CHECKLIST.md).';
+  } else if (s.connected) {
+    statusEl.innerHTML = 'Connected to <strong>' + (s.organisation && s.organisation.name || 'Xero') + '</strong>' +
+      (s.baseCurrency ? ' · ' + s.baseCurrency : '') +
+      '<br><span class="acct-pill">tenant …' + (s.organisation && s.organisation.tenantIdSuffix || '') + '</span>' +
+      (s.lastConnectedAt ? ' <span style="color:var(--muted);font-size:12px;">since ' + new Date(s.lastConnectedAt).toLocaleDateString() + '</span>' : '');
+  } else {
+    statusEl.innerHTML = 'Not connected to Xero.';
+  }
+  document.getElementById('acct-connect-btn').style.display = (s.configured && !s.connected) ? '' : 'none';
+  document.getElementById('acct-sync-btn').style.display = s.connected ? '' : 'none';
+  document.getElementById('acct-disconnect-btn').style.display = s.connected ? '' : 'none';
+  var f = s.flags || {};
+  var flag = function (k, on) { return '<span class="acct-flag ' + (on ? 'on' : 'off') + '">' + k + ': ' + (on ? 'ON' : 'off') + '</span>'; };
+  badges.innerHTML =
+    flag('read', f.xeroRead) + flag('dashboard', f.financeDashboard) + flag('write', f.xeroWrite) +
+    flag('draft-invoice', f.draftInvoiceCreate) + flag('approve', f.approveInvoice) +
+    flag('send', f.sendInvoice) + flag('payment', f.paymentCreate) + flag('auto-recon', f.autoReconciliation) + flag('webhooks', f.webhooks);
+}
+
+async function acctConnectXero(btn) {
+  btn.disabled = true; btn.textContent = 'Opening Xero…';
+  try {
+    var d = await acctGet('/xero/connect');
+    if (d.authUrl) { window.location.href = d.authUrl; return; }
+    throw new Error(d.error || 'Xero not configured');
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Connect Xero';
+    if (typeof showToast === 'function') showToast('Could not start Xero connection', String(err.message || err));
+  }
+}
+async function acctSyncXero(btn) {
+  btn.disabled = true; btn.textContent = 'Syncing…';
+  var r = await acctPost('/xero/sync', {});
+  btn.disabled = false; btn.textContent = 'Sync now';
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Xero sync complete' : 'Sync failed', r.status === 200 ? 'Finance data refreshed' : (r.json.error || ''));
+  acctRenderOverview();
+}
+async function acctDisconnectXero(btn) {
+  if (!confirm('Disconnect Xero? Cached finance data is kept but no further sync will occur.')) return;
+  await acctPost('/xero/disconnect', {});
+  acctRenderConnection();
+}
+
+async function acctRenderInvoices() {
+  var el = document.getElementById('acct-invoices-body');
+  var d = await acctGet('/xero/invoices');
+  if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  if (!d.connected) { el.innerHTML = '<div class="acct-note">Connect Xero to see invoices.</div>'; return; }
+  var rows = (d.items || []).filter(function (i) { return i.type === 'ACCREC'; }).slice(0, 100);
+  if (!rows.length) { el.innerHTML = '<div class="acct-note">No invoices synced yet. Use <strong>Sync now</strong> on the Xero Connection tab.</div>'; return; }
+  el.innerHTML = '<table class="acct-table"><thead><tr><th>Number</th><th>Contact</th><th>Date</th><th>Due</th><th>Status</th><th>Total</th><th>Due amt</th></tr></thead><tbody>' +
+    rows.map(function (i) {
+      return '<tr><td>' + (i.invoice_number || '—') + '</td><td>' + (i.contact_name || '—') + '</td><td>' +
+        (i.invoice_date ? String(i.invoice_date).slice(0, 10) : '—') + '</td><td>' + (i.due_date ? String(i.due_date).slice(0, 10) : '—') +
+        '</td><td><span class="acct-pill">' + (i.status || '') + '</span></td><td>' + acctFmtMoney(i.total, i.currency_code) +
+        '</td><td>' + acctFmtMoney(i.amount_due, i.currency_code) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+async function acctRenderCandidates() {
+  var el = document.getElementById('acct-candidates-body');
+  var d = await acctGet('/candidates');
+  if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  var rows = d.candidates || [];
+  var header = '<div style="margin-bottom:10px;"><button class="btn" onclick="acctGenerateCandidates(this)">Generate from Splose (next 30 days)</button></div>';
+  if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No invoice candidates yet.</div>'; return; }
+  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Appointment</th><th>Date</th><th>Status</th><th>Amount</th><th>Warnings</th></tr></thead><tbody>' +
+    rows.map(function (c) {
+      return '<tr><td>' + (c.splose_appointment_id || '—') + '</td><td>' + (c.appointment_date ? String(c.appointment_date).slice(0, 10) : '—') +
+        '</td><td><span class="acct-pill">' + c.status + '</span></td><td>' + acctFmtMoney(c.total_amount, c.currency_code) +
+        '</td><td style="font-size:11px;color:var(--muted);">' + ((c.warnings || []).join(', ') || '—') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+async function acctGenerateCandidates(btn) {
+  btn.disabled = true; btn.textContent = 'Generating…';
+  var start = new Date().toISOString().slice(0, 10);
+  var end = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  var r = await acctPost('/candidates/generate', { startDate: start, endDate: end });
+  btn.disabled = false; btn.textContent = 'Generate from Splose (next 30 days)';
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidates generated' : 'Generation failed', r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''));
+  acctRenderCandidates();
+}
+
+async function acctRenderReconciliation() {
+  var el = document.getElementById('acct-recon-body');
+  var d = await acctGet('/reconciliation');
+  if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  var rows = d.candidates || [];
+  var header = '<div style="margin-bottom:10px;"><button class="btn" onclick="acctRefreshRecon(this)">Refresh suggestions</button></div>';
+  if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No reconciliation suggestions. Sync Xero, then refresh.</div>'; return; }
+  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Type</th><th>Confidence</th><th>Payment</th><th>Invoice</th><th>Reasons</th></tr></thead><tbody>' +
+    rows.map(function (c) {
+      return '<tr><td><span class="acct-pill">' + c.match_type + '</span></td><td>' + c.confidence + '</td><td>' +
+        acctFmtMoney(c.amount_payment) + '</td><td>' + acctFmtMoney(c.amount_invoice) + '</td><td style="font-size:11px;color:var(--muted);">' +
+        ((c.reasons || []).join(', ')) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+async function acctRefreshRecon(btn) {
+  btn.disabled = true; btn.textContent = 'Refreshing…';
+  await acctPost('/reconciliation/refresh', {});
+  btn.disabled = false; btn.textContent = 'Refresh suggestions';
+  acctRenderReconciliation();
+}
+
+async function acctRenderPricing() {
+  var el = document.getElementById('acct-pricing-body');
+  var d = await acctGet('/pricing-rules');
+  if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  var rows = d.rules || [];
+  if (!rows.length) { el.innerHTML = '<div class="acct-note">No pricing rules configured. Rates are never guessed — add rules here before generating priced candidates.</div>'; return; }
+  el.innerHTML = '<table class="acct-table"><thead><tr><th>Name</th><th>Service</th><th>Type</th><th>Funding</th><th>Rate</th><th>Tax</th><th>From</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr><td>' + r.name + '</td><td>' + (r.splose_service_id || 'any') + '</td><td>' + (r.appointment_type || 'any') +
+        '</td><td>' + (r.funding_type || 'any') + '</td><td>' + acctFmtMoney(r.unit_amount) + '</td><td>' + (r.tax_type || '') +
+        '</td><td>' + (r.effective_from ? String(r.effective_from).slice(0, 10) : '') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+async function acctRenderSyncLog() {
+  var el = document.getElementById('acct-synclog-body');
+  var d = await acctGet('/sync-log');
+  if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  var rows = d.log || [];
+  if (!rows.length) { el.innerHTML = '<div class="acct-note">No sync activity yet.</div>'; return; }
+  el.innerHTML = '<table class="acct-table"><thead><tr><th>Resource</th><th>Status</th><th>Records</th><th>When</th><th>Message</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr><td>' + r.resource + '</td><td><span class="acct-pill">' + r.status + '</span></td><td>' + (r.records || 0) +
+        '</td><td>' + new Date(r.created_at).toLocaleString() + '</td><td style="font-size:11px;color:var(--muted);">' + (r.message || '') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+// Load overview when the Accounting tab is opened.
+(function hookAccountingTab() {
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('.tab[data-tab="accounting"]');
+    if (t) setTimeout(function () { acctLoadSection('overview'); }, 50);
+  });
+})();
 
 /* ── Settings → Integrations: Connect Outlook ──────────────────────────────
    /auth/outlook-login returns JSON { authUrl } — it must be fetched and
@@ -17737,6 +18008,18 @@ function applyNavRoleVisibility(role) {
     var el = document.querySelector('.tab[data-tab="' + tabName + '"]');
     if (el) el.style.display = isPrivileged ? '' : 'none';
   });
+
+  // Owner-ONLY tabs (Accounting): visible only to the practice owner. The
+  // backend independently enforces owner-only on every /api/accounting route,
+  // so this is UX honesty, not the security boundary.
+  var isOwner = (role === 'owner');
+  document.querySelectorAll('.tab[data-owner-only="1"]').forEach(function(el) {
+    el.style.display = isOwner ? '' : 'none';
+  });
+  if (!isOwner) {
+    var activeOwnerTab = document.querySelector('.tab.active[data-owner-only="1"]');
+    if (activeOwnerTab && typeof switchTab === 'function') switchTab('calendar');
+  }
 
   // Show / hide "Travel & Flights" tab (admin sees team-wide, therapist sees own)
   // All roles can access it — no change needed

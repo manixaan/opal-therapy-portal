@@ -130,6 +130,10 @@ app.use(cors({
 // silently dropped in production (handover KNOWN_ISSUES #6).
 app.use('/api/webhooks/outlook', express.raw({ type: '*/*' }));
 
+// Xero webhook — raw body needed for HMAC-SHA256 signature verification.
+// Mounted before bodyParser.json, same pattern as the Outlook webhook.
+app.use('/api/accounting/webhooks/xero', express.raw({ type: '*/*' }));
+
 // Document uploads carry base64 file bytes (documented cap: 5 MB binary ≈
 // 6.7 MB base64) — that one route gets a larger JSON limit. Everything else
 // keeps the small default limit as a request-size defence.
@@ -436,6 +440,11 @@ app.use('/', appRoutes);
 const mapsRoutes = require('./maps-routes');
 app.use('/', mapsRoutes);
 
+// Accounting / Xero module (owner-only; every route enforces role server-side)
+const accountingRoutes = require('./accounting-routes');
+app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
+app.use('/', accountingRoutes);
+
 console.log('✅ Routes registered');
 
 // Boot up the server and listen for requests
@@ -448,6 +457,7 @@ const PORT = process.env.PORT || 5000;
 // Staged-integration switchboard — logged at boot so every environment's
 // posture is visible in its logs (values only, never secrets).
 log.info('feature flags', require('./feature-flags').featureFlagState());
+log.info('finance flags', require('./finance-flags').financeFlagState());
 
 // ===== GRACEFUL SHUTDOWN =====
 // App Service / container platforms send SIGTERM before recycling. Flip the

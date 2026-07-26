@@ -45,6 +45,9 @@ if (process.env.CI !== 'true' && !['localhost', '127.0.0.1'].includes(host)) {
 
 // Neutralise outbound integrations for the test process.
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'integration-test-secret-at-least-32-chars-long';
+// Exercise token encryption at rest exactly as staging/production do, so
+// OAuth-token round-trips (Outlook + Xero) are tested realistically.
+process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || 'ab'.repeat(32);
 process.env.ALLOWED_DOMAINS = '';
 process.env.ALLOWED_EMAILS = '';
 process.env.EMAIL_HOST = '';
