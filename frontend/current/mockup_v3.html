@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+<!DOCTYP
+            <button class="btn cal-outlook-only-btn" id="btn-outlook-only" style="display:none;font-size:12px;" onclick="toggleOutlookOnly(this)" title="Owner/admin: show only genuine Outlook events for 1:1 comparison">👁 Outlook-only</button>E html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -1869,6 +1870,15 @@
   .nav-arrow:hover { background: var(--border-soft); color: var(--ink); }
   .nav-arrow svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 
+  /* Outlook-only validation mode: hide app-generated/support blocks */
+  .cal-grid.outlook-only .session.support { display: none !important; }
+  .cal-grid.outlook-only .travel-chip, .cal-grid.outlook-only .addr-chip { display: none !important; }
+  .cal-outlook-only-btn.active { background: #2563eb; color: #fff; }
+  /* Visual refresh: calmer, more Outlook-like tiles */
+  .session { border-radius: 4px; border-width: 1px; box-shadow: none; font-size: 11.5px; line-height: 1.25; padding: 2px 6px; border-left-width: 3px; }
+  .session .session-title, .session b { font-weight: 600; }
+  .cal-head { border-bottom: 1px solid #e5e7eb; }
+  .cal-head.today .day-num { background:#2563eb; color:#fff; border-radius:50%; display:inline-block; min-width:22px; text-align:center; }
   .cal-grid {
     display: grid;
     grid-template-columns: 50px repeat(7, 1fr);
@@ -6750,6 +6760,10 @@ window.APP_USER = null;
     // this keeps the UI honest about what the account can do).
     document.body.classList.add('role-' + String(window.APP_USER.role || 'therapist').replace(/_/g, '-'));
     if (window.APP_USER.role === 'read_only') applyReadOnlyGuards();
+    if (['owner','admin'].includes(window.APP_USER.role)) {
+      var oBtn = document.getElementById('btn-outlook-only');
+      if (oBtn) oBtn.style.display = '';
+    }
 
     // Expose a quick helper for permission checks in UI code
     window.currentUserCan = (permission) =>
@@ -15751,7 +15765,12 @@ function __eventsInVisibleWeek() {
   const weekEnd = new Date(start); weekEnd.setUTCDate(start.getUTCDate() + 7);
   const startKey = __ymd(start);
   const endKey   = __ymd(weekEnd); // exclusive
-  return (window.__outlookEventsCache || []).filter(e => {
+  // Outlook-only validation mode (owner/admin): render ONLY genuine
+  // Outlook-sourced events so the week compares 1:1 with Outlook.
+  const __base = window.OUTLOOK_ONLY
+    ? (window.__outlookEventsCache || []).filter(e => e.source === 'outlook' && e.outlook_id)
+    : (window.__outlookEventsCache || []);
+  return __base.filter(e => {
     const dt = new Date(e.start_time);
     if (isNaN(dt.getTime())) return false;
     const k = __perthDateStr(dt);
@@ -16236,8 +16255,10 @@ function renderCurrentWeek() {
   renderToday();
   // Post-render decorations — run after all tiles are in the DOM
   requestAnimationFrame(() => {
-    detectAndMarkCalendarConflicts();
-    detectAndMarkRuralTrips();
+    if (!window.OUTLOOK_ONLY) {
+      detectAndMarkCalendarConflicts();
+      detectAndMarkRuralTrips();
+    }
   });
 }
 
@@ -16255,6 +16276,15 @@ function gotoNextWeek() {
   if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
   window.__currentWeekMonday.setUTCDate(window.__currentWeekMonday.getUTCDate() + 7);
   _saveWeekPos();
+  renderCurrentWeek();
+}
+function toggleOutlookOnly(btn) {
+  // Owner/admin validation tool — read-only view change that hides
+  // app-generated/derived blocks so the week matches Outlook exactly.
+  window.OUTLOOK_ONLY = !window.OUTLOOK_ONLY;
+  const g = document.getElementById('cal-grid');
+  if (g) g.classList.toggle('outlook-only', !!window.OUTLOOK_ONLY);
+  if (btn) { btn.classList.toggle('active', !!window.OUTLOOK_ONLY); btn.textContent = window.OUTLOOK_ONLY ? '\u{1F441} Outlook-only: ON' : '\u{1F441} Outlook-only'; }
   renderCurrentWeek();
 }
 function gotoThisWeek() {

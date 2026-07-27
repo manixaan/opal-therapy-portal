@@ -884,6 +884,15 @@ async function saveDeltaState(userId, deltaToken) {
 // so that multi-therapist calendar queries can filter by therapist without
 // joining through the users table on every request.
 async function upsertOutlookEvent(userId, eventData) {
+  // Recurring-series MASTER records must never be stored as events: Graph's
+  // delta/list feeds return them alongside the expanded occurrences, but a
+  // master carries the series' PATTERN time (original timezone), not a real
+  // slot — storing it renders a phantom block per series in addition to the
+  // true occurrences (staging reconciliation 2026-07-27). Occurrences and
+  // exceptions still sync normally.
+  if (eventData.type === 'seriesMaster') {
+    return { skipped: 'seriesMaster', outlookId: eventData.outlookId };
+  }
   const {
     outlookId, startTime, endTime, location, categories,
     iCalUId, changeKey, lastModifiedAt, isCancelled,

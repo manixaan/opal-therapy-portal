@@ -567,7 +567,12 @@ router.post('/api/sync/outlook-initial', requireAuth, async (req, res) => {
 
     for (const ev of outlookEvents) {
       try {
+        // Never store recurring-series masters (phantom blocks — see
+        // docs/calendar/CALENDAR_RECONCILIATION_2026-07-27.md); the
+        // occurrences carry the real slots.
+        if (ev.type === 'seriesMaster') continue;
         const eventData = {
+          type:           ev.type,
           outlookId:      ev.outlookId || ev.id,
           iCalUId:        ev.iCalUId,
           changeKey:      ev.changeKey,
@@ -977,6 +982,65 @@ router.post(
 );
 
 // ===== SYNC STATUS =====
+
+/**
+ * GET /api/calendar/reconcile?start=YYYY-MM-DD&end=YYYY-MM-DD
+ * Owner/admin debug: compares Microsoft Graph (source of truth) with the
+ * local mirror for the CALLER's connected mailbox. Read-only; REDACTED —
+ * returns ids/times/counts only, never subjects or bodies.
+ */
+router.get('/api/calendar/reconcile', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) {
+      return res.status(400).json({ error: 'start and end required (YYYY-MM-DD)' });
+    }
+    const user = await db.getUser(req.session.userId);
+    if (!user?.access_token) return res.status(409).json({ error: 'No Outlook connection on this account' });
+    // Perth week boundaries → UTC
+    const sUtc = new Date(start + 'T00:00:00+08:00').toISOString();
+    const eUtc = new Date(end + 'T23:59:59+08:00').toISOString();
+    const accessToken = await getValidAccessToken(user);
+
+    // Graph truth (expanded occurrences; masters never appear in calendarView)
+    let gItems = [];
+    let url = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${encodeURIComponent(sUtc)}&endDateTime=${encodeURIComponent(eUtc)}&$top=200&$select=id,start,end,isCancelled,type`;
+    while (url) {
+      const r = await axios.get(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      gItems.push(...(r.data.value || []));
+      url = r.data['@odata.nextLink'] || null;
+    }
+    const gActive = gItems.filter(i => !i.isCancelled);
+    const gIds = new Set(gActive.map(i => i.id));
+
+    const { rows: local } = await db.pool.query(
+      `SELECT id, outlook_id, start_time, end_time, source, event_type,
+              COALESCE(is_deleted,false) AS is_deleted
+         FROM events WHERE user_id = $1 AND start_time >= $2 AND start_time <= $3`,
+      [user.id, sUtc, eUtc]);
+    const activeLocal = local.filter(r => !r.is_deleted);
+    const localIds = new Set(activeLocal.filter(r => r.outlook_id).map(r => r.outlook_id));
+
+    res.json({
+      window: { start: sUtc, end: eUtc, timezone: 'Australia/Perth' },
+      outlookActive: gActive.length,
+      localActive: activeLocal.length,
+      localTombstoned: local.length - activeLocal.length,
+      matches: activeLocal.filter(r => r.outlook_id && gIds.has(r.outlook_id)).length,
+      appEventsNotInOutlook: activeLocal
+        .filter(r => r.outlook_id && !gIds.has(r.outlook_id))
+        .map(r => ({ localId: r.id, outlookId: r.outlook_id, start: r.start_time, type: r.event_type })),
+      outlookEventsMissingFromApp: gActive
+        .filter(i => !localIds.has(i.id))
+        .map(i => ({ outlookId: i.id, start: i.start?.dateTime, graphType: i.type })),
+      appInternalEvents: activeLocal.filter(r => !r.outlook_id).length,
+    });
+  } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
+    console.error('calendar reconcile error:', err.response?.status || err.message);
+    res.status(500).json({ error: 'Reconcile failed' });
+  }
+});
 
 /**
  * GET /api/sync-status
