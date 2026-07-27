@@ -35,11 +35,14 @@ function readFlag(name) {
 
 const isXeroReadEnabled = () => readFlag('ENABLE_XERO_READ');
 const isFinanceDashboardEnabled = () => readFlag('ENABLE_FINANCE_DASHBOARD');
+const isExceptionDashboardEnabled = () => readFlag('ENABLE_ACCOUNTING_EXCEPTION_DASHBOARD');
 
 // Every write requires BOTH the master write gate AND the specific action flag.
 const isXeroWriteEnabled = () => writeFlag('ENABLE_XERO_WRITE');
 const isDraftInvoiceCreateEnabled = () =>
   isXeroWriteEnabled() && writeFlag('ENABLE_XERO_DRAFT_INVOICE_CREATE');
+const isContactCreateEnabled = () =>
+  isXeroWriteEnabled() && writeFlag('ENABLE_XERO_CONTACT_CREATE');
 const isApproveInvoiceEnabled = () =>
   isXeroWriteEnabled() && writeFlag('ENABLE_XERO_APPROVE_INVOICE');
 const isSendInvoiceEnabled = () =>
@@ -55,8 +58,10 @@ function financeFlagState() {
   return {
     xeroRead: isXeroReadEnabled(),
     financeDashboard: isFinanceDashboardEnabled(),
+    exceptionDashboard: isExceptionDashboardEnabled(),
     xeroWrite: isXeroWriteEnabled(),
     draftInvoiceCreate: isDraftInvoiceCreateEnabled(),
+    contactCreate: isContactCreateEnabled(),
     approveInvoice: isApproveInvoiceEnabled(),
     sendInvoice: isSendInvoiceEnabled(),
     paymentCreate: isPaymentCreateEnabled(),
@@ -80,8 +85,10 @@ function financeDisabledError(flagName, what) {
 module.exports = {
   isXeroReadEnabled,
   isFinanceDashboardEnabled,
+  isExceptionDashboardEnabled,
   isXeroWriteEnabled,
   isDraftInvoiceCreateEnabled,
+  isContactCreateEnabled,
   isApproveInvoiceEnabled,
   isSendInvoiceEnabled,
   isPaymentCreateEnabled,

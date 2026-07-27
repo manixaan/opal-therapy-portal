@@ -27,6 +27,13 @@
  *   GET|POST /api/accounting/pricing-rules
  *   GET|POST /api/accounting/service-mappings
  *   GET  /api/accounting/sync-log
+ *   GET  /api/accounting/exceptions                   (?refresh=true regenerates)
+ *   POST /api/accounting/exceptions/refresh
+ *   POST /api/accounting/exceptions/:id/resolve|dismiss|reopen
+ *   GET  /api/accounting/contacts
+ *   POST /api/accounting/contacts/refresh-suggestions
+ *   POST /api/accounting/contacts/:id/map             { xeroContactId }
+ *   POST /api/accounting/contacts/create-xero-contact (flag-gated stub — 403 while off)
  *   POST /api/accounting/webhooks/xero                (signature-verified; flag-gated)
  */
 
@@ -43,6 +50,8 @@ const recon = require('./reconciliation-engine');
 const { createXeroSync } = require('./xero-sync');
 const { createCandidateEngine } = require('./candidate-engine');
 const { requireAuth, requireRole } = require('./permissions');
+const exceptions = require('./accounting-exceptions');
+const matching = require('./contact-matching');
 
 const log = require('./logger').createLogger('accounting');
 const sync = createXeroSync({ xeroApi, adb, logger: log });
@@ -259,7 +268,8 @@ router.post('/api/accounting/candidates/generate', ...ownerOnly, async (req, res
       organisationId: orgId(req),
       pricingRules: await adb.listPricingRules(orgId(req)),
       serviceMappings: await adb.listServiceMappings(orgId(req)),
-      contactMappings: [],
+      // Only owner-CONFIRMED mappings feed candidates; suggestions never do.
+      contactMappings: (await adb.listContactMappings(orgId(req), { status: 'mapped' })),
     };
     const summary = await candidateEngine.generate(appts, ctx);
     await audit(req, 'finance.candidates_generated', 'invoice_candidate', null, summary);
@@ -404,6 +414,147 @@ router.get('/api/accounting/sync-log', ...ownerOnly, async (req, res) => {
   const conn = await adb.getConnection(orgId(req));
   if (!conn) return res.json({ log: [] });
   res.json({ log: await adb.getFinanceSyncLog(conn.id) });
+});
+
+// ── Exception dashboard (Phase 2 slice 1) ────────────────────────────────────
+// The operational control centre: every blocked/risky accounting condition
+// surfaces here with severity, explanation and a suggested action. Items
+// carry identifiers only — never client names or clinical content.
+
+router.get('/api/accounting/exceptions', ...ownerOnly, async (req, res) => {
+  if (!flags.isExceptionDashboardEnabled()) {
+    return res.status(403).json({ error: 'Exception dashboard disabled', code: 'exceptions_disabled' });
+  }
+  try {
+    let generated = null;
+    if (req.query.refresh === 'true') {
+      generated = await exceptions.generateExceptions(orgId(req));
+    }
+    const items = await adb.listExceptions(orgId(req), {
+      status: req.query.status || 'open',
+      severity: req.query.severity, type: req.query.type,
+    });
+    res.json({ items, generated });
+  } catch (err) {
+    log.error('exceptions list failed', { error: err });
+    res.status(500).json({ error: 'Failed to load exceptions' });
+  }
+});
+
+router.post('/api/accounting/exceptions/refresh', ...ownerOnly, async (req, res) => {
+  if (!flags.isExceptionDashboardEnabled()) {
+    return res.status(403).json({ error: 'Exception dashboard disabled', code: 'exceptions_disabled' });
+  }
+  try {
+    const generated = await exceptions.generateExceptions(orgId(req));
+    await audit(req, 'finance.exceptions_refreshed', 'exception', null, generated);
+    res.json({ ok: true, generated });
+  } catch (err) {
+    log.error('exceptions refresh failed', { error: err });
+    res.status(500).json({ error: 'Failed to regenerate exceptions' });
+  }
+});
+
+// resolve = fixed; dismiss = permanently silence (survives regeneration);
+// reopen = back to open. All owner decisions, all audited.
+for (const [action, status] of [['resolve', 'resolved'], ['dismiss', 'dismissed'], ['reopen', 'open']]) {
+  router.post(`/api/accounting/exceptions/:id/${action}`, ...ownerOnly, async (req, res) => {
+    try {
+      const updated = await adb.setExceptionStatus(req.params.id, status, req.user.id);
+      if (!updated) return res.status(404).json({ error: 'Exception not found' });
+      await audit(req, `finance.exception_${action}d`, 'exception', req.params.id,
+        { type: updated.exception_type });
+      res.json({ item: updated });
+    } catch (err) {
+      log.error(`exception ${action} failed`, { error: err });
+      res.status(500).json({ error: `Failed to ${action} exception` });
+    }
+  });
+}
+
+// ── Contact mappings (Phase 2 slice 1) ───────────────────────────────────────
+// Permanent splose_client_id ↔ xero ContactID mappings. Suggestions come
+// from the pure matching engine; nothing is confirmed without the owner.
+
+router.get('/api/accounting/contacts', ...ownerOnly, async (req, res) => {
+  try {
+    const conn = await adb.getConnection(orgId(req));
+    const mappings = await adb.listContactMappings(orgId(req), { status: req.query.status });
+    const cache = conn ? await adb.listCache('contacts', conn.id) : [];
+    const nameByXeroId = new Map(cache.map(c => [c.xero_contact_id, c.name]));
+    res.json({
+      connected: !!conn,
+      xeroContactCount: cache.length,
+      mappings: mappings.map(m => ({
+        ...m, xero_contact_name: m.xero_contact_id ? (nameByXeroId.get(m.xero_contact_id) || null) : null,
+      })),
+      flags: { contactCreate: flags.isContactCreateEnabled() },
+    });
+  } catch (err) {
+    log.error('contacts list failed', { error: err });
+    res.status(500).json({ error: 'Failed to load contact mappings' });
+  }
+});
+
+// Recompute suggestions: Splose clients (read-only) × Xero contact cache
+// through the confidence ladder. Owner-confirmed rows are never downgraded.
+router.post('/api/accounting/contacts/refresh-suggestions', ...ownerOnly, async (req, res) => {
+  try {
+    const conn = await adb.getConnection(orgId(req));
+    if (!conn) return res.status(404).json({ error: 'Not connected to Xero' });
+    const sploseApi = require('./splose-api');
+    const clients = (await sploseApi.getPatients()).map(p => ({
+      id: p.id, fullName: p.fullName, email: p.email,
+    }));
+    const xeroContacts = await adb.listCache('contacts', conn.id);
+    const existing = await adb.listContactMappings(orgId(req));
+    const suggestions = matching.suggestContactMatches(clients, xeroContacts, existing);
+
+    const summary = { mapped: 0, needs_review: 0, unmapped: 0 };
+    for (const s of suggestions) {
+      await adb.upsertSuggestedContactMapping({
+        organisationId: orgId(req), sploseClientId: s.sploseClientId,
+        xeroContactId: s.xeroContactId, matchConfidence: s.confidence,
+        matchReason: s.matchReason, status: s.status,
+      });
+      summary[s.status] = (summary[s.status] || 0) + 1;
+    }
+    await audit(req, 'finance.contact_suggestions_refreshed', 'contact_mapping', null, summary);
+    res.json({ ok: true, summary });
+  } catch (err) {
+    log.error('contact suggestion refresh failed', { error: err });
+    res.status(502).json({ error: 'Failed to refresh contact suggestions' });
+  }
+});
+
+// Manual mapping — the owner's explicit decision; permanent until changed.
+router.post('/api/accounting/contacts/:id/map', ...ownerOnly, async (req, res) => {
+  try {
+    const { xeroContactId } = req.body || {};
+    if (!xeroContactId) return res.status(400).json({ error: 'xeroContactId required' });
+    const updated = await adb.setManualContactMapping(req.params.id, xeroContactId, req.user.id);
+    if (!updated) return res.status(404).json({ error: 'Mapping not found' });
+    await audit(req, 'finance.contact_mapped_manually', 'contact_mapping', req.params.id,
+      { xeroContactId });
+    res.json({ mapping: updated });
+  } catch (err) {
+    log.error('manual contact map failed', { error: err });
+    res.status(500).json({ error: 'Failed to save mapping' });
+  }
+});
+
+// Contact creation in Xero — WRITE-SHAPED STUB. Proves the double gate:
+// blocked unless ENABLE_XERO_WRITE and ENABLE_XERO_CONTACT_CREATE are both
+// 'true', and even then unimplemented in this slice (no write path exists).
+router.post('/api/accounting/contacts/create-xero-contact', ...ownerOnly, async (req, res) => {
+  if (!flags.isContactCreateEnabled()) {
+    return res.status(403).json({
+      error: 'Xero contact creation is disabled', code: 'contact_create_disabled',
+      hint: 'Requires ENABLE_XERO_WRITE=true and ENABLE_XERO_CONTACT_CREATE=true',
+    });
+  }
+  await audit(req, 'finance.contact_create_attempted', 'xero_contact', null);
+  res.status(501).json({ error: 'Contact creation is not implemented in this phase' });
 });
 
 // ── Xero webhook (signature-verified, flag-gated) ────────────────────────────

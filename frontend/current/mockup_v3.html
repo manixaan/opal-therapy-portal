@@ -4273,6 +4273,18 @@
   .acct-table th, .acct-table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
   .acct-note { font-size:12px; color:var(--muted); background:var(--surface-2,rgba(0,0,0,0.03)); padding:10px 12px; border-radius:8px; margin-bottom:12px; }
   .acct-pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
+  .acct-subnav button:disabled { opacity:.45; cursor:not-allowed; }
+  .acct-exc-count { display:inline-block; min-width:16px; padding:1px 5px; margin-left:4px; font-size:10px;
+    border-radius:999px; background:#dc2626; color:#fff; text-align:center; }
+  .acct-sev { font-size:10px; font-weight:700; letter-spacing:.4px; padding:2px 7px; border-radius:999px; text-transform:uppercase; }
+  .acct-sev.high { background:#fee2e2; color:#b91c1c; }
+  .acct-sev.medium { background:#fef3c7; color:#b45309; }
+  .acct-sev.low { background:var(--surface-2,rgba(0,0,0,0.05)); color:var(--muted); }
+  .acct-conf { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
+  .acct-conf.mapped { background:#dcfce7; color:#15803d; border-color:#15803d33; }
+  .acct-conf.needs_review { background:#fef3c7; color:#b45309; border-color:#b4530933; }
+  .acct-conf.unmapped { background:#fee2e2; color:#b91c1c; border-color:#b91c1c33; }
+  .btn-locked { opacity:.5; cursor:not-allowed; }
 </style>
 <div class="acct-page">
   <h1 style="margin:0 0 4px;">Accounting</h1>
@@ -4280,12 +4292,17 @@
 
   <div class="acct-subnav" id="acct-subnav">
     <button data-acct="overview" class="active">Overview</button>
+    <button data-acct="exceptions">Exceptions <span class="acct-exc-count" id="acct-exc-count" style="display:none;"></span></button>
     <button data-acct="connection">Xero Connection</button>
     <button data-acct="invoices">Invoices</button>
     <button data-acct="candidates">Invoice Candidates</button>
+    <button data-acct="contacts">Contacts</button>
     <button data-acct="reconciliation">Reconciliation</button>
     <button data-acct="pricing">Pricing</button>
     <button data-acct="synclog">Sync Log</button>
+    <button disabled title="Coming soon — planned in Accounting Automation Phase 2">Expenses</button>
+    <button disabled title="Coming soon — planned in Accounting Automation Phase 2">Timesheets</button>
+    <button disabled title="Coming soon — planned in Accounting Automation Phase 2">Leave</button>
   </div>
 
   <div class="acct-section active" id="acct-overview"><div class="acct-cards" id="acct-overview-cards"><div class="acct-note">Loading…</div></div></div>
@@ -4300,8 +4317,18 @@
     </div>
   </div>
 
+  <div class="acct-section" id="acct-exceptions">
+    <div class="acct-note">Operational control centre: everything blocked, risky or waiting for a decision. Items reference record IDs only — never client details.</div>
+    <div id="acct-exceptions-body">Loading…</div>
+  </div>
+
   <div class="acct-section" id="acct-invoices"><div id="acct-invoices-body" class="acct-note">Loading…</div></div>
   <div class="acct-section" id="acct-candidates"><div id="acct-candidates-body" class="acct-note">Loading…</div></div>
+
+  <div class="acct-section" id="acct-contacts">
+    <div class="acct-note">Permanent Splose-payer ↔ Xero-contact mappings (ContactID is the stable key). Suggestions are never confirmed automatically — every mapping is your decision.</div>
+    <div id="acct-contacts-body">Loading…</div>
+  </div>
   <div class="acct-section" id="acct-reconciliation">
     <div class="acct-note">Suggestions only. Bank reconciliation is performed in Xero — the public API cannot reconcile bank statement lines.</div>
     <div id="acct-recon-body">Loading…</div>
@@ -6878,12 +6905,82 @@ document.addEventListener('click', function (e) {
 
 async function acctLoadSection(key) {
   if (key === 'overview') return acctRenderOverview();
+  if (key === 'exceptions') return acctRenderExceptions();
   if (key === 'connection') return acctRenderConnection();
   if (key === 'invoices') return acctRenderInvoices();
   if (key === 'candidates') return acctRenderCandidates();
+  if (key === 'contacts') return acctRenderContacts();
   if (key === 'reconciliation') return acctRenderReconciliation();
   if (key === 'pricing') return acctRenderPricing();
   if (key === 'synclog') return acctRenderSyncLog();
+}
+
+// ── Exceptions (operational control centre) ─────────────────────────────
+async function acctRenderExceptions(refresh) {
+  var el = document.getElementById('acct-exceptions-body');
+  var d = await acctGet('/exceptions' + (refresh ? '?refresh=true' : ''));
+  if (d._denied) { el.innerHTML = '<div class="acct-note">Access denied.</div>'; return; }
+  var rows = d.items || [];
+  var badge = document.getElementById('acct-exc-count');
+  if (badge) { badge.style.display = rows.length ? '' : 'none'; badge.textContent = rows.length; }
+  var header = '<div style="margin-bottom:10px;display:flex;gap:8px;">' +
+    '<button class="btn" onclick="acctRenderExceptions(true)">Re-scan now</button></div>';
+  if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No open exceptions. Everything that can be checked is clean.</div>'; return; }
+  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Severity</th><th>Type</th><th>Affected</th><th>Explanation</th><th>Suggested action</th><th></th></tr></thead><tbody>' +
+    rows.map(function (x) {
+      return '<tr><td><span class="acct-sev ' + x.severity + '">' + x.severity + '</span></td>' +
+        '<td><span class="acct-pill">' + String(x.exception_type || '').replace(/_/g, ' ') + '</span></td>' +
+        '<td style="font-size:11px;color:var(--muted);">' + (x.affected_type || '') + '<br>' + String(x.affected_id || '').slice(0, 8) + '…</td>' +
+        '<td style="font-size:12px;">' + (x.explanation || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);">' + (x.suggested_action || '') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn" style="font-size:11px;" onclick="acctExceptionAction(\'' + x.id + '\',\'resolve\')">Resolve</button> ' +
+        '<button class="btn" style="font-size:11px;" onclick="acctExceptionAction(\'' + x.id + '\',\'dismiss\')">Dismiss</button></td></tr>';
+    }).join('') + '</tbody></table>';
+}
+async function acctExceptionAction(id, action) {
+  var r = await acctPost('/exceptions/' + id + '/' + action, {});
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Exception ' + action + 'd' : 'Failed', r.json.error || '');
+  acctRenderExceptions();
+}
+
+// ── Contacts / mappings ─────────────────────────────────────────────────
+async function acctRenderContacts() {
+  var el = document.getElementById('acct-contacts-body');
+  var d = await acctGet('/contacts');
+  if (d._denied) { el.innerHTML = '<div class="acct-note">Access denied.</div>'; return; }
+  var rows = d.mappings || [];
+  var gateOn = d.flags && d.flags.contactCreate;
+  var header = '<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">' +
+    '<button class="btn" onclick="acctRefreshContactSuggestions(this)">Refresh suggestions</button>' +
+    '<button class="btn ' + (gateOn ? '' : 'btn-locked') + '" ' + (gateOn ? '' : 'disabled') +
+    ' title="' + (gateOn ? 'Create a missing contact in Xero' : 'Disabled: requires ENABLE_XERO_WRITE and ENABLE_XERO_CONTACT_CREATE') + '">Create contact in Xero 🔒</button>' +
+    '<span style="font-size:11px;color:var(--muted);">' + (d.connected ? (d.xeroContactCount + ' Xero contacts synced') : 'Xero not connected') + '</span></div>';
+  if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No mappings yet. Sync Xero contacts, then refresh suggestions.</div>'; return; }
+  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Splose client ID</th><th>Xero contact</th><th>Status</th><th>Confidence</th><th>Reason</th><th></th></tr></thead><tbody>' +
+    rows.map(function (m) {
+      return '<tr><td style="font-family:monospace;font-size:11px;">' + m.splose_client_id + '</td>' +
+        '<td>' + (m.xero_contact_name || (m.xero_contact_id ? String(m.xero_contact_id).slice(0, 8) + '…' : '—')) + '</td>' +
+        '<td><span class="acct-conf ' + m.status + '">' + String(m.status || '').replace(/_/g, ' ') + '</span></td>' +
+        '<td>' + (m.match_confidence || '—') + '</td><td style="font-size:11px;color:var(--muted);">' + (m.match_reason || '—') + '</td>' +
+        '<td>' + (m.status === 'mapped' ? '' :
+          '<button class="btn" style="font-size:11px;" onclick="acctManualMap(\'' + m.id + '\',\'' + (m.xero_contact_id || '') + '\')">' +
+          (m.xero_contact_id ? 'Confirm mapping' : 'Map manually') + '</button>') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+async function acctRefreshContactSuggestions(btn) {
+  btn.disabled = true; btn.textContent = 'Matching…';
+  var r = await acctPost('/contacts/refresh-suggestions', {});
+  btn.disabled = false; btn.textContent = 'Refresh suggestions';
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Suggestions refreshed' : 'Refresh failed',
+    r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''));
+  acctRenderContacts();
+}
+async function acctManualMap(id, suggestedXeroId) {
+  var xeroId = prompt('Xero ContactID to map to this Splose client:', suggestedXeroId || '');
+  if (!xeroId) return;
+  var r = await acctPost('/contacts/' + id + '/map', { xeroContactId: xeroId.trim() });
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Mapping saved' : 'Mapping failed', r.json.error || '');
+  acctRenderContacts();
 }
 
 async function acctRenderOverview() {
@@ -6976,15 +7073,43 @@ async function acctRenderCandidates() {
   var el = document.getElementById('acct-candidates-body');
   var d = await acctGet('/candidates');
   if (d._denied) { el.innerHTML = 'Access denied.'; return; }
+  var s = await acctGet('/xero/status');
+  var draftOn = s.flags && s.flags.draftInvoiceCreate;
   var rows = d.candidates || [];
-  var header = '<div style="margin-bottom:10px;"><button class="btn" onclick="acctGenerateCandidates(this)">Generate from Splose (next 30 days)</button></div>';
+  var header = '<div style="margin-bottom:10px;"><button class="btn" onclick="acctGenerateCandidates(this)">Generate from Splose (next 30 days)</button>' +
+    (draftOn ? '' : ' <span style="font-size:11px;color:var(--muted);">Draft-invoice creation is locked (ENABLE_XERO_WRITE + ENABLE_XERO_DRAFT_INVOICE_CREATE are off) — approval only records your decision.</span>') + '</div>';
   if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No invoice candidates yet.</div>'; return; }
-  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Appointment</th><th>Date</th><th>Status</th><th>Amount</th><th>Warnings</th></tr></thead><tbody>' +
+  el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Appointment</th><th>Date</th><th>Status</th><th>Amount</th><th>Warnings</th><th></th></tr></thead><tbody>' +
     rows.map(function (c) {
+      var actions = '';
+      if (c.status === 'ready_for_review') {
+        actions = '<button class="btn" style="font-size:11px;" onclick="acctReviewCandidate(\'' + c.id + '\',\'approved_for_draft\')">Approve</button> ' +
+          '<button class="btn" style="font-size:11px;" onclick="acctReviewCandidate(\'' + c.id + '\',\'ignored\')">Ignore</button>';
+      } else if (c.status === 'approved_for_draft') {
+        actions = '<button class="btn ' + (draftOn ? '' : 'btn-locked') + '" style="font-size:11px;" ' + (draftOn ? '' : 'disabled') +
+          ' title="' + (draftOn ? 'Create a DRAFT invoice in Xero (never authorised or sent)' : 'Disabled: requires ENABLE_XERO_WRITE and ENABLE_XERO_DRAFT_INVOICE_CREATE') + '"' +
+          (draftOn ? ' onclick="acctCreateDraft(\'' + c.id + '\',this)"' : '') + '>Create draft in Xero 🔒</button>';
+      } else if (c.status === 'draft_created_in_xero') {
+        actions = '<span class="acct-pill">in Xero</span>';
+      }
       return '<tr><td>' + (c.splose_appointment_id || '—') + '</td><td>' + (c.appointment_date ? String(c.appointment_date).slice(0, 10) : '—') +
         '</td><td><span class="acct-pill">' + c.status + '</span></td><td>' + acctFmtMoney(c.total_amount, c.currency_code) +
-        '</td><td style="font-size:11px;color:var(--muted);">' + ((c.warnings || []).join(', ') || '—') + '</td></tr>';
+        '</td><td style="font-size:11px;color:var(--muted);">' + ((c.warnings || []).join(', ') || '—') +
+        '</td><td style="white-space:nowrap;">' + actions + '</td></tr>';
     }).join('') + '</tbody></table>';
+}
+async function acctReviewCandidate(id, status) {
+  var r = await acctPost('/candidates/' + id + '/review', { status: status });
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidate updated' : 'Update failed', r.json.error || '');
+  acctRenderCandidates();
+}
+async function acctCreateDraft(id, btn) {
+  if (!confirm('Create a DRAFT invoice in Xero for this candidate? It will never be authorised or sent by the portal.')) return;
+  btn.disabled = true;
+  var r = await acctPost('/candidates/' + id + '/create-draft-invoice', {});
+  if (typeof showToast === 'function') showToast(r.status === 201 ? 'Draft created in Xero' : 'Draft creation blocked',
+    r.status === 201 ? (r.json.invoiceNumber || '') : (r.json.error || ''));
+  acctRenderCandidates();
 }
 async function acctGenerateCandidates(btn) {
   btn.disabled = true; btn.textContent = 'Generating…';

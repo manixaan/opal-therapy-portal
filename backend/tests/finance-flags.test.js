@@ -27,6 +27,12 @@ describe('read flags', () => {
     const f = fresh({ ENABLE_XERO_READ: 'false' });
     expect(f.isXeroReadEnabled()).toBe(false);
   });
+  test('exception dashboard defaults ON, explicit false turns it off', () => {
+    let f = fresh({});
+    expect(f.isExceptionDashboardEnabled()).toBe(true);
+    f = fresh({ ENABLE_ACCOUNTING_EXCEPTION_DASHBOARD: 'false' });
+    expect(f.isExceptionDashboardEnabled()).toBe(false);
+  });
 });
 
 describe('write flags fail closed in every environment', () => {
@@ -59,6 +65,32 @@ describe('write flags fail closed in every environment', () => {
     // Both on → enabled.
     f = fresh({ ENABLE_XERO_WRITE: 'true', ENABLE_XERO_DRAFT_INVOICE_CREATE: 'true' });
     expect(f.isDraftInvoiceCreateEnabled()).toBe(true);
+  });
+
+  test('contact create requires BOTH master gate AND specific flag (hard rule)', () => {
+    // The accidental-misconfiguration case the hard rule exists for:
+    // specific flag true, master gate false → MUST stay blocked.
+    let f = fresh({ ENABLE_XERO_CONTACT_CREATE: 'true' });
+    expect(f.isContactCreateEnabled()).toBe(false);
+    f = fresh({ ENABLE_XERO_WRITE: 'true' });
+    expect(f.isContactCreateEnabled()).toBe(false);
+    f = fresh({ ENABLE_XERO_WRITE: 'true', ENABLE_XERO_CONTACT_CREATE: 'true' });
+    expect(f.isContactCreateEnabled()).toBe(true);
+  });
+
+  test('EVERY specific write helper is blocked by the global gate alone', () => {
+    // All specific flags true, global gate off → everything still off.
+    const f = fresh({
+      ENABLE_XERO_DRAFT_INVOICE_CREATE: 'true', ENABLE_XERO_CONTACT_CREATE: 'true',
+      ENABLE_XERO_APPROVE_INVOICE: 'true', ENABLE_XERO_SEND_INVOICE: 'true',
+      ENABLE_XERO_PAYMENT_CREATE: 'true', ENABLE_XERO_AUTO_RECONCILIATION: 'true',
+    });
+    expect(f.isDraftInvoiceCreateEnabled()).toBe(false);
+    expect(f.isContactCreateEnabled()).toBe(false);
+    expect(f.isApproveInvoiceEnabled()).toBe(false);
+    expect(f.isSendInvoiceEnabled()).toBe(false);
+    expect(f.isPaymentCreateEnabled()).toBe(false);
+    expect(f.isAutoReconciliationEnabled()).toBe(false);
   });
 
   test('webhooks flag is independent of the write master gate', () => {

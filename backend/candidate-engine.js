@@ -54,6 +54,12 @@ function createCandidateEngine({ adb, pricing, logger = console }) {
           status = 'needs_mapping';
           if (!warnings.includes('service_not_mapped')) warnings.push('service_not_mapped');
         }
+        // Unresolved payer/contact mapping blocks readiness — a candidate can
+        // never be reviewable without a confirmed Xero ContactID.
+        if (!cm.xero_contact_id && status !== 'ignored') {
+          status = 'needs_mapping';
+          if (!warnings.includes('no_contact_mapping')) warnings.push('no_contact_mapping');
+        }
         if (status === 'priced') status = 'ready_for_review';
 
         const saved = await adb.upsertCandidate({

@@ -263,7 +263,8 @@ async function upsertCandidate(cand, lines = []) {
           practitioner_ref, appointment_date, appointment_status, xero_contact_id,
           status, currency_code, total_amount, total_tax, warnings, pricing_source, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
-       ON CONFLICT (organisation_id, splose_appointment_id) DO UPDATE
+       ON CONFLICT (COALESCE(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    splose_appointment_id) DO UPDATE
          SET splose_client_id = EXCLUDED.splose_client_id,
              splose_service_id = EXCLUDED.splose_service_id,
              practitioner_ref = EXCLUDED.practitioner_ref,
@@ -434,6 +435,90 @@ async function decideReconciliation(id, decision, userId) {
   return rows[0];
 }
 
+// ── Contact mappings (Phase 2 slice 1) ───────────────────────────────────────
+// splose_client_id ↔ xero_contact_id is the permanent mapping; ContactID is
+// the only stable key. status: mapped | needs_review | unmapped.
+
+async function listContactMappings(organisationId, { status } = {}) {
+  const params = [organisationId || null];
+  let sql = 'SELECT * FROM finance_contact_mappings WHERE organisation_id IS NOT DISTINCT FROM $1';
+  if (status) { params.push(status); sql += ` AND status = $${params.length}`; }
+  sql += ' ORDER BY status, updated_at DESC LIMIT 1000';
+  return (await pool.query(sql, params)).rows;
+}
+
+async function getContactMapping(id) {
+  const { rows } = await pool.query('SELECT * FROM finance_contact_mappings WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+/**
+ * Upsert a SUGGESTED mapping. Never downgrades a confirmed row: once
+ * status='mapped' (owner-confirmed or reason 'existing'), suggestions leave
+ * it alone.
+ */
+async function upsertSuggestedContactMapping({ organisationId, sploseClientId, xeroContactId,
+                                              matchConfidence, matchReason, status }) {
+  const { rows } = await pool.query(
+    `INSERT INTO finance_contact_mappings
+       (organisation_id, splose_client_id, xero_contact_id, match_confidence, match_reason, status, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,NOW())
+     ON CONFLICT (COALESCE(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                  splose_client_id) DO UPDATE SET
+       xero_contact_id  = CASE WHEN finance_contact_mappings.status = 'mapped'
+                               THEN finance_contact_mappings.xero_contact_id ELSE EXCLUDED.xero_contact_id END,
+       match_confidence = CASE WHEN finance_contact_mappings.status = 'mapped'
+                               THEN finance_contact_mappings.match_confidence ELSE EXCLUDED.match_confidence END,
+       match_reason     = CASE WHEN finance_contact_mappings.status = 'mapped'
+                               THEN finance_contact_mappings.match_reason ELSE EXCLUDED.match_reason END,
+       status           = CASE WHEN finance_contact_mappings.status = 'mapped'
+                               THEN 'mapped' ELSE EXCLUDED.status END,
+       updated_at = NOW()
+     RETURNING *`,
+    [organisationId || null, String(sploseClientId), xeroContactId || null,
+     matchConfidence || null, matchReason || null, status || 'unmapped']
+  );
+  return rows[0];
+}
+
+/** Owner's explicit manual mapping — permanent until changed by the owner. */
+async function setManualContactMapping(id, xeroContactId, userId) {
+  const { rows } = await pool.query(
+    `UPDATE finance_contact_mappings
+        SET xero_contact_id = $2, match_confidence = 'high', match_reason = 'manual',
+            status = 'mapped', created_by_user_id = $3, updated_at = NOW()
+      WHERE id = $1 RETURNING *`,
+    [id, xeroContactId, userId || null]
+  );
+  return rows[0] || null;
+}
+
+// ── Exception items ──────────────────────────────────────────────────────────
+
+async function listExceptions(organisationId, { status = 'open', severity, type } = {}) {
+  const params = [organisationId || null];
+  let sql = 'SELECT * FROM accounting_exception_items WHERE organisation_id IS NOT DISTINCT FROM $1';
+  if (status && status !== 'all') { params.push(status); sql += ` AND status = $${params.length}`; }
+  if (severity) { params.push(severity); sql += ` AND severity = $${params.length}`; }
+  if (type) { params.push(type); sql += ` AND exception_type = $${params.length}`; }
+  sql += ` ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+           last_seen_at DESC LIMIT 500`;
+  return (await pool.query(sql, params)).rows;
+}
+
+async function setExceptionStatus(id, status, userId) {
+  // Computed in JS — never reuse a pg parameter in a CASE (inconsistent-type
+  // deduction breaks the whole statement).
+  const reopening = status === 'open';
+  const { rows } = await pool.query(
+    `UPDATE accounting_exception_items
+        SET status = $2, resolved_by = $3, resolved_at = $4
+      WHERE id = $1 RETURNING *`,
+    [id, status, reopening ? null : (userId || null), reopening ? null : new Date()]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   pool,
   getConnection, upsertConnection, updateConnectionTokens, markConnectionDisconnected, setConnectionError,
@@ -442,4 +527,6 @@ module.exports = {
   getCandidate, listCandidates, upsertCandidate, setCandidateStatus, recordInvoiceAction,
   listPricingRules, createPricingRule, listServiceMappings, upsertServiceMapping,
   replaceReconciliationCandidates, listReconciliationCandidates, decideReconciliation,
+  listContactMappings, getContactMapping, upsertSuggestedContactMapping, setManualContactMapping,
+  listExceptions, setExceptionStatus,
 };
