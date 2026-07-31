@@ -55,10 +55,36 @@ function isEmailConfigured() {
   return !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS);
 }
 
+// Test hooks: inject a fake transporter / reset the cached one so unit tests
+// can exercise the sent/skipped/failed paths without touching the network.
+function _setTransporterForTests(t) { transporter = t; }
+function _resetTransporter() { transporter = null; }
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const FROM = () => process.env.EMAIL_FROM || `Opal Therapy <${process.env.EMAIL_USER}>`;
-const BASE = () => (process.env.APP_BASE_URL || 'http://localhost:5001').replace(/\/$/, '');
+
+/**
+ * Base URL for every emailed link (invite/verify/reset). APP_BASE_URL is
+ * REQUIRED outside development/test (enforced at boot by env-validation and
+ * again here): a localhost link delivered to a real user is worse than a
+ * hard error, so this fails loudly rather than guessing.
+ */
+function getBaseUrl() {
+  const configured = process.env.APP_BASE_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  const env = process.env.NODE_ENV || 'development';
+  if (env !== 'development' && env !== 'test') {
+    throw new Error('APP_BASE_URL is not set — refusing to build a localhost link outside development/test');
+  }
+  return 'http://localhost:5001';
+}
+const BASE = getBaseUrl;
+
+/** Registration URL for an invite token — single source of truth for the link shape. */
+function buildRegisterUrl(inviteToken) {
+  return `${BASE()}/register?token=${encodeURIComponent(inviteToken)}`;
+}
 
 function roleLabel(role) {
   return { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist', read_only: 'Read-only user' }[role] || role;
@@ -93,7 +119,7 @@ function escapeHtml(value) {
  * @param {string} [opts.orgName]      Organisation name, e.g. "Opal Therapy"
  */
 async function sendInviteEmail({ toEmail, inviteToken, role, displayName, invitedBy, orgName }) {
-  const registerUrl = `${BASE()}/register?token=${encodeURIComponent(inviteToken)}`;
+  const registerUrl = buildRegisterUrl(inviteToken);
   const greeting    = displayName ? `Hi ${escapeHtml(displayName)},` : 'Hello,';
   const org         = escapeHtml(orgName || 'Opal Therapy');
   const sender      = escapeHtml(invitedBy || 'The practice owner');
@@ -449,4 +475,8 @@ module.exports = {
   sendPasswordResetEmail,
   sendAccountApprovedEmail,
   isEmailConfigured,
+  getBaseUrl,
+  buildRegisterUrl,
+  _setTransporterForTests,
+  _resetTransporter,
 };

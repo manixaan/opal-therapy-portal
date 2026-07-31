@@ -32,41 +32,10 @@ const {
   requireMasterCalendarAccess,
 } = require('./calendar-permissions');
 
-// ── Auth middleware (re-uses the one in routes.js via shared session) ───────
-// Routes here run after server.js has mounted requireAuth on the session,
-// so we just define a local guard that checks req.session and loads the user.
-const { getPermissions } = require('./permissions');
-
-async function requireAuth(req, res, next) {
-  if (!req.session?.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  try {
-    if (!req.user) {
-      const user = await db.getUser(req.session.userId);
-      if (!user || user.is_active === false) {
-        req.session.destroy(() => {});
-        return res.status(401).json({ error: 'Session expired or account inactive' });
-      }
-      user.permissions = getPermissions(user.role, user.permissions || []);
-      req.user = user;
-    }
-    next();
-  } catch (err) {
-    console.error('requireAuth error:', err);
-    res.status(500).json({ error: 'Auth check failed' });
-  }
-}
-
-function requireRole(...roles) {
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Access denied', required: roles });
-    }
-    next();
-  };
-}
+// ── Auth middleware ──────────────────────────────────────────────────────────
+// From the single permissions.js choke point (read_only write-block
+// included). This file used to define its own copy WITHOUT that block.
+const { requireAuth, requireRole } = require('./permissions');
 
 // ── Helper: resolve and validate therapistIds from query params ─────────────
 function parseTherapistIds(raw) {

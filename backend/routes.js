@@ -18,7 +18,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const outlookApi = require('./outlook-oauth');
 const sploseApi = require('./splose-api');
-const { getPermissions, requireRole, requirePermission, hasPermission } = require('./permissions');
+const { getPermissions, requireAuth, requireRole, requirePermission, hasPermission } = require('./permissions');
 const { classifyEventType } = require('./sync-utils');
 
 /**
@@ -62,33 +62,70 @@ function recordSploFailure(msg) {
 
 // ===== MIDDLEWARE =====
 
+// requireAuth comes from permissions.js — the single choke point that also
+// enforces the read_only write-block. This file used to define its own copy
+// WITHOUT that block, which let read_only accounts hit write-shaped routes
+// here (audit finding, Stage 1 fix). Never re-introduce a local requireAuth.
+
+// ── Splose proxy access model (Stage 1 launch hardening) ─────────────────────
+// Backend-enforced privacy boundary — frontend tab-hiding is cosmetic.
+//   • read_only: no Splose proxy access at all (their calendar mirror is local)
+//   • therapist: practitioner-scoped reads only, and only once an owner has
+//     linked their profile to a Splose practitioner — fail-closed otherwise
+//   • whole-practice PII (patient directory, cases, contacts) and financial
+//     data (invoices, payments, support items): owner/admin only
+// See docs/launch/SPLOSE_RBAC_AND_PRIVACY_MODEL.md for the full matrix.
+
+function denySploseToReadOnly(req, res, next) {
+  if (req.user?.role === 'read_only') {
+    return res.status(403).json({
+      error: 'Read-only accounts cannot access practice-management data',
+      code: 'splose_read_only_denied',
+    });
+  }
+  next();
+}
+
+const requireSploseAdmin = requireRole('owner', 'admin');
+
+/** Splose practitioner id linked to the signed-in user (null if unmapped). */
+function ownPractitionerId(req) {
+  return req.user?.tp_splose_practitioner_id || null;
+}
+
 /**
- * requireAuth — verifies the session and attaches the full user record
- * (including role and computed permissions) to req.user.
- *
- * All protected routes use this. Role/permission checks then read from req.user
- * rather than making additional DB calls.
+ * Practitioner-scoped access. Owner/admin pass through untouched. Therapists
+ * are FORCED to their own linked practitioner (any client-supplied id is
+ * overridden — it was previously an unenforced query param), and fail closed
+ * with an explicit "mapping required" state when no link exists yet.
  */
-async function requireAuth(req, res, next) {
-  if (!req.session || !req.session.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  try {
-    // Load user if not already cached on this request
-    if (!req.user) {
-      const user = await db.getUser(req.session.userId);
-      if (!user || user.is_active === false) {
-        req.session.destroy(() => {});
-        return res.status(401).json({ error: 'Session expired or account inactive' });
-      }
-      user.permissions = getPermissions(user.role, user.permissions || []);
-      req.user = user;
+function scopeSplosePractitioner(source) {
+  return (req, res, next) => {
+    if (req.user.role === 'owner' || req.user.role === 'admin') return next();
+    const own = ownPractitionerId(req);
+    if (!own) {
+      return res.status(403).json({
+        error: 'Your account is not linked to a Splose practitioner yet. Ask the practice owner to complete your therapist profile.',
+        code: 'practitioner_mapping_required',
+      });
     }
+    const bag = source === 'params' ? req.params : source === 'body' ? req.body : req.query;
+    if (bag.practitionerId && String(bag.practitionerId) !== String(own)) {
+      return res.status(403).json({
+        error: 'You can only access your own practitioner data',
+        code: 'practitioner_scope_denied',
+      });
+    }
+    bag.practitionerId = own;
     next();
-  } catch (err) {
-    console.error('requireAuth error:', err);
-    res.status(500).json({ error: 'Auth check failed' });
-  }
+  };
+}
+
+/** Fail-closed ownership check for single-appointment reads/updates. */
+function assertOwnAppointment(req, appointment) {
+  if (req.user.role === 'owner' || req.user.role === 'admin') return true;
+  const own = ownPractitionerId(req);
+  return !!own && String(appointment?.practitionerId) === String(own);
 }
 
 
@@ -997,6 +1034,7 @@ router.get('/api/calendar/reconcile', requireAuth, requireRole('owner', 'admin')
     }
     const user = await db.getUser(req.session.userId);
     if (!user?.access_token) return res.status(409).json({ error: 'No Outlook connection on this account' });
+    const axios = require('axios'); // was missing — success path threw ReferenceError → 500
     // Perth week boundaries → UTC
     const sUtc = new Date(start + 'T00:00:00+08:00').toISOString();
     const eUtc = new Date(end + 'T23:59:59+08:00').toISOString();
@@ -1449,7 +1487,7 @@ router.get('/api/outlook/categories', requireAuth, async (req, res) => {
  * GET /api/splose/status
  * Quick connection test — confirms key is valid.
  */
-router.get('/api/splose/status', requireAuth, async (req, res) => {
+router.get('/api/splose/status', requireAuth, denySploseToReadOnly, async (req, res) => {
   const userId = req.user?.id || req.session?.userId;
   try {
     const result = await sploseApi.testConnection();
@@ -1475,7 +1513,7 @@ router.get('/api/splose/status', requireAuth, async (req, res) => {
  * GET /api/splose/sync-status
  * Returns current in-process Splose sync health without triggering a live call.
  */
-router.get('/api/splose/sync-status', requireAuth, (req, res) => {
+router.get('/api/splose/sync-status', requireAuth, denySploseToReadOnly, (req, res) => {
   res.json(sploSyncState);
 });
 
@@ -1483,7 +1521,7 @@ router.get('/api/splose/sync-status', requireAuth, (req, res) => {
  * GET /api/splose/services
  * Returns all services (appointment + support-activity types).
  */
-router.get('/api/splose/services', requireAuth, async (req, res) => {
+router.get('/api/splose/services', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
     const services = await sploseApi.getServices();
     res.json({ data: services });
@@ -1496,7 +1534,7 @@ router.get('/api/splose/services', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/practitioners
  */
-router.get('/api/splose/practitioners', requireAuth, async (req, res) => {
+router.get('/api/splose/practitioners', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
     const practitioners = await sploseApi.getPractitioners();
     res.json({ data: practitioners });
@@ -1509,7 +1547,7 @@ router.get('/api/splose/practitioners', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/locations
  */
-router.get('/api/splose/locations', requireAuth, async (req, res) => {
+router.get('/api/splose/locations', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
     const locations = await sploseApi.getLocations();
     res.json({ data: locations });
@@ -1560,7 +1598,7 @@ function isRoutableAddress(addr) {
 /**
  * GET /api/splose/appointments?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&practitionerId=...
  */
-router.get('/api/splose/appointments', requireAuth, async (req, res) => {
+router.get('/api/splose/appointments', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('query'), async (req, res) => {
   try {
     const { startDate, endDate, practitionerId } = req.query;
     if (!startDate || !endDate) {
@@ -1614,7 +1652,8 @@ router.get('/api/splose/appointments', requireAuth, async (req, res) => {
 
       // Log what we found for diagnosis (only on first call to avoid log spam)
       if (patient && !patientAddress) {
-        console.warn(`[location-debug] Patient ${patient.id} (${patient.firstname} ${patient.lastname}) — no address found. Raw fields:`, patient._rawAddressFields);
+        // Identifier only — never log patient names/addresses (audit H6)
+        console.warn(`[location-debug] Patient ${patient.id} — no routable address found`);
       }
 
       // ── Billing/travel address from support items ─────────────────────────
@@ -1673,7 +1712,8 @@ router.get('/api/splose/appointments', requireAuth, async (req, res) => {
         isRoutable,
         missingReason:    isRoutable ? null : missingReason,
         // Diagnostic: raw address fields from patient record
-        _patientRawAddress: process.env.NODE_ENV !== 'production' ? patient?._rawAddressFields : undefined,
+        // Raw-field debug payload: development only (was leaking on staging)
+        _patientRawAddress: process.env.NODE_ENV === 'development' ? patient?._rawAddressFields : undefined,
       };
     });
 
@@ -1826,9 +1866,12 @@ router.get('/api/splose/debug/location-report', requireAuth, requireRole('owner'
 /**
  * GET /api/splose/appointments/:id
  */
-router.get('/api/splose/appointments/:id', requireAuth, async (req, res) => {
+router.get('/api/splose/appointments/:id', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
     const appointment = await sploseApi.getAppointment(req.params.id);
+    if (!assertOwnAppointment(req, appointment)) {
+      return res.status(403).json({ error: 'You can only access your own appointments', code: 'practitioner_scope_denied' });
+    }
     res.json(appointment);
   } catch (err) {
     console.error('Splose appointment error:', err.message);
@@ -1841,7 +1884,7 @@ router.get('/api/splose/appointments/:id', requireAuth, async (req, res) => {
  * Create a new appointment in Splose.
  * Body: { start, end, serviceId, locationId, practitionerId, patientId, caseId, note? }
  */
-router.post('/api/splose/appointments', requireAuth, async (req, res) => {
+router.post('/api/splose/appointments', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('body'), async (req, res) => {
   try {
     const { start, end, serviceId, locationId, practitionerId, patientId, caseId, note } = req.body;
     if (!start || !end || !serviceId || !locationId || !practitionerId || !patientId || !caseId) {
@@ -1864,8 +1907,17 @@ router.post('/api/splose/appointments', requireAuth, async (req, res) => {
  * PUT /api/splose/appointments/:id
  * Update (reschedule) an appointment.
  */
-router.put('/api/splose/appointments/:id', requireAuth, async (req, res) => {
+router.put('/api/splose/appointments/:id', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
+    // Therapists may only touch their own appointments — verify ownership
+    // BEFORE any write attempt (the write itself is still flag-gated).
+    if (req.user.role !== 'owner' && req.user.role !== 'admin') {
+      const existing = await sploseApi.getAppointment(req.params.id);
+      if (!assertOwnAppointment(req, existing)) {
+        return res.status(403).json({ error: 'You can only modify your own appointments', code: 'practitioner_scope_denied' });
+      }
+      if (req.body && req.body.practitionerId) req.body.practitionerId = ownPractitionerId(req);
+    }
     const appointment = await sploseApi.updateAppointment(req.params.id, req.body);
     res.json(appointment);
   } catch (err) {
@@ -1881,7 +1933,7 @@ router.put('/api/splose/appointments/:id', requireAuth, async (req, res) => {
  * These IDs are required when creating busy-time blocks — they are NOT the same
  * as service IDs used for client appointments.
  */
-router.get('/api/splose/busy-time-types', requireAuth, async (req, res) => {
+router.get('/api/splose/busy-time-types', requireAuth, denySploseToReadOnly, async (req, res) => {
   try {
     const types = await sploseApi.getBusyTimeTypes();
     res.json({ data: types });
@@ -1894,7 +1946,7 @@ router.get('/api/splose/busy-time-types', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/busy-times?startDate=...&endDate=...&practitionerId=...
  */
-router.get('/api/splose/busy-times', requireAuth, async (req, res) => {
+router.get('/api/splose/busy-times', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('query'), async (req, res) => {
   try {
     const { startDate, endDate, practitionerId } = req.query;
     if (!startDate || !endDate) {
@@ -1913,11 +1965,12 @@ router.get('/api/splose/busy-times', requireAuth, async (req, res) => {
  * POST /api/splose/busy-times
  * Create a busy-time block (travel, admin, lunch, etc.)
  */
-router.post('/api/splose/busy-times', requireAuth, async (req, res) => {
+router.post('/api/splose/busy-times', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('body'), async (req, res) => {
   try {
     const result = await sploseApi.createBusyTime(req.body);
     res.status(201).json(result);
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Splose create busy-time error:', err.message);
     res.status(500).json({ error: 'Failed to create busy time', details: err.message });
   }
@@ -1927,7 +1980,7 @@ router.post('/api/splose/busy-times', requireAuth, async (req, res) => {
  * GET /api/splose/patients
  * Full patient list for the patient picker.
  */
-router.get('/api/splose/patients', requireAuth, async (req, res) => {
+router.get('/api/splose/patients', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const patients = await sploseApi.getPatients();
     res.json({ data: patients, count: patients.length });
@@ -1940,18 +1993,15 @@ router.get('/api/splose/patients', requireAuth, async (req, res) => {
 /**
  * POST /api/splose/patients
  */
-router.post('/api/splose/patients', requireAuth, async (req, res) => {
+router.post('/api/splose/patients', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
-    const c = require('./splose-api');
-    // splose-api doesn't have createPatient yet — call directly
-    const axios = require('axios');
-    const BASE = (process.env.SPLOSE_BASE_URL || 'https://api.splose.com') + '/v1';
-    const response = await axios.post(`${BASE}/patients`, req.body, {
-      headers: { Authorization: `Bearer ${process.env.SPLOSE_API_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 15000,
-    });
-    res.status(201).json(response.data);
+    // Goes through splose-api so the ENABLE_SPLOSE_WRITE gate applies. The
+    // previous direct-axios call here bypassed the write flag entirely
+    // (audit finding C2) — never call Splose directly from a route.
+    const patient = await sploseApi.createPatient(req.body);
+    res.status(201).json(patient);
   } catch (err) {
+    if (handleFeatureDisabled(err, res)) return;
     console.error('Splose create patient error:', err.message);
     res.status(500).json({ error: 'Failed to create patient', details: err.response?.data || err.message });
   }
@@ -1960,7 +2010,7 @@ router.post('/api/splose/patients', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/patients/:id
  */
-router.get('/api/splose/patients/:id', requireAuth, async (req, res) => {
+router.get('/api/splose/patients/:id', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const patient = await sploseApi.getPatient(req.params.id);
     res.json(patient);
@@ -1974,7 +2024,7 @@ router.get('/api/splose/patients/:id', requireAuth, async (req, res) => {
  * GET /api/splose/cases?patientId=...
  * Returns active cases for a patient — needed to get caseId for appointment write.
  */
-router.get('/api/splose/cases', requireAuth, async (req, res) => {
+router.get('/api/splose/cases', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const { patientId } = req.query;
     // Splose /cases uses cursor-only pagination — no patientId filter param accepted.
@@ -1993,7 +2043,7 @@ router.get('/api/splose/cases', requireAuth, async (req, res) => {
  * GET /api/splose/contacts
  * Returns all contacts (plan managers, referrers, GPs, etc.)
  */
-router.get('/api/splose/contacts', requireAuth, async (req, res) => {
+router.get('/api/splose/contacts', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const contacts = await sploseApi.getContacts();
     res.json({ data: contacts.filter(c => !c.archived) });
@@ -2007,7 +2057,7 @@ router.get('/api/splose/contacts', requireAuth, async (req, res) => {
  * GET /api/splose/invoices?patientId=...
  * Returns invoices, optionally filtered by patient.
  */
-router.get('/api/splose/invoices', requireAuth, async (req, res) => {
+router.get('/api/splose/invoices', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const { patientId, startDate, endDate } = req.query;
     const params = {};
@@ -2025,7 +2075,7 @@ router.get('/api/splose/invoices', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/availabilities/:practitionerId?startDate=...&endDate=...
  */
-router.get('/api/splose/availabilities/:practitionerId', requireAuth, async (req, res) => {
+router.get('/api/splose/availabilities/:practitionerId', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('params'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     if (!startDate || !endDate) {
@@ -2043,7 +2093,7 @@ router.get('/api/splose/availabilities/:practitionerId', requireAuth, async (req
  * GET /api/splose/payments
  * Returns all payments (receipts).
  */
-router.get('/api/splose/payments', requireAuth, async (req, res) => {
+router.get('/api/splose/payments', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const payments = await sploseApi.getPayments();
     const active = payments.filter(p => !p.archived && !p.archivedAt);
@@ -2058,7 +2108,7 @@ router.get('/api/splose/payments', requireAuth, async (req, res) => {
 /**
  * GET /api/splose/support-activities
  */
-router.get('/api/splose/support-activities', requireAuth, async (req, res) => {
+router.get('/api/splose/support-activities', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const all = await sploseApi.getSupportActivities();
     console.log(`Splose support-activities loaded: ${all.length} records`);
@@ -2073,7 +2123,7 @@ router.get('/api/splose/support-activities', requireAuth, async (req, res) => {
  * GET /api/splose/support-items
  * Returns support items (travel logs, NDIS line items).
  */
-router.get('/api/splose/support-items', requireAuth, async (req, res) => {
+router.get('/api/splose/support-items', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const all = await sploseApi.getSupportItems();
     console.log(`Splose support-items loaded: ${all.length} records`);
@@ -2098,7 +2148,7 @@ router.get('/api/splose/support-items', requireAuth, async (req, res) => {
  *  4. Flag anyone whose most-recent date is > 42 days ago (or null).
  *  5. Return sorted by lastActivity ascending (oldest first).
  */
-router.get('/api/splose/dormant-cases', requireAuth, async (req, res) => {
+router.get('/api/splose/dormant-cases', requireAuth, requireSploseAdmin, async (req, res) => {
   try {
     const thresholdDays = parseInt(req.query.days || '42', 10);
     const now = new Date();

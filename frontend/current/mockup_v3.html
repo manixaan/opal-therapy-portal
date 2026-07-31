@@ -5726,7 +5726,15 @@
       <div id="invite-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9999;align-items:center;justify-content:center;">
         <div style="background:#fff;border-radius:14px;padding:28px 32px;width:380px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
           <h3 style="margin:0 0 4px;font-size:16px;font-weight:700;color:var(--ink);">Invite Team Member</h3>
-          <p style="margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);">They'll receive an email with a registration link.</p>
+          <p style="margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);">A registration link will be created — emailed automatically when email is configured, otherwise shown here to copy.</p>
+          <div id="invite-link-box" style="display:none;background:var(--surface-2,#f6f7fb);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+            <div id="invite-link-why" style="font-size:12px;font-weight:600;color:var(--warn,#b45309);margin-bottom:6px;"></div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="settings-input" id="invite-link-url" readonly style="flex:1;font-size:11px;font-family:monospace;box-sizing:border-box;">
+              <button class="btn" style="font-size:12px;white-space:nowrap;" onclick="copyInviteLinkFromBox(this)">Copy link</button>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Share this link with the invitee yourself (e.g. by phone/Teams). It expires on the date shown in Pending invites.</div>
+          </div>
           <div style="display:grid;gap:14px;">
             <div>
               <label style="font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:4px;">Email address <span style="color:var(--danger);">*</span></label>
@@ -6847,17 +6855,17 @@ async function resReload() {
   if (!rows.length) { el.innerHTML = 'No approved resources yet. Owner/admin can add resources; therapist drafts appear after review.'; return; }
   el.className = '';
   el.innerHTML = rows.map(function (r) {
-    var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + t.name + '</span>'; }).join(' ');
+    var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + escapeHtml(t.name) + '</span>'; }).join(' ');
     return '<div class="acct-card" style="margin-bottom:10px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-      '<strong>' + r.title + '</strong><span>' +
+      '<strong>' + escapeHtml(r.title) + '</strong><span>' +
       (Number(r.file_count) > 0 ? '<a class="btn" style="font-size:12px;" href="/api/resources/' + r.id + '/download">Download</a> ' : '') +
-      (r.external_url ? '<a class="btn" style="font-size:12px;" href="' + r.external_url + '" target="_blank" rel="noopener">Open link</a> ' : '') +
+      (/^https?:\/\//i.test(r.external_url || '') ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a> ' : '') +
       '<button class="btn" style="font-size:12px;" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ')">' + (r.favourited ? '★' : '☆') + '</button>' +
       '</span></div>' +
-      (r.description ? '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + r.description + '</div>' : '') +
-      '<div style="margin-top:6px;">' + (r.resource_type ? '<span class="acct-pill">' + r.resource_type + '</span> ' : '') + tags + '</div>' +
-      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">⚠ ' + r.safety_notes + '</div>' : '') +
+      (r.description ? '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + escapeHtml(r.description) + '</div>' : '') +
+      '<div style="margin-top:6px;">' + (r.resource_type ? '<span class="acct-pill">' + escapeHtml(r.resource_type) + '</span> ' : '') + tags + '</div>' +
+      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">⚠ ' + escapeHtml(r.safety_notes) + '</div>' : '') +
       '</div>';
   }).join('');
 }
@@ -7539,6 +7547,16 @@ async function loadSplosePatients() {
 
   try {
     const resp = await fetch('/api/splose/patients', { credentials: 'include' });
+    if (resp.status === 403) {
+      // Backend privacy boundary: the patient directory is owner/admin-only.
+      // Not an error and not retryable — show an honest access state.
+      PATIENTS = [];
+      list.innerHTML = `<div class="empty-state" style="padding:20px;text-align:center;">
+        <div style="color:var(--muted);font-size:12.5px;">The patient directory is not available for your role.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Ask the practice owner if you need a booking made.</div>
+      </div>`;
+      return;
+    }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const { data } = await resp.json();
 
@@ -7608,10 +7626,10 @@ function renderPatients() {
     card.innerHTML = `
       <div class="pat-avatar">${initials(p)}</div>
       <div class="pat-meta">
-        <div class="pat-name">${p.first} ${p.last} <span class="pat-tag ${p.region}">${p.region[0].toUpperCase()+p.region.slice(1)}</span></div>
+        <div class="pat-name">${escapeHtml(p.first)} ${escapeHtml(p.last)} <span class="pat-tag ${p.region}">${p.region[0].toUpperCase()+p.region.slice(1)}</span></div>
         <div class="pat-sub">Patient #${p.id}${p.plan ? ' · NDIS '+p.plan : ''}${fmtPlanEnd(p.planEnds) ? ' · Plan ends '+fmtPlanEnd(p.planEnds) : ''}${warn}</div>
       </div>
-      <div class="pat-region">📍 ${p.suburb} ${p.postcode}</div>
+      <div class="pat-region">📍 ${escapeHtml(p.suburb)} ${escapeHtml(p.postcode)}</div>
     `;
     card.addEventListener('click', () => {
       document.querySelectorAll('.patient-card').forEach(x => x.classList.remove('selected'));
@@ -8547,9 +8565,9 @@ function _renderLeaveApprovalRows(requests, showActions) {
   return requests.map(r => `
     <div class="approval-row" id="leave-ar-${r.id}">
       <div class="ar-info">
-        <strong>${r.user_display_name || r.user_email}</strong> — ${_pfLeaveTypeLabel(r.leave_type)}<br>
+        <strong>${escapeHtml(r.user_display_name || r.user_email)}</strong> — ${_pfLeaveTypeLabel(r.leave_type)}<br>
         <div class="ar-meta">${_pfDateFmt(r.start_date)} → ${_pfDateFmt(r.end_date)}
-          ${r.reason ? ` · <em>${r.reason}</em>` : ''}</div>
+          ${r.reason ? ` · <em>${escapeHtml(r.reason)}</em>` : ''}</div>
         <div class="ar-meta">Submitted ${_pfDateFmt(r.submitted_at || r.created_at)}</div>
       </div>
       ${showActions ? `<div class="ar-actions">
@@ -8564,7 +8582,7 @@ function _renderLeaveTableRows(requests) {
   return `<table class="req-tbl">
     <thead><tr><th>Staff member</th><th>Type</th><th>From</th><th>To</th><th>Status</th></tr></thead>
     <tbody>${requests.map(r => `<tr>
-      <td>${r.user_display_name || r.user_email}</td>
+      <td>${escapeHtml(r.user_display_name || r.user_email)}</td>
       <td>${_pfLeaveTypeLabel(r.leave_type)}</td>
       <td>${_pfDateFmt(r.start_date)}</td>
       <td>${_pfDateFmt(r.end_date)}</td>
@@ -8576,14 +8594,14 @@ function _renderLeaveTableRows(requests) {
 function _pfLeaveTypeLabel(type) {
   const map = { annual:'Annual leave', personal:"Personal / carer's leave", sick:'Sick leave',
     public:'Public holiday / RDO', unpaid:'Unpaid leave', study:'Study / conference', other:'Other' };
-  return map[type] || type;
+  return map[type] || escapeHtml(type);
 }
 
 async function pfApproveLeave(id) {
   try {
     const r = await fetch(`/api/profile/leave/${id}/approve`, { method:'PATCH', credentials:'include' });
     if (!r.ok) throw new Error((await r.json()).error);
-    showToast('Leave approved', 'The staff member will be notified.');
+    showToast('Leave approved', 'Recorded. Note: the portal does not yet notify the staff member automatically — tell them directly.');
     loadLeaveSection();
   } catch (e) { showToast('Error', e.message || 'Could not approve leave.', 'error'); }
 }
@@ -8597,7 +8615,7 @@ async function pfRejectLeave(id) {
       body: JSON.stringify({ rejectionReason: reason || '' }),
     });
     if (!r.ok) throw new Error((await r.json()).error);
-    showToast('Leave rejected', 'The staff member will be notified.');
+    showToast('Leave rejected', 'Recorded. Note: the portal does not yet notify the staff member automatically — tell them directly.');
     loadLeaveSection();
   } catch (e) { showToast('Error', e.message || 'Could not reject leave.', 'error'); }
 }
@@ -8703,11 +8721,11 @@ function _renderCPDTherapistView(body, activities) {
         <thead><tr><th>Activity</th><th>Date</th><th>Hours</th><th>Cost</th><th>Status</th></tr></thead>
         <tbody>
           ${activities.map(a => `<tr>
-            <td>${a.title}${a.provider ? `<div style="font-size:10.5px;color:var(--muted);">${a.provider}</div>` : ''}</td>
+            <td>${escapeHtml(a.title)}${a.provider ? `<div style="font-size:10.5px;color:var(--muted);">${escapeHtml(a.provider)}</div>` : ''}</td>
             <td>${_pfDateFmt(a.completed_date)}</td>
             <td>${a.hours != null ? Number(a.hours).toFixed(1) : '—'}</td>
             <td>${a.cost_aud != null ? '$' + Number(a.cost_aud).toLocaleString('en-AU', {minimumFractionDigits:2}) : '—'}</td>
-            <td>${_pfStatusPill(a.status)}${a.review_comments ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">${a.review_comments}</div>` : ''}</td>
+            <td>${_pfStatusPill(a.status)}${a.review_comments ? `<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">${escapeHtml(a.review_comments)}</div>` : ''}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -8738,11 +8756,11 @@ function _renderCPDApprovalRows(activities, showActions) {
   return activities.map(a => `
     <div class="approval-row" id="cpd-ar-${a.id}">
       <div class="ar-info">
-        <strong>${a.user_display_name || a.user_email}</strong> — ${a.title}<br>
-        <div class="ar-meta">${a.provider ? a.provider + ' · ' : ''}${a.completed_date ? _pfDateFmt(a.completed_date) : 'Date not set'}
+        <strong>${escapeHtml(a.user_display_name || a.user_email)}</strong> — ${escapeHtml(a.title)}<br>
+        <div class="ar-meta">${a.provider ? escapeHtml(a.provider) + ' · ' : ''}${a.completed_date ? _pfDateFmt(a.completed_date) : 'Date not set'}
           ${a.hours != null ? ` · ${Number(a.hours).toFixed(1)} hrs` : ''}
           ${a.cost_aud != null ? ` · $${Number(a.cost_aud).toLocaleString('en-AU')}` : ''}</div>
-        ${a.notes ? `<div class="ar-meta" style="margin-top:2px;font-style:italic;">${a.notes}</div>` : ''}
+        ${a.notes ? `<div class="ar-meta" style="margin-top:2px;font-style:italic;">${escapeHtml(a.notes)}</div>` : ''}
       </div>
       ${showActions ? `<div class="ar-actions">
         <button class="btn" style="color:var(--danger);border-color:var(--danger);" onclick="pfRejectCPD('${a.id}')">Reject</button>
@@ -8756,8 +8774,8 @@ function _renderCPDTableRows(activities) {
   return `<table class="req-tbl">
     <thead><tr><th>Staff</th><th>Activity</th><th>Date</th><th>Hours</th><th>Status</th></tr></thead>
     <tbody>${activities.map(a => `<tr>
-      <td>${a.user_display_name || a.user_email}</td>
-      <td>${a.title}</td>
+      <td>${escapeHtml(a.user_display_name || a.user_email)}</td>
+      <td>${escapeHtml(a.title)}</td>
       <td>${_pfDateFmt(a.completed_date)}</td>
       <td>${a.hours != null ? Number(a.hours).toFixed(1) : '—'}</td>
       <td>${_pfStatusPill(a.status)}</td>
@@ -8895,9 +8913,9 @@ function _renderPDDocuments(body, docs) {
     <thead><tr><th>Title</th><th>Type</th><th>File</th><th>Uploaded</th><th></th></tr></thead>
     <tbody>
       ${docs.map(d => `<tr>
-        <td>${d.title}</td>
+        <td>${escapeHtml(d.title)}</td>
         <td style="color:var(--muted);font-size:11.5px;">${_pfDocTypeLabel(d.document_type)}</td>
-        <td style="font-size:11.5px;">${d.file_name || '—'}</td>
+        <td style="font-size:11.5px;">${escapeHtml(d.file_name) || '—'}</td>
         <td style="font-size:11.5px;">${_pfDateFmt(d.uploaded_at)}</td>
         <td><button class="btn" style="font-size:11px;padding:3px 10px;color:var(--danger);"
           onclick="pfDeleteDocument('${d.id}')">Remove</button></td>
@@ -8909,7 +8927,7 @@ function _renderPDDocuments(body, docs) {
 function _pfDocTypeLabel(type) {
   const map = { certificate:'Certificate', training:'Training record', supervision:'Supervision record',
     learning_plan:'Learning plan', registration:'Registration document', other:'Other' };
-  return map[type] || type || '—';
+  return map[type] || escapeHtml(type) || '—';
 }
 
 async function openPDDocModal() {
@@ -9046,12 +9064,12 @@ function _renderCredentialCards(body, creds, isManager) {
     else                 statusLabel = `<span style="font-size:11px;color:var(--muted);">No expiry date</span>`;
 
     return `<div class="cred-card ${cardClass}">
-      <div class="cred-name">${c.credential_name}</div>
-      ${isManager ? `<div class="cred-sub">${c.user_display_name || c.user_email || ''}</div>` : ''}
+      <div class="cred-name">${escapeHtml(c.credential_name)}</div>
+      ${isManager ? `<div class="cred-sub">${escapeHtml(c.user_display_name || c.user_email || '')}</div>` : ''}
       <div class="cred-sub">${_pfCredTypeLabel(c.credential_type)}</div>
       <div class="cred-meta">
-        ${c.issuing_body ? `<strong>${c.issuing_body}</strong><br>` : ''}
-        ${c.registration_number ? `Reg: ${c.registration_number}<br>` : ''}
+        ${c.issuing_body ? `<strong>${escapeHtml(c.issuing_body)}</strong><br>` : ''}
+        ${c.registration_number ? `Reg: ${escapeHtml(c.registration_number)}<br>` : ''}
         ${c.expiry_date ? `Expires: ${_pfDateFmt(c.expiry_date)}<br>` : ''}
         ${statusLabel}
         ${c.status === 'verified' ? `<br><span style="color:var(--ok);font-size:10.5px;">✓ Verified</span>` : ''}
@@ -18980,6 +18998,10 @@ function filterBilling() {
 let _dormantRunning = false;
 
 async function runDormantCheckNow() {
+  // Dormant data is owner/admin-only at the backend now — don't fetch (and
+  // cache) whole-practice client data for roles that can never see the tab.
+  var _role = window.APP_USER && window.APP_USER.role;
+  if (_role && _role !== 'owner' && _role !== 'admin') return;
   // Respect the dormant detection enabled toggle
   if ((window.NOTIF_FILTER || {}).dormantEnabled === false) {
     var _dBody = document.getElementById('dormant-cases-body');
@@ -19067,10 +19089,10 @@ function _renderDormantData({ data: dormant, thresholdDays, checkedAt }, body, s
       : `<span class="expiry-badge ${urgency}" style="font-size:11px">${fmt(d.lastActivity)}</span>`;
     const weeksLabel = d.weeksAgo != null ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${d.weeksAgo}w ago</div>` : '';
     return `<tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:10px 12px;font-weight:500">${p.firstname} ${p.lastname}
-        <div style="font-size:11px;color:var(--muted)">${p.ndisNumber || 'No NDIS #'}</div>
+      <td style="padding:10px 12px;font-weight:500">${escapeHtml(p.firstname)} ${escapeHtml(p.lastname)}
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(p.ndisNumber) || 'No NDIS #'}</div>
       </td>
-      <td style="padding:10px 12px;color:var(--muted);font-size:12px">${p.email || '—'}</td>
+      <td style="padding:10px 12px;color:var(--muted);font-size:12px">${escapeHtml(p.email) || '—'}</td>
       <td style="padding:10px 12px">${lastLabel}${weeksLabel}</td>
       <td style="padding:10px 12px;text-align:right;color:var(--muted);font-size:12px">—</td>
       <td style="padding:10px 12px;text-align:center;color:var(--muted);font-size:12px">—</td>
@@ -22048,18 +22070,39 @@ async function submitInvite() {
     });
     var d = await res.json();
     if (!res.ok) { showMsg(d.error || 'Failed to send invite.', false); btn.disabled=false; btn.textContent='Send invite'; return; }
-    showMsg('✓ Invite sent!', true);
-    btn.textContent = '✓ Sent';
-    setTimeout(function() {
-      closeInviteModal();
-      // Refresh pending invites list
-      loadPendingInvites();
-      var outerMsg = document.getElementById('stg-invite-msg');
-      if (outerMsg) {
-        outerMsg.style.display=''; outerMsg.style.color='var(--accent)'; outerMsg.textContent='✓ Invite sent to ' + inviteEmail;
-        setTimeout(function() { outerMsg.style.display='none'; }, 4000);
+
+    if (d.emailSent) {
+      // Genuinely delivered to the mail server — only THIS state may say "sent".
+      showMsg('✓ Invite email sent to ' + inviteEmail, true);
+      btn.textContent = '✓ Sent';
+      setTimeout(function() {
+        closeInviteModal();
+        loadPendingInvites();
+        var outerMsg = document.getElementById('stg-invite-msg');
+        if (outerMsg) {
+          outerMsg.style.display=''; outerMsg.style.color='var(--accent)'; outerMsg.textContent='✓ Invite emailed to ' + inviteEmail;
+          setTimeout(function() { outerMsg.style.display='none'; }, 4000);
+        }
+      }, 1200);
+    } else {
+      // Invite CREATED but no email went out (not configured, or send failed).
+      // Never claim "sent" — show the link so the owner can share it manually.
+      var linkBox = document.getElementById('invite-link-box');
+      var whyEl   = document.getElementById('invite-link-why');
+      var urlEl   = document.getElementById('invite-link-url');
+      if (linkBox && whyEl && urlEl && d.registerUrl) {
+        whyEl.textContent = d.emailFailed
+          ? '⚠ Invite created, but the email failed to send — copy the link below and share it yourself.'
+          : '⚠ Invite created. Email is not configured on this server — copy the link below and share it yourself.';
+        urlEl.value = d.registerUrl;
+        linkBox.style.display = '';
+        showMsg('Invite created — email NOT sent', false);
+      } else {
+        showMsg('Invite created, but no email was sent and no link was returned — use "Copy link" in Pending invites.', false);
       }
-    }, 1200);
+      btn.disabled = false; btn.textContent = 'Send invite';
+      loadPendingInvites();
+    }
   } catch (e) {
     showMsg('Network error — please try again.', false);
     btn.disabled=false; btn.textContent='Send invite';
@@ -22088,12 +22131,36 @@ async function loadPendingInvites() {
         '<div class="settings-row-control" style="display:flex;gap:6px;">' +
           (inv.id ? '<button class="btn" onclick="revokeInvite(\'' + inv.id + '\', this)" style="font-size:11.5px;color:var(--danger);border-color:var(--danger);">Revoke</button>' : '') +
           (inv.id ? '<button class="btn" onclick="resendInvite(\'' + inv.id + '\', this)" style="font-size:11.5px;">Resend</button>' : '') +
+          (inv.id && !isExpired ? '<button class="btn" onclick="copyPendingInviteLink(\'' + inv.id + '\', this)" style="font-size:11.5px;">Copy link</button>' : '') +
         '</div>' +
       '</div>';
     });
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<p style="color:var(--muted)">Could not load invites.</p>';
+  }
+}
+
+// Copy helpers for manual invite-link delivery (email-less environments).
+function copyInviteLinkFromBox(btn) {
+  var urlEl = document.getElementById('invite-link-url');
+  if (!urlEl || !urlEl.value) return;
+  navigator.clipboard.writeText(urlEl.value).then(function() {
+    btn.textContent = '✓ Copied'; setTimeout(function() { btn.textContent = 'Copy link'; }, 2000);
+  }).catch(function() { urlEl.select(); document.execCommand('copy'); btn.textContent = '✓ Copied'; });
+}
+
+async function copyPendingInviteLink(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    var res = await fetch('/api/invites/' + id + '/link', { credentials: 'include' });
+    var d = await res.json();
+    if (!res.ok || !d.registerUrl) throw new Error(d.error || 'no link');
+    await navigator.clipboard.writeText(d.registerUrl);
+    if (btn) { btn.textContent = '✓ Copied'; setTimeout(function() { btn.disabled = false; btn.textContent = 'Copy link'; }, 2000); }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Copy link'; }
+    showToast('Could not fetch invite link', true);
   }
 }
 
