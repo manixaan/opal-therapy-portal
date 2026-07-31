@@ -275,31 +275,29 @@ async function checkIncompleteProfile(userId) {
 //  CHECK 3: OUTLOOK TOKEN EXPIRY (warn 48 h before)
 // ─────────────────────────────────────────────────────────────
 async function checkOutlookTokenExpiry(userId) {
+  // Stage 2 fix: the ACCESS token expires hourly and is auto-refreshed by the
+  // poller, so warning on token_expires_at fired a false "expires in 1 hours"
+  // alarm for every connected user every day — training people to ignore the
+  // one alert that matters. What actually matters is that the sync has
+  // STOPPED MOVING (revoked refresh token, throttling, poller death), so
+  // warn only when the delta sync is stalled.
   const res = await pool.query(
-    `SELECT token_expires_at, email FROM users WHERE id = $1 LIMIT 1`,
+    `SELECT u.access_token, d.last_synced_at
+       FROM users u
+       LEFT JOIN outlook_delta_state d ON d.user_id = u.id
+      WHERE u.id = $1 LIMIT 1`,
     [userId]
   );
   if (!res.rows.length) return;
-  const { token_expires_at, email } = res.rows[0];
-  if (!token_expires_at) return;
-
-  const expiresAt = new Date(token_expires_at);
-  const hoursLeft = (expiresAt - Date.now()) / 3600000;
-
-  if (hoursLeft < 0) {
+  const { access_token, last_synced_at } = res.rows[0];
+  if (!access_token || !last_synced_at) return; // not connected / first sync pending
+  const hoursSince = (Date.now() - new Date(last_synced_at)) / 3600000;
+  if (hoursSince > 24) {
     await storeNotification(userId, {
-      type: 'outlook_token_expired',
-      title: 'Outlook connection has expired',
-      message: 'Your Outlook calendar sync has stopped. Go to Settings → Integrations to reconnect.',
+      type: 'outlook_sync_stalled',
+      title: 'Outlook sync appears to have stopped',
+      message: `Your calendar last synced ${Math.round(hoursSince)} hours ago. Go to Settings → Integrations and reconnect Outlook, or contact the practice owner.`,
       severity: 'error',
-      relatedEntity: 'integration',
-    });
-  } else if (hoursLeft < 48) {
-    await storeNotification(userId, {
-      type: 'outlook_token_expiring',
-      title: `Outlook connection expires in ${Math.round(hoursLeft)} hours`,
-      message: 'Reconnect your Outlook account in Settings → Integrations before it expires to avoid sync interruptions.',
-      severity: 'warning',
       relatedEntity: 'integration',
     });
   }
@@ -1338,6 +1336,49 @@ router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), 
 });
 
 /**
+ * GET /api/admin/team-setup
+ * Owner/admin: per-member setup-completion view for onboarding a new
+ * therapist (Stage 2), doubling as the Outlook connection debug view —
+ * WHICH mailbox each user connected, whether sync is moving, never tokens.
+ */
+router.get('/api/admin/team-setup', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT u.id, u.email, u.name, u.display_name, u.role, u.account_status,
+             u.is_active, u.profile_completed,
+             (u.default_work_location IS NOT NULL) AS travel_base_set,
+             (u.access_token IS NOT NULL) AS outlook_connected,
+             u.outlook_connected_email,
+             tp.id AS therapist_profile_id,
+             tp.display_name AS therapist_display_name,
+             tp.splose_practitioner_id,
+             d.last_synced_at AS outlook_last_synced_at
+        FROM users u
+        LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+        LEFT JOIN outlook_delta_state d ON d.user_id = u.id
+       ORDER BY u.created_at`);
+    res.json({
+      members: q.rows.map(r => ({
+        id: r.id, email: r.email, name: r.display_name || r.name, role: r.role,
+        accountStatus: r.account_status, isActive: r.is_active,
+        onboardingComplete: !!r.profile_completed,
+        therapistProfile: { exists: !!r.therapist_profile_id, id: r.therapist_profile_id || null, displayName: r.therapist_display_name || null },
+        splosePractitionerId: r.splose_practitioner_id || null,
+        outlook: {
+          connected: !!r.outlook_connected,
+          email: r.outlook_connected ? (r.outlook_connected_email || r.email) : null,
+          lastSyncedAt: r.outlook_last_synced_at || null,
+        },
+        travelBaseSet: !!r.travel_base_set,
+      })),
+    });
+  } catch (err) {
+    console.error('GET /api/admin/team-setup error:', err);
+    res.status(500).json({ error: 'Failed to load team setup status' });
+  }
+});
+
+/**
  * PATCH /api/admin/users/:id/role
  * Change a user's role. Owner-only.
  * Body: { role: 'owner'|'admin'|'therapist' }
@@ -1346,7 +1387,7 @@ router.patch('/api/admin/users/:id/role', requireAuth, requireRole('owner'), asy
   const { id } = req.params;
   const { role } = req.body || {};
   if (!['owner','admin','therapist','read_only'].includes(role)) {
-    return res.status(400).json({ error: 'role must be owner, admin, or therapist' });
+    return res.status(400).json({ error: 'role must be owner, admin, therapist, or read_only' });
   }
   if (id === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
   try {
@@ -1355,6 +1396,13 @@ router.patch('/api/admin/users/:id/role', requireAuth, requireRole('owner'), asy
       [role, id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+
+    // A therapist must never silently lack a therapist_profile (Stage 2):
+    // promoting to therapist provisions one immediately.
+    if (role === 'therapist') {
+      await require('./database').ensureTherapistProfile(id).catch(err =>
+        console.error('ensureTherapistProfile on role change failed:', err.message));
+    }
 
     // Use db module for audit (it has logAuditEvent)
     const dbMod = require('./database');

@@ -734,6 +734,63 @@ router.put('/api/profile/notification-prefs', requireAuth, async (req, res) => {
   }
 });
 
+// ── GET /api/profile/setup-status ────────────────────────────────────────────
+// Single truthful view of the caller's identity chain (Stage 2): role,
+// onboarding, therapist profile, Splose practitioner mapping, Outlook
+// connection (THIS user's, never someone else's) and travel base. Drives the
+// "Complete therapist profile setup" call-to-action in My Profile.
+
+router.get('/api/profile/setup-status', requireAuth, async (req, res) => {
+  try {
+    const q = await db.pool.query(`
+      SELECT u.role, u.profile_completed, u.onboarding_step,
+             u.default_work_location,
+             (u.access_token IS NOT NULL) AS outlook_connected,
+             u.outlook_connected_email, u.email,
+             tp.id AS profile_id, tp.display_name AS profile_display_name,
+             tp.splose_practitioner_id,
+             d.last_synced_at AS outlook_last_synced_at
+        FROM users u
+        LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+        LEFT JOIN outlook_delta_state d ON d.user_id = u.id
+       WHERE u.id = $1`, [req.user.id]);
+    const r = q.rows[0];
+    if (!r) return res.status(404).json({ error: 'User not found' });
+
+    const isTherapist = r.role === 'therapist';
+    const status = {
+      role: r.role,
+      onboardingComplete: !!r.profile_completed,
+      therapistProfile: {
+        required: isTherapist,
+        exists: !!r.profile_id,
+        id: r.profile_id || null,
+        displayName: r.profile_display_name || null,
+      },
+      splosePractitionerMapped: !!r.splose_practitioner_id,
+      splosePractitionerId: r.splose_practitioner_id || null,
+      outlook: {
+        connected: !!r.outlook_connected,
+        email: r.outlook_connected ? (r.outlook_connected_email || r.email) : null,
+        lastSyncedAt: r.outlook_last_synced_at || null,
+      },
+      travelBaseSet: !!r.default_work_location,
+    };
+    // Ordered next actions for the UI — empty array = fully set up.
+    const actions = [];
+    if (!status.onboardingComplete) actions.push({ key: 'complete_onboarding', label: 'Finish the onboarding wizard' });
+    if (isTherapist && !status.therapistProfile.exists) actions.push({ key: 'therapist_profile', label: 'Complete therapist profile setup — contact the practice owner' });
+    if (isTherapist && status.therapistProfile.exists && !status.splosePractitionerMapped) actions.push({ key: 'splose_mapping', label: 'Splose practitioner link pending — the practice owner sets this up' });
+    if (!status.outlook.connected) actions.push({ key: 'connect_outlook', label: 'Connect your Outlook calendar (Settings → Integrations)' });
+    if (!status.travelBaseSet) actions.push({ key: 'travel_base', label: 'Set your home/travel base (Profile → Work locations)' });
+    status.actions = actions;
+    res.json(status);
+  } catch (err) {
+    console.error('GET /api/profile/setup-status error:', err.message);
+    res.status(500).json({ error: 'Failed to load setup status' });
+  }
+});
+
 module.exports = router;
 
 module.exports.validateUpload = validateUpload;

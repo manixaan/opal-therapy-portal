@@ -47,19 +47,75 @@ not re-resolve, and the old worker overlaps ~100s.
 
 ## Owner actions to enable real email (Microsoft 365 SMTP)
 
-1. Choose/create the sending mailbox (e.g. `portal@opaltherapy.com.au`).
-2. In M365 admin: enable **Authenticated SMTP** for that mailbox
-   (Settings → Mail → SMTP AUTH), and create an **app password** if MFA is
-   on (or use a mailbox password if not — app password strongly preferred).
-3. Give the developer the mailbox address + app password **via Key Vault or
-   a secure channel — never chat/email**; it is stored only as the
-   `email-pass` KV secret.
-4. Developer sets `EMAIL_HOST/PORT/SECURE/USER/FROM` app settings + the
-   `EMAIL_PASS` KV reference, restarts, and runs the staging email test
-   below.
-5. If M365 blocks SMTP AUTH by policy, alternatives (documented, not built):
-   Microsoft Graph `sendMail` with an app registration, or an SMTP relay
-   (SendGrid etc.) — the abstraction needs only host/user/pass.
+1. **Which mailbox sends invites**: use a dedicated practice mailbox —
+   recommended `portal@opaltherapy.com.au` (create it in M365 admin, a
+   cheap Exchange licence is enough). Avoid your personal mailbox: invite
+   and reset emails should come from a neutral sender the practice keeps.
+   `adminservices@opaltherapy.com.au` also works if you prefer no new
+   mailbox.
+2. **SMTP AUTH / app password — yes, required**: in the Microsoft 365
+   admin center → Users → [the mailbox] → Mail → **enable "Authenticated
+   SMTP"**. If the account has MFA (it should), create an **app password**
+   (My sign-ins → Security info → App password) — that is the value the
+   portal uses, never your real password.
+
+### Exact terminal session (run on your Mac, az CLI signed in)
+
+Nothing below echoes the secret; `read -s` keeps it out of shell history
+and the screen. Names come from `deploy/staging-resources.txt`.
+
+```bash
+cd "~/Documents/Claude/Projects/Therapy Scheduling Application"
+source deploy/staging-resources.txt   # sets APP, RG, KV
+
+# 3. Store the app password in Key Vault (typed invisibly)
+read -s -p "M365 app password: " EMAIL_PASS_VALUE && echo
+az keyvault secret set --vault-name "$KV" --name email-pass \
+  --value "$EMAIL_PASS_VALUE" -o none && unset EMAIL_PASS_VALUE
+echo "✓ email-pass stored in $KV"
+
+# 4-5. App Service settings (EMAIL_PASS as a Key Vault reference)
+SECRET_URI=$(az keyvault secret show --vault-name "$KV" --name email-pass --query id -o tsv)
+az webapp config appsettings set -g "$RG" -n "$APP" --settings \
+  EMAIL_HOST=smtp.office365.com \
+  EMAIL_PORT=587 \
+  EMAIL_SECURE=false \
+  EMAIL_USER=portal@opaltherapy.com.au \
+  EMAIL_FROM="Opal Therapy <portal@opaltherapy.com.au>" \
+  EMAIL_PASS="@Microsoft.KeyVault(SecretUri=$SECRET_URI)" -o none
+echo "✓ app settings written (this restarts the app automatically)"
+
+# 6. Verify the new worker picked them up (~2 min; uptime resets)
+sleep 120 && curl -s https://opal-portal-staging.azurewebsites.net/health
+```
+
+(Replace `portal@opaltherapy.com.au` in both places if you chose a
+different mailbox. Rotation later: re-run the `read -s` + `secret set`
+steps, then **re-write the EMAIL_PASS app setting** — a restart alone does
+not re-resolve Key Vault references.)
+
+### 7–8. Send and verify a test invite
+
+Settings → Users & Roles → Invite: invite a personal mailbox you control
+as **read_only**. The modal must say "✓ Invite email sent to …" — if the
+copy-link box appears instead, email did not send (check the mailbox's
+SMTP AUTH setting and the App Insights logs; no secrets are ever logged).
+Open the received email; the button link must start with
+`https://opal-portal-staging.azurewebsites.net/register?token=` —
+**never localhost** (item 9). Then revoke the test invite.
+
+### 10. Fallback if SMTP stays unavailable
+
+Nothing blocks the pilot: every invite shows a **copy-link box** in the
+modal and a **Copy link** button under Pending invites (audited endpoint).
+You deliver the link over SMS/Teams/phone yourself. Password reset has no
+copy-link equivalent — until SMTP works, a forgotten password is an
+owner-assisted event, so configuring email before the pilot is strongly
+recommended.
+
+If M365 blocks SMTP AUTH by tenant policy: alternatives (documented, not
+built) are Microsoft Graph `sendMail` via an app registration, or an SMTP
+relay (SendGrid etc.) — the abstraction needs only host/user/pass.
 
 ## Testing staging email
 
