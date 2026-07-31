@@ -368,6 +368,10 @@ async function getBusyTimeTypes() {
 }
 
 async function createBusyTime(data) {
+  const flags = require('./feature-flags');
+  if (!flags.isSploseWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_SPLOSE_WRITE', 'Splose busy-time creation');
+  }
   const c = client();
   const response = await c.post('/busy-times', {
     start: data.start,
@@ -376,6 +380,21 @@ async function createBusyTime(data) {
     busyTimePractitionerIds: data.practitionerIds || [],
     note: data.note || '',
   });
+  return response.data;
+}
+
+/**
+ * Create a patient record in Splose. WRITE — fail-closed behind
+ * ENABLE_SPLOSE_WRITE like every other Splose mutation. Added so no route
+ * ever needs to reach Splose with a raw axios call around this gate.
+ */
+async function createPatient(data) {
+  const flags = require('./feature-flags');
+  if (!flags.isSploseWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_SPLOSE_WRITE', 'Splose patient creation');
+  }
+  const c = client();
+  const response = await c.post('/patients', data);
   return response.data;
 }
 
@@ -559,6 +578,7 @@ module.exports = {
   getAvailabilities,
   getPatient,
   getPatients,
+  createPatient,
   getCase,
   fetchAllCases,
   invalidateCache,

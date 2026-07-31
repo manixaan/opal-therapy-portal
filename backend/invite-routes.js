@@ -18,33 +18,9 @@ const router  = express.Router();
 const db    = require('./database');
 const email = require('./email');
 
-// ── Auth middleware ───────────────────────────────────────────────────────────
-
-async function requireAuth(req, res, next) {
-  if (!req.session?.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-  try {
-    const user = await db.getUser(req.session.userId);
-    if (!user || !user.is_active) {
-      return res.status(401).json({ error: 'Session expired' });
-    }
-    req.user = user;
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'Authentication error' });
-  }
-}
-
-function requireRole(...roles) {
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Access denied', required: roles });
-    }
-    next();
-  };
-}
+// requireAuth from the single permissions.js choke point (read_only
+// write-block included) — this file used to carry its own copy without it.
+const { requireAuth, requireRole } = require('./permissions');
 
 // ── POST /api/invites ─────────────────────────────────────────────────────────
 // Create a new invite and send the invite email.
@@ -143,16 +119,21 @@ router.post('/api/invites', requireAuth, async (req, res) => {
         orgName:     null, // will use default 'Opal Therapy'
       });
     } catch (emailErr) {
+      // Send FAILED (configured but SMTP errored) — still hand back the link
+      // so the owner can deliver it manually instead of silently stalling.
       console.error('⚠️  Failed to send invite email:', emailErr.message);
-      emailResult = { error: emailErr.message };
+      emailResult = { failed: true, registerUrl: email.buildRegisterUrl(invite.invite_token) };
     }
 
-    // Return invite info (never expose the token in the list response)
+    // Return invite info (never expose the token in the list response).
+    // The UI must distinguish sent / not-configured / failed — never claim
+    // "sent" unless emailSent is true (audit blocker #1).
     return res.status(201).json({
       ok: true,
       invite: safeInvite(invite),
       emailSent: emailResult?.sent || false,
       emailSkipped: emailResult?.skipped || false,
+      emailFailed: emailResult?.failed || false,
       registerUrl: emailResult?.registerUrl || null,
     });
   } catch (err) {
@@ -218,6 +199,41 @@ router.delete('/api/invites/:id', requireAuth, requireRole('owner', 'admin'), as
   } catch (err) {
     console.error('DELETE /api/invites/:id error:', err);
     return res.status(500).json({ error: 'Failed to revoke invite' });
+  }
+});
+
+// ── GET /api/invites/:id/link ─────────────────────────────────────────────────
+// Retrieve the registration link for a still-pending invite so the owner can
+// share it manually (email not configured, or the recipient never got it).
+// The token is deliberately stripped from list responses; this explicit,
+// audited endpoint is the ONLY post-creation way to obtain the link.
+
+router.get('/api/invites/:id/link', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const invites = await db.getInvitesByOrganisation(req.user.organisation_id);
+    const invite  = invites.find(i => i.id === req.params.id && i.status === 'pending');
+    if (!invite) return res.status(404).json({ error: 'Pending invite not found' });
+
+    await db.logAuditEvent({
+      actorUserId:    req.user.id,
+      action:         'invite.link_retrieved',
+      targetType:     'invite',
+      targetId:       invite.id,
+      organisationId: req.user.organisation_id,
+      ipAddress:      req.ip,
+      metadata: { targetEmail: invite.email, role: invite.role },
+    }).catch(() => {});
+
+    return res.json({
+      ok: true,
+      registerUrl: email.buildRegisterUrl(invite.invite_token),
+      email: invite.email,
+      role: invite.role,
+      expiresAt: invite.expires_at,
+    });
+  } catch (err) {
+    console.error('GET /api/invites/:id/link error:', err);
+    return res.status(500).json({ error: 'Failed to fetch invite link' });
   }
 });
 

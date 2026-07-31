@@ -20,12 +20,15 @@ const CRITICAL_IN_PRODUCTION = [
   { key: 'MICROSOFT_CLIENT_SECRET', why: 'Outlook OAuth' },
   { key: 'MICROSOFT_REDIRECT_URI', why: 'must match the Azure app registration exactly' },
   { key: 'SPLOSE_API_KEY',       why: 'Splose integration' },
+  // Every invite/verify/reset link is built from this — a localhost link
+  // delivered to a real user is a launch-killer, so it is boot-critical in
+  // staging/production and must be https (Stage 1 launch hardening).
+  { key: 'APP_BASE_URL',         why: 'invite/verify/reset links must use the real app URL, never localhost', validate: v => /^https:\/\/.+/.test(v || '') },
 ];
 
 const RECOMMENDED = [
   { key: 'GOOGLE_MAPS_API_KEY',  why: 'travel time / geocoding features degrade without it' },
-  { key: 'EMAIL_HOST',           why: 'verification/invite/reset emails fall back to console links' },
-  { key: 'APP_BASE_URL',         why: 'email links point at localhost without it' },
+  { key: 'EMAIL_HOST',           why: 'verification/invite/reset emails fall back to copy-link mode (surfaced in the invite UI) without it' },
   { key: 'MICROSOFT_TENANT_ID',  why: 'falls back to the development tenant' },
 ];
 
