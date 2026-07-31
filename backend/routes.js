@@ -362,141 +362,72 @@ router.get('/auth/oauth/callback', async (req, res) => {
       returnUrl = req.session.outlookReturnUrl || null;
     }
 
-    const redirectUrl = returnUrl
-      ? (returnUrl.includes('?') ? returnUrl + '&auth=complete' : returnUrl + '?auth=complete')
-      : null;
-
-    console.log('📍 Return URL for redirect:', redirectUrl ? `✓ ${redirectUrl}` : '✗ Not available');
-
-    // Send HTML page that shows success and provides navigation back
-    res.send(`
-      <html>
-        <head>
-          <title>Authentication Successful</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f7; }
-            .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 500px; }
-            h1 { color: #1e8449; margin-top: 0; font-size: 28px; }
-            p { color: #666; line-height: 1.6; }
-            .details { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-size: 13px; border-left: 4px solid #1e8449; }
-            .details strong { display: block; color: #1e8449; margin-bottom: 4px; }
-            .button-group { margin-top: 30px; display: flex; gap: 10px; }
-            button {
-              flex: 1;
-              padding: 12px 20px;
-              border: none;
-              border-radius: 8px;
-              font-size: 14px;
-              font-weight: 600;
-              cursor: pointer;
-              transition: all 0.2s;
-            }
-            .primary-btn {
-              background: #1e8449;
-              color: white;
-            }
-            .primary-btn:hover {
-              background: #16654f;
-              box-shadow: 0 2px 8px rgba(30, 132, 73, 0.3);
-            }
-            .secondary-btn {
-              background: #e8f5e9;
-              color: #1e8449;
-              border: 1px solid #1e8449;
-            }
-            .secondary-btn:hover {
-              background: #d4edda;
-            }
-            .status-icon { font-size: 48px; margin-bottom: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="status-icon">✓</div>
-            <h1>Authentication Successful!</h1>
-            <p>You have successfully authenticated with Microsoft Outlook.</p>
-
-            <div class="details">
-              <strong>Email:</strong> ${user.email}
-            </div>
-
-            <p style="color: #999; font-size: 13px; margin-top: 20px;">Your session is active and ready to sync your Outlook calendar.</p>
-
-            <div class="button-group">
-              <button class="primary-btn" onclick="goBack()">Back to App</button>
-              <button class="secondary-btn" onclick="goHome()">Open App Fresh</button>
-            </div>
-
-            <p style="font-size: 11px; color: #999; margin-top: 20px;">If buttons don't work, please manually open mockup_v3.html.</p>
-          </div>
-
-          <script>
-            const returnUrl = ${redirectUrl ? `'${redirectUrl}'` : 'null'};
-
-            function goBack() {
-              console.log('Going back...');
-              if (returnUrl) {
-                console.log('Redirecting to:', returnUrl);
-                window.location.href = returnUrl;
-              } else {
-                console.log('No return URL, trying history');
-                window.history.back();
-              }
-            }
-
-            function goHome() {
-              alert('Your authentication is complete! Your session is now active. Please open mockup_v3.html to complete the sync.');
-              if (returnUrl) {
-                window.location.href = returnUrl;
-              } else {
-                window.history.back();
-              }
-            }
-
-            // Auto-redirect if return URL is available
-            window.addEventListener('load', () => {
-              setTimeout(() => {
-                if (returnUrl) {
-                  console.log('Auto-redirecting...');
-                  goBack();
-                }
-              }, 1500);
-            });
-          </script>
-        </body>
-      </html>
-    `);
+    // SAME-ORIGIN redirect back into the app (Stage 2 fix: users used to land
+    // on an interstitial that mentioned "mockup_v3.html"). Only relative
+    // paths are honoured — an absolute/protocol URL from state falls back to
+    // '/' so the state param can never become an open redirect.
+    const safeReturn = (returnUrl && /^\/(?!\/)/.test(returnUrl)) ? returnUrl : '/';
+    const redirectUrl = safeReturn.includes('?')
+      ? safeReturn + '&outlook=connected'
+      : safeReturn + '?outlook=connected';
+    console.log('📍 OAuth complete — redirecting into the app');
+    return res.redirect(302, redirectUrl);
   } catch (error) {
     console.error('❌ OAuth callback error:', error.message);
-    console.error('Full error:', error);
 
-    // Send error HTML
-    res.send(`
+    // Friendly, generic error page: no raw error interpolation (the message
+    // could echo attacker-influenced OAuth params), no internal filenames.
+    res.status(500).send(`
       <html>
-        <head>
-          <title>Authentication Failed</title>
+        <head><title>Outlook connection failed</title>
           <style>
-            body { font-family: Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-            .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; max-width: 500px; }
-            h1 { color: #f44336; margin-top: 0; }
-            p { color: #666; line-height: 1.6; }
-            .error { background: #ffebee; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-size: 14px; color: #c62828; border-left: 4px solid #f44336; }
+            body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f7; }
+            .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 460px; }
+            h1 { color: #c0392b; margin-top: 0; font-size: 22px; }
+            p { color: #555; line-height: 1.6; }
+            a.btn { display: inline-block; margin-top: 16px; padding: 11px 22px; background: #00a8cc; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
           </style>
         </head>
         <body>
           <div class="container">
-            <h1>✗ Authentication Failed</h1>
-            <p>There was an error authenticating with Microsoft.</p>
-
-            <div class="error">
-              <strong>Error:</strong> ${error.message}
-            </div>
-
-            <p>Please go back to your application and try again.</p>
+            <h1>Outlook connection didn't complete</h1>
+            <p>The Microsoft sign-in could not be finished. No changes were made.
+               Please return to the portal and try again from
+               Settings → Integrations. If it keeps failing, contact the
+               practice owner.</p>
+            <a class="btn" href="/">Back to the portal</a>
           </div>
         </body>
       </html>
     `);
+  }
+});
+
+/**
+ * POST /api/outlook/disconnect  (Stage 2 — there was previously NO way to
+ * disconnect a mailbox, so a wrong-account sign-in was unrecoverable.)
+ * Clears the caller's OWN tokens + delta state. Locally mirrored events are
+ * kept (source data, soft-delete policy) and NOTHING is changed in Outlook.
+ */
+router.post('/api/outlook/disconnect', requireAuth, async (req, res) => {
+  try {
+    await db.pool.query(
+      `UPDATE users SET access_token = NULL, refresh_token = NULL,
+              token_expires_at = NULL, outlook_connected_email = NULL,
+              updated_at = NOW() WHERE id = $1`, [req.user.id]);
+    await db.pool.query('DELETE FROM outlook_delta_state WHERE user_id = $1', [req.user.id]);
+    await db.logAuditEvent({
+      actorUserId: req.user.id, action: 'outlook.disconnected',
+      targetType: 'user', targetId: req.user.id, ipAddress: req.ip,
+      organisationId: req.user.organisation_id || null,
+    }).catch(() => {});
+    res.json({
+      ok: true,
+      note: 'Outlook disconnected for your account. Mirrored events are kept locally; reconnecting resumes sync. Nothing was changed in Outlook itself.',
+    });
+  } catch (err) {
+    console.error('outlook disconnect failed:', err.message);
+    res.status(500).json({ error: 'Failed to disconnect Outlook' });
   }
 });
 
@@ -1090,39 +1021,37 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
     const events = await db.getEvents(req.session.userId);
     const outlookEvents = events.filter(e => e.outlook_id);
 
-    // Report connected if the caller has a token OR any org member does
-    // (owner/admin accounts often have no personal token but manage a connected therapist)
-    let outlookConnected = !!user.access_token;
+    // STRICTLY PER-USER (Stage 2 fix). The old org-wide fallback reported
+    // "connected" with ANOTHER member's mailbox whenever anyone in the org
+    // had a token — suppressing the Connect banner for a new therapist and
+    // leaving them an empty calendar under a green pill showing someone
+    // else's email. Never report a connection the signed-in user does not
+    // personally have.
+    const outlookConnected = !!user.access_token;
     // The connected MAILBOX may differ from the portal email (shared/admin
     // mailboxes) — prefer the recorded mailbox address.
-    let connectedEmail   = user.access_token
+    const connectedEmail = outlookConnected
       ? (user.outlook_connected_email || user.email)
       : null;
-    if (!outlookConnected) {
-      const orgId = user.organisation_id;
-      const fallback = await db.pool.query(
-        `SELECT email FROM users
-         WHERE access_token IS NOT NULL AND access_token != ''
-           AND is_active = true
-           AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
-         ORDER BY created_at LIMIT 1`,
-        [orgId]
-      );
-      if (fallback.rows.length) {
-        outlookConnected = true;
-        connectedEmail   = fallback.rows[0].email;
-      }
-    }
+
+    // Real last-sync time for honest freshness display (Stage 2).
+    const delta = await db.pool.query(
+      'SELECT last_synced_at FROM outlook_delta_state WHERE user_id = $1', [req.session.userId]);
+    const lastSyncedAt = delta.rows[0]?.last_synced_at || null;
 
     res.json({
       outlookConnected,
       connectedAs:        connectedEmail,
+      lastSyncedAt,
       totalEvents:        events.length,
       outlookSyncedEvents: outlookEvents.length,
-      status:  outlookEvents.length > 0 ? 'synced' : 'not_synced',
-      message: outlookEvents.length > 0
-        ? `${outlookEvents.length} events synced from Outlook`
-        : 'No Outlook events synced yet',
+      status: !outlookConnected ? 'not_connected'
+        : (outlookEvents.length > 0 ? 'synced'
+        : (lastSyncedAt ? 'synced_empty' : 'waiting_first_sync')),
+      message: !outlookConnected ? 'Outlook is not connected for your account'
+        : outlookEvents.length > 0
+          ? `${outlookEvents.length} events synced from Outlook`
+          : (lastSyncedAt ? 'Synced — no events in the mirror window yet' : 'Waiting for first sync'),
     });
   } catch (error) {
     console.error('Sync status error:', error);

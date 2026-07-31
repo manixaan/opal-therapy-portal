@@ -436,6 +436,12 @@ router.post('/api/auth/complete-profile', async (req, res) => {
 
     if (!updated) return res.status(404).json({ error: 'User not found' });
 
+    // Identity-chain safety net (Stage 2): therapists get a profile here too.
+    if (updated.role === 'therapist' && !updated.therapist_profile_id) {
+      const prof = await db.ensureTherapistProfile(req.session.userId).catch(() => null);
+      if (prof) updated.therapist_profile_id = String(prof.id);
+    }
+
     // If the user has a therapist profile, update its display_name and role_title too
     if (updated.therapist_profile_id) {
       await db.pool.query(`
@@ -581,6 +587,11 @@ router.post('/api/auth/complete-onboarding-step', async (req, res) => {
                           onboarding_step = 'complete', updated_at = NOW() WHERE id = $1`,
         [userId]
       );
+      // Identity-chain safety net (Stage 2): a therapist finishing onboarding
+      // must end up with a therapist_profile even if the invite lacked the
+      // treating-therapist flag. Idempotent.
+      await db.ensureTherapistProfile(userId).catch(err =>
+        console.error('ensureTherapistProfile at onboarding completion failed:', err.message));
     }
 
     const fullUser   = await db.getUser(userId);

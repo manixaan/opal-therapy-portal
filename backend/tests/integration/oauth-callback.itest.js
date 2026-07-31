@@ -89,7 +89,8 @@ describe('portal-first connection (session user)', () => {
     const state = await beginOauth(agent);
 
     const cb = await agent.get(`/auth/oauth/callback?code=mock-code&state=${encodeURIComponent(state)}`);
-    expect(cb.status).toBe(200); // success page
+    expect(cb.status).toBe(302); // Stage 2: redirects into the app
+    expect(cb.headers.location).toMatch(/outlook=connected/);
 
     const row = (await db.pool.query(
       'SELECT email, (access_token IS NOT NULL) AS has_token, outlook_connected_email FROM users WHERE id=$1',
@@ -167,7 +168,7 @@ describe('portal-first connection (session user)', () => {
     for (let i = 0; i < 2; i++) {
       const state = await beginOauth(agent);
       const cb = await agent.get(`/auth/oauth/callback?code=c${i}&state=${encodeURIComponent(state)}`);
-      expect(cb.status).toBe(200);
+      expect(cb.status).toBe(302); // Stage 2 redirect
       await agent.post('/api/auth/complete-onboarding-step').send({ step: 'outlook', data: { connected: true } });
     }
 

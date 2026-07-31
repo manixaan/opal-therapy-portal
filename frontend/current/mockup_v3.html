@@ -3272,16 +3272,17 @@
 <header data-help="app-header">
   <div class="logo">O</div>
   <h1>Opal Therapy <span class="sub">Scheduler</span></h1>
-  <div class="prac-badge" title="Single practitioner — v1 scope">
-    <div class="prac-avatar">AM</div>
+  <div class="prac-badge" id="hdr-user-badge" title="Signed-in user">
+    <div class="prac-avatar" id="prac-avatar">–</div>
     <div>
-      <div style="font-weight:600;" id="prac-name">Ann Mary Mathew</div>
-      <div style="font-size:10px;color:var(--muted);">OT · Willetton WA</div>
+      <div style="font-weight:600;" id="prac-name">Loading…</div>
+      <div style="font-size:10px;color:var(--muted);" id="prac-sub"></div>
     </div>
   </div>
-  <div class="sync-pill" data-help="sync-status" title="Splose delta feed (update_gt) — 90s cadence">
-    <span class="sync-dot"></span>
-    <span>Synced with Splose · 14s ago</span>
+  <div class="sync-pill" data-help="sync-status" id="hdr-sync-pill" style="cursor:pointer;"
+       title="Real data freshness — click to refresh now" onclick="refreshFreshnessNow(true)">
+    <span class="sync-dot" id="hdr-sync-dot"></span>
+    <span id="hdr-sync-text">Checking sync…</span>
   </div>
 
   <div class="top-spacer"></div>
@@ -3379,6 +3380,12 @@
       <button class="btn" onclick="dismissAlarm()">Snooze 24h</button>
       <button class="btn primary" onclick="scrollToLocationEditor()">Set now</button>
     </div>
+  </div>
+
+  <!-- Setup status: the truthful identity-chain view (Stage 2) -->
+  <div class="settings-group" id="pf-setup-card" style="display:none;margin:0 0 16px;">
+    <div class="settings-group-header">Account setup status</div>
+    <div id="pf-setup-body" style="padding:14px 16px;font-size:13px;">Loading…</div>
   </div>
 
   <div class="profile-grid">
@@ -5452,8 +5459,9 @@
               <strong>Connect / reconnect Outlook</strong>
               <span>Re-authorise if your session has expired</span>
             </div>
-            <div class="settings-row-control">
+            <div class="settings-row-control" style="display:flex;gap:8px;">
               <button class="btn" onclick="connectOutlookFromSettings(this)" style="font-size:12px;">Connect Outlook</button>
+              <button class="btn" onclick="disconnectOutlookFromSettings(this)" style="font-size:12px;color:var(--danger);border-color:var(--danger);">Disconnect</button>
             </div>
           </div>
         </div>
@@ -5680,6 +5688,12 @@
         </div>
 
         <!-- Pending Invites list -->
+        <div class="settings-group" style="margin-top:20px;" id="stg-team-setup-wrap">
+          <div class="settings-group-header">Team setup status</div>
+          <div style="padding:0 16px 6px;font-size:11.5px;color:var(--muted);">Onboarding progress per member — therapist profile, Splose link, Outlook mailbox (yours to verify, tokens never shown).</div>
+          <div id="stg-team-setup" style="padding:8px 16px 14px;font-size:12.5px;color:var(--muted);">Loading…</div>
+        </div>
+
         <div class="settings-group" style="margin-top:20px;" id="stg-pending-invites-wrap">
           <div class="settings-group-header">Pending Invites</div>
           <div id="stg-pending-invites" style="padding:16px;font-size:13px;color:var(--muted);">Loading…</div>
@@ -5752,6 +5766,12 @@
                 <option value="admin">🛡️ Admin</option>
                 <option value="owner">👑 Owner</option>
               </select>
+            </div>
+            <div id="invite-treating-wrap">
+              <label style="font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="invite-treating" checked>
+                <span><strong>Treating therapist</strong> — has their own calendar; a therapist profile is created automatically</span>
+              </label>
             </div>
             <div>
               <label style="font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:4px;">Link expires in</label>
@@ -6812,6 +6832,19 @@ window.APP_USER = null;
       userChip.textContent = `${roleBadge} ${window.APP_USER.name}`;
       userChip.title = `${window.APP_USER.email} · ${window.APP_USER.role}`;
     }
+    // Bind the header identity to the REAL signed-in user (was hardcoded Ann)
+    (function bindHeaderIdentity() {
+      var u = window.APP_USER; if (!u) return;
+      var nm = document.getElementById('prac-name');
+      var av = document.getElementById('prac-avatar');
+      var sub = document.getElementById('prac-sub');
+      if (nm) nm.textContent = u.displayName || u.name || u.email;
+      if (av) av.textContent = (u.displayName || u.name || '?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+      if (sub) sub.textContent = (u.roleTitle || ({owner:'Practice owner',admin:'Administrator',therapist:'Therapist',read_only:'Read-only'})[u.role] || u.role);
+    })();
+    // Kick off honest freshness display + gentle polling
+    if (typeof refreshFreshnessNow === 'function') setTimeout(function(){ refreshFreshnessNow(false); }, 2000);
+
     // Pre-populate My Profile view in case the user lands on that tab
     if (typeof loadProfileView === 'function') loadProfileView();
     // Show Master Calendar tab for Owner/Admin
@@ -7804,13 +7837,29 @@ async function bootstrapSploseConfig() {
       console.log('✅ Splose services loaded:', services.length, '| ID map:', map);
     }
 
-    // Load practitioner
+    // Resolve the practitioner as the SIGNED-IN user's own Splose mapping
+    // (Stage 2 fix — this used to hardcode practitioners[0], which attributed
+    // every booking to the first practitioner regardless of who was logged in).
+    let ownPracId = null;
+    try {
+      const stResp = await fetch('/api/profile/setup-status', { credentials: 'include' });
+      if (stResp.ok) ownPracId = (await stResp.json()).splosePractitionerId || null;
+    } catch (e) {}
     const prResp = await fetch('/api/splose/practitioners', { credentials: 'include' });
     if (prResp.ok) {
       const { data: practitioners } = await prResp.json();
-      if (practitioners.length > 0) {
-        window.SPLOSE_CONFIG.practitionerId = practitioners[0].id;
-        console.log('✅ Practitioner ID:', window.SPLOSE_CONFIG.practitionerId, practitioners[0].fullName);
+      const role = window.APP_USER && window.APP_USER.role;
+      let chosen = null;
+      if (ownPracId) chosen = practitioners.find(p => String(p.id) === String(ownPracId)) || { id: ownPracId, fullName: (window.APP_USER && (window.APP_USER.displayName || window.APP_USER.name)) || 'You' };
+      else if ((role === 'owner' || role === 'admin') && practitioners.length > 0) chosen = practitioners[0]; // practice-level default, shown by name on confirm
+      if (chosen) {
+        window.SPLOSE_CONFIG.practitionerId   = chosen.id;
+        window.SPLOSE_CONFIG.practitionerName = chosen.fullName || chosen.name || '—';
+        console.log('✅ Practitioner resolved:', chosen.id, window.SPLOSE_CONFIG.practitionerName, ownPracId ? '(own mapping)' : '(practice default)');
+      } else {
+        window.SPLOSE_CONFIG.practitionerId = null;
+        window.SPLOSE_CONFIG.practitionerName = null;
+        console.warn('⚠ No practitioner mapping for this account — booking disabled until the owner links one');
       }
     }
 
@@ -8378,7 +8427,7 @@ function renderConfirmSummary() {
     <div class="confirm-row"><span class="k">Patient</span><span class="v">${patient ? `${patient.first} ${patient.last} (${patient.id})` : '— internal block —'}</span></div>
     ${patient && (patient.plan || fmtPlanEnd(patient.planEnds)) ? `<div class="confirm-row"><span class="k">Plan</span><span class="v">${[patient.plan, fmtPlanEnd(patient.planEnds) ? 'ends '+fmtPlanEnd(patient.planEnds) : ''].filter(Boolean).join(' · ')}</span></div>` : ''}
     <div class="confirm-row"><span class="k">Service</span><span class="v">${TYPE_LABEL[type] || type} (${TYPE_SERVICE_ID[type] || '—'})</span></div>
-    <div class="confirm-row"><span class="k">Practitioner</span><span class="v">Ann Mary Mathew</span></div>
+    <div class="confirm-row"><span class="k">Practitioner</span><span class="v">${escapeHtml((window.SPLOSE_CONFIG && window.SPLOSE_CONFIG.practitionerName) || '— not linked —')}</span></div>
     <div class="confirm-row"><span class="k">Location</span><span class="v">${location}</span></div>
     <div class="confirm-row"><span class="k">When</span><span class="v">${slot.dayLabel} 2026 · ${fmtTime(slot.startH, slot.startM)} – ${fmtTime(eh, em)} AWST</span></div>
     <div class="confirm-row"><span class="k">Recurring</span><span class="v">${recurringLabel}</span></div>
@@ -15148,43 +15197,68 @@ refreshAlarm();
 // Paint travel legs + idle-gap windows onto every day column now that SESSIONS is populated
 if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
 
-/* ---------- Backend Connection ---------- */
-// Load Socket.io library and connect to backend
-function connectToBackend() {
-  const script = document.createElement('script');
-  script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
-  script.onload = () => {
-    const socket = io();
+/* ---------- Live data freshness (Stage 2) ----------
+   The old CDN socket.io client was blocked by the CSP in every deployed
+   environment, so the app NEVER refreshed after page load while a fake
+   "Synced · 14s ago" pill claimed otherwise. Replaced with honest, modest
+   same-origin polling (paused while the tab is hidden) + a real freshness
+   pill fed by backend timestamps. */
 
-    socket.on('connect', () => {
-      console.log('✅ Connected to therapy scheduler backend');
-      console.log('Backend connection established (same origin)');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('⚠️ Disconnected from backend');
-    });
-
-    socket.on('error', (error) => {
-      console.error('❌ Backend connection error:', error);
-    });
-
-    socket.on('calendarUpdated', (data) => {
-      console.log('📡 Calendar updated via socket:', data);
-      // Refresh the calendar events from the backend
-      if (typeof loadOutlookEventsToCalendar === 'function') {
-        loadOutlookEventsToCalendar();
-      }
-    });
-
-    // Store socket globally for use in other functions
-    window.backendSocket = socket;
-  };
-  document.head.appendChild(script);
+function _fmtAgo(ts) {
+  if (!ts) return null;
+  var mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  var hrs = Math.round(mins / 60);
+  return hrs < 48 ? hrs + ' h ago' : Math.round(hrs / 24) + ' d ago';
 }
 
-// Connect when page loads
-connectToBackend();
+async function refreshFreshnessNow(manual) {
+  var txt = document.getElementById('hdr-sync-text');
+  var dot = document.getElementById('hdr-sync-dot');
+  if (!txt) return;
+  if (manual) txt.textContent = 'Refreshing…';
+  try {
+    var parts = [];
+    var ok = true;
+    var os = await fetch('/api/sync-status', { credentials: 'include' });
+    if (os.ok) {
+      var o = await os.json();
+      if (!o.outlookConnected) parts.push('Outlook: not connected');
+      else parts.push('Outlook: ' + (_fmtAgo(o.lastSyncedAt) ? 'synced ' + _fmtAgo(o.lastSyncedAt) : 'first sync pending'));
+    } else { ok = false; }
+    if (window.APP_USER && window.APP_USER.role !== 'read_only') {
+      var ss = await fetch('/api/splose/sync-status', { credentials: 'include' });
+      if (ss.ok) {
+        var sp = await ss.json();
+        parts.push('Splose: ' + (sp.ok ? ('checked ' + (_fmtAgo(sp.lastOk) || 'recently')) : 'error'));
+        if (!sp.ok) ok = false;
+      }
+    }
+    txt.textContent = parts.join(' · ') || 'Status unavailable';
+    if (dot) dot.style.background = ok ? '' : 'var(--danger)';
+  } catch (e) {
+    txt.textContent = 'Refresh failed — check connection';
+    if (dot) dot.style.background = 'var(--danger)';
+  }
+}
+
+function startLivePolling() {
+  if (window.__pollersStarted) return;
+  window.__pollersStarted = true;
+  // Freshness pill + calendar events: every 2 minutes; notifications: every
+  // minute. Deliberately modest; all paused while the tab is hidden.
+  setInterval(function () {
+    if (document.hidden) return;
+    refreshFreshnessNow(false);
+    try { if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar(); } catch (e) {}
+  }, 120000);
+  setInterval(function () {
+    if (document.hidden) return;
+    try { if (typeof loadNotifications === 'function') loadNotifications(); } catch (e) {}
+  }, 60000);
+}
+startLivePolling();
 
 /* ---------- OUTLOOK INTEGRATION ---------- */
 
@@ -15289,10 +15363,13 @@ function showOutlookConnected(status) {
   if (dot) dot.classList.remove('disconnected');
   if (label) {
     const who   = status.connectedAs ? ` · ${status.connectedAs}` : '';
-    const count = status.outlookSyncedEvents?.toLocaleString() ?? '—';
-    label.textContent = `Outlook connected${who} · ${count} events`;
+    let detail;
+    if (status.status === 'waiting_first_sync') detail = 'first sync running…';
+    else if (status.status === 'synced_empty')  detail = 'no events in window yet';
+    else detail = `${status.outlookSyncedEvents?.toLocaleString() ?? '—'} events`;
+    label.textContent = `Outlook connected${who} · ${detail}`;
     label.title = status.connectedAs
-      ? `Outlook calendar linked via ${status.connectedAs}`
+      ? `YOUR Outlook mailbox: ${status.connectedAs}`
       : 'Outlook calendar connected';
   }
 }
@@ -15362,9 +15439,15 @@ async function completeOutlookSync() {
     if (syncResponse.status === 401) {
       const errBody = await syncResponse.json().catch(() => ({}));
       if (errBody.action === 'reauthenticate') {
-        console.warn('🔒 Re-authentication required — redirecting to Outlook login');
-        alert('Your Outlook session expired. Re-connecting now.');
-        window.location.href = '/auth/outlook-login?returnUrl=' + encodeURIComponent(window.location.pathname);
+        console.warn('🔒 Re-authentication required — fetching Microsoft sign-in URL');
+        // /auth/outlook-login returns JSON {authUrl} — it must be FETCHED and
+        // followed, never navigated to directly (that lands on a raw JSON page).
+        try {
+          var ra = await fetch('/auth/outlook-login?returnUrl=' + encodeURIComponent(window.location.pathname), { credentials: 'include' });
+          var rd = await ra.json();
+          if (rd.authUrl) { window.location.href = rd.authUrl; return; }
+        } catch (e2) {}
+        showToast('Outlook session expired', 'Reconnect from Settings → Integrations.');
         return;
       }
     }
@@ -18564,7 +18647,43 @@ function renderMasterCalendarWeek() {
 //  MY PROFILE — load from APP_USER + allow inline edit
 // ═══════════════════════════════════════════════════════
 
+async function loadSetupStatusCard() {
+  var card = document.getElementById('pf-setup-card');
+  var body = document.getElementById('pf-setup-body');
+  if (!card || !body) return;
+  try {
+    var r = await fetch('/api/profile/setup-status', { credentials: 'include' });
+    if (!r.ok) { card.style.display = 'none'; return; }
+    var st = await r.json();
+    var row = function (label, ok, detail) {
+      return '<div style="display:flex;gap:8px;align-items:center;padding:3px 0;">' +
+        '<span style="font-size:14px;">' + (ok ? '✅' : '⚠️') + '</span>' +
+        '<span style="min-width:190px;font-weight:600;">' + label + '</span>' +
+        '<span style="color:var(--muted);">' + escapeHtml(detail || (ok ? 'Done' : 'Not set up yet')) + '</span></div>';
+    };
+    var isTherapist = st.role === 'therapist';
+    var html = '';
+    html += row('Onboarding', st.onboardingComplete);
+    if (isTherapist) html += row('Therapist profile', st.therapistProfile.exists,
+      st.therapistProfile.exists ? (st.therapistProfile.displayName || 'Created') : 'Missing — the owner can create it in Settings → Users & Roles');
+    if (isTherapist) html += row('Splose practitioner link', st.splosePractitionerMapped,
+      st.splosePractitionerMapped ? 'Linked' : 'Pending — set up by the practice owner');
+    html += row('Outlook calendar', st.outlook.connected,
+      st.outlook.connected ? ('Connected as ' + (st.outlook.email || '') + (st.outlook.lastSyncedAt ? ' · synced ' + _fmtAgo(st.outlook.lastSyncedAt) : ' · first sync pending')) : 'Not connected — Settings → Integrations');
+    html += row('Home / travel base', st.travelBaseSet);
+    if (st.actions && st.actions.length) {
+      html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-weight:600;">Next steps</div>';
+      st.actions.forEach(function (a) { html += '<div style="padding:2px 0;color:var(--ink-soft);">• ' + escapeHtml(a.label) + '</div>'; });
+    } else {
+      html += '<div style="margin-top:10px;color:var(--ok,#15803d);font-weight:600;">All set up ✓</div>';
+    }
+    body.innerHTML = html;
+    card.style.display = '';
+  } catch (e) { card.style.display = 'none'; }
+}
+
 function loadProfileView() {
+  loadSetupStatusCard();
   const u = window.APP_USER;
   if (!u) return; // auth not yet resolved
 
@@ -21705,6 +21824,22 @@ async function loadOrgSettings() {
 }
 
 // ── Integration status (real check) ──────────────────────────
+async function disconnectOutlookFromSettings(btn) {
+  if (!confirm('Disconnect Outlook for YOUR account?\n\nSync stops and the connection is removed. Locally mirrored events are kept, and nothing changes in Outlook itself. You can reconnect at any time.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Disconnecting…'; }
+  try {
+    var r = await fetch('/api/outlook/disconnect', { method: 'POST', credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Outlook disconnected', 'Reconnect any time from this screen.');
+  } catch (e) {
+    showToast('Disconnect failed', 'Please try again.');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
+  checkIntegrationStatuses();
+  if (typeof initOutlookSync === 'function') initOutlookSync();
+  if (typeof refreshFreshnessNow === 'function') refreshFreshnessNow(false);
+}
+
 async function checkIntegrationStatuses() {
   // Splose: optimistic (we always attempt sync)
   var slosePill    = document.getElementById('stg-splose-status');
@@ -21748,10 +21883,74 @@ async function checkIntegrationStatuses() {
   }
 }
 
+// ── Team setup status (owner/admin): the identity-chain dashboard ─────────
+async function loadTeamSetup() {
+  var el = document.getElementById('stg-team-setup');
+  if (!el) return;
+  try {
+    var r = await fetch('/api/admin/team-setup', { credentials: 'include' });
+    if (!r.ok) { el.textContent = 'Not available for your role.'; return; }
+    var d = await r.json();
+    var rows = (d.members || []).filter(function (m) { return m.isActive !== false; });
+    if (!rows.length) { el.textContent = 'No members yet.'; return; }
+    var b = function (ok, txt) { return '<span style="white-space:nowrap;">' + (ok ? '✅' : '⚠️') + ' ' + txt + '</span>'; };
+    el.innerHTML = rows.map(function (m) {
+      var isTher = m.role === 'therapist';
+      var bits = [
+        b(m.accountStatus === 'active', 'account'),
+        b(m.onboardingComplete, 'onboarding'),
+      ];
+      if (isTher) bits.push(b(m.therapistProfile.exists, 'profile'));
+      if (isTher) bits.push(b(!!m.splosePractitionerId, 'Splose link'));
+      bits.push(b(m.outlook.connected, m.outlook.connected ? ('Outlook: ' + escapeHtml(m.outlook.email || '')) : 'Outlook'));
+      bits.push(b(m.travelBaseSet, 'travel base'));
+      var actions = '';
+      if (isTher && !m.therapistProfile.exists) {
+        actions += ' <button class="btn" style="font-size:11px;" onclick="teamCreateProfile(\'' + m.id + '\',\'' + escapeHtml(m.name || m.email) + '\', this)">Create profile</button>';
+      }
+      if (isTher && m.therapistProfile.exists && !m.splosePractitionerId) {
+        actions += ' <button class="btn" style="font-size:11px;" onclick="teamSetSploseId(\'' + m.therapistProfile.id + '\', this)">Link Splose ID</button>';
+      }
+      return '<div style="padding:7px 0;border-bottom:1px solid var(--border);">' +
+        '<strong>' + escapeHtml(m.name || m.email) + '</strong> <span class="acct-pill" style="font-size:10px;">' + escapeHtml(m.role) + '</span>' + actions +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px;font-size:11.5px;color:var(--muted);">' + bits.join(' ') + '</div></div>';
+    }).join('');
+  } catch (e) { el.textContent = 'Could not load team setup.'; }
+}
+
+async function teamCreateProfile(userId, name, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  try {
+    var r = await fetch('/api/therapists', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: userId, displayName: name }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    showToast('Therapist profile created', 'Their calendar identity is now set up.');
+  } catch (e) { showToast('Could not create profile', String(e.message || e)); }
+  loadTeamSetup();
+}
+
+async function teamSetSploseId(profileId, btn) {
+  var id = prompt('Splose practitioner ID for this therapist:\n(Practice owner: find it in Splose → Team, or ask the developer.)');
+  if (!id || !id.trim()) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    var r = await fetch('/api/therapists/' + profileId, {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ splosePractitionerId: id.trim() }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'failed');
+    showToast('Splose practitioner linked', 'Their appointments are now scoped to this ID.');
+  } catch (e) { showToast('Could not save mapping', String(e.message || e)); }
+  loadTeamSetup();
+}
+
 // ── Load user list for owners (admin management) ──────────────
 async function loadUserListForOwner() {
   if (!window.APP_USER || !['owner','admin'].includes(window.APP_USER.role)) return;
   loadPendingInvites();
+  loadTeamSetup();
 
   var el = document.getElementById('stg-user-list');
   if (el) el.innerHTML = '<p style="padding:12px 0;color:var(--muted);">Loading…</p>';
@@ -22066,7 +22265,13 @@ async function submitInvite() {
     var res = await fetch('/api/invites', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail, role: inviteRole, displayNameHint: inviteName || undefined, expiresInDays: expiresIn }),
+      body: JSON.stringify({
+        email: inviteEmail, role: inviteRole, displayNameHint: inviteName || undefined,
+        expiresInDays: expiresIn,
+        // A therapist invite creates the therapist_profile at registration —
+        // without this an invited therapist lands on an EMPTY calendar.
+        isTreatingTherapist: inviteRole === 'therapist' && !!(document.getElementById('invite-treating') || {}).checked,
+      }),
     });
     var d = await res.json();
     if (!res.ok) { showMsg(d.error || 'Failed to send invite.', false); btn.disabled=false; btn.textContent='Send invite'; return; }

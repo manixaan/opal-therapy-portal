@@ -1527,6 +1527,41 @@ async function revokeInvite(inviteId, revokedByUserId) {
  * Marks the invite as accepted.
  * Returns { user, therapistProfile }.
  */
+/**
+ * Ensure a therapist has a therapist_profile (Stage 2 identity-chain fix).
+ * Idempotent safety net called at onboarding completion and role promotion:
+ * a therapist must never silently lack a profile — that meant an empty
+ * calendar, absence from the master view, and no UI to repair it. Creates
+ * the profile if missing, links users.therapist_profile_id, marks the user
+ * as treating, and back-fills any events synced before the profile existed.
+ * Returns the profile row, or null if the user is not a therapist.
+ */
+async function ensureTherapistProfile(userId) {
+  const u = await pool.query(
+    'SELECT id, name, display_name, role_title, role, organisation_id FROM users WHERE id = $1', [userId]);
+  const user = u.rows[0];
+  if (!user || user.role !== 'therapist') return null;
+
+  const prof = await pool.query(`
+    INSERT INTO therapist_profiles (user_id, organisation_id, display_name, role_title)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (user_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+    RETURNING *
+  `, [user.id, user.organisation_id, user.display_name || user.name || 'Therapist', user.role_title || null]);
+  const profile = prof.rows[0];
+
+  await pool.query(
+    `UPDATE users SET therapist_profile_id = $1, is_treating_therapist = TRUE,
+            updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+    [profile.id, user.id]);
+  // Events mirrored before the profile existed carry NULL — claim them.
+  await pool.query(
+    `UPDATE events SET therapist_profile_id = $1
+      WHERE user_id = $2 AND therapist_profile_id IS NULL`,
+    [profile.id, user.id]);
+  return profile;
+}
+
 async function registerUserFromInvite({ invite, passwordHash, name, phone, displayName, roleTitle }) {
   const client = await pool.connect();
   try {
@@ -1941,6 +1976,7 @@ module.exports = {
   acceptInvite,
   revokeInvite,
   registerUserFromInvite,
+  ensureTherapistProfile,
   completeOnboardingProfile,
   // Leave requests
   getLeaveRequests,

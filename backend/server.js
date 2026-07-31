@@ -176,12 +176,15 @@ app.use((req, res, next) => {
   }
 
   const candidate = origin || refOrigin;
-  // Allow 'null' (file:// page in development) only in non-production
-  if (candidate === 'null' && process.env.NODE_ENV !== 'production') return next();
+  // Stage 2 hardening: STRICT everywhere except development/test. Staging
+  // hosts real users during the pilot, so it must enforce like production
+  // (it previously only warned — audit H5).
+  const strictEnv = process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test';
+  // Allow 'null' (file:// page) only in non-strict environments
+  if (candidate === 'null' && !strictEnv) return next();
 
   if (!allowedOrigins.includes(candidate)) {
-    const isProd = process.env.NODE_ENV === 'production';
-    if (isProd) {
+    if (strictEnv) {
       return res.status(403).json({ error: 'Request origin not permitted' });
     }
     console.warn(`⚠️  CSRF check: origin '${candidate}' not in ALLOWED_ORIGINS (dev-mode passthrough)`);
@@ -240,7 +243,9 @@ const sessionMiddleware = session({
   saveUninitialized: false,
   rolling: true, // reset timeout on each request
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    // Secure everywhere except development/test — staging is HTTPS-only and
+    // hosts real users during the pilot (Stage 2 hardening, audit H5).
+    secure: process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test',
     httpOnly: true,   // not accessible via JS
     sameSite: 'lax',
     maxAge: SESSION_TTL_MS,
