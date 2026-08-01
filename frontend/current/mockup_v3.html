@@ -1,10 +1,9 @@
-<!DOCTYP
-            <button class="btn cal-outlook-only-btn" id="btn-outlook-only" style="display:none;font-size:12px;" onclick="toggleOutlookOnly(this)" title="Owner/admin: show only genuine Outlook events for 1:1 comparison">👁 Outlook-only</button>E html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Opal Therapy Scheduler — v2 Mockup</title>
+<title>Opal Therapy Portal</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -3344,7 +3343,7 @@
     <svg class="icon tab-icon icon-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3.05h16.94a2 2 0 0 0 1.71-3.05L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Dormant Cases
     <span class="tab-badge" id="dormant-badge">0</span>
   </button>
-  <button class="tab" data-tab="travel" data-help="tab-travel">
+  <button class="tab" data-tab="travel" data-help="tab-travel" disabled title="Coming soon — flight & travel tracking is planned but not available yet" style="opacity:.45;cursor:not-allowed;">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.04v-5.1c0-.6-.32-1.12-.84-1.4l-8.8-5.23c-.48-.29-1.24-.29-1.72 0l-8.8 5.23c-.52.28-.84.8-.84 1.4v5.1c0 .6.32 1.12.84 1.4l8.8 5.23c.48.29 1.24.29 1.72 0l8.8-5.23c.52-.28.84-.8.84-1.4z"/><path d="M3.5 9.5l8.5 5v6.5M20.5 9.5l-8.5 5v6.5"/></svg> Travel & Flights
   </button>
   <button class="tab" data-tab="logbook">
@@ -3607,7 +3606,7 @@
     <div class="panel">
       <h2>
         New appointment
-        <span class="h2-sub">Ann · Mon 20 Apr – Fri 24 Apr 2026</span>
+        <span class="h2-sub" id="book-week-sub">This week</span>
       </h2>
 
       <!-- Stepper -->
@@ -4005,7 +4004,7 @@
       </div>
 
       <div class="panel ndis-card" id="ctx-week-card">
-        <h3>This week — Ann</h3>
+        <h3>This week</h3>
         <div id="ctx-week-body">
           <!-- Populated by renderRightContext() — reflects actual SESSIONS state. -->
         </div>
@@ -4081,6 +4080,7 @@
       <div id="cal-sync-strip" class="cal-sync-strip" title="Outlook sync status — click to refresh or fix calendar" data-help="cal-sync-strip">
         <div class="sync-dot-sm disconnected" id="cal-sync-dot"></div>
         <span id="cal-sync-label">Not connected</span>
+        <button class="btn cal-outlook-only-btn" id="btn-outlook-only" style="display:none;font-size:12px;" onclick="toggleOutlookOnly(this)" title="Owner/admin: show only genuine Outlook events for 1:1 comparison">👁 Outlook-only</button>
         <div class="cal-sync-menu" id="cal-sync-menu">
           <div class="menu-label">Outlook Calendar</div>
           <button onclick="refreshOutlookSync()">
@@ -4111,7 +4111,7 @@
     <div class="cal-view" id="cal-view-today" style="display: none; overflow: auto; padding: 16px;">
       <div class="day-main-grid">
         <div class="panel panel-pad">
-          <h3 id="today-heading">Today's schedule — Ann</h3>
+          <h3 id="today-heading">Today's schedule</h3>
           <div class="day-agenda" id="today-agenda">
             <!-- Populated by renderToday() -->
           </div>
@@ -4669,12 +4669,12 @@
       <h2>Business Travel & Flights <span class="h2-sub">Track trips, monitor delays</span></h2>
 
       <div style="padding:16px; border-bottom:1px solid var(--border);">
-        <button class="btn primary" onclick="showAddFlightModal()">
+        <button class="btn primary" onclick="showToast('Coming soon', 'Flight tracking is planned but not available yet.')">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;">
             <path d="M22 16.04v-5.1c0-.6-.32-1.12-.84-1.4l-8.8-5.23c-.48-.29-1.24-.29-1.72 0l-8.8 5.23c-.52.28-.84.8-.84 1.4v5.1c0 .6.32 1.12.84 1.4l8.8 5.23c.48.29 1.24.29 1.72 0l8.8-5.23c.52-.28.84-.8.84-1.4z"/><path d="M3.5 9.5l8.5 5v6.5M20.5 9.5l-8.5 5v6.5"/>
           </svg>Add Flight
         </button>
-        <button class="btn" onclick="addManualTravel()">
+        <button class="btn" onclick="showToast('Coming soon', 'Manual travel entries are planned but not available yet.')">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;">
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
           </svg>Add Manual Travel
@@ -5457,7 +5457,7 @@
           <div class="settings-row">
             <div class="settings-row-label">
               <strong>Connect / reconnect Outlook</strong>
-              <span>Re-authorise if your session has expired</span>
+              <span>Connect links YOUR mailbox to the portal. Disconnect stops sync for your account only — nothing changes in Outlook itself.</span>
             </div>
             <div class="settings-row-control" style="display:flex;gap:8px;">
               <button class="btn" onclick="connectOutlookFromSettings(this)" style="font-size:12px;">Connect Outlook</button>
@@ -6885,7 +6885,7 @@ async function resReload() {
   var d = await fetch(url, { credentials: 'include' }).then(r => r.status === 403 ? { disabled: true } : r.json()).catch(() => ({}));
   if (d.disabled) { el.innerHTML = 'Resource Hub is disabled on this environment.'; return; }
   var rows = d.resources || [];
-  if (!rows.length) { el.innerHTML = 'No approved resources yet. Owner/admin can add resources; therapist drafts appear after review.'; return; }
+  if (!rows.length) { el.innerHTML = 'No resources here yet — the practice owner adds and approves content, and new items appear automatically.'; return; }
   el.className = '';
   el.innerHTML = rows.map(function (r) {
     var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + escapeHtml(t.name) + '</span>'; }).join(' ');
@@ -7641,7 +7641,7 @@ function fmtPlanEnd(iso) {
   return d.toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' });
 }
 function planEndsSoon(iso) {
-  const d = new Date(iso), now = new Date('2026-04-20');
+  const d = new Date(iso), now = new Date(); // was frozen at 2026-04-20 — plan-expiry warnings were wrong
   return ((d - now) / (1000*60*60*24)) < 90; // < 90 days
 }
 
@@ -8966,7 +8966,9 @@ function _renderPDDocuments(body, docs) {
         <td style="color:var(--muted);font-size:11.5px;">${_pfDocTypeLabel(d.document_type)}</td>
         <td style="font-size:11.5px;">${escapeHtml(d.file_name) || '—'}</td>
         <td style="font-size:11.5px;">${_pfDateFmt(d.uploaded_at)}</td>
-        <td><button class="btn" style="font-size:11px;padding:3px 10px;color:var(--danger);"
+        <td style="white-space:nowrap;">
+          <a class="btn" style="font-size:11px;padding:3px 10px;" href="/api/profile/documents/${d.id}/download" target="_blank" rel="noopener">Download</a>
+          <button class="btn" style="font-size:11px;padding:3px 10px;color:var(--danger);"
           onclick="pfDeleteDocument('${d.id}')">Remove</button></td>
       </tr>`).join('')}
     </tbody>
@@ -9674,7 +9676,7 @@ function calculateTotalTravel(booked) {
 }
 
 function downloadSchedule() {
-  showToast('Downloaded', 'Schedule saved as PDF.');
+  showToast('Not available yet', 'Schedule PDF export is planned but not built — use the Snapshot report for now.');
 }
 
 async function sendToSplose() {
@@ -9701,8 +9703,9 @@ async function sendToSplose() {
       .filter(k => !payload[k]);
 
     if (missing.length > 0) {
-      // Fallback: if booking state isn't fully populated (mockup flow), show info toast
-      showToast('Booking recorded', 'Appointment logged — connect full scheduler to write to Splose.');
+      // NO fake success (audit P0): incomplete booking data does nothing —
+      // say so plainly instead of claiming it was recorded.
+      showToast('Booking not sent', 'Missing details: ' + missing.join(', ') + '. Complete every step — or book directly in Splose during the read-only pilot.');
       return;
     }
 
@@ -10930,7 +10933,7 @@ function scheduleCaseNoting(day, slot, clientNames, venue) {
   const toastSub = venue
     ? `${DAY_FULL[day]||day} · ${fmtTime(slot.startH,slot.startM)} – ${fmtTime(slot.endH,slot.endM)} · ${venue.icon} ${venue.name}`
     : `${DAY_FULL[day]||day} · ${fmtTime(slot.startH,slot.startM)} – ${fmtTime(slot.endH,slot.endM)}`;
-  showToast('Case noting scheduled', toastSub);
+  showToast('Preview only — not saved', 'Case-noting blocks are a planning preview: they are NOT saved or synced yet. ' + toastSub);
   return id;
 }
 
@@ -11133,7 +11136,7 @@ function cnScheduleAll() {
     }
   }
   document.getElementById('case-noting-modal')?.remove();
-  showToast('Case noting scheduled', `${count} day${count !== 1 ? 's' : ''} scheduled from idle gaps`);
+  showToast('Preview only — not saved', `${count} day${count !== 1 ? 's' : ''} previewed from idle gaps — these blocks are NOT saved or synced yet.`);
   showCaseNotingPrompt();
 }
 
@@ -11784,7 +11787,26 @@ const RESOURCE_LABEL = {
   travel:'Support-Activity', report:'Support-Activity',
   admin:'Busy-Time · type 55339', lunch:'Busy-Time · type 55340', cpd:'Busy-Time · CPD'
 };
-const DAY_LABEL = { mon:'Mon 20 Apr', tue:'Tue 21 Apr', wed:'Wed 22 Apr', thu:'Thu 23 Apr', fri:'Fri 24 Apr' };
+// Real current-week labels (was frozen at the April-2026 mockup week —
+// block-detail and move-session dialogs showed wrong dates).
+const DAY_LABEL = (function () {
+  const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const keys = ['mon','tue','wed','thu','fri','sat','sun'];
+  const out = {};
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    out[keys[i]] = d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  return out;
+})();
+// Booking header week range — real dates, no hardcoded name (header shows the user)
+(function setBookingWeekSub() {
+  const el = document.getElementById('book-week-sub'); if (!el) return;
+  const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+  const f = d => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  el.textContent = f(mon) + ' – ' + f(fri) + ' ' + fri.getFullYear();
+})();
 const DAY_FULL  = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday' };
 
 // Movable categories — only cancellations are locked from moves; lunch is movable too
@@ -12175,65 +12197,65 @@ function openAutoSchedule() {
 const DAY_DATA = {
   mon: {
     label: 'Monday 20 April 2026',
-    heading: "Monday's schedule — Ann",
+    heading: "Monday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Sync Outlook to load events', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Available' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Available' } ],
     sessions: []
   },
   tue: {
     label: 'Tuesday 21 April 2026',
-    heading: "Tuesday's schedule — Ann",
+    heading: "Tuesday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Sync Outlook to load events', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Available' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Available' } ],
     sessions: []
   },
   wed: {
     label: 'Wednesday 22 April 2026',
-    heading: "Wednesday's schedule — Ann",
+    heading: "Wednesday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Sync Outlook to load events', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Available' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Available' } ],
     sessions: []
   },
   thu: {
     label: 'Thursday 23 April 2026',
-    heading: "Thursday's schedule — Ann",
+    heading: "Thursday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Sync Outlook to load events', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Available' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Available' } ],
     sessions: []
   },
   fri: {
     label: 'Friday 24 April 2026',
-    heading: "Friday's schedule — Ann",
+    heading: "Friday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Sync Outlook to load events', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Available' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Available' } ],
     sessions: []
   },
   sat: {
     label: 'Saturday 25 April 2026',
-    heading: "Saturday's schedule — Ann",
+    heading: "Saturday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Weekend — Outlook events sync here', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Off' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Off' } ],
     sessions: []
   },
   sun: {
     label: 'Sunday 26 April 2026',
-    heading: "Sunday's schedule — Ann",
+    heading: "Sunday's schedule",
     isToday: false,
     totals: { sessions: 0, billable: '0 hrs', travel: '0 min', admin: '0 min', intensity: 'No data', intensityColor: 'var(--muted)' },
     upNext: { title: 'No events scheduled', meta: 'Weekend — Outlook events sync here', tag: 'Empty' },
-    clinic: [ { name: 'Ann Mary Mathew', role: 'OT · treating', status: 'Off' } ],
+    clinic: [ { name: 'Treating therapist', role: 'OT',  status: 'Off' } ],
     sessions: []
   }
 };
@@ -14983,7 +15005,7 @@ function rebuildLocationCatalogue() {
 rebuildLocationCatalogue();
 
 /* ---------- Week key helpers ---------- */
-const TODAY = new Date('2026-04-20');  // anchor: Monday 20 Apr 2026 (aligns with rest of mockup)
+const TODAY = new Date(); // real clock (was frozen at the 2026-04-20 mockup anchor)
 function mondayOf(d) {
   const x = new Date(d);
   const day = (x.getDay() + 6) % 7;  // 0 = Mon
@@ -23762,7 +23784,7 @@ function addGapBlock(type, label) {
   var day = pg.day;
   var timeLabel = (h % 12 || 12) + ':' + String(m).padStart(2,'0') + (h<12?'am':'pm') +
     ' – ' + (eh % 12 || 12) + ':' + String(em).padStart(2,'0') + (eh<12?'am':'pm');
-  showToast('✅ ' + label + ' noted', 'Blocked ' + timeLabel + ' on ' + day.charAt(0).toUpperCase() + day.slice(1));
+  showToast('Preview only — not saved', label + ' ' + timeLabel + ' on ' + day.charAt(0).toUpperCase() + day.slice(1) + ' is a suggestion preview: nothing was saved to your calendar.');
   closeGapModal();
   // Future: create Outlook block via write-back
 }
