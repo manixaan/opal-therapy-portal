@@ -1,0 +1,13 @@
+{
+  "name": "opal-therapy-portal-e2e",
+  "private": true,
+  "description": "E2E harness for the Opal Therapy Portal (staging only). Backend app lives in backend/.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "dotenv": "^16.4.5"
+  }
+}

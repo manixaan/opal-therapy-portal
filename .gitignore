@@ -51,3 +51,10 @@ opal-scheduler-snapshot-*.zip
 
 # staging synthetic credentials (local only, never committed)
 deploy/staging-synthetic.local.txt
+
+# E2E credentials (never commit) — the .example template IS committed
+.env.e2e
+!.env.e2e.example
+test-results/
+playwright-report/
+.playwright-mcp/
