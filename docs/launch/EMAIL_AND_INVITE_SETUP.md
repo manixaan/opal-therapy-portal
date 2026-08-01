@@ -85,7 +85,9 @@ az webapp config appsettings set -g "$RG" -n "$APP" --settings \
   EMAIL_PASS="@Microsoft.KeyVault(SecretUri=$SECRET_URI)" -o none
 echo "✓ app settings written (this restarts the app automatically)"
 
-# 6. Verify the new worker picked them up (~2 min; uptime resets)
+# 6. The settings write restarts the app automatically. To force another
+#    restart at any time:  az webapp restart -g "$RG" -n "$APP"
+#    Verify the new worker picked everything up (~2 min; uptime resets):
 sleep 120 && curl -s https://opal-portal-staging.azurewebsites.net/health
 ```
 

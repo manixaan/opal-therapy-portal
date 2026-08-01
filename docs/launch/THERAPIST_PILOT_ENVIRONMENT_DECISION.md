@@ -56,3 +56,4 @@ first 1–2 pilot weeks if you prefer to see the pilot working first.
 | Date | Status |
 |---|---|
 | 2026-07-31 | Decision OPEN. Stage 2 built + validated on staging (Option A posture). No production resources exist. |
+| 2026-08-01 | Stage 3 complete on staging (UX polish, starter content, guides). Condensed decision brief issued: **STAGE3_ENVIRONMENT_DECISION_BRIEF.md** — answer there. Still OPEN; still no production resources. |
