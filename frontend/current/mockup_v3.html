@@ -6845,10 +6845,29 @@ window.APP_USER = null;
     // Kick off honest freshness display + gentle polling
     if (typeof refreshFreshnessNow === 'function') setTimeout(function(){ refreshFreshnessNow(false); }, 2000);
 
+    // Different user in this browser session → drop the previous user's
+    // cached practice data before any view can render it (browser QA fix).
+    try {
+      var _lastUser = sessionStorage.getItem('portal_last_user');
+      if (_lastUser && _lastUser !== window.APP_USER.id) {
+        if (typeof window.clearCachedPracticeData === 'function') window.clearCachedPracticeData();
+        else Object.keys(sessionStorage).filter(function (k) { return k.indexOf('splose_swr_') === 0; })
+               .forEach(function (k) { sessionStorage.removeItem(k); });
+      }
+      sessionStorage.setItem('portal_last_user', window.APP_USER.id);
+    } catch (_) {}
+
     // Pre-populate My Profile view in case the user lands on that tab
     if (typeof loadProfileView === 'function') loadProfileView();
-    // Show Master Calendar tab for Owner/Admin
-    if (typeof initMasterCalendarAccess === 'function') initMasterCalendarAccess();
+    // Show Master Calendar tab for Owner/Admin + apply role-based nav gating.
+    // Retried because this IIFE can resolve before the later script block
+    // that defines these functions has parsed — browser QA found therapists
+    // seeing the Billing/NDIS/Dormant tabs because the call silently no-oped.
+    (function applyRoleGatingWhenReady(attempt) {
+      if (typeof initMasterCalendarAccess === 'function') { initMasterCalendarAccess(); return; }
+      if (typeof applyNavRoleVisibility === 'function') { applyNavRoleVisibility(window.APP_USER.role); return; }
+      if ((attempt || 0) < 40) setTimeout(function () { applyRoleGatingWhenReady((attempt || 0) + 1); }, 100);
+    })(0);
     // Load and apply user settings (affects calendar, reports, notifications)
     if (typeof loadUserSettings === 'function') loadUserSettings();
   } catch (err) {
@@ -6858,10 +6877,27 @@ window.APP_USER = null;
 })();
 
 /* ── Logout helper (call from any "Sign out" button) ── */
+/**
+ * Clear cached PRACTICE data (Splose stale-while-revalidate entries) from
+ * sessionStorage. Browser QA 2026-08-01 found the owner's cached billing /
+ * activity / dormant payloads surviving a logout and RENDERING for the next
+ * user signed in on the same machine — practice-wide financials shown to a
+ * therapist even though every live API correctly returned 403. Server data
+ * caches must never outlive the session that fetched them.
+ */
+window.clearCachedPracticeData = function () {
+  try {
+    Object.keys(sessionStorage)
+      .filter(function (k) { return k.indexOf('splose_swr_') === 0; })
+      .forEach(function (k) { sessionStorage.removeItem(k); });
+  } catch (_) {}
+};
+
 window.signOut = async function () {
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   } catch (_) {}
+  window.clearCachedPracticeData();
   window.location.replace('/login');
 };
 

@@ -91,3 +91,26 @@ describe('launch-facing affordances', () => {
     expect(HTML).toContain('Disconnect stops sync for your account only');
   });
 });
+
+// ── Browser-QA regressions (2026-08-01) ──────────────────────────────────────
+describe('browser QA fixes', () => {
+  test('cached practice data is cleared on sign-out (cross-role leak fix)', () => {
+    expect(HTML).toContain('window.clearCachedPracticeData = function ()');
+    expect(HTML).toContain("k.indexOf('splose_swr_') === 0");
+    // signOut must call it before redirecting
+    const so = HTML.slice(HTML.indexOf('window.signOut = async function'), HTML.indexOf('window.signOut = async function') + 400);
+    expect(so).toContain('window.clearCachedPracticeData()');
+  });
+
+  test('a different user in the same browser session drops the previous caches', () => {
+    expect(HTML).toContain("sessionStorage.getItem('portal_last_user')");
+    expect(HTML).toContain("sessionStorage.setItem('portal_last_user'");
+  });
+
+  test('role-based nav gating is applied with retry (no silent no-op)', () => {
+    expect(HTML).toContain('function applyRoleGatingWhenReady(attempt)');
+    expect(HTML).toContain('applyNavRoleVisibility(window.APP_USER.role)');
+    // the old unguarded single-shot call must be gone
+    expect(HTML).not.toContain("if (typeof initMasterCalendarAccess === 'function') initMasterCalendarAccess();\n");
+  });
+});
