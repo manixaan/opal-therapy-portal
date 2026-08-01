@@ -1,0 +1,8 @@
+APP=opal-portal-prod
+RG=opal-portal-prod-rg
+PG=opal-portal-prod-pg
+KV=opal-portal-prod-kv
+SA=opalprod163e898c
+AI=opal-portal-prod-ai
+LAW=opal-portal-prod-law
+BASE=https://opal-portal-prod.azurewebsites.net

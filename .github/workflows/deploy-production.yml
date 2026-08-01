@@ -9,8 +9,13 @@
 #
 #  Rollback: re-run this workflow selecting the previous known-good run's
 #            artifact commit, or `az webapp deploy` the previous deploy.zip
-#            (kept 14 days as a workflow artifact). See deploy/AZURE_DEPLOYMENT.md
-#            § Rollback.
+#            (kept 14 days as a workflow artifact). See
+#            docs/launch/PRODUCTION_ROLLBACK_AND_RECOVERY.md.
+#
+#  2026-08-01: production provisioned (deploy/prod-provision.sh); the
+#  `production` environment carries PRODUCTION_URL=<azurewebsites URL> until
+#  the custom domain is bound. This touch also (re)registers the workflow
+#  with the Actions API, which never indexed the original batch push.
 # ═══════════════════════════════════════════════════════════════════════════
 name: Deploy Production
 
