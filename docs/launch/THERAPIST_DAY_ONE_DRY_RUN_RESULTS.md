@@ -69,3 +69,15 @@ resumed account already had its mapping — the *fresh* fail-closed state
 was re-proven live on `synthetic.therapist`; (17) wrong JSON key in the
 script; (20b) the 1.17 MB HTML fetch flaking under the script's timeout —
 marker confirmed present directly. No app defect was found by the dry run.
+
+## Stage 3 addendum (2026-08-01, build 8b92979)
+
+The 20-item sign-off smoke re-validated the dry-run surface on the Stage 3
+build: 27/27 checks passed — invite/copy-link, setup-status chain, per-user
+Outlook state, Splose fail-closed, all write flags false, plus the new
+Stage 3 assertions (professional title, standards-mode DOCTYPE, no
+hardcoded Ann, Travel tab disabled, no fake-success strings, fake
+freshness absent) and the Resource Hub starter content visible to the
+therapist role (14 folders / 16 approved items). Step 9 (real Outlook
+mailbox connect) remains the single open item, deliberately deferred to
+the real therapist's onboarding.
