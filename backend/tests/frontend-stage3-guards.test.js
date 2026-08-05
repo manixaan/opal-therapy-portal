@@ -114,3 +114,44 @@ describe('browser QA fixes', () => {
     expect(HTML).not.toContain("if (typeof initMasterCalendarAccess === 'function') initMasterCalendarAccess();\n");
   });
 });
+
+// ── Installable web app (icons + manifest, 2026-08-01) ───────────────────────
+describe('installable web app', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+
+  test('every served page links the icon set and manifest', () => {
+    const pages = fs.readdirSync(FRONTEND).filter((f) => f.endsWith('.html'));
+    expect(pages.length).toBeGreaterThanOrEqual(8);
+    for (const page of pages) {
+      const html = fs.readFileSync(path.join(FRONTEND, page), 'utf8');
+      expect(html).toContain('<link rel="manifest" href="/site.webmanifest" />');
+      expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />');
+      expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+      expect(html).toContain('<meta name="theme-color" content="#00a8cc" />');
+    }
+  });
+
+  test('manifest is valid and every icon it references exists', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(FRONTEND, 'site.webmanifest'), 'utf8'));
+    expect(manifest.name).toBe('Opal Therapy Portal');
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.start_url).toBe('/');
+    expect(manifest.icons.length).toBeGreaterThanOrEqual(3);
+    expect(manifest.icons.some((i) => i.purpose === 'maskable')).toBe(true);
+    const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    for (const icon of manifest.icons) {
+      const buf = fs.readFileSync(path.join(FRONTEND, icon.src.replace(/^\//, '')));
+      expect(buf.subarray(0, 4).equals(PNG_MAGIC)).toBe(true);
+    }
+  });
+
+  test('favicon.ico exists and is a real ICO (fixes the QA favicon 404)', () => {
+    const ico = fs.readFileSync(path.join(FRONTEND, 'favicon.ico'));
+    // ICONDIR: reserved=0, type=1 (icon), count >= 1
+    expect(ico.readUInt16LE(0)).toBe(0);
+    expect(ico.readUInt16LE(2)).toBe(1);
+    expect(ico.readUInt16LE(4)).toBeGreaterThanOrEqual(1);
+    const touch = fs.readFileSync(path.join(FRONTEND, 'icons', 'apple-touch-icon.png'));
+    expect(touch.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
+  });
+});

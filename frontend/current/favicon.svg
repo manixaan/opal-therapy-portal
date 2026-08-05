@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Opal Therapy Portal icon — keep in sync with scripts/generate-icons.js -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00b8d9"/>
+      <stop offset="1" stop-color="#007a9c"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="url(#g)"/>
+  <circle cx="48" cy="56" r="22.75" fill="none" stroke="#ffffff" stroke-width="10.5"/>
+  <path d="M76 13.5 Q77 24 87.5 25 Q77 26 76 36.5 Q75 26 64.5 25 Q75 24 76 13.5 Z" fill="#ffffff"/>
+</svg>
