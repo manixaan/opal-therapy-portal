@@ -155,3 +155,53 @@ describe('installable web app', () => {
     expect(touch.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
   });
 });
+
+// ── Compact calendar week view (2026-08-06) ──────────────────────────────────
+describe('compact calendar week view', () => {
+  test('hour height is the compact 48px and all coordinate math uses the constant', () => {
+    expect(HTML).toContain('const HOUR_PX = 48;');
+    // No stray hardcoded 60px/hour math reintroduced alongside the constant
+    expect(HTML).not.toMatch(/const HOUR_PX = 60/);
+  });
+
+  test('event tiles truncate with ellipsis instead of growing', () => {
+    const sTitle = HTML.slice(HTML.indexOf('.session .s-title {'), HTML.indexOf('.session .s-title {') + 300);
+    expect(sTitle).toContain('white-space: nowrap');
+    expect(sTitle).toContain('text-overflow: ellipsis');
+  });
+
+  test('tiles render a time range line and duration-aware density classes', () => {
+    expect(HTML).toContain('class="s-time"');
+    expect(HTML).toContain('function applySessionDensity(el, durationMin)');
+    expect(HTML).toContain(".session.s-compact .s-time, .session.s-compact .s-sub { display: none; }");
+    // resize paths refresh density so a stretched tile regains its time line
+    expect(HTML.match(/applySessionDensity\(/g).length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('weekday header stays sticky and today keeps a non-heavy highlight', () => {
+    const anchor = HTML.indexOf('Day column headers — compact single-line');
+    expect(anchor).toBeGreaterThan(-1);
+    const head = HTML.slice(anchor, anchor + 600);
+    expect(head).toContain('position: sticky');
+    expect(HTML).toContain('.cal-col.today { background: rgba(0, 168, 204, 0.035); }');
+  });
+
+  test('overlap layout algorithm is unchanged (side-by-side lanes)', () => {
+    expect(HTML).toContain('function reflowDayOverlaps(col)');
+    expect(HTML).toContain('Greedy lane assignment');
+  });
+
+  test('external-calendar-only tiles keep a non-colour indicator', () => {
+    expect(HTML).toContain('.session[data-type="outlook"]::before');
+    expect(HTML).toContain('External calendar event (Outlook only)');
+  });
+
+  test('half-hour guides painted; small screens scroll horizontally', () => {
+    expect(HTML).toContain("className = 'hour-line half'");
+    expect(HTML).toContain('.cal-grid.view-week { min-width: 700px; }');
+  });
+
+  test('no hardcoded Ann identity in reschedule warnings', () => {
+    expect(HTML).not.toContain("Ann's working window");
+  });
+});

@@ -1950,35 +1950,40 @@
     font-size: 11.5px; color: var(--muted);
     margin-top: 12px; line-height: 1.5;
   }
-  /* ─── Day column headers ─── */
+  /* ─── Day column headers — compact single-line "MON 4" (Outlook style) ─── */
   .cal-head {
-    padding: 10px 4px 8px; text-align: center;
+    padding: 6px 4px 5px; text-align: center;
     border-bottom: 1px solid var(--border);
     background: #fafafa;
     position: sticky; top: 0; z-index: 20;
     /* Solid background prevents event bleed-through while scrolling */
     isolation: isolate;
+    display: flex; flex-direction: row; align-items: center; justify-content: center;
+    gap: 5px; min-height: 30px;
   }
   .cal-head:first-child { background: #fafafa; } /* time gutter */
   .cal-head .day-num {
-    font-size: 20px; font-weight: 400; line-height: 1.15;
+    font-size: 13px; font-weight: 600; line-height: 1;
     color: var(--ink); display: block;
+    order: 2; /* name first, number second: "MON 4" */
   }
   .cal-head .day-name {
     font-size: 10.5px; font-weight: 500;
     color: var(--muted);
     text-transform: uppercase;
-    margin-top: 1px;
     letter-spacing: 0.6px;
+    order: 1;
   }
-  /* Today — blue circle behind date number */
+  /* Today — small blue circle behind date number */
   .cal-head.today .day-num {
     color: white;
     background: var(--accent);
     display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 50%;
+    width: 21px; height: 21px; border-radius: 50%;
     font-weight: 600;
   }
+  /* Subtle wash over today's whole column — identifiable without a heavy border */
+  .cal-col.today { background: rgba(0, 168, 204, 0.035); }
   .cal-head.today .day-name { color: var(--accent); font-weight: 600; letter-spacing: 0.6px; }
   /* Clickable day header in week view — drill-down to Day View */
   .cal-head[data-day] { cursor: pointer; transition: background 120ms; }
@@ -2020,6 +2025,13 @@
     z-index: 0;
     pointer-events: none;
   }
+  .hour-line.half { border-top: 1px dotted #f6f7f9; }
+  /* Small screens: keep columns readable and let the grid container
+     (#cal-grid has overflow:auto) scroll horizontally instead of
+     crushing seven days into unreadable slivers. */
+  @media (max-width: 860px) {
+    .cal-grid.view-week { min-width: 700px; }
+  }
   .nonworking-band {
     position: absolute; left: 0; right: 0;
     /* DISABLED: Therapist can now schedule at any time (flexible hours)
@@ -2032,24 +2044,48 @@
      data-type attribute set inside addSession(). */
   .session {
     position: absolute; left: 3px; right: 3px;
-    border-radius: 7px;
-    padding: 5px 8px;
+    border-radius: 4px;
+    padding: 2px 6px 2px 5px;
     background: var(--c-outlook-bg);
     color: var(--tile-fg);
     font-size: 11px;
-    line-height: 1.35;
+    line-height: 1.25;
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-    border-left: 4px solid var(--c-therapy);
+    box-shadow: none;
+    border-left: 3px solid var(--c-therapy);
+    outline: 1px solid rgba(15, 23, 42, 0.05);
     overflow: hidden;
-    transition: box-shadow 0.15s ease, transform 0.06s ease;
+    min-height: 9px;
+    transition: box-shadow 0.15s ease;
     z-index: 2; /* sit above hour-line gridlines */
   }
-  .session:hover { box-shadow: 0 3px 10px rgba(15, 23, 42, 0.15); transform: translateY(-1px); }
-  .session .s-title { font-weight: 600; display: block; }
-  .session .s-sub   { font-size: 10px; display: block; opacity: 0.8; }
-  .session .s-title { font-weight: 600; display: block; color: var(--tile-fg); }
-  .session .s-sub   { font-size: 10px; display: block; color: var(--tile-fg-soft); }
+  .session:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18); z-index: 3; }
+  /* One line each, ellipsis instead of wrapping — the tile never grows to fit text */
+  .session .s-title {
+    font-weight: 600; display: block; color: var(--tile-fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session .s-time {
+    font-size: 10px; display: block; color: var(--tile-fg-soft);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session .s-sub {
+    font-size: 10px; display: block; color: var(--tile-fg-soft);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Duration-aware density: ≤65 min drops the location line; <40 min drops the
+     time line too and tightens to a single centred title row. Full details stay
+     one click away in the detail panel (and in the hover tooltip). */
+  .session.s-med .s-sub { display: none; }
+  .session.s-compact .s-time, .session.s-compact .s-sub { display: none; }
+  .session.s-compact { padding: 1px 6px 1px 5px; font-size: 10.5px; display: flex; align-items: center; }
+  /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
+     even without the blue tint (colour-blind safe). */
+  .session[data-type="outlook"]::before {
+    content: "⇄"; position: absolute; top: 1px; right: 3px;
+    font-size: 8px; opacity: 0.55; line-height: 1;
+  }
 
   /* Per-type tile colours: light fill + matching accent bar */
   .session[data-type="therapy"]    { background: var(--c-therapy-bg);    border-left-color: var(--c-therapy); }
@@ -11698,7 +11734,7 @@ function resetWizard() {
 }
 
 /* ---------- Calendar rendering ---------- */
-const HOUR_PX = 60;    // pixels per hour — fixed
+const HOUR_PX = 48;    // pixels per hour — compact Outlook-style density (was 60)
 var START_H   = 0;     // visible grid start — full 24-hour day (midnight). Calendar always shows 0→24.
 var END_H     = 24;    // visible grid end   — midnight (full 24-hour day)
 var WORK_S    = 8;     // soft working-hours start for non-working band
@@ -11786,6 +11822,14 @@ function paintHourLines(col) {
     line.className = 'hour-line';
     line.style.top = tToY(h) + 'px';
     col.appendChild(line);
+  }
+  // Half-hour guides (Outlook style) — fainter than the hour lines so the
+  // compact grid stays scannable without extra visual weight.
+  for (let h = START_H; h < END_H; h++) {
+    const half = document.createElement('div');
+    half.className = 'hour-line half';
+    half.style.top = tToY(h, 30) + 'px';
+    col.appendChild(half);
   }
   // non-working bands
   const before = document.createElement('div');
@@ -11968,6 +12012,15 @@ function durMin(s) { return (s.endH - s.startH) * 60 + ((s.endM||0) - (s.startM|
 function sessionStartMin(s) { return s.startH * 60 + (s.startM||0); }
 function sessionEndMin(s)   { return s.endH   * 60 + (s.endM  ||0); }
 
+/* Duration-aware density classes for compact tiles. Display-only: <40 min
+   shows the title alone, ≤65 min shows title + time, longer shows all lines.
+   Called from addSession and every path that changes a tile's duration. */
+function applySessionDensity(el, durationMin) {
+  el.classList.remove('s-compact', 's-med');
+  if (durationMin < 40) el.classList.add('s-compact');
+  else if (durationMin <= 65) el.classList.add('s-med');
+}
+
 function addSession(col, opts) {
   // Auto-assign id if absent (for legacy call sites)
   const id = opts.id || ('S-' + (opts.day||'').toUpperCase() + '-' + Math.random().toString(36).slice(2,7));
@@ -12019,11 +12072,22 @@ function addSession(col, opts) {
             ? '<em style="opacity:0.65">' + _typeLabel + '</em>'
             : '<em style="opacity:0.5">(No subject)</em>')
     : opts.title;
-  el.innerHTML = `<span class="s-title">${displayTitle}</span><span class="s-sub">${opts.sub || ''}</span>` + addrChip;
-  // Tooltip: prefer full address, fall back to suburb, fall back to sub label.
+  // Compact tile content: title first, time range second, location last.
+  // Duration-aware density classes let CSS drop the lower lines on short
+  // tiles — the full details stay in the tooltip and the click-through
+  // detail panel, so nothing is lost, only hidden by default.
+  applySessionDensity(el, durMin(opts));
+  const timeStr = (typeof fmtTime === 'function' && typeof opts.startH === 'number')
+    ? fmtTime(opts.startH, opts.startM || 0) + '–' + fmtTime(opts.endH, opts.endM || 0)
+    : '';
+  el.innerHTML = `<span class="s-title">${displayTitle}</span>` +
+                 (timeStr ? `<span class="s-time">${timeStr}</span>` : '') +
+                 `<span class="s-sub">${opts.sub || ''}</span>` + addrChip;
+  // Tooltip: time range, then full address, fall back to suburb, fall back to sub label.
   const locTip = opts.address || opts.suburb || opts.sub || '';
-  let baseTip = opts.title + ' · ' + (opts.sub || '') + (locTip ? ' · ' + locTip : '') +
+  let baseTip = opts.title + (timeStr ? ' · ' + timeStr : '') + ' · ' + (opts.sub || '') + (locTip ? ' · ' + locTip : '') +
                 ' · click for details · drag to move · drag edges to resize';
+  if (el.dataset.type === 'outlook') baseTip += '\n⇄ External calendar event (Outlook only)';
   if (addrClass === ' missing-addr') {
     baseTip += '\n⚠ Please enter a full address for this appointment so travel time can be calculated.';
   }
@@ -13615,6 +13679,7 @@ function onBlockResizeMove(e) {
   // Live preview: update element top/height but don't commit to state yet
   resize.el.style.top    = ((newStart - START_H * 60) / 60 * HOUR_PX) + 'px';
   resize.el.style.height = (newDur / 60 * HOUR_PX - 2) + 'px';
+  if (typeof applySessionDensity === 'function') applySessionDensity(resize.el, newDur);
 
   // Update duration tooltip
   if (!resize.tip) {
@@ -13681,7 +13746,7 @@ function evaluateMove(id, newDay, newStartMin, durationMin) {
     impacts.push({
       sev: 'warn',
       ttl: 'Outside working hours',
-      sub: `New time ${fmtMin(newStartMin)}–${fmtMin(newEndMin)} falls outside Ann's working window 09:00–17:00 AWST. Splose will accept this but it's flagged as out-of-hours.`
+      sub: `New time ${fmtMin(newStartMin)}–${fmtMin(newEndMin)} falls outside the working window 09:00–17:00 AWST. Splose will accept this but it's flagged as out-of-hours.`
     });
     if (verdict === 'ok') verdict = 'warn';
   }
@@ -13959,6 +14024,7 @@ function commitMove() {
   s.element.style.top = tToY(sh, sm) + 'px';
   // Resize in case duration changed via the detail-drawer timing editor or edge-handle resize
   s.element.style.height = (duration / 60 * HOUR_PX - 2) + 'px';
+  if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
   // Also update the displayed label timestamp in title
   s.element.querySelector('.s-title').textContent = `${fmtTime(sh, sm)} ${titleBase(s)}`;
@@ -16020,7 +16086,11 @@ function __renderWeekHeader() {
       head.onclick = () => switchToCalDay(clickDate);
       head.title = `Open Day View for ${__DAY_LABEL_BY_KEY[key]} ${d.getUTCDate()}`;
     }
-    if (col) col.style.order = String(i + 11);
+    if (col) {
+      col.style.order = String(i + 11);
+      // Mirror the header's today state onto the column for the subtle wash
+      col.classList.toggle('today', ymd === todayKey);
+    }
   });
 
   // Update the BSP booking panel day chips to show the actual date for each
