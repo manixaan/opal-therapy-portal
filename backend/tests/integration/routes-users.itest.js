@@ -122,20 +122,19 @@ describe('Fix 3 — read_only invitations', () => {
     expect(rows[0]).toMatchObject({ role: 'read_only', status: 'pending' });
   });
 
-  test('admin can invite read_only but not owner', async () => {
+  test('team management is owner-only — admin cannot invite at all (RBAC 2026-08-06)', async () => {
     const app = buildRealApp();
     const org = await seedOrganisation();
     const admin = await seedLoginUser({ role: 'admin' });
     await db.pool.query('UPDATE users SET organisation_id=$1 WHERE id=$2', [org.id, admin.id]);
     const agent = await loginAgent(app, admin.email);
 
-    const ok = await agent.post('/api/invites')
-      .send({ email: 'viewer2@test.invalid', role: 'read_only' });
-    expect(ok.status).toBe(201);
-
-    const refused = await agent.post('/api/invites')
-      .send({ email: 'boss@test.invalid', role: 'owner' });
-    expect(refused.status).toBe(403);
+    for (const role of ['read_only', 'therapist', 'owner']) {
+      const refused = await agent.post('/api/invites')
+        .send({ email: `${role}.x@test.invalid`, role });
+      expect(refused.status).toBe(403);
+    }
+    expect((await agent.get('/api/invites')).status).toBe(403);
   });
 });
 

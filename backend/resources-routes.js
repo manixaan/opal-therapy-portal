@@ -29,11 +29,17 @@ const log = require('./logger').createLogger('resources');
 
 const hubEnabled = () => process.env.ENABLE_RESOURCE_HUB !== 'false';
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
-const canManage = (u) => ['owner', 'admin'].includes(u?.role);
+// RBAC 2026-08-06: resource management is owner-only (admin has no Resources access).
+const canManage = (u) => u?.role === 'owner';
 const orgOf = (req) => req.user?.organisation_id || null;
 
 router.use('/api/resources', requireAuth, (req, res, next) => {
   if (!hubEnabled()) return res.status(403).json({ error: 'Resource Hub is disabled', code: 'resource_hub_disabled' });
+  // RBAC 2026-08-06: admin has no Resource Hub access (default-deny; a future
+  // explicit permission can reopen it). Owner manages; therapists/read_only view.
+  if (req.user?.role === 'admin') {
+    return res.status(403).json({ error: 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.', code: 'role_denied' });
+  }
   next();
 });
 
@@ -60,7 +66,7 @@ router.get('/api/resources/folders', safe(async (req, res) => {
   res.json({ folders: rows });
 }));
 
-router.post('/api/resources/folders', requireRole('owner', 'admin'), safe(async (req, res) => {
+router.post('/api/resources/folders', requireRole('owner'), safe(async (req, res) => {
   const { name, parentId, description } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name required' });
   const { rows } = await pool.query(
@@ -143,7 +149,7 @@ router.post('/api/resources', safe(async (req, res) => {
 }));
 
 // Upload a file to a resource (owner/admin only) via the storage abstraction.
-router.post('/api/resources/:id/files', requireRole('owner', 'admin'), safe(async (req, res) => {
+router.post('/api/resources/:id/files', requireRole('owner'), safe(async (req, res) => {
   try {
     if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const { fileName, fileMime, fileData, fileSizeBytes } = req.body || {};
@@ -237,7 +243,7 @@ router.post('/api/resources/:id/submit', safe(async (req, res) => {
   res.json({ ok: true });
 }));
 
-router.post('/api/resources/:id/approve', requireRole('owner', 'admin'), safe(async (req, res) => {
+router.post('/api/resources/:id/approve', requireRole('owner'), safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
   const { rows } = await pool.query(
     `UPDATE resources SET status='approved', approved_by=$3, approved_at=NOW(),
@@ -249,14 +255,14 @@ router.post('/api/resources/:id/approve', requireRole('owner', 'admin'), safe(as
   res.json({ ok: true });
 }));
 
-router.post('/api/resources/:id/reject', requireRole('owner', 'admin'), safe(async (req, res) => {
+router.post('/api/resources/:id/reject', requireRole('owner'), safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
   await pool.query(`UPDATE resources SET status='rejected', updated_at=NOW() WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2`, [req.params.id, orgOf(req)]);
   await audit(req, 'resource.rejected', req.params.id, { reason: (req.body?.reason || '').slice(0, 200) });
   res.json({ ok: true });
 }));
 
-router.delete('/api/resources/:id/archive', requireRole('owner', 'admin'), safe(async (req, res) => {
+router.delete('/api/resources/:id/archive', requireRole('owner'), safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
   await pool.query(`UPDATE resources SET status='archived', updated_at=NOW() WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2`, [req.params.id, orgOf(req)]);
   await audit(req, 'resource.archived', req.params.id);

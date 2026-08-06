@@ -29,9 +29,10 @@ const { requireAuth, requireRole } = require('./permissions');
 router.post('/api/invites', requireAuth, async (req, res) => {
   const { role: actorRole, organisation_id: orgId, name: actorName } = req.user;
 
-  // Permission: only Owner and Admin can create invites
-  if (!['owner', 'admin'].includes(actorRole)) {
-    return res.status(403).json({ error: 'Only Owner or Admin can create invites' });
+  // Permission (RBAC 2026-08-06): team management is owner-only. Admin's
+  // remit is scheduling + travel; inviting users is a team/settings control.
+  if (actorRole !== 'owner') {
+    return res.status(403).json({ error: 'Only the practice owner can create invites' });
   }
 
   const { email: inviteEmail, role: inviteRole, isTreatingTherapist, displayNameHint, expiresInDays } = req.body;
@@ -45,11 +46,6 @@ router.post('/api/invites', requireAuth, async (req, res) => {
   const VALID_ROLES = ['owner', 'admin', 'therapist', 'read_only'];
   if (!VALID_ROLES.includes(inviteRole)) {
     return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
-  }
-
-  // Admin can invite non-privileged roles only (therapist, read_only)
-  if (actorRole === 'admin' && !['therapist', 'read_only'].includes(inviteRole)) {
-    return res.status(403).json({ error: 'Admin can only invite Therapists or Read-only users. Owner role required for Owner/Admin invites.' });
   }
 
   // Validate email format
@@ -145,7 +141,7 @@ router.post('/api/invites', requireAuth, async (req, res) => {
 // ── GET /api/invites ──────────────────────────────────────────────────────────
 // List all invites for the organisation. Owner and Admin only.
 
-router.get('/api/invites', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+router.get('/api/invites', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const invites = await db.getInvitesByOrganisation(req.user.organisation_id);
     return res.json({ invites: invites.map(safeInvite) });
@@ -158,7 +154,7 @@ router.get('/api/invites', requireAuth, requireRole('owner', 'admin'), async (re
 // ── DELETE /api/invites/:id ───────────────────────────────────────────────────
 // Revoke a pending invite. Owner can revoke any. Admin can revoke therapist invites only.
 
-router.delete('/api/invites/:id', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+router.delete('/api/invites/:id', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     // Fetch the invite FIRST so we can check role permissions before writing
     const existing = await db.pool.query(
@@ -208,7 +204,7 @@ router.delete('/api/invites/:id', requireAuth, requireRole('owner', 'admin'), as
 // The token is deliberately stripped from list responses; this explicit,
 // audited endpoint is the ONLY post-creation way to obtain the link.
 
-router.get('/api/invites/:id/link', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+router.get('/api/invites/:id/link', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const invites = await db.getInvitesByOrganisation(req.user.organisation_id);
     const invite  = invites.find(i => i.id === req.params.id && i.status === 'pending');
@@ -240,7 +236,7 @@ router.get('/api/invites/:id/link', requireAuth, requireRole('owner', 'admin'), 
 // ── Resend invite email ───────────────────────────────────────────────────────
 // POST /api/invites/:id/resend  — resend the email for a still-pending invite
 
-router.post('/api/invites/:id/resend', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+router.post('/api/invites/:id/resend', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const invites = await db.getInvitesByOrganisation(req.user.organisation_id);
     const invite  = invites.find(i => i.id === req.params.id && i.status === 'pending');

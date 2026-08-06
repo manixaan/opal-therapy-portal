@@ -205,3 +205,49 @@ describe('compact calendar week view', () => {
     expect(HTML).not.toContain("Ann's working window");
   });
 });
+
+// ── RBAC role-based navigation (2026-08-06) ──────────────────────────────────
+describe('role-based navigation (RBAC)', () => {
+  test('explicit per-role nav config exists with default-deny allowlists', () => {
+    expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] }");
+    expect(HTML).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] }");
+    expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
+    expect(HTML).toContain("['Business', ['resources', 'accounting', 'settings']]");
+    // admin gets a Travel menu only — no business/practice groups
+    const roleNav = HTML.indexOf('var ROLE_NAV = {');
+    expect(roleNav).toBeGreaterThan(-1);
+    const adminCfg = HTML.slice(HTML.indexOf('admin: {', roleNav), HTML.indexOf("therapist: { primary", roleNav));
+    expect(adminCfg).toContain("label: 'Travel'");
+    expect(adminCfg).not.toContain('accounting');
+    expect(adminCfg).not.toContain('billing');
+  });
+
+  test('switch-time guard blocks unpermitted tabs and lands on Calendar', () => {
+    expect(HTML).toContain('window.__navGuardInstalled');
+    expect(HTML).toContain("var ACCESS_DENIED_MESSAGE = 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.'");
+    expect(HTML).toContain("name = 'calendar'; // permitted home screen");
+  });
+
+  test('the dropdown moves REAL tab buttons (badges/active state keep working)', () => {
+    expect(HTML).toContain("wrap.id = 'nav-more-wrap'");
+    expect(HTML).toContain("menu.id = 'nav-more-menu'");
+    expect(HTML).toContain('function toggleNavMoreMenu(force)');
+  });
+
+  test('global search respects the role allowlist (no hidden-area leakage)', () => {
+    expect(HTML).toContain('if (!allowedTabs.includes(n.tab)) return;');
+    expect(HTML).toContain("(role === 'owner' || role === 'admin') && typeof PATIENTS !== 'undefined'");
+    expect(HTML).toContain("!allowedTabs.includes('settings') ? [] :");
+  });
+
+  test('header settings gear is gated with the Settings tab rule', () => {
+    expect(HTML).toContain('id="hdr-settings-btn"');
+    expect(HTML).toContain("gear.style.display = allowed.includes('settings')");
+  });
+
+  test('cache clearing extends to practice-adjacent localStorage', () => {
+    expect(HTML).toContain("k.indexOf('manual_addr_') === 0");
+    expect(HTML).toContain("k.indexOf('session_note_') === 0");
+    expect(HTML).toContain("k === 'opal_recent_searches'");
+  });
+});

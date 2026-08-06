@@ -875,6 +875,28 @@
     line-height: 1.3;
   }
   .tab .tab-icon { font-size: 14px; }
+  /* Role-nav dropdown (More / Travel) — holds the real tab buttons */
+  .nav-more-wrap { position: relative; display: flex; align-items: stretch; }
+  .nav-more-menu {
+    position: absolute; top: calc(100% + 4px); right: 0;
+    background: white; border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    padding: 6px; min-width: 230px; z-index: 1200;
+    display: none;
+  }
+  .nav-more-menu.open { display: block; }
+  .nav-more-group {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--muted);
+    padding: 8px 10px 4px;
+  }
+  .nav-more-group:first-child { padding-top: 4px; }
+  .nav-more-menu .tab {
+    display: flex !important; width: 100%; text-align: left;
+    border-bottom: none; border-radius: 7px; padding: 8px 10px;
+  }
+  .nav-more-menu .tab:hover { background: var(--accent-soft); }
+  .nav-more-menu .tab.active { background: var(--accent-soft); border-bottom: none; }
 
   /* ─── Layout ─── */
   .view { display: none; padding: 16px; }
@@ -3339,7 +3361,7 @@
     </svg>
     <span class="badge" id="notif-badge" style="display:none">0</span>
   </button>
-  <button class="icon-btn" title="Settings" onclick="switchTab('settings')" aria-label="Open settings">
+  <button class="icon-btn" id="hdr-settings-btn" title="Settings" onclick="switchTab('settings')" aria-label="Open settings">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24M19.78 19.78l-4.24-4.24m-2.12-2.12l-4.24-4.24"/>
     </svg>
@@ -6931,6 +6953,18 @@ window.clearCachedPracticeData = function () {
     Object.keys(sessionStorage)
       .filter(function (k) { return k.indexOf('splose_swr_') === 0; })
       .forEach(function (k) { sessionStorage.removeItem(k); });
+  } catch (_) {}
+  // Practice-adjacent localStorage must not survive a user change either:
+  // manually entered session addresses, per-session notes, and recent search
+  // queries (which can contain client names).
+  try {
+    Object.keys(localStorage)
+      .filter(function (k) {
+        return k.indexOf('manual_addr_') === 0 ||
+               k.indexOf('session_note_') === 0 ||
+               k === 'opal_recent_searches';
+      })
+      .forEach(function (k) { localStorage.removeItem(k); });
   } catch (_) {}
 };
 
@@ -18448,44 +18482,143 @@ function initMasterCalendarAccess() {
   if (typeof applySettingsRoleVisibility === 'function') applySettingsRoleVisibility();
 }
 
-// ── Role-based nav tab visibility ─────────────────────────────
-// Tabs that only Admin/Owner can access in the sidebar nav
+// ── Role-based navigation (RBAC 2026-08-06, default-deny) ─────────────────────
+// Each role gets an explicit primary nav plus (for owner/admin) a compact
+// dropdown holding secondary areas. Any tab NOT listed for the role is hidden
+// AND blocked at switch time — the backend independently enforces the same
+// boundaries on every route, so this layer is UX honesty, not the security
+// boundary. Legacy name kept for older callers.
 var NAV_ADMIN_ONLY_TABS = ['billing', 'ndis', 'dormant'];
+
+var ROLE_NAV = {
+  owner: {
+    primary: ['profile', 'book', 'calendar'],
+    menu: { label: 'More', groups: [
+      ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
+      ['Travel', ['travel', 'logbook']],
+      ['Business', ['resources', 'accounting', 'settings']],
+    ] },
+  },
+  admin: {
+    primary: ['profile', 'book', 'calendar'],
+    menu: { label: 'Travel', groups: [
+      ['Travel', ['travel', 'logbook']],
+    ] },
+  },
+  therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] },
+  read_only: { primary: ['profile', 'calendar', 'resources'] },
+};
+
+var ACCESS_DENIED_MESSAGE = 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.';
+
+function navAllowedTabs(role) {
+  var cfg = ROLE_NAV[role] || ROLE_NAV.therapist;
+  var allowed = cfg.primary.slice();
+  (cfg.menu ? cfg.menu.groups : []).forEach(function (g) { allowed = allowed.concat(g[1]); });
+  return allowed;
+}
+
+function toggleNavMoreMenu(force) {
+  var menu = document.getElementById('nav-more-menu');
+  var btn = document.getElementById('nav-more-btn');
+  if (!menu) return;
+  var open = typeof force === 'boolean' ? force : !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
 
 function applyNavRoleVisibility(role) {
   role = role || ((window.APP_USER && window.APP_USER.role) || 'therapist');
-  var isPrivileged = (role === 'owner' || role === 'admin');
+  var cfg = ROLE_NAV[role] || ROLE_NAV.therapist;
+  var allowed = navAllowedTabs(role);
+  window.NAV_ALLOWED_TABS = allowed;
 
-  NAV_ADMIN_ONLY_TABS.forEach(function(tabName) {
-    var el = document.querySelector('.tab[data-tab="' + tabName + '"]');
-    if (el) el.style.display = isPrivileged ? '' : 'none';
+  var bar = document.querySelector('nav.tabs');
+  if (!bar) return;
+
+  // Default deny: hide every tab button, then reveal only what the role gets.
+  bar.querySelectorAll('.tab[data-tab]').forEach(function (el) {
+    el.style.display = allowed.includes(el.dataset.tab) ? '' : 'none';
   });
 
-  // Owner-ONLY tabs (Accounting): visible only to the practice owner. The
-  // backend independently enforces owner-only on every /api/accounting route,
-  // so this is UX honesty, not the security boundary.
-  var isOwner = (role === 'owner');
-  document.querySelectorAll('.tab[data-owner-only="1"]').forEach(function(el) {
-    el.style.display = isOwner ? '' : 'none';
-  });
-  if (!isOwner) {
-    var activeOwnerTab = document.querySelector('.tab.active[data-owner-only="1"]');
-    if (activeOwnerTab && typeof switchTab === 'function') switchTab('calendar');
+  // Build (or rebuild) the dropdown for roles that have one. The real tab
+  // BUTTONS move into the menu, so switchTab's active-state bookkeeping,
+  // badges (#ndis-alert-badge, #dormant-badge) and read_only CSS guards all
+  // keep working unchanged.
+  var wrap = document.getElementById('nav-more-wrap');
+  if (wrap) {
+    // Return previously moved tabs to the bar before rebuilding
+    wrap.querySelectorAll('.tab[data-tab]').forEach(function (el) { bar.insertBefore(el, wrap); });
+    wrap.remove();
+  }
+  if (cfg.menu) {
+    wrap = document.createElement('div');
+    wrap.id = 'nav-more-wrap';
+    wrap.className = 'nav-more-wrap';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'nav-more-btn';
+    btn.className = 'tab';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = cfg.menu.label + ' <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="6 9 12 15 18 9"/></svg>';
+    btn.onclick = function (e) { e.stopPropagation(); toggleNavMoreMenu(); };
+    var menu = document.createElement('div');
+    menu.id = 'nav-more-menu';
+    menu.className = 'nav-more-menu';
+    menu.setAttribute('role', 'menu');
+    cfg.menu.groups.forEach(function (g) {
+      var title = document.createElement('div');
+      title.className = 'nav-more-group';
+      title.textContent = g[0];
+      menu.appendChild(title);
+      g[1].forEach(function (tabName) {
+        var el = bar.querySelector('.tab[data-tab="' + tabName + '"]');
+        if (el) { el.style.display = ''; menu.appendChild(el); }
+      });
+    });
+    wrap.appendChild(btn);
+    wrap.appendChild(menu);
+    bar.appendChild(wrap);
   }
 
-  // Show / hide "Travel & Flights" tab (admin sees team-wide, therapist sees own)
-  // All roles can access it — no change needed
+  // Header settings gear mirrors the Settings tab rule (owner only).
+  var gear = document.getElementById('hdr-settings-btn');
+  if (gear) gear.style.display = allowed.includes('settings') ? '' : 'none';
 
-  // If current active tab is one that's now hidden, redirect away from it.
-  // read_only accounts land on the calendar (their Smart Booking tab is
-  // hidden too); everyone else lands on Smart Booking as before.
-  if (!isPrivileged) {
-    var activeTab = document.querySelector('.tab.active');
-    if (activeTab && NAV_ADMIN_ONLY_TABS.includes(activeTab.dataset.tab)) {
-      if (typeof switchTab === 'function') {
-        switchTab(role === 'read_only' ? 'calendar' : 'book');
+  // Install the switch-time guard once (outermost wrapper, default deny).
+  if (!window.__navGuardInstalled) {
+    window.__navGuardInstalled = true;
+    var _preGuardSwitchTab = window.switchTab;
+    window.switchTab = function (name) {
+      var ok = !window.NAV_ALLOWED_TABS || window.NAV_ALLOWED_TABS.includes(name);
+      if (!ok) {
+        if (typeof showToast === 'function') showToast('Access denied', ACCESS_DENIED_MESSAGE, 'warn');
+        name = 'calendar'; // permitted home screen
       }
-    }
+      var out = _preGuardSwitchTab(name);
+      toggleNavMoreMenu(false);
+      var moreBtn = document.getElementById('nav-more-btn');
+      if (moreBtn) {
+        var inMenu = !!document.querySelector('#nav-more-menu .tab.active');
+        moreBtn.classList.toggle('active', inMenu);
+      }
+      return out;
+    };
+    document.addEventListener('click', function (e) {
+      var w = document.getElementById('nav-more-wrap');
+      if (w && !w.contains(e.target)) toggleNavMoreMenu(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') toggleNavMoreMenu(false);
+    });
+  }
+
+  // If the currently active tab is not permitted for this role, land on the
+  // permitted home screen (Calendar).
+  var activeTab = document.querySelector('.tab.active[data-tab]');
+  if (activeTab && !allowed.includes(activeTab.dataset.tab)) {
+    if (typeof switchTab === 'function') switchTab('calendar');
   }
 }
 
@@ -21129,9 +21262,12 @@ async function runSearch(q) {
 function clientSideSearch(q, role) {
   var ql = q.toLowerCase();
   var results = [];
+  // RBAC: the palette only surfaces areas the role can actually open.
+  var allowedTabs = window.NAV_ALLOWED_TABS ||
+    (typeof navAllowedTabs === 'function' ? navAllowedTabs(role) : []);
 
-  // Patients/clients
-  if (typeof PATIENTS !== 'undefined' && PATIENTS) {
+  // Patients/clients — practice directory results are owner/admin only
+  if ((role === 'owner' || role === 'admin') && typeof PATIENTS !== 'undefined' && PATIENTS) {
     Object.values(PATIENTS).forEach(function(p) {
       var name = ((p.firstName || '') + ' ' + (p.lastName || '')).toLowerCase();
       var ndis = (p.ndisNumber || '').toLowerCase();
@@ -21146,8 +21282,8 @@ function clientSideSearch(q, role) {
     });
   }
 
-  // Settings sections
-  var settingsSections = [
+  // Settings sections — the Settings area itself is owner-only now
+  var settingsSections = !allowedTabs.includes('settings') ? [] : [
     { label: 'My Settings', desc: 'Personal preferences', section: 'my-settings' },
     { label: 'Calendar Settings', desc: 'View, hours, event visibility', section: 'calendar-settings' },
     { label: 'Travel Settings', desc: 'Km rate, calculation options', section: 'travel-settings' },
@@ -21185,6 +21321,7 @@ function clientSideSearch(q, role) {
   ];
   navItems.forEach(function(n) {
     if (n.roles && !n.roles.includes(role)) return;
+    if (!allowedTabs.includes(n.tab)) return; // default deny — hidden areas never appear
     if (n.label.toLowerCase().includes(ql) || n.desc.toLowerCase().includes(ql)) {
       (function(tab) {
         results.push({ group: 'Navigation', icon: n.icon, title: n.label, sub: n.desc, tag: 'Page',

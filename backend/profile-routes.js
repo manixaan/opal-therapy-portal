@@ -24,14 +24,17 @@ const { requireAuth } = require('./permissions');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-/** True when caller may take approval/verification actions. */
+/** True when caller may take approval/verification actions.
+ *  RBAC 2026-08-06: HR-style controls (leave/CPD approvals, credential
+ *  verification, cross-user document access) are OWNER-ONLY. Admin's remit
+ *  is scheduling + travel; approvals are practice management. */
 function canApprove(user) {
-  return ['owner', 'admin'].includes(user?.role);
+  return user?.role === 'owner';
 }
 
-/** True when caller may view all-org data. */
+/** True when caller may view all-org data (same owner-only rule). */
 function canViewAll(user) {
-  return ['owner', 'admin'].includes(user?.role);
+  return user?.role === 'owner';
 }
 
 function notFound(res) { return res.status(404).json({ error: 'Record not found' }); }

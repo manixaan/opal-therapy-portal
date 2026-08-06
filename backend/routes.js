@@ -87,6 +87,12 @@ function denySploseToReadOnly(req, res, next) {
 }
 
 const requireSploseAdmin = requireRole('owner', 'admin');
+// RBAC hardening (2026-08-06): whole-practice PII/financial areas (Contacts,
+// Activity, Billing, NDIS Cases, Dormant Cases) are OWNER-ONLY. Admin keeps
+// scheduling data only (patients directory for booking, appointments,
+// reference data, support-items for the travel logbook). Default-deny: adding
+// a new Splose route requires an explicit tier choice here.
+const requireSploseOwner = requireRole('owner');
 
 /** Splose practitioner id linked to the signed-in user (null if unmapped). */
 function ownPractitionerId(req) {
@@ -1068,7 +1074,7 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
  *
  * Useful for diagnosing sync drift without reading the full DB.
  */
-router.get('/api/sync/diagnostics', requireAuth, async (req, res) => {
+router.get('/api/sync/diagnostics', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
   try {
     const pool = db.pool;
 
@@ -1953,7 +1959,7 @@ router.get('/api/splose/patients/:id', requireAuth, requireSploseAdmin, async (r
  * GET /api/splose/cases?patientId=...
  * Returns active cases for a patient — needed to get caseId for appointment write.
  */
-router.get('/api/splose/cases', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/cases', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const { patientId } = req.query;
     // Splose /cases uses cursor-only pagination — no patientId filter param accepted.
@@ -1972,7 +1978,7 @@ router.get('/api/splose/cases', requireAuth, requireSploseAdmin, async (req, res
  * GET /api/splose/contacts
  * Returns all contacts (plan managers, referrers, GPs, etc.)
  */
-router.get('/api/splose/contacts', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/contacts', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const contacts = await sploseApi.getContacts();
     res.json({ data: contacts.filter(c => !c.archived) });
@@ -1986,7 +1992,7 @@ router.get('/api/splose/contacts', requireAuth, requireSploseAdmin, async (req, 
  * GET /api/splose/invoices?patientId=...
  * Returns invoices, optionally filtered by patient.
  */
-router.get('/api/splose/invoices', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/invoices', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const { patientId, startDate, endDate } = req.query;
     const params = {};
@@ -2022,7 +2028,7 @@ router.get('/api/splose/availabilities/:practitionerId', requireAuth, denySplose
  * GET /api/splose/payments
  * Returns all payments (receipts).
  */
-router.get('/api/splose/payments', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/payments', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const payments = await sploseApi.getPayments();
     const active = payments.filter(p => !p.archived && !p.archivedAt);
@@ -2037,7 +2043,7 @@ router.get('/api/splose/payments', requireAuth, requireSploseAdmin, async (req, 
 /**
  * GET /api/splose/support-activities
  */
-router.get('/api/splose/support-activities', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/support-activities', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const all = await sploseApi.getSupportActivities();
     console.log(`Splose support-activities loaded: ${all.length} records`);
@@ -2077,7 +2083,7 @@ router.get('/api/splose/support-items', requireAuth, requireSploseAdmin, async (
  *  4. Flag anyone whose most-recent date is > 42 days ago (or null).
  *  5. Return sorted by lastActivity ascending (oldest first).
  */
-router.get('/api/splose/dormant-cases', requireAuth, requireSploseAdmin, async (req, res) => {
+router.get('/api/splose/dormant-cases', requireAuth, requireSploseOwner, async (req, res) => {
   try {
     const thresholdDays = parseInt(req.query.days || '42', 10);
     const now = new Date();

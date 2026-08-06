@@ -202,7 +202,11 @@ router.put('/api/therapists/:id', requireAuth, async (req, res) => {
     const profile = await db.getTherapistProfileById(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Therapist profile not found' });
 
-    if (!canManageTherapistSchedule(req.user, profile.id)) {
+    // RBAC 2026-08-06: therapist-profile edits (identity, Splose mapping,
+    // Outlook calendar id) are team-setup controls — owner or self only.
+    // Admin retains schedule/calendar operations but not profile editing.
+    const isSelf = String(req.user.therapist_profile_id) === String(profile.id);
+    if (req.user.role !== 'owner' && !isSelf) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

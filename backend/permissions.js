@@ -61,10 +61,13 @@ const ROLE_PERMISSIONS = {
     'view_audit_logs',
   ],
 
+  // RBAC 2026-08-06: admin is a focused scheduling + travel role. No billing,
+  // contacts, activity, NDIS/dormant, accounting, resources, settings or team
+  // controls — routes enforce this independently; this list mirrors it for
+  // the frontend's currentUserCan().
   admin: [
     'view_all_calendars',
     'manage_all_schedules',
-    'view_billing_without_financials',
     'view_all_clients',
     'view_all_therapists',
     'view_all_travel',

@@ -448,6 +448,9 @@ app.use('/', mapsRoutes);
 // Resource Hub (governed clinical resource repository; backend-enforced RBAC)
 app.use('/', require('./resources-routes'));
 
+// Travel Logbook (read-only Splose aggregation, role-scoped server-side)
+app.use('/', require('./travel-routes'));
+
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);

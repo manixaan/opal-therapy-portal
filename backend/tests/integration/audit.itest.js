@@ -98,11 +98,12 @@ describe('org settings audit', () => {
 });
 
 describe('document audit', () => {
-  test('upload and delete are audited; cross-user download by admin is audited', async () => {
+  test('upload and delete are audited; cross-user download is owner-only and audited (admin denied, RBAC 2026-08-06)', async () => {
     process.env.DOCUMENT_STORAGE_BACKEND = 'db';
     const app = buildApp();
     const { agent: therapist, user: t } = await agentFor(app, { role: 'therapist' });
-    const { agent: admin, user: a } = await agentFor(app, { role: 'admin' });
+    const { agent: admin } = await agentFor(app, { role: 'admin' });
+    const { agent: ownerAgent, user: a } = await agentFor(app, { role: 'owner' });
 
     const up = await therapist.post('/api/profile/documents')
       .send({ title: 'Cert', fileName: 'cert.pdf', fileMime: 'application/pdf', fileData: PDF_B64 });
@@ -120,8 +121,13 @@ describe('document audit', () => {
     await therapist.get(`/api/profile/documents/${docId}/download`);
     expect(await auditRows('document.downloaded')).toHaveLength(0);
 
-    // Admin cross-user download: audited with document owner in metadata
-    const dl = await admin.get(`/api/profile/documents/${docId}/download`);
+    // Admin cross-user download: DENIED (owner-only), and the denial is audited
+    const adminDl = await admin.get(`/api/profile/documents/${docId}/download`);
+    expect(adminDl.status).toBe(403);
+    expect(await auditRows('document.download_denied')).toHaveLength(1);
+
+    // Owner cross-user download: audited with document owner in metadata
+    const dl = await ownerAgent.get(`/api/profile/documents/${docId}/download`);
     expect(dl.status).toBe(200);
     const downloaded = await auditRows('document.downloaded');
     expect(downloaded).toHaveLength(1);

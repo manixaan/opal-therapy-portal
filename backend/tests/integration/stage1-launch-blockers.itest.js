@@ -177,13 +177,22 @@ describe('Splose proxy RBAC (audit C1)', () => {
     expect(res.status).toBe(403);
   });
 
-  test('owner can fetch practice-wide data; admin follows the same explicit model', async () => {
+  test('owner keeps practice-wide data; admin keeps scheduling data but loses financial/PII areas (RBAC 2026-08-06)', async () => {
     const app = buildApp();
-    for (const role of ['owner', 'admin']) {
-      const { agent } = await agentFor(app, role);
-      expect((await agent.get('/api/splose/patients')).status).toBe(200);
-      expect((await agent.get('/api/splose/invoices')).status).toBe(200);
-      expect((await agent.get('/api/splose/appointments?startDate=2026-07-01&endDate=2026-07-02')).status).toBe(200);
+    const { agent: owner } = await agentFor(app, 'owner');
+    expect((await owner.get('/api/splose/patients')).status).toBe(200);
+    expect((await owner.get('/api/splose/invoices')).status).toBe(200);
+    expect((await owner.get('/api/splose/appointments?startDate=2026-07-01&endDate=2026-07-02')).status).toBe(200);
+
+    const { agent: admin } = await agentFor(app, 'admin');
+    // Scheduling remit retained
+    expect((await admin.get('/api/splose/patients')).status).toBe(200);
+    expect((await admin.get('/api/splose/appointments?startDate=2026-07-01&endDate=2026-07-02')).status).toBe(200);
+    expect((await admin.get('/api/splose/support-items')).status).toBe(200); // travel logbook
+    // Practice financial/PII areas denied
+    for (const p of ['/api/splose/invoices', '/api/splose/payments', '/api/splose/contacts',
+                     '/api/splose/cases', '/api/splose/support-activities', '/api/splose/dormant-cases']) {
+      expect((await admin.get(p)).status).toBe(403);
     }
   });
 });

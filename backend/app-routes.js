@@ -1341,7 +1341,7 @@ router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), 
  * therapist (Stage 2), doubling as the Outlook connection debug view —
  * WHICH mailbox each user connected, whether sync is moving, never tokens.
  */
-router.get('/api/admin/team-setup', requireAuth, requireRole('owner', 'admin'), async (req, res) => {
+router.get('/api/admin/team-setup', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const q = await pool.query(`
       SELECT u.id, u.email, u.name, u.display_name, u.role, u.account_status,
