@@ -451,6 +451,12 @@ app.use('/', require('./resources-routes'));
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
 
+// Purchase requests (Resource Hub V1; admin gets a stripped operational view)
+app.use('/', require('./purchases-routes'));
+
+// AI Resource Studio drafts (local store only — no external AI calls)
+app.use('/', require('./ai-drafts-routes'));
+
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);

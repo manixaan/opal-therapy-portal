@@ -7822,7 +7822,7 @@ async function rhLoadDrafts() {
     var qd = q.drafts || [];
     document.getElementById('rh-review-queue').innerHTML = qd.length ? qd.map(function (x) {
       return '<div class="rh-item"><div style="font-weight:600;font-size:13px;">' + escapeHtml(x.title) + '</div>' +
-        '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(x.author || '') + '</div>' +
+        '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(x.author_name || '') + '</div>' +
         '<div style="display:flex;gap:6px;">' +
         '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'approve\')">Approve &amp; publish</button>' +
         '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'request-changes\')">Request changes</button>' +

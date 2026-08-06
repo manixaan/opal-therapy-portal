@@ -23,6 +23,8 @@ const ALL_TABLES = [
   'leave_requests', 'cpd_activities', 'credentials', 'pd_documents',
   'user_invites', 'therapist_profiles',
   'outlook_delta_state', 'sessions', 'audit_logs',
+  'purchase_request_events', 'purchase_requests',
+  'resource_ai_drafts', 'user_resource_progress',
   'users', 'organisations',
 ];
 

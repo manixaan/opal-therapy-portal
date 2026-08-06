@@ -98,6 +98,10 @@ router.get('/api/resources', safe(async (req, res) => {
     params.push(req.query.tagId);
     where += ` AND EXISTS (SELECT 1 FROM resource_tag_links l WHERE l.resource_id = r.id AND l.tag_id = $${params.length})`;
   }
+  // ?saved=1 → only the caller's favourites ($N below is the appended user id).
+  if (req.query.saved === '1') {
+    where += ` AND EXISTS (SELECT 1 FROM resource_favourites f WHERE f.resource_id = r.id AND f.user_id = $${params.length + 1})`;
+  }
   const { rows } = await pool.query(
     `SELECT r.*,
             COALESCE(json_agg(json_build_object('id',t.id,'category',t.category,'name',t.name))
@@ -228,6 +232,69 @@ router.delete('/api/resources/:id/favourite', safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
   await pool.query('DELETE FROM resource_favourites WHERE user_id=$1 AND resource_id=$2', [req.user.id, req.params.id]);
   res.json({ ok: true });
+}));
+
+// ── Feedback, link health, kit progress (Resource Hub V1) ────────────────────
+
+// Lightweight helpful/not-helpful signal — audit-only, no table.
+router.post('/api/resources/:id/feedback', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const r = await pool.query('SELECT id FROM resources WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2', [req.params.id, orgOf(req)]);
+  if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+  await audit(req, 'resource.feedback', req.params.id, { helpful: req.body?.helpful === true });
+  res.json({ ok: true });
+}));
+
+// Report a broken/suspect link. Flags only — NO outbound HTTP check exists.
+router.post('/api/resources/:id/report', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const { rows } = await pool.query(
+    `UPDATE resources SET link_status='reported' WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2 RETURNING id`,
+    [req.params.id, orgOf(req)]);
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  await audit(req, 'resource.reported', req.params.id, { reason: (req.body?.reason || '').slice(0, 200) });
+  res.json({ ok: true });
+}));
+
+// Owner marks a link ok/broken (or clears). Format-only — no fetch, ever.
+router.post('/api/resources/:id/link-status', requireRole('owner'), safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const status = req.body?.status ?? null;
+  if (status !== null && !['ok', 'broken'].includes(status)) {
+    return res.status(400).json({ error: "status must be 'ok', 'broken' or null" });
+  }
+  const { rows } = await pool.query(
+    `UPDATE resources SET link_status=$3, link_checked_at=NOW()
+      WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2 RETURNING id`,
+    [req.params.id, orgOf(req), status]);
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  await audit(req, 'resource.link_status_changed', req.params.id, { status });
+  res.json({ ok: true });
+}));
+
+// Per-user starter-kit progress. GET open to all hub roles (read_only reads
+// are fine); PUT is blocked for read_only by the global write choke point.
+router.get('/api/resources/kits/progress', safe(async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT kit_key, completed_steps FROM user_resource_progress WHERE user_id = $1', [req.user.id]);
+  const progress = {};
+  for (const r of rows) progress[r.kit_key] = r.completed_steps || [];
+  res.json({ progress });
+}));
+
+router.put('/api/resources/kits/:kitKey/progress', safe(async (req, res) => {
+  const kitKey = String(req.params.kitKey || '');
+  if (!kitKey || kitKey.length > 100) return res.status(400).json({ error: 'Invalid kit key' });
+  const steps = req.body?.completedSteps;
+  if (!Array.isArray(steps) || steps.length > 50 || steps.some((s) => typeof s !== 'string' || s.length > 200)) {
+    return res.status(400).json({ error: 'completedSteps must be an array of up to 50 strings' });
+  }
+  await pool.query(
+    `INSERT INTO user_resource_progress (user_id, kit_key, completed_steps, updated_at)
+     VALUES ($1,$2,$3,NOW())
+     ON CONFLICT (user_id, kit_key) DO UPDATE SET completed_steps = EXCLUDED.completed_steps, updated_at = NOW()`,
+    [req.user.id, kitKey, JSON.stringify(steps)]);
+  res.json({ ok: true, kitKey, completedSteps: steps });
 }));
 
 // Governance: submit / approve / reject / archive.
