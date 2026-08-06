@@ -4381,15 +4381,147 @@
 
 <!-- ============ RESOURCES TAB (Resource Hub R1) ============ -->
 <section class="view" id="view-resources">
+<style>
+  .rh-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .rh-tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 9px 14px; font-size: 13px; font-weight: 500; color: var(--ink-soft);
+    cursor: pointer; font-family: inherit;
+  }
+  .rh-tab:hover { color: var(--ink); }
+  .rh-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .rh-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .rh-panel { display: none; }
+  .rh-panel.active { display: block; }
+  .rh-soon {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase; background: #f4f4f5; color: var(--ink-soft);
+    border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; margin-left: 8px;
+  }
+  .rh-step { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; font-size: 12.5px; }
+  .rh-step .step { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: 500; }
+  .rh-step .arrow { color: var(--muted); }
+  .rh-status-chip { display: inline-block; font-size: 11px; border: 1px solid var(--border); background: #fafafa; color: var(--ink-soft); border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; }
+  .rh-mock label { display: block; font-size: 12px; color: var(--ink-soft); margin: 10px 0 3px; }
+  .rh-mock select, .rh-mock input { width: 100%; max-width: 340px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--bg); color: var(--muted); }
+</style>
 <div class="acct-page">
   <h1 style="margin:0 0 4px;">Resource Hub</h1>
-  <p style="color:var(--muted);margin:0 0 12px;">Approved clinical, educational and practice resources. Uploads are reviewed before they appear here.</p>
-  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    <input type="text" id="res-search" placeholder="Search resources…" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;min-width:240px;" oninput="resReload()">
-    <select id="res-tag-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;"><option value="">All tags</option></select>
-    <button class="btn" onclick="resReload()">Refresh</button>
+  <p style="color:var(--muted);margin:0 0 12px;">Shared therapy materials, drafting tools and purchasing — in one workspace.</p>
+
+  <div class="rh-tabs" role="tablist">
+    <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Shared Resources</button>
+    <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio<span class="rh-soon">Coming soon</span></button>
+    <button class="rh-tab" role="tab" data-rh="store" onclick="rhSwitch('store')">Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>
   </div>
-  <div id="res-list" class="acct-note">Loading…</div>
+
+  <!-- ── Shared Resources ── -->
+  <div class="rh-panel active" id="rh-panel-shared">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <input type="text" id="res-search" placeholder="Search resources…" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;min-width:240px;" oninput="resReload()">
+      <select id="res-tag-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;"><option value="">All tags</option></select>
+      <select id="res-type-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;">
+        <option value="">All types</option>
+        <option value="worksheet">Worksheet</option>
+        <option value="handout">Handout</option>
+        <option value="session_plan">Session plan</option>
+        <option value="product_link">Product link</option>
+        <option value="research">Research</option>
+        <option value="pd_video">PD video</option>
+        <option value="template">Template</option>
+      </select>
+      <select id="res-status-filter" onchange="resReload()" style="display:none;padding:8px;border:1px solid var(--border);border-radius:8px;">
+        <option value="">Approved (default)</option>
+        <option value="submitted_for_review">Submitted for review</option>
+        <option value="draft">Drafts</option>
+        <option value="archived">Archived</option>
+      </select>
+      <button class="btn" onclick="resReload()">Refresh</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="res-submit-btn" onclick="rhOpenSubmit()">Submit a resource</button>
+    </div>
+    <div id="res-list" class="acct-note">Loading…</div>
+  </div>
+
+  <!-- ── AI Resource Studio (placeholder — not enabled) ── -->
+  <div class="rh-panel" id="rh-panel-ai">
+    <div class="acct-card">
+      <h3 style="margin:0 0 6px;">AI Resource Studio <span class="rh-soon">Not enabled</span></h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">
+        Drafting support for worksheets, activities, checklists, visual supports,
+        home programs and session resources — grounded in the practice's approved
+        Shared Resources.</p>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 4px;">
+        AI-generated resources will be drafts requiring therapist review before use.</p>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;">
+        Client-identifying or sensitive clinical information must not be sent to AI
+        tools unless approved privacy, consent, and data-handling controls are in place.</p>
+      <div class="rh-mock" aria-disabled="true">
+        <label>Diagnosis</label><select disabled><option>Select…</option></select>
+        <label>Therapy goal</label><select disabled><option>Select…</option></select>
+        <label>Age range</label><select disabled><option>Select…</option></select>
+        <label>Format</label><select disabled><option>Worksheet</option></select>
+        <label>Tone</label><select disabled><option>Plain and encouraging</option></select>
+        <label>Ground in approved resources</label><select disabled><option>Choose from Shared Resources…</option></select>
+        <div style="margin-top:14px;"><button class="btn primary" disabled title="Not enabled">Generate draft</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Therapy Store & Purchase Requests (foundation — not enabled) ── -->
+  <div class="rh-panel" id="rh-panel-store">
+    <div class="acct-card">
+      <h3 style="margin:0 0 6px;">Therapy Store &amp; Purchase Requests <span class="rh-soon">Coming soon</span></h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 4px;">
+        A catalogue of therapy tools with a transparent request-and-approval flow:</p>
+      <div class="rh-step" aria-label="Planned workflow">
+        <span class="step">Therapist request</span><span class="arrow">→</span>
+        <span class="step">Owner review</span><span class="arrow">→</span>
+        <span class="step">Admin purchase order check</span><span class="arrow">→</span>
+        <span class="step">Accounting handoff</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Planned request statuses</div>
+      <div>
+        <span class="rh-status-chip">Draft</span><span class="rh-status-chip">Submitted</span><span class="rh-status-chip">Owner Review</span><span class="rh-status-chip">Approved</span><span class="rh-status-chip">Admin Review</span><span class="rh-status-chip">Purchase Order Created</span><span class="rh-status-chip">Ordered</span><span class="rh-status-chip">Received</span><span class="rh-status-chip">Invoiced</span><span class="rh-status-chip">Paid</span><span class="rh-status-chip">Rejected</span>
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:12px 0 0;">
+        Accounting export/integration will require an approval checkpoint before
+        anything is sent externally.</p>
+      <p style="font-size:12px;color:var(--ink-soft);margin:4px 0 0;">
+        Tax treatment is an accounting-review field and is not automatically
+        determined by the portal.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Submit-resource modal (uses the existing draft/review backend flow) -->
+<div class="modal-backdrop" id="modal-res-submit" onclick="if(event.target===this)rhCloseSubmit()">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:460px;">
+    <h3>Submit a resource</h3>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">
+        Submissions go to the practice owner for review before appearing in the library.
+        <strong>Do not upload client-identifying information.</strong></p>
+      <label style="display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 3px;">Title</label>
+      <input type="text" id="rhs-title" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+      <label style="display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 3px;">Description</label>
+      <input type="text" id="rhs-desc" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+      <label style="display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 3px;">Type</label>
+      <select id="rhs-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+        <option value="worksheet">Worksheet</option><option value="handout">Handout</option>
+        <option value="session_plan">Session plan</option><option value="product_link">Product link</option>
+        <option value="research">Research</option><option value="pd_video">PD video</option>
+        <option value="template">Template</option>
+      </select>
+      <label style="display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 3px;">Link (optional)</label>
+      <input type="url" id="rhs-url" placeholder="https://…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
+      <div id="rhs-err" style="display:none;margin-top:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;font-size:12.5px;color:#dc2626;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn primary" id="rhs-send" onclick="rhSubmitResource()">Submit for review</button>
+      <button class="btn" onclick="rhCloseSubmit()">Cancel</button>
+    </div>
+  </div>
 </div>
 </section>
 
@@ -7068,9 +7200,24 @@ window.signOut = async function () {
 /* ── Resource Hub (R1) ──────────────────────────────────────────────────────
    Backend enforces all RBAC; therapists see approved resources only. */
 window.resTagsLoaded = false;
+
+function rhIsOwner() { return !!(window.APP_USER && window.APP_USER.role === 'owner'); }
+
+function rhSwitch(area) {
+  document.querySelectorAll('.rh-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.rh === area); });
+  ['shared', 'ai', 'store'].forEach(function (a) {
+    var p = document.getElementById('rh-panel-' + a);
+    if (p) p.classList.toggle('active', a === area);
+  });
+  if (area === 'shared') resReload();
+}
+
 async function resReload() {
   var el = document.getElementById('res-list');
   if (!el) return;
+  // Owner-only affordances (backend enforces independently)
+  var statusSel = document.getElementById('res-status-filter');
+  if (statusSel) statusSel.style.display = rhIsOwner() ? '' : 'none';
   if (!window.resTagsLoaded) {
     var t = await fetch('/api/resources/tags', { credentials: 'include' }).then(r => r.json()).catch(() => ({}));
     var sel = document.getElementById('res-tag-filter');
@@ -7081,7 +7228,11 @@ async function resReload() {
   }
   var q = encodeURIComponent(document.getElementById('res-search').value || '');
   var tagId = document.getElementById('res-tag-filter').value;
-  var url = '/api/resources?q=' + q + (tagId ? '&tagId=' + tagId : '');
+  var type = (document.getElementById('res-type-filter') || {}).value || '';
+  var status = rhIsOwner() ? ((statusSel || {}).value || '') : '';
+  var url = '/api/resources?q=' + q + (tagId ? '&tagId=' + tagId : '') +
+            (type ? '&type=' + encodeURIComponent(type) : '') +
+            (status ? '&status=' + encodeURIComponent(status) : '');
   var d = await fetch(url, { credentials: 'include' }).then(r => r.status === 403 ? { disabled: true } : r.json()).catch(() => ({}));
   if (d.disabled) { el.innerHTML = 'Resource Hub is disabled on this environment.'; return; }
   var rows = d.resources || [];
@@ -7089,18 +7240,72 @@ async function resReload() {
   el.className = '';
   el.innerHTML = rows.map(function (r) {
     var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + escapeHtml(t.name) + '</span>'; }).join(' ');
+    // Owner sees non-approved status + moderation actions (backend-enforced)
+    var statusBadge = (rhIsOwner() && r.status && r.status !== 'approved')
+      ? '<span class="rh-status-chip">' + escapeHtml(r.status.replace(/_/g, ' ')) + '</span> ' : '';
+    var modActions = (rhIsOwner() && (r.status === 'submitted_for_review' || r.status === 'draft'))
+      ? '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'approve\')">Approve</button> ' +
+        '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'reject\')">Reject</button> ' : '';
     return '<div class="acct-card" style="margin-bottom:10px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-      '<strong>' + escapeHtml(r.title) + '</strong><span>' +
+      '<strong>' + escapeHtml(r.title) + '</strong><span>' + statusBadge + modActions +
       (Number(r.file_count) > 0 ? '<a class="btn" style="font-size:12px;" href="/api/resources/' + r.id + '/download">Download</a> ' : '') +
       (/^https?:\/\//i.test(r.external_url || '') ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a> ' : '') +
-      '<button class="btn" style="font-size:12px;" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ')">' + (r.favourited ? '★' : '☆') + '</button>' +
+      '<button class="btn" style="font-size:12px;" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ')">' + (r.favourited ? 'Saved' : 'Save') + '</button>' +
       '</span></div>' +
       (r.description ? '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + escapeHtml(r.description) + '</div>' : '') +
       '<div style="margin-top:6px;">' + (r.resource_type ? '<span class="acct-pill">' + escapeHtml(r.resource_type) + '</span> ' : '') + tags + '</div>' +
-      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">⚠ ' + escapeHtml(r.safety_notes) + '</div>' : '') +
+      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">Safety: ' + escapeHtml(r.safety_notes) + '</div>' : '') +
       '</div>';
   }).join('');
+}
+
+/* Submit-for-review flow (existing backend: therapist POST creates a draft) */
+function rhOpenSubmit() {
+  var m = document.getElementById('modal-res-submit');
+  if (m) m.classList.add('show');
+}
+function rhCloseSubmit() {
+  var m = document.getElementById('modal-res-submit');
+  if (m) m.classList.remove('show');
+  var e = document.getElementById('rhs-err'); if (e) e.style.display = 'none';
+}
+async function rhSubmitResource() {
+  var title = (document.getElementById('rhs-title').value || '').trim();
+  var err = document.getElementById('rhs-err');
+  if (!title) { err.textContent = 'A title is required.'; err.style.display = ''; return; }
+  var payload = {
+    title: title,
+    description: (document.getElementById('rhs-desc').value || '').trim(),
+    resourceType: document.getElementById('rhs-type').value,
+    externalUrl: (document.getElementById('rhs-url').value || '').trim() || undefined,
+  };
+  var r = await fetch('/api/resources', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }).catch(function () { return null; });
+  if (!r || !r.ok) {
+    err.textContent = 'Could not submit — please try again or contact the practice owner.';
+    err.style.display = ''; return;
+  }
+  var created = await r.json().catch(function () { return {}; });
+  // Move a fresh draft straight into the review queue (creator-permitted)
+  if (created.resource && created.resource.status === 'draft') {
+    await fetch('/api/resources/' + created.resource.id + '/submit', { method: 'POST', credentials: 'include' }).catch(function () {});
+  }
+  rhCloseSubmit();
+  ['rhs-title', 'rhs-desc', 'rhs-url'].forEach(function (id) { var f = document.getElementById(id); if (f) f.value = ''; });
+  showToast('Submitted for review', 'The practice owner will review it before it appears in the library.');
+  resReload();
+}
+
+async function rhModerate(id, action) {
+  var body = action === 'reject' ? JSON.stringify({ reason: 'Not suitable for the shared library' }) : undefined;
+  await fetch('/api/resources/' + id + '/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
+  }).catch(function () {});
+  resReload();
 }
 async function resFav(id, on) {
   await fetch('/api/resources/' + id + '/favourite', { method: on ? 'POST' : 'DELETE', credentials: 'include' });

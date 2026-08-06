@@ -346,3 +346,57 @@ describe('travel logbook redesign', () => {
     expect(HTML).not.toContain("SploseSync.apiFetch('/api/splose/support-items')");
   });
 });
+
+// ── Resource Hub Phase 1 shell (2026-08-06) ──────────────────────────────────
+describe('resource hub three-area shell', () => {
+  const view = () => HTML.slice(HTML.indexOf('<section class="view" id="view-resources">'),
+                                HTML.indexOf('<!-- ============ ACCOUNTING TAB'));
+
+  test('three clearly separated areas render, future areas marked not enabled', () => {
+    const v = view();
+    expect(v).toContain('>Shared Resources</button>');
+    expect(v).toContain('AI Resource Studio<span class="rh-soon">Coming soon</span>');
+    expect(v).toContain('Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span>');
+    expect(v).toContain('id="rh-panel-shared"');
+    expect(v).toContain('id="rh-panel-ai"');
+    expect(v).toContain('id="rh-panel-store"');
+    expect(HTML).toContain('function rhSwitch(area)');
+  });
+
+  test('AI studio is disabled-only: safety copy present, no provider call exists', () => {
+    const v = view();
+    expect(v).toContain('AI-generated resources will be drafts requiring therapist review before use.');
+    expect(v).toContain('Client-identifying or sensitive clinical information must not be sent to AI');
+    expect(v).toContain('<button class="btn primary" disabled title="Not enabled">Generate draft</button>');
+    // no AI endpoint is called anywhere in the app
+    expect(HTML).not.toMatch(/fetch\(['"][^'"]*\/api\/(ai|generate|llm)/i);
+  });
+
+  test('store panel is a static foundation with the approval workflow + notes', () => {
+    const v = view();
+    expect(v).toContain('<span class="step">Therapist request</span>');
+    expect(v).toContain('<span class="step">Owner review</span>');
+    expect(v).toContain('<span class="step">Admin purchase order check</span>');
+    expect(v).toContain('<span class="step">Accounting handoff</span>');
+    expect(v).toContain('approval checkpoint before');
+    expect(v).toContain('Tax treatment is an accounting-review field');
+    expect(v).toContain('Purchase Order Created');
+    // no purchase/xero calls from the store panel
+    expect(v).not.toMatch(/fetch\([^)]*(xero|purchase|order)/i);
+  });
+
+  test('submit flow exists with the client-privacy reminder; no emojis in hub', () => {
+    const v = view();
+    expect(v).toContain('Do not upload client-identifying information.');
+    expect(HTML).toContain('function rhSubmitResource()');
+    for (const e of ['★', '☆', '⚠ ', '📚', '🤖', '🛒']) expect(v).not.toContain(e);
+    expect(HTML).toContain("(r.favourited ? 'Saved' : 'Save')");
+    expect(HTML).toContain("Safety: ' + escapeHtml(r.safety_notes)");
+  });
+
+  test('owner-only moderation is role-gated in UI (backend enforces separately)', () => {
+    expect(HTML).toContain("function rhIsOwner() { return !!(window.APP_USER && window.APP_USER.role === 'owner'); }");
+    expect(HTML).toContain('rhIsOwner() && (r.status ===');
+    expect(HTML).toContain("statusSel.style.display = rhIsOwner()");
+  });
+});
