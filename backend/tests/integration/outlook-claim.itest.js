@@ -56,6 +56,7 @@ function buildApp() {
   app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: false } }));
   app.use('/', require('../../auth'));
   app.use('/', require('../../routes'));
+  app.use('/', require('../../app-routes'));
   return app;
 }
 
@@ -183,5 +184,69 @@ describe('stale-claim self-heal in the OAuth callback', () => {
     expect(holders.rows).toHaveLength(1);
     // no stale-release audit fired for a same-user reconnect
     expect(await auditRows('outlook.stale_claim_released')).toHaveLength(0);
+  });
+});
+
+describe('owner-controlled mailbox claim release (zombie accounts)', () => {
+  /** Seed the real staging scenario: an abandoned bootstrap-era account that
+   *  still holds the mailbox WITH tokens, and cannot sign in to disconnect. */
+  async function seedZombie() {
+    const zombie = await seedUser({ role: 'therapist' });
+    await db.pool.query(
+      `UPDATE users SET microsoft_id = 'ms-mailbox-1', access_token = 'enc-old-token',
+              refresh_token = 'enc-old-refresh', outlook_connected_email = 'ann.mathew@opaltherapy.com.au'
+        WHERE id = $1`, [zombie.id]);
+    await db.pool.query(
+      `INSERT INTO outlook_delta_state (user_id, delta_link) VALUES ($1, 'stale-link')
+       ON CONFLICT (user_id) DO UPDATE SET delta_link = 'stale-link'`, [zombie.id]).catch(() => {});
+    return zombie;
+  }
+
+  test('owner releases a zombie claim; fields cleared, audited; mailbox then connects to owner', async () => {
+    const app = buildApp();
+    const zombie = await seedZombie();
+    const { agent: owner, user: ownerUser } = await agentFor(app, 'owner');
+
+    // Blocked while the zombie holds tokens (active-claim rule)
+    expect((await connectOutlook(owner)).status).toBe(403);
+
+    const rel = await owner.post(`/api/admin/users/${zombie.id}/release-outlook`);
+    expect(rel.status).toBe(200);
+    const z = await userRow(zombie.id);
+    expect(z.microsoft_id).toBeNull();
+    expect(z.access_token).toBeNull();
+    expect(z.outlook_connected_email).toBeNull();
+    const audits = await auditRows('outlook.claim_released_by_owner');
+    expect(audits).toHaveLength(1);
+    expect(audits[0].actor_user_id).toBe(ownerUser.id);
+    expect(audits[0].target_id).toBe(zombie.id);
+
+    // The real goal: the mailbox now connects to the signed-in owner
+    const cb = await connectOutlook(owner);
+    expect(cb.status).toBe(302);
+    expect((await userRow(ownerUser.id)).microsoft_id).toBe('ms-mailbox-1');
+  });
+
+  test('release is owner-only; unknown user is 404', async () => {
+    const app = buildApp();
+    const zombie = await seedZombie();
+    for (const role of ['admin', 'therapist']) {
+      const { agent } = await agentFor(app, role);
+      expect((await agent.post(`/api/admin/users/${zombie.id}/release-outlook`)).status).toBe(403);
+    }
+    expect((await userRow(zombie.id)).microsoft_id).toBe('ms-mailbox-1'); // untouched
+    const { agent: owner } = await agentFor(app, 'owner');
+    expect((await owner.post('/api/admin/users/00000000-0000-4000-8000-000000000000/release-outlook')).status).toBe(404);
+  });
+
+  test('owner user list surfaces mailbox claims for visibility', async () => {
+    const app = buildApp();
+    const zombie = await seedZombie();
+    const { agent: owner } = await agentFor(app, 'owner');
+    const list = await owner.get('/api/admin/users');
+    expect(list.status).toBe(200);
+    const row = list.body.users.find((u) => u.id === zombie.id);
+    expect(row.hasMailboxClaim).toBe(true);
+    expect(row.outlookConnectedEmail).toBe('ann.mathew@opaltherapy.com.au');
   });
 });

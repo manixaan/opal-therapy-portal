@@ -1263,7 +1263,9 @@ router.get('/api/admin/users', requireAuth, requireRole('owner'), async (req, re
               u.approved_at, u.suspended_at,
               u.last_login_at, u.created_at,
               approver.display_name AS approved_by_name,
-              (u.access_token IS NOT NULL AND u.access_token != '') AS has_outlook
+              (u.access_token IS NOT NULL AND u.access_token != '') AS has_outlook,
+              (u.microsoft_id IS NOT NULL) AS has_mailbox_claim,
+              u.outlook_connected_email
          FROM users u
          LEFT JOIN users approver ON approver.id = u.approved_by_user_id
         ORDER BY u.created_at DESC`
@@ -1282,6 +1284,8 @@ router.get('/api/admin/users', requireAuth, requireRole('owner'), async (req, re
       profileCompleted: !!u.profile_completed,
       onboardingStep:   u.onboarding_step,
       hasOutlook:       !!u.has_outlook,
+      hasMailboxClaim:  !!u.has_mailbox_claim,
+      outlookConnectedEmail: u.outlook_connected_email || null,
       hasWorkLocation:  !!(u.default_work_location || u.work_location_schedule),
       approvedAt:       u.approved_at,
       approvedBy:       u.approved_by_name,
@@ -1416,6 +1420,40 @@ router.patch('/api/admin/users/:id/role', requireAuth, requireRole('owner'), asy
   } catch (err) {
     console.error('PATCH role error:', err);
     res.status(500).json({ error: 'Failed to change role' });
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/release-outlook  (owner-only)
+ * Administrative release of a user's Outlook mailbox claim — for zombie or
+ * abandoned accounts that still hold microsoft_id (+tokens) but can no
+ * longer sign in to disconnect themselves. Clears the TARGET user's tokens,
+ * connected email, delta state and microsoft_id. Nothing is changed in
+ * Outlook itself. Audited.
+ */
+router.post('/api/admin/users/:id/release-outlook', requireAuth, requireRole('owner'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET access_token = NULL, refresh_token = NULL,
+              token_expires_at = NULL, outlook_connected_email = NULL,
+              microsoft_id = NULL, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, email`, [id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    await pool.query('DELETE FROM outlook_delta_state WHERE user_id = $1', [id]).catch(() => {});
+    await require('./database').logAuditEvent({
+      actorUserId: req.user.id, action: 'outlook.claim_released_by_owner',
+      targetType: 'user', targetId: id, ipAddress: req.ip,
+      organisationId: req.user.organisation_id || null,
+    }).catch(() => {});
+    res.json({
+      ok: true,
+      note: 'Outlook connection released for that account. Nothing was changed in Outlook itself; the mailbox can now be connected elsewhere.',
+    });
+  } catch (err) {
+    console.error('release-outlook failed:', err.message);
+    res.status(500).json({ error: 'Failed to release the Outlook connection' });
   }
 });
 
