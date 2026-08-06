@@ -4847,12 +4847,16 @@
   .lb-table tbody tr:last-child { border-bottom: none; }
   .lb-table td { padding: 9px 13px; vertical-align: middle; }
   .lb-type { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
+  .lb-src { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #f4f4f5; color: var(--ink-soft); border: 1px solid var(--border); white-space: nowrap; }
+  .lb-row { cursor: pointer; transition: background 100ms; }
+  .lb-row:hover { background: var(--accent-soft); }
+  .lb-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 </style>
 <div class="logbook-page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
     <div>
       <h2 style="margin:0;font-size:18px;font-weight:600;">Travel Logbook</h2>
-      <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Provider travel logged in Splose · ATO cents-per-km method · <span data-splose-indicator="logbook" style="color:var(--accent)"></span></p>
+      <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Provider travel with linked appointments and calculation details · <span data-splose-indicator="logbook" style="color:var(--accent)"></span></p>
     </div>
     <div style="display:flex;gap:8px;">
       <select id="logbook-fy" onchange="loadLogbookData()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:white;">
@@ -4870,11 +4874,25 @@
     <div class="lb-stat"><div class="lv" id="lb-trips">—</div><div class="ll">Travel trips</div></div>
     <div class="lb-stat"><div class="lv" id="lb-mins">—</div><div class="ll">Total minutes</div></div>
     <div class="lb-stat"><div class="lv" id="lb-kms">— km</div><div class="ll">Est. kilometres</div></div>
-    <div class="lb-stat"><div class="lv" id="lb-claim">—</div><div class="ll">ATO deduction (@$0.88/km)</div></div>
+    <div class="lb-stat"><div class="lv" id="lb-claim">—</div><div class="ll" id="lb-claim-label">Deduction</div></div>
   </div>
 
   <div id="logbook-table-wrap" data-help="travel-logbook">
     <div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Loading travel data from Splose…</div>
+  </div>
+</div>
+
+<!-- Travel entry detail panel -->
+<div class="modal-backdrop" id="modal-travel-entry" onclick="if(event.target===this)lbCloseEntry()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lb-detail-title" style="max-width:480px;">
+    <h3 id="lb-detail-title" style="display:flex;align-items:center;justify-content:space-between;">
+      Travel entry
+      <button class="btn" onclick="lbCloseEntry()" aria-label="Close" style="font-size:12px;padding:4px 10px;">Close</button>
+    </h3>
+    <div class="modal-body" id="lb-detail-body"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn primary" id="lb-detail-open-cal">Open calendar at this date</button>
+    </div>
   </div>
 </div>
 </section>
@@ -17992,155 +18010,63 @@ async function loadLogbookData() {
   const wrap = document.getElementById('logbook-table-wrap');
   const fy   = document.getElementById('logbook-fy')?.value || '2026';
 
-  // ── stale-while-revalidate ──────────────────────────────────────────
+  // ── stale-while-revalidate (v2 cache: structured entries, not HTML) ──
   const cached = SploseSync.getCached(module);
-  if (cached && cached._fy === fy) {
-    // Render cached logbook immediately
+  if (cached && cached._fy === fy && cached._v === 2) {
     _renderLogbookFromData(cached, wrap);
-    if (!SploseSync.isStale(module)) {
-      console.debug('[SploseSync] logbook: data fresh, skipping fetch');
-      return;
-    }
+    if (!SploseSync.isStale(module)) return;
     SploseSync.setIndicator(module, true);
   } else {
-    if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:12px;">Loading from Splose…</div>';
+    if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:12px;">Loading travel data…</div>';
   }
-  // ────────────────────────────────────────────────────────────────────
 
   try {
-    // FY runs 1 Jul (fy-1) to 30 Jun (fy), capped to today so Splose doesn't reject future end dates
-    const today = new Date().toISOString().slice(0, 10);
-    const startDate = `${parseInt(fy)-1}-07-01`;
-    const endDate   = `${fy}-06-30` < today ? `${fy}-06-30` : today;
-
-    const [suppResp, apptResp] = await Promise.all([
-      SploseSync.apiFetch('/api/splose/support-items'),
-      SploseSync.apiFetch(`/api/splose/appointments?startDate=${startDate}&endDate=${endDate}`),
-    ]);
-
-    const allSupport = suppResp.ok ? (await suppResp.json()).data || [] : [];
-    const allAppts   = apptResp.ok ? (await apptResp.json()).data || [] : [];
-
-    // Only travel support items
-    const travel = allSupport.filter(s => s.type && s.type.toLowerCase().includes('travel') && s.appointmentAddress);
-
-    // Join appointment date
-    const apptMap = {};
-    allAppts.forEach(a => { apptMap[a.id] = a; });
-
-    const splosDates = travel.map(t => {
-      const appt = apptMap[t.appointmentId];
-      const date = appt?.start || t.createdAt;
-      const mins = (t.toMinutes || 0) + (t.returnMinutes || 0);
-      const estKm = Math.round(mins / 60 * 40 * 10) / 10;
-      return { ...t, date, estKm, appt, _source: 'splose' };
-    }).filter(t => t.date);
-
-    // ── Calendar-derived trips for the currently-displayed week ──────────
-    // (These fill the gap for travel segments computed from the calendar view
-    //  but not yet lodged as Splose support items)
-    const calTrips = [];
-    const CAL_DAYS = ['mon','tue','wed','thu','fri'];
-    const calDayDates = window.DAY_DATES || {};
-    const sploseKeys = new Set(splosDates.map(t => (t.date || '').slice(0, 10)));
-
-    CAL_DAYS.forEach(function(day) {
-      const dateStr = calDayDates[day];
-      if (!dateStr || dateStr < startDate || dateStr > endDate) return;
-
-      // Use cached segments when available
-      let segs;
-      try {
-        segs = (window.DAY_SEGMENTS && window.DAY_SEGMENTS.has(day))
-          ? window.DAY_SEGMENTS.get(day)
-          : (typeof computeDayTravelSegments === 'function' ? computeDayTravelSegments(day) : []);
-      } catch(e) { segs = []; }
-
-      segs.forEach(function(seg) {
-        if (seg.kind !== 'travel') return;
-
-        // Skip if Splose already has a trip recorded for this date
-        if (sploseKeys.has(dateStr)) return;
-
-        const toMin = seg.travelMin || 0;
-        if (!toMin) return;
-        const estKm = Math.round(toMin / 60 * 40 * 10) / 10;
-
-        // Build ISO date-time string for the leg departure
-        const startH = Math.floor((seg.startMin || 0) / 60);
-        const startM = (seg.startMin || 0) % 60;
-        const dateIso = dateStr + 'T' + String(startH).padStart(2,'0') + ':' + String(startM).padStart(2,'0') + ':00+08:00';
-
-        const fromSess = seg.fromId && window.SESSIONS && window.SESSIONS[seg.fromId];
-        const toSess   = seg.toId   && window.SESSIONS && window.SESSIONS[seg.toId];
-        const destAddr = seg.toAddr || seg.toSuburb
-          || (toSess ? (toSess.address || toSess.suburb || '') : '');
-        const fromLabel = seg.fromSuburb || (fromSess ? (fromSess.suburb || '') : '');
-
-        calTrips.push({
-          date: dateIso,
-          appointmentAddress: destAddr || '—',
-          type: 'Calendar Travel',
-          toMinutes: toMin,
-          returnMinutes: 0,
-          estKm,
-          _source: 'calendar',
-          _fromLabel: fromLabel,
-          _toLabel: seg.toSuburb || (toSess ? (toSess.suburb || '') : ''),
-        });
-      });
-    });
-    // ────────────────────────────────────────────────────────────────────
-
-    const withDates = [...splosDates, ...calTrips]
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    const totalMins = withDates.reduce((s, t) => s + (t.toMinutes||0) + (t.returnMinutes||0), 0);
-    const totalKm   = withDates.reduce((s, t) => s + t.estKm, 0);
-    const ATO_RATE  = 0.88;
-    const deduction = totalKm * ATO_RATE;
-
-    const byMonth = {};
-    withDates.forEach(t => {
-      const key = new Date(t.date).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
-      if (!byMonth[key]) byMonth[key] = [];
-      byMonth[key].push(t);
-    });
-    const fmtDate = iso => new Date(iso).toLocaleDateString('en-AU', {day:'2-digit',month:'short',year:'numeric'});
-    const fmtTime = iso => new Date(iso).toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit',timeZone:'Australia/Perth'});
-
-    // Source badge helper
-    const srcBadge = t => t._source === 'calendar'
-      ? '<span style="font-size:10px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:1px 5px;margin-left:4px;">Calendar</span>'
-      : '<span style="font-size:10px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:4px;padding:1px 5px;margin-left:4px;">Splose</span>';
-
-    const monthRowsHtml = Object.entries(byMonth).map(([month, rows]) =>
-      `<tr style="background:#fafafa;"><td colspan="6" style="padding:8px 12px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;">${month}</td></tr>` +
-      rows.map(t => `<tr>
-        <td>${fmtDate(t.date)} · ${t.appt ? fmtTime(t.appt.start) : fmtTime(t.date)}${srcBadge(t)}</td>
-        <td>${t.appointmentAddress || '—'}${t._source === 'calendar' && t._fromLabel ? `<div style="font-size:10.5px;color:#aaa;margin-top:2px;">from ${t._fromLabel}</div>` : ''}</td>
-        <td><span class="lb-type">${t.type || 'Travel'}</span></td>
-        <td style="text-align:right">${t.toMinutes||0}${t.returnMinutes ? ' + ' + t.returnMinutes : ''} min</td>
-        <td style="text-align:right">${t.estKm} km</td>
-        <td style="text-align:right;font-weight:600;color:var(--accent)">$${(t.estKm * ATO_RATE).toFixed(2)}</td>
-      </tr>`).join('')
-    ).join('');
-
-    // Cache the processed output so we can show it instantly next visit
-    const logbookResult = { _fy: fy, trips: withDates.length, totalMins, totalKm, deduction, monthRowsHtml };
-    SploseSync.saveEntry(module, logbookResult);
-    _renderLogbookFromData(logbookResult, wrap);
-    console.debug(`[SploseSync] logbook: ${withDates.length} travel trips for FY${fy}`);
-
+    // Single role-scoped backend call: owner/admin get practice-wide entries,
+    // therapists get only their own (enforced server-side).
+    const resp = await SploseSync.apiFetch('/api/travel/logbook?fy=' + encodeURIComponent(fy));
+    if (resp.status === 403) {
+      let code = null;
+      try { code = (await resp.json()).code; } catch (_) {}
+      const msg = code === 'practitioner_mapping_required'
+        ? 'Your travel logbook will appear once the practice owner links your Splose practitioner profile.'
+        : 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.';
+      if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:12.5px;">' + msg + '</div>';
+      ['lb-trips','lb-mins','lb-kms','lb-claim'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
+      return;
+    }
+    if (!resp.ok) throw new Error('Travel service unavailable (' + resp.status + ')');
+    const data = await resp.json();
+    const rate = Number(data.kilometreRate) || Number(window.ATO_RATE) || 0.88;
+    const entries = data.entries || [];
+    const totalMins = entries.reduce((s, e) => s + (e.totalMinutes || 0), 0);
+    const totalKm = Math.round(entries.reduce((s, e) => s + (e.estKm || 0), 0) * 10) / 10;
+    const result = {
+      _v: 2, _fy: fy, rate,
+      scope: data.scope || 'practice',
+      method: data.calculationMethod || '',
+      entries,
+      trips: entries.length, totalMins, totalKm, deduction: totalKm * rate,
+    };
+    SploseSync.saveEntry(module, result);
+    _renderLogbookFromData(result, wrap);
   } catch (err) {
     console.warn('[SploseSync] logbook fetch failed:', err);
-    if (!SploseSync.getCached(module)) {
-      if (wrap) wrap.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed: ${err.message}</div>`;
+    const prior = SploseSync.getCached(module);
+    if (!(prior && prior._v === 2)) {
+      if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger);">Could not load travel data. Try Refresh.</div>';
     }
   } finally {
     SploseSync.setIndicator(module, false);
   }
 }
+
+// Entries for the currently rendered logbook, keyed by id — feeds the
+// row detail panel. Display-state only; cleared on every render.
+let LB_ENTRIES = {};
+
+const _lbFmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const _lbFmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Perth' }) : '';
+const _lbKm = mins => Math.round((mins / 60) * 40 * 10) / 10;
 
 function _renderLogbookFromData(d, wrap) {
   if (!wrap) wrap = document.getElementById('logbook-table-wrap');
@@ -18148,19 +18074,114 @@ function _renderLogbookFromData(d, wrap) {
   document.getElementById('lb-mins').textContent  = `${Math.round(d.totalMins)} min`;
   document.getElementById('lb-kms').textContent   = `${Math.round(d.totalKm)} km`;
   document.getElementById('lb-claim').textContent = `$${d.deduction.toFixed(2)}`;
+  const claimLabel = document.getElementById('lb-claim-label');
+  if (claimLabel) claimLabel.textContent = `Deduction (@$${d.rate.toFixed(2)}/km)`;
+
+  LB_ENTRIES = {};
+  (d.entries || []).forEach(e => { LB_ENTRIES[e.id] = Object.assign({}, e, { _rate: d.rate, _method: d.method }); });
+
+  const byMonth = {};
+  (d.entries || []).forEach(e => {
+    const key = e.date ? new Date(e.date).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'Undated';
+    (byMonth[key] = byMonth[key] || []).push(e);
+  });
+
+  const rows = Object.entries(byMonth).map(([month, list]) =>
+    `<tr class="lb-month"><td colspan="7" style="padding:8px 12px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;background:#fafafa;">${month}</td></tr>` +
+    list.map(e => `<tr class="lb-row" tabindex="0" role="button" data-lbid="${escapeHtml(String(e.id))}"
+        aria-label="Open travel entry details for ${_lbFmtDate(e.date)}"
+        onclick="lbOpenEntry(this.dataset.lbid)"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();lbOpenEntry(this.dataset.lbid);}">
+      <td>${_lbFmtDate(e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) : ''}</td>
+      <td>${escapeHtml(e.destinationAddress || '—')}</td>
+      <td><span class="lb-type">${escapeHtml(e.type || 'Travel')}</span></td>
+      <td><span class="lb-src">Source: ${e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual')}</span></td>
+      <td style="text-align:right">${e.totalMinutes || 0} min</td>
+      <td style="text-align:right">${e.estKm} km</td>
+      <td style="text-align:right;font-weight:600;color:var(--accent)">$${((e.estKm || 0) * d.rate).toFixed(2)}</td>
+    </tr>`).join('')
+  ).join('');
+
   wrap.innerHTML = `
-    <div style="display:flex;gap:10px;align-items:center;padding:8px 0 10px;font-size:11.5px;color:#888;">
-      <span>Sources:</span>
-      <span style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:4px;padding:2px 7px;">✅ Splose support items</span>
-      <span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:2px 7px;">📅 Calendar-derived (current week)</span>
-      <span style="margin-left:auto;font-size:11px;">ATO rate: $0.88/km</span>
-    </div>
     <table class="lb-table"><thead><tr>
-      <th>Date</th><th>Destination</th><th>Type</th>
+      <th>Date</th><th>Destination</th><th>Type</th><th>Source</th>
       <th style="text-align:right">Travel time</th>
       <th style="text-align:right">Est. km</th>
       <th style="text-align:right">Deduction</th>
-    </tr></thead><tbody>${d.monthRowsHtml || '<tr><td colspan="6" style="padding:20px;text-align:center;color:#aaa;">No provider travel found for this period.</td></tr>'}</tbody></table>`;
+    </tr></thead><tbody>${rows || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#aaa;">No provider travel found for this period.</td></tr>'}</tbody></table>
+    <p style="margin:8px 2px 0;font-size:11px;color:var(--muted);">Select a row for the linked appointment, travel breakdown and calculation details.</p>`;
+}
+
+/* ── Row detail panel ─────────────────────────────────────────────────── */
+function lbTravelBreakdownHtml(e) {
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;"><span style="color:var(--ink-soft);">${k}</span><span style="font-weight:600;">${v}</span></div>`;
+  const hasTo = (e.toMinutes || 0) > 0, hasFrom = (e.returnMinutes || 0) > 0;
+  let html = '';
+  if (hasTo && hasFrom) {
+    html += row('Total travel', `${e.totalMinutes} min`);
+    html += row('To appointment', `${e.toMinutes} min`);
+    html += row('From appointment', `${e.returnMinutes} min`);
+    html += row('Total distance', `${e.estKm} km`);
+    html += row('To appointment', `${_lbKm(e.toMinutes)} km`);
+    html += row('From appointment', `${_lbKm(e.returnMinutes)} km`);
+  } else if (hasTo) {
+    html += row('Travel to appointment', `${e.toMinutes} min`);
+    html += row('Distance to appointment', `${e.estKm} km`);
+  } else if (hasFrom) {
+    html += row('Travel from appointment', `${e.returnMinutes} min`);
+    html += row('Distance from appointment', `${e.estKm} km`);
+  } else {
+    html += row('Travel time', 'Not recorded');
+  }
+  html += row('Deduction', `$${((e.estKm || 0) * (e._rate || 0.88)).toFixed(2)} @ $${(e._rate || 0.88).toFixed(2)}/km`);
+  return html;
+}
+
+function lbOpenEntry(id) {
+  const e = LB_ENTRIES[id];
+  const modal = document.getElementById('modal-travel-entry');
+  const body = document.getElementById('lb-detail-body');
+  if (!e || !modal || !body) return;
+  const statusLabel = e.calculationStatus === 'address_missing'
+    ? '<span style="color:#b45309;font-weight:600;">Address missing — route could not be estimated</span>'
+    : 'Calculated estimate';
+  const apptLine = e.appointmentTitle
+    ? escapeHtml(e.appointmentTitle)
+    : (e.appointmentId ? 'Linked appointment (details unavailable for your role or outside this period)' : 'Source appointment unavailable');
+  const kv = (k, v) => `<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><span style="min-width:150px;color:var(--ink-soft);">${k}</span><span>${v}</span></div>`;
+  body.innerHTML = `
+    ${kv('Appointment', apptLine)}
+    ${kv('Date & time', `${_lbFmtDate(e.appointmentStart || e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) + '–' + _lbFmtTime(e.appointmentEnd) + ' AWST' : ''}`)}
+    ${kv('Destination', escapeHtml(e.destinationAddress || 'Address missing'))}
+    ${kv('Source system', e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual'))}
+    ${kv('Calculation status', statusLabel)}
+    ${kv('Recorded', e.createdAt ? _lbFmtDate(e.createdAt) : '—')}
+    ${e.appointmentId ? kv('Appointment reference', '<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);">' + escapeHtml(String(e.appointmentId)) + '</span>') : ''}
+    <div style="margin:12px 0 4px;font-weight:600;font-size:13px;">Travel breakdown</div>
+    ${lbTravelBreakdownHtml(e)}
+    <details style="margin-top:12px;font-size:12.5px;">
+      <summary style="cursor:pointer;font-weight:600;color:var(--ink-soft);">Calculation details</summary>
+      <div style="padding:8px 0 0;color:var(--ink-soft);line-height:1.55;">
+        The starting and ending points follow your appointment sequence in Splose;
+        the destination is the appointment address shown above.
+        ${escapeHtml(e._method || 'Splose travel minutes converted at a 40 km/h average speed; deduction = km × the practice kilometre rate.')}
+      </div>
+    </details>
+    <div style="margin-top:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--ink-soft);">
+      Need to fix the address? Appointment addresses are corrected in Splose —
+      this entry recalculates after the next sync.
+    </div>`;
+  const openBtn = document.getElementById('lb-detail-open-cal');
+  if (openBtn) {
+    openBtn.style.display = e.date ? '' : 'none';
+    openBtn.onclick = function () { lbCloseEntry(); switchTab('calendar'); if (typeof gotoWeekOf === 'function' && e.date) gotoWeekOf(e.date.slice(0, 10)); };
+  }
+  modal.classList.add('show');
+}
+
+function lbCloseEntry() {
+  const modal = document.getElementById('modal-travel-entry');
+  if (modal) modal.classList.remove('show');
 }
 
 // ═══════════════════════════════════════════════════════

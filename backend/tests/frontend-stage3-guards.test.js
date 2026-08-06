@@ -296,3 +296,53 @@ describe('profile dashboard redesign', () => {
     expect(HTML).toContain("' setup step' + (pending === 1 ? '' : 's') + ' remaining'");
   });
 });
+
+// ── Travel Logbook redesign (2026-08-06) ─────────────────────────────────────
+describe('travel logbook redesign', () => {
+  test('informal sources legend and emoji markers are gone', () => {
+    expect(HTML).not.toContain('<span>Sources:</span>');
+    expect(HTML).not.toContain('✅ Splose support items');
+    expect(HTML).not.toContain('📅 Calendar-derived (current week)');
+    expect(HTML).toContain('class="lb-src"');
+    expect(HTML).toContain("Source: ${e.source === 'splose' ? 'Splose'");
+  });
+
+  test('kilometre rate comes from the org setting, not a hardcode', () => {
+    expect(HTML).not.toContain('ATO rate: $0.88/km');
+    expect(HTML).not.toContain('const ATO_RATE  = 0.88');
+    expect(HTML).toContain('Number(data.kilometreRate) || Number(window.ATO_RATE) || 0.88');
+    expect(HTML).toContain('id="lb-claim-label"');
+  });
+
+  test('rows are clickable + keyboard-focusable and open the detail panel', () => {
+    expect(HTML).toContain('class="lb-row" tabindex="0" role="button"');
+    expect(HTML).toContain("onkeydown=\"if(event.key==='Enter'||event.key===' ')");
+    expect(HTML).toContain('function lbOpenEntry(id)');
+    expect(HTML).toContain('id="modal-travel-entry"');
+    expect(HTML).toContain('.lb-row:focus-visible');
+  });
+
+  test('travel breakdown uses explicit labels, one-leg shows one leg', () => {
+    expect(HTML).toContain("row('Total travel'");
+    expect(HTML).toContain("row('To appointment'");
+    expect(HTML).toContain("row('From appointment'");
+    expect(HTML).toContain("row('Travel to appointment'");
+    expect(HTML).toContain("row('Travel from appointment'");
+    // the ambiguous inline "15 + 20 min" cell format is gone
+    expect(HTML).not.toContain("${t.toMinutes||0}${t.returnMinutes ? ' + ' + t.returnMinutes : ''} min");
+  });
+
+  test('missing address and unavailable appointment have clear states', () => {
+    expect(HTML).toContain('Address missing — route could not be estimated');
+    expect(HTML).toContain('Source appointment unavailable');
+    expect(HTML).toContain('corrected in Splose');
+  });
+
+  test('data comes from the role-scoped backend route with v2 cache', () => {
+    expect(HTML).toContain("SploseSync.apiFetch('/api/travel/logbook?fy='");
+    expect(HTML).toContain("cached._fy === fy && cached._v === 2");
+    expect(HTML).toContain('practitioner_mapping_required');
+    // the old direct support-items call is gone from the logbook
+    expect(HTML).not.toContain("SploseSync.apiFetch('/api/splose/support-items')");
+  });
+});
