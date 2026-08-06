@@ -11,13 +11,24 @@
 <meta name="theme-color" content="#00a8cc" />
 <style>
   :root {
-    --bg: #ffffff;
+    /* ── Design tokens (2026-08-06 visual system) ──
+       Calm, warm-neutral base; one confident accent; consistent scales. */
+    --bg: #faf9f7;            /* warm page background */
     --panel: #ffffff;
-    --ink: #1a1a1a;
-    --ink-soft: #666666;
-    --muted: #999999;
-    --border: #e0e0e0;
-    --border-soft: #f5f5f5;
+    --ink: #211f1d;
+    --ink-soft: #5f5b56;
+    --muted: #97928c;
+    --border: #e7e4df;
+    --border-soft: #f4f2ef;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 1px 2px rgba(33, 31, 29, 0.05);
+    --shadow-md: 0 4px 14px rgba(33, 31, 29, 0.08);
+    --shadow-lg: 0 10px 32px rgba(33, 31, 29, 0.13);
+    --space-1: 4px; --space-2: 8px; --space-3: 12px;
+    --space-4: 16px; --space-5: 24px; --space-6: 32px;
+    --focus-ring: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
     --accent: #00a8cc;
     --accent-deep: #0088aa;
     --accent-soft: #e8f4f8;
@@ -867,7 +878,9 @@
     user-select: none;
   }
   .tab:hover { color: var(--ink); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab.active { color: var(--accent-deep); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab { transition: color 110ms, background 110ms; border-radius: 6px 6px 0 0; }
+  .tab:hover { background: rgba(0, 168, 204, 0.05); }
   .tab .tab-badge {
     font-size: 10px; font-weight: 700;
     background: var(--danger); color: white;
@@ -982,7 +995,8 @@
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--radius-lg, 14px);
+    box-shadow: var(--shadow-sm);
   }
   .panel-pad { padding: 16px; }
   .panel h2 {
@@ -1382,20 +1396,30 @@
     border-top: 1px solid var(--border);
   }
   .btn {
-    padding: 9px 14px;
+    padding: 8px 14px;
     border: 1px solid var(--border);
-    border-radius: 9px;
-    background: white;
+    border-radius: var(--radius-md, 9px);
+    background: var(--panel);
     color: var(--ink);
     font-weight: 500;
     display: inline-flex; align-items: center; gap: 6px;
+    transition: background 110ms, border-color 110ms, box-shadow 110ms, transform 60ms;
   }
-  .btn:hover { background: #f5f5f7; }
+  .btn:hover { background: var(--border-soft); border-color: #d9d5cf; }
+  .btn:active { transform: translateY(1px); }
   .btn.primary {
     background: var(--accent); color: white; border-color: var(--accent);
+    box-shadow: var(--shadow-sm);
   }
-  .btn.primary:hover { background: var(--accent-deep); }
-  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  /* Calm, consistent keyboard focus everywhere */
+  button:focus-visible, a:focus-visible, input:focus-visible,
+  select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius-sm);
+  }
 
   /* === Week view === */
   .week-grid {
@@ -5097,9 +5121,42 @@
   .lb-table td { padding: 9px 13px; vertical-align: middle; }
   .lb-type { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
   .lb-src { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #f4f4f5; color: var(--ink-soft); border: 1px solid var(--border); white-space: nowrap; }
-  .lb-row { cursor: pointer; transition: background 100ms; }
+  .lb-workspace { display: flex; gap: 16px; align-items: flex-start; }
+  .lb-main { flex: 1; min-width: 0; }
+  .lb-detail {
+    width: 340px; flex: 0 0 340px; position: sticky; top: 110px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 14px); box-shadow: var(--shadow-sm);
+    padding: 16px; max-height: calc(100vh - 180px); overflow-y: auto;
+  }
+  .lb-detail-empty { font-size: 12.5px; color: var(--muted); line-height: 1.6; padding: 24px 6px; text-align: center; }
+  .lb-list { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg, 14px); overflow: hidden; }
+  .lb-month-h {
+    padding: 8px 16px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--muted); background: var(--border-soft);
+    border-bottom: 1px solid var(--border);
+  }
+  .lb-row {
+    cursor: pointer; transition: background 100ms;
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  .lb-row:last-child { border-bottom: none; }
   .lb-row:hover { background: var(--accent-soft); }
+  .lb-row.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
   .lb-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .lb-j-main { flex: 1; min-width: 0; }
+  .lb-j-route { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-j-route .lb-j-dir { color: var(--ink-soft); font-weight: 500; }
+  .lb-j-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .lb-j-review {
+    display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
+    color: #92400e; background: #fef3c7; border-radius: 5px; padding: 1px 7px;
+  }
+  .lb-j-right { text-align: right; flex-shrink: 0; }
+  .lb-j-dur { font-size: 13px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .lb-j-sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) { .lb-detail { display: none; } }
 </style>
 <div class="logbook-page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -5126,8 +5183,19 @@
     <div class="lb-stat"><div class="lv" id="lb-claim">—</div><div class="ll" id="lb-claim-label">Deduction</div></div>
   </div>
 
-  <div id="logbook-table-wrap" data-help="travel-logbook">
-    <div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Loading travel data from Splose…</div>
+  <div class="lb-workspace">
+    <div class="lb-main">
+      <div id="logbook-table-wrap" data-help="travel-logbook">
+        <div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Loading travel data…</div>
+      </div>
+    </div>
+    <aside class="lb-detail" id="lb-detail-side" aria-label="Selected journey">
+      <div class="lb-detail-empty" id="lb-detail-empty">
+        <div style="font-weight:600;color:var(--ink-soft);margin-bottom:6px;">No journey selected</div>
+        Select a journey to see its linked appointment, route and calculation details.
+      </div>
+      <div id="lb-detail-content" style="display:none;"></div>
+    </aside>
   </div>
 </div>
 
@@ -18579,30 +18647,52 @@ function _renderLogbookFromData(d, wrap) {
     (byMonth[key] = byMonth[key] || []).push(e);
   });
 
-  const rows = Object.entries(byMonth).map(([month, list]) =>
-    `<tr class="lb-month"><td colspan="7" style="padding:8px 12px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;background:#fafafa;">${month}</td></tr>` +
-    list.map(e => `<tr class="lb-row" tabindex="0" role="button" data-lbid="${escapeHtml(String(e.id))}"
-        aria-label="Open travel entry details for ${_lbFmtDate(e.date)}"
+  /* Journey row: the ROUTE carries the hierarchy; times/date are quiet
+     metadata; technical fields (source system, references) live in the
+     detail panel only. Nothing is invented — legs and times render only
+     when the underlying data exists. */
+  const journeyRow = (e) => {
+    const hasTo = (e.toMinutes || 0) > 0, hasFrom = (e.returnMinutes || 0) > 0;
+    const dest = escapeHtml(e.destinationAddress || 'Address missing');
+    const dir = (hasTo && hasFrom) ? 'Round trip · ' : hasTo ? 'To ' : hasFrom ? 'From ' : '';
+    let times = '';
+    if (e.appointmentStart && hasTo) {
+      const dep = new Date(new Date(e.appointmentStart).getTime() - e.toMinutes * 60000);
+      times = ' · departs ~' + _lbFmtTime(dep.toISOString()) + ', arrives ' + _lbFmtTime(e.appointmentStart);
+    } else if (e.appointmentStart) {
+      times = ' · appointment ' + _lbFmtTime(e.appointmentStart);
+    }
+    const review = e.calculationStatus === 'address_missing'
+      ? '<span class="lb-j-review">Needs review</span>' : '';
+    const appt = e.appointmentTitle ? escapeHtml(e.appointmentTitle) + ' · ' : '';
+    return `<div class="lb-row" tabindex="0" role="button" data-lbid="${escapeHtml(String(e.id))}"
+        aria-label="Open journey details for ${_lbFmtDate(e.date)}"
         onclick="lbOpenEntry(this.dataset.lbid)"
         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();lbOpenEntry(this.dataset.lbid);}">
-      <td>${_lbFmtDate(e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) : ''}</td>
-      <td>${escapeHtml(e.destinationAddress || '—')}</td>
-      <td><span class="lb-type">${escapeHtml(e.type || 'Travel')}</span></td>
-      <td><span class="lb-src">Source: ${e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual')}</span></td>
-      <td style="text-align:right">${e.totalMinutes || 0} min</td>
-      <td style="text-align:right">${e.estKm} km</td>
-      <td style="text-align:right;font-weight:600;color:var(--accent)">$${((e.estKm || 0) * d.rate).toFixed(2)}</td>
-    </tr>`).join('')
+      <div class="lb-j-main">
+        <div class="lb-j-route"><span class="lb-j-dir">${dir}</span>${dest}${review}</div>
+        <div class="lb-j-meta">${appt}${_lbFmtDate(e.date)}${times}</div>
+      </div>
+      <div class="lb-j-right">
+        <div class="lb-j-dur">${e.totalMinutes || 0} min</div>
+        <div class="lb-j-sub">${e.estKm} km · $${((e.estKm || 0) * d.rate).toFixed(2)}</div>
+      </div>
+    </div>`;
+  };
+
+  const groups = Object.entries(byMonth).map(([month, list]) =>
+    `<div class="lb-month-h">${month}</div>` + list.map(journeyRow).join('')
   ).join('');
 
-  wrap.innerHTML = `
-    <table class="lb-table"><thead><tr>
-      <th>Date</th><th>Destination</th><th>Type</th><th>Source</th>
-      <th style="text-align:right">Travel time</th>
-      <th style="text-align:right">Est. km</th>
-      <th style="text-align:right">Deduction</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#aaa;">No provider travel found for this period.</td></tr>'}</tbody></table>
-    <p style="margin:8px 2px 0;font-size:11px;color:var(--muted);">Select a row for the linked appointment, travel breakdown and calculation details.</p>`;
+  wrap.innerHTML = groups
+    ? `<div class="lb-list">${groups}</div>
+       <p style="margin:8px 2px 0;font-size:11px;color:var(--muted);">Select a journey for the linked appointment, travel breakdown and calculation details.</p>`
+    : '<div class="lb-list"><div style="padding:32px;text-align:center;color:var(--muted);font-size:12.5px;">No travel entries for this period. Journeys appear here once provider travel is recorded against appointments in Splose.</div></div>';
+
+  // Restore the previous selection (e.g. returning from the calendar)
+  if (window.__lbSelectedId && LB_ENTRIES[window.__lbSelectedId]) {
+    lbOpenEntry(window.__lbSelectedId, true);
+  }
 }
 
 /* ── Row detail panel ─────────────────────────────────────────────────── */
@@ -18630,11 +18720,25 @@ function lbTravelBreakdownHtml(e) {
   return html;
 }
 
-function lbOpenEntry(id) {
+function lbOpenEntry(id, isRestore) {
   const e = LB_ENTRIES[id];
+  if (!e) return;
+  window.__lbSelectedId = id;
+  // Selected-row highlight
+  document.querySelectorAll('.lb-row.selected').forEach(function (r) { r.classList.remove('selected'); });
+  const rowEl = document.querySelector('.lb-row[data-lbid="' + CSS.escape(String(id)) + '"]');
+  if (rowEl) {
+    rowEl.classList.add('selected');
+    if (isRestore) rowEl.scrollIntoView({ block: 'nearest' });
+  }
+  // Wide screens: the sticky side panel. Small screens: the drawer modal.
+  const useSide = window.matchMedia('(min-width: 901px)').matches;
+  const side = document.getElementById('lb-detail-content');
+  const sideEmpty = document.getElementById('lb-detail-empty');
   const modal = document.getElementById('modal-travel-entry');
-  const body = document.getElementById('lb-detail-body');
-  if (!e || !modal || !body) return;
+  const body = (useSide && side) ? side : document.getElementById('lb-detail-body');
+  if (!body) return;
+  if (useSide && side) { side.style.display = ''; if (sideEmpty) sideEmpty.style.display = 'none'; }
   const statusLabel = e.calculationStatus === 'address_missing'
     ? '<span style="color:#b45309;font-weight:600;">Address missing — route could not be estimated</span>'
     : 'Calculated estimate';
@@ -18664,12 +18768,32 @@ function lbOpenEntry(id) {
       Need to fix the address? Appointment addresses are corrected in Splose —
       this entry recalculates after the next sync.
     </div>`;
-  const openBtn = document.getElementById('lb-detail-open-cal');
-  if (openBtn) {
-    openBtn.style.display = e.date ? '' : 'none';
-    openBtn.onclick = function () { lbCloseEntry(); switchTab('calendar'); if (typeof gotoWeekOf === 'function' && e.date) gotoWeekOf(e.date.slice(0, 10)); };
+  // "Open in calendar" — in the side panel we render our own action button;
+  // the modal keeps its footer button. Returning to Travel Logbook restores
+  // this selection and list position automatically (cache + __lbSelectedId).
+  const goCal = function () {
+    lbCloseEntry();
+    switchTab('calendar');
+    if (typeof gotoWeekOf === 'function' && e.date) gotoWeekOf(e.date.slice(0, 10));
+    if (typeof showToast === 'function') showToast('Calendar opened', 'Travel Logbook keeps your place — your selected journey is still highlighted when you return.');
+  };
+  if (useSide && side) {
+    const act = document.createElement('div');
+    act.style.cssText = 'margin-top:14px;display:flex;gap:8px;';
+    if (e.date) {
+      const b = document.createElement('button');
+      b.className = 'btn primary'; b.textContent = 'Open in calendar'; b.onclick = goCal;
+      act.appendChild(b);
+    }
+    body.appendChild(act);
+  } else {
+    const openBtn = document.getElementById('lb-detail-open-cal');
+    if (openBtn) {
+      openBtn.style.display = e.date ? '' : 'none';
+      openBtn.onclick = goCal;
+    }
+    modal.classList.add('show');
   }
-  modal.classList.add('show');
 }
 
 function lbCloseEntry() {

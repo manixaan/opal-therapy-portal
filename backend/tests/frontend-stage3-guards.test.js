@@ -457,3 +457,38 @@ describe('calendar workspace redesign', () => {
     expect(HTML).toContain('.cal-sidebar.open { transform: none; }');
   });
 });
+
+// ── Travel Logbook journey view (2026-08-06 second pass) ─────────────────────
+describe('travel logbook journey view', () => {
+  test('journey list replaces the technical table (no Source/Type columns)', () => {
+    expect(HTML).toContain('class="lb-j-route"');
+    expect(HTML).not.toContain('<th>Source</th>');
+    expect(HTML).not.toContain('<th>Type</th>');
+    expect(HTML).toContain("'Round trip · ' : hasTo ? 'To ' : hasFrom ? 'From '");
+  });
+
+  test('selected-journey side panel with modal fallback on small screens', () => {
+    expect(HTML).toContain('id="lb-detail-side"');
+    expect(HTML).toContain('id="lb-detail-content"');
+    expect(HTML).toContain("window.matchMedia('(min-width: 901px)')");
+    expect(HTML).toContain('window.__lbSelectedId = id;');
+    // returning restores the selection
+    expect(HTML).toContain('lbOpenEntry(window.__lbSelectedId, true);');
+  });
+
+  test('needs-review flag only when attention is needed; nothing invented', () => {
+    expect(HTML).toContain('<span class="lb-j-review">Needs review</span>');
+    expect(HTML).toContain("departs ~' + _lbFmtTime"); // estimated, tilde-marked
+  });
+});
+
+// ── Design tokens (2026-08-06 visual system) ─────────────────────────────────
+describe('design token system', () => {
+  test('token scales exist and core components consume them', () => {
+    expect(HTML).toContain('--radius-lg: 14px;');
+    expect(HTML).toContain('--shadow-sm:');
+    expect(HTML).toContain('--focus-ring:');
+    expect(HTML).toContain('box-shadow: var(--focus-ring);');
+    expect(HTML).toContain('--bg: #faf9f7;');
+  });
+});
