@@ -400,3 +400,54 @@ describe('resource hub three-area shell', () => {
     expect(HTML).toContain("statusSel.style.display = rhIsOwner()");
   });
 });
+
+// ── Outlook-style calendar workspace (2026-08-06) ────────────────────────────
+describe('calendar workspace redesign', () => {
+  test('three-panel structure: sidebar + main, toolbar preserved with its help ids', () => {
+    expect(HTML).toContain('class="cal-workspace"');
+    expect(HTML).toContain('id="cal-sidebar"');
+    expect(HTML).toContain('class="cal-main"');
+    // toolbar anchors the help tours rely on are untouched
+    for (const id of ['cal-view-tabs', 'cal-today', 'cal-week-label', 'cal-legend', 'cal-sync-strip', 'cal-add-event', 'calendar-grid']) {
+      expect(HTML).toContain(`data-help="${id}"`);
+    }
+  });
+
+  test('mini month drives the existing navigation API', () => {
+    expect(HTML).toContain('function renderMiniCal(keepAnchor)');
+    expect(HTML).toContain('function miniNav(delta)');
+    expect(HTML).toContain("window.gotoWeekOf(ymd);");
+    expect(HTML).toContain("switchToCalDay(new Date(ymd + 'T00:00:00Z'))");
+    // week header re-render keeps it in sync
+    expect(HTML).toContain("if (typeof renderMiniCal === 'function') { try { renderMiniCal(); } catch (_) {} }");
+  });
+
+  test('calendar visibility list is presentation-only CSS filtering', () => {
+    expect(HTML).toContain('var CAL_VIS_CATS = [');
+    expect(HTML).toContain("grid.classList.toggle('hide-cat-' + c.key");
+    expect(HTML).toContain('.cal-grid.hide-cat-travel .travel-overlay { display: none !important; }');
+    expect(HTML).toContain('All therapists (Master view)');
+  });
+
+  test('all-day row exists, hidden when empty, and >=23h events become chips', () => {
+    expect(HTML).toContain('class="cal-grid view-week no-allday"');
+    expect(HTML).toContain('class="allday-cell" data-day="mon" id="allday-mon"');
+    expect(HTML).toContain('function addAllDayChip(day, opts)');
+    expect(HTML).toContain('function clearAllDayChips()');
+    expect(HTML).toContain('_spanMin >= 23 * 60');
+    // chips open the existing detail panel — no new detail system
+    expect(HTML).toContain("if (typeof openBlockDetail === 'function') openBlockDetail(id);");
+  });
+
+  test('week view defaults to Mon-Fri; weekends stay an opt-in setting', () => {
+    expect(HTML).toContain('var showWeekends = s.showWeekends === true;');
+    expect(HTML).not.toContain('var showWeekends = s.showWeekends !== false;');
+    expect(HTML).toContain('Display Saturday and Sunday in week view'); // setting still there
+  });
+
+  test('sidebar collapses to a drawer on small screens', () => {
+    expect(HTML).toContain('function toggleCalSidebar()');
+    expect(HTML).toContain('id="btn-cal-sidebar"');
+    expect(HTML).toContain('.cal-sidebar.open { transform: none; }');
+  });
+});

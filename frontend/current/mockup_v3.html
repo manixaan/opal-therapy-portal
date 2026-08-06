@@ -2083,6 +2083,90 @@
     pointer-events: none;
   }
   .hour-line.half { border-top: 1px dotted #f6f7f9; }
+  /* ── Calendar workspace (2026-08-06 Outlook-style redesign) ── */
+  .cal-workspace { display: flex; flex: 1; min-height: 0; position: relative; }
+  .cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .cal-sidebar {
+    width: 212px; flex: 0 0 212px;
+    border-right: 1px solid var(--border); background: #fbfbfc;
+    padding: 12px 10px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .btn-cal-sidebar {
+    display: none; align-items: center; justify-content: center;
+    background: none; border: 1px solid var(--border); border-radius: 7px;
+    width: 30px; height: 30px; cursor: pointer; color: var(--ink-soft);
+  }
+  .mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .mini-cal-head .nav-arrow { width: 22px; height: 22px; font-size: 13px; }
+  .mini-cal-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .mini-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+  .mm-dow { font-size: 9px; font-weight: 600; color: var(--muted); text-align: center; padding: 2px 0 4px; text-transform: uppercase; }
+  .mm-cell {
+    font-size: 10.5px; text-align: center; line-height: 22px; height: 22px;
+    border-radius: 50%; cursor: pointer; color: var(--ink);
+    border: none; background: none; font-family: inherit; padding: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .mm-cell:hover { background: var(--accent-soft); }
+  .mm-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .mm-cell.mm-out { color: var(--muted); opacity: 0.6; }
+  .mm-cell.mm-sel { background: var(--accent-soft); border-radius: 6px; }
+  .mm-cell.mm-today { background: var(--accent); color: white; font-weight: 700; }
+  .cal-vis-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 6px; }
+  .cal-vis-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; color: var(--ink); cursor: pointer; border-radius: 6px; }
+  .cal-vis-row:hover { background: var(--accent-soft); }
+  .cal-vis-row input { accent-color: var(--accent); margin: 0; }
+  .cal-vis-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  .cal-vis-link {
+    display: block; margin-top: 8px; font-size: 12px; font-weight: 600;
+    color: var(--accent-deep); cursor: pointer; background: none; border: none;
+    padding: 4px 2px; font-family: inherit; text-align: left; width: 100%;
+  }
+  .cal-vis-link:hover { text-decoration: underline; }
+  /* All-day row: grid row 2, sticky under the weekday headers */
+  .allday-gutter {
+    font-size: 9px; color: var(--muted); text-align: right;
+    padding: 3px 8px 3px 0; text-transform: uppercase; letter-spacing: 0.4px;
+    background: #fafafa; border-bottom: 1px solid var(--border);
+    position: sticky; top: 30px; z-index: 19;
+  }
+  .allday-cell {
+    border-left: 1px solid #f0f0f0; border-bottom: 1px solid var(--border);
+    background: white; padding: 1px 2px; min-width: 0;
+    position: sticky; top: 30px; z-index: 19;
+  }
+  .cal-grid.no-allday .allday-gutter, .cal-grid.no-allday .allday-cell { display: none; }
+  .cal-grid.view-day .allday-gutter, .cal-grid.view-day .allday-cell { display: none; }
+  .cal-grid.hide-weekends .allday-cell[data-day="sat"],
+  .cal-grid.hide-weekends .allday-cell[data-day="sun"] { display: none !important; }
+  .allday-chip {
+    font-size: 10px; line-height: 1.5; padding: 0 5px; margin: 1px 0;
+    border-radius: 3px; border-left: 3px solid var(--c-therapy);
+    background: var(--c-outlook-bg); color: var(--tile-fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .allday-chip[data-type="travel"] { background: var(--c-travel-bg); border-left-color: var(--c-travel); }
+  .allday-chip[data-type="leave"]  { background: var(--c-leave-bg);  border-left-color: var(--c-personal); }
+  .allday-chip[data-type="admin"]  { background: var(--c-admin-bg);  border-left-color: var(--c-admin); }
+  /* Category visibility filters (presentation-only) */
+  .cal-grid.hide-cat-client .session[data-type="therapy"], .cal-grid.hide-cat-client .session[data-type="assessment"], .cal-grid.hide-cat-client .session[data-type="initial"],
+  .cal-grid.hide-cat-travel .session[data-type="travel"],
+  .cal-grid.hide-cat-admin .session[data-type="admin"], .cal-grid.hide-cat-admin .session[data-type="report"], .cal-grid.hide-cat-admin .session[data-type="cpd"], .cal-grid.hide-cat-admin .session[data-type="lunch"],
+  .cal-grid.hide-cat-meeting .session[data-type="meeting"], .cal-grid.hide-cat-meeting .session[data-type="mdt"], .cal-grid.hide-cat-meeting .session[data-type="teams_meeting"],
+  .cal-grid.hide-cat-other .session[data-type="outlook"], .cal-grid.hide-cat-other .session[data-type="leave"] { display: none !important; }
+  .cal-grid.hide-cat-travel .travel-overlay { display: none !important; }
+  /* Sidebar collapses into a drawer on smaller screens */
+  @media (max-width: 1080px) {
+    .btn-cal-sidebar { display: inline-flex; }
+    .cal-sidebar {
+      position: absolute; left: 0; top: 0; bottom: 0; z-index: 1150;
+      transform: translateX(-105%); transition: transform 160ms ease;
+      box-shadow: 4px 0 18px rgba(15, 23, 42, 0.12);
+    }
+    .cal-sidebar.open { transform: none; }
+  }
   /* Small screens: keep columns readable and let the grid container
      (#cal-grid has overflow:auto) scroll horizontally instead of
      crushing seven days into unreadable slivers. */
@@ -4160,6 +4244,9 @@
          setCalendarMode(). Today + arrows fire gotoPrev/Next/Today which are
          mode-aware (week-step in week-style modes, month-step in month). -->
     <div class="cal-topbar">
+      <button class="btn-cal-sidebar" id="btn-cal-sidebar" onclick="toggleCalSidebar()" aria-label="Toggle calendar sidebar" title="Calendars &amp; mini month">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <!-- Segmented view toggle -->
       <div class="view-tabs" id="view-tabs" data-help="cal-view-tabs">
         <button class="view-tab" data-view="day"   onclick="setCalendarMode('day')"    data-help="cal-view-day"    title="Day view — see a single day in detail">Day</button>
@@ -4241,6 +4328,24 @@
       </button>
     </div>
 
+    <!-- ── Three-panel workspace: sidebar (mini month + calendar list) + views ── -->
+    <div class="cal-workspace">
+      <aside class="cal-sidebar" id="cal-sidebar" aria-label="Calendar navigation">
+        <div class="mini-cal" data-help="mini-calendar">
+          <div class="mini-cal-head">
+            <button class="nav-arrow" onclick="miniNav(-1)" title="Previous month">&lsaquo;</button>
+            <span class="mini-cal-label" id="mini-cal-label"></span>
+            <button class="nav-arrow" onclick="miniNav(1)" title="Next month">&rsaquo;</button>
+          </div>
+          <div class="mini-cal-grid" id="mini-cal-grid"></div>
+        </div>
+        <div class="cal-vis">
+          <div class="cal-vis-title">My calendars</div>
+          <div id="cal-vis-list"></div>
+        </div>
+      </aside>
+      <div class="cal-main">
+
     <!-- Today View (legacy day-agenda; kept for backward links, not in nav) -->
     <div class="cal-view" id="cal-view-today" style="display: none; overflow: auto; padding: 16px;">
       <div class="day-main-grid">
@@ -4280,7 +4385,7 @@
             </div>
           </div>
 
-          <div class="cal-grid view-week" id="cal-grid" data-help="calendar-grid" style="flex: 1; overflow: auto;">
+          <div class="cal-grid view-week no-allday" id="cal-grid" data-help="calendar-grid" style="flex: 1; overflow: auto;">
             <div class="cal-head"></div>
             <div class="cal-head" data-day="mon"><div class="day-num">11</div><div class="day-name">Mon</div></div>
             <div class="cal-head" data-day="tue"><div class="day-num">12</div><div class="day-name">Tue</div></div>
@@ -4289,6 +4394,15 @@
             <div class="cal-head" data-day="fri"><div class="day-num">15</div><div class="day-name">Fri</div></div>
             <div class="cal-head" data-day="sat"><div class="day-num">16</div><div class="day-name">Sat</div></div>
             <div class="cal-head" data-day="sun"><div class="day-num">17</div><div class="day-name">Sun</div></div>
+            <!-- Compact all-day row (hidden until an all-day event exists) -->
+            <div class="allday-gutter">All day</div>
+            <div class="allday-cell" data-day="mon" id="allday-mon"></div>
+            <div class="allday-cell" data-day="tue" id="allday-tue"></div>
+            <div class="allday-cell" data-day="wed" id="allday-wed"></div>
+            <div class="allday-cell" data-day="thu" id="allday-thu"></div>
+            <div class="allday-cell" data-day="fri" id="allday-fri"></div>
+            <div class="allday-cell" data-day="sat" id="allday-sat"></div>
+            <div class="allday-cell" data-day="sun" id="allday-sun"></div>
             <div class="time-col" id="time-col"></div>
             <div class="cal-col" id="day-mon" data-day="mon"></div>
             <div class="cal-col" id="day-tue" data-day="tue"></div>
@@ -4345,6 +4459,9 @@
         </div>
       </div>
     </div>
+
+      </div><!-- /.cal-main -->
+    </div><!-- /.cal-workspace -->
 
   </div>
 
@@ -16476,6 +16593,8 @@ function __renderWeekHeader() {
       ? `${startDate.getUTCDate()}–${last.getUTCDate()} ${lastStr}, ${last.getUTCFullYear()}`
       : `${startDate.getUTCDate()} ${startStr} – ${last.getUTCDate()} ${lastStr}, ${last.getUTCFullYear()}`;
   }
+  // Keep the sidebar mini month in step with the visible week
+  if (typeof renderMiniCal === 'function') { try { renderMiniCal(); } catch (_) {} }
 }
 
 // Subset of __outlookEventsCache whose Perth-local date is within [Mon, next Mon).
@@ -17019,6 +17138,151 @@ function gotoWeekOf(isoDate) {
   renderCurrentWeek();
 }
 
+/* ── Calendar sidebar: mini month + calendar visibility (2026-08-06) ─────────
+   Display-only. The mini month drives the EXISTING navigation API
+   (gotoWeekOf / switchToCalDay); the visibility list toggles CSS classes on
+   #cal-grid that hide tile categories — no data or sync logic involved. */
+let __miniAnchor = null; // first-of-month Date (UTC midnight) shown in the mini cal
+
+function miniNav(delta) {
+  const a = __miniAnchor || window.__currentWeekMonday || new Date();
+  __miniAnchor = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + delta, 1));
+  renderMiniCal(true);
+}
+
+function renderMiniCal(keepAnchor) {
+  const grid = document.getElementById('mini-cal-grid');
+  const label = document.getElementById('mini-cal-label');
+  if (!grid || !label) return;
+  const monday = window.__currentWeekMonday || __thisMondayPerth();
+  if (!keepAnchor || !__miniAnchor) {
+    __miniAnchor = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), 1));
+  }
+  const y = __miniAnchor.getUTCFullYear(), m = __miniAnchor.getUTCMonth();
+  label.textContent = __miniAnchor.toLocaleString('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  const todayKey = __perthDateStr(new Date());
+  const weekKeys = Object.values(_weekDates || {});
+  const dowNames = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+  const order = (window.WEEK_START === 0) ? ['Su'].concat(dowNames.slice(0, 6)) : dowNames;
+  let html = order.map(function (d) { return '<div class="mm-dow">' + d + '</div>'; }).join('');
+
+  // First visible cell: back up from the 1st to the week start
+  const first = new Date(Date.UTC(y, m, 1));
+  const lead = (first.getUTCDay() - (window.WEEK_START === 0 ? 0 : 1) + 7) % 7;
+  const start = new Date(first); start.setUTCDate(1 - lead);
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setUTCDate(start.getUTCDate() + i);
+    const ymd = __ymd(d);
+    const cls = ['mm-cell'];
+    if (d.getUTCMonth() !== m) cls.push('mm-out');
+    if (weekKeys.includes(ymd)) cls.push('mm-sel');
+    if (ymd === todayKey) cls.push('mm-today');
+    html += '<button type="button" class="' + cls.join(' ') + '" data-ymd="' + ymd + '" aria-label="' + ymd + '">' + d.getUTCDate() + '</button>';
+  }
+  grid.innerHTML = html;
+  grid.onclick = function (e) {
+    const cell = e.target.closest('.mm-cell');
+    if (!cell) return;
+    const ymd = cell.dataset.ymd;
+    if (window.__calendarMode === 'day' && typeof switchToCalDay === 'function') {
+      switchToCalDay(new Date(ymd + 'T00:00:00Z'));
+    } else {
+      window.gotoWeekOf(ymd);
+    }
+    renderMiniCal(true);
+  };
+}
+
+var CAL_VIS_CATS = [
+  { key: 'client',  label: 'Client sessions', colorVar: '--c-therapy' },
+  { key: 'travel',  label: 'Travel',          colorVar: '--c-travel' },
+  { key: 'admin',   label: 'Admin & notes',   colorVar: '--c-admin' },
+  { key: 'meeting', label: 'Meetings',        colorVar: '--c-meeting' },
+  { key: 'other',   label: 'Outlook & other', colorVar: '--c-mdt' },
+];
+var CAL_VIS_KEY = 'opal_cal_hidden_cats';
+
+function __calHiddenCats() {
+  try { return JSON.parse(localStorage.getItem(CAL_VIS_KEY)) || []; } catch (_) { return []; }
+}
+
+function toggleCalCat(key, visible) {
+  let hidden = __calHiddenCats().filter(function (k) { return k !== key; });
+  if (!visible) hidden.push(key);
+  try { localStorage.setItem(CAL_VIS_KEY, JSON.stringify(hidden)); } catch (_) {}
+  applyCalVisibility();
+}
+
+function applyCalVisibility() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  const hidden = __calHiddenCats();
+  CAL_VIS_CATS.forEach(function (c) {
+    grid.classList.toggle('hide-cat-' + c.key, hidden.includes(c.key));
+  });
+}
+
+function renderCalVis() {
+  const list = document.getElementById('cal-vis-list');
+  if (!list) return;
+  const hidden = __calHiddenCats();
+  let html = CAL_VIS_CATS.map(function (c) {
+    const on = !hidden.includes(c.key);
+    return '<label class="cal-vis-row">' +
+      '<input type="checkbox"' + (on ? ' checked' : '') +
+      ' onchange="toggleCalCat(\'' + c.key + '\', this.checked)">' +
+      '<span class="cal-vis-dot" style="background:var(' + c.colorVar + ');"></span>' +
+      c.label + '</label>';
+  }).join('');
+  const u = window.APP_USER;
+  if (u && (u.role === 'owner' || u.role === 'admin')) {
+    html += '<button type="button" class="cal-vis-link" onclick="setCalendarMode(\'master\')">All therapists (Master view)</button>';
+  }
+  list.innerHTML = html;
+  applyCalVisibility();
+}
+
+function toggleCalSidebar() {
+  const sb = document.getElementById('cal-sidebar');
+  if (sb) sb.classList.toggle('open');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  renderCalVis();
+  try { renderMiniCal(); } catch (_) {}
+});
+
+/* ── All-day events (2026-08-06): route ≥23h events into the compact all-day
+   row instead of painting a full-height (clipped) tile down the column.
+   Chips reuse the existing detail panel via SESSIONS + openBlockDetail. */
+function addAllDayChip(day, opts) {
+  const cell = document.getElementById('allday-' + day);
+  const grid = document.getElementById('cal-grid');
+  if (!cell) return null;
+  const id = opts.id || ('AD-' + day.toUpperCase() + '-' + Math.random().toString(36).slice(2, 7));
+  const el = document.createElement('div');
+  el.className = 'allday-chip';
+  el.dataset.type = opts.type || 'outlook';
+  el.textContent = opts.title || '(No subject)';
+  el.title = (opts.title || '') + ' · all day · click for details';
+  el.setAttribute('role', 'button');
+  el.tabIndex = 0;
+  SESSIONS[id] = Object.assign({}, opts, { id, element: el, col: cell, allDay: true, outlookSynced: true });
+  const open = function () { if (typeof openBlockDetail === 'function') openBlockDetail(id); };
+  el.onclick = open;
+  el.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  cell.appendChild(el);
+  if (grid) grid.classList.remove('no-allday');
+  return id;
+}
+
+function clearAllDayChips() {
+  document.querySelectorAll('.allday-chip').forEach(function (el) { el.remove(); });
+  const grid = document.getElementById('cal-grid');
+  if (grid) grid.classList.add('no-allday');
+}
+
 /**
  * Fetch synced Outlook events from backend, cache them, and render the
  * current Perth week. Subsequent week navigation reuses the cache.
@@ -17448,6 +17712,7 @@ function _repairNoTitleTiles() {
  */
 function mergeEventsIntoDayData(eventsByDay) {
   console.log('🔀 Merging Outlook events into calendar...');
+  if (typeof clearAllDayChips === 'function') clearAllDayChips();
   console.log('DAY_DATA keys:', Object.keys(DAY_DATA));
 
   Object.keys(eventsByDay).forEach(day => {
@@ -17498,6 +17763,22 @@ function mergeEventsIntoDayData(eventsByDay) {
               endH = startH + Math.floor(endM / 60);
               endM = endM % 60;
             }
+          }
+
+          // All-day (or near-24h) events get a compact chip in the all-day
+          // row — a timed tile would span the whole column, get clipped, and
+          // falsely conflict with every session that day.
+          const _spanMin = (endH * 60 + endM) - (startH * 60 + startM);
+          if (_spanMin >= 23 * 60 && typeof addAllDayChip === 'function') {
+            addAllDayChip(day, {
+              day, type: session.type || 'outlook',
+              startH, startM, endH: Math.min(endH, 23), endM: endH > 23 ? 59 : endM,
+              title: session.title,
+              outlookId: session.outlookId, dbId: session.dbId,
+              categories: session.categories || [],
+              startTimeIso: session.startTimeIso, endTimeIso: session.endTimeIso,
+            });
+            return;
           }
 
           // Add to week calendar. Type comes from the backend classifier;
@@ -18811,6 +19092,9 @@ function initMasterCalendarAccess() {
 
   // Apply settings page visibility
   if (typeof applySettingsRoleVisibility === 'function') applySettingsRoleVisibility();
+
+  // Sidebar calendar list shows the Master link for owner/admin only
+  if (typeof renderCalVis === 'function') renderCalVis();
 }
 
 // ── Role-based navigation (RBAC 2026-08-06, default-deny) ─────────────────────
@@ -23157,7 +23441,7 @@ function applyUserSettings(s, os) {
   if (s.travelWarnThresholdMin !== undefined) window.TRAVEL_WARN_MIN = s.travelWarnThresholdMin;
 
   // ── Show weekends — toggle CSS class on both grids ─────────────
-  var showWeekends = s.showWeekends !== false;
+  var showWeekends = s.showWeekends === true; // Mon-Fri by default (Outlook-style); weekends opt-in in Settings
   ['cal-grid', 'master-grid'].forEach(function(gId) {
     var g = document.getElementById(gId);
     if (g) g.classList.toggle('hide-weekends', !showWeekends);
