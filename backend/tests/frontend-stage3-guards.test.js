@@ -251,3 +251,48 @@ describe('role-based navigation (RBAC)', () => {
     expect(HTML).toContain("k === 'opal_recent_searches'");
   });
 });
+
+// ── My Profile dashboard redesign (2026-08-06) ───────────────────────────────
+describe('profile dashboard redesign', () => {
+  const view = () => HTML.slice(HTML.indexOf('<section class="view" id="view-profile">'),
+                                HTML.indexOf('<!-- ============ BOOK TAB ============ -->'));
+
+  test('compact summary + seven area cards + focused-area host render', () => {
+    const v = view();
+    expect(v).toContain('class="pf-summary panel panel-pad"');
+    expect(v).toContain('id="pf-summary-status"');
+    expect(v).toContain('id="pf-dashboard"');
+    expect(v).toContain('id="pf-area-host"');
+    expect((v.match(/class="pf-card"/g) || []).length).toBe(7);
+    // role-dynamic card labels keep their ids so section loaders rename them
+    expect(v).toContain('id="pf-nav-leave-label"');
+    expect(v).toContain('id="pf-nav-cpd-label"');
+  });
+
+  test('cards open focused areas; back returns to the dashboard', () => {
+    expect(HTML).toContain('function pfOpenArea(id)');
+    expect(HTML).toContain('function pfBackToDashboard()');
+    expect(HTML).toContain('function scrollToProfile(id) { pfOpenArea(id); }');
+    expect(HTML).toContain("PF_AREA_IDS = ['pf-details', 'pf-location', 'pf-leave', 'pf-cpd', 'pf-pddocs', 'pf-credentials', 'pf-alerts']");
+  });
+
+  test('no emojis on the profile dashboard or its panels', () => {
+    const v = view();
+    for (const e of ['✅', '⚠️', '🏠', '💻', '📎', '👤', '📅']) {
+      expect(v).not.toContain(e);
+    }
+    expect(HTML).not.toContain("'<span style=\"font-size:14px;\">' + (ok ? '✅' : '⚠️') + '</span>'");
+  });
+
+  test('long explanatory copy is off the dashboard', () => {
+    expect(HTML).not.toContain('Runs the Distance Matrix API');
+    expect(HTML).not.toContain('Air-BnB for regional weeks');
+    expect(HTML).not.toContain('which can hide real travel costs');
+  });
+
+  test('setup card hides once complete; summary shows a subtle status', () => {
+    expect(HTML).toContain("if (!pending) { card.style.display = 'none'; return; }");
+    expect(HTML).toContain('</span>Setup complete');
+    expect(HTML).toContain("' setup step' + (pending === 1 ? '' : 's') + ' remaining'");
+  });
+});
