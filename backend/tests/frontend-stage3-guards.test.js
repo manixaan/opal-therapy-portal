@@ -445,6 +445,12 @@ describe('calendar workspace redesign', () => {
     expect(HTML).toContain('Display Saturday and Sunday in week view'); // setting still there
   });
 
+  test('settings load at boot with a parse-order retry (no silent no-op)', () => {
+    expect(HTML).toContain('function loadSettingsWhenReady(attempt)');
+    // the old unguarded single-shot call must be gone
+    expect(HTML).not.toContain("if (typeof loadUserSettings === 'function') loadUserSettings();\n");
+  });
+
   test('sidebar collapses to a drawer on small screens', () => {
     expect(HTML).toContain('function toggleCalSidebar()');
     expect(HTML).toContain('id="btn-cal-sidebar"');

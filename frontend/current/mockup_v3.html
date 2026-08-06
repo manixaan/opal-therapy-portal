@@ -7269,8 +7269,15 @@ window.APP_USER = null;
       if (typeof applyNavRoleVisibility === 'function') { applyNavRoleVisibility(window.APP_USER.role); return; }
       if ((attempt || 0) < 40) setTimeout(function () { applyRoleGatingWhenReady((attempt || 0) + 1); }, 100);
     })(0);
-    // Load and apply user settings (affects calendar, reports, notifications)
-    if (typeof loadUserSettings === 'function') loadUserSettings();
+    // Load and apply user settings (affects calendar, reports, notifications).
+    // Same parse-order race as role gating above: loadUserSettings is defined
+    // ~15k lines below, so a single-shot typeof check silently no-ops when
+    // /api/auth/me resolves before the parser gets there — settings then never
+    // load at boot (weekend default, calendar view, km rate all skipped).
+    (function loadSettingsWhenReady(attempt) {
+      if (typeof loadUserSettings === 'function') { loadUserSettings(); return; }
+      if ((attempt || 0) < 40) setTimeout(function () { loadSettingsWhenReady((attempt || 0) + 1); }, 100);
+    })(0);
   } catch (err) {
     console.error('Auth check error:', err);
     window.location.replace('/login');
