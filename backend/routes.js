@@ -305,7 +305,62 @@ router.get('/auth/oauth/callback', async (req, res) => {
         return res.status(401).send(oauthErrorPage('Session expired',
           'Your portal session has expired. Please sign in again, then reconnect Outlook.'));
       }
-      if (microsoftUser.id && !user.microsoft_id) {
+      // ── Mailbox claim handling ─────────────────────────────────────────
+      // A mailbox (microsoft_id) may be ACTIVELY connected to only one
+      // portal account. Reconnecting to the same account is idempotent.
+      // A row that disconnected used to keep its microsoft_id forever
+      // (disconnect bug, fixed above) — such STALE claims are released here
+      // so the mailbox isn't locked out; an ACTIVE claim is never stolen.
+      if (microsoftUser.id && String(user.microsoft_id || '') !== String(microsoftUser.id)) {
+        const holderRes = await db.pool.query(
+          'SELECT id, access_token FROM users WHERE microsoft_id = $1 AND id <> $2 LIMIT 1',
+          [microsoftUser.id, user.id]
+        );
+        const holder = holderRes.rows[0];
+        if (holder && holder.access_token) {
+          // Actively connected elsewhere — block, never transfer.
+          await db.logAuditEvent({
+            actorUserId: user.id, action: 'outlook.connect_blocked_active_claim',
+            targetType: 'user', targetId: holder.id, ipAddress: req.ip,
+            organisationId: user.organisation_id || null,
+          }).catch(() => {});
+          console.warn('⚠️  Outlook connect blocked — mailbox actively connected to another account');
+          return res.status(403).send(`
+            <html>
+              <head><title>Mailbox already connected</title>
+                <style>
+                  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f7; }
+                  .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 460px; }
+                  h1 { color: #c0392b; margin-top: 0; font-size: 22px; }
+                  p { color: #555; line-height: 1.6; }
+                  a.btn { display: inline-block; margin-top: 16px; padding: 11px 22px; background: #00a8cc; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>Mailbox already connected</h1>
+                  <p>This Outlook mailbox is already connected to another portal
+                  account. Disconnect it from that account before connecting it
+                  here. No changes were made.</p>
+                  <a class="btn" href="/">Back to Settings → Integrations</a>
+                </div>
+              </body>
+            </html>`);
+        }
+        if (holder) {
+          // Stale claim (no active tokens) — release it, audited.
+          await db.pool.query(
+            'UPDATE users SET microsoft_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [holder.id]
+          );
+          await db.logAuditEvent({
+            actorUserId: user.id, action: 'outlook.stale_claim_released',
+            targetType: 'user', targetId: holder.id, ipAddress: req.ip,
+            organisationId: user.organisation_id || null,
+            metadata: { reconnectedToUserId: user.id },
+          }).catch(() => {});
+          console.log('♻️  Released stale Outlook mailbox claim from a disconnected account');
+        }
         await db.pool.query(
           'UPDATE users SET microsoft_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [microsoftUser.id, user.id]
@@ -417,9 +472,13 @@ router.get('/auth/oauth/callback', async (req, res) => {
  */
 router.post('/api/outlook/disconnect', requireAuth, async (req, res) => {
   try {
+    // microsoft_id must be cleared too — leaving it made the disconnected row
+    // keep a permanent claim on the mailbox, so no OTHER account could ever
+    // connect it (unique users_microsoft_id_key violation in the callback).
     await db.pool.query(
       `UPDATE users SET access_token = NULL, refresh_token = NULL,
               token_expires_at = NULL, outlook_connected_email = NULL,
+              microsoft_id = NULL,
               updated_at = NOW() WHERE id = $1`, [req.user.id]);
     await db.pool.query('DELETE FROM outlook_delta_state WHERE user_id = $1', [req.user.id]);
     await db.logAuditEvent({
