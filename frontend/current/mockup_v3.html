@@ -4543,25 +4543,59 @@
   .rh-step .step { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: 500; }
   .rh-step .arrow { color: var(--muted); }
   .rh-status-chip { display: inline-block; font-size: 11px; border: 1px solid var(--border); background: #fafafa; color: var(--ink-soft); border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; }
-  .rh-mock label { display: block; font-size: 12px; color: var(--ink-soft); margin: 10px 0 3px; }
-  .rh-mock select, .rh-mock input { width: 100%; max-width: 340px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--bg); color: var(--muted); }
+  .rh-searchbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .rh-searchbar input[type="search"] { flex: 1; min-width: 240px; padding: 9px 14px; border: 1px solid var(--border); border-radius: var(--radius-md, 10px); font-size: 13.5px; background: var(--panel); }
+  .rh-searchbar select { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md, 10px); background: var(--panel); font-size: 12.5px; }
+  .rh-sections { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .rh-sec {
+    background: none; border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 13px; font-size: 12px; font-weight: 500; color: var(--ink-soft);
+    cursor: pointer; font-family: inherit; transition: background 110ms, color 110ms;
+  }
+  .rh-sec:hover { background: var(--accent-soft); }
+  .rh-sec.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
+  .rh-res-row {
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border-soft); cursor: pointer; transition: background 100ms;
+  }
+  .rh-res-row:hover { background: var(--accent-soft); }
+  .rh-res-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .rh-res-main { flex: 1; min-width: 0; }
+  .rh-res-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .rh-res-sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rh-res-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .rh-list-shell { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg, 14px); overflow: hidden; }
+  .rh-two-col { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .rh-col { flex: 1; min-width: 320px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg, 14px); padding: 16px; }
+  .rh-quiet { font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 8px; }
+  .rh-lbl { display: block; font-size: 12px; color: var(--ink-soft); margin: 10px 0 3px; }
+  .rh-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit; box-sizing: border-box; }
+  .rh-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .rh-err { margin-top: 10px; padding: 8px 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 7px; font-size: 12.5px; color: #dc2626; }
+  .rh-item { padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+  .rh-item:last-child { border-bottom: none; }
+  .rh-kit { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg, 14px); padding: 16px; margin-bottom: 12px; }
+  .rh-kit-step { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; font-size: 13px; }
+  .rh-kit-step input { margin-top: 2px; accent-color: var(--accent); }
+  .rh-kit-step.done label { color: var(--muted); text-decoration: line-through; }
+  .rh-ext-ind { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 1px; }
 </style>
 <div class="acct-page">
   <h1 style="margin:0 0 4px;">Resource Hub</h1>
   <p style="color:var(--muted);margin:0 0 12px;">Shared therapy materials, drafting tools and purchasing — in one workspace.</p>
 
   <div class="rh-tabs" role="tablist">
-    <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Shared Resources</button>
-    <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio<span class="rh-soon">Coming soon</span></button>
-    <button class="rh-tab" role="tab" data-rh="store" onclick="rhSwitch('store')">Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>
+    <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Resource Library</button>
+    <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio</button>
+    <button class="rh-tab" role="tab" data-rh="store" onclick="rhSwitch('store')">Therapy Store &amp; Purchase Requests</button>
   </div>
 
-  <!-- ── Shared Resources ── -->
+  <!-- ── Resource Library ── -->
   <div class="rh-panel active" id="rh-panel-shared">
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
-      <input type="text" id="res-search" placeholder="Search resources…" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;min-width:240px;" oninput="resReload()">
-      <select id="res-tag-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;"><option value="">All tags</option></select>
-      <select id="res-type-filter" onchange="resReload()" style="padding:8px;border:1px solid var(--border);border-radius:8px;">
+    <div class="rh-searchbar">
+      <input type="search" id="res-search" placeholder="Search resources, topics, templates…" oninput="resReload()" aria-label="Search resources">
+      <select id="res-tag-filter" onchange="resReload()" aria-label="Filter by tag"><option value="">All tags</option></select>
+      <select id="res-type-filter" onchange="resReload()" aria-label="Filter by type">
         <option value="">All types</option>
         <option value="worksheet">Worksheet</option>
         <option value="handout">Handout</option>
@@ -4571,71 +4605,127 @@
         <option value="pd_video">PD video</option>
         <option value="template">Template</option>
       </select>
-      <select id="res-status-filter" onchange="resReload()" style="display:none;padding:8px;border:1px solid var(--border);border-radius:8px;">
+      <select id="res-status-filter" onchange="resReload()" style="display:none;" aria-label="Filter by status">
         <option value="">Approved (default)</option>
         <option value="submitted_for_review">Submitted for review</option>
         <option value="draft">Drafts</option>
         <option value="archived">Archived</option>
       </select>
-      <button class="btn" onclick="resReload()">Refresh</button>
+      <button class="btn" onclick="rhResetFilters()">Reset</button>
       <div style="flex:1"></div>
       <button class="btn primary" id="res-submit-btn" onclick="rhOpenSubmit()">Submit a resource</button>
     </div>
+    <div class="rh-sections" id="rh-sections" role="tablist" aria-label="Library sections"></div>
+    <div id="rh-topic-chips" style="display:none;margin:0 0 10px;"></div>
+    <div id="rh-kits" style="display:none;"></div>
     <div id="res-list" class="acct-note">Loading…</div>
   </div>
 
-  <!-- ── AI Resource Studio (placeholder — not enabled) ── -->
+  <!-- ── AI Resource Studio ── -->
   <div class="rh-panel" id="rh-panel-ai">
-    <div class="acct-card">
-      <h3 style="margin:0 0 6px;">AI Resource Studio <span class="rh-soon">Not enabled</span></h3>
-      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px;">
-        Drafting support for worksheets, activities, checklists, visual supports,
-        home programs and session resources — grounded in the practice's approved
-        Shared Resources.</p>
-      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 4px;">
-        AI-generated resources will be drafts requiring therapist review before use.</p>
-      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;">
-        Client-identifying or sensitive clinical information must not be sent to AI
-        tools unless approved privacy, consent, and data-handling controls are in place.</p>
-      <div class="rh-mock" aria-disabled="true">
-        <label>Diagnosis</label><select disabled><option>Select…</option></select>
-        <label>Therapy goal</label><select disabled><option>Select…</option></select>
-        <label>Age range</label><select disabled><option>Select…</option></select>
-        <label>Format</label><select disabled><option>Worksheet</option></select>
-        <label>Tone</label><select disabled><option>Plain and encouraging</option></select>
-        <label>Ground in approved resources</label><select disabled><option>Choose from Shared Resources…</option></select>
-        <div style="margin-top:14px;"><button class="btn primary" disabled title="Not enabled">Generate draft</button></div>
+    <div class="rh-two-col">
+      <div class="rh-col">
+        <h3 style="margin:0 0 4px;">Draft a resource</h3>
+        <p class="rh-quiet" id="rh-ai-mode-note">AI generation is not enabled yet — drafts are written manually and follow the same review path.</p>
+        <p class="rh-quiet">Do not include client-identifying or sensitive clinical information.</p>
+        <input type="hidden" id="rhd-id" value="">
+        <label class="rh-lbl">Title</label>
+        <input type="text" id="rhd-title" class="rh-input">
+        <div class="rh-grid-2">
+          <div><label class="rh-lbl">Resource type</label>
+            <select id="rhd-type" class="rh-input"><option value="worksheet">Worksheet</option><option value="handout">Handout</option><option value="checklist">Checklist</option><option value="session_plan">Session plan</option><option value="template" selected>Template</option></select></div>
+          <div><label class="rh-lbl">Topic</label><input type="text" id="rhd-topic" class="rh-input" placeholder="e.g. Emotional regulation"></div>
+          <div><label class="rh-lbl">Audience</label>
+            <select id="rhd-audience" class="rh-input"><option>Client</option><option>Parent / carer</option><option>School</option><option>Therapist</option></select></div>
+          <div><label class="rh-lbl">Tone</label>
+            <select id="rhd-tone" class="rh-input"><option>Plain and encouraging</option><option>Clinical</option><option>Child-friendly</option></select></div>
+        </div>
+        <label class="rh-lbl">Instructions / outline</label>
+        <textarea id="rhd-instructions" class="rh-input" rows="3"></textarea>
+        <label class="rh-lbl">Draft content</label>
+        <textarea id="rhd-content" class="rh-input" rows="8" placeholder="Write the draft here…"></textarea>
+        <div id="rhd-err" class="rh-err" style="display:none;"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn primary" id="rhd-save" onclick="rhSaveDraft(false)">Create manual draft</button>
+          <button class="btn" onclick="rhSaveDraft(true)">Save &amp; submit for review</button>
+          <button class="btn" onclick="rhClearDraftForm()">Clear</button>
+        </div>
+      </div>
+      <div class="rh-col">
+        <h3 style="margin:0 0 8px;">My drafts</h3>
+        <div id="rh-draft-list" class="rh-quiet">Loading…</div>
+        <div id="rh-review-queue-wrap" style="display:none;margin-top:18px;">
+          <h3 style="margin:0 0 8px;">Review queue</h3>
+          <div id="rh-review-queue" class="rh-quiet"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Therapy Store & Purchase Requests (foundation — not enabled) ── -->
+  <!-- ── Therapy Store & Purchase Requests ── -->
   <div class="rh-panel" id="rh-panel-store">
-    <div class="acct-card">
-      <h3 style="margin:0 0 6px;">Therapy Store &amp; Purchase Requests <span class="rh-soon">Coming soon</span></h3>
-      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 4px;">
-        A catalogue of therapy tools with a transparent request-and-approval flow:</p>
-      <div class="rh-step" aria-label="Planned workflow">
-        <span class="step">Therapist request</span><span class="arrow">→</span>
-        <span class="step">Owner review</span><span class="arrow">→</span>
-        <span class="step">Admin purchase order check</span><span class="arrow">→</span>
-        <span class="step">Accounting handoff</span>
+    <div class="rh-two-col">
+      <div class="rh-col">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <h3 style="margin:0;flex:1;">Product catalogue</h3>
+          <input type="search" id="rh-store-search" class="rh-input" style="max-width:220px;" placeholder="Search products…" oninput="rhLoadCatalogue()">
+        </div>
+        <div id="rh-catalogue" class="rh-quiet">Loading…</div>
+        <p class="rh-quiet" style="margin-top:10px;">Product suitability for an individual client remains a therapist judgment.</p>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Planned request statuses</div>
-      <div>
-        <span class="rh-status-chip">Draft</span><span class="rh-status-chip">Submitted</span><span class="rh-status-chip">Owner Review</span><span class="rh-status-chip">Approved</span><span class="rh-status-chip">Admin Review</span><span class="rh-status-chip">Purchase Order Created</span><span class="rh-status-chip">Ordered</span><span class="rh-status-chip">Received</span><span class="rh-status-chip">Invoiced</span><span class="rh-status-chip">Paid</span><span class="rh-status-chip">Rejected</span>
+      <div class="rh-col">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <h3 style="margin:0;flex:1;" id="rh-req-title">My purchase requests</h3>
+          <button class="btn primary" onclick="rhOpenPurchase()">New request</button>
+        </div>
+        <div id="rh-requests" class="rh-quiet">Loading…</div>
+        <p class="rh-quiet" style="margin-top:12px;">Approved requests hand off to the accounting workflow — nothing is sent externally from this portal.</p>
+        <p class="rh-quiet">Tax treatment is an accounting-review field and is not automatically determined by the portal.</p>
       </div>
-      <p style="font-size:12px;color:var(--ink-soft);margin:12px 0 0;">
-        Accounting export/integration will require an approval checkpoint before
-        anything is sent externally.</p>
-      <p style="font-size:12px;color:var(--ink-soft);margin:4px 0 0;">
-        Tax treatment is an accounting-review field and is not automatically
-        determined by the portal.</p>
     </div>
   </div>
-</div>
 
-<!-- Submit-resource modal (uses the existing draft/review backend flow) -->
+  <!-- Resource detail drawer -->
+  <div class="modal-backdrop" id="modal-res-detail" onclick="if(event.target===this)rhCloseResource()">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
+      <h3 id="rh-detail-title" style="display:flex;justify-content:space-between;align-items:center;">Resource
+        <button class="btn" onclick="rhCloseResource()" style="font-size:12px;padding:4px 10px;">Close</button></h3>
+      <div class="modal-body" id="rh-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Purchase request form -->
+  <div class="modal-backdrop" id="modal-purchase" onclick="if(event.target===this)rhClosePurchase()">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
+      <h3>Purchase request</h3>
+      <div class="modal-body">
+        <input type="hidden" id="rhp-id" value="">
+        <label class="rh-lbl">Product name</label><input type="text" id="rhp-name" class="rh-input">
+        <label class="rh-lbl">Product link</label><input type="url" id="rhp-url" class="rh-input" placeholder="https://…">
+        <div class="rh-grid-2">
+          <div><label class="rh-lbl">Supplier</label><input type="text" id="rhp-supplier" class="rh-input"></div>
+          <div><label class="rh-lbl">Quantity</label><input type="number" id="rhp-qty" class="rh-input" value="1" min="1"></div>
+          <div><label class="rh-lbl">Approx. cost (AUD)</label><input type="number" id="rhp-cost" class="rh-input" step="0.01" min="0"></div>
+          <div><label class="rh-lbl">Price checked on</label><input type="date" id="rhp-checked" class="rh-input"></div>
+        </div>
+        <label class="rh-lbl">Intended use</label><input type="text" id="rhp-use" class="rh-input">
+        <label class="rh-lbl">Clinical rationale</label><textarea id="rhp-rationale" class="rh-input" rows="2"></textarea>
+        <div class="rh-grid-2">
+          <div><label class="rh-lbl">Client reference (internal only)</label><input type="text" id="rhp-client" class="rh-input" placeholder="e.g. NDIS ref — never a name"></div>
+          <div><label class="rh-lbl">Lower-cost alternative</label><input type="text" id="rhp-alt" class="rh-input"></div>
+        </div>
+        <label class="rh-lbl">Safety considerations</label><input type="text" id="rhp-safety" class="rh-input">
+        <div id="rhp-err" class="rh-err" style="display:none;"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button class="btn" onclick="rhSavePurchase(false)">Save draft</button>
+        <button class="btn primary" onclick="rhSavePurchase(true)">Submit for approval</button>
+        <button class="btn" onclick="rhClosePurchase()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit-resource modal (uses the existing draft/review backend flow) -->
 <div class="modal-backdrop" id="modal-res-submit" onclick="if(event.target===this)rhCloseSubmit()">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:460px;">
     <h3>Submit a resource</h3>
@@ -7402,54 +7492,174 @@ function rhSwitch(area) {
     if (p) p.classList.toggle('active', a === area);
   });
   if (area === 'shared') resReload();
+  if (area === 'ai' && typeof rhLoadDrafts === 'function') rhLoadDrafts();
+  if (area === 'store' && typeof rhLoadStore === 'function') rhLoadStore();
+}
+
+/* Library sections — data-driven views over the same list API. */
+var RH_SECTIONS = [
+  { key: 'all',       label: 'Browse All' },
+  { key: 'kits',      label: 'Starter Kits' },
+  { key: 'templates', label: 'Templates & Checklists' },
+  { key: 'topics',    label: 'Clinical Topics' },
+  { key: 'links',     label: 'Quick Links' },
+  { key: 'external',  label: 'External References' },
+  { key: 'saved',     label: 'My Saved Resources' },
+  { key: 'recent',    label: 'Recently Added' },
+];
+var rhSection = 'all';
+var rhTopicTag = '';
+
+function rhSetSection(key) {
+  rhSection = key;
+  rhTopicTag = '';
+  document.querySelectorAll('.rh-sec').forEach(function (b) { b.classList.toggle('active', b.dataset.sec === key); });
+  resReload();
+}
+
+function rhRenderSections() {
+  var host = document.getElementById('rh-sections');
+  if (!host || host.childElementCount) return;
+  host.innerHTML = RH_SECTIONS.map(function (sec) {
+    return '<button type="button" class="rh-sec' + (sec.key === rhSection ? ' active' : '') +
+      '" data-sec="' + sec.key + '" onclick="rhSetSection(\'' + sec.key + '\')">' + sec.label + '</button>';
+  }).join('');
+}
+
+function rhResetFilters() {
+  ['res-search'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  ['res-tag-filter', 'res-type-filter', 'res-status-filter'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  rhSetSection('all');
 }
 
 async function resReload() {
   var el = document.getElementById('res-list');
   if (!el) return;
-  // Owner-only affordances (backend enforces independently)
+  rhRenderSections();
   var statusSel = document.getElementById('res-status-filter');
   if (statusSel) statusSel.style.display = rhIsOwner() ? '' : 'none';
+  var kitsHost = document.getElementById('rh-kits');
+  var topicHost = document.getElementById('rh-topic-chips');
+  if (kitsHost) kitsHost.style.display = rhSection === 'kits' ? '' : 'none';
+  if (topicHost) topicHost.style.display = rhSection === 'topics' ? '' : 'none';
+  if (rhSection === 'kits') { el.innerHTML = ''; el.className = ''; if (typeof rhRenderKits === 'function') rhRenderKits(); return; }
+
   if (!window.resTagsLoaded) {
     var t = await fetch('/api/resources/tags', { credentials: 'include' }).then(r => r.json()).catch(() => ({}));
     var sel = document.getElementById('res-tag-filter');
+    window.__rhTags = t.tags || [];
     (t.tags || []).forEach(function (tag) {
       var o = document.createElement('option'); o.value = tag.id; o.textContent = tag.category + ': ' + tag.name; sel.appendChild(o);
     });
     window.resTagsLoaded = true;
   }
+  if (rhSection === 'topics' && topicHost && !topicHost.childElementCount) {
+    topicHost.innerHTML = (window.__rhTags || []).filter(function (t) { return t.category === 'therapy_area'; })
+      .map(function (t) { return '<button type="button" class="rh-sec" onclick="rhTopicTag=\'' + t.id + '\';resReload();">' + escapeHtml(t.name) + '</button>'; }).join(' ');
+  }
+
   var q = encodeURIComponent(document.getElementById('res-search').value || '');
-  var tagId = document.getElementById('res-tag-filter').value;
+  var tagId = rhSection === 'topics' && rhTopicTag ? rhTopicTag : document.getElementById('res-tag-filter').value;
   var type = (document.getElementById('res-type-filter') || {}).value || '';
+  if (rhSection === 'templates') type = 'template';
+  if (rhSection === 'external') type = 'research';
   var status = rhIsOwner() ? ((statusSel || {}).value || '') : '';
   var url = '/api/resources?q=' + q + (tagId ? '&tagId=' + tagId : '') +
             (type ? '&type=' + encodeURIComponent(type) : '') +
-            (status ? '&status=' + encodeURIComponent(status) : '');
+            (status ? '&status=' + encodeURIComponent(status) : '') +
+            (rhSection === 'saved' ? '&saved=1' : '');
   var d = await fetch(url, { credentials: 'include' }).then(r => r.status === 403 ? { disabled: true } : r.json()).catch(() => ({}));
   if (d.disabled) { el.innerHTML = 'Resource Hub is disabled on this environment.'; return; }
   var rows = d.resources || [];
-  if (!rows.length) { el.innerHTML = 'No resources here yet — the practice owner adds and approves content, and new items appear automatically.'; return; }
+  if (rhSection === 'links') rows = rows.filter(function (r) { return /^https?:\/\//i.test(r.external_url || '') && r.resource_type !== 'product_link'; });
+  if (rhSection === 'recent') rows = rows.slice().sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); }).slice(0, 20);
+  window.__rhRows = {};
+  rows.forEach(function (r) { window.__rhRows[r.id] = r; });
+
+  if (!rows.length) {
+    el.className = '';
+    el.innerHTML = '<div class="rh-list-shell"><div style="padding:28px;text-align:center;color:var(--muted);font-size:12.5px;">' +
+      (rhSection === 'saved'
+        ? 'Nothing saved yet — browse the library and use Save to build your own shelf.'
+        : (q || tagId || type) ? 'No resources match — try clearing a filter or the search.' :
+          'No resources here yet — the practice owner adds and approves content, and new items appear automatically.') +
+      '</div></div>';
+    return;
+  }
   el.className = '';
-  el.innerHTML = rows.map(function (r) {
-    var tags = (r.tags || []).map(function (t) { return '<span class="acct-pill">' + escapeHtml(t.name) + '</span>'; }).join(' ');
-    // Owner sees non-approved status + moderation actions (backend-enforced)
+  el.innerHTML = '<div class="rh-list-shell">' + rows.map(function (r) {
+    var isLink = /^https?:\/\//i.test(r.external_url || '');
+    var host = '';
+    if (isLink) { try { host = new URL(r.external_url).hostname.replace(/^www\./, ''); } catch (_) {} }
     var statusBadge = (rhIsOwner() && r.status && r.status !== 'approved')
       ? '<span class="rh-status-chip">' + escapeHtml(r.status.replace(/_/g, ' ')) + '</span> ' : '';
-    var modActions = (rhIsOwner() && (r.status === 'submitted_for_review' || r.status === 'draft'))
-      ? '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'approve\')">Approve</button> ' +
-        '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'reject\')">Reject</button> ' : '';
-    return '<div class="acct-card" style="margin-bottom:10px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
-      '<strong>' + escapeHtml(r.title) + '</strong><span>' + statusBadge + modActions +
-      (Number(r.file_count) > 0 ? '<a class="btn" style="font-size:12px;" href="/api/resources/' + r.id + '/download">Download</a> ' : '') +
-      (/^https?:\/\//i.test(r.external_url || '') ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a> ' : '') +
+    var linkFlag = (rhIsOwner() && (r.link_status === 'reported' || r.link_status === 'broken'))
+      ? '<span class="lb-j-review">Needs review</span>' : '';
+    var sub = [r.resource_type || '', host, (r.tags || []).slice(0, 3).map(function (t) { return t.name; }).join(', ')]
+      .filter(Boolean).join(' · ');
+    return '<div class="rh-res-row" tabindex="0" role="button" data-rid="' + r.id + '"' +
+      ' onclick="rhOpenResource(this.dataset.rid)"' +
+      ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();rhOpenResource(this.dataset.rid);}">' +
+      '<div class="rh-res-main">' +
+      '<div class="rh-res-title">' + escapeHtml(r.title) + (isLink ? '<span class="rh-ext-ind">external</span>' : '') + linkFlag + '</div>' +
+      (r.description ? '<div class="rh-res-sub">' + escapeHtml(r.description) + '</div>' : '') +
+      (sub ? '<div class="rh-res-sub">' + escapeHtml(sub) + '</div>' : '') +
+      '</div><span class="rh-res-actions" onclick="event.stopPropagation()">' + statusBadge +
+      (rhIsOwner() && (r.status === 'submitted_for_review' || r.status === 'draft')
+        ? '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'approve\')">Approve</button>' +
+          '<button class="btn" style="font-size:12px;" onclick="rhModerate(\'' + r.id + '\',\'reject\')">Reject</button>' : '') +
+      (Number(r.file_count) > 0 ? '<a class="btn" style="font-size:12px;" href="/api/resources/' + r.id + '/download">Download</a>' : '') +
+      (isLink ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a>' : '') +
       '<button class="btn" style="font-size:12px;" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ')">' + (r.favourited ? 'Saved' : 'Save') + '</button>' +
-      '</span></div>' +
-      (r.description ? '<div style="font-size:13px;color:var(--muted);margin-top:4px;">' + escapeHtml(r.description) + '</div>' : '') +
-      '<div style="margin-top:6px;">' + (r.resource_type ? '<span class="acct-pill">' + escapeHtml(r.resource_type) + '</span> ' : '') + tags + '</div>' +
-      (r.safety_notes ? '<div style="font-size:12px;color:#b45309;margin-top:6px;">Safety: ' + escapeHtml(r.safety_notes) + '</div>' : '') +
-      '</div>';
-  }).join('');
+      '</span></div>';
+  }).join('') + '</div>';
+}
+
+/* ── Resource detail drawer ── */
+function rhOpenResource(id) {
+  var r = (window.__rhRows || {})[id];
+  var modal = document.getElementById('modal-res-detail');
+  var body = document.getElementById('rh-detail-body');
+  if (!r || !modal || !body) return;
+  var isLink = /^https?:\/\//i.test(r.external_url || '');
+  var kv = function (k, v) { return v ? '<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><span style="min-width:120px;color:var(--ink-soft);">' + k + '</span><span>' + v + '</span></div>' : ''; };
+  body.innerHTML =
+    '<div style="font-size:15px;font-weight:600;margin-bottom:6px;">' + escapeHtml(r.title) + '</div>' +
+    (r.description ? '<p class="rh-quiet">' + escapeHtml(r.description) + '</p>' : '') +
+    (r.usage_instructions ? '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;background:var(--border-soft);border-radius:8px;padding:10px 12px;margin:8px 0;">' + escapeHtml(r.usage_instructions) + '</div>' : '') +
+    kv('Type', escapeHtml(r.resource_type || '')) +
+    kv('Topics', (r.tags || []).map(function (t) { return escapeHtml(t.name); }).join(', ')) +
+    kv('Source', escapeHtml(r.source_reference || '')) +
+    kv('Last reviewed', r.approved_at ? new Date(r.approved_at).toLocaleDateString('en-AU') : '') +
+    (r.safety_notes ? kv('Safety', escapeHtml(r.safety_notes)) : '') +
+    '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">' +
+    (isLink ? '<a class="btn primary" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a>' : '') +
+    (Number(r.file_count) > 0 ? '<a class="btn primary" href="/api/resources/' + r.id + '/download">Download</a>' : '') +
+    '<button class="btn" onclick="resFav(\'' + r.id + '\',' + !r.favourited + ');rhCloseResource();">' + (r.favourited ? 'Saved' : 'Save') + '</button>' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-soft);">' +
+    'Was this helpful?' +
+    '<button class="btn" style="font-size:12px;" onclick="rhFeedback(\'' + r.id + '\',true)">Yes</button>' +
+    '<button class="btn" style="font-size:12px;" onclick="rhFeedback(\'' + r.id + '\',false)">No</button>' +
+    '<div style="flex:1"></div>' +
+    '<button class="btn" style="font-size:12px;" onclick="rhReport(\'' + r.id + '\')">Report a problem</button>' +
+    '</div>';
+  modal.classList.add('show');
+}
+function rhCloseResource() { var m = document.getElementById('modal-res-detail'); if (m) m.classList.remove('show'); }
+async function rhFeedback(id, helpful) {
+  await fetch('/api/resources/' + id + '/feedback', { method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ helpful: helpful }) }).catch(function () {});
+  showToast('Thanks', 'Your feedback was recorded for the practice owner.');
+}
+async function rhReport(id) {
+  await fetch('/api/resources/' + id + '/report', { method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Reported from resource detail' }) }).catch(function () {});
+  rhCloseResource();
+  showToast('Reported', 'The practice owner will review this resource.');
+  resReload();
 }
 
 /* Submit-for-review flow (existing backend: therapist POST creates a draft) */
@@ -7498,6 +7708,324 @@ async function rhModerate(id, action) {
     headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
   }).catch(function () {});
   resReload();
+}
+
+/* ── Starter Kits: guided workflows over existing starter content ── */
+var RH_KITS = [
+  { key: 'first-week', title: 'New therapist first-week setup', goal: 'Get set up to see clients confidently.', time: '~45 min', steps: [
+    { label: 'Complete your profile and work locations (My Profile)' },
+    { label: 'Read the induction resources', q: 'induction' },
+    { label: 'Review internal practice policies', q: 'policy' },
+    { label: 'Bookmark the report-writing templates', q: 'report' },
+  ]},
+  { key: 'first-session', title: 'First client session preparation', goal: 'Walk into the first session prepared.', time: '~30 min', steps: [
+    { label: 'Review fine-motor and handwriting starters', q: 'fine motor' },
+    { label: 'Pick a sensory-regulation resource', q: 'sensory' },
+    { label: 'Prepare a parent/carer handout', q: 'parent' },
+  ]},
+  { key: 'school-support', title: 'School-support resources', goal: 'Support school participation goals.', time: '~20 min', steps: [
+    { label: 'Review school participation resources', q: 'school' },
+    { label: 'Review executive functioning supports', q: 'executive' },
+  ]},
+  { key: 'report-prep', title: 'Report-writing preparation', goal: 'Draft NDIS-ready reports faster.', time: '~25 min', steps: [
+    { label: 'Open the NDIS/report writing templates', q: 'report' },
+    { label: 'Save the ones you use to My Saved Resources' },
+  ]},
+];
+var __rhKitProgress = {};
+
+async function rhLoadKitProgress() {
+  try {
+    var r = await fetch('/api/resources/kits/progress', { credentials: 'include' });
+    if (r.ok) __rhKitProgress = (await r.json()).progress || {};
+  } catch (_) {}
+}
+
+function rhRenderKits() {
+  var host = document.getElementById('rh-kits');
+  if (!host) return;
+  host.innerHTML = RH_KITS.map(function (kit) {
+    var done = __rhKitProgress[kit.key] || [];
+    var pct = Math.round((done.length / kit.steps.length) * 100);
+    return '<div class="rh-kit">' +
+      '<div style="display:flex;align-items:baseline;gap:10px;">' +
+      '<div style="font-size:14px;font-weight:600;flex:1;">' + kit.title + '</div>' +
+      '<span class="rh-quiet" style="margin:0;">' + kit.time + ' · ' + pct + '% complete</span></div>' +
+      '<p class="rh-quiet">' + kit.goal + '</p>' +
+      kit.steps.map(function (st, i) {
+        var id = kit.key + '-' + i;
+        var checked = done.includes(String(i));
+        return '<div class="rh-kit-step' + (checked ? ' done' : '') + '">' +
+          '<input type="checkbox" id="ks-' + id + '"' + (checked ? ' checked' : '') +
+          ' onchange="rhToggleKitStep(\'' + kit.key + '\',' + i + ',this.checked)">' +
+          '<label for="ks-' + id + '">' + st.label +
+          (st.q ? ' <a style="color:var(--accent-deep);cursor:pointer;" onclick="rhKitSearch(\'' + st.q + '\')">View resources</a>' : '') +
+          '</label></div>';
+      }).join('') + '</div>';
+  }).join('');
+  rhLoadKitProgress().then(function () {
+    // re-render once real progress arrives (cheap; avoids flicker on first paint)
+    if (rhSection === 'kits') {
+      var host2 = document.getElementById('rh-kits');
+      if (host2 && !host2.dataset.fresh) { host2.dataset.fresh = '1'; rhRenderKits(); }
+    }
+  });
+}
+
+function rhKitSearch(q) {
+  document.getElementById('res-search').value = q;
+  rhSetSection('all');
+}
+
+async function rhToggleKitStep(kitKey, idx, on) {
+  var done = new Set(__rhKitProgress[kitKey] || []);
+  if (on) done.add(String(idx)); else done.delete(String(idx));
+  __rhKitProgress[kitKey] = Array.from(done);
+  rhRenderKits();
+  await fetch('/api/resources/kits/' + encodeURIComponent(kitKey) + '/progress', {
+    method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ completedSteps: __rhKitProgress[kitKey] }),
+  }).catch(function () {});
+}
+
+/* ── AI Resource Studio: local drafts + owner review (no provider calls) ── */
+async function rhLoadDrafts() {
+  var list = document.getElementById('rh-draft-list');
+  if (!list) return;
+  try {
+    var cfg = await fetch('/api/resources/ai-drafts/config', { credentials: 'include' }).then(function (r) { return r.json(); });
+    var note = document.getElementById('rh-ai-mode-note');
+    if (note && cfg && cfg.aiEnabled) note.textContent = 'AI drafting is enabled — generated drafts are always labelled and require therapist review.';
+  } catch (_) {}
+  var d = await fetch('/api/resources/ai-drafts', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : { drafts: [] }; }).catch(function () { return { drafts: [] }; });
+  var drafts = d.drafts || [];
+  window.__rhDrafts = {};
+  drafts.forEach(function (x) { window.__rhDrafts[x.id] = x; });
+  list.innerHTML = drafts.length ? drafts.map(function (x) {
+    return '<div class="rh-item"><div style="display:flex;align-items:center;gap:8px;">' +
+      '<span style="flex:1;font-weight:600;font-size:13px;">' + escapeHtml(x.title) + '</span>' +
+      '<span class="rh-status-chip">' + escapeHtml(String(x.status).replace(/_/g, ' ')) + '</span></div>' +
+      '<div style="display:flex;gap:6px;margin-top:6px;">' +
+      (x.status === 'private_draft' || x.status === 'changes_requested'
+        ? '<button class="btn" style="font-size:12px;" onclick="rhEditDraft(\'' + x.id + '\')">Edit</button>' +
+          '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'submit\')">Submit for review</button>' : '') +
+      (x.review_comment ? '<span class="rh-quiet" style="margin:0;">Reviewer: ' + escapeHtml(x.review_comment) + '</span>' : '') +
+      '</div></div>';
+  }).join('') : '<div class="rh-quiet">No drafts yet — create one on the left. Drafts stay private until you submit them.</div>';
+
+  var qwrap = document.getElementById('rh-review-queue-wrap');
+  if (rhIsOwner() && qwrap) {
+    qwrap.style.display = '';
+    var q = await fetch('/api/resources/ai-drafts?queue=1', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : { drafts: [] }; }).catch(function () { return { drafts: [] }; });
+    var qd = q.drafts || [];
+    document.getElementById('rh-review-queue').innerHTML = qd.length ? qd.map(function (x) {
+      return '<div class="rh-item"><div style="font-weight:600;font-size:13px;">' + escapeHtml(x.title) + '</div>' +
+        '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(x.author || '') + '</div>' +
+        '<div style="display:flex;gap:6px;">' +
+        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'approve\')">Approve &amp; publish</button>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'request-changes\')">Request changes</button>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'decline\')">Decline</button>' +
+        '</div></div>';
+    }).join('') : '<div class="rh-quiet">Nothing waiting for review.</div>';
+  }
+}
+
+function rhClearDraftForm() {
+  ['rhd-id', 'rhd-title', 'rhd-topic', 'rhd-instructions', 'rhd-content'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+}
+
+function rhEditDraft(id) {
+  var x = (window.__rhDrafts || {})[id];
+  if (!x) return;
+  document.getElementById('rhd-id').value = x.id;
+  document.getElementById('rhd-title').value = x.title || '';
+  document.getElementById('rhd-topic').value = x.topic || '';
+  document.getElementById('rhd-instructions').value = x.instructions || '';
+  document.getElementById('rhd-content').value = x.content || '';
+}
+
+async function rhSaveDraft(alsoSubmit) {
+  var err = document.getElementById('rhd-err');
+  var title = (document.getElementById('rhd-title').value || '').trim();
+  if (!title) { err.textContent = 'A title is required.'; err.style.display = ''; return; }
+  err.style.display = 'none';
+  var id = document.getElementById('rhd-id').value;
+  var payload = {
+    title: title,
+    resourceType: document.getElementById('rhd-type').value,
+    topic: document.getElementById('rhd-topic').value,
+    audience: document.getElementById('rhd-audience').value,
+    tone: document.getElementById('rhd-tone').value,
+    instructions: document.getElementById('rhd-instructions').value,
+    content: document.getElementById('rhd-content').value,
+  };
+  var r = await fetch('/api/resources/ai-drafts' + (id ? '/' + id : ''), {
+    method: id ? 'PATCH' : 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }).catch(function () { return null; });
+  if (!r || !r.ok) { err.textContent = 'Could not save the draft.'; err.style.display = ''; return; }
+  var saved = await r.json().catch(function () { return {}; });
+  var draftId = id || (saved.draft && saved.draft.id);
+  if (alsoSubmit && draftId) await rhDraftAction(draftId, 'submit', true);
+  rhClearDraftForm();
+  showToast('Draft saved', alsoSubmit ? 'Submitted for the owner\'s review.' : 'Saved privately to My drafts.');
+  rhLoadDrafts();
+}
+
+async function rhDraftAction(id, action, quiet) {
+  var body;
+  if (action === 'request-changes') body = JSON.stringify({ comment: prompt('What should change?') || 'Please revise' });
+  if (action === 'decline') body = JSON.stringify({ comment: 'Not suitable for the shared library' });
+  await fetch('/api/resources/ai-drafts/' + id + '/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
+  }).catch(function () {});
+  if (!quiet) rhLoadDrafts();
+  if (action === 'approve') { showToast('Published', 'The draft is now an approved library resource.'); resReload(); }
+}
+
+/* ── Therapy Store: catalogue + local purchase workflow ── */
+async function rhLoadStore() {
+  rhLoadCatalogue();
+  rhLoadRequests();
+}
+
+async function rhLoadCatalogue() {
+  var host = document.getElementById('rh-catalogue');
+  if (!host) return;
+  var q = encodeURIComponent((document.getElementById('rh-store-search') || {}).value || '');
+  var d = await fetch('/api/resources?type=product_link&q=' + q, { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+  var rows = d.resources || [];
+  host.innerHTML = rows.length ? rows.map(function (r) {
+    var host2 = '';
+    try { host2 = new URL(r.external_url).hostname.replace(/^www\./, ''); } catch (_) {}
+    return '<div class="rh-item"><div style="font-weight:600;font-size:13px;">' + escapeHtml(r.title) + '</div>' +
+      (r.description ? '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(r.description) + '</div>' : '') +
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+      (host2 ? '<span class="rh-quiet" style="margin:0;">' + escapeHtml(host2) + '</span>' : '') +
+      '<div style="flex:1"></div>' +
+      (/^https?:\/\//i.test(r.external_url || '') ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a>' : '') +
+      '<button class="btn" style="font-size:12px;" onclick="rhOpenPurchase(\'' + escapeHtml(r.title).replace(/'/g, '') + '\',\'' + escapeHtml(r.external_url || '') + '\')">Request to buy</button>' +
+      '</div></div>';
+  }).join('') : '<div class="rh-quiet">No products in the catalogue yet — approved product links appear here.</div>';
+}
+
+var RH_PR_STATUS_LABEL = { draft: 'Draft', submitted: 'Submitted', changes_requested: 'Changes requested',
+  approved: 'Approved', declined: 'Declined', ordered: 'Ordered', received: 'Received', cancelled: 'Cancelled' };
+
+async function rhLoadRequests() {
+  var host = document.getElementById('rh-requests');
+  if (!host) return;
+  var title = document.getElementById('rh-req-title');
+  if (title && rhIsOwner()) title.textContent = 'Purchase requests';
+  var d = await fetch('/api/purchases', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+  var rows = d.requests || [];
+  window.__rhReqs = {};
+  rows.forEach(function (x) { window.__rhReqs[x.id] = x; });
+  host.innerHTML = rows.length ? rows.map(function (x) {
+    var cost = x.approx_cost_cents ? '$' + (x.approx_cost_cents / 100).toFixed(2) : '';
+    var mine = window.APP_USER && x.requester_user_id === window.APP_USER.id;
+    var actions = '';
+    if (rhIsOwner() && (x.status === 'submitted' || x.status === 'changes_requested')) {
+      actions = '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'approve\')">Approve</button>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'request-changes\')">Request changes</button>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'decline\')">Decline</button>';
+    } else if (rhIsOwner() && x.status === 'approved') {
+      actions = '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'mark-ordered\')">Mark ordered</button>';
+    } else if (rhIsOwner() && x.status === 'ordered') {
+      actions = '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'mark-received\')">Mark received</button>';
+    } else if (mine && (x.status === 'draft' || x.status === 'changes_requested')) {
+      actions = '<button class="btn" style="font-size:12px;" onclick="rhEditPurchase(\'' + x.id + '\')">Edit</button>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'submit\')">Submit</button>';
+    } else if (mine && x.status === 'submitted') {
+      actions = '<button class="btn" style="font-size:12px;" onclick="rhPurchaseAction(\'' + x.id + '\',\'cancel\')">Cancel</button>';
+    }
+    return '<div class="rh-item"><div style="display:flex;align-items:center;gap:8px;">' +
+      '<span style="flex:1;font-weight:600;font-size:13px;">' + escapeHtml(x.product_name) + '</span>' +
+      (cost ? '<span class="rh-quiet" style="margin:0;">' + cost + '</span>' : '') +
+      '<span class="rh-status-chip">' + (RH_PR_STATUS_LABEL[x.status] || x.status) + '</span></div>' +
+      (x.owner_comment ? '<div class="rh-quiet" style="margin:2px 0 0;">Owner: ' + escapeHtml(x.owner_comment) + '</div>' : '') +
+      (actions ? '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">' + actions + '</div>' : '') +
+      '</div>';
+  }).join('') : '<div class="rh-quiet">No purchase requests yet. Use New request, or Request to buy from the catalogue.</div>';
+}
+
+function rhOpenPurchase(name, url) {
+  document.getElementById('rhp-id').value = '';
+  if (typeof name === 'string') document.getElementById('rhp-name').value = name;
+  if (typeof url === 'string') document.getElementById('rhp-url').value = url;
+  document.getElementById('modal-purchase').classList.add('show');
+}
+function rhClosePurchase() { document.getElementById('modal-purchase').classList.remove('show'); }
+
+function rhEditPurchase(id) {
+  var x = (window.__rhReqs || {})[id];
+  if (!x) return;
+  rhOpenPurchase();
+  document.getElementById('rhp-id').value = x.id;
+  document.getElementById('rhp-name').value = x.product_name || '';
+  document.getElementById('rhp-url').value = x.product_url || '';
+  document.getElementById('rhp-supplier').value = x.supplier || '';
+  document.getElementById('rhp-qty').value = x.quantity || 1;
+  document.getElementById('rhp-cost').value = x.approx_cost_cents ? (x.approx_cost_cents / 100) : '';
+  document.getElementById('rhp-use').value = x.intended_use || '';
+  document.getElementById('rhp-rationale').value = x.clinical_rationale || '';
+}
+
+async function rhSavePurchase(alsoSubmit) {
+  var err = document.getElementById('rhp-err');
+  var name = (document.getElementById('rhp-name').value || '').trim();
+  if (!name) { err.textContent = 'A product name is required.'; err.style.display = ''; return; }
+  err.style.display = 'none';
+  var id = document.getElementById('rhp-id').value;
+  var cost = parseFloat(document.getElementById('rhp-cost').value);
+  var payload = {
+    productName: name,
+    productUrl: (document.getElementById('rhp-url').value || '').trim() || undefined,
+    supplier: document.getElementById('rhp-supplier').value || undefined,
+    quantity: parseInt(document.getElementById('rhp-qty').value, 10) || 1,
+    approxCostCents: Number.isFinite(cost) ? Math.round(cost * 100) : undefined,
+    costCheckedOn: document.getElementById('rhp-checked').value || undefined,
+    intendedUse: document.getElementById('rhp-use').value || undefined,
+    clinicalRationale: document.getElementById('rhp-rationale').value || undefined,
+    clientReference: document.getElementById('rhp-client').value || undefined,
+    alternativeOption: document.getElementById('rhp-alt').value || undefined,
+    safetyConsiderations: document.getElementById('rhp-safety').value || undefined,
+    submit: !!alsoSubmit && !id,
+  };
+  var r = await fetch('/api/purchases' + (id ? '/' + id : ''), {
+    method: id ? 'PATCH' : 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }).catch(function () { return null; });
+  if (!r || !r.ok) { err.textContent = 'Could not save the request.'; err.style.display = ''; return; }
+  if (id && alsoSubmit) {
+    var created = await r.json().catch(function () { return {}; });
+    await fetch('/api/purchases/' + id + '/submit', { method: 'POST', credentials: 'include' }).catch(function () {});
+  }
+  rhClosePurchase();
+  showToast(alsoSubmit ? 'Request submitted' : 'Draft saved',
+    alsoSubmit ? 'The practice owner will review it.' : 'Saved to your requests.');
+  rhLoadRequests();
+}
+
+async function rhPurchaseAction(id, action) {
+  var body;
+  if (action === 'approve') body = JSON.stringify({ comment: prompt('Approval note (optional):') || undefined });
+  if (action === 'request-changes') body = JSON.stringify({ comment: prompt('What should change?') || 'Please revise' });
+  if (action === 'decline') body = JSON.stringify({ comment: prompt('Reason (optional):') || undefined });
+  if (action === 'mark-ordered') body = JSON.stringify({ poReference: prompt('Purchase order / reference:') || undefined });
+  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: prompt('Invoice / receipt reference (optional):') || undefined });
+  await fetch('/api/purchases/' + id + '/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
+  }).catch(function () {});
+  rhLoadRequests();
 }
 async function resFav(id, on) {
   await fetch('/api/resources/' + id + '/favourite', { method: on ? 'POST' : 'DELETE', credentials: 'include' });
@@ -18750,7 +19278,7 @@ function lbOpenEntry(id, isRestore) {
     ${kv('Appointment', apptLine)}
     ${kv('Date & time', `${_lbFmtDate(e.appointmentStart || e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) + '–' + _lbFmtTime(e.appointmentEnd) + ' AWST' : ''}`)}
     ${kv('Destination', escapeHtml(e.destinationAddress || 'Address missing'))}
-    ${kv('Source system', e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual'))}
+    ${kv('Source system', '<span class="lb-src">Source: ' + (e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual')) + '</span>')}
     ${kv('Calculation status', statusLabel)}
     ${kv('Recorded', e.createdAt ? _lbFmtDate(e.createdAt) : '—')}
     ${e.appointmentId ? kv('Appointment reference', '<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);">' + escapeHtml(String(e.appointmentId)) + '</span>') : ''}

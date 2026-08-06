@@ -304,7 +304,7 @@ describe('travel logbook redesign', () => {
     expect(HTML).not.toContain('✅ Splose support items');
     expect(HTML).not.toContain('📅 Calendar-derived (current week)');
     expect(HTML).toContain('class="lb-src"');
-    expect(HTML).toContain("Source: ${e.source === 'splose' ? 'Splose'");
+    expect(HTML).toContain("Source: ' + (e.source === 'splose' ? 'Splose'");
   });
 
   test('kilometre rate comes from the org setting, not a hardcode', () => {
@@ -317,7 +317,7 @@ describe('travel logbook redesign', () => {
   test('rows are clickable + keyboard-focusable and open the detail panel', () => {
     expect(HTML).toContain('class="lb-row" tabindex="0" role="button"');
     expect(HTML).toContain("onkeydown=\"if(event.key==='Enter'||event.key===' ')");
-    expect(HTML).toContain('function lbOpenEntry(id)');
+    expect(HTML).toContain('function lbOpenEntry(id, isRestore)');
     expect(HTML).toContain('id="modal-travel-entry"');
     expect(HTML).toContain('.lb-row:focus-visible');
   });
@@ -347,56 +347,65 @@ describe('travel logbook redesign', () => {
   });
 });
 
-// ── Resource Hub Phase 1 shell (2026-08-06) ──────────────────────────────────
-describe('resource hub three-area shell', () => {
+// ── Resource Hub V1 (2026-08-06) ─────────────────────────────────────────────
+describe('resource hub v1', () => {
   const view = () => HTML.slice(HTML.indexOf('<section class="view" id="view-resources">'),
                                 HTML.indexOf('<!-- ============ ACCOUNTING TAB'));
 
-  test('three clearly separated areas render, future areas marked not enabled', () => {
+  test('three functional areas — no Coming Soon, no disabled tabs', () => {
     const v = view();
-    expect(v).toContain('>Shared Resources</button>');
-    expect(v).toContain('AI Resource Studio<span class="rh-soon">Coming soon</span>');
-    expect(v).toContain('Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span>');
-    expect(v).toContain('id="rh-panel-shared"');
-    expect(v).toContain('id="rh-panel-ai"');
-    expect(v).toContain('id="rh-panel-store"');
-    expect(HTML).toContain('function rhSwitch(area)');
+    expect(v).toContain('>Resource Library</button>');
+    expect(v).toContain('>AI Resource Studio</button>');
+    expect(v).toContain('Therapy Store &amp; Purchase Requests</button>');
+    expect(v).not.toContain('Coming soon');
+    expect(v).not.toContain('rh-soon">Not enabled');
   });
 
-  test('AI studio is disabled-only: safety copy present, no provider call exists', () => {
-    const v = view();
-    expect(v).toContain('AI-generated resources will be drafts requiring therapist review before use.');
-    expect(v).toContain('Client-identifying or sensitive clinical information must not be sent to AI');
-    expect(v).toContain('<button class="btn primary" disabled title="Not enabled">Generate draft</button>');
-    // no AI endpoint is called anywhere in the app
-    expect(HTML).not.toMatch(/fetch\(['"][^'"]*\/api\/(ai|generate|llm)/i);
+  test('library has sections, search, filters, reset and saved view', () => {
+    expect(HTML).toContain("{ key: 'saved',     label: 'My Saved Resources' }");
+    expect(HTML).toContain("{ key: 'kits',      label: 'Starter Kits' }");
+    expect(HTML).toContain("rhSection === 'saved' ? '&saved=1' : ''");
+    expect(HTML).toContain('function rhResetFilters()');
+    expect(HTML).toContain('function rhOpenResource(id)');
+    expect(HTML).toContain("rhFeedback(");
+    expect(HTML).toContain("rhReport(");
   });
 
-  test('store panel is a static foundation with the approval workflow + notes', () => {
+  test('starter kits are guided workflows with per-user progress', () => {
+    expect(HTML).toContain('var RH_KITS = [');
+    expect(HTML).toContain("fetch('/api/resources/kits/progress'");
+    expect(HTML).toContain('function rhToggleKitStep(kitKey, idx, on)');
+  });
+
+  test('AI studio is a local draft workspace — no provider call exists', () => {
     const v = view();
-    expect(v).toContain('<span class="step">Therapist request</span>');
-    expect(v).toContain('<span class="step">Owner review</span>');
-    expect(v).toContain('<span class="step">Admin purchase order check</span>');
-    expect(v).toContain('<span class="step">Accounting handoff</span>');
-    expect(v).toContain('approval checkpoint before');
+    expect(v).toContain('AI generation is not enabled yet');
+    expect(v).toContain('Do not include client-identifying or sensitive clinical information.');
+    expect(v).toContain('>Create manual draft</button>');
+    expect(HTML).toContain("fetch('/api/resources/ai-drafts/config'");
+    expect(HTML).not.toMatch(/fetch\(['"][^'"]*\/api\/(ai|generate|llm)\b/i);
+  });
+
+  test('store runs the local purchase workflow only — no accounting calls', () => {
+    const v = view();
+    expect(HTML).toContain("fetch('/api/purchases'");
+    expect(HTML).toContain('function rhSavePurchase(alsoSubmit)');
+    expect(HTML).toContain('function rhPurchaseAction(id, action)');
     expect(v).toContain('Tax treatment is an accounting-review field');
-    expect(v).toContain('Purchase Order Created');
-    // no purchase/xero calls from the store panel
-    expect(v).not.toMatch(/fetch\([^)]*(xero|purchase|order)/i);
+    expect(v).toContain('nothing is sent externally from this portal');
+    expect(v).not.toMatch(/fetch\([^)]*xero/i);
   });
 
-  test('submit flow exists with the client-privacy reminder; no emojis in hub', () => {
+  test('submit flow keeps the client-privacy reminder; no emojis in hub', () => {
     const v = view();
     expect(v).toContain('Do not upload client-identifying information.');
     expect(HTML).toContain('function rhSubmitResource()');
     for (const e of ['★', '☆', '⚠ ', '📚', '🤖', '🛒']) expect(v).not.toContain(e);
     expect(HTML).toContain("(r.favourited ? 'Saved' : 'Save')");
-    expect(HTML).toContain("Safety: ' + escapeHtml(r.safety_notes)");
   });
 
-  test('owner-only moderation is role-gated in UI (backend enforces separately)', () => {
+  test('owner-only moderation stays role-gated in UI (backend enforces separately)', () => {
     expect(HTML).toContain("function rhIsOwner() { return !!(window.APP_USER && window.APP_USER.role === 'owner'); }");
-    expect(HTML).toContain('rhIsOwner() && (r.status ===');
     expect(HTML).toContain("statusSel.style.display = rhIsOwner()");
   });
 });
@@ -462,8 +471,9 @@ describe('calendar workspace redesign', () => {
 describe('travel logbook journey view', () => {
   test('journey list replaces the technical table (no Source/Type columns)', () => {
     expect(HTML).toContain('class="lb-j-route"');
-    expect(HTML).not.toContain('<th>Source</th>');
-    expect(HTML).not.toContain('<th>Type</th>');
+    const lbRenderer = HTML.slice(HTML.indexOf('function _renderLogbookFromData'), HTML.indexOf('function lbTravelBreakdownHtml'));
+    expect(lbRenderer).not.toContain('<th>');
+    expect(lbRenderer).not.toContain('lb-src'); // source label lives in the detail panel only
     expect(HTML).toContain("'Round trip · ' : hasTo ? 'To ' : hasFrom ? 'From '");
   });
 

@@ -35,7 +35,7 @@ describe('escaping guards on user-authored render sinks', () => {
     '<strong>${escapeHtml(c.issuing_body)}</strong>',
     'Reg: ${escapeHtml(c.registration_number)}',
     // Resource Hub cards
-    "'<strong>' + escapeHtml(r.title) + '</strong>",
+    'rh-res-title">\' + escapeHtml(r.title)',
     'escapeHtml(r.description)',
     'escapeHtml(r.safety_notes)',
     'escapeHtml(t.name)',
