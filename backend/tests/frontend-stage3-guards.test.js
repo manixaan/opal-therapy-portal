@@ -217,7 +217,7 @@ describe('role-based navigation (RBAC)', () => {
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
     const adminCfg = HTML.slice(HTML.indexOf('admin: {', roleNav), HTML.indexOf("therapist: { primary", roleNav));
-    expect(adminCfg).toContain("label: 'Travel'");
+    expect(adminCfg).toContain("label: 'Menu'");
     expect(adminCfg).not.toContain('accounting');
     expect(adminCfg).not.toContain('billing');
   });
@@ -579,5 +579,57 @@ describe('calendar clean status indicators', () => {
     // breaking closeBookingPanel at runtime. Pin declaration + consumers.
     expect(HTML).toContain('const _previewBlocks = []; // { el, col }');
     expect(HTML.indexOf('const _previewBlocks')).toBeLessThan(HTML.indexOf('function clearPreviewBlocks()'));
+  });
+});
+
+// ── Contextual Smart Booking + interaction pass (2026-08-07) ─────────────────
+describe('contextual smart booking + interaction pass', () => {
+  test('Smart Booking is no longer a top-level nav destination', () => {
+    const roleNav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
+    expect(roleNav).not.toContain("'book'");
+    // contextual launch still works for booking-capable roles
+    expect(HTML).toContain("(name === 'book' && window.APP_USER && window.APP_USER.role !== 'read_only')");
+  });
+
+  test('test/seed therapist records are excluded from the booking selector', () => {
+    expect(HTML).toContain('var BSP_TEST_NAME_RE =');
+    expect(HTML).toContain('!BSP_TEST_NAME_RE.test(t.displayName');
+    expect(HTML).toContain('Booking for:');
+  });
+
+  test('stepper: four even steps on desktop, compact label on narrow screens', () => {
+    expect(HTML).toContain('id="stepper-compact"');
+    expect(HTML).toContain("'Step ' + n + ' of 4: ' + _lbl");
+    expect(HTML).toContain(".setAttribute('aria-current', 'step')");
+  });
+
+  test('contextual account panel behaves (focus return, Escape, outside click)', () => {
+    expect(HTML).toContain('function toggleAccountMenu(forceOrEvent)');
+    expect(HTML).toContain('trigger.focus(); // focus returns to the trigger on close');
+    expect(HTML).toContain("toggleAccountMenu(false); }");
+  });
+
+  test('motion system with reduced-motion support', () => {
+    expect(HTML).toContain('--ease-out: cubic-bezier');
+    expect(HTML).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(HTML).toContain('transition-duration: 0.01ms !important;');
+  });
+
+  test('admin purchasing queue view exists and is nav-gated to admin', () => {
+    expect(HTML).toContain('id="view-purchases"');
+    expect(HTML).toContain('function admLoadPurchases()');
+    const roleNav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
+    const adminCfg = roleNav.slice(roleNav.indexOf('admin: {'), roleNav.indexOf('therapist:'));
+    expect(adminCfg).toContain("['Operations', ['purchases']]");
+    const ownerCfg = roleNav.slice(roleNav.indexOf('owner: {'), roleNav.indexOf('admin: {'));
+    expect(ownerCfg).not.toContain('purchases');
+  });
+
+  test('calendar/booking emoji sweep held', () => {
+    expect(HTML).not.toContain('👁 Outlook-only');
+    expect(HTML).not.toContain("owner: '👑'");
+    expect(HTML).not.toContain('⚡ Auto-fit');
+    expect(HTML).not.toContain('`✅ Synced');
+    expect(HTML).not.toContain('📍 Cluster by region');
   });
 });

@@ -888,6 +888,38 @@
     line-height: 1.3;
   }
   .tab .tab-icon { font-size: 14px; }
+  /* ── Motion system (2026-08-07): one restrained language ──
+     hover/press 120-180ms · menus 160-220ms · panels 220-320ms;
+     ease-out entering, ease-in leaving. Reduced motion collapses it all. */
+  :root { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); }
+  .nav-more-menu, .hdr-account-menu {
+    transform-origin: top right;
+    animation: menuIn 180ms var(--ease-out);
+  }
+  @keyframes menuIn { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  /* Contextual account panel (header user chip) */
+  .hdr-account-wrap { position: relative; }
+  .hdr-account-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 1300;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow-md); padding: 6px; min-width: 190px; display: none;
+  }
+  .hdr-account-menu.open { display: block; }
+  .hdr-account-menu button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    padding: 8px 10px; font-size: 13px; color: var(--ink); border-radius: 7px;
+    cursor: pointer; font-family: inherit;
+  }
+  .hdr-account-menu button:hover { background: var(--accent-soft); }
+
   /* Role-nav dropdown (More / Travel) — holds the real tab buttons */
   .nav-more-wrap { position: relative; display: flex; align-items: stretch; }
   .nav-more-menu {
@@ -1017,13 +1049,19 @@
 
   /* Stepper */
   .stepper {
-    display: flex; align-items: center;
-    padding: 14px 16px 8px;
-    gap: 6px;
+    display: flex; align-items: flex-start;
+    padding: 16px 18px 10px;
+    gap: 0;
   }
   .step {
-    display: flex; align-items: center; gap: 8px;
-    color: var(--muted); font-size: 12px;
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 11.5px; text-align: center; min-width: 0;
+  }
+  .step > div:last-child { line-height: 1.25; }
+  .stepper-compact { display: none; font-size: 13px; font-weight: 600; color: var(--ink); padding: 14px 18px 8px; }
+  @media (max-width: 700px) {
+    .stepper .step, .stepper .step-line { display: none; }
+    .stepper-compact { display: block; }
   }
   .step-num {
     width: 22px; height: 22px; border-radius: 50%;
@@ -1036,10 +1074,28 @@
   .step.active .step-num { background: var(--accent); color: white; }
   .step.active           { color: var(--ink); font-weight: 600; }
   .step.done             { color: var(--ok); }
-  .step-line { flex: 0 0 24px; height: 2px; background: var(--border); border-radius: 1px; }
+  .step-line { flex: 1; max-width: 48px; height: 2px; background: var(--border); border-radius: 1px; margin-top: 11px; }
   .step.done + .step-line { background: var(--ok-soft); }
 
   .step-body { padding: 12px 18px 18px; }
+  /* Booking-type options: calm full-row targets, small inline line icons */
+  .booking-cat-chips { display: flex; flex-direction: column; gap: 8px; }
+  .booking-cat-chip {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel); text-align: left; cursor: pointer; font-family: inherit;
+    transition: border-color 120ms, background 120ms;
+  }
+  .booking-cat-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .booking-cat-chip.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .booking-cat-chip .bcat-icon {
+    width: 20px; height: 20px; border-radius: 0; background: none !important;
+    color: var(--accent-deep); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .booking-cat-chip .bcat-icon svg { width: 18px; height: 18px; }
+  .bcat-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .bcat-desc { font-size: 12px; color: var(--muted); margin-top: 1px; }
   .step-body p.lead { color: var(--ink-soft); margin: 0 0 14px; }
 
   /* Patient picker */
@@ -3503,18 +3559,19 @@
 
   <!-- Current user chip + sign out -->
   <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid var(--border,#dde3ec);padding-left:12px;">
-    <span id="app-user-chip"
-      style="font-size:12px;font-weight:500;color:var(--ink-soft,#6b7280);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;"
-      title="Loading…">
-      Loading…
+    <span class="hdr-account-wrap">
+      <button id="app-user-chip" type="button" aria-haspopup="true" aria-expanded="false"
+        onclick="toggleAccountMenu(event)"
+        style="font-size:12px;font-weight:500;color:var(--ink-soft,#6b7280);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;background:none;border:1px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;"
+        title="Account">
+        Loading…
+      </button>
+      <div class="hdr-account-menu" id="hdr-account-menu" role="menu" aria-label="Account">
+        <button role="menuitem" onclick="toggleAccountMenu();switchTab('profile')">My Profile</button>
+        <button role="menuitem" id="acct-settings-item" style="display:none;" onclick="toggleAccountMenu();switchTab('settings')">Settings</button>
+        <button role="menuitem" onclick="window.signOut()">Sign out</button>
+      </div>
     </span>
-    <button
-      class="icon-btn"
-      title="Sign out"
-      onclick="window.signOut()"
-      style="font-size:13px;padding:4px 8px;border-radius:6px;">
-      ⏻
-    </button>
   </div>
 </header>
 
@@ -3545,7 +3602,11 @@
   <button class="tab" data-tab="logbook">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg> Travel Logbook
   </button>
-  <button class="tab" data-tab="resources">
+  <button class="tab" data-tab="purchases" data-help="tab-purchases" style="display:none;">
+  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+  Purchasing
+</button>
+<button class="tab" data-tab="resources">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Resources
   </button>
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
@@ -3842,7 +3903,8 @@
       </h2>
 
       <!-- Stepper -->
-      <div class="stepper" id="stepper">
+      <div class="stepper-compact" id="stepper-compact" aria-live="polite"></div>
+      <div class="stepper" id="stepper" aria-label="Booking progress">
         <div class="step active" data-step="1"><div class="step-num">1</div><div>Booking Type</div></div>
         <div class="step-line"></div>
         <div class="step" data-step="2"><div class="step-num">2</div><div>Session type</div></div>
@@ -4176,7 +4238,7 @@
 
         <div class="slots-toolbar" data-help="booking-slot-filters">
           <span class="filter-pill on">All filters on</span>
-          <span class="filter-pill on">📍 Cluster by region</span>
+          <span class="filter-pill on">Cluster by region</span>
           <span class="filter-pill on">⚖ Balance day intensity</span>
           <span class="filter-pill on">Plan capacity</span>
           <span class="filter-pill">🌅 Morning preferred</span>
@@ -4315,7 +4377,7 @@
       <div id="cal-sync-strip" class="cal-sync-strip" title="Outlook sync status — click to refresh or fix calendar" data-help="cal-sync-strip">
         <div class="sync-dot-sm disconnected" id="cal-sync-dot"></div>
         <span id="cal-sync-label">Not connected</span>
-        <button class="btn cal-outlook-only-btn" id="btn-outlook-only" style="display:none;font-size:12px;" onclick="toggleOutlookOnly(this)" title="Owner/admin: show only genuine Outlook events for 1:1 comparison">👁 Outlook-only</button>
+        <button class="btn cal-outlook-only-btn" id="btn-outlook-only" style="display:none;font-size:12px;" onclick="toggleOutlookOnly(this)" title="Owner/admin: show only genuine Outlook events for 1:1 comparison">Outlook-only</button>
         <div class="cal-sync-menu" id="cal-sync-menu">
           <div class="menu-label">Outlook Calendar</div>
           <button onclick="refreshOutlookSync()">
@@ -4511,6 +4573,14 @@
 
 
 <!-- ============ RESOURCES TAB (Resource Hub R1) ============ -->
+<section class="view" id="view-purchases">
+<div class="acct-page">
+  <h1 style="margin:0 0 4px;">Purchasing queue</h1>
+  <p style="color:var(--muted);margin:0 0 14px;">Approved purchase requests ready for processing. Supplier confirmation, purchase-order reference and receipt are recorded here — nothing is sent externally, and the accounting handoff stays a status.</p>
+  <div id="adm-purchases" class="rh-quiet">Loading…</div>
+</div>
+</section>
+
 <section class="view" id="view-resources">
 <style>
   .rh-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
@@ -6311,7 +6381,7 @@
               <label style="font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:4px;">Role <span style="color:var(--danger);">*</span></label>
               <select class="settings-select" id="invite-role" style="width:100%;box-sizing:border-box;">
                 <option value="therapist">🩺 Therapist</option>
-                <option value="read_only">👁️ Read-only</option>
+                <option value="read_only">Read-only</option>
                 <option value="admin">🛡️ Admin</option>
                 <option value="owner">👑 Owner</option>
               </select>
@@ -7377,7 +7447,7 @@ window.APP_USER = null;
     // Render user identity in the header if the element exists
     const userChip = document.getElementById('app-user-chip');
     if (userChip && window.APP_USER) {
-      const roleBadge = { owner: '👑', admin: '🛠️', therapist: '🩺', read_only: '👁️' }[window.APP_USER.role] || '';
+      const roleBadge = '';
       userChip.textContent = `${roleBadge} ${window.APP_USER.name}`;
       userChip.title = `${window.APP_USER.email} · ${window.APP_USER.role}`;
     }
@@ -8395,7 +8465,7 @@ function applyReadOnlyGuards() {
   // 2. JS: intercept write-action entry points that are built dynamically.
   //    Wrapped on load (functions are declared later in this file).
   const explain = () => {
-    if (typeof showToast === 'function') showToast('👁️ Read-only account', 'This action is not available for read-only access');
+    if (typeof showToast === 'function') showToast('Read-only account', 'This action is not available for read-only access');
     else alert('Read-only account — this action is not available.');
   };
   const wrapWrites = () => {
@@ -8539,7 +8609,13 @@ function goStep(n) {
     const k = parseInt(el.dataset.step, 10);
     el.classList.toggle('done',   k <  n);
     el.classList.toggle('active', k === n);
+    if (k === n) el.setAttribute('aria-current', 'step'); else el.removeAttribute('aria-current');
   });
+  var _sc = document.getElementById('stepper-compact');
+  if (_sc) {
+    var _lbl = { 1: 'Booking Type', 2: 'Session type', 3: 'Suggested slots', 4: 'Confirm' }[n] || '';
+    _sc.textContent = 'Step ' + n + ' of 4: ' + _lbl;
+  }
   // Step-3 entry triggers a fresh suggestion compute against the live
   // SESSIONS state — empty calendar → empty-state reasons; partial calendar
   // → real cluster/intensity reasons. Right-context panels also refresh so
@@ -8736,7 +8812,7 @@ async function loadSplosePatients() {
   } catch (err) {
     console.error('Failed to load Splose patients:', err.message);
     list.innerHTML = `<div class="empty-state" style="padding:20px;text-align:center;">
-      <div style="color:var(--warn);margin-bottom:6px;">⚠ Could not load patients</div>
+      <div style="color:var(--warn);margin-bottom:6px;">Could not load patients</div>
       <div style="font-size:11px;color:var(--muted)">${err.message}</div>
       <button class="btn" style="margin-top:10px;" onclick="loadSplosePatients()">Retry</button>
     </div>`;
@@ -8777,7 +8853,7 @@ function renderPatients() {
         <div class="pat-name">${escapeHtml(p.first)} ${escapeHtml(p.last)} <span class="pat-tag ${p.region}">${p.region[0].toUpperCase()+p.region.slice(1)}</span></div>
         <div class="pat-sub">Patient #${p.id}${p.plan ? ' · NDIS '+p.plan : ''}${fmtPlanEnd(p.planEnds) ? ' · Plan ends '+fmtPlanEnd(p.planEnds) : ''}${warn}</div>
       </div>
-      <div class="pat-region">📍 ${escapeHtml(p.suburb)} ${escapeHtml(p.postcode)}</div>
+      <div class="pat-region">${escapeHtml(p.suburb)} ${escapeHtml(p.postcode)}</div>
     `;
     card.addEventListener('click', () => {
       document.querySelectorAll('.patient-card').forEach(x => x.classList.remove('selected'));
@@ -9159,15 +9235,15 @@ function reasonChipsFor(candidate, patient, type) {
   if (patient) {
     const neighbours = sameDay.filter(s => s.region === patient.region && s.patientId);
     if (neighbours.length === 0 && sameDay.length === 0) {
-      reasons.push({ tone:'good', text:`📍 ${day.toUpperCase()} is empty — anchors a future ${labelRegion(patient.region)} cluster` });
+      reasons.push({ tone:'good', text:`${day.toUpperCase()} is empty — anchors a future ${labelRegion(patient.region)} cluster` });
     } else if (neighbours.length > 0) {
       const names = neighbours.slice(0, 2).map(s => (s.patient || s.sub || 'session').split(' ')[0] + ' ' + fmtTime(s.startH, s.startM||0)).join(', ');
-      reasons.push({ tone:'good', text:`📍 Same-day ${labelRegion(patient.region)} cluster (${names}${neighbours.length > 2 ? ' +'+(neighbours.length-2)+' more':''})` });
+      reasons.push({ tone:'good', text:`Same-day ${labelRegion(patient.region)} cluster (${names}${neighbours.length > 2 ? ' +'+(neighbours.length-2)+' more':''})` });
     } else {
-      reasons.push({ tone:'warn', text:`📍 No nearby ${labelRegion(patient.region)} clients on ${day.toUpperCase()} (solo trip)` });
+      reasons.push({ tone:'warn', text:`No nearby ${labelRegion(patient.region)} clients on ${day.toUpperCase()} (solo trip)` });
     }
   } else {
-    reasons.push({ tone:'good', text:`📍 ${sameDay.length === 0 ? 'Empty day' : sameDay.length + ' session(s) booked'}` });
+    reasons.push({ tone:'good', text:`${sameDay.length === 0 ? 'Empty day' : sameDay.length + ' session(s) booked'}` });
   }
 
   // Day intensity — truthful count
@@ -10744,7 +10820,7 @@ function displayScheduleResults(booked, clients, slots) {
         <strong>${booking.slot.time}</strong> · ${booking.slot.date}
       </div>
       <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">
-        📍 ${booking.slot.location} · <span class="pat-tag">${booking.client.region}</span>
+        ${booking.slot.location} · <span class="pat-tag">${booking.client.region}</span>
       </div>
       <div style="background: white; padding: 8px; border-radius: 4px; font-size: 10px; color: var(--ink-soft); line-height: 1.5;">
         <strong>Score:</strong> ${Math.round(booking.score.total)}<br>
@@ -12597,7 +12673,7 @@ async function confirmBooking() {
         body.innerHTML = `
           <p style="margin:0 0 6px;"><strong>${outlookTitle}</strong> added for <strong>${DAY_LABELS[t.day] || t.day} ${fmtTime(t.startH, t.startM)} – ${fmtTime(t.endH, t.endM)} AWST · ${t.durationMin} min</strong>.</p>
           ${outlookLine}
-          <p style="margin:6px 0 0;font-size:12px;color:var(--muted);">ℹ️ Splose does not support creating busy-time blocks via API — add this manually in Splose if needed.</p>`;
+          <p style="margin:6px 0 0;font-size:12px;color:var(--muted);">Splose does not support creating busy-time blocks via API — add this manually in Splose if needed.</p>`;
       }
       if (modal) modal.classList.add('show');
       WIZARD_BOOKED = true;
@@ -13347,7 +13423,7 @@ function refreshCalendarEmptyState() {
           </div>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
             <button class="ces-cta" onclick="switchTab('book')">＋ Book one client</button>
-            <button class="ces-cta" style="background:#0f766e;" onclick="openAutoSchedule()">⚡ Auto-fit multiple clients</button>
+            <button class="ces-cta" style="background:#0f766e;" onclick="openAutoSchedule()">Auto-fit multiple clients</button>
           </div>
           <div class="ces-tips">
             Each session asks for a <strong>location</strong> (online or in-person → default address from Splose, or custom).
@@ -16699,7 +16775,7 @@ async function completeOutlookSync() {
     console.log('📊 Sync complete:', syncData);
 
     if (syncData.eventsSynced > 0) {
-      alert(`✅ Synced ${syncData.eventsSynced} events from Outlook!`);
+      alert(`Synced ${syncData.eventsSynced} events from Outlook!`);
     }
 
     // Refresh the connection-status UI
@@ -16733,7 +16809,7 @@ async function refreshOutlookSync() {
     const data = await response.json();
     console.log('✅ Refreshed:', data);
 
-    alert(`✅ Refreshed! Found ${data.eventsFound} events in Outlook.`);
+    alert(`Refreshed. Found ${data.eventsFound} events in Outlook.`);
     initOutlookSync();
 
   } catch (error) {
@@ -16804,7 +16880,7 @@ async function resyncAllEvents() {
       btn.textContent = '🔄 Clear & Re-sync All (2 Years)';
     }
 
-    alert(`✅ Complete re-sync done!\n\nCleared: ${clearData.deletedCount} old events\nSynced: ${syncData.upserted ?? syncData.eventsSynced ?? '?'} fresh events from Outlook\n\nRefreshing calendar...`);
+    alert(`Complete re-sync done.\n\nCleared: ${clearData.deletedCount} old events\nSynced: ${syncData.upserted ?? syncData.eventsSynced ?? '?'} fresh events from Outlook\n\nRefreshing calendar...`);
 
     // Reload page to show new events
     setTimeout(() => window.location.reload(), 1000);
@@ -16849,7 +16925,7 @@ async function fixCalendar() {
     const data = await res.json();
     const removed = data.stalePruned ?? data.removed ?? '?';
     const deduped = data.deduped ?? '?';
-    alert(`✅ Fix complete!\n\nStale events removed: ${removed}\nDuplicates removed: ${deduped}\n\nRefreshing calendar...`);
+    alert(`Fix complete.\n\nStale events removed: ${removed}\nDuplicates removed: ${deduped}\n\nRefreshing calendar...`);
     await loadOutlookEventsToCalendar();
   } catch (err) {
     console.error('❌ fixCalendar error:', err);
@@ -16909,11 +16985,11 @@ window.debugLocationReport = async function() {
       'Event title':      (s.title || '').slice(0,35),
       'Client':           s.patient || '—',
       'Outlook ID':       (s.outlookId || '—').slice(0,16) + '…',
-      'Has address?':     addrOk ? '✅ Yes' : (addr ? '⚠️ Partial' : '❌ No'),
+      'Has address?':     addrOk ? 'Yes' : (addr ? 'Partial' : 'No'),
       'Mapped address':   addr ? addr.slice(0,40) : '—',
       'Address source':   s.addressSource || s.locationObj?.source || '—',
-      'Splose match?':    sploseMatch ? '✅ Yes' : '—',
-      'Splose has addr?': sploseMatch ? (sploseMatch.routingAddress ? '✅ Yes' : '❌ No') : '—',
+      'Splose match?':    sploseMatch ? 'Yes' : '—',
+      'Splose has addr?': sploseMatch ? (sploseMatch.routingAddress ? 'Yes' : 'No') : '—',
       'Travel status':    addrOk ? 'Can route' : 'Cannot route',
     });
   });
@@ -17755,7 +17831,7 @@ function toggleOutlookOnly(btn) {
   window.OUTLOOK_ONLY = !window.OUTLOOK_ONLY;
   const g = document.getElementById('cal-grid');
   if (g) g.classList.toggle('outlook-only', !!window.OUTLOOK_ONLY);
-  if (btn) { btn.classList.toggle('active', !!window.OUTLOOK_ONLY); btn.textContent = window.OUTLOOK_ONLY ? '\u{1F441} Outlook-only: ON' : '\u{1F441} Outlook-only'; }
+  if (btn) { btn.classList.toggle('active', !!window.OUTLOOK_ONLY); btn.textContent = window.OUTLOOK_ONLY ? 'Outlook-only: ON' : 'Outlook-only'; }
   renderCurrentWeek();
 }
 function gotoThisWeek() {
@@ -19794,7 +19870,7 @@ var NAV_ADMIN_ONLY_TABS = ['billing', 'ndis', 'dormant'];
 
 var ROLE_NAV = {
   owner: {
-    primary: ['profile', 'book', 'calendar'],
+    primary: ['profile', 'calendar'],
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
       ['Travel', ['travel', 'logbook']],
@@ -19802,9 +19878,10 @@ var ROLE_NAV = {
     ] },
   },
   admin: {
-    primary: ['profile', 'book', 'calendar'],
-    menu: { label: 'Travel', groups: [
+    primary: ['profile', 'calendar'],
+    menu: { label: 'Menu', groups: [
       ['Travel', ['travel', 'logbook']],
+      ['Operations', ['purchases']],
     ] },
   },
   therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] },
@@ -19819,6 +19896,69 @@ function navAllowedTabs(role) {
   (cfg.menu ? cfg.menu.groups : []).forEach(function (g) { allowed = allowed.concat(g[1]); });
   return allowed;
 }
+
+/* Admin purchasing queue — operational view over /api/purchases (the
+   backend already scopes admin to approved/ordered/received and strips
+   clinical_rationale + client_reference). */
+async function admLoadPurchases() {
+  var host = document.getElementById('adm-purchases');
+  if (!host) return;
+  var d = await fetch('/api/purchases', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : { denied: r.status === 403 }; })
+    .catch(function () { return {}; });
+  if (d.denied) { host.textContent = 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.'; return; }
+  var rows = d.requests || [];
+  host.innerHTML = rows.length ? '<div class="rh-list-shell">' + rows.map(function (x) {
+    var cost = x.approx_cost_cents ? '$' + (x.approx_cost_cents / 100).toFixed(2) : '';
+    var act = '';
+    if (x.status === 'approved') act = '<button class="btn primary" style="font-size:12px;" onclick="admPurchaseAction(\'' + x.id + '\',\'mark-ordered\')">Confirm supplier &amp; mark ordered</button>';
+    if (x.status === 'ordered') act = '<button class="btn primary" style="font-size:12px;" onclick="admPurchaseAction(\'' + x.id + '\',\'mark-received\')">Mark received</button>';
+    return '<div class="rh-res-row" style="cursor:default;"><div class="rh-res-main">' +
+      '<div class="rh-res-title">' + escapeHtml(x.product_name) + '</div>' +
+      '<div class="rh-res-sub">' + [x.supplier ? escapeHtml(x.supplier) : '', 'qty ' + (x.quantity || 1), cost,
+        x.po_reference ? 'PO ' + escapeHtml(x.po_reference) : '', x.spend_limit_cents ? 'limit $' + (x.spend_limit_cents / 100).toFixed(2) : '']
+        .filter(Boolean).join(' · ') + '</div>' +
+      '</div><span class="rh-res-actions">' +
+      '<span class="rh-status-chip">' + escapeHtml(String(x.status).replace(/_/g, ' ')) + '</span>' + act +
+      '</span></div>';
+  }).join('') + '</div>' : '<div class="rh-quiet">Nothing waiting for processing — approved requests appear here.</div>';
+}
+
+async function admPurchaseAction(id, action) {
+  var body;
+  if (action === 'mark-ordered') body = JSON.stringify({
+    poReference: prompt('Purchase order / reference:') || undefined,
+    supplier: prompt('Confirm supplier (optional):') || undefined,
+  });
+  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: prompt('Invoice / receipt reference (optional):') || undefined });
+  await fetch('/api/purchases/' + id + '/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
+  }).catch(function () {});
+  admLoadPurchases();
+}
+
+function toggleAccountMenu(forceOrEvent) {
+  var menu = document.getElementById('hdr-account-menu');
+  var trigger = document.getElementById('app-user-chip');
+  if (!menu) return;
+  if (forceOrEvent && forceOrEvent.stopPropagation) forceOrEvent.stopPropagation();
+  var open = (forceOrEvent === false) ? false : !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  if (trigger) trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    var st = document.getElementById('acct-settings-item');
+    if (st) st.style.display = (window.NAV_ALLOWED_TABS || []).includes('settings') ? '' : 'none';
+    var first = menu.querySelector('button');
+    if (first) first.focus();
+  } else if (trigger && document.activeElement && menu.contains(document.activeElement)) {
+    trigger.focus(); // focus returns to the trigger on close
+  }
+}
+document.addEventListener('click', function (e) {
+  var w = document.querySelector('.hdr-account-wrap');
+  if (w && !w.contains(e.target)) toggleAccountMenu(false);
+});
 
 function toggleNavMoreMenu(force) {
   var menu = document.getElementById('nav-more-menu');
@@ -19893,12 +20033,14 @@ function applyNavRoleVisibility(role) {
     window.__navGuardInstalled = true;
     var _preGuardSwitchTab = window.switchTab;
     window.switchTab = function (name) {
-      var ok = !window.NAV_ALLOWED_TABS || window.NAV_ALLOWED_TABS.includes(name);
+      var ok = !window.NAV_ALLOWED_TABS || window.NAV_ALLOWED_TABS.includes(name) ||
+               (name === 'book' && window.APP_USER && window.APP_USER.role !== 'read_only');
       if (!ok) {
         if (typeof showToast === 'function') showToast('Access denied', ACCESS_DENIED_MESSAGE, 'warn');
         name = 'calendar'; // permitted home screen
       }
       var out = _preGuardSwitchTab(name);
+      if (name === 'purchases' && typeof admLoadPurchases === 'function') admLoadPurchases();
       toggleNavMoreMenu(false);
       var moreBtn = document.getElementById('nav-more-btn');
       if (moreBtn) {
@@ -19912,7 +20054,7 @@ function applyNavRoleVisibility(role) {
       if (w && !w.contains(e.target)) toggleNavMoreMenu(false);
     });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') toggleNavMoreMenu(false);
+      if (e.key === 'Escape') { toggleNavMoreMenu(false); toggleAccountMenu(false); }
     });
   }
 
@@ -21560,19 +21702,42 @@ async function loadBspTherapists() {
   } catch (_) { /* non-fatal */ }
 }
 
+/* Test/dry-run/QA/seed records must never appear as bookable therapists in
+   the user-facing selector — staging keeps its synthetic LOGIN accounts, but
+   the booking UI only lists real, active therapist profiles. */
+var BSP_TEST_NAME_RE = /dry.?run|\bqa\b|test|smoke|seed|synthetic|demo/i;
+
 function renderBspTherapistStrip() {
   const strip = document.getElementById('bsp-therapist-strip');
   if (!strip) return;
-  if (!_bspTherapists.length) { strip.style.display = 'none'; return; }
-
-  let html = '<span class="bsp-t-label">For:</span>';
-  _bspTherapists.forEach(t => {
-    const sel = (_bspSelectedTherapist?.id === t.id);
-    html += `<button class="bsp-t-chip${sel ? ' selected' : ''}" onclick="selectBspTherapist('${t.id}')">
-      <span class="bsp-t-dot" style="background:${t.colour}"></span>
-      ${t.displayName}
-    </button>`;
-  });
+  const list = _bspTherapists.filter(t =>
+    t.isActive !== false && !BSP_TEST_NAME_RE.test(t.displayName || ''));
+  if (!list.length) { strip.style.display = 'none'; _bspSelectedTherapist = _bspSelectedTherapist || null; return; }
+  if (_bspSelectedTherapist && BSP_TEST_NAME_RE.test(_bspSelectedTherapist.displayName || '')) {
+    _bspSelectedTherapist = list[0];
+  }
+  if (list.length === 1) {
+    // Context already determines the therapist — concise read-only line
+    _bspSelectedTherapist = list[0];
+    strip.innerHTML = '<span class="bsp-t-label">Booking for:</span><span style="font-weight:600;">' +
+      escapeHtml(list[0].displayName) + '</span>';
+    strip.style.display = 'flex';
+    return;
+  }
+  let html = '<span class="bsp-t-label">Booking for:</span>';
+  if (list.length <= 5) {
+    list.forEach(t => {
+      const sel = (_bspSelectedTherapist?.id === t.id);
+      html += `<button class="bsp-t-chip${sel ? ' selected' : ''}" onclick="selectBspTherapist('${t.id}')">
+        <span class="bsp-t-dot" style="background:${t.colour}"></span>
+        ${escapeHtml(t.displayName)}
+      </button>`;
+    });
+  } else {
+    html += '<select class="rh-input" style="max-width:220px;" onchange="selectBspTherapist(this.value)">' +
+      list.map(t => `<option value="${t.id}"${_bspSelectedTherapist?.id === t.id ? ' selected' : ''}>${escapeHtml(t.displayName)}</option>`).join('') +
+      '</select>';
+  }
   strip.innerHTML = html;
   strip.style.display = 'flex';
 }
@@ -25334,7 +25499,7 @@ function _renderTravelPanel(seg) {
 
   // Source chip
   html += '<span class="tp-source-chip ' + sourceClass + '">' +
-    (isOutlook ? '📅 Outlook event' : '🗺 Calculated route') + '</span>';
+    (isOutlook ? 'Outlook event' : 'Calculated route') + '</span>';
 
   // Stat row
   html += '<div class="tp-stat-row">';
