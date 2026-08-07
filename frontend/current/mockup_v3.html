@@ -11398,7 +11398,7 @@ function _calColPointerDown(e) {
     dragging: false
   };
 
-  col.setPointerCapture(e.pointerId);
+  try { col.setPointerCapture(e.pointerId); } catch (_) { /* synthetic/stale pointer ids */ }
   e.preventDefault();
 }
 
@@ -11533,6 +11533,24 @@ function handleDragMove(event) {
 
 function handleDragEnd(event) {
   if (!dragState.isCreating) return;
+
+  // FINAL AUTHORITY: recompute the selected range from the release
+  // coordinates through the same converter the ghost and grid use. The
+  // rAF-painted state can lag (throttled/background tabs cancel pending
+  // frames), so the pointer-up position — not the last painted frame —
+  // decides what gets booked.
+  if (event && dragState.col && typeof event.clientY === 'number') {
+    const hover = calYToMinutes(dragState.col, event.clientY);
+    const anchor = (typeof dragState.anchorMinutes === 'number') ? dragState.anchorMinutes : dragState.startMinutes;
+    let selStart = Math.min(anchor, hover);
+    let selEnd   = Math.max(anchor, hover);
+    if (selEnd - selStart < SLOT_SNAP_MIN) selEnd = selStart + SLOT_SNAP_MIN;
+    if (selEnd - selStart > 480) {
+      if (hover > anchor) selEnd = selStart + 480; else selStart = selEnd - 480;
+    }
+    dragState.startMinutes   = selStart;
+    dragState.currentMinutes = selEnd - selStart;
+  }
 
   // Immediately stop creating to prevent re-triggering
   dragState.isCreating = false;

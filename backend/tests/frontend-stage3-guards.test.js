@@ -530,6 +530,12 @@ describe('calendar drag-selection coordinate fix', () => {
     expect(HTML).toContain('let selEnd   = Math.max(anchor, hover);');
   });
 
+  test('pointer-up is the final authority for the booked range (rAF-lag safe)', () => {
+    const de = HTML.slice(HTML.indexOf('function handleDragEnd(event)'), HTML.indexOf('function handleDragEnd(event)') + 1400);
+    expect(de).toContain('const hover = calYToMinutes(dragState.col, event.clientY);');
+    expect(de).toContain('dragState.currentMinutes = selEnd - selStart');
+  });
+
   test('no end-time midnight wrap; legacy duplicate handler stays a no-op', () => {
     expect(HTML).not.toContain('Math.floor(_dragEndMin / 60) % 24');
     const legacy = HTML.slice(HTML.indexOf('function attachCalendarSlotHandlers()'), HTML.indexOf('function attachCalendarSlotHandlers()') + 500);
