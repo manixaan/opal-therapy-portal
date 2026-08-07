@@ -2313,6 +2313,10 @@
     box-shadow: none;
     border-left: 3px solid var(--c-therapy);
     outline: 1px solid rgba(15, 23, 42, 0.05);
+    /* Back-to-back separation: a page-coloured hairline under every tile so
+       an event ending exactly when the next begins reads as two blocks.
+       Positioning stays time-accurate (the gap is shaved from height). */
+    box-shadow: 0 2px 0 0 var(--bg, #faf9f7);
     overflow: hidden;
     min-height: 9px;
     transition: box-shadow 0.15s ease;
@@ -13203,6 +13207,36 @@ function applySessionDensity(el, durationMin) {
   else if (durationMin <= 65) el.classList.add('s-med');
 }
 
+/* Missing-Outlook-title recovery: one bounded delta refresh per session.
+   Recovered subjects flow through the normal sync path and re-render; a
+   persistent gap gets ONE brief toast — never raw errors or internal IDs. */
+window.__titleRecoveryDone = false;
+let __titleRecoveryPending = false;
+function scheduleTitleRecovery() {
+  if (window.__titleRecoveryDone || __titleRecoveryPending) return;
+  __titleRecoveryPending = true;
+  setTimeout(async function () {
+    try {
+      await fetch('/api/sync/outlook-delta', { method: 'POST', credentials: 'include' });
+      if (typeof loadOutlookEventsToCalendar === 'function') await loadOutlookEventsToCalendar();
+    } catch (_) { /* quiet — the next scheduled sync retries naturally */ }
+    window.__titleRecoveryDone = true;
+    __titleRecoveryPending = false;
+    let unresolved = 0;
+    document.querySelectorAll('.session em').forEach(function (em) {
+      if (/Syncing title/.test(em.textContent)) unresolved++;
+    });
+    if (unresolved) {
+      if (typeof showToast === 'function') {
+        showToast('Event title could not be synced from Outlook',
+          'An event has no subject after a refresh. Try refreshing Outlook sync from Settings if this looks wrong.');
+      }
+      console.warn('[title-recovery] untitled Outlook events after bounded retry:', unresolved);
+      if (typeof renderCurrentWeek === 'function') renderCurrentWeek(); // relabel as 'Untitled event'
+    }
+  }, 1500);
+}
+
 function addSession(col, opts) {
   // Auto-assign id if absent (for legacy call sites)
   const id = opts.id || ('S-' + (opts.day||'').toUpperCase() + '-' + Math.random().toString(36).slice(2,7));
@@ -13240,6 +13274,11 @@ function addSession(col, opts) {
   el.style.top    = tToY(opts.startH, opts.startM || 0) + 'px';
   el.style.height = (durMin(opts) / 60 * HOUR_PX - 2) + 'px';
   const noSubject = !opts.title || opts.title === '(No subject)' || opts.title === '(No title)' || opts.title === 'Untitled';
+  // A subject-less Outlook event is a sync/mapping gap, not a real name:
+  // schedule ONE bounded delta refresh per session (no hammering).
+  if (noSubject && (opts.outlookId || opts.type === 'outlook')) {
+    if (typeof scheduleTitleRecovery === 'function') scheduleTitleRecovery();
+  }
   // For untitled events: prefer patient name → first category → type label → placeholder
   const _noSubCats = opts.categories && opts.categories.length ? opts.categories[0] : null;
   const _noSubFallback = opts.patient || opts.sub || null;
@@ -13251,7 +13290,9 @@ function addSession(col, opts) {
           ? '<em style="opacity:0.65">' + _noSubCats + '</em>'
           : _typeLabel
             ? '<em style="opacity:0.65">' + _typeLabel + '</em>'
-            : '<em style="opacity:0.5">(No subject)</em>')
+            : (window.__titleRecoveryDone
+                ? '<em style="opacity:0.5">Untitled event</em>'
+                : '<em style="opacity:0.55">Syncing title…</em>'))
     : opts.title;
   // Compact tile content: title first, time range second, location last.
   // Duration-aware density classes let CSS drop the lower lines on short
@@ -19404,35 +19445,33 @@ function lbOpenEntry(id, isRestore) {
   const body = (useSide && side) ? side : document.getElementById('lb-detail-body');
   if (!body) return;
   if (useSide && side) { side.style.display = ''; if (sideEmpty) sideEmpty.style.display = 'none'; }
-  const statusLabel = e.calculationStatus === 'address_missing'
-    ? '<span style="color:#b45309;font-weight:600;">Address missing — route could not be estimated</span>'
-    : 'Calculated estimate';
-  const apptLine = e.appointmentTitle
-    ? escapeHtml(e.appointmentTitle)
-    : (e.appointmentId ? 'Linked appointment (details unavailable for your role or outside this period)' : 'Source appointment unavailable');
-  const kv = (k, v) => `<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><span style="min-width:150px;color:var(--ink-soft);">${k}</span><span>${v}</span></div>`;
+  const tripType = ((e.toMinutes || 0) > 0 && (e.returnMinutes || 0) > 0) ? 'Round trip'
+    : (e.toMinutes || 0) > 0 ? 'To appointment'
+    : (e.returnMinutes || 0) > 0 ? 'From appointment' : 'Travel entry';
+  const kv = (k, v) => `<div style="display:flex;gap:10px;padding:4px 0;font-size:13px;"><span style="min-width:110px;color:var(--ink-soft);">${k}</span><span style="min-width:0;">${v}</span></div>`;
+  const when = `${_lbFmtDate(e.appointmentStart || e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) + '–' + _lbFmtTime(e.appointmentEnd) : ''}` +
+    (e.totalMinutes ? ` · ${e.totalMinutes} min travel` : '');
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;margin-top:2px;';
   body.innerHTML = `
-    ${kv('Appointment', apptLine)}
-    ${kv('Date & time', `${_lbFmtDate(e.appointmentStart || e.date)}${e.appointmentStart ? ' · ' + _lbFmtTime(e.appointmentStart) + '–' + _lbFmtTime(e.appointmentEnd) + ' AWST' : ''}`)}
-    ${kv('Destination', escapeHtml(e.destinationAddress || 'Address missing'))}
-    ${kv('Source system', '<span class="lb-src">Source: ' + (e.source === 'splose' ? 'Splose' : escapeHtml(e.source || 'Manual')) + '</span>')}
-    ${kv('Calculation status', statusLabel)}
-    ${kv('Recorded', e.createdAt ? _lbFmtDate(e.createdAt) : '—')}
-    ${e.appointmentId ? kv('Appointment reference', '<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);">' + escapeHtml(String(e.appointmentId)) + '</span>') : ''}
-    <div style="margin:12px 0 4px;font-weight:600;font-size:13px;">Travel breakdown</div>
-    ${lbTravelBreakdownHtml(e)}
-    <details style="margin-top:12px;font-size:12.5px;">
-      <summary style="cursor:pointer;font-weight:600;color:var(--ink-soft);">Calculation details</summary>
-      <div style="padding:8px 0 0;color:var(--ink-soft);line-height:1.55;">
-        The starting and ending points follow your appointment sequence in Splose;
-        the destination is the appointment address shown above.
-        ${escapeHtml(e._method || 'Splose travel minutes converted at a 40 km/h average speed; deduction = km × the practice kilometre rate.')}
-      </div>
-    </details>
-    <div style="margin-top:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--ink-soft);">
-      Need to fix the address? Appointment addresses are corrected in Splose —
-      this entry recalculates after the next sync.
-    </div>`;
+    ${kv('Trip type', tripType)}
+    ${kv('Date & time', when)}
+    <div style="padding:6px 0 2px;font-size:13px;">
+      <label style="color:var(--ink-soft);display:block;">From address</label>
+      <input type="text" id="lb-edit-from" style="${inputStyle}"
+        value="${escapeHtml(e.fromAddress || '')}" placeholder="Previous location / practice base">
+    </div>
+    <div style="padding:6px 0 2px;font-size:13px;">
+      <label style="color:var(--ink-soft);display:block;">To address</label>
+      <input type="text" id="lb-edit-to" style="${inputStyle}"
+        value="${escapeHtml(e.destinationAddress || '')}" placeholder="Destination address">
+    </div>
+    <div id="lb-edit-msg" style="display:none;margin-top:8px;font-size:12.5px;"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn primary" style="font-size:12.5px;" onclick="lbSaveAddresses('${escapeHtml(String(e.id))}')">Save addresses</button>
+    </div>
+    ${(!e.date && !e.appointmentId)
+      ? '<p style="margin:12px 0 0;font-size:12.5px;color:var(--muted);">No linked calendar event is available for this trip.</p>'
+      : ''}`;
   // "Open in calendar" — in the side panel we render our own action button;
   // the modal keeps its footer button. Returning to Travel Logbook restores
   // this selection and list position automatically (cache + __lbSelectedId).
@@ -19459,6 +19498,33 @@ function lbOpenEntry(id, isRestore) {
     }
     modal.classList.add('show');
   }
+}
+
+async function lbSaveAddresses(id) {
+  const msg = document.getElementById('lb-edit-msg');
+  const fromV = (document.getElementById('lb-edit-from') || {}).value || '';
+  const toV = (document.getElementById('lb-edit-to') || {}).value || '';
+  if (!toV.trim()) {
+    msg.style.display = ''; msg.style.color = '#dc2626';
+    msg.textContent = 'A destination address is required.';
+    return;
+  }
+  const r = await fetch('/api/travel/logbook/' + encodeURIComponent(id) + '/addresses', {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fromAddress: fromV, toAddress: toV }),
+  }).catch(function () { return null; });
+  if (!r || !r.ok) {
+    msg.style.display = ''; msg.style.color = '#dc2626';
+    msg.textContent = 'Could not save — please try again.';
+    return;
+  }
+  msg.style.display = ''; msg.style.color = '#15803d';
+  msg.textContent = 'Addresses saved.';
+  // Bust the v2 cache and re-render so the journey row shows the new route;
+  // __lbSelectedId restores this selection and the list position.
+  try { sessionStorage.removeItem('splose_swr_logbook'); } catch (_) {}
+  if (typeof loadLogbookData === 'function') loadLogbookData();
 }
 
 function lbCloseEntry() {

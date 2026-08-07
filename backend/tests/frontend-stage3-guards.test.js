@@ -303,8 +303,7 @@ describe('travel logbook redesign', () => {
     expect(HTML).not.toContain('<span>Sources:</span>');
     expect(HTML).not.toContain('✅ Splose support items');
     expect(HTML).not.toContain('📅 Calendar-derived (current week)');
-    expect(HTML).toContain('class="lb-src"');
-    expect(HTML).toContain("Source: ' + (e.source === 'splose' ? 'Splose'");
+    expect(HTML).toContain('.lb-src {'); // style retained for list-level badges
   });
 
   test('kilometre rate comes from the org setting, not a hardcode', () => {
@@ -332,10 +331,16 @@ describe('travel logbook redesign', () => {
     expect(HTML).not.toContain("${t.toMinutes||0}${t.returnMinutes ? ' + ' + t.returnMinutes : ''} min");
   });
 
-  test('missing address and unavailable appointment have clear states', () => {
-    expect(HTML).toContain('Address missing — route could not be estimated');
-    expect(HTML).toContain('Source appointment unavailable');
-    expect(HTML).toContain('corrected in Splose');
+  test('simplified panel: editable addresses + short no-event message', () => {
+    expect(HTML).toContain('id="lb-edit-from"');
+    expect(HTML).toContain('id="lb-edit-to"');
+    expect(HTML).toContain("lbSaveAddresses(");
+    expect(HTML).toContain("'/api/travel/logbook/' + encodeURIComponent(id) + '/addresses'");
+    expect(HTML).toContain('No linked calendar event is available for this trip.');
+    const panel = HTML.slice(HTML.indexOf('function lbOpenEntry(id'), HTML.indexOf('async function lbSaveAddresses'));
+    expect(panel).not.toContain('Appointment reference');
+    expect(panel).not.toContain('Source system');
+    expect(panel).not.toContain('Calculation details');
   });
 
   test('data comes from the role-scoped backend route with v2 cache', () => {
@@ -677,5 +682,22 @@ describe('scheduler ui refinement', () => {
     expect(HTML).toContain('#month-scroll-area .month-section { max-width: var(--cal-frame) !important');
     expect(HTML).toContain('#master-grid { max-width: var(--cal-frame) !important');
     expect(HTML).toContain('.cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }');
+  });
+});
+
+// ── Calendar polish: separation + title recovery (2026-08-07) ────────────────
+describe('calendar polish', () => {
+  test('back-to-back events carry a page-coloured separation hairline', () => {
+    expect(HTML).toContain('box-shadow: 0 2px 0 0 var(--bg, #faf9f7);');
+  });
+
+  test('missing Outlook titles show a recovery state, never (No subject)', () => {
+    expect(HTML).toContain('function scheduleTitleRecovery()');
+    expect(HTML).toContain('Syncing title…');
+    expect(HTML).toContain("'Untitled event'");
+    expect(HTML).not.toContain('>(No subject)</em>');
+    // bounded: one delta refresh per session, quiet failure toast
+    expect(HTML).toContain('window.__titleRecoveryDone || __titleRecoveryPending');
+    expect(HTML).toContain('Event title could not be synced from Outlook');
   });
 });

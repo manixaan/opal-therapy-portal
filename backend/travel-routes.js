@@ -112,6 +112,26 @@ router.get('/api/travel/logbook', requireAuth, denyReadOnly, async (req, res) =>
       .filter(Boolean)
       .filter((e) => !e.date || (e.date.slice(0, 10) >= start && e.date.slice(0, 10) <= fyEnd));
 
+    // Local address overrides (migration 009): practice-level overlay keyed
+    // by Splose item id. Splose data stays untouched; the original address is
+    // preserved as sourceDestination.
+    if (entries.length) {
+      const ids = entries.map((e) => String(e.id));
+      const ov = await pool.query(
+        'SELECT splose_item_id, from_address, to_address FROM travel_address_overrides WHERE splose_item_id = ANY($1)', [ids]);
+      const byId = new Map(ov.rows.map((r) => [r.splose_item_id, r]));
+      entries.forEach((e) => {
+        const o = byId.get(String(e.id));
+        e.fromAddress = (o && o.from_address) || null;
+        if (o && (o.from_address || o.to_address)) e.addressEdited = true;
+        if (o && o.to_address) {
+          e.sourceDestination = e.destinationAddress;
+          e.destinationAddress = o.to_address;
+          e.calculationStatus = 'estimated';
+        }
+      });
+    }
+
     entries.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
     res.json({
@@ -124,6 +144,62 @@ router.get('/api/travel/logbook', requireAuth, denyReadOnly, async (req, res) =>
   } catch (err) {
     console.error('travel logbook error:', err.message);
     res.status(502).json({ error: 'Could not load travel data from Splose', code: 'splose_unavailable' });
+  }
+});
+
+// PATCH /api/travel/logbook/:itemId/addresses — local override only; never
+// writes to Splose/Outlook. Owner/admin: any entry. Therapist: only items
+// visible in their own scoped logbook (fail-closed via the same fetch).
+router.patch('/api/travel/logbook/:itemId/addresses', requireAuth, denyReadOnly, async (req, res) => {
+  try {
+    const itemId = String(req.params.itemId || '').trim();
+    if (!itemId || itemId.length > 100) return res.status(404).json({ error: 'Not found' });
+    const { fromAddress, toAddress } = req.body || {};
+    if (fromAddress === undefined && toAddress === undefined) {
+      return res.status(400).json({ error: 'Provide fromAddress and/or toAddress' });
+    }
+    const clean = (v) => {
+      if (v === undefined) return undefined;
+      const t = String(v).slice(0, 500).trim();
+      return t.length ? t : null; // blank clears the override for that leg
+    };
+    const fromV = clean(fromAddress);
+    const toV = clean(toAddress);
+
+    const role = req.user.role;
+    if (role !== 'owner' && role !== 'admin') {
+      const own = req.user.tp_splose_practitioner_id || null;
+      if (!own) return res.status(403).json({ code: 'practitioner_mapping_required', error: 'No linked practitioner' });
+      const [items, appts] = await Promise.all([
+        sploseApi.getSupportItems(),
+        sploseApi.getAppointments('2000-01-01', new Date().toISOString().slice(0, 10), own),
+      ]);
+      const apptIds = new Set((appts || []).map((a) => String(a.id)));
+      const mine = (items || []).some((i) => String(i.id) === itemId && i.appointmentId && apptIds.has(String(i.appointmentId)));
+      if (!mine) return res.status(404).json({ error: 'Not found' });
+    }
+
+    const r = await pool.query(
+      `INSERT INTO travel_address_overrides (splose_item_id, organisation_id, from_address, to_address, updated_by_user_id, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (splose_item_id) DO UPDATE SET
+         from_address = CASE WHEN $6 THEN EXCLUDED.from_address ELSE travel_address_overrides.from_address END,
+         to_address   = CASE WHEN $7 THEN EXCLUDED.to_address   ELSE travel_address_overrides.to_address END,
+         updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
+       RETURNING splose_item_id, from_address, to_address`,
+      [itemId, req.user.organisation_id || null,
+       fromV === undefined ? null : fromV, toV === undefined ? null : toV,
+       req.user.id, fromAddress !== undefined, toAddress !== undefined]);
+    await require('./database').logAuditEvent({
+      actorUserId: req.user.id, action: 'travel.address_overridden',
+      targetType: 'travel_entry', targetId: null, ipAddress: req.ip,
+      organisationId: req.user.organisation_id || null,
+      metadata: { itemId },
+    }).catch(() => {});
+    res.json({ ok: true, override: r.rows[0] });
+  } catch (err) {
+    console.error('travel address override error:', err.message);
+    res.status(500).json({ error: 'Could not save the address change' });
   }
 });
 

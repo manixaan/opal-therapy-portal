@@ -25,7 +25,7 @@ const ALL_TABLES = [
   'outlook_delta_state', 'sessions', 'audit_logs',
   'purchase_request_events', 'purchase_requests',
   'resource_ai_drafts', 'user_resource_progress',
-  'snapshot_reminders', 'snapshot_tasks',
+  'snapshot_reminders', 'snapshot_tasks', 'travel_address_overrides',
   'users', 'organisations',
 ];
 

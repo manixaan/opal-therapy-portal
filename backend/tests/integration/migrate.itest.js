@@ -31,11 +31,11 @@ describe('migration runner', () => {
       '002_outlook_connected_email.sql', '003_event_type_vocabulary.sql',
       '004_accounting_xero_module.sql', '005_resource_hub_foundation.sql',
       '006_accounting_exceptions_and_mapping.sql', '007_resource_hub_v1.sql',
-      '008_snapshot_day.sql',
+      '008_snapshot_day.sql', '009_travel_overrides.sql',
     ]));
 
     const { rows } = await db.pool.query('SELECT id FROM schema_migrations ORDER BY id');
-    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008']);
+    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009']);
   });
 
   test('is idempotent — a second run applies nothing', async () => {
