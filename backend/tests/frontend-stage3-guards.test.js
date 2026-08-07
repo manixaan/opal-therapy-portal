@@ -173,7 +173,7 @@ describe('compact calendar week view', () => {
   test('tiles render a time range line and duration-aware density classes', () => {
     expect(HTML).toContain('class="s-time"');
     expect(HTML).toContain('function applySessionDensity(el, durationMin)');
-    expect(HTML).toContain(".session.s-compact .s-time, .session.s-compact .s-sub { display: none; }");
+    expect(HTML).toContain(".session.s-compact .s-time { display: block; order: -1;"); // short events: time first
     // resize paths refresh density so a stretched tile regains its time line
     expect(HTML.match(/applySessionDensity\(/g).length).toBeGreaterThanOrEqual(4);
   });
@@ -448,9 +448,9 @@ describe('calendar workspace redesign', () => {
     expect(HTML).toContain("if (typeof openBlockDetail === 'function') openBlockDetail(id);");
   });
 
-  test('week view defaults to Mon-Fri; weekends stay an opt-in setting', () => {
-    expect(HTML).toContain('var showWeekends = s.showWeekends === true;');
-    expect(HTML).not.toContain('var showWeekends = s.showWeekends !== false;');
+  test('week view shows the full Mon-Sun week by default; Settings can hide weekends', () => {
+    expect(HTML).toContain('var showWeekends = s.showWeekends !== false; // full Mon-Sun week by default');
+    expect(HTML).toContain('.cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: #fbfaf7; }');
     expect(HTML).toContain('Display Saturday and Sunday in week view'); // setting still there
   });
 
@@ -500,5 +500,71 @@ describe('design token system', () => {
     expect(HTML).toContain('--focus-ring:');
     expect(HTML).toContain('box-shadow: var(--focus-ring);');
     expect(HTML).toContain('--bg: #faf9f7;');
+  });
+});
+
+// ── Calendar selection coordinate fix (2026-08-07) ───────────────────────────
+describe('calendar drag-selection coordinate fix', () => {
+  test('one conversion source of truth exists and uses the live grid constants', () => {
+    expect((HTML.match(/function calYToMinutes/g) || []).length).toBe(1);
+    expect(HTML).toContain('function calMinutesToY(minutesOfDay)');
+    const fn = HTML.slice(HTML.indexOf('function calYToMinutes'), HTML.indexOf('function calYToMinutes') + 400);
+    expect(fn).toContain('/ HOUR_PX) * 60 + START_H * 60');
+    expect(fn).toContain('SLOT_SNAP_MIN) * SLOT_SNAP_MIN');
+    expect(fn).toContain('Math.min(END_H * 60'); // clamped to the visible range
+  });
+
+  test('pointer paths and the ghost block all consume the shared helpers', () => {
+    expect(HTML).toContain('const startMinutes = calYToMinutes(col, e.clientY);');
+    expect(HTML).toContain('const yPos = calMinutesToY(startMinutes);');
+    expect(HTML).toContain('const hover = calYToMinutes(col, pointerClientY);');
+    expect(HTML).toContain("dragState.block.style.top    = `${calMinutesToY(selStart)}px`;");
+    // the 60px/hour era is over
+    expect(HTML).not.toContain('// 60px per hour');
+    expect(HTML).not.toContain('(dragState.startMinutes / 60) * 60');
+  });
+
+  test('upward drags produce the reversed range from the anchor slot', () => {
+    expect(HTML).toContain('dragState.anchorMinutes = _calDragPending.startMinutes;');
+    expect(HTML).toContain('let selStart = Math.min(anchor, hover);');
+    expect(HTML).toContain('let selEnd   = Math.max(anchor, hover);');
+  });
+
+  test('no end-time midnight wrap; legacy duplicate handler stays a no-op', () => {
+    expect(HTML).not.toContain('Math.floor(_dragEndMin / 60) % 24');
+    const legacy = HTML.slice(HTML.indexOf('function attachCalendarSlotHandlers()'), HTML.indexOf('function attachCalendarSlotHandlers()') + 500);
+    expect(legacy).toContain('Deliberately a no-op');
+    expect(legacy).not.toContain('addEventListener');
+  });
+
+  test('text selection is suppressed on day columns during drags', () => {
+    expect(HTML).toContain('-webkit-user-select: none; user-select: none; touch-action: pan-y;');
+  });
+});
+
+// ── Calendar week layout + clean indicators (2026-08-07) ─────────────────────
+describe('calendar clean status indicators', () => {
+  test('event blocks carry no emoji or dollar-sign chips', () => {
+    expect(HTML).not.toContain('.session.bill-full::after');
+    expect(HTML).not.toContain('.session.bill-half::after');
+    expect(HTML).not.toContain('.session.support::after');
+    expect(HTML).not.toContain('>📍</span>');
+    expect(HTML).not.toContain('>⚠</span>');
+    expect(HTML).not.toContain("'🚗 ' + travelMin");
+  });
+
+  test('missing-address indicator is minimal, accessible and actionable', () => {
+    expect(HTML).toContain('aria-label="Address required for travel calculation"');
+    expect(HTML).toContain('title="Address required for travel calculation."');
+    expect(HTML).toContain('Address required for travel calculation. ${locObj.missingReason');
+    // valid addresses render a NORMAL tile (no chip at all)
+    expect(HTML).toContain("addrClass = ' has-addr'; // valid address: the tile looks normal");
+    // fixing the address removes the indicator
+    expect(HTML).toContain('if (chip) chip.remove(); // fixed address: indicator disappears');
+  });
+
+  test('short events keep a minimum height and never spill', () => {
+    expect(HTML).toContain('min-height: 14px;');
+    expect(HTML).toContain('.session.s-compact .s-title { flex: 1; min-width: 0; }');
   });
 });

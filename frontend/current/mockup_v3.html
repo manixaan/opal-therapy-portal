@@ -2077,7 +2077,8 @@
 
   .cal-col {
     position: relative;
-    border-left: 1px solid #f0f0f0;
+    border-left: 1px solid #e9e6e1; /* clear, restrained day boundary */
+    -webkit-user-select: none; user-select: none; touch-action: pan-y;
     min-height: 0; /* actual height injected by _applyCalGridHeight() via !important */
   }
   .time-col {
@@ -2107,6 +2108,9 @@
     pointer-events: none;
   }
   .hour-line.half { border-top: 1px dotted #f6f7f9; }
+  /* Weekends: fully interactive, only a whisper of tonal distinction */
+  .cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: #fbfaf7; }
+  .cal-head[data-day="sat"], .cal-head[data-day="sun"] { background: #f5f3ef; }
   /* ── Calendar workspace (2026-08-06 Outlook-style redesign) ── */
   .cal-workspace { display: flex; flex: 1; min-height: 0; position: relative; }
   .cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -2243,8 +2247,11 @@
      time line too and tightens to a single centred title row. Full details stay
      one click away in the detail panel (and in the hover tooltip). */
   .session.s-med .s-sub { display: none; }
-  .session.s-compact .s-time, .session.s-compact .s-sub { display: none; }
-  .session.s-compact { padding: 1px 6px 1px 5px; font-size: 10.5px; display: flex; align-items: center; }
+  /* Short events: time first, concise title if space allows, one line, no spill */
+  .session.s-compact .s-sub { display: none; }
+  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; display: flex; align-items: center; gap: 5px; min-height: 14px; }
+  .session.s-compact .s-time { display: block; order: -1; flex-shrink: 0; font-size: 10px; }
+  .session.s-compact .s-title { flex: 1; min-width: 0; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
      even without the blue tint (colour-blind safe). */
   .session[data-type="outlook"]::before {
@@ -2266,22 +2273,7 @@
   .session[data-type="leave"]      { background: var(--c-leave-bg);      border-left-color: var(--c-personal); }
   .session[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #6366f1; }
   .session[data-type="outlook"]    { background: var(--c-outlook-bg);    border-left-color: var(--c-therapy); }
-  .session.bill-full::after {
-    content: "$"; position: absolute; top: 3px; right: 4px;
-    font-size: 9px; background: rgba(255,255,255,0.32);
-    border-radius: 3px; padding: 0 4px; font-weight: 700; color: inherit;
-  }
-  .session.bill-half::after {
-    content: "½$"; position: absolute; top: 3px; right: 4px;
-    font-size: 9px; background: rgba(255,255,255,0.32);
-    border-radius: 3px; padding: 0 4px; font-weight: 700; color: inherit;
-  }
   /* Keep legacy .support class working */
-  .session.support::after {
-    content: "$"; position: absolute; top: 3px; right: 4px;
-    font-size: 9px; background: rgba(255,255,255,0.28);
-    border-radius: 3px; padding: 0 4px; font-weight: 700;
-  }
   .session.cancelled {
     opacity: 0.6;
     text-decoration: line-through;
@@ -2296,16 +2288,14 @@
   /* Address status chips on appointment-type blocks. `.has-addr` gets a
      subtle green 📍 dot; `.missing-addr` gets an amber warning stripe plus
      a ⚠ glyph so the manager can spot incomplete bookings at a glance. */
+  /* Missing-address indicator: one minimal glyph in a reserved corner.
+     Valid-address tiles carry no chip at all. Explanation + the Add/Fix
+     address action live in the event detail panel. */
   .session .addr-chip {
-    position: absolute; bottom: 3px; right: 4px;
-    font-size: 9px; background: rgba(255,255,255,0.28);
-    border-radius: 3px; padding: 0 4px; font-weight: 700; letter-spacing: 0.2px;
-  }
-  .session.missing-addr {
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.85) inset;
-  }
-  .session.missing-addr .addr-chip {
-    background: var(--warn); color: white;
+    position: absolute; top: 1px; right: 2px;
+    width: 12px; height: 12px; line-height: 12px; text-align: center;
+    font-size: 9px; font-weight: 700;
+    background: #b45309; color: white; border-radius: 50%;
   }
 
   /* ── Conflict highlighting ─────────────────────────────────────────── */
@@ -11282,14 +11272,14 @@ function renderCalendarWithEvents() {
     const dayEvents = CALENDAR_EVENTS.filter(e => e.day === day);
     dayEvents.forEach(evt => {
       const timeNum = parseTimeToMinutes(evt.time);
-      const yPos = (timeNum / 60) * 60; // 60px per hour
+      const yPos = calMinutesToY(timeNum);
 
       const blockEl = document.createElement('div');
       blockEl.style.cssText = `
         position: absolute;
         left: 4px; right: 4px;
         top: ${yPos}px;
-        height: ${(evt.duration / 60) * 60}px;
+        height: ${(evt.duration / 60) * HOUR_PX}px;
         background: linear-gradient(135deg, #fbbf24, #f59e0b);
         border: 2px solid #d97706;
         border-radius: 6px;
@@ -11361,6 +11351,26 @@ let dragState = {
    which had no way to distinguish a click from a drag.
    ───────────────────────────────────────────────────────────────────── */
 const DRAG_THRESHOLD = 8; // px — below this = treat as a click
+const SLOT_SNAP_MIN = 15;  // selection snaps to 15-minute slots
+
+/* SINGLE SOURCE OF TRUTH for pointer→time and time→pixel conversion.
+   The column's bounding rect is scroll-independent (it moves with the
+   scrolled content), so clientY − rect.top is always the true offset into
+   the column regardless of grid scroll, sticky headers, the all-day row,
+   zoom, or responsive width. The SAME live constants that render the grid
+   (HOUR_PX, START_H, END_H — see tToY) convert both directions, so the
+   ghost block, the booking panel and the saved event can never disagree.
+   (The previous code hardcoded 60px/hour here after the grid moved to
+   48px/hour — a 7:00 PM selection painted at the 11:45 PM position.) */
+function calYToMinutes(col, clientY) {
+  const y = clientY - col.getBoundingClientRect().top;
+  const raw = (y / HOUR_PX) * 60 + START_H * 60;
+  const snapped = Math.round(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
+  return Math.max(START_H * 60, Math.min(END_H * 60, snapped));
+}
+function calMinutesToY(minutesOfDay) {
+  return ((minutesOfDay - START_H * 60) / 60) * HOUR_PX;
+}
 
 let _calDragPending = null; // { col, day, startY, startMinutes, pointerId }
 
@@ -11377,11 +11387,7 @@ function _calColPointerDown(e) {
       e.target.closest('.travel-overlay')) return;
 
   const col = e.currentTarget;
-  const rect = col.getBoundingClientRect();
-  const y = e.clientY - rect.top;
-  // y is pixels from top of column; HOUR_PX=60, START_H=8 → convert to minutes-of-day
-  const rawMin = (y / HOUR_PX) * 60 + (START_H * 60);
-  const startMinutes = Math.round(rawMin / 15) * 15;
+  const startMinutes = calYToMinutes(col, e.clientY);
 
   _calDragPending = {
     col,
@@ -11405,11 +11411,12 @@ function _calColPointerMove(e) {
     _calDragPending.dragging = true;
     dragState.isCreating    = true;
     dragState.startY        = _calDragPending.startY;
+    dragState.anchorMinutes = _calDragPending.startMinutes; // fixed end of the range
     dragState.startMinutes  = _calDragPending.startMinutes;
-    dragState.currentMinutes = 30;
+    dragState.currentMinutes = SLOT_SNAP_MIN;
     dragState.day           = _calDragPending.day;
     dragState.col           = _calDragPending.col;
-    createDragBlock(_calDragPending.col, _calDragPending.startMinutes, 30);
+    createDragBlock(_calDragPending.col, _calDragPending.startMinutes, SLOT_SNAP_MIN);
   }
 
   if (_calDragPending.dragging) {
@@ -11454,8 +11461,8 @@ function createDragBlock(col, startMinutes, durationMinutes) {
   const existing = col.querySelector('.drag-block');
   if (existing) existing.remove();
 
-  const yPos = (startMinutes / 60) * 60; // 60px per hour
-  const height = (durationMinutes / 60) * 60; // proportional to duration
+  const yPos = calMinutesToY(startMinutes);
+  const height = (durationMinutes / 60) * HOUR_PX;
 
   const block = document.createElement('div');
   block.className = 'drag-block';
@@ -11496,31 +11503,31 @@ function handleDragMove(event) {
     cancelAnimationFrame(dragState.animationFrameId);
   }
 
-  // Queue smooth update
+  // Read the pointer position NOW (the event object is reused by some
+  // browsers once the handler returns), then paint on the next frame.
+  const pointerClientY = event.clientY;
   dragState.animationFrameId = requestAnimationFrame(() => {
     const col = dragState.col;
-    const colRect = col.getBoundingClientRect();
-    const currentY = event.clientY - colRect.top;
+    // The range is anchor-slot → hover-slot, in EITHER direction, snapped
+    // and clamped by the shared converter. Same numbers drive the ghost,
+    // the panel and the save.
+    const hover = calYToMinutes(col, pointerClientY);
+    const anchor = dragState.anchorMinutes;
+    let selStart = Math.min(anchor, hover);
+    let selEnd   = Math.max(anchor, hover);
+    if (selEnd - selStart < SLOT_SNAP_MIN) selEnd = selStart + SLOT_SNAP_MIN;
+    if (selEnd - selStart > 480) { // cap at 8 hours from the anchor
+      if (hover > anchor) selEnd = selStart + 480; else selStart = selEnd - 480;
+    }
+    dragState.startMinutes   = selStart;
+    dragState.currentMinutes = selEnd - selStart;
 
-    // Calculate duration based on drag distance (15 min increments)
-    let durationPixels = currentY - ((dragState.startMinutes / 60) * 60);
-    let durationMinutes = Math.round(durationPixels / 60 * 60 / 15) * 15;
-
-    // Minimum 15 minutes
-    durationMinutes = Math.max(15, durationMinutes);
-
-    // Maximum 8 hours (480 minutes)
-    durationMinutes = Math.min(480, durationMinutes);
-
-    dragState.currentMinutes = durationMinutes;
-
-    // Update block appearance smoothly
-    const height = (durationMinutes / 60) * 60;
-    dragState.block.style.height = `${height}px`;
+    dragState.block.style.top    = `${calMinutesToY(selStart)}px`;
+    dragState.block.style.height = `${((selEnd - selStart) / 60) * HOUR_PX}px`;
     dragState.block.style.boxShadow = '0 4px 12px rgba(122, 155, 142, 0.2)';
 
-    const startTime = minutesToTime(dragState.startMinutes);
-    dragState.block.innerHTML = `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${durationMinutes} min</div></div>`;
+    const startTime = minutesToTime(selStart);
+    dragState.block.innerHTML = `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${selEnd - selStart} min</div></div>`;
   });
 }
 
@@ -11547,8 +11554,8 @@ function handleDragEnd(event) {
   // Open the Smart Booking side panel with drag-selected time pre-filled
   const _dragStartH = Math.floor(dragState.startMinutes / 60);
   const _dragStartM = dragState.startMinutes % 60;
-  const _dragEndMin = dragState.startMinutes + dragState.currentMinutes;
-  const _dragEndH   = Math.floor(_dragEndMin / 60) % 24;
+  const _dragEndMin = Math.min(dragState.startMinutes + dragState.currentMinutes, 24 * 60 - 1);
+  const _dragEndH   = Math.floor(_dragEndMin / 60);
   const _dragEndM   = _dragEndMin % 60;
   const _dragDate   = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[dragState.day] : null;
   // Remove drag ghost block
@@ -13081,11 +13088,10 @@ function addSession(col, opts) {
   let addrChip  = '';
   if (sessionNeedsFullAddress(opts)) {
     if (isFullLocation(opts.address)) {
-      addrClass = ' has-addr';
-      addrChip  = '<span class="addr-chip" title="Full address set — travel time can be calculated">📍</span>';
+      addrClass = ' has-addr'; // valid address: the tile looks normal
     } else {
       addrClass = ' missing-addr';
-      addrChip  = '<span class="addr-chip" title="Missing full address — travel time cannot be calculated">⚠</span>';
+      addrChip  = '<span class="addr-chip" role="img" aria-label="Address required for travel calculation" title="Address required for travel calculation.">!</span>';
     }
   }
   const billingTier = getBillingTier(opts);
@@ -14026,7 +14032,7 @@ function __bdLocationRows(rows, s, id) {
         <span>Address</span>${sourceBadge}
       </div>
       <div style="width:100%;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:9px 11px;display:flex;flex-direction:column;gap:5px;">
-        <div style="font-size:13px;font-weight:500;color:var(--ink,#1a1a2e);line-height:1.4;">📍 ${addr}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--ink,#1a1a2e);line-height:1.4;">${addr}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <a href="${mapsUrl}" target="_blank" rel="noopener"
             style="font-size:11.5px;color:#1d4ed8;text-decoration:none;padding:2px 7px;background:#eff6ff;border-radius:4px;border:1px solid #bfdbfe;">
@@ -14034,7 +14040,7 @@ function __bdLocationRows(rows, s, id) {
           </a>
           <button class="btn btn-xs" style="font-size:11.5px;padding:2px 8px;"
             onclick="document.getElementById('bd-addr-edit-section').style.display='block';document.getElementById('bd-addr-input').focus();">
-            ✏ Change
+            Change address
           </button>
         </div>
       </div>
@@ -14068,7 +14074,7 @@ function __bdLocationRows(rows, s, id) {
       <div style="width:100%;display:flex;flex-direction:column;gap:5px;">
         ${locObj.isMissing
           ? `<div style="font-size:11.5px;color:var(--warn,#d97706);padding:5px 7px;background:#fffbeb;border-radius:5px;border-left:2px solid var(--warn,#d97706);">
-              ⚠ ${locObj.missingReason || 'No address on record'} — enter one below to enable travel time calculation.
+              Address required for travel calculation. ${locObj.missingReason || 'No address on record'} — add it below.
              </div>`
           : addr
           ? `<div style="font-size:11.5px;color:var(--warn,#d97706);padding:3px 0;">Partial address — a full street address gives more accurate travel time.</div>`
@@ -14185,15 +14191,19 @@ function bdSaveAddress(id) {
     s.element.classList.toggle('has-addr',     addrOk);
     s.element.classList.toggle('missing-addr', !addrOk && sessionNeedsFullAddress(s));
     let chip = s.element.querySelector('.addr-chip');
-    if (!chip) {
-      chip = document.createElement('span');
-      chip.className = 'addr-chip';
-      s.element.appendChild(chip);
+    if (addrOk) {
+      if (chip) chip.remove(); // fixed address: indicator disappears, tile is normal
+    } else {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'addr-chip';
+        chip.setAttribute('role', 'img');
+        s.element.appendChild(chip);
+      }
+      chip.textContent = '!';
+      chip.title = 'Address required for travel calculation.';
+      chip.setAttribute('aria-label', 'Address required for travel calculation');
     }
-    chip.textContent = addrOk ? '📍' : '⚠';
-    chip.title = addrOk
-      ? `${newAddr}${fromPlaces ? ' (Maps verified)' : ' (manual)'}`
-      : 'Address may be incomplete — travel calculation may be inaccurate';
   }
 
   // Disable the save button and show confirmation
@@ -21605,85 +21615,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // ══════════════════════════════════════════════════════════════════
 
 function attachCalendarSlotHandlers() {
-  const cols = document.querySelectorAll('.cal-col');
-  cols.forEach(col => {
-    const day = col.dataset.day;
-
-    // ── Drag-to-select state ──
-    let dragState = null;
-    let dragOverlay = null;
-
-    col.addEventListener('mousedown', e => {
-      const target = e.target;
-      // Only trigger on empty column space, not on existing events
-      if (target !== col &&
-          !target.classList.contains('work-band') &&
-          !target.classList.contains('off-band') &&
-          !target.classList.contains('now-line')) return;
-
-      e.preventDefault();
-      const rect = col.getBoundingClientRect();
-      const startY = e.clientY - rect.top;
-      const rawMin = (startY / HOUR_PX) * 60 + START_H * 60;
-      const startMin = Math.round(rawMin / 15) * 15;
-
-      dragState = { col, day, startMin, endMin: startMin + 60, rect };
-
-      // Create drag overlay
-      dragOverlay = document.createElement('div');
-      dragOverlay.className = 'cal-drag-select';
-      dragOverlay.style.top = tToY(Math.floor(startMin/60), startMin%60) + 'px';
-      dragOverlay.style.height = HOUR_PX + 'px';
-      col.appendChild(dragOverlay);
-    });
-
-    document.addEventListener('mousemove', e => {
-      if (!dragState || dragState.col !== col) return;
-      const y = e.clientY - dragState.rect.top;
-      const rawMin = (y / HOUR_PX) * 60 + START_H * 60;
-      const endMin = Math.max(dragState.startMin + 15, Math.round(rawMin / 15) * 15);
-      dragState.endMin = endMin;
-
-      const topPx   = tToY(Math.floor(dragState.startMin/60), dragState.startMin%60);
-      const heightPx = ((endMin - dragState.startMin) / 60 * HOUR_PX);
-      if (dragOverlay) {
-        dragOverlay.style.top    = topPx + 'px';
-        dragOverlay.style.height = heightPx + 'px';
-      }
-    });
-
-    document.addEventListener('mouseup', e => {
-      if (!dragState || dragState.col !== col) return;
-      const ds = dragState;
-      dragState = null;
-      if (dragOverlay) { dragOverlay.remove(); dragOverlay = null; }
-
-      const date = DAY_DATES ? DAY_DATES[ds.day] : null;
-      const dur  = ds.endMin - ds.startMin;
-
-      if (dur <= 15) {
-        // Treat as a click (short drag = no drag intent)
-        openBookingPanel({
-          day: ds.day, date,
-          startH: Math.floor(ds.startMin/60), startM: ds.startMin%60,
-        });
-      } else {
-        openBookingPanel({
-          day: ds.day, date,
-          startH: Math.floor(ds.startMin/60), startM: ds.startMin%60,
-          endH: Math.floor(ds.endMin/60),   endM: ds.endMin%60,
-        });
-      }
-    });
-  });
+  /* Legacy mousedown-based slot selection — superseded by
+     initCalColInteractions() (pointer events + calYToMinutes single source
+     of truth). Deliberately a no-op: the old body duplicated coordinate
+     math with hardcoded 60px/hour and would reintroduce the misaligned-
+     selection bug if ever wired again. */
 }
-
-// ══════════════════════════════════════════════════════════════════
-//  CALENDAR PREVIEW BLOCKS (suggested slots shown on calendar)
-// ══════════════════════════════════════════════════════════════════
-
-const _previewBlocks = []; // { el, col }
-
 function clearPreviewBlocks() {
   _previewBlocks.forEach(({ el }) => el.remove());
   _previewBlocks.length = 0;
@@ -24100,7 +24037,7 @@ function applyUserSettings(s, os) {
   if (s.travelWarnThresholdMin !== undefined) window.TRAVEL_WARN_MIN = s.travelWarnThresholdMin;
 
   // ── Show weekends — toggle CSS class on both grids ─────────────
-  var showWeekends = s.showWeekends === true; // Mon-Fri by default (Outlook-style); weekends opt-in in Settings
+  var showWeekends = s.showWeekends !== false; // full Mon-Sun week by default; Settings can hide weekends
   ['cal-grid', 'master-grid'].forEach(function(gId) {
     var g = document.getElementById(gId);
     if (g) g.classList.toggle('hide-weekends', !showWeekends);
@@ -24277,7 +24214,7 @@ function detectAndMarkRuralTrips() {
     s.element.classList.add('rural-tile');
     var badge = document.createElement('span');
     badge.className = 'rural-badge';
-    badge.textContent = '🚗 ' + travelMin + 'min';
+    badge.textContent = travelMin + ' min drive';
     badge.title = 'Rural trip: ' + travelMin + ' min travel time. Consider planning accommodation or clustering nearby clients.';
     var titleEl = s.element.querySelector('.s-title');
     if (titleEl) titleEl.appendChild(badge);
