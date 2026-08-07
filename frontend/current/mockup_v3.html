@@ -21621,6 +21621,8 @@ function attachCalendarSlotHandlers() {
      math with hardcoded 60px/hour and would reintroduce the misaligned-
      selection bug if ever wired again. */
 }
+const _previewBlocks = []; // { el, col }
+
 function clearPreviewBlocks() {
   _previewBlocks.forEach(({ el }) => el.remove());
   _previewBlocks.length = 0;

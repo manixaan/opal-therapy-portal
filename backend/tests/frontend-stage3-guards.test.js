@@ -567,4 +567,11 @@ describe('calendar clean status indicators', () => {
     expect(HTML).toContain('min-height: 14px;');
     expect(HTML).toContain('.session.s-compact .s-title { flex: 1; min-width: 0; }');
   });
+
+  test('booking-panel preview state survives the legacy-handler removal', () => {
+    // The dead-handler cleanup once swallowed this top-level declaration,
+    // breaking closeBookingPanel at runtime. Pin declaration + consumers.
+    expect(HTML).toContain('const _previewBlocks = []; // { el, col }');
+    expect(HTML.indexOf('const _previewBlocks')).toBeLessThan(HTML.indexOf('function clearPreviewBlocks()'));
+  });
 });
