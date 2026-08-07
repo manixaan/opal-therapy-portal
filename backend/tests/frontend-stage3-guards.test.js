@@ -656,3 +656,26 @@ describe('snapshot day v1', () => {
     expect(HTML).not.toContain('⚠ No address');
   });
 });
+
+// ── Scheduler UI refinement (2026-08-07) ─────────────────────────────────────
+describe('scheduler ui refinement', () => {
+  test('brand is Opa with the organic pebble mark', () => {
+    expect(HTML).toContain('<h1 class="brand-opa">Opa</h1>');
+    expect(HTML).toContain('.brand-pebble {');
+    expect(HTML).not.toContain('Opal Therapy <span class="sub">Scheduler</span>');
+  });
+
+  test('calendar toolbar hides integration clutter without removing the sync machinery', () => {
+    expect(HTML).toContain('.cal-topbar .tz-label, .cal-topbar #cal-sync-strip { display: none !important; }');
+    // the underlying controls still exist in the DOM (functionality intact)
+    expect(HTML).toContain('id="cal-sync-strip"');
+    expect(HTML).toContain('id="btn-outlook-only"');
+  });
+
+  test('Month, Master and Day share the centred content frame', () => {
+    expect(HTML).toContain('--cal-frame: 1060px;');
+    expect(HTML).toContain('#month-scroll-area .month-section { max-width: var(--cal-frame)');
+    expect(HTML).toContain('#master-grid { max-width: var(--cal-frame); margin: 0 auto; }');
+    expect(HTML).toContain('.cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }');
+  });
+});
