@@ -25596,6 +25596,7 @@ var RPT_WEEKLY_TARGET_H  = 25.0;  // default hours/week
 // ── Open / close ─────────────────────────────────────────────
 
 function openReportPanel(mode) {
+  if (typeof snapLoad === 'function') snapLoad().then(function () { try { renderReportPanel(); } catch (_) {} });
   _reportMode = mode || 'daily';
   if (!_reportDate) _reportDate = new Date();
   _reportOpen = true;
@@ -25813,6 +25814,124 @@ function _rptWeekStart(date) {
 
 // ── Daily report ─────────────────────────────────────────────
 
+/* ── Snapshot Day V1 (2026-08-07): reminders + daily tasks over the new
+   /api/snapshot backend, rendered inside the daily panel. Personal scope
+   only (backend enforces user_id); timeline items link to the calendar. */
+var __snapReminders = [], __snapTasks = [];
+
+async function snapLoad() {
+  try {
+    const [r, t] = await Promise.all([
+      fetch('/api/snapshot/reminders', { credentials: 'include' }).then(x => x.ok ? x.json() : { reminders: [] }),
+      fetch('/api/snapshot/tasks', { credentials: 'include' }).then(x => x.ok ? x.json() : { tasks: [] }),
+    ]);
+    __snapReminders = r.reminders || [];
+    __snapTasks = t.tasks || [];
+  } catch (_) { __snapReminders = []; __snapTasks = []; }
+}
+
+function snapRefresh() { snapLoad().then(function () { if (typeof renderReportPanel === 'function') renderReportPanel(); }); }
+
+function snapOverdue(rem) { return rem.state === 'upcoming' && new Date(rem.due_at) < new Date(); }
+
+async function snapAddReminder() {
+  const title = prompt('Reminder title:'); if (!title) return;
+  const time = prompt('Due time today (HH:MM, 24h):', '16:00') || '16:00';
+  const d = new Date(); const [h, m] = time.split(':').map(Number);
+  const due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 16, m || 0);
+  await fetch('/api/snapshot/reminders', { method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, dueAt: due.toISOString() }) }).catch(function () {});
+  snapRefresh();
+}
+async function snapReminderAct(id, action, body) {
+  await fetch('/api/snapshot/reminders/' + id + '/' + action, { method: 'POST', credentials: 'include',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }).catch(function () {});
+  snapRefresh();
+}
+async function snapAddTask() {
+  const title = prompt('Task:'); if (!title) return;
+  await fetch('/api/snapshot/tasks', { method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) }).catch(function () {});
+  snapRefresh();
+}
+async function snapTaskToggle(id, done) {
+  await fetch('/api/snapshot/tasks/' + id + '/' + (done ? 'complete' : 'reopen'), { method: 'POST', credentials: 'include' }).catch(function () {});
+  snapRefresh();
+}
+async function snapTaskDelete(id) {
+  if (!confirm('Delete this task?')) return;
+  await fetch('/api/snapshot/tasks/' + id, { method: 'DELETE', credentials: 'include' }).catch(function () {});
+  snapRefresh();
+}
+async function snapTaskMove(id, dir) {
+  const active = __snapTasks.filter(t => !t.completed).map(t => t.id);
+  const i = active.indexOf(id); const j = i + dir;
+  if (i < 0 || j < 0 || j >= active.length) return;
+  [active[i], active[j]] = [active[j], active[i]];
+  await fetch('/api/snapshot/tasks/order', { method: 'PUT', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: active }) }).catch(function () {});
+  snapRefresh();
+}
+
+function buildSnapshotWorkHTML() {
+  const esc = escapeHtml;
+  const fmtT = iso => new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  const todayKey = new Date().toDateString();
+  const rems = __snapReminders.filter(r => r.state !== 'dismissed' &&
+    (r.state === 'upcoming' ? true : new Date(r.due_at).toDateString() === todayKey));
+  const activeTasks = __snapTasks.filter(t => !t.completed);
+  const doneTasks = __snapTasks.filter(t => t.completed);
+  const overdue = rems.filter(snapOverdue).length;
+
+  let html = '<div class="rpt-section"><div class="rpt-section-title" style="display:flex;align-items:center;gap:8px;">Today\'s work' +
+    '<span style="font-weight:400;color:var(--muted);font-size:11.5px;">' + activeTasks.length + ' task' + (activeTasks.length === 1 ? '' : 's') +
+    (overdue ? ' · <span style="color:#b45309;font-weight:600;">' + overdue + ' overdue</span>' : '') + '</span>' +
+    '<span style="flex:1"></span>' +
+    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddReminder()">Add reminder</button>' +
+    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddTask()">Add task</button></div>';
+
+  // Reminders
+  if (rems.length) {
+    html += rems.map(r => {
+      const od = snapOverdue(r);
+      return '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="flex:1;min-width:0;"><span style="font-weight:600;font-size:13px;">' + esc(r.title) + '</span>' +
+        ' <span style="font-size:11.5px;color:' + (od ? '#b45309' : 'var(--muted)') + ';">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span>' +
+        (r.state === 'completed' ? ' <span class="rh-status-chip">done</span>' : '') + '</span>' +
+        (r.state === 'upcoming'
+          ? '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'defer\',{minutes:60})">+1h</button>' +
+            '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'complete\')">Done</button>' +
+            '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'dismiss\')">Dismiss</button>'
+          : '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'reopen\')">Reopen</button>') +
+        '</div>';
+    }).join('');
+  } else {
+    html += '<div class="rh-quiet">No reminders — add one for anything you must not miss today.</div>';
+  }
+
+  // Tasks
+  html += activeTasks.length ? activeTasks.map((t, i) =>
+    '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
+    '<input type="checkbox" style="accent-color:var(--accent);" aria-label="Complete task" onchange="snapTaskToggle(\'' + t.id + '\', true)">' +
+    '<span style="flex:1;font-size:13px;min-width:0;">' + esc(t.title) + '</span>' +
+    '<button class="btn" style="font-size:11px;padding:2px 7px;"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up" onclick="snapTaskMove(\'' + t.id + '\',-1)">Up</button>' +
+    '<button class="btn" style="font-size:11px;padding:2px 7px;"' + (i === activeTasks.length - 1 ? ' disabled' : '') + ' aria-label="Move down" onclick="snapTaskMove(\'' + t.id + '\',1)">Down</button>' +
+    '<button class="btn" style="font-size:11px;padding:2px 7px;" onclick="snapTaskDelete(\'' + t.id + '\')">Delete</button>' +
+    '</div>').join('')
+    : '<div class="rh-quiet">No active tasks. Add the small things you want done today.</div>';
+
+  if (doneTasks.length) {
+    html += '<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:var(--muted);">Completed (' + doneTasks.length + ')</summary>' +
+      doneTasks.map(t => '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="flex:1;font-size:13px;color:var(--muted);text-decoration:line-through;">' + esc(t.title) + '</span>' +
+        '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapTaskToggle(\'' + t.id + '\', false)">Restore</button></div>').join('') +
+      '</details>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function buildDailyReportHTML(date, role) {
   // ── Report preferences ──────────────────────────────────────────
   var _rptPrefs = ((window.APP_SETTINGS || {}).reportPreferences) || {};
@@ -25828,6 +25947,7 @@ function buildDailyReportHTML(date, role) {
   var travel    = _inclTravel ? _rptTravel(dayKey) : { travelMin: 0, legs: [], kmTotal: 0 };
   var gaps      = _inclGaps   ? _rptGaps(dayKey)   : [];
   var missing   = _rptMissingLocs(sessions);
+  var _snapHTML = (typeof buildSnapshotWorkHTML === 'function') ? buildSnapshotWorkHTML() : '';
   var targetH   = RPT_DAILY_TARGET_H;
   var billableH = metrics.billableMin / 60;
   var targetPct = Math.min(100, Math.round(billableH / targetH * 100));
@@ -25835,9 +25955,10 @@ function buildDailyReportHTML(date, role) {
   var dayLabel  = isToday ? 'Today' : date.toLocaleDateString('en-AU', { weekday: 'long' });
 
   if (sessions.length === 0) {
-    return _rptEmpty(dayLabel + ' — no appointments', 'No sessions found for ' + dateStr + '. If you expect appointments, check that the Outlook sync has run and events have loaded into the calendar.');
+    return _snapHTML + _rptEmpty(dayLabel + ' — no appointments', 'No sessions found for ' + dateStr + '. If you expect appointments, check that the Outlook sync has run and events have loaded into the calendar.');
   }
 
+  var html_prefix = _snapHTML; // Snapshot Day work section leads the report
   var clientSessions = sessions.filter(function(s) { return s.type !== 'travel' && s.type !== 'leave'; });
   var first = clientSessions[0];
   var last  = clientSessions[clientSessions.length - 1];
@@ -25853,7 +25974,7 @@ function buildDailyReportHTML(date, role) {
   html += '<div class="rpt-summary-cards">';
   html += _rptCard('📅', metrics.appts, 'Appointments', metrics.uniqueClients + ' client' + (metrics.uniqueClients !== 1 ? 's' : ''), '#4f46e5');
   html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + targetH + 'h target', '#059669');
-  html += _rptCard('🚗', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#d97706');
+  html += _rptCard('', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#d97706');
   html += _rptCard('💡', gaps.length, 'Free gaps', gaps.length > 0 ? 'available today' : 'none found', '#7c3aed');
   if (attn.length > 0) html += _rptCard('⚠', attn.length, 'Attention', 'item' + (attn.length !== 1 ? 's' : '') + ' to review', '#dc2626');
   html += '</div>';
@@ -25958,8 +26079,8 @@ function buildDailyReportHTML(date, role) {
         html += '<div class="rpt-tl-dot ' + (isBillable ? 'billable' : 'nonbillable') + '"></div>';
         html += '<div class="rpt-tl-body"><div class="rpt-tl-title">' + (s.patient || s.title || typeLabel) + '</div>';
         html += '<div class="rpt-tl-meta">' + typeLabel;
-        if (loc) html += ' · 📍 ' + loc;
-        if (missingLoc) html += ' <span class="rpt-warn-chip">⚠ No address</span>';
+        if (loc) html += ' · ' + loc;
+        if (missingLoc) html += ' <span class="rpt-warn-chip">No address</span>';
         if (isBillable) html += ' <span class="rpt-badge billable">Billable</span>';
         html += '</div></div></div>';
       } else if (item.kind === 'travel') {
@@ -25970,7 +26091,7 @@ function buildDailyReportHTML(date, role) {
         html += '<div class="rpt-timeline-row">';
         html += '<div class="rpt-tl-time">' + tT + '</div>';
         html += '<div class="rpt-tl-dot travel"></div>';
-        html += '<div class="rpt-tl-body"><div class="rpt-tl-title">🚗 Travel · ' + (seg.travelMin || '?') + ' min</div>';
+        html += '<div class="rpt-tl-body"><div class="rpt-tl-title">Travel · ' + (seg.travelMin || '?') + ' min</div>';
         html += '<div class="rpt-tl-meta">' + from + ' → ' + to + '</div></div></div>';
       } else if (item.kind === 'gap') {
         var seg = item.seg;
@@ -25989,7 +26110,7 @@ function buildDailyReportHTML(date, role) {
 
   // Travel summary
   if (travel.travelMin > 0 || missing.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">🚗 Travel Summary</div><div class="rpt-travel-list">';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Travel Summary</div><div class="rpt-travel-list">';
     travel.legs.forEach(function(seg) {
       var from = (seg.fromLoc && seg.fromLoc.suburb) || 'Base';
       var to   = (seg.toLoc   && seg.toLoc.suburb)   || 'Base';
@@ -26059,11 +26180,11 @@ function buildDailyReportHTML(date, role) {
   html += '<div class="rpt-actions">';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">📅 Open Calendar</button>';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'book\')">➕ Book Appointment</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">🗺 Travel Logbook</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
   html += '<button class="rpt-action-btn" onclick="switchReportMode(\'weekly\')">📊 View This Week</button>';
   html += '</div>';
 
-  return html;
+  return html_prefix + html;
 }
 
 // ── Weekly report ─────────────────────────────────────────────
@@ -26119,7 +26240,7 @@ function buildWeeklyReportHTML(date, role) {
   html += '<div class="rpt-summary-cards">';
   html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + weekTarget + 'h target', '#059669');
   html += _rptCard('📅', totalAppts, 'Appointments', allClients.size + ' clients', '#4f46e5');
-  html += _rptCard('🚗', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#d97706');
+  html += _rptCard('', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#d97706');
   html += _rptCard('💡', totalGaps, 'Free gaps', 'across Mon–Fri', '#7c3aed');
   if (totalMissing > 0) html += _rptCard('⚠', totalMissing, 'Missing addr', 'location' + (totalMissing > 1 ? 's' : '') + ' missing', '#dc2626');
   html += '</div>';
@@ -26231,7 +26352,7 @@ function buildWeeklyReportHTML(date, role) {
   // Action buttons
   html += '<div class="rpt-actions">';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">📅 Open Calendar</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">🗺 Travel Logbook</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'profile\')">👤 My Profile</button>';
   html += '<button class="rpt-action-btn" onclick="switchReportMode(\'daily\')">📋 View Today</button>';
   html += '</div>';

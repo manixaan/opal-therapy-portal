@@ -451,6 +451,9 @@ app.use('/', require('./resources-routes'));
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
 
+// Snapshot Day (personal reminders + daily tasks; strictly user-scoped)
+app.use('/', require('./snapshot-routes'));
+
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));
 

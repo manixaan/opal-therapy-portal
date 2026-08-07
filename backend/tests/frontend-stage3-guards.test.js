@@ -633,3 +633,26 @@ describe('contextual smart booking + interaction pass', () => {
     expect(HTML).not.toContain('📍 Cluster by region');
   });
 });
+
+// ── Snapshot Day V1 (2026-08-07) ─────────────────────────────────────────────
+describe('snapshot day v1', () => {
+  test('reminders + tasks module wired to the snapshot API', () => {
+    expect(HTML).toContain("fetch('/api/snapshot/reminders'");
+    expect(HTML).toContain("fetch('/api/snapshot/tasks'");
+    expect(HTML).toContain('function buildSnapshotWorkHTML()');
+    expect(HTML).toContain('return html_prefix + html;');
+    expect(HTML).toContain('function snapTaskMove(id, dir)'); // reorder persists via PUT order
+    expect(HTML).toContain("'/api/snapshot/tasks/order'");
+  });
+
+  test('reminder lifecycle actions exist; delete requires confirmation', () => {
+    for (const a of ["'complete'", "'dismiss'", "'reopen'", "'defer'"]) expect(HTML).toContain('snapReminderAct(');
+    expect(HTML).toContain("if (!confirm('Delete this task?')) return;");
+  });
+
+  test('snapshot/report panel emoji sweep held', () => {
+    expect(HTML).not.toContain('🚗 Travel ·');
+    expect(HTML).not.toContain('🗺 Travel Logbook');
+    expect(HTML).not.toContain('⚠ No address');
+  });
+});
