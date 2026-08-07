@@ -2190,10 +2190,13 @@
      edges instead of each view picking its own width. Week keeps full width
      (seven columns want the space). */
   :root { --cal-frame: 1060px; }
-  #month-scroll-area .month-section { max-width: var(--cal-frame); width: 100%; margin: 0 auto; }
+  /* !important: the original month/master rules set shrink widths that
+     otherwise win the cascade — the shared frame must be authoritative. */
+  #month-scroll-area .month-section { max-width: var(--cal-frame) !important; width: 100% !important; margin: 0 auto !important; }
+  #month-scroll-area .month-grid { width: 100% !important; }
   #master-chip-strip, #master-status { max-width: var(--cal-frame); width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; }
   #master-grid-wrap { flex: 1; overflow: auto; }
-  #master-grid { max-width: var(--cal-frame); margin: 0 auto; }
+  #master-grid { max-width: var(--cal-frame) !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box; }
   .cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }
   /* Weekends: fully interactive, only a whisper of tonal distinction */
   .cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: #fbfaf7; }

@@ -674,8 +674,8 @@ describe('scheduler ui refinement', () => {
 
   test('Month, Master and Day share the centred content frame', () => {
     expect(HTML).toContain('--cal-frame: 1060px;');
-    expect(HTML).toContain('#month-scroll-area .month-section { max-width: var(--cal-frame)');
-    expect(HTML).toContain('#master-grid { max-width: var(--cal-frame); margin: 0 auto; }');
+    expect(HTML).toContain('#month-scroll-area .month-section { max-width: var(--cal-frame) !important');
+    expect(HTML).toContain('#master-grid { max-width: var(--cal-frame) !important');
     expect(HTML).toContain('.cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }');
   });
 });
