@@ -277,6 +277,106 @@
     return lower.concat(upper);
   }
 
+
+  // ── Matrix pure helpers (Scheduling-Assistant pivot) ──────────────────────
+  // The horizontal free/busy matrix derives everything it paints from the
+  // canonical availability segments; these helpers are pure so the matrix
+  // logic is unit-testable in node.
+
+  // Visible time window for the matrix. 'work' hugs the organisation's
+  // working-day bounds with an hour of context either side; 'full' shows
+  // the whole day.
+  function matrixWindow(zoom, workingHours) {
+    if (zoom === 'full') return { startMin: 0, endMin: 1440 };
+    var ws = (workingHours && workingHours.startMin != null) ? workingHours.startMin : 480;
+    var we = (workingHours && workingHours.endMin != null) ? workingHours.endMin : 1020;
+    var s = Math.max(0, Math.floor(ws / 60) * 60 - 60);
+    var e = Math.min(1440, Math.ceil(we / 60) * 60 + 60);
+    if (e <= s) { s = 420; e = 1140; }
+    return { startMin: s, endMin: e };
+  }
+
+  // Simplified paint runs for one therapist row. Quiet background means
+  // genuinely available; only the non-bookable states get a wash. Busy time
+  // is drawn as event blocks, so busy segments need no paint of their own.
+  function trackPaint(entry) {
+    if (!entry || !entry.segments) return [];
+    var runs = [];
+    entry.segments.forEach(function (s) {
+      var cls = null;
+      if (s.type === 'outside_hours' || s.type === 'not_working') cls = 'off';
+      else if (s.type === 'leave') cls = 'leave';
+      else if (s.type === 'buffer') cls = 'buffer';
+      else if (s.type === 'short_gap') cls = 'short';
+      if (!cls) return;
+      var last = runs[runs.length - 1];
+      if (last && last.cls === cls && last.endMin === s.startMin) { last.endMin = s.endMin; return; }
+      runs.push({ startMin: s.startMin, endMin: s.endMin, cls: cls });
+    });
+    return runs;
+  }
+
+  // Verdict for a proposed [startMin, startMin+durationMin) slot against one
+  // therapist's availability segments. Busy/leave outrank outside-hours so a
+  // row is never called merely "outside hours" when it actually conflicts.
+  function slotVerdict(entry, startMin, durationMin) {
+    if (!entry || !entry.segments || !entry.segments.length) {
+      return { state: 'unknown', label: 'No availability data' };
+    }
+    var endMin = startMin + durationMin;
+    var hasBusy = false, hasLeave = false, hasOff = false, offType = null;
+    var hasBuffer = false, hasShort = false;
+    entry.segments.forEach(function (s) {
+      if (s.endMin <= startMin || s.startMin >= endMin) return;
+      if (s.type === 'busy') hasBusy = true;
+      else if (s.type === 'leave') hasLeave = true;
+      else if (s.type === 'outside_hours' || s.type === 'not_working') { hasOff = true; offType = offType || s.type; }
+      else if (s.type === 'buffer') hasBuffer = true;
+      else if (s.type === 'short_gap') hasShort = true;
+    });
+    if (hasBusy) return { state: 'conflict', label: 'Busy' };
+    if (hasLeave) return { state: 'conflict', label: 'On leave' };
+    if (hasOff) {
+      return { state: 'outside', label: offType === 'not_working' ? 'Not working' : 'Outside working hours' };
+    }
+    if (hasBuffer) return { state: 'conflict', label: 'Buffer time' };
+    if (hasShort) return { state: 'conflict', label: 'Not enough free time' };
+    return { state: 'available', label: 'Available' };
+  }
+
+  // Client-side mirror of the engine's intersection, used only for the
+  // common-free header highlight; the server calculation stays canonical.
+  function commonFreeWindows(entries, minDurationMin) {
+    var lists = (entries || []).map(function (e) {
+      return ((e && e.segments) || []).filter(function (s) { return s.type === 'available'; })
+        .map(function (s) { return { startMin: s.startMin, endMin: s.endMin }; });
+    });
+    if (!lists.length) return [];
+    var acc = lists[0];
+    for (var i = 1; i < lists.length && acc.length; i++) {
+      var next = [];
+      /* eslint-disable no-loop-func */
+      acc.forEach(function (a) {
+        lists[i].forEach(function (b) {
+          var s2 = Math.max(a.startMin, b.startMin), e2 = Math.min(a.endMin, b.endMin);
+          if (e2 - s2 > 0) next.push({ startMin: s2, endMin: e2 });
+        });
+      });
+      acc = next;
+    }
+    return acc.filter(function (w) { return w.endMin - w.startMin >= (minDurationMin || 0); })
+      .sort(function (a, b) { return a.startMin - b.startMin; });
+  }
+
+  function searchTherapists(list, q) {
+    var s = String(q || '').trim().toLowerCase();
+    if (!s) return list;
+    return (list || []).filter(function (t) {
+      return String(t.displayName || '').toLowerCase().indexOf(s) !== -1 ||
+             String(t.roleTitle || '').toLowerCase().indexOf(s) !== -1;
+    });
+  }
+
   // ── Exports for unit tests (node) ─────────────────────────────────────────
   var helpers = {
     perthParts: perthParts, addDaysYmd: addDaysYmd, mondayOfYmd: mondayOfYmd,
@@ -287,55 +387,55 @@
     clinicalMinutes: clinicalMinutes, nextAvailableSegment: nextAvailableSegment, snap15: snap15,
     haversineKm: haversineKm, dedupSuburbPoints: dedupSuburbPoints,
     clusterPoints: clusterPoints, convexHull: convexHull,
+    matrixWindow: matrixWindow, trackPaint: trackPaint, slotVerdict: slotVerdict,
+    commonFreeWindows: commonFreeWindows, searchTherapists: searchTherapists,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (!global || !global.document) return; // node/test environment stops here
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  Browser wiring
+  //  Browser wiring — Scheduling-Assistant free/busy matrix
+  //  Therapists down the left, time across the top. One primary surface;
+  //  map / therapist details / recommendations live in a single contextual
+  //  inspector. All intelligence comes from the same aggregated endpoints
+  //  as before — this layer is presentation only.
   // ═══════════════════════════════════════════════════════════════════════
 
-  var HOUR = function () { return global.HOUR_PX || 48; };
-  var WORK_START_H = 8, WORK_END_H = 18; // soft visual wash only (not availability)
+  var PPM = 2;                 // horizontal pixels per minute
+  var RAIL_W = 216;            // fixed therapist rail width
+  var ROW_H = 46;              // compact row height (44 content + separation)
 
   var SCHED = {
-    date: null,             // 'YYYY-MM-DD' (Perth)
-    mode: 'day',            // 'day' | 'week'
-    therapists: [],
+    date: null,               // 'YYYY-MM-DD' (Perth)
+    therapists: [],           // [{id, displayName, initials, colour, roleTitle}]
     events: [],
-    rangeKey: null,         // cache key of last fetch
-    filterIds: null,        // Set of therapist ids | null = everyone
-    discipline: null,
-    // Focus state — Phase 4 (availability Focus Mode) extends this object
-    // rather than replacing it: keep it a plain serialisable shape.
-    focusId: null,
+    rangeKey: null,
     loading: false,
+    gen: 0,                   // request generation — bumped on every date change
     nowTimer: null,
-    // Phase 2 — availability intelligence layer
-    overlay: (function () { try { return localStorage.getItem('sch_overlay') === '1'; } catch (e) { return false; } })(),
+    // one canonical proposed slot drives band, statuses, candidates, prefill
+    proposed: null,           // { startMin, durationMin } | null
+    duration: 60,
+    targetId: null,           // therapist picked from the matrix (schedule target)
+    client: { suburb: '', telehealth: false },
+    filters: { discipline: '', search: '', checked: null }, // checked: Set|null = all
+    sort: 'practice',         // 'practice' | 'available' | 'name'
+    zoom: 'work',             // 'work' | 'full'
+    // one contextual inspector; never several panels at once
+    inspector: null,          // null | 'therapist' | 'map' | 'recs'
+    inspectorId: null,        // therapist id when inspector === 'therapist'
     avail: { key: null, byId: {}, meta: null, loading: false },
-    common: { open: false, minDur: 30, loading: false, result: null },
-    // Phase 3 — Quick Availability Finder (right intelligence panel)
-    // Phase 5/6 — Scheduler Map (right intelligence panel tab)
+    common: { minDur: 30, key: null, slots: null, loading: false, gen: 0, timer: null },
+    recs: { key: null, result: null, loading: false, error: false, gen: 0, timer: null },
     map: {
-      open: (function () { try { return localStorage.getItem('sch_map') === '1'; } catch (e) { return false; } })(),
       footprints: (function () { try { return localStorage.getItem('sch_footprints') !== '0'; } catch (e) { return true; } })(),
-      sdk: 'none',              // none | loading | ready | error
-      gmap: null, el: null,     // persistent map DOM element survives re-renders
+      sdk: 'none', gmap: null, el: null,
       markers: [], polys: [], info: null,
       points: null, pointsKey: null, loading: false, error: false,
       meta: { telehealth: 0, unmappable: 0 },
       userMoved: false, boundsKey: null,
     },
-    finder: {
-      open: false, mode: 'exact',
-      startMin: 10 * 60, durationMin: 60,
-      rangeStartMin: 8 * 60, rangeEndMin: 12 * 60,
-      discipline: '',
-      suburb: '', telehealth: false,      // Phase 7: location-aware recommendations
-      loading: false, error: false, result: null, resultKind: 'finder',
-      gen: 0, timer: null,
-    },
+    drag: null,               // transient pointer-drag state for the band
   };
 
   function esc(s) {
@@ -346,1332 +446,1341 @@
 
   function root() { return document.getElementById('scheduler-root'); }
 
-  // ── Data (single aggregated request per range) ────────────────────────────
-  function rangeFor(state) {
-    if (state.mode === 'week') {
-      var mon = mondayOfYmd(state.date);
-      return { start: mon, end: addDaysYmd(mon, 7) };
-    }
-    return { start: state.date, end: addDaysYmd(state.date, 1) };
-  }
-
   function fmtDur(min) {
-    var h = Math.floor(min / 60), m = min % 60;
-    return (h ? h + 'h' : '') + (h && m ? ' ' : '') + (m || !h ? m + 'm' : '');
+    if (min % 60 === 0) return (min / 60) + 'h';
+    if (min < 60) return min + 'm';
+    return Math.floor(min / 60) + 'h ' + (min % 60) + 'm';
   }
 
-  function loadAvailability(force) {
-    if ((!SCHED.overlay && !SCHED.focusId) || SCHED.mode !== 'day') return Promise.resolve();
-    var key = SCHED.date;
-    if (!force && SCHED.avail.key === key) return Promise.resolve();
-    SCHED.avail.loading = true;
-    return fetch('/api/scheduler/availability?date=' + key, { credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        SCHED.avail.loading = false;
-        if (!j) { SCHED.avail = { key: key, byId: {}, meta: null, loading: false }; return; }
-        var byId = {};
-        (j.therapists || []).forEach(function (t) { byId[t.therapistProfileId] = t; });
-        SCHED.avail = { key: key, byId: byId, meta: j, loading: false };
-        render();
-      })
-      .catch(function () { SCHED.avail.loading = false; });
+  function minToHHMM(min) { return pad2(Math.floor(min / 60)) + ':' + pad2(min % 60); }
+  function hhmmToMin(v) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+    if (!m) return null;
+    var out = (+m[1]) * 60 + (+m[2]);
+    return out >= 0 && out < 1440 ? out : null;
   }
+
+  // ── Derived views of state ────────────────────────────────────────────────
+
+  function displayWindow() {
+    var meta = SCHED.avail.meta;
+    return matrixWindow(SCHED.zoom, meta && meta.workingHours);
+  }
+
+  function visibleTherapists() {
+    var base = filterTherapists(SCHED.therapists, null, null, SCHED.filters.discipline || null);
+    return searchTherapists(base, SCHED.filters.search);
+  }
+
+  function isChecked(tid) {
+    return !SCHED.filters.checked || SCHED.filters.checked.has(tid);
+  }
+
+  function checkedVisible() {
+    return visibleTherapists().filter(function (t) { return isChecked(t.id); });
+  }
+
+  function availEntry(tid) {
+    return SCHED.avail.key === SCHED.date ? SCHED.avail.byId[tid] : null;
+  }
+
+  // Travel/fit intelligence for a therapist from the last candidates result,
+  // keyed to the current proposed slot + client suburb (Level 3+ context).
+  function recsStatusFor(tid) {
+    var r = SCHED.recs.result;
+    if (!r || SCHED.recs.key !== recsKey()) return null;
+    var i;
+    for (i = 0; i < (r.candidates || []).length; i++) {
+      if (r.candidates[i].therapistProfileId === tid) return { kind: 'candidate', c: r.candidates[i] };
+    }
+    for (i = 0; i < (r.notPractical || []).length; i++) {
+      if (r.notPractical[i].therapistProfileId === tid) return { kind: 'notPractical', c: r.notPractical[i] };
+    }
+    return null;
+  }
+
+  function rowStatus(t) {
+    if (!SCHED.proposed) return null;
+    var verdict = slotVerdict(availEntry(t.id), SCHED.proposed.startMin, SCHED.proposed.durationMin);
+    var rs = recsStatusFor(t.id);
+    if (rs && verdict.state === 'available') {
+      if (rs.kind === 'notPractical') return { state: 'conflict', label: 'Not practical for this location' };
+      var tr = rs.c.travel || {};
+      if (tr.status === 'travel_feasible') return { state: 'available', label: 'Travel feasible' };
+      if (tr.status === 'tight_fit') return { state: 'tight', label: 'Tight travel' };
+      if (tr.status === 'travel_unknown') return { state: 'available', label: 'Available · travel unknown' };
+    }
+    return verdict;
+  }
+
+  function sortedRows(list) {
+    if (SCHED.sort === 'name') {
+      return list.slice().sort(function (a, b) { return String(a.displayName).localeCompare(String(b.displayName)); });
+    }
+    if (SCHED.sort === 'available' && SCHED.proposed) {
+      var rank = { available: 0, tight: 1, outside: 2, conflict: 3, unknown: 4 };
+      return list.slice().sort(function (a, b) {
+        var ra = rowStatus(a), rb = rowStatus(b);
+        var d = (rank[ra ? ra.state : 'unknown'] || 0) - (rank[rb ? rb.state : 'unknown'] || 0);
+        return d || String(a.displayName).localeCompare(String(b.displayName));
+      });
+    }
+    return list; // practice order — never reorder while the admin scans
+  }
+
+  // ── Data layer ────────────────────────────────────────────────────────────
 
   function load(force) {
-    var r = rangeFor(SCHED);
-    var key = r.start + '..' + r.end;
-    if (!force && key === SCHED.rangeKey) { render(); return Promise.resolve(); }
-    SCHED.loading = true; render();
-    return fetch('/api/calendar/master?startDate=' + r.start + '&endDate=' + r.end,
-      { credentials: 'include' })
-      .then(function (res) {
-        if (!res.ok) return res.json().catch(function () { return {}; })
-          .then(function (j) { throw new Error(j.error || ('HTTP ' + res.status)); });
-        return res.json();
-      })
+    var start = SCHED.date, end = addDaysYmd(SCHED.date, 1);
+    var key = start + '..' + end;
+    var gen = SCHED.gen;
+    if (!force && SCHED.rangeKey === key && SCHED.events.length) { render(); loadAvailability(force); return; }
+    SCHED.loading = true;
+    render();
+    fetch('/api/calendar/master?startDate=' + start + '&endDate=' + end, { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('master ' + r.status); return r.json(); })
       .then(function (data) {
+        if (gen !== SCHED.gen) return; // stale response — a newer date won
         SCHED.therapists = data.therapists || [];
         SCHED.events = data.events || [];
         SCHED.rangeKey = key;
         SCHED.loading = false;
         render();
-        loadAvailability();
-        if (SCHED.map.open) mapFetchPoints();
       })
-      .catch(function (err) {
+      .catch(function () {
+        if (gen !== SCHED.gen) return;
         SCHED.loading = false;
-        var el = root();
-        if (el) el.innerHTML = '<div class="sch-status">Could not load the scheduler: ' +
-          esc(err.message) + '</div>';
-        console.error('Master Scheduler load error:', err);
-      });
-  }
-
-  // ── Toolbar + filters ─────────────────────────────────────────────────────
-  function renderToolbar(frag) {
-    var tb = document.createElement('div');
-    tb.className = 'sch-toolbar';
-    tb.innerHTML =
-      '<span class="sch-title">MASTER SCHEDULER</span>' +
-      '<div class="sch-nav">' +
-        '<button type="button" data-act="prev" title="Previous ' + SCHED.mode + '" aria-label="Previous">&#8249;</button>' +
-        '<button type="button" data-act="next" title="Next ' + SCHED.mode + '" aria-label="Next">&#8250;</button>' +
-      '</div>' +
-      '<span class="sch-date-label">' + esc(SCHED.mode === 'week'
-        ? 'Week of ' + fmtDayLabel(mondayOfYmd(SCHED.date))
-        : fmtDayLabel(SCHED.date)) + '</span>' +
-      '<button type="button" class="sch-today-btn" data-act="today">Today</button>' +
-      '<input type="date" class="sch-date-input" value="' + esc(SCHED.date) + '" aria-label="Pick a date" />' +
-      '<div class="sch-mode" role="tablist">' +
-        '<button type="button" data-act="mode-day"' + (SCHED.mode === 'day' ? ' class="active"' : '') + '>Day</button>' +
-        '<button type="button" data-act="mode-week"' + (SCHED.mode === 'week' ? ' class="active"' : '') + '>Week</button>' +
-      '</div>' +
-      '<div class="sch-spacer"></div>' +
-      (SCHED.mode === 'day'
-        ? '<button type="button" class="sch-toggle' + (SCHED.overlay ? ' on' : '') + '" data-act="overlay" ' +
-            'title="Distinguish true availability from empty calendar space" aria-pressed="' + (SCHED.overlay ? 'true' : 'false') + '">' +
-            '<span class="sch-toggle-dot"></span>Availability</button>' +
-          '<button type="button" class="sch-common-btn' + (SCHED.common.open ? ' on' : '') + '" data-act="common">Common availability</button>' +
-          '<button type="button" class="sch-common-btn' + (SCHED.finder.open ? ' on' : '') + '" data-act="finder">Find availability</button>' +
-          '<button type="button" class="sch-common-btn' + (SCHED.map.open ? ' on' : '') + '" data-act="map">Map</button>'
-        : '') +
-      '<button type="button" class="sch-add-btn" data-act="add">+ Appointment</button>';
-
-    tb.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-act]'); if (!b) return;
-      var act = b.getAttribute('data-act');
-      if (act === 'prev')  nav(-1);
-      if (act === 'next')  nav(1);
-      if (act === 'today') nav('today');
-      if (act === 'overlay') {
-        SCHED.overlay = !SCHED.overlay;
-        try { localStorage.setItem('sch_overlay', SCHED.overlay ? '1' : '0'); } catch (err) {}
-        if (SCHED.overlay) { render(); loadAvailability(); } else { render(); }
-      }
-      if (act === 'common') { SCHED.common.open = !SCHED.common.open; SCHED.common.result = null; render(); if (SCHED.common.open && !SCHED.overlay) loadAvailability(); }
-      if (act === 'finder') {
-        SCHED.finder.open = !SCHED.finder.open;
-        if (SCHED.finder.open) { SCHED.map.open = false; persistMapOpen(); SCHED.finder.result = null; render(); finderSearch(); }
-        else render();
-      }
-      if (act === 'map') {
-        SCHED.map.open = !SCHED.map.open;
-        if (SCHED.map.open) SCHED.finder.open = false;
-        persistMapOpen();
         render();
-        if (SCHED.map.open) mapEnsure();
-      }
-      if (act === 'mode-day')  { SCHED.mode = 'day'; load(); }
-      if (act === 'mode-week') { SCHED.mode = 'week'; load(); }
-      if (act === 'add') {
-        // Open the Smart Booking slide-over directly — switchTab('book') would
-        // raw-switch to the default week grid underneath the scheduler.
-        if (typeof global.openBookingPanel === 'function') global.openBookingPanel();
-        else if (typeof global.switchTab === 'function') global.switchTab('book');
-      }
-    });
-    tb.querySelector('.sch-date-input').addEventListener('change', function (e) {
-      if (e.target.value) { SCHED.date = e.target.value; load(); }
-    });
-    frag.appendChild(tb);
+      });
+    loadAvailability(force);
+    if (SCHED.inspector === 'map') mapFetchPoints(force);
   }
 
-  function renderFilters(frag) {
-    var bar = document.createElement('div');
-    bar.className = 'sch-filters';
-
-    if (SCHED.focusId) {
-      var t = SCHED.therapists.find(function (x) { return x.id === SCHED.focusId; });
-      var av = SCHED.avail.key === SCHED.date ? SCHED.avail.byId[SCHED.focusId] : null;
-      var dayEvents = eventsForTherapistDay(SCHED.events, SCHED.focusId, SCHED.date);
-      var appts = apptCount(dayEvents);
-      var clin = clinicalMinutes(dayEvents);
-      var nowM = SCHED.date === todayPerthYmd() ? perthParts(new Date().toISOString()).minutes : 0;
-      var nextSeg = av && av.working ? nextAvailableSegment(av.segments, nowM) : null;
-      var nextTxt;
-      if (!av) nextTxt = '';
-      else if (!av.working) nextTxt = av.segments.some(function (x) { return x.type === 'leave'; }) ? 'On leave' : 'Not working today';
-      else if (nextSeg) nextTxt = 'Next available ' + fmtTime12(nextSeg.startMin) + '–' + fmtTime12(nextSeg.endMin) + ' · ' + fmtDur(nextSeg.endMin - nextSeg.startMin);
-      else nextTxt = 'No further availability today';
-
-      bar.className = 'sch-focus-head';
-      bar.innerHTML =
-        '<button type="button" class="sch-focus-crumb" data-act="unfocus">&#8592; All therapists</button>' +
-        '<div class="sch-fh-main">' +
-          '<span class="sch-h-av" style="background:' + esc((t && t.colour) || '#0f7c6c') + ';">' + esc((t && t.initials) || '?') + '</span>' +
-          '<div class="sch-fh-id">' +
-            '<div class="sch-fh-name">' + esc((t && t.displayName) || '') + '</div>' +
-            '<div class="sch-fh-role">' + esc((t && t.roleTitle) || '') +
-              (av && av.availabilityConfidence === 'default'
-                ? ' · <span class="sch-defbadge" title="No work schedule entered for this week">using organisation default hours</span>' : '') +
-            '</div>' +
-          '</div>' +
-          '<div class="sch-fh-stats">' +
-            '<span class="sch-fh-stat"><strong>' + appts + '</strong> appointment' + (appts === 1 ? '' : 's') + '</span>' +
-            '<span class="sch-fh-stat"><strong>' + fmtDur(clin) + '</strong> clinical</span>' +
-            (av && av.working ? '<span class="sch-fh-stat cap"><strong>' + fmtDur(av.capacity.availableMin) + '</strong> available</span>' : '') +
-          '</div>' +
-        '</div>' +
-        '<div class="sch-fh-next">' + esc(nextTxt) + '</div>' +
-        '<div class="sch-weekstrip" id="sch-weekstrip"></div>';
-      bar.addEventListener('click', function (e) {
-        if (e.target.closest('[data-act="unfocus"]')) { SCHED.focusId = null; render(); return; }
-        var day = e.target.closest('.sch-ws-day');
-        if (day) { SCHED.date = day.dataset.date; load(); loadAvailability(true); loadWeekCapacity(); }
+  // The availability engine paints the matrix itself — always loaded.
+  function loadAvailability(force) {
+    var key = SCHED.date;
+    var gen = SCHED.gen;
+    if (!force && SCHED.avail.key === key) { return; }
+    SCHED.avail.loading = true;
+    fetch('/api/scheduler/availability?date=' + key, { credentials: 'include' })
+      .then(function (r) { if (!r.ok) throw new Error('availability ' + r.status); return r.json(); })
+      .then(function (j) {
+        if (gen !== SCHED.gen || SCHED.date !== key) return;
+        var byId = {};
+        (j.therapists || []).forEach(function (t) { byId[t.therapistProfileId] = t; });
+        SCHED.avail = { key: key, byId: byId, meta: j, loading: false };
+        scheduleCommonFetch();
+        render();
+      })
+      .catch(function () {
+        if (gen !== SCHED.gen) return;
+        SCHED.avail.loading = false;
+        render();
       });
-      frag.appendChild(bar);
-      var stripHost = bar.querySelector('#sch-weekstrip');
-      if (stripHost) renderWeekStripInto(stripHost);
+  }
+
+  // Server-verified common availability for the checked set (the header
+  // highlight uses the client-side mirror immediately; this confirms it).
+  function scheduleCommonFetch() {
+    var c = SCHED.common;
+    if (c.timer) clearTimeout(c.timer);
+    c.timer = setTimeout(fetchCommon, 300);
+  }
+
+  function fetchCommon() {
+    var c = SCHED.common;
+    var ids = checkedVisible().map(function (t) { return t.id; });
+    if (ids.length < 2) { c.slots = null; c.key = null; renderSummaryOnly(); return; }
+    c.minDur = SCHED.proposed ? SCHED.proposed.durationMin : SCHED.duration;
+    var key = SCHED.date + '|' + ids.join(',') + '|' + c.minDur;
+    if (c.key === key && c.slots) { renderSummaryOnly(); return; }
+    var gen = ++c.gen;
+    c.loading = true;
+    fetch('/api/scheduler/common-availability', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: SCHED.date, therapistIds: ids, minDurationMin: SCHED.common.minDur }),
+    })
+      .then(function (r) { if (!r.ok) throw new Error('common ' + r.status); return r.json(); })
+      .then(function (j) {
+        var f = c;
+        if (gen !== f.gen) return;
+        c.loading = false;
+        c.key = key;
+        c.slots = j.slots || [];
+        render();
+      })
+      .catch(function () { if (gen === c.gen) { c.loading = false; } });
+  }
+
+  function recsKey() {
+    var p = SCHED.proposed;
+    if (!p) return null;
+    return [SCHED.date, p.startMin, p.durationMin, SCHED.client.suburb.trim().toLowerCase(),
+      SCHED.client.telehealth ? 't' : 'f', SCHED.filters.discipline || ''].join('|');
+  }
+
+  function scheduleRecsFetch() {
+    var f = SCHED.recs;
+    if (f.timer) clearTimeout(f.timer);
+    f.timer = setTimeout(fetchRecs, 350);
+  }
+
+  // Candidate scoring + travel feasibility (Levels 3–4). Only meaningful with
+  // a proposed slot; geography engages once a client suburb (or telehealth)
+  // context exists.
+  function fetchRecs() {
+    var f = SCHED.recs;
+    var p = SCHED.proposed;
+    var suburb = SCHED.client.suburb.trim();
+    if (!p || (!SCHED.client.telehealth && suburb.length < 3)) {
+      f.result = null; f.key = null; render();
       return;
     }
+    var key = recsKey();
+    if (f.key === key && f.result) { render(); return; }
+    var gen = ++f.gen;
+    f.loading = true; f.error = false;
+    renderSummaryOnly();
+    var body = {
+      date: SCHED.date, startMin: p.startMin, durationMin: p.durationMin,
+      isTelehealth: SCHED.client.telehealth,
+      discipline: SCHED.filters.discipline || undefined,
+      therapistIds: [],
+    };
+    if (!SCHED.client.telehealth) body.location = { suburb: suburb };
+    fetch('/api/scheduler/candidates', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { if (!r.ok) throw new Error('candidates ' + r.status); return r.json(); })
+      .then(function (j) {
+        if (gen !== f.gen) return;
+        f.loading = false; f.result = j; f.key = key;
+        if (SCHED.inspector === 'map' && j.clientPoint) mapShowClientPoint(j.clientPoint);
+        render();
+      })
+      .catch(function () {
+        if (gen !== f.gen) return;
+        f.loading = false; f.error = true;
+        render();
+      });
+  }
 
-    var html = '<span class="sch-filter-label">Therapists</span>' +
-      '<button type="button" class="sch-chip all' + (SCHED.filterIds ? ' muted' : ' selected') + '" data-tid="__all">' +
-        '<span class="sch-chip-av">&#9733;</span>Everyone</button>';
-    SCHED.therapists.forEach(function (t) {
-      var on = !SCHED.filterIds || SCHED.filterIds.has(t.id);
-      html += '<button type="button" class="sch-chip' + (on ? ' selected' : ' muted') + '"' +
-        ' data-tid="' + esc(t.id) + '" style="color:' + esc(t.colour || '#0f7c6c') + ';">' +
-        '<span class="sch-chip-av" style="background:' + esc(t.colour || '#0f7c6c') + ';">' + esc(t.initials || '?') + '</span>' +
-        esc(t.displayName) + '</button>';
+  // Week capacity summary for the therapist inspector (Mon–Fri of the
+  // selected week; cached per therapist+date, cleared on refresh).
+  var WEEK_CAP = {};
+  function loadWeekCapacity(tid) {
+    var monday = mondayOfYmd(SCHED.date);
+    var days = [0, 1, 2, 3, 4].map(function (i) { return addDaysYmd(monday, i); });
+    var pending = days.filter(function (d) { return WEEK_CAP[tid + '|' + d] === undefined; });
+    if (!pending.length) { renderWeekStripInto(tid, days); return; }
+    pending.forEach(function (d) {
+      WEEK_CAP[tid + '|' + d] = null; // in flight
+      fetch('/api/scheduler/availability?date=' + d + '&therapistIds=' + encodeURIComponent(tid), { credentials: 'include' })
+        .then(function (r) { if (!r.ok) throw new Error('cap ' + r.status); return r.json(); })
+        .then(function (j) {
+          var t = j.therapists && j.therapists[0];
+          WEEK_CAP[tid + '|' + d] = t ? (t.working ? (t.capacity && t.capacity.availableMin) || 0 : 'x') : 'x';
+          renderWeekStripInto(tid, days);
+        })
+        .catch(function () { WEEK_CAP[tid + '|' + d] = undefined; });
     });
+    renderWeekStripInto(tid, days);
+  }
 
-    var discs = disciplinesOf(SCHED.therapists);
-    if (discs.length > 1) {
-      html += '<span class="sch-filter-label" style="margin-left:8px;">Discipline</span>' +
-        '<select class="sch-select" data-role="discipline">' +
-        '<option value="">All</option>' +
-        discs.map(function (d) {
-          return '<option value="' + esc(d) + '"' + (SCHED.discipline === d ? ' selected' : '') + '>' + esc(d) + '</option>';
-        }).join('') + '</select>';
-    }
-    // NOTE: region filter intentionally absent — no reliable region data yet.
-    // The filter state object already carries a `region` seam for Phase 5+.
+  // ── State transitions (deterministic reset rules) ─────────────────────────
 
-    bar.innerHTML = html;
+  function setDate(ymd) {
+    if (ymd === SCHED.date) return;
+    SCHED.date = ymd;
+    SCHED.gen++;                                  // invalidate every in-flight response
+    SCHED.rangeKey = null;
+    SCHED.avail = { key: null, byId: {}, meta: null, loading: false };
+    SCHED.common.slots = null; SCHED.common.key = null;
+    SCHED.recs.result = null; SCHED.recs.key = null;
+    SCHED.targetId = null;
+    SCHED.map.pointsKey = null;
+    // proposed slot (time-of-day) stays — same time on the new date
+    load();
+    if (SCHED.proposed) scheduleRecsFetch();
+  }
+
+  function setProposed(startMin, durationMin) {
+    var win = displayWindow();
+    var dur = Math.max(15, Math.min(480, durationMin || SCHED.duration));
+    var s = Math.max(0, Math.min(1440 - dur, startMin));
+    SCHED.proposed = { startMin: s, durationMin: dur };
+    SCHED.duration = dur;
+    if (s < win.startMin || s + dur > win.endMin) SCHED.zoom = 'full';
+    scheduleRecsFetch();
+    scheduleCommonFetch();
+    render();
+  }
+
+  function clearProposed() {
+    SCHED.proposed = null;
+    SCHED.targetId = null;
+    SCHED.recs.result = null; SCHED.recs.key = null;
+    if (SCHED.inspector === 'recs') SCHED.inspector = null;
+    render();
+  }
+
+  function setClient(suburb, telehealth) {
+    SCHED.client.suburb = suburb != null ? suburb : SCHED.client.suburb;
+    if (telehealth != null) SCHED.client.telehealth = telehealth;
+    SCHED.recs.result = null; SCHED.recs.key = null;   // geography context changed
+    scheduleRecsFetch();
+  }
+
+  function openInspector(kind, tid) {
+    SCHED.inspector = kind;
+    SCHED.inspectorId = kind === 'therapist' ? tid : null;
+    if (kind === 'map') { mapFetchPoints(); }
+    render();
+    if (kind === 'map') mapEnsure();
+    if (kind === 'therapist' && tid) loadWeekCapacity(tid);
+  }
+
+  function closeInspector() {
+    SCHED.inspector = null;
+    SCHED.inspectorId = null;
+    render();
+  }
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────
+
+  function renderToolbar(frag) {
+    var bar = document.createElement('div');
+    bar.className = 'sch-toolbar sm-toolbar';
+    var p = SCHED.proposed;
+    bar.innerHTML =
+      '<span class="sch-title">Master Scheduler</span>' +
+      '<span class="sch-nav">' +
+        '<button type="button" class="sch-nav-btn" data-act="prev" title="Previous day">&lsaquo;</button>' +
+        '<button type="button" class="sch-nav-btn" data-act="next" title="Next day">&rsaquo;</button>' +
+      '</span>' +
+      '<span class="sch-date-label">' + esc(fmtDayLabel(SCHED.date)) + '</span>' +
+      '<button type="button" class="sch-today-btn" data-act="today">Today</button>' +
+      '<input type="date" class="sch-date-input" data-act="date" value="' + esc(SCHED.date) + '" aria-label="Scheduler date" />' +
+      '<span class="sm-ctl"><label>Start</label>' +
+        '<input type="time" step="900" class="sch-date-input sm-time" data-act="start" value="' + (p ? minToHHMM(p.startMin) : '') + '" aria-label="Proposed start time" /></span>' +
+      '<span class="sm-ctl"><label>Duration</label>' +
+        '<select class="sch-select sm-dur" data-act="duration" aria-label="Proposed duration">' +
+          [15, 30, 45, 60, 90, 120].map(function (d) {
+            return '<option value="' + d + '"' + (SCHED.duration === d ? ' selected' : '') + '>' + fmtDur(d) + '</option>';
+          }).join('') +
+        '</select></span>' +
+      '<span class="sm-ctl"><label>Discipline</label>' +
+        '<select class="sch-select" data-act="discipline" aria-label="Discipline filter">' +
+          '<option value="">All</option>' +
+          disciplinesOf(SCHED.therapists).map(function (d) {
+            return '<option value="' + esc(d) + '"' + (SCHED.filters.discipline === d ? ' selected' : '') + '>' + esc(d) + '</option>';
+          }).join('') +
+        '</select></span>' +
+      '<span class="sm-ctl"><label>Client suburb</label>' +
+        '<input type="text" class="sch-date-input sm-suburb" data-act="suburb" placeholder="Optional" value="' + esc(SCHED.client.suburb) + '" aria-label="Client suburb for travel checks" /></span>' +
+      '<span class="sch-spacer"></span>' +
+      '<span class="sm-ctl"><label>Sort</label>' +
+        '<select class="sch-select" data-act="sort" aria-label="Row order">' +
+          '<option value="practice"' + (SCHED.sort === 'practice' ? ' selected' : '') + '>Practice order</option>' +
+          '<option value="available"' + (SCHED.sort === 'available' ? ' selected' : '') + '>Available first</option>' +
+          '<option value="name"' + (SCHED.sort === 'name' ? ' selected' : '') + '>Name</option>' +
+        '</select></span>' +
+      '<select class="sch-select" data-act="zoom" aria-label="Time window">' +
+        '<option value="work"' + (SCHED.zoom === 'work' ? ' selected' : '') + '>Working day</option>' +
+        '<option value="full"' + (SCHED.zoom === 'full' ? ' selected' : '') + '>Full day</option>' +
+      '</select>' +
+      '<button type="button" class="sch-toggle' + (SCHED.inspector === 'map' ? ' on' : '') + '" data-act="map">Map</button>' +
+      '<button type="button" class="sch-toggle' + (SCHED.inspector === 'recs' ? ' on' : '') + '" data-act="recs"' + (p ? '' : ' disabled title="Pick a time first"') + '>Recommend</button>' +
+      '<button type="button" class="sch-add-btn" data-act="add">+ Appointment</button>';
+
     bar.addEventListener('click', function (e) {
-      var chip = e.target.closest('.sch-chip'); if (!chip) return;
-      var tid = chip.getAttribute('data-tid');
-      if (tid === '__all') { SCHED.filterIds = null; render(); return; }
-      if (!SCHED.filterIds) SCHED.filterIds = new Set([tid]);
-      else if (SCHED.filterIds.has(tid)) {
-        SCHED.filterIds.delete(tid);
-        if (!SCHED.filterIds.size) SCHED.filterIds = null;
-      } else SCHED.filterIds.add(tid);
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      var act = b.dataset.act;
+      if (act === 'prev') nav(-1);
+      else if (act === 'next') nav(1);
+      else if (act === 'today') nav('today');
+      else if (act === 'map') { SCHED.inspector === 'map' ? closeInspector() : openInspector('map'); }
+      else if (act === 'recs') { SCHED.inspector === 'recs' ? closeInspector() : openInspector('recs'); }
+      else if (act === 'add') { openBooking(SCHED.targetId); }
+    });
+    bar.addEventListener('change', function (e) {
+      var el = e.target.closest('[data-act]');
+      if (!el) return;
+      var act = el.dataset.act;
+      if (act === 'date' && el.value) setDate(el.value);
+      else if (act === 'duration') {
+        var d = parseInt(el.value, 10) || 60;
+        if (SCHED.proposed) setProposed(SCHED.proposed.startMin, d);
+        else { SCHED.duration = d; scheduleCommonFetch(); render(); }
+      }
+      else if (act === 'start') {
+        var m = hhmmToMin(el.value);
+        if (m != null) setProposed(snap15(m), SCHED.duration);
+      }
+      else if (act === 'discipline') {
+        SCHED.filters.discipline = el.value || '';
+        SCHED.recs.result = null; SCHED.recs.key = null;
+        scheduleCommonFetch(); scheduleRecsFetch(); render();
+      }
+      else if (act === 'sort') { SCHED.sort = el.value; render(); }
+      else if (act === 'zoom') { SCHED.zoom = el.value; render(); }
+    });
+    bar.addEventListener('input', function (e) {
+      var el = e.target.closest('[data-act="suburb"]');
+      if (el) setClient(el.value, null);
+    });
+    frag.appendChild(bar);
+  }
+
+  // ── Summary bar: proposed slot + who fits + common free ───────────────────
+
+  function summaryText() {
+    var p = SCHED.proposed;
+    var checked = checkedVisible();
+    var parts = [];
+    if (p) {
+      var free = checked.filter(function (t) {
+        var st = rowStatus(t);
+        return st && (st.state === 'available' || st.state === 'tight');
+      }).length;
+      parts.push('<strong>' + fmtTime12(p.startMin) + '&ndash;' + fmtTime12(p.startMin + p.durationMin) + '</strong>' +
+        ' &middot; ' + free + ' of ' + checked.length + ' selected therapist' + (checked.length === 1 ? '' : 's') + ' available' +
+        (SCHED.recs.loading ? ' &middot; checking travel&hellip;' : ''));
+      if (SCHED.targetId) {
+        var t = SCHED.therapists.find(function (x) { return x.id === SCHED.targetId; });
+        if (t) parts.push('<span class="sm-target">' + esc(t.displayName) + '</span>' +
+          '<button type="button" class="sch-add-btn sm-sched-btn" data-act="schedule">Schedule</button>');
+      }
+      parts.push('<button type="button" class="sm-clear" data-act="clear">Clear slot</button>');
+    } else {
+      parts.push('Click a clear moment in any row to propose a time &mdash; or set Start above.');
+    }
+    var slots = SCHED.common.slots;
+    if (slots && checked.length >= 2) {
+      if (slots.length) {
+        parts.push('<span class="sm-cf-note">Common free: ' + slots.slice(0, 3).map(function (s) {
+          return fmtTime12(s.startMin) + '&ndash;' + fmtTime12(s.endMin);
+        }).join(', ') + (slots.length > 3 ? ' &hellip;' : '') + '</span>');
+      } else {
+        parts.push('<span class="sm-cf-note">No common free window for everyone selected.</span>');
+      }
+    }
+    return parts.join(' ');
+  }
+
+  function renderSummary(frag) {
+    var el = document.createElement('div');
+    el.className = 'sm-summary';
+    el.id = 'sm-summary';
+    el.innerHTML = summaryText();
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'clear') clearProposed();
+      if (b.dataset.act === 'schedule') openBooking(SCHED.targetId);
+    });
+    frag.appendChild(el);
+  }
+
+  function renderSummaryOnly() {
+    var el = document.getElementById('sm-summary');
+    if (el) el.innerHTML = summaryText();
+  }
+
+  function openBooking(tid) {
+    if (tid && typeof global.selectBspTherapist === 'function') {
+      try { global.selectBspTherapist(tid); } catch (e) { /* booking panel optional */ }
+    }
+    if (typeof global.openBookingPanel === 'function') global.openBookingPanel();
+  }
+
+  // ── The matrix ────────────────────────────────────────────────────────────
+
+  function renderMatrix(frag, visible) {
+    var win = displayWindow();
+    var span = win.endMin - win.startMin;
+    var width = span * PPM;
+    var mode = 'cross'; // matrix is always a cross-therapist comparison surface
+
+    var scroll = document.createElement('div');
+    scroll.className = 'sm-scroll';
+    scroll.id = 'sm-scroll';
+
+    var grid = document.createElement('div');
+    grid.className = 'sm-grid';
+    grid.style.width = (RAIL_W + width) + 'px';
+
+    // ── header: corner + time scale ──
+    var head = document.createElement('div');
+    head.className = 'sm-headrow';
+    var corner = document.createElement('div');
+    corner.className = 'sm-corner';
+    var checkedAll = !SCHED.filters.checked;
+    corner.innerHTML =
+      '<input type="text" class="sm-search" placeholder="Search therapist" value="' + esc(SCHED.filters.search) + '" aria-label="Search therapist" />' +
+      '<span class="sm-selacts"><button type="button" data-act="all"' + (checkedAll ? ' disabled' : '') + '>Select all</button>' +
+      '<button type="button" data-act="none">Clear</button></span>';
+    corner.querySelector('.sm-search').addEventListener('input', function (e) {
+      SCHED.filters.search = e.target.value;
+      renderRowsOnly();
+    });
+    corner.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'all') SCHED.filters.checked = null;
+      else SCHED.filters.checked = new Set();
+      scheduleCommonFetch();
       render();
     });
-    var sel = bar.querySelector('[data-role="discipline"]');
-    if (sel) sel.addEventListener('change', function (e) {
-      SCHED.discipline = e.target.value || null; render();
-    });
-    frag.appendChild(bar);
-  }
+    head.appendChild(corner);
 
-  // ── Phase 4: focused-therapist week capacity strip ────────────────────────
-  // One small aggregated request per weekday for the FOCUSED therapist only,
-  // cached by therapist+date; reuses the canonical availability endpoint.
-  var WEEK_CAP = {}; // 'tid|date' -> availableMin | 'x' (not working/leave)
-  function loadWeekCapacity() {
-    var tid = SCHED.focusId;
-    if (!tid || SCHED.mode !== 'day') return;
-    var mon = mondayOfYmd(SCHED.date);
-    for (var i = 0; i < 5; i++) (function (d) {
-      var key = tid + '|' + d;
-      if (WEEK_CAP[key] !== undefined) return;
-      WEEK_CAP[key] = null; // in flight
-      fetch('/api/scheduler/availability?date=' + d + '&therapistIds=' + encodeURIComponent(tid),
-        { credentials: 'include' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (j) {
-          var t = j && j.therapists && j.therapists[0];
-          WEEK_CAP[key] = t ? (t.working ? t.capacity.availableMin : 'x') : 'x';
-          var strip = document.getElementById('sch-weekstrip');
-          if (strip && SCHED.focusId === tid) renderWeekStripInto(strip);
-        })
-        .catch(function () { WEEK_CAP[key] = undefined; });
-    })(addDaysYmd(mon, i));
-  }
-
-  function renderWeekStripInto(host) {
-    var tid = SCHED.focusId; if (!tid) return;
-    var mon = mondayOfYmd(SCHED.date);
-    var names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    var timehead = document.createElement('div');
+    timehead.className = 'sm-timehead';
+    timehead.style.width = width + 'px';
     var html = '';
-    for (var i = 0; i < 5; i++) {
-      var d = addDaysYmd(mon, i);
-      var cap = WEEK_CAP[tid + '|' + d];
-      var capTxt = cap === undefined || cap === null ? '·'
-        : cap === 'x' ? '—' : fmtDur(cap);
-      html += '<button type="button" class="sch-ws-day' + (d === SCHED.date ? ' on' : '') + '" data-date="' + d + '">' +
-        '<span class="sch-ws-name">' + names[i] + ' ' + Number(d.slice(8)) + '</span>' +
-        '<span class="sch-ws-cap">' + capTxt + '</span></button>';
+    for (var m = Math.ceil(win.startMin / 60) * 60; m < win.endMin; m += 60) {
+      html += '<span class="sm-tick" style="left:' + ((m - win.startMin) * PPM) + 'px">' + fmtTime12(m) + '</span>';
     }
-    host.innerHTML = html;
-  }
-
-  // ── Common availability (Phase 2) ─────────────────────────────────────────
-  function commonTherapistIds(visible) {
-    return visible.map(function (t) { return t.id; });
-  }
-
-  function renderCommon(frag, visible) {
-    if (!SCHED.common.open || SCHED.mode !== 'day') return;
-    var bar = document.createElement('div');
-    bar.className = 'sch-common';
-    var ids = commonTherapistIds(visible);
-    var res = SCHED.common.result;
-    var html = '<span class="sch-filter-label">Common availability</span>' +
-      '<span class="sch-common-sub">' + ids.length + ' therapist' + (ids.length === 1 ? '' : 's') + ' · ' + esc(fmtDayLabel(SCHED.date)) + '</span>' +
-      '<label class="sch-common-sub" for="sch-common-min">Minimum</label>' +
-      '<select id="sch-common-min" class="sch-select">' +
-        [30, 45, 60, 90].map(function (m) {
-          return '<option value="' + m + '"' + (SCHED.common.minDur === m ? ' selected' : '') + '>' + m + ' min</option>';
-        }).join('') + '</select>' +
-      '<button type="button" class="sch-common-find" data-act="find"' + (ids.length < 2 ? ' disabled title="Select at least two therapists"' : '') + '>' +
-        (SCHED.common.loading ? 'Finding…' : 'Find') + '</button>';
-    if (res) {
-      if (!res.slots.length) {
-        html += '<span class="sch-common-none">No common ' + res.minDurationMin + '-minute window — try a shorter minimum or fewer therapists.</span>';
-      } else {
-        html += res.slots.map(function (sl, i) {
-          return '<button type="button" class="sch-common-slot" data-slot="' + i + '">' +
-            fmtTime12(sl.startMin) + '–' + fmtTime12(sl.endMin) +
-            '<span class="sch-common-dur">' + esc(fmtDur(sl.durationMin)) + '</span></button>';
-        }).join('');
+    // common-free windows as a subtle top highlight
+    (SCHED.common.slots || []).forEach(function (s) {
+      var a = Math.max(s.startMin, win.startMin), b = Math.min(s.endMin, win.endMin);
+      if (b <= a) return;
+      html += '<span class="sm-cf" title="All selected therapists available ' + fmtTime12(s.startMin) + '&ndash;' + fmtTime12(s.endMin) + '" style="left:' + ((a - win.startMin) * PPM) + 'px;width:' + ((b - a) * PPM) + 'px"></span>';
+    });
+    if (SCHED.proposed) {
+      var p = SCHED.proposed;
+      var a2 = Math.max(p.startMin, win.startMin), b2 = Math.min(p.startMin + p.durationMin, win.endMin);
+      if (b2 > a2) {
+        html += '<span class="sm-headband sch-req-slot" style="left:' + ((a2 - win.startMin) * PPM) + 'px;width:' + ((b2 - a2) * PPM) + 'px">' +
+          fmtTime12(p.startMin) + '&ndash;' + fmtTime12(p.startMin + p.durationMin) + '</span>';
       }
     }
-    bar.innerHTML = html;
-    bar.addEventListener('click', function (e) {
-      var find = e.target.closest('[data-act="find"]');
-      if (find && !find.disabled) {
-        SCHED.common.loading = true; render();
-        fetch('/api/scheduler/common-availability', {
-          method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: SCHED.date, therapistIds: ids, minDurationMin: SCHED.common.minDur }),
-        })
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (j) { SCHED.common.loading = false; SCHED.common.result = j; render(); })
-          .catch(function () { SCHED.common.loading = false; render(); });
-        return;
-      }
-      var slot = e.target.closest('[data-slot]');
-      if (slot && SCHED.common.result) {
-        var sl = SCHED.common.result.slots[Number(slot.dataset.slot)];
-        if (sl) jumpToMinute(sl.startMin);
-      }
-    });
-    var sel = bar.querySelector('#sch-common-min');
-    if (sel) sel.addEventListener('change', function (e) {
-      SCHED.common.minDur = Number(e.target.value) || 30; SCHED.common.result = null; render();
-    });
-    frag.appendChild(bar);
-  }
+    timehead.innerHTML = html;
+    head.appendChild(timehead);
+    grid.appendChild(head);
 
-  function jumpToMinute(min) {
-    var scroll = document.querySelector('#scheduler-root .sch-scroll');
-    if (scroll) scroll.scrollTo({ top: Math.max(0, min / 60 * HOUR() - 90), behavior: 'smooth' });
-    document.querySelectorAll('#scheduler-root .sch-col').forEach(function (c) {
-      c.classList.remove('sch-flash');
-      void c.offsetWidth; // restart the animation
-      c.classList.add('sch-flash');
+    // ── rows ──
+    var rows = document.createElement('div');
+    rows.className = 'sm-rows';
+    rows.id = 'sm-rows';
+    sortedRows(visible).forEach(function (t) {
+      rows.appendChild(buildRow(t, win, width, mode));
+    });
+    grid.appendChild(rows);
+
+    scroll.appendChild(grid);
+    frag.appendChild(scroll);
+
+    // initial horizontal position: proposed slot or morning
+    requestAnimationFrame(function () {
+      var el = document.getElementById('sm-scroll');
+      if (!el || el.dataset.positioned) return;
+      el.dataset.positioned = '1';
+      var target = SCHED.proposed ? SCHED.proposed.startMin - 60 : (8 * 60 - 30);
+      el.scrollLeft = Math.max(0, (target - win.startMin) * PPM);
     });
   }
 
-  // ── Phase 3: Quick Availability Finder ────────────────────────────────────
-  function minToHHMM(min) { return pad2(Math.floor(min / 60)) + ':' + pad2(min % 60); }
-  function hhmmToMin(v) {
-    var m = /^(\d{1,2}):(\d{2})$/.exec(v || '');
-    return m ? Math.min(1435, Number(m[1]) * 60 + Number(m[2])) : null;
-  }
-
-  // Debounced canonical search — a generation counter makes stale responses
-  // impossible to apply over newer criteria.
-  function finderSearch() {
-    var f = SCHED.finder;
-    if (!f.open || SCHED.mode !== 'day') return;
-    if (f.timer) clearTimeout(f.timer);
-    f.timer = setTimeout(function () {
-      var gen = ++f.gen;
-      f.loading = true; f.error = false;
-      renderFinderOnly();
-      var visible = filterTherapists(SCHED.therapists, { ids: SCHED.filterIds, discipline: SCHED.discipline, focusId: SCHED.focusId });
-      var useCandidates = f.mode === 'exact' && (f.suburb || '').trim().length >= 3;
-      var body = {
-        date: SCHED.date, durationMin: f.durationMin, mode: f.mode,
-        therapistIds: visible.length === SCHED.therapists.length ? [] : visible.map(function (t) { return t.id; }),
-        discipline: f.discipline || undefined,
-      };
-      if (f.mode === 'exact') body.startMin = f.startMin;
-      else { body.rangeStartMin = f.rangeStartMin; body.rangeEndMin = f.rangeEndMin; }
-      if (useCandidates) {
-        body.location = { suburb: f.suburb.trim() };
-        body.isTelehealth = f.telehealth;
-      }
-      fetch(useCandidates ? '/api/scheduler/candidates' : '/api/scheduler/find-availability', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-        .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http')); })
-        .then(function (j) {
-          if (gen !== f.gen) return; // superseded
-          f.loading = false; f.result = j;
-          f.resultKind = useCandidates ? 'candidates' : 'finder';
-          renderFinderOnly();
-          mapShowClientPoint(useCandidates && j.clientPoint ? j.clientPoint : null);
-        })
-        .catch(function () {
-          if (gen !== f.gen) return;
-          f.loading = false; f.error = true; f.result = null; renderFinderOnly();
-        });
-    }, 280);
-  }
-
-  function mapShowClientPoint(pt) {
-    var m = SCHED.map;
-    if (m.clientMarker) { m.clientMarker.setMap(null); m.clientMarker = null; }
-    if (!pt || !m.gmap || !global.google) return;
-    m.clientMarker = new google.maps.Marker({
-      map: m.gmap, position: { lat: pt.lat, lng: pt.lng },
-      title: 'Proposed appointment — ' + pt.suburb + ' (not yet booked)',
-      icon: {
-        path: 'M 0,-12 L 3,-4 11,-4 5,1 7,9 0,4 -7,9 -5,1 -11,-4 -3,-4 Z',
-        fillColor: '#b5563a', fillOpacity: 1,
-        strokeColor: '#ffffff', strokeWeight: 1.5, scale: 1.1,
-      },
-      zIndex: 20,
+  function renderRowsOnly() {
+    var rows = document.getElementById('sm-rows');
+    if (!rows) { render(); return; }
+    var win = displayWindow();
+    var width = (win.endMin - win.startMin) * PPM;
+    rows.innerHTML = '';
+    sortedRows(visibleTherapists()).forEach(function (t) {
+      rows.appendChild(buildRow(t, win, width, 'cross'));
     });
-    m.gmap.panTo({ lat: pt.lat, lng: pt.lng });
   }
 
-  function renderFinderOnly() {
-    var host = document.getElementById('sch-finder');
-    if (!host) { render(); return; }
-    var fresh = buildFinder();
-    host.replaceWith(fresh);
-  }
+  function buildRow(t, win, width, mode) {
+    var checked = isChecked(t.id);
+    var entry = availEntry(t.id);
+    var row = document.createElement('div');
+    row.className = 'sm-row' + (checked ? '' : ' sm-unchecked') +
+      (entry && entry.working === false ? ' sch-notworking' : '') +
+      (SCHED.targetId === t.id ? ' sm-target-row' : '') +
+      (SCHED.inspectorId === t.id ? ' sm-inspected' : '');
+    row.dataset.tid = t.id;
 
-  function finderReasonText(u) {
-    if (u.reason === 'busy') {
-      return u.busyUntilMin != null ? 'Busy until ' + fmtTime12(u.busyUntilMin) : 'Busy';
-    }
-    if (u.reason === 'too_short') {
-      return 'Only ' + fmtDur(u.availableMin || 0) + ' free — ' + SCHED.finder.durationMin + ' min requested';
-    }
-    return u.reasonLabel || 'Unavailable';
-  }
-
-  function buildFinder() {
-    var f = SCHED.finder;
-    var aside = document.createElement('aside');
-    aside.className = 'sch-finder';
-    aside.id = 'sch-finder';
-    aside.setAttribute('aria-label', 'Quick availability finder');
-
-    var discs = disciplinesOf(SCHED.therapists);
-    var html =
-      '<div class="sch-f-head">Find availability' +
-        '<button type="button" class="sch-f-close" data-act="close" aria-label="Close finder">&#10005;</button></div>' +
-      '<div class="sch-f-form">' +
-        '<label class="sch-f-lbl">Date<input type="date" class="sch-f-input" data-f="date" value="' + esc(SCHED.date) + '"></label>' +
-        '<div class="sch-f-modes" role="radiogroup" aria-label="Search mode">' +
-          '<button type="button" class="sch-f-mode' + (f.mode === 'exact' ? ' on' : '') + '" data-mode="exact">Exact time</button>' +
-          '<button type="button" class="sch-f-mode' + (f.mode === 'range' ? ' on' : '') + '" data-mode="range">Time range</button>' +
-        '</div>' +
-        (f.mode === 'exact'
-          ? '<label class="sch-f-lbl">Start<input type="time" step="900" class="sch-f-input" data-f="start" value="' + minToHHMM(f.startMin) + '"></label>'
-          : '<div class="sch-f-range">' +
-              '<label class="sch-f-lbl">Between<input type="time" step="900" class="sch-f-input" data-f="rstart" value="' + minToHHMM(f.rangeStartMin) + '"></label>' +
-              '<label class="sch-f-lbl">and<input type="time" step="900" class="sch-f-input" data-f="rend" value="' + minToHHMM(f.rangeEndMin) + '"></label>' +
-            '</div>' +
-            '<div class="sch-f-dayparts">' +
-              '<button type="button" class="sch-chip" data-part="480,720">Morning</button>' +
-              '<button type="button" class="sch-chip" data-part="720,1020">Afternoon</button>' +
-              '<button type="button" class="sch-chip" data-part="480,1020">All day</button>' +
-            '</div>') +
-        '<label class="sch-f-lbl">Duration<select class="sch-f-input" data-f="dur">' +
-          [30, 45, 60, 90, 120].map(function (d) {
-            return '<option value="' + d + '"' + (f.durationMin === d ? ' selected' : '') + '>' + d + ' min</option>';
-          }).join('') +
-          '<option value="custom"' + ([30, 45, 60, 90, 120].indexOf(f.durationMin) === -1 ? ' selected' : '') + '>Custom…</option>' +
-        '</select></label>' +
-        ([30, 45, 60, 90, 120].indexOf(f.durationMin) === -1
-          ? '<label class="sch-f-lbl">Minutes<input type="number" min="5" max="480" step="5" class="sch-f-input" data-f="durcustom" value="' + f.durationMin + '"></label>'
-          : '') +
-        (discs.length > 1
-          ? '<label class="sch-f-lbl">Discipline<select class="sch-f-input" data-f="disc">' +
-              '<option value="">All</option>' +
-              discs.map(function (d) {
-                return '<option value="' + esc(d) + '"' + (f.discipline === d ? ' selected' : '') + '>' + esc(d) + '</option>';
-              }).join('') + '</select></label>'
-          : '') +
-        (f.mode === 'exact'
-          ? '<label class="sch-f-lbl">Location<input type="text" class="sch-f-input" data-f="suburb" placeholder="Suburb (optional)" value="' + esc(f.suburb) + '"></label>' +
-            ((f.suburb || '').trim().length >= 3
-              ? '<label class="sch-f-lbl sch-f-tele"><span>Telehealth</span><input type="checkbox" data-f="tele"' + (f.telehealth ? ' checked' : '') + '></label>'
-              : '')
-          : '') +
-        '<div class="sch-f-scope">Searches the therapists selected in the filter bar.' +
-          (f.mode === 'exact' ? ' Add a suburb for geographic recommendations.' : '') + '</div>' +
-      '</div>';
-
-    // ── Results ──
-    var TIER_LABELS = { best: 'Best fit', good: 'Good fit', possible: 'Possible', poor: 'Poor fit' };
-    function reasonRow(r) {
-      var neg = /far_|travel_tight|travel_infeasible|travel_unknown|geography_unknown|default_hours/.test(r.code);
-      return '<span class="sch-f-reason' + (neg ? ' warn' : '') + '">' + (neg ? '&#9651; ' : '&#10003; ') + esc(r.label) + '</span>';
-    }
-    function candidateCard(c, showTier) {
-      var slot = c.suggestedSlot || { startMin: f.startMin, endMin: f.startMin + f.durationMin };
-      return '<div class="sch-f-card sch-f-cand" data-tid="' + esc(c.therapistProfileId) + '">' +
-        '<span class="sch-f-dot" style="background:' + esc(c.colour || '#0f7c6c') + ';"></span>' +
-        '<span class="sch-f-main">' +
-          '<span class="sch-f-name">' + esc(c.displayName) +
-            (showTier && c.fitTier ? ' <span class="sch-tier ' + esc(c.fitTier) + '">' + TIER_LABELS[c.fitTier] + '</span>' : '') + '</span>' +
-          '<span class="sch-f-role">' + esc(c.roleTitle || '') + '</span>' +
-          '<span class="sch-f-fit">' + fmtTime12(slot.startMin) + '–' + fmtTime12(slot.endMin) + '</span>' +
-          (c.reasons || []).map(reasonRow).join('') +
-        '</span>' +
-        '<span class="sch-f-actions">' +
-          '<button type="button" class="sch-mini" data-act="view">View schedule</button>' +
-          '<button type="button" class="sch-mini primary" data-act="book">Schedule</button>' +
-        '</span></div>';
-    }
-
-    if (f.loading) {
-      html += '<div class="sch-f-status">Checking availability…</div>';
-    } else if (f.error) {
-      html += '<div class="sch-f-status">Availability couldn\'t be checked. <button type="button" class="sch-mini" data-act="retry">Retry</button></div>';
-    } else if (!f.result) {
-      html += '<div class="sch-f-status">Choose a time to find available therapists.</div>';
-    } else if (f.resultKind === 'candidates') {
-      var rc = f.result;
-      html += '<div class="sch-f-counts">' + rc.counts.candidates + ' candidate' + (rc.counts.candidates === 1 ? '' : 's') +
-        (rc.clientPoint ? ' for ' + esc(rc.clientPoint.suburb) : '') + '</div>';
-      if (!rc.clientPoint && (f.suburb || '').trim()) {
-        html += '<div class="sch-f-none">That suburb couldn\'t be located — showing availability without geography.</div>';
+    // ── rail cell ──
+    var rail = document.createElement('div');
+    rail.className = 'sm-rail';
+    var st = checked ? rowStatus(t) : null;
+    var conf = entry && entry.availabilityConfidence === 'default';
+    rail.innerHTML =
+      '<input type="checkbox" class="sm-check" aria-label="Compare ' + esc(t.displayName) + '"' + (checked ? ' checked' : '') + ' />' +
+      '<span class="sm-ava" style="background:' + esc(t.colour || '#0f7c6c') + '">' + esc(t.initials || (t.displayName || '?').slice(0, 2).toUpperCase()) + '</span>' +
+      '<span class="sm-id"><button type="button" class="sm-name" title="Therapist details">' + esc(t.displayName) + '</button>' +
+      '<span class="sm-role">' + esc(t.roleTitle || 'Therapist') + (conf ? ' <span class="sch-defbadge" title="No configured schedule this week - showing default hours">default hours</span>' : '') + '</span></span>' +
+      (st ? '<span class="sm-chip sm-chip-' + st.state + '">' + esc(st.label) + '</span>' : '');
+    var slotDesc = SCHED.proposed && st
+      ? (t.displayName + ', ' + fmtTime12(SCHED.proposed.startMin) + ' to ' + fmtTime12(SCHED.proposed.startMin + SCHED.proposed.durationMin) + ' ' + (st.state === 'available' ? 'available' : 'unavailable') + '.')
+      : t.displayName + '.';
+    rail.setAttribute('aria-label', slotDesc);
+    rail.querySelector('.sm-check').addEventListener('change', function (e) {
+      var set = SCHED.filters.checked;
+      if (!set) { // everyone → materialise the full set, then toggle
+        set = new Set(visibleTherapists().map(function (x) { return x.id; }));
+        SCHED.filters.checked = set;
       }
-      if (!rc.candidates.length && !rc.notPractical.length) {
-        html += '<div class="sch-f-none">No therapists can take this appointment.</div>';
-      }
-      var tiersSeen = {};
-      rc.candidates.forEach(function (c) {
-        var tier = c.fitTier || 'possible';
-        if (!tiersSeen[tier]) { tiersSeen[tier] = true; html += '<div class="sch-f-group">' + TIER_LABELS[tier] + '</div>'; }
-        html += candidateCard(c, false);
+      if (e.target.checked) set.add(t.id); else set.delete(t.id);
+      if (set.size === visibleTherapists().length) SCHED.filters.checked = null;
+      if (!e.target.checked && SCHED.targetId === t.id) SCHED.targetId = null;
+      scheduleCommonFetch();
+      render();
+    });
+    rail.querySelector('.sm-name').addEventListener('click', function () {
+      if (SCHED.inspector === 'therapist' && SCHED.inspectorId === t.id) closeInspector();
+      else openInspector('therapist', t.id);
+    });
+    row.appendChild(rail);
+
+    // ── track ──
+    var track = document.createElement('div');
+    track.className = 'sm-track';
+    track.style.width = width + 'px';
+    track.dataset.tid = t.id;
+
+    if (checked) {
+      var thtml = '';
+      // availability paint (engine-derived); quiet background = available
+      trackPaint(entry).forEach(function (r) {
+        var a = Math.max(r.startMin, win.startMin), b = Math.min(r.endMin, win.endMin);
+        if (b <= a) return;
+        thtml += '<span class="sch-avl sm-paint sm-paint-' + r.cls + '" style="left:' + ((a - win.startMin) * PPM) + 'px;width:' + ((b - a) * PPM) + 'px"></span>';
       });
-      if (rc.notPractical.length) {
-        html += '<div class="sch-f-group">Not practical for this location</div>' +
-          rc.notPractical.map(function (n) {
-            return '<div class="sch-f-card" data-tid="' + esc(n.therapistProfileId) + '">' +
-              '<span class="sch-f-dot" style="background:' + esc(n.colour || '#99928a') + ';"></span>' +
-              '<span class="sch-f-main">' +
-                '<span class="sch-f-name">' + esc(n.displayName) + '</span>' +
-                (n.reasons || []).map(reasonRow).join('') +
-                (n.alternativeSlot
-                  ? '<button type="button" class="sch-f-sugg" data-sugg="' + n.alternativeSlot.startMin + '">Closest feasible option · ' +
-                      fmtTime12(n.alternativeSlot.startMin) + '–' + fmtTime12(n.alternativeSlot.endMin) + '</button>'
-                  : '') +
-              '</span></div>';
-          }).join('');
-      }
-      if (rc.excluded.length) {
-        html += '<details class="sch-f-unav"><summary>Unavailable · ' + rc.excluded.length + '</summary>' +
-          rc.excluded.map(function (u) {
-            return '<div class="sch-f-urow"><span class="sch-f-dot" style="background:' + esc(u.colour || '#99928a') + ';"></span>' +
-              '<span class="sch-f-uname">' + esc(u.displayName) + '</span>' +
-              '<span class="sch-f-ureason">' + esc(finderReasonText(u)) + '</span></div>';
-          }).join('') + '</details>';
-      }
-    } else {
-      var r = f.result;
-      html += '<div class="sch-f-counts">' + r.counts.available + ' available · ' + r.counts.unavailable + ' unavailable</div>';
 
-      if (r.available.length) {
-        html += '<div class="sch-f-group">Available · ' + r.available.length + '</div>';
-        r.available.forEach(function (c, i) {
-          var line = f.mode === 'exact'
-            ? '<span class="sch-f-fit">&#10003; ' + fmtTime12(r.requested.startMin) + '–' + fmtTime12(r.requested.endMin) + '</span>' +
-              '<span class="sch-f-window">Window ' + fmtTime12(c.window.startMin) + '–' + fmtTime12(c.window.endMin) + ' · ' + fmtDur(c.windowMin) + '</span>'
-            : '<span class="sch-f-window">' + c.windows.map(function (w) {
-                return fmtTime12(w.startMin) + '–' + fmtTime12(w.endMin) + ' (' + fmtDur(w.durationMin) + ')';
-              }).join(' · ') + '</span>';
-          html += '<div class="sch-f-card" data-tid="' + esc(c.therapistProfileId) + '" data-idx="' + i + '">' +
-            '<span class="sch-f-dot" style="background:' + esc(c.colour || '#0f7c6c') + ';"></span>' +
-            '<span class="sch-f-main">' +
-              '<span class="sch-f-name">' + esc(c.displayName) +
-                (c.availabilityConfidence === 'default' ? ' <span class="sch-defbadge" title="Using the practice default hours">default hours</span>' : '') + '</span>' +
-              '<span class="sch-f-role">' + esc(c.roleTitle || '') + '</span>' +
-              line +
-            '</span>' +
-            '<span class="sch-f-actions">' +
-              '<button type="button" class="sch-mini" data-act="view">View calendar</button>' +
-              '<button type="button" class="sch-mini primary" data-act="book">Schedule</button>' +
-            '</span></div>';
-        });
-      } else {
-        html += '<div class="sch-f-none">No therapists available' +
-          (f.mode === 'exact' ? ' at ' + fmtTime12(r.requested.startMin) : ' in this range') + '.</div>' +
-          '<div class="sch-f-nudges">' +
-            '<button type="button" class="sch-chip" data-nudge="-30">Earlier</button>' +
-            '<button type="button" class="sch-chip" data-nudge="30">Later</button>' +
-          '</div>';
-        if (r.suggestions && r.suggestions.length) {
-          html += '<div class="sch-f-group">Closest availability</div>' +
-            r.suggestions.map(function (sg) {
-              return '<button type="button" class="sch-f-sugg" data-sugg="' + sg.startMin + '">' +
-                '<span class="sch-f-dot" style="background:' + esc(sg.colour || '#0f7c6c') + ';"></span>' +
-                esc(sg.displayName) + ' · ' + fmtTime12(sg.startMin) + '–' + fmtTime12(sg.endMin) + '</button>';
-            }).join('');
+      // events as horizontal blocks — eventsForTherapistDay already returns
+      // day-clamped { ev, startMin, endMin } wrappers
+      var items = eventsForTherapistDay(SCHED.events, t.id, SCHED.date);
+      assignLanes(items);
+      items.forEach(function (it) {
+        var a = Math.max(it.startMin, win.startMin), b = Math.min(it.endMin, win.endMin);
+        if (b <= a) return;
+        var laneCount = it.laneCount || 1;
+        var h = laneCount > 1 ? Math.floor(36 / laneCount) : 36;
+        var top = 4 + (it.lane || 0) * (h + 1);
+        var label = safeLabel(it.ev, mode);
+        var suburb = extractSuburb(it.ev.manualLocation || it.ev.location);
+        var w = Math.max(8, (b - a) * PPM - 4); // 4px separation between blocks
+        thtml += '<button type="button" class="sm-ev sm-ev-' + esc(it.ev.eventType || 'outlook') + '" data-eid="' + esc(it.ev.id) + '"' +
+          ' style="left:' + ((a - win.startMin) * PPM) + 'px;width:' + w + 'px;top:' + top + 'px;height:' + h + 'px"' +
+          ' title="' + esc(fmtTime12(it.startMin) + '–' + fmtTime12(it.endMin) + '  ' + label + (suburb ? '  · ' + suburb : '')) + '">' +
+          '<span>' + esc(label) + '</span>' +
+        '</button>';
+      });
+
+      // current time (vertical line, today only)
+      if (SCHED.date === todayPerthYmd()) {
+        var nowMin = perthParts(new Date().toISOString()).minutes;
+        if (nowMin >= win.startMin && nowMin <= win.endMin) {
+          thtml += '<span class="sm-now" style="left:' + ((nowMin - win.startMin) * PPM) + 'px"></span>';
         }
       }
 
-      if (r.unavailable.length) {
-        html += '<details class="sch-f-unav"' + (r.available.length ? '' : ' open') + '><summary>Unavailable · ' + r.unavailable.length + '</summary>' +
-          r.unavailable.map(function (u) {
-            return '<div class="sch-f-urow"><span class="sch-f-dot" style="background:' + esc(u.colour || '#99928a') + ';"></span>' +
-              '<span class="sch-f-uname">' + esc(u.displayName) + '</span>' +
-              '<span class="sch-f-ureason">' + esc(finderReasonText(u)) + '</span></div>';
-          }).join('') + '</details>';
+      // proposed band segment
+      if (SCHED.proposed) {
+        var p = SCHED.proposed;
+        var a3 = Math.max(p.startMin, win.startMin), b3 = Math.min(p.startMin + p.durationMin, win.endMin);
+        if (b3 > a3) {
+          thtml += '<span class="sm-bandseg" tabindex="0" role="slider" aria-label="Proposed slot for ' + esc(t.displayName) + '" aria-valuetext="' + fmtTime12(p.startMin) + ' to ' + fmtTime12(p.startMin + p.durationMin) + '"' +
+            ' style="left:' + ((a3 - win.startMin) * PPM) + 'px;width:' + ((b3 - a3) * PPM) + 'px">' +
+            '<span class="sm-band-grip" aria-hidden="true"></span></span>';
+        }
+      }
+      track.innerHTML = thtml;
+
+      track.addEventListener('click', function (e) {
+        if (SCHED.drag && SCHED.drag.moved) return; // drag, not click
+        var evBtn = e.target.closest('.sm-ev');
+        if (evBtn) {
+          var id = evBtn.dataset.eid;
+          mapEmphasiseEvent(id);
+          if (typeof global.openBlockDetail === 'function') { try { global.openBlockDetail(id); } catch (err) { /* detail optional */ } }
+          return;
+        }
+        if (e.target.closest('.sm-bandseg')) return;
+        var rect = track.getBoundingClientRect();
+        var clicked = win.startMin + (e.clientX - rect.left) / PPM;
+        SCHED.targetId = t.id;
+        setProposed(snap15(clicked), SCHED.duration);
+      });
+
+      attachTrackDrag(track, win);
+    } else {
+      track.className += ' sm-track-off';
+    }
+
+    row.appendChild(track);
+    return row;
+  }
+
+  // ── Band interactions: drag to move, grip to resize, drag-create ─────────
+
+  function attachTrackDrag(track, win) {
+    track.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var band = e.target.closest('.sm-bandseg');
+      var grip = e.target.closest('.sm-band-grip');
+      var onEmpty = !band && !e.target.closest('.sm-ev');
+      var rect = track.getBoundingClientRect();
+      var atMin = win.startMin + (e.clientX - rect.left) / PPM;
+      if (grip && SCHED.proposed) {
+        SCHED.drag = { kind: 'resize', startX: e.clientX, origin: SCHED.proposed.startMin, dur: SCHED.proposed.durationMin, moved: false, win: win };
+      } else if (band && SCHED.proposed) {
+        SCHED.drag = { kind: 'move', startX: e.clientX, origin: SCHED.proposed.startMin, dur: SCHED.proposed.durationMin, moved: false, win: win };
+      } else if (onEmpty) {
+        SCHED.drag = { kind: 'create', startX: e.clientX, anchorMin: snap15(atMin), tid: track.dataset.tid, moved: false, win: win };
+      } else { return; }
+      try { track.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    });
+    track.addEventListener('pointermove', function (e) {
+      var d = SCHED.drag;
+      if (!d) return;
+      var dx = e.clientX - d.startX;
+      if (Math.abs(dx) > 6) d.moved = true;
+      if (!d.moved) return;
+      if (d.kind === 'move') {
+        var next = snap15(d.origin + dx / PPM);
+        next = Math.max(0, Math.min(1440 - d.dur, next));
+        if (!SCHED.proposed || SCHED.proposed.startMin !== next) {
+          SCHED.proposed = { startMin: next, durationMin: d.dur };
+          updateBandLight();
+        }
+      } else if (d.kind === 'resize') {
+        var dur = snap15(d.dur + dx / PPM);
+        dur = Math.max(15, Math.min(480, Math.min(dur, 1440 - d.origin)));
+        if (SCHED.proposed && SCHED.proposed.durationMin !== dur) {
+          SCHED.proposed = { startMin: d.origin, durationMin: dur };
+          SCHED.duration = dur;
+          updateBandLight();
+        }
+      } else if (d.kind === 'create') {
+        var rect = track.getBoundingClientRect();
+        var cur = snap15(d.win.startMin + (e.clientX - rect.left) / PPM);
+        var s = Math.min(d.anchorMin, cur), en = Math.max(d.anchorMin, cur);
+        if (en - s >= 15) {
+          SCHED.proposed = { startMin: Math.max(0, s), durationMin: Math.min(480, en - s) };
+          SCHED.duration = SCHED.proposed.durationMin;
+          SCHED.targetId = d.tid;
+          updateBandLight();
+        }
+      }
+    });
+    var finish = function () {
+      var d = SCHED.drag;
+      if (!d) return;
+      SCHED.drag = null;
+      if (d.moved) {
+        scheduleRecsFetch();
+        scheduleCommonFetch();
+        render();
+        // keep drag-vs-click disambiguation for the click handler
+        SCHED.drag = { moved: true };
+        setTimeout(function () { if (SCHED.drag && !SCHED.drag.kind) SCHED.drag = null; }, 0);
+      }
+    };
+    track.addEventListener('pointerup', finish);
+    track.addEventListener('pointercancel', function () { SCHED.drag = null; });
+
+    // keyboard: arrows move the proposed slot in 15-minute steps
+    track.addEventListener('keydown', function (e) {
+      if (!e.target.closest('.sm-bandseg') || !SCHED.proposed) return;
+      var p = SCHED.proposed;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setProposed(Math.max(0, p.startMin - 15), p.durationMin); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setProposed(Math.min(1440 - p.durationMin, p.startMin + 15), p.durationMin); }
+      else if (e.key === 'Escape') { clearProposed(); }
+    });
+  }
+
+  // Light mid-drag update: move every band segment + header chip + statuses
+  // without rebuilding the DOM (full render happens on release).
+  function updateBandLight() {
+    var win = displayWindow();
+    var p = SCHED.proposed;
+    if (!p) return;
+    var left = (Math.max(p.startMin, win.startMin) - win.startMin) * PPM;
+    var w = (Math.min(p.startMin + p.durationMin, win.endMin) - Math.max(p.startMin, win.startMin)) * PPM;
+    document.querySelectorAll('.sm-bandseg').forEach(function (el) {
+      el.style.left = left + 'px';
+      el.style.width = Math.max(0, w) + 'px';
+      el.setAttribute('aria-valuetext', fmtTime12(p.startMin) + ' to ' + fmtTime12(p.startMin + p.durationMin));
+    });
+    var hb = document.querySelector('.sm-headband');
+    if (hb) {
+      hb.style.left = left + 'px';
+      hb.style.width = Math.max(0, w) + 'px';
+      hb.textContent = fmtTime12(p.startMin) + '–' + fmtTime12(p.startMin + p.durationMin);
+    }
+    var timeInput = document.querySelector('.sm-time');
+    if (timeInput) timeInput.value = minToHHMM(p.startMin);
+    // status chips
+    document.querySelectorAll('.sm-row').forEach(function (rowEl) {
+      var tid = rowEl.dataset.tid;
+      var t = SCHED.therapists.find(function (x) { return x.id === tid; });
+      if (!t || !isChecked(tid)) return;
+      var st = rowStatus(t);
+      var chip = rowEl.querySelector('.sm-chip');
+      if (chip && st) { chip.className = 'sm-chip sm-chip-' + st.state; chip.textContent = st.label; }
+    });
+    renderSummaryOnly();
+  }
+
+  // Horizontal scroll-to-time with a row flash (kept name; the axis changed).
+  function jumpToMinute(min, tid) {
+    var el = document.getElementById('sm-scroll');
+    var win = displayWindow();
+    if (el) el.scrollTo({ left: Math.max(0, (min - 45 - win.startMin) * PPM), behavior: 'smooth' });
+    if (tid) {
+      var row = document.querySelector('.sm-row[data-tid="' + tid + '"]');
+      if (row) {
+        row.classList.add('sch-flash');
+        setTimeout(function () { row.classList.remove('sch-flash'); }, 1200);
+      }
+    }
+  }
+
+  // ── Inspector (one contextual panel: therapist | map | recs) ─────────────
+
+  function renderInspector(host) {
+    if (!SCHED.inspector) return;
+    var aside = document.createElement('aside');
+    aside.className = 'sm-inspector';
+    if (SCHED.inspector === 'therapist') buildTherapistInspector(aside);
+    else if (SCHED.inspector === 'map') buildMapInspector(aside);
+    else if (SCHED.inspector === 'recs') buildRecsInspector(aside);
+    host.appendChild(aside);
+  }
+
+  function inspectorHead(aside, title) {
+    var h = document.createElement('div');
+    h.className = 'sm-insp-head';
+    h.innerHTML = '<span>' + esc(title) + '</span><button type="button" class="sch-f-close" aria-label="Close panel">&times;</button>';
+    h.querySelector('button').addEventListener('click', closeInspector);
+    aside.appendChild(h);
+    return h;
+  }
+
+  // Level 2 — therapist summary without leaving the matrix.
+  function buildTherapistInspector(aside) {
+    var t = SCHED.therapists.find(function (x) { return x.id === SCHED.inspectorId; });
+    if (!t) { closeInspector(); return; }
+    inspectorHead(aside, 'Therapist');
+    var entry = availEntry(t.id);
+    var items = eventsForTherapistDay(SCHED.events, t.id, SCHED.date);
+    var body = document.createElement('div');
+    body.className = 'sm-insp-body';
+
+    var html = '<div class="sch-fh-id"><span class="sm-ava sm-ava-lg" style="background:' + esc(t.colour || '#0f7c6c') + '">' + esc(t.initials || '') + '</span>' +
+      '<div><div class="sch-fh-name">' + esc(t.displayName) + '</div>' +
+      '<div class="sch-fh-role">' + esc(t.roleTitle || 'Therapist') +
+      (entry && entry.availabilityConfidence === 'default' ? ' <span class="sch-defbadge">default hours</span>' : '') + '</div></div></div>';
+
+    html += '<div class="sm-insp-date">' + esc(fmtDayLabel(SCHED.date)) + '</div>';
+
+    if (entry && entry.working === false) {
+      var leaveDay = (entry.segments || []).some(function (s) { return s.type === 'leave'; });
+      html += '<div class="sm-insp-note">' + esc(t.displayName) +
+        (leaveDay ? ' is on leave this day.' : " isn't scheduled to work this day.") + '</div>';
+    } else {
+      var clin = clinicalMinutes(items);
+      var availMin = entry && entry.capacity ? entry.capacity.availableMin : null;
+      html += '<div class="sch-fh-stats">' +
+        '<span class="sch-fh-stat"><strong>' + apptCount(items) + '</strong> appointments</span>' +
+        '<span class="sch-fh-stat"><strong>' + fmtDur(clin) + '</strong> clinical</span>' +
+        (availMin != null ? '<span class="sch-fh-stat"><strong>' + fmtDur(availMin) + '</strong> available</span>' : '') +
+        '</div>';
+      var nowMin = SCHED.date === todayPerthYmd() ? perthParts(new Date().toISOString()).minutes : 0;
+      var seg = entry ? nextAvailableSegment(entry.segments, nowMin) : null;
+      html += seg
+        ? '<div class="sch-fh-next">Next available ' + fmtTime12(seg.startMin) + '&ndash;' + fmtTime12(seg.endMin) + '</div>'
+        : '<div class="sch-fh-next">No further availability today</div>';
+    }
+
+    // open gaps as actionable cards
+    if (entry && entry.working !== false) {
+      var gaps = (entry.segments || []).filter(function (s) { return s.type === 'available'; });
+      if (gaps.length) {
+        html += '<div class="sm-insp-sub">Open windows</div>';
+        gaps.slice(0, 6).forEach(function (g) {
+          html += '<div class="sch-avl-card"><span class="sch-avl-times">' + fmtTime12(g.startMin) + '&ndash;' + fmtTime12(g.endMin) +
+            ' <span class="sch-avl-tag">' + fmtDur(g.endMin - g.startMin) + '</span></span>' +
+            '<button type="button" class="sch-avl-add" data-min="' + g.startMin + '">+ Add appointment</button></div>';
+        });
       }
     }
 
-    aside.innerHTML = html;
+    // day list with focus-grade labels (single-therapist inspection)
+    if (items.length) {
+      html += '<div class="sm-insp-sub">Day</div>';
+      items.forEach(function (it) {
+        html += '<div class="sm-insp-ev"><span class="sm-insp-ev-time">' + fmtTime12(it.startMin) + '&ndash;' + fmtTime12(it.endMin) + '</span> ' +
+          esc(safeLabel(it.ev, 'focus')) + '</div>';
+      });
+    }
 
-    // ── Wiring ──
-    aside.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-act],[data-mode],[data-part],[data-nudge],[data-sugg]');
-      if (!el) return;
-      if (el.dataset.act === 'close') { SCHED.finder.open = false; mapShowClientPoint(null); render(); return; }
-      if (el.dataset.act === 'retry') { finderSearch(); return; }
-      if (el.dataset.mode) { f.mode = el.dataset.mode; f.result = null; render(); finderSearch(); return; }
-      if (el.dataset.part) {
-        var pp = el.dataset.part.split(',').map(Number);
-        f.rangeStartMin = pp[0]; f.rangeEndMin = pp[1]; render(); finderSearch(); return;
-      }
-      if (el.dataset.nudge) {
-        f.startMin = Math.max(0, Math.min(1435 - f.durationMin, f.startMin + Number(el.dataset.nudge)));
-        render(); finderSearch(); return;
-      }
-      if (el.dataset.sugg) { f.startMin = Number(el.dataset.sugg); render(); finderSearch(); return; }
-
-      var card = e.target.closest('.sch-f-card');
-      if (card && el.dataset.act === 'view') {
-        SCHED.focusId = card.dataset.tid; render();
-        jumpToMinute(f.mode === 'exact' ? f.startMin : f.rangeStartMin);
-        return;
-      }
-      if (card && el.dataset.act === 'book') {
-        var startMin = f.mode === 'exact' ? f.startMin
-          : (SCHED.finder.result && findFirstWindowStart(card.dataset.tid)) || f.rangeStartMin;
-        if (typeof global.openBookingPanel === 'function') {
-          var dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-          var ppd = SCHED.date.split('-').map(Number);
-          global.openBookingPanel({
-            day: dayKeys[new Date(Date.UTC(ppd[0], ppd[1] - 1, ppd[2])).getUTCDay()],
-            date: SCHED.date,
-            startH: Math.floor(startMin / 60), startM: startMin % 60,
-            endH: Math.floor((startMin + f.durationMin) / 60), endM: (startMin + f.durationMin) % 60,
-          });
-          if (typeof global.selectBspTherapist === 'function') {
-            setTimeout(function () { try { global.selectBspTherapist(card.dataset.tid); } catch (err) {} }, 400);
-          }
-        }
+    html += '<div class="sm-insp-sub">This week</div><div id="sch-weekstrip" class="sch-weekstrip"></div>';
+    body.innerHTML = html;
+    body.addEventListener('click', function (e) {
+      var add = e.target.closest('.sch-avl-add');
+      if (add) {
+        var clicked = parseInt(add.dataset.min, 10);
+        SCHED.targetId = t.id;
+        setProposed(snap15(clicked), SCHED.duration);
+        jumpToMinute(snap15(clicked), t.id);
       }
     });
-
-    aside.addEventListener('change', function (e) {
-      var t = e.target, v = t.value;
-      if (t.dataset.f === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v)) { SCHED.date = v; load(); finderSearch(); }
-      if (t.dataset.f === 'start') { var m = hhmmToMin(v); if (m != null) { f.startMin = m; finderSearch(); } }
-      if (t.dataset.f === 'rstart') { var m1 = hhmmToMin(v); if (m1 != null) { f.rangeStartMin = m1; finderSearch(); } }
-      if (t.dataset.f === 'rend') { var m2 = hhmmToMin(v); if (m2 != null) { f.rangeEndMin = m2; finderSearch(); } }
-      if (t.dataset.f === 'dur') {
-        if (v === 'custom') { f.durationMin = 75; render(); finderSearch(); }
-        else { f.durationMin = Number(v); render(); finderSearch(); }
-      }
-      if (t.dataset.f === 'durcustom') {
-        var n = Math.max(5, Math.min(480, Number(v) || 60)); f.durationMin = n; finderSearch();
-      }
-      if (t.dataset.f === 'disc') { f.discipline = v; finderSearch(); }
-      if (t.dataset.f === 'suburb') { f.suburb = v; render(); finderSearch(); }
-      if (t.dataset.f === 'tele') { f.telehealth = t.checked; finderSearch(); }
-    });
-
-    // Hover cross-highlighting: result card ↔ therapist column
-    aside.addEventListener('mouseover', function (e) {
-      var card = e.target.closest('.sch-f-card'); if (!card) return;
-      var col = document.querySelector('.sch-col[data-tid="' + card.dataset.tid + '"]');
-      if (col) col.classList.add('sch-hovered');
-    });
-    aside.addEventListener('mouseout', function (e) {
-      var card = e.target.closest('.sch-f-card'); if (!card) return;
-      var col = document.querySelector('.sch-col[data-tid="' + card.dataset.tid + '"]');
-      if (col) col.classList.remove('sch-hovered');
-    });
-
-    return aside;
+    aside.appendChild(body);
   }
 
-  function findFirstWindowStart(tid) {
-    var r = SCHED.finder.result;
-    if (!r) return null;
-    var row = (r.available || []).find(function (c) { return c.therapistProfileId === tid; });
-    return row && row.windows && row.windows.length ? row.windows[0].startMin : null;
+  function renderWeekStripInto(tid, days) {
+    var host = document.getElementById('sch-weekstrip');
+    if (!host || SCHED.inspectorId !== tid) return;
+    var names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    host.innerHTML = days.map(function (d, i) {
+      var v = WEEK_CAP[tid + '|' + d];
+      var label = v === null || v === undefined ? '&hellip;' : (v === 'x' ? 'Off' : fmtDur(v));
+      return '<button type="button" class="sch-ws-day' + (d === SCHED.date ? ' on' : '') + '" data-d="' + d + '">' +
+        '<span class="sch-ws-name">' + names[i] + '</span><span class="sch-ws-cap">' + label + '</span></button>';
+    }).join('');
+    host.querySelectorAll('[data-d]').forEach(function (b) {
+      b.addEventListener('click', function () { setDate(b.dataset.d); });
+    });
   }
 
-  // ── Phase 5/6: Scheduler Map ──────────────────────────────────────────────
-  function persistMapOpen() {
-    try {
-      localStorage.setItem('sch_map', SCHED.map.open ? '1' : '0');
-      localStorage.setItem('sch_footprints', SCHED.map.footprints ? '1' : '0');
-    } catch (e) {}
+  // Level 5 — map + service footprints, contextual only.
+  function buildMapInspector(aside) {
+    inspectorHead(aside, 'Map');
+    var body = document.createElement('div');
+    body.className = 'sm-insp-body sm-insp-map';
+    var m = SCHED.map;
+
+    var controls = document.createElement('div');
+    controls.className = 'sch-map-toggle';
+    controls.innerHTML =
+      '<label><input type="checkbox" data-act="fp"' + (m.footprints ? ' checked' : '') + ' /> Operating areas</label>' +
+      '<span class="sch-map-note">' + (m.meta.telehealth ? m.meta.telehealth + ' telehealth' : '') +
+      (m.meta.unmappable ? (m.meta.telehealth ? ' &middot; ' : '') + m.meta.unmappable + ' without a mappable location' : '') + '</span>';
+    controls.querySelector('[data-act="fp"]').addEventListener('change', function (e) {
+      m.footprints = e.target.checked;
+      try { localStorage.setItem('sch_footprints', m.footprints ? '1' : '0'); } catch (err) { /* private mode */ }
+      mapDraw();
+    });
+    body.appendChild(controls);
+
+    var canvasHost = document.createElement('div');
+    canvasHost.id = 'sch-map-host';
+    canvasHost.className = 'sch-map-canvas';
+    body.appendChild(canvasHost);
+
+    var status = document.createElement('div');
+    status.id = 'sch-map-status';
+    body.appendChild(status);
+
+    var legend = document.createElement('div');
+    legend.id = 'sch-map-legend';
+    body.appendChild(legend);
+
+    aside.appendChild(body);
+    renderMapStatus();
+    renderMapLegend();
   }
 
-  // Lazy SDK: fetched only when the map first opens; the calendar never waits.
+  // Level 4 — explainable recommendations, on request.
+  var TIER_LABELS = { best: 'Best fit', good: 'Good fit', possible: 'Possible', poor: 'Not ideal' };
+
+  function buildRecsInspector(aside) {
+    inspectorHead(aside, 'Recommendations');
+    var body = document.createElement('div');
+    body.className = 'sm-insp-body';
+    var f = SCHED.recs;
+    var p = SCHED.proposed;
+
+    var form = document.createElement('div');
+    form.className = 'sm-recs-form';
+    form.innerHTML =
+      '<label class="sch-f-tele"><input type="checkbox" data-act="tele"' + (SCHED.client.telehealth ? ' checked' : '') + ' /> Telehealth (no travel)</label>' +
+      (p ? '<div class="sm-recs-slot">For <strong>' + fmtTime12(p.startMin) + '&ndash;' + fmtTime12(p.startMin + p.durationMin) + '</strong>' +
+        (SCHED.client.suburb ? ' near <strong>' + esc(SCHED.client.suburb) + '</strong>' : '') + '</div>'
+        : '<div class="sm-recs-slot">Pick a time in the matrix first.</div>') +
+      (!SCHED.client.telehealth && SCHED.client.suburb.trim().length < 3
+        ? '<div class="sm-insp-note">Add a client suburb in the toolbar for travel-aware ranking; without it, ranking is availability-only.</div>' : '');
+    form.querySelector('[data-act="tele"]').addEventListener('change', function (e) {
+      setClient(null, e.target.checked);
+      render();
+    });
+    body.appendChild(form);
+
+    var list = document.createElement('div');
+    if (f.loading) list.innerHTML = '<div class="sch-status">Checking candidates&hellip;</div>';
+    else if (f.error) list.innerHTML = '<div class="sch-status">Could not load recommendations. Scheduling still works from the matrix.</div>';
+    else if (!f.result) {
+      if (p && (SCHED.client.telehealth || SCHED.client.suburb.trim().length >= 3)) fetchRecs();
+      list.innerHTML = '<div class="sch-status">&nbsp;</div>';
+    } else {
+      var html = '';
+      (f.result.candidates || []).forEach(function (c) {
+        var tr = c.travel || {};
+        html += '<div class="sch-f-card sm-cand" data-tid="' + esc(c.therapistProfileId) + '" data-start="' + (c.suggestedSlot ? c.suggestedSlot.startMin : '') + '">' +
+          '<span class="sch-tier ' + esc(c.fitTier) + '">' + esc(TIER_LABELS[c.fitTier] || c.fitTier) + '</span>' +
+          '<span class="sch-f-name"><span class="sch-f-dot" style="background:' + esc(c.colour || '#0f7c6c') + '"></span>' + esc(c.displayName) + '</span>' +
+          '<span class="sch-f-role">' + esc(c.roleTitle || '') + '</span>' +
+          (c.suggestedSlot ? '<span class="sch-f-window">' + fmtTime12(c.suggestedSlot.startMin) + '&ndash;' + fmtTime12(c.suggestedSlot.endMin) + '</span>' : '') +
+          '<span class="sm-reasons">' + (c.reasons || []).map(function (r) {
+            var neg = /far_|travel_tight|travel_infeasible|travel_unknown|geography_unknown|default_hours/.test(r.code);
+            return '<span class="sch-f-reason' + (neg ? ' neg' : '') + '">' + esc(r.label) + '</span>';
+          }).join('') + '</span>' +
+          (tr.status === 'travel_feasible' && (tr.beforeMinutes != null || tr.afterMinutes != null)
+            ? '<span class="sm-travel">Travel feasible' +
+              (tr.beforeMinutes != null ? ' &middot; ~' + tr.beforeMinutes + ' min from previous' : '') +
+              (tr.afterMinutes != null ? ' &middot; ~' + tr.afterMinutes + ' min to next' : '') + '</span>' : '') +
+          '</div>';
+      });
+      (f.result.notPractical || []).forEach(function (c) {
+        html += '<div class="sch-f-card sm-cand sm-cand-np" data-tid="' + esc(c.therapistProfileId) + '" data-start="' + (c.alternativeSlot ? c.alternativeSlot.startMin : '') + '">' +
+          '<span class="sch-tier poor">Not practical for this location</span>' +
+          '<span class="sch-f-name"><span class="sch-f-dot" style="background:' + esc(c.colour || '#0f7c6c') + '"></span>' + esc(c.displayName) + '</span>' +
+          (c.alternativeSlot ? '<span class="sch-f-window">Closest feasible option ' + fmtTime12(c.alternativeSlot.startMin) + '&ndash;' + fmtTime12(c.alternativeSlot.endMin) + '</span>' : '') +
+          '</div>';
+      });
+      var excluded = f.result.excluded || [];
+      if (excluded.length) {
+        html += '<div class="sm-insp-sub">Unavailable</div>';
+        excluded.forEach(function (u) {
+          var reasonText = u.reason === 'busy'
+            ? (u.busyUntilMin != null ? 'Busy until ' + fmtTime12(u.busyUntilMin) : 'Busy')
+            : u.reason === 'leave' ? 'On leave'
+            : u.reason === 'not_working' ? 'Not working'
+            : u.reason === 'outside_hours' ? 'Outside working hours' : 'Not enough free time';
+          html += '<div class="sch-f-urow"><span class="sch-f-uname">' + esc(u.displayName) + '</span>' +
+            '<span class="sch-f-ureason">' + esc(reasonText) + '</span></div>';
+        });
+      }
+      if (!html) html = '<div class="sch-status">No candidates for this slot.</div>';
+      list.innerHTML = html;
+      list.addEventListener('click', function (e) {
+        var card = e.target.closest('.sm-cand');
+        if (!card) return;
+        var tid = card.dataset.tid;
+        SCHED.targetId = tid;
+        if (SCHED.filters.checked) SCHED.filters.checked.add(tid);
+        var start = parseInt(card.dataset.start, 10);
+        if (!isNaN(start)) setProposed(start, SCHED.proposed ? SCHED.proposed.durationMin : SCHED.duration);
+        else render();
+        jumpToMinute(isNaN(start) ? (SCHED.proposed ? SCHED.proposed.startMin : 600) : start, tid);
+      });
+    }
+    body.appendChild(list);
+    aside.appendChild(body);
+  }
+
+  // ── Map internals (SDK, points, drawing) — unchanged behaviour ───────────
+
   function mapEnsure() {
     var m = SCHED.map;
-    if (m.sdk === 'ready') { mapFetchPoints(); return; }
-    if (m.sdk === 'loading') return;
-    m.sdk = 'loading'; renderMapStatus();
-    global.onGoogleMapsReady = global.onGoogleMapsReady || function () {};
-    var prevReady = global.onGoogleMapsReady;
-    global.onGoogleMapsReady = function () {
-      prevReady();
-      m.sdk = 'ready';
-      mapInit();
-      mapFetchPoints();
-    };
+    if (m.sdk === 'ready') { mapInit(); return; }
+    if (m.sdk === 'loading' || m.sdk === 'error') return;
+    m.sdk = 'loading';
     fetch('/api/maps/sdk-url', { credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('unavailable')); })
+      .then(function (r) { if (!r.ok) throw new Error('sdk ' + r.status); return r.json(); })
       .then(function (j) {
-        if (global.google && global.google.maps) { global.onGoogleMapsReady(); return; }
-        var sc = document.createElement('script');
-        sc.src = j.url; sc.async = true;
-        sc.onerror = function () { m.sdk = 'error'; renderMapStatus(); };
-        document.head.appendChild(sc);
+        if (!j.url) throw new Error('no url');
+        var prev = global.onGoogleMapsReady;
+        global.onGoogleMapsReady = function () {
+          if (typeof prev === 'function') { try { prev(); } catch (e) { /* other consumer */ } }
+          m.sdk = 'ready';
+          mapInit();
+        };
+        if (global.google && global.google.maps) { m.sdk = 'ready'; mapInit(); return; }
+        if (!document.querySelector('script[data-sch-maps]')) {
+          var sc = document.createElement('script');
+          sc.src = j.url; sc.async = true; sc.defer = true;
+          sc.dataset.schMaps = '1';
+          sc.onerror = function () { m.sdk = 'error'; m.error = true; renderMapStatus(); };
+          document.head.appendChild(sc);
+        }
       })
-      .catch(function () { m.sdk = 'error'; renderMapStatus(); });
+      .catch(function () { m.sdk = 'error'; m.error = true; renderMapStatus(); });
   }
 
   function mapInit() {
     var m = SCHED.map;
-    if (m.gmap || !global.google) return;
-    if (!m.el) { m.el = document.createElement('div'); m.el.className = 'sch-map-canvas'; }
-    m.gmap = new google.maps.Map(m.el, {
-      center: { lat: -31.95, lng: 115.86 }, zoom: 9,   // starting view only — bounds follow data
-      mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
-      zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
-      clickableIcons: false,
-    });
-    m.info = new google.maps.InfoWindow();
-    // Respect the user's viewport after a manual gesture (§18)
-    m.gmap.addListener('dragstart', function () { m.userMoved = true; });
+    var host = document.getElementById('sch-map-host');
+    if (!host || !(global.google && global.google.maps)) return;
+    if (!m.el) {
+      m.el = document.createElement('div');
+      m.el.style.cssText = 'width:100%;height:100%;';
+      m.gmap = new google.maps.Map(m.el, {
+        center: { lat: -31.99, lng: 115.87 }, zoom: 10,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+      });
+      m.info = new google.maps.InfoWindow();
+      m.gmap.addListener('dragstart', function () { m.userMoved = true; });
+    }
+    if (m.el.parentNode !== host) { host.innerHTML = ''; host.appendChild(m.el); }
+    google.maps.event.trigger(m.gmap, 'resize');
+    mapDraw();
   }
 
   function mapFetchPoints(force) {
     var m = SCHED.map;
-    if (!m.open || SCHED.mode !== 'day') return;
     var key = SCHED.date;
     if (!force && m.pointsKey === key && m.points) { mapDraw(); return; }
-    m.loading = true; m.error = false; renderMapStatus();
+    m.loading = true; m.error = false;
+    renderMapStatus();
     fetch('/api/scheduler/map-points?date=' + key, { credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http')); })
+      .then(function (r) { if (!r.ok) throw new Error('points ' + r.status); return r.json(); })
       .then(function (j) {
-        if (SCHED.date !== key) return; // superseded by a date change
+        if (SCHED.date !== key) return; // date changed while loading
+        m.loading = false;
         m.points = j.points || [];
+        m.pointsKey = key;
         m.meta = { telehealth: j.telehealth || 0, unmappable: j.unmappable || 0 };
-        m.pointsKey = key; m.loading = false; m.userMoved = false;
-        renderMapStatus(); mapDraw();
+        renderMapStatus(); renderMapLegend(); mapDraw();
       })
-      .catch(function () { m.loading = false; m.error = true; renderMapStatus(); });
+      .catch(function () {
+        if (SCHED.date !== key) return;
+        m.loading = false; m.error = true;
+        renderMapStatus();
+      });
   }
 
-  function mapVisiblePoints(visible) {
-    var ids = {};
-    (visible || filterTherapists(SCHED.therapists, {
-      ids: SCHED.filterIds, discipline: SCHED.discipline, focusId: SCHED.focusId,
-    })).forEach(function (t) { ids[t.id] = true; });
-    return (SCHED.map.points || []).filter(function (p) { return ids[p.therapistProfileId]; });
+  function mapVisiblePoints() {
+    var m = SCHED.map;
+    var vis = {};
+    visibleTherapists().forEach(function (t) { if (isChecked(t.id)) vis[t.id] = true; });
+    return (m.points || []).filter(function (p) { return vis[p.therapistProfileId]; });
   }
 
   function mapClear() {
-    SCHED.map.markers.forEach(function (mk) { mk.setMap(null); });
-    SCHED.map.polys.forEach(function (pg) { pg.setMap(null); });
-    SCHED.map.markers = []; SCHED.map.polys = [];
+    var m = SCHED.map;
+    m.markers.forEach(function (mk) { mk.setMap(null); });
+    m.polys.forEach(function (pl) { pl.setMap(null); });
+    m.markers = []; m.polys = [];
   }
 
   function mapDraw() {
     var m = SCHED.map;
-    if (!m.gmap || !m.points) return;
+    if (!m.gmap || !(global.google && global.google.maps)) return;
     mapClear();
     var pts = mapVisiblePoints();
-    var focus = SCHED.focusId;
-
-    // Same suburb, several therapists → deterministic small offsets so
-    // markers stay individually clickable.
-    var bySub = {};
-    pts.forEach(function (p) {
-      var k = p.suburb.toLowerCase();
-      bySub[k] = bySub[k] || [];
-      bySub[k].push(p);
-    });
     var bounds = new google.maps.LatLngBounds();
-
-    Object.keys(bySub).forEach(function (k) {
-      // group per therapist within the suburb (one marker + visit count)
-      var byT = {};
-      bySub[k].forEach(function (p) {
-        byT[p.therapistProfileId] = byT[p.therapistProfileId] || [];
-        byT[p.therapistProfileId].push(p);
-      });
-      Object.keys(byT).forEach(function (tid, ti) {
-        var list = byT[tid].sort(function (a, b) { return a.startMin - b.startMin; });
-        var first = list[0];
-        var faded = focus && tid !== focus;
-        var pos = { lat: first.lat + ti * 0.006, lng: first.lng + ti * 0.006 };
-        bounds.extend(pos);
+    var byTher = {};
+    pts.forEach(function (p) {
+      (byTher[p.therapistProfileId] = byTher[p.therapistProfileId] || []).push(p);
+    });
+    Object.keys(byTher).forEach(function (tid) {
+      var list = byTher[tid];
+      var dedup = dedupSuburbPoints(list);
+      dedup.forEach(function (p, idx) {
+        var off = 0.006 * (idx % 3 - 1);
         var mk = new google.maps.Marker({
-          map: m.gmap, position: pos,
-          title: first.therapistName + ' · ' + first.suburb +
-            (list.length > 1 ? ' · ' + list.length + ' visits' : ' · ' + fmtTime12(first.startMin)),
+          map: m.gmap,
+          position: { lat: p.lat + off, lng: p.lng },
+          label: p.count > 1 ? { text: String(p.count), color: '#fff', fontSize: '11px' } : null,
+          title: p.suburb + ' - ' + p.therapistName,
           icon: {
-            path: google.maps.SymbolPath.CIRCLE, scale: faded ? 6 : 9,
-            fillColor: first.therapistColour, fillOpacity: faded ? 0.3 : 0.95,
-            strokeColor: '#ffffff', strokeWeight: 2, strokeOpacity: faded ? 0.4 : 1,
+            path: google.maps.SymbolPath.CIRCLE, scale: p.count > 1 ? 11 : 8,
+            fillColor: p.therapistColour || '#0f7c6c', fillOpacity: 0.92,
+            strokeColor: '#ffffff', strokeWeight: 2,
           },
-          zIndex: faded ? 1 : 3,
-          label: list.length > 1 ? { text: String(list.length), color: '#fff', fontSize: '10px', fontWeight: '700' } : null,
         });
-        mk.__eids = list.map(function (p) { return p.eventId; });
-        mk.addListener('mouseover', function () { mapHighlightTiles(mk.__eids, true); });
-        mk.addListener('mouseout', function () { mapHighlightTiles(mk.__eids, false); });
         mk.addListener('click', function () {
-          var content = document.createElement('div');
-          content.className = 'sch-map-pop';
-          content.innerHTML = '<strong>' + esc(first.therapistName) + '</strong><br>' +
-            list.map(function (p) { return fmtTime12(p.startMin) + '–' + fmtTime12(p.endMin); }).join(', ') +
-            '<br>' + esc(first.suburb);
-          var btn = document.createElement('button');
-          btn.className = 'sch-mini'; btn.textContent = 'View on calendar';
-          btn.addEventListener('click', function () {
-            m.info.close();
-            jumpToMinute(first.startMin);
-            mapHighlightTiles(mk.__eids, true);
-            setTimeout(function () { mapHighlightTiles(mk.__eids, false); }, 2400);
-          });
-          content.appendChild(document.createElement('br'));
-          content.appendChild(btn);
-          m.info.setContent(content);
-          m.info.open({ map: m.gmap, anchor: mk });
+          var evs = list.filter(function (q) { return q.suburb === p.suburb; });
+          m.info.setContent('<div class="sch-map-pop"><strong>' + esc(p.therapistName) + '</strong><br/>' +
+            esc(p.suburb) + '<br/>' + evs.map(function (q) {
+              return fmtTime12(q.startMin) + '–' + fmtTime12(q.endMin);
+            }).join('<br/>') +
+            '<br/><button type="button" data-eid="' + esc(evs[0].eventId) + '" class="sch-map-view">View on calendar</button></div>');
+          m.info.open(m.gmap, mk);
+          setTimeout(function () {
+            var btn = document.querySelector('.sch-map-view');
+            if (btn) btn.addEventListener('click', function () { mapHighlightTiles(btn.dataset.eid); });
+          }, 60);
         });
         m.markers.push(mk);
+        bounds.extend(mk.getPosition());
       });
-    });
-
-    // ── Phase 6: daily service footprints (derived, never stored) ──
-    if (m.footprints) {
-      var byTher = {};
-      pts.forEach(function (p) {
-        byTher[p.therapistProfileId] = byTher[p.therapistProfileId] || [];
-        byTher[p.therapistProfileId].push(p);
-      });
-      Object.keys(byTher).forEach(function (tid) {
-        var uniq = dedupSuburbPoints(byTher[tid]);
-        var clusters = clusterPoints(uniq, 45);
-        clusters.forEach(function (cluster) {
-          if (cluster.length < 3) return;      // 1-2 points: markers carry the story
-          var hull = convexHull(cluster);
+      // service footprint hull for the day (derived, never stored)
+      if (m.footprints) {
+        var cluster = dedupSuburbPoints(list);
+        if (cluster.length < 3) return; // 1-2 suburbs: markers alone tell the story
+        clusterPoints(cluster).forEach(function (cl) {
+          if (cl.length < 3) return;
+          var hull = convexHull(cl);
           if (hull.length < 3) return;
-          var faded = focus && tid !== focus;
-          var colour = byTher[tid][0].therapistColour;
           m.polys.push(new google.maps.Polygon({
             map: m.gmap,
-            paths: hull.map(function (h) { return { lat: h.lat, lng: h.lng }; }),
-            fillColor: colour, fillOpacity: faded ? 0.04 : (focus === tid ? 0.18 : 0.09),
-            strokeColor: colour, strokeOpacity: faded ? 0.1 : 0.35, strokeWeight: 1.5,
-            clickable: false, zIndex: 0,
+            paths: hull.map(function (p) { return { lat: p.lat, lng: p.lng }; }),
+            fillColor: list[0].therapistColour || '#0f7c6c', fillOpacity: 0.10,
+            strokeColor: list[0].therapistColour || '#0f7c6c', strokeOpacity: 0.5, strokeWeight: 1.5,
           }));
         });
-      });
-    }
-
-    // Bounds: only on data/context changes, never fighting a manual viewport
-    var bKey = SCHED.date + '|' + (focus || 'all') + '|' + pts.length;
-    if (!m.userMoved && pts.length && m.boundsKey !== bKey) {
-      m.boundsKey = bKey;
+      }
+    });
+    var bk = pts.map(function (p) { return p.eventId; }).join(',');
+    if (!m.userMoved && pts.length && bk !== m.boundsKey) {
+      m.boundsKey = bk;
       m.gmap.fitBounds(bounds, 48);
-      if (pts.length === 1) m.gmap.setZoom(Math.min(m.gmap.getZoom(), 13));
     }
-
-    renderMapLegend(pts);
   }
 
-  function mapHighlightTiles(eids, on) {
-    (eids || []).forEach(function (eid) {
-      var tile = document.querySelector('.sch-tile[data-eid="' + eid + '"]');
-      if (tile) tile.classList.toggle('sch-map-hi', !!on);
+  // map marker → matrix block highlight
+  function mapHighlightTiles(eid) {
+    document.querySelectorAll('.sm-ev[data-eid]').forEach(function (el) {
+      if (el.dataset.eid === eid) {
+        el.classList.add('sch-flash');
+        el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+        setTimeout(function () { el.classList.remove('sch-flash'); }, 1400);
+      }
     });
   }
 
-  // Calendar → map: hovering a tile emphasises its marker
-  function mapEmphasiseEvent(eid, on) {
+  // matrix block → map marker emphasis
+  function mapEmphasiseEvent(eid) {
     var m = SCHED.map;
-    if (!m.gmap) return;
-    m.markers.forEach(function (mk) {
-      if ((mk.__eids || []).indexOf(eid) === -1) return;
-      var ic = mk.getIcon();
-      ic.scale = on ? 12 : 9;
-      mk.setIcon(ic);
-      mk.setZIndex(on ? 9 : 3);
+    if (SCHED.inspector !== 'map' || !m.gmap) return;
+    var p = (m.points || []).find(function (q) { return q.eventId === eid; });
+    if (p) m.gmap.panTo({ lat: p.lat, lng: p.lng });
+  }
+
+  // temporary proposed-client marker (star); cleared, never persisted
+  function mapShowClientPoint(pt) {
+    var m = SCHED.map;
+    if (!m.gmap || !(global.google && global.google.maps)) return;
+    if (m.clientMarker) { m.clientMarker.setMap(null); m.clientMarker = null; }
+    if (!pt || pt.lat == null) return;
+    m.clientMarker = new google.maps.Marker({
+      map: m.gmap,
+      position: { lat: pt.lat, lng: pt.lng },
+      title: (pt.suburb || 'Client') + ' - not yet booked',
+      icon: {
+        path: 'M 0,-12 L 3,-4 11,-4 5,1 7,9 0,4 -7,9 -5,1 -11,-4 -3,-4 Z',
+        fillColor: '#d96f4e', fillOpacity: 0.95, strokeColor: '#ffffff', strokeWeight: 1.5, scale: 1,
+      },
     });
+    m.gmap.panTo({ lat: pt.lat, lng: pt.lng });
   }
 
   function renderMapStatus() {
     var host = document.getElementById('sch-map-status');
     if (!host) return;
     var m = SCHED.map;
-    if (m.sdk === 'error') host.innerHTML = 'Map unavailable. <button type="button" class="sch-mini" onclick="OpalScheduler._mapRetry()">Retry</button>';
-    else if (m.sdk === 'loading' || m.loading) host.textContent = 'Loading service locations…';
-    else if (m.error) host.innerHTML = 'Locations couldn\'t be loaded. <button type="button" class="sch-mini" onclick="OpalScheduler._mapRetry()">Retry</button>';
-    else host.textContent = '';
+    host.className = 'sch-map-note';
+    host.innerHTML = m.error
+      ? 'Map unavailable right now. Scheduling is unaffected. <button type="button" class="sch-map-retry">Retry</button>'
+      : (m.loading ? 'Loading locations&hellip;' : '');
+    var retry = host.querySelector('.sch-map-retry');
+    if (retry) retry.addEventListener('click', function () { SCHED.map.error = false; mapFetchPoints(true); mapEnsure(); });
   }
 
-  function renderMapLegend(pts) {
+  function renderMapLegend() {
     var host = document.getElementById('sch-map-legend');
     if (!host) return;
-    var m = SCHED.map;
-    if (!pts.length) {
-      var msg = 'No service locations to show for this day.';
-      var extra = [];
-      if (m.meta.telehealth) extra.push('Telehealth: ' + m.meta.telehealth);
-      if (m.meta.unmappable) extra.push('Without location: ' + m.meta.unmappable);
-      host.innerHTML = '<div class="sch-map-empty">' + msg +
-        (extra.length ? '<br><span>' + extra.join(' · ') + '</span>' : '') + '</div>';
-      return;
-    }
-    var byT = {};
-    pts.forEach(function (p) {
-      byT[p.therapistProfileId] = byT[p.therapistProfileId] ||
-        { name: p.therapistName, colour: p.therapistColour, visits: 0, suburbs: [] };
-      byT[p.therapistProfileId].visits += 1;
-      if (byT[p.therapistProfileId].suburbs.indexOf(p.suburb) === -1) byT[p.therapistProfileId].suburbs.push(p.suburb);
+    var byTher = {};
+    mapVisiblePoints().forEach(function (p) {
+      (byTher[p.therapistProfileId] = byTher[p.therapistProfileId] || { name: p.therapistName, colour: p.therapistColour, suburbs: {}, n: 0 }); // eslint-disable-line
+      byTher[p.therapistProfileId].n += 1;
+      byTher[p.therapistProfileId].suburbs[p.suburb] = 1;
     });
-    var extra2 = [];
-    if (m.meta.telehealth) extra2.push('Telehealth today: ' + m.meta.telehealth);
-    if (m.meta.unmappable) extra2.push(m.meta.unmappable + ' without a mappable location');
-    host.innerHTML = Object.keys(byT).map(function (tid) {
-      var t = byT[tid];
-      return '<button type="button" class="sch-map-leg" data-tid="' + esc(tid) + '"' +
-        ' aria-label="' + esc(t.name + ', ' + t.visits + ' face-to-face visits today: ' + t.suburbs.join(', ')) + '">' +
-        '<span class="sch-f-dot" style="background:' + esc(t.colour) + ';"></span>' +
-        '<span class="sch-map-leg-name">' + esc(t.name) + '</span>' +
-        '<span class="sch-map-leg-n">' + t.visits + ' visit' + (t.visits === 1 ? '' : 's') + '</span>' +
-        '<span class="sch-map-leg-subs">' + esc(t.suburbs.join(' · ')) + '</span>' +
-        '</button>';
-    }).join('') + (extra2.length ? '<div class="sch-map-note">' + extra2.join(' · ') + '</div>' : '');
-    host.onclick = function (e) {
-      var b = e.target.closest('.sch-map-leg'); if (!b) return;
-      SCHED.focusId = SCHED.focusId === b.dataset.tid ? null : b.dataset.tid;
-      render(); loadAvailability(); loadWeekCapacity(); mapDraw();
-    };
-  }
-
-  function buildMapPanel() {
-    var m = SCHED.map;
-    var aside = document.createElement('aside');
-    aside.className = 'sch-finder sch-map-panel';
-    aside.id = 'sch-map-panel';
-    aside.innerHTML =
-      '<div class="sch-f-head">Map — ' + esc(fmtDayLabel(SCHED.date)) +
-        '<span style="flex:1"></span>' +
-        '<label class="sch-map-toggle"><input type="checkbox" id="sch-fp-toggle"' + (m.footprints ? ' checked' : '') + '> Operating areas</label>' +
-        '<button type="button" class="sch-f-close" data-act="close" aria-label="Hide map">&#10005;</button></div>' +
-      '<div id="sch-map-status" class="sch-f-status"></div>' +
-      '<div id="sch-map-host"></div>' +
-      '<div id="sch-map-legend" class="sch-map-legend" aria-live="polite"></div>';
-    aside.addEventListener('click', function (e) {
-      if (e.target.closest('[data-act="close"]')) { m.open = false; persistMapOpen(); render(); }
-    });
-    aside.addEventListener('change', function (e) {
-      if (e.target.id === 'sch-fp-toggle') { m.footprints = e.target.checked; persistMapOpen(); mapDraw(); }
-    });
-    return aside;
-  }
-
-  function mountMapPanel(wrap) {
-    var aside = buildMapPanel();
-    wrap.appendChild(aside);
-    var host = aside.querySelector('#sch-map-host');
-    if (!SCHED.map.el) { SCHED.map.el = document.createElement('div'); SCHED.map.el.className = 'sch-map-canvas'; }
-    host.appendChild(SCHED.map.el);   // persistent canvas — the map instance survives re-renders
-    renderMapStatus();
-    if (SCHED.map.sdk === 'ready') { mapDraw(); }
-    else mapEnsure();
-  }
-
-  // ── Day grid ──────────────────────────────────────────────────────────────
-  function renderDay(frag, visible) {
-    var wrap = document.createElement('div');
-    wrap.className = 'sch-day-wrap';
-    var scroll = document.createElement('div');
-    scroll.className = 'sch-scroll';
-    var grid = document.createElement('div');
-    grid.className = 'sch-grid' + (SCHED.focusId ? ' focused' : '');
-    grid.style.setProperty('--sch-cols', String(visible.length || 1));
-    grid.style.setProperty('--sch-hour', HOUR() + 'px');
-
-    var bodyH = 24 * HOUR();
-    var isToday = SCHED.date === todayPerthYmd();
-    var mode = SCHED.focusId ? 'focus' : 'cross';
-
-    // header row
-    var corner = document.createElement('div');
-    corner.className = 'sch-corner';
-    grid.appendChild(corner);
-    visible.forEach(function (t) {
-      var dayEvents = eventsForTherapistDay(SCHED.events, t.id, SCHED.date);
-      var head = document.createElement('div');
-      head.className = 'sch-headcell';
-      head.setAttribute('role', 'button');
-      head.setAttribute('tabindex', '0');
-      head.title = 'Focus on ' + t.displayName;
-      var avh = (SCHED.overlay || SCHED.focusId) && SCHED.avail.key === SCHED.date ? SCHED.avail.byId[t.id] : null;
-      var subBits = [esc(t.roleTitle || '')];
-      if (avh && avh.working) subBits.push('<span class="sch-cap">' + esc(fmtDur(avh.capacity.availableMin)) + ' free</span>');
-      if (avh && avh.availabilityConfidence === 'default') subBits.push('<span class="sch-defbadge" title="No work schedule entered for this week — using the practice default hours">default hours</span>');
-      head.innerHTML =
-        '<span class="sch-h-av" style="background:' + esc(t.colour || '#0f7c6c') + ';">' + esc(t.initials || '?') + '</span>' +
-        '<span class="sch-h-id">' +
-          '<span class="sch-h-name">' + esc(t.displayName) + '</span>' +
-          '<span class="sch-h-sub">' + subBits.filter(Boolean).join(' · ') + '</span>' +
-        '</span>' +
-        '<span class="sch-h-count" title="Appointments this day">' + apptCount(dayEvents) + '</span>';
-      var focus = function () { SCHED.focusId = t.id; render(); loadAvailability(); loadWeekCapacity(); };
-      head.addEventListener('click', focus);
-      head.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focus(); } });
-      grid.appendChild(head);
-    });
-
-    // body row: time rail
-    var rail = document.createElement('div');
-    rail.className = 'sch-timerail';
-    rail.style.height = bodyH + 'px';
-    for (var h = 0; h < 24; h++) {
-      var lbl = document.createElement('div');
-      lbl.className = 'sch-t-label';
-      lbl.style.top = (h * HOUR()) + 'px';
-      lbl.textContent = ((h % 12) || 12) + ' ' + (h < 12 ? 'AM' : 'PM');
-      rail.appendChild(lbl);
-    }
-    grid.appendChild(rail);
-
-    // body row: one column per therapist
-    visible.forEach(function (t) {
-      var col = document.createElement('div');
-      col.className = 'sch-col';
-      col.dataset.tid = t.id;
-      col.style.height = bodyH + 'px';
-
-      var av = (SCHED.overlay || SCHED.focusId) && SCHED.avail.key === SCHED.date ? SCHED.avail.byId[t.id] : null;
-      if (av) {
-        // Real availability from the engine: paint every segment type.
-        if (!av.working) {
-          col.classList.add('sch-notworking');
-          var onLeave = av.segments.some(function (x) { return x.type === 'leave'; });
-          var nw = document.createElement('div');
-          nw.className = 'sch-nw-label' + (SCHED.focusId ? ' focus' : '');
-          nw.textContent = SCHED.focusId
-            ? (t.displayName + (onLeave ? ' is on leave this day.' : " isn't scheduled to work this day."))
-            : (onLeave ? 'On leave' : 'Not working');
-          nw.style.top = (10.5 * HOUR()) + 'px';
-          col.appendChild(nw);
-        } else {
-          var inFocus = !!SCHED.focusId;
-          av.segments.forEach(function (seg) {
-            if (seg.type === 'busy') return; // tiles carry busy visually
-            var band = document.createElement('div');
-            band.className = 'sch-avl ' + seg.type + (inFocus ? ' focus' : '');
-            band.style.top = (seg.startMin / 60 * HOUR()) + 'px';
-            var bandPx = (seg.endMin - seg.startMin) / 60 * HOUR();
-            band.style.height = bandPx + 'px';
-
-            if (seg.type === 'buffer' && inFocus && bandPx >= 12) {
-              var bl = document.createElement('span');
-              bl.className = 'sch-buf-lbl';
-              bl.textContent = 'Buffer · ' + (seg.endMin - seg.startMin) + ' min';
-              band.appendChild(bl);
-            }
-
-            if (seg.type === 'available') {
-              var dur = seg.endMin - seg.startMin;
-              band.title = fmtDur(dur) + ' available · ' + fmtTime12(seg.startMin) + '–' + fmtTime12(seg.endMin) + ' · click to book';
-              if (inFocus && bandPx >= 46) {
-                // Focus Mode: availability is the headline — full gap card
-                var card = document.createElement('span');
-                card.className = 'sch-avl-card';
-                card.innerHTML =
-                  '<span class="sch-avl-tag">Available</span>' +
-                  '<span class="sch-avl-times">' + fmtTime12(seg.startMin) + ' – ' + fmtTime12(seg.endMin) + ' · ' + fmtDur(dur) + '</span>' +
-                  '<button type="button" class="sch-avl-add">+ Add appointment</button>';
-                band.appendChild(card);
-              } else if (dur >= 60 && bandPx >= 34) {
-                var lbl = document.createElement('span');
-                lbl.className = 'sch-avl-lbl';
-                lbl.textContent = fmtDur(dur) + ' available';
-                band.appendChild(lbl);
-              }
-              (function (startMin, endMin) {
-                band.addEventListener('click', function (ev) {
-                  if (typeof global.openBookingPanel !== 'function') return;
-                  // Click WITHIN the gap: snap the clicked time (15-min grid),
-                  // then clamp so the appointment still fits the true segment.
-                  var windowLen = endMin - startMin;
-                  var dflt = Math.min(global.DEFAULT_BOOKING_TYPE ? 60 : 60, 60, windowLen);
-                  var clicked = startMin + Math.floor((ev.offsetY || 0) / HOUR() * 60);
-                  var start = Math.max(startMin, Math.min(snap15(clicked), endMin - dflt));
-                  var dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-                  var pp = SCHED.date.split('-').map(Number);
-                  var dayKey = dayKeys[new Date(Date.UTC(pp[0], pp[1] - 1, pp[2])).getUTCDay()];
-                  global.openBookingPanel({
-                    day: dayKey, date: SCHED.date,
-                    startH: Math.floor(start / 60), startM: start % 60,
-                    endH: Math.floor((start + dflt) / 60), endM: (start + dflt) % 60,
-                  });
-                  if (SCHED.focusId && typeof global.selectBspTherapist === 'function') {
-                    setTimeout(function () { try { global.selectBspTherapist(SCHED.focusId); } catch (err) {} }, 400);
-                  }
-                });
-              })(seg.startMin, seg.endMin);
-            }
-            col.appendChild(band);
-          });
-        }
-      } else {
-        // soft off-hours wash (visual calm, explicitly NOT availability)
-        [['0', WORK_START_H], [String(WORK_END_H), 24 - WORK_END_H]].forEach(function (band) {
-          var off = document.createElement('div');
-          off.className = 'sch-offhours';
-          off.style.top = (Number(band[0]) * HOUR()) + 'px';
-          off.style.height = (band[1] * HOUR()) + 'px';
-          col.appendChild(off);
-        });
-      }
-
-      var items = assignLanes(eventsForTherapistDay(SCHED.events, t.id, SCHED.date));
-      items.forEach(function (it) {
-        var tile = document.createElement('div');
-        tile.className = 'sch-tile';
-        tile.setAttribute('data-type', it.ev.eventType || 'outlook');
-        if (it.ev.id) tile.setAttribute('data-eid', it.ev.id);
-        var top = it.startMin / 60 * HOUR();
-        // 4px bottom gap keeps back-to-back events visibly separate (matches
-        // the personal calendar's separation rule)
-        var height = Math.max(9, (it.endMin - it.startMin) / 60 * HOUR() - 4);
-        var w = 100 / (it.laneCount || 1);
-        tile.style.top = top + 'px';
-        tile.style.height = height + 'px';
-        if ((it.laneCount || 1) > 1) {
-          tile.style.left = 'calc(' + (it.lane * w) + '% + 3px)';
-          tile.style.right = 'auto';
-          tile.style.width = 'calc(' + w + '% - 6px)';
-        }
-        var label = safeLabel(it.ev, mode);
-        var suburb = extractSuburb(it.ev.location);
-        var timeStr = fmtTime12(it.startMin) + '–' + fmtTime12(it.endMin);
-        var html = '';
-        if (height >= 30) html += '<span class="sch-e-time">' + esc(timeStr) + '</span>';
-        html += '<span class="sch-e-label">' + esc(label) + '</span>';
-        if (height >= 42 && suburb) html += '<span class="sch-e-loc">' + esc(suburb) + '</span>';
-        tile.innerHTML = html;
-        tile.title = timeStr + ' · ' + label + (suburb ? ' · ' + suburb : '');
-        col.appendChild(tile);
+    var ids = Object.keys(byTher);
+    host.innerHTML = ids.length
+      ? ids.map(function (tid) {
+          var e = byTher[tid];
+          return '<button type="button" class="sch-map-leg" data-tid="' + esc(tid) + '">' +
+            '<span class="sch-map-leg-n" style="background:' + esc(e.colour || '#0f7c6c') + '">' + e.n + '</span>' +
+            '<span class="sch-map-leg-name">' + esc(e.name) + ' <span class="sch-map-leg-subs">' + e.n + ' visit' + (e.n === 1 ? '' : 's') + ' &middot; ' +
+            esc(Object.keys(e.suburbs).join(' · ')) + '</span></span></button>';
+        }).join('')
+      : '<div class="sch-map-empty">No mappable visits for this day.</div>';
+    host.querySelectorAll('[data-tid]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        openInspector('therapist', b.dataset.tid);
       });
-
-      if (!items.length) {
-        var empty = document.createElement('div');
-        empty.className = 'sch-empty-col';
-        empty.textContent = 'No appointments';
-        col.appendChild(empty);
-      }
-
-      if (isToday) {
-        var nowMin = perthParts(new Date().toISOString()).minutes;
-        var line = document.createElement('div');
-        line.className = 'sch-nowline';
-        line.style.top = (nowMin / 60 * HOUR()) + 'px';
-        col.appendChild(line);
-      }
-      // Finder emphasis: outline the requested slot in available columns
-      var fr = SCHED.finder;
-      if (fr.open && fr.mode === 'exact' && fr.result && fr.result.requested &&
-          fr.result.requested.date === SCHED.date &&
-          (fr.result.available || []).some(function (c) { return c.therapistProfileId === t.id; })) {
-        var req = document.createElement('div');
-        req.className = 'sch-req-slot';
-        req.style.top = (fr.result.requested.startMin / 60 * HOUR()) + 'px';
-        req.style.height = ((fr.result.requested.endMin - fr.result.requested.startMin) / 60 * HOUR()) + 'px';
-        col.appendChild(req);
-      }
-      grid.appendChild(col);
     });
-
-    scroll.appendChild(grid);
-    wrap.appendChild(scroll);
-    if (SCHED.finder.open) wrap.appendChild(buildFinder());
-    else if (SCHED.map.open) mountMapPanel(wrap);
-    frag.appendChild(wrap);
-
-    // Calendar → map cross-highlighting (delegated, subtle)
-    grid.addEventListener('mouseover', function (e) {
-      var tile = e.target.closest('.sch-tile[data-eid]');
-      if (tile && SCHED.map.open) mapEmphasiseEvent(tile.dataset.eid, true);
-    });
-    grid.addEventListener('mouseout', function (e) {
-      var tile = e.target.closest('.sch-tile[data-eid]');
-      if (tile && SCHED.map.open) mapEmphasiseEvent(tile.dataset.eid, false);
-    });
-
-    // scroll to working hours on first paint of the day
-    requestAnimationFrame(function () {
-      scroll.scrollTop = Math.max(0, (WORK_START_H - 0.5) * HOUR());
-    });
-
-    // keep the now-line honest without re-rendering the world
-    if (SCHED.nowTimer) clearInterval(SCHED.nowTimer);
-    if (isToday) {
-      SCHED.nowTimer = setInterval(function () {
-        var el = root(); if (!el || SCHED.mode !== 'day') return;
-        var nowMin = perthParts(new Date().toISOString()).minutes;
-        el.querySelectorAll('.sch-nowline').forEach(function (l) {
-          l.style.top = (nowMin / 60 * HOUR()) + 'px';
-        });
-      }, 60000);
-    }
   }
 
-  // ── Week view (group by therapist) ────────────────────────────────────────
-  var WK_MAX_ITEMS = 5;
+  // ── Root render ───────────────────────────────────────────────────────────
 
-  function renderWeek(frag, visible) {
-    var wrap = document.createElement('div');
-    wrap.className = 'sch-week';
-    var monday = mondayOfYmd(SCHED.date);
-    var grouped = groupWeek(SCHED.events, visible, monday);
-    var todayYmd = todayPerthYmd();
-
-    // include weekend columns only when the week actually has weekend events
-    var hasWeekend = visible.some(function (t) {
-      return grouped.byTherapist[t.id][grouped.days[5]].length ||
-             grouped.byTherapist[t.id][grouped.days[6]].length;
-    });
-    var days = hasWeekend ? grouped.days : grouped.days.slice(0, 5);
-    var dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    visible.forEach(function (t) {
-      var weekTotal = 0;
-      days.forEach(function (d) { weekTotal += apptCount(grouped.byTherapist[t.id][d]); });
-
-      var row = document.createElement('div');
-      row.className = 'sch-wk-row';
-      var head = document.createElement('div');
-      head.className = 'sch-wk-head';
-      head.setAttribute('role', 'button'); head.setAttribute('tabindex', '0');
-      head.title = 'Focus on ' + t.displayName;
-      head.innerHTML =
-        '<span class="sch-h-av" style="background:' + esc(t.colour || '#0f7c6c') + ';">' + esc(t.initials || '?') + '</span>' +
-        '<span class="sch-wk-name">' + esc(t.displayName) + '</span>' +
-        '<span class="sch-wk-sub">' + esc(t.roleTitle || '') +
-          ' · ' + weekTotal + ' appointment' + (weekTotal === 1 ? '' : 's') + ' this week</span>';
-      head.addEventListener('click', function () { SCHED.focusId = t.id; SCHED.mode = 'day'; render(); });
-      row.appendChild(head);
-
-      var daysEl = document.createElement('div');
-      daysEl.className = 'sch-wk-days';
-      daysEl.style.setProperty('--sch-wk-cols', String(days.length));
-      days.forEach(function (d, i) {
-        var evs = grouped.byTherapist[t.id][d];
-        var cell = document.createElement('div');
-        cell.className = 'sch-wk-day' + (d === todayYmd ? ' today' : '');
-        cell.title = 'Open ' + dayNames[i] + ' in day view';
-        var html = '<div class="sch-wk-daylabel">' + dayNames[i] + ' ' + Number(d.slice(8)) + '</div>';
-        if (!evs.length) html += '<div class="sch-wk-quiet">—</div>';
-        evs.slice(0, WK_MAX_ITEMS).forEach(function (x) {
-          var suburb = extractSuburb(x.ev.location);
-          html += '<div class="sch-wk-item" data-type="' + esc(x.ev.eventType || 'outlook') + '">' +
-            '<span class="sch-wk-dot"></span>' +
-            '<span class="sch-wk-time">' + esc(fmtTime12(x.startMin)) + '</span>' +
-            '<span>' + esc(safeLabel(x.ev, 'cross')) + (suburb ? ' · ' + esc(suburb) : '') + '</span>' +
-            '</div>';
-        });
-        if (evs.length > WK_MAX_ITEMS) html += '<div class="sch-wk-more">+' + (evs.length - WK_MAX_ITEMS) + ' more</div>';
-        cell.innerHTML = html;
-        cell.addEventListener('click', function () { SCHED.date = d; SCHED.mode = 'day'; load(); });
-        daysEl.appendChild(cell);
-      });
-      row.appendChild(daysEl);
-      wrap.appendChild(row);
-    });
-
-    if (!visible.length) {
-      wrap.innerHTML = '<div class="sch-status">No therapists match the current filters.</div>';
-    }
-    frag.appendChild(wrap);
-  }
-
-  // ── Render root ───────────────────────────────────────────────────────────
   function render() {
-    var el = root(); if (!el) return;
+    var el = root();
+    if (!el) return;
     var frag = document.createDocumentFragment();
     renderToolbar(frag);
-    renderFilters(frag);
+    renderSummary(frag);
 
-    if (SCHED.loading) {
-      var st = document.createElement('div');
-      st.className = 'sch-status';
-      st.textContent = 'Loading schedules…';
-      frag.appendChild(st);
+    var body = document.createElement('div');
+    body.className = 'sm-body' + (SCHED.inspector ? ' has-insp' : '');
+    var visible = visibleTherapists();
+    if (SCHED.loading && !SCHED.therapists.length) {
+      var ld = document.createElement('div');
+      ld.className = 'sch-status';
+      ld.textContent = 'Loading schedules…';
+      body.appendChild(ld);
+    } else if (!visible.length) {
+      var none = document.createElement('div');
+      none.className = 'sch-status';
+      none.textContent = SCHED.therapists.length ? 'No therapists match the current filters.' : 'No therapists found for this practice.';
+      body.appendChild(none);
     } else {
-      var visible = filterTherapists(SCHED.therapists, {
-        ids: SCHED.filterIds, discipline: SCHED.discipline, focusId: SCHED.focusId,
-      });
-      if (!SCHED.therapists.length) {
-        var none = document.createElement('div');
-        none.className = 'sch-status';
-        none.textContent = 'No therapists found for this practice.';
-        frag.appendChild(none);
-      } else if (SCHED.mode === 'week') {
-        renderWeek(frag, visible);
-      } else {
-        renderCommon(frag, visible);
-        renderDay(frag, visible);
-      }
+      renderMatrix(body, visible);
     }
+    renderInspector(body);
+    frag.appendChild(body);
+
+    var note = document.createElement('div');
+    note.className = 'sch-mobile-note';
+    note.textContent = 'On small screens the matrix condenses to the therapist list; pick a time with Start above.';
+    frag.appendChild(note);
+
     el.innerHTML = '';
     el.appendChild(frag);
+
+    if (SCHED.inspector === 'map') { mapEnsure(); }
+    if (SCHED.inspector === 'therapist' && SCHED.inspectorId) loadWeekCapacity(SCHED.inspectorId);
+    ensureNowTimer();
+  }
+
+  function ensureNowTimer() {
+    if (SCHED.nowTimer) { clearInterval(SCHED.nowTimer); SCHED.nowTimer = null; }
+    if (SCHED.date !== todayPerthYmd()) return;
+    SCHED.nowTimer = setInterval(function () {
+      var win = displayWindow();
+      var nowMin = perthParts(new Date().toISOString()).minutes;
+      document.querySelectorAll('.sm-now').forEach(function (elx) {
+        elx.style.left = ((nowMin - win.startMin) * PPM) + 'px';
+      });
+    }, 60000);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
+
   function open() {
     if (!SCHED.date) SCHED.date = todayPerthYmd();
     load();
   }
 
   function nav(dir) {
-    if (dir === 'today') SCHED.date = todayPerthYmd();
-    else SCHED.date = addDaysYmd(SCHED.date || todayPerthYmd(),
-      (SCHED.mode === 'week' ? 7 : 1) * dir);
-    load();
-    if (SCHED.map.open) mapFetchPoints();
-    if (SCHED.finder.open) finderSearch();
+    if (dir === 'today') setDate(todayPerthYmd());
+    else setDate(addDaysYmd(SCHED.date || todayPerthYmd(), dir));
   }
 
-  function refresh() { load(true); }
+  function refresh() {
+    WEEK_CAP = {};
+    SCHED.avail.key = null;
+    SCHED.recs.key = null;
+    SCHED.common.key = null;
+    load(true);
+  }
 
   global.OpalScheduler = {
     open: open, nav: nav, refresh: refresh, _state: SCHED,
     _mapRetry: function () { SCHED.map.sdk = 'none'; SCHED.map.error = false; mapEnsure(); },
   };
+
 
 })(typeof window !== 'undefined' ? window : null);

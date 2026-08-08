@@ -12,8 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
-<link rel="stylesheet" href="/scheduler.css?v=p6" />
-<script src="/scheduler.js?v=p6" defer></script>
+<link rel="stylesheet" href="/scheduler.css?v=p9" />
+<script src="/scheduler.js?v=p9" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -8693,7 +8693,14 @@ window.connectOutlookFromSettings = async function (btn) {
       const isApi = url.startsWith('/api/') || url.includes(window.location.origin + '/api/');
       const isAuthEndpoint = url.includes('/api/auth/');
       if (res.status === 401 && isApi && !isAuthEndpoint && window.APP_USER && !redirecting) {
+        // Background pollers also flow through here — one flaky 401 must not
+        // log the user out mid-session. Confirm the session is really dead
+        // with a direct auth check before navigating away.
         redirecting = true;
+        try {
+          const check = await origFetch('/api/auth/me', { credentials: 'include' });
+          if (check.status !== 401) { redirecting = false; return res; }
+        } catch (_) { redirecting = false; return res; }
         console.warn('Session expired — redirecting to login');
         window.location.replace('/login?expired=1&next=' + encodeURIComponent(window.location.pathname));
       }
@@ -8783,6 +8790,16 @@ function switchCalendarView(viewName) {
   document.querySelectorAll('#view-calendar .cal-view').forEach(view => {
     view.style.display = view.id === 'cal-view-' + viewName ? 'flex' : 'none';
   });
+
+  // Keep the mode variable and .view-tab highlight consistent with what is
+  // now visible — a caller that only flips displays would otherwise leave the
+  // Scheduler tab highlighted while the week grid shows.
+  if (viewName === 'day' || viewName === 'week' || viewName === 'month') {
+    window.__calendarMode = viewName;
+    document.querySelectorAll('.view-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.view === viewName);
+    });
+  }
 
   // Ensure we're on the calendar top-tab
   switchTab('calendar');
@@ -18396,7 +18413,11 @@ async function loadOutlookEventsToCalendar() {
       } catch (_) {}
       if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
     }
-    if (__eventsInVisibleWeek().length === 0) {
+    // Snap-to-nearest-event runs ONCE, on the first load only. This loader is
+    // also called from background sync polls; snapping there would silently
+    // move a week the user deliberately navigated to (or the hidden anchor
+    // while they sit in the Master Scheduler) just because it has no events.
+    if (!window.__outlookSnapDone && __eventsInVisibleWeek().length === 0) {
       const now = Date.now();
       let nearest = window.__outlookEventsCache[0];
       let bestDelta = Infinity;
@@ -18409,18 +18430,22 @@ async function loadOutlookEventsToCalendar() {
       window.__currentWeekMonday = __thisMondayPerth(new Date(nearest.start_time));
       console.log(`📌 No events in current week — snapped to week of ${__ymd(window.__currentWeekMonday)}`);
     }
+    window.__outlookSnapDone = true;
 
-    // Refresh the view the user is currently in — don't force-switch away from month view.
-    // Previously this always called switchCalendarView('week'), overriding the user's mode.
+    // Refresh the view the user is currently in — never force-switch modes.
+    // This runs from background sync callbacks, so it must not change which
+    // view is visible: switchCalendarView('week') here used to hide the
+    // Master Scheduler mid-session and yank users back to the Calendar tab.
     if (window.__calendarMode === 'month') {
       renderMonth();
     } else if (window.__calendarMode === 'day') {
       const _dayKey = (typeof DAY_ORDER !== 'undefined' && typeof window.__currentDayOffset !== 'undefined')
         ? DAY_ORDER[window.__currentDayOffset] : 'mon';
       renderDay(_dayKey);
+    } else if (window.__calendarMode === 'master') {
+      if (window.OpalScheduler) window.OpalScheduler.refresh();
     } else {
       renderCurrentWeek();
-      switchCalendarView('week');
     }
 
     // After Outlook tiles are rendered, load Splose appointments and cross-reference
@@ -24200,12 +24225,17 @@ async function loadAppInfo() {
       loadUserListForOwner();
       loadAppInfo();
     }
-    // Apply default calendar view the first time the calendar tab is opened
+    // Apply default calendar view the first time the calendar tab is opened —
+    // but never after the user has manually picked a view this session.
     if (name === 'calendar' && !_calendarDefaultViewApplied) {
-      var dv = (window.APP_SETTINGS || {}).calendarDefaultView;
-      if (dv && typeof setCalendarMode === 'function') {
-        setCalendarMode(dv);
-        _calendarDefaultViewApplied = true;
+      if (window.__viewManuallySet) {
+        _calendarDefaultViewApplied = true; // user's choice wins for good
+      } else {
+        var dv = (window.APP_SETTINGS || {}).calendarDefaultView;
+        if (dv && typeof setCalendarMode === 'function') {
+          setCalendarMode(dv);
+          _calendarDefaultViewApplied = true;
+        }
       }
     }
   };

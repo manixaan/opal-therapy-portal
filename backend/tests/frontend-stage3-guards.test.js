@@ -770,8 +770,8 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p6" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p6" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p9" />');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p9" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -811,8 +811,9 @@ describe('master scheduler phase 1', () => {
     expect(EMOJI.test(SCHED_CSS)).toBe(false);
   });
 
-  test('back-to-back tiles keep the 4px separation rule in the scheduler too', () => {
-    expect(SCHED_JS).toContain('HOUR() - 4)');
+  test('back-to-back blocks keep the 4px separation rule in the matrix too', () => {
+    // horizontal geometry: block width is duration*PPM minus the 4px gap
+    expect(SCHED_JS).toContain('* PPM - 4)');
   });
 });
 
@@ -841,17 +842,18 @@ describe('master scheduler phase 2 availability', () => {
   const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
-  test('availability is an optional overlay toggle, off never changes Phase 1', () => {
-    expect(SCHED_JS).toContain("localStorage.getItem('sch_overlay')");
-    expect(SCHED_JS).toContain('data-act="overlay"');
-    expect(SCHED_JS).toContain('(SCHED.overlay || SCHED.focusId) && SCHED.avail.key === SCHED.date');
+  test('the availability engine drives the matrix itself — always loaded, engine-derived paint', () => {
+    expect(SCHED_JS).toContain('function loadAvailability');
+    expect(SCHED_JS).toContain('trackPaint(');           // engine segments -> row paint
+    expect(SCHED_JS).toContain('slotVerdict(');          // engine segments -> proposed-slot status
+    expect(SCHED_JS).not.toContain('SCHED.overlay');     // the optional-overlay era is retired
   });
 
   test('availability visuals are calm opal tints, not bright green fills', () => {
-    expect(SCHED_CSS).toContain('.sch-avl.available');
-    expect(SCHED_CSS).toContain('rgba(15, 124, 108, 0.07)');
+    expect(SCHED_CSS).toContain('rgba(15, 124, 108, 0.07)'); // common-free wash stays calm
     expect(SCHED_CSS).not.toMatch(/#(00ff00|0f0|4ade80|22c55e)/i);
-    expect(SCHED_CSS).toContain('.sch-col.sch-notworking');
+    expect(SCHED_CSS).toContain('.sm-row.sch-notworking .sm-track'); // not-working rows stay muted
+    expect(SCHED_CSS).toContain('.sm-paint-leave');                  // leave keeps its own pattern
   });
 
   test('default-hours honesty badge and capacity are wired', () => {
@@ -860,8 +862,9 @@ describe('master scheduler phase 2 availability', () => {
     expect(SCHED_JS).toContain('capacity.availableMin');
   });
 
-  test('common availability panel intersects and jumps the grid', () => {
-    expect(SCHED_JS).toContain('function renderCommon');
+  test('common availability highlights the matrix header, server-verified', () => {
+    expect(SCHED_JS).toContain('function fetchCommon');            // canonical server intersection
+    expect(SCHED_JS).toContain('commonFreeWindows');               // instant client-side mirror
     expect(SCHED_JS).toContain('function jumpToMinute');
     expect(SCHED_JS).toContain('minDurationMin: SCHED.common.minDur');
   });
@@ -885,11 +888,13 @@ describe('master scheduler phase 3 finder', () => {
   const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
   const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'scheduler-routes.js'), 'utf8');
 
-  test('finder consumes the canonical engine — no frontend availability math', () => {
+  test('availability search consumes the canonical engine — no frontend availability math', () => {
     expect(ROUTES).toContain('engine.classifyCandidate');
     expect(ROUTES).toContain('engine.rangeWindows');
     expect(ROUTES).toContain('engine.nearestAlternatives');
-    expect(SCHED_JS).toContain('/api/scheduler/find-availability');
+    expect(ROUTES).toContain('/api/scheduler/find-availability'); // capability preserved server-side
+    // the matrix itself is now the finder result: toolbar start/duration + band
+    expect(SCHED_JS).toContain('/api/scheduler/candidates');
     // stale responses can never overwrite newer criteria
     expect(SCHED_JS).toContain('if (gen !== f.gen) return;');
   });
@@ -901,9 +906,10 @@ describe('master scheduler phase 3 finder', () => {
   });
 
   test('view-calendar and schedule actions integrate with existing surfaces', () => {
-    expect(SCHED_JS).toContain("el.dataset.act === 'view'");
+    expect(SCHED_JS).toContain('sm-cand');       // candidate cards drive the matrix selection
+    expect(SCHED_JS).toContain('jumpToMinute');  // picking a result scrolls + flashes the row
     expect(SCHED_JS).toContain('selectBspTherapist');
-    expect(SCHED_JS).toContain('sch-req-slot'); // requested slot emphasised on the grid
+    expect(SCHED_JS).toContain('sch-req-slot'); // requested slot emphasised on the time scale
   });
 
   test('unavailable reasons stay content-free', () => {
@@ -933,14 +939,14 @@ describe('master scheduler phase 4 focus mode', () => {
     expect(SCHED_JS).toContain('sch-avl-card');
     expect(SCHED_JS).toContain('+ Add appointment');
     expect(SCHED_JS).toContain('snap15(clicked)'); // click-within-gap snapping
-    expect(SCHED_JS).toContain("seg.type === 'buffer' && inFocus"); // buffers explained
-    expect(SCHED_CSS).toContain('.sch-avl.focus.available');
+    expect(SCHED_JS).toContain("'Buffer time'");   // buffers explained in slot verdicts
+    expect(SCHED_CSS).toContain('.sch-avl-card');
   });
 
-  test('focus availability always loads; finder scopes to the focused therapist', () => {
-    expect(SCHED_JS).toContain('(!SCHED.overlay && !SCHED.focusId)');
-    expect(SCHED_JS).toContain('focusId: SCHED.focusId });'); // finder visible set
-    expect(SCHED_JS).toContain('function loadWeekCapacity');
+  test('therapist details are a contextual inspector over the live matrix', () => {
+    expect(SCHED_JS).toContain("openInspector('therapist'");  // row click opens the drawer
+    expect(SCHED_JS).toContain('function loadWeekCapacity');  // week capacity strip retained
+    expect(SCHED_JS).toContain('buildTherapistInspector');
   });
 
   test('friendly non-working/leave states in focus', () => {

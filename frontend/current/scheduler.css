@@ -1,8 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   OPAL MASTER SCHEDULER — Phase 1 styles
-   Therapist-column day grid + group-by-therapist week view.
-   Inherits the portal design tokens (opal teal / terracotta / warm neutrals);
-   therapist colour is identity accent only, event pastels carry the type.
+   OPAL MASTER SCHEDULER — Scheduling-Assistant matrix styles
+   Therapists down the left, time across the top, busy/free in the middle.
+   One primary surface + one contextual inspector. Inherits the portal design
+   tokens (opal teal / terracotta / warm neutrals); therapist colour is
+   identity accent only, event pastels carry the type.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #scheduler-root {
@@ -44,22 +45,12 @@
   padding: 4px 8px; font-size: 12.5px; font-family: inherit;
   color: var(--ink); background: var(--panel);
 }
-
-/* Day | Week segmented switch (matches calendar view tabs) */
-.sch-mode {
-  display: inline-flex; background: var(--border-soft);
-  border-radius: 999px; padding: 2px; gap: 2px;
+.sch-select {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 24px 4px 8px; font-size: 12px; font-family: inherit;
+  color: var(--ink-soft); background-color: var(--panel);
 }
-.sch-mode button {
-  border: none; background: transparent; cursor: pointer;
-  padding: 4px 14px; border-radius: 999px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.sch-mode button.active { background: var(--panel); color: var(--accent-deep); box-shadow: var(--shadow-sm); }
-
 .sch-toolbar .sch-spacer { flex: 1; }
-
 .sch-add-btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 14px; border: none; border-radius: var(--radius-sm);
@@ -68,251 +59,6 @@
   transition: background var(--t-fast);
 }
 .sch-add-btn:hover { background: var(--accent-deep); }
-
-/* ── Filter strip ────────────────────────────────────────────────────────── */
-.sch-filters {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-.sch-filters .sch-filter-label {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
-}
-.sch-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 12px 4px 5px; border-radius: 999px;
-  border: 1.5px solid var(--border); background: var(--panel);
-  font-size: 12px; font-weight: 600; color: var(--ink-soft);
-  cursor: pointer; font-family: inherit;
-  transition: border-color var(--t-fast), background var(--t-fast), opacity var(--t-fast);
-}
-.sch-chip .sch-chip-av {
-  width: 20px; height: 20px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9.5px; font-weight: 700; color: #fff; flex-shrink: 0;
-}
-.sch-chip.all .sch-chip-av { background: var(--ink-soft); }
-.sch-chip.selected { border-color: currentColor; }
-.sch-chip.muted { opacity: 0.42; }
-.sch-chip:hover { background: var(--border-soft); }
-.sch-select {
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 4px 24px 4px 8px; font-size: 12px; font-family: inherit;
-  color: var(--ink-soft); background-color: var(--panel);
-}
-.sch-focus-crumb {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: none; background: transparent; cursor: pointer;
-  font-size: 12.5px; font-weight: 600; color: var(--accent-deep);
-  padding: 4px 8px; border-radius: var(--radius-sm); font-family: inherit;
-}
-.sch-focus-crumb:hover { background: var(--accent-soft); }
-
-/* ── Status / empty states ───────────────────────────────────────────────── */
-.sch-status { padding: 42px; text-align: center; color: var(--muted); font-size: 13px; }
-.sch-empty-col {
-  position: absolute; top: 38%; left: 50%; transform: translateX(-50%);
-  font-size: 11.5px; color: var(--muted); white-space: nowrap; pointer-events: none;
-}
-
-/* ── Day grid: sticky time rail + sticky therapist headers ───────────────── */
-.sch-scroll { flex: 1; overflow: auto; min-height: 0; position: relative; }
-.sch-grid {
-  display: grid;
-  grid-template-columns: 56px repeat(var(--sch-cols, 1), minmax(200px, 1fr));
-  min-width: min-content;
-}
-.sch-grid.focused { grid-template-columns: 56px minmax(320px, 1fr); }
-
-.sch-corner {
-  position: sticky; top: 0; left: 0; z-index: 30;
-  background: var(--panel); border-bottom: 1px solid var(--border);
-  border-right: 1px solid var(--border-soft);
-}
-
-.sch-headcell {
-  position: sticky; top: 0; z-index: 20;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  border-left: 1px solid var(--border-soft);
-  padding: 8px 10px;
-  display: flex; align-items: center; gap: 9px;
-  cursor: pointer; min-width: 0;
-  transition: background var(--t-fast);
-}
-.sch-headcell:hover { background: var(--border-soft); }
-.sch-h-av {
-  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; color: #fff;
-}
-.sch-headcell .sch-h-id { min-width: 0; flex: 1; }
-.sch-headcell .sch-h-name {
-  font-size: 13px; font-weight: 700; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sch-headcell .sch-h-sub {
-  font-size: 11px; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sch-headcell .sch-h-count {
-  font-size: 11px; font-weight: 700; color: var(--ink-soft);
-  background: var(--border-soft); border-radius: 999px;
-  padding: 2px 8px; flex-shrink: 0;
-}
-
-/* Time rail */
-.sch-timerail {
-  position: sticky; left: 0; z-index: 10;
-  background: var(--panel);
-  border-right: 1px solid var(--border-soft);
-  position: sticky;
-}
-.sch-timerail .sch-t-label {
-  position: absolute; right: 8px; transform: translateY(-50%);
-  font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Therapist body columns */
-.sch-col {
-  position: relative;
-  border-left: 1px solid var(--border-soft);
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0, transparent calc(var(--sch-hour, 48px) - 1px),
-      var(--border-soft) calc(var(--sch-hour, 48px) - 1px), var(--border-soft) var(--sch-hour, 48px)
-    );
-  background-color: var(--panel);
-}
-/* Soft wash outside typical working hours (visual calm only — NOT availability) */
-.sch-col .sch-offhours {
-  position: absolute; left: 0; right: 0; pointer-events: none;
-  background: rgba(36, 31, 26, 0.025);
-}
-
-/* Event tile — pastel by event type, compact and safe-labelled */
-.sch-tile {
-  position: absolute; left: 3px; right: 3px;
-  border-radius: 5px; padding: 2px 7px 2px 6px;
-  font-size: 11px; line-height: 1.3;
-  overflow: hidden; box-sizing: border-box; cursor: default;
-  border-left: 3px solid var(--c-therapy);
-  background: var(--c-therapy-bg);
-  color: var(--tile-fg);
-  outline: 1px solid rgba(36, 31, 26, 0.05);
-  min-height: 9px;
-  z-index: 2;
-  transition: box-shadow var(--t-fast);
-}
-.sch-tile:hover { box-shadow: 0 2px 8px rgba(36, 31, 26, 0.16); z-index: 3; }
-.sch-tile .sch-e-time {
-  font-size: 10px; color: var(--tile-fg-soft); font-variant-numeric: tabular-nums;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
-}
-.sch-tile .sch-e-label {
-  font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
-}
-.sch-tile .sch-e-loc {
-  font-size: 10px; color: var(--tile-fg-soft);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
-}
-/* Event-type pastels (reuse the calendar's tokens) */
-.sch-tile[data-type="therapy"]       { border-left-color: var(--c-therapy);  background: var(--c-therapy-bg); }
-.sch-tile[data-type="travel"]        { border-left-color: var(--c-travel);   background: var(--c-travel-bg); }
-.sch-tile[data-type="meeting"]       { border-left-color: var(--c-meeting);  background: var(--c-meeting-bg); }
-.sch-tile[data-type="teams_meeting"] { border-left-color: var(--c-meeting);  background: var(--c-meeting-bg); }
-.sch-tile[data-type="admin"]         { border-left-color: var(--c-admin);    background: var(--c-admin-bg); }
-.sch-tile[data-type="report"]        { border-left-color: var(--c-report);   background: var(--c-report-bg); }
-.sch-tile[data-type="cpd"]           { border-left-color: var(--c-cpd);      background: var(--c-cpd-bg); }
-.sch-tile[data-type="lunch"]         { border-left-color: var(--c-lunch);    background: var(--c-lunch-bg); }
-.sch-tile[data-type="leave"]         { border-left-color: var(--c-personal); background: var(--c-leave-bg); }
-.sch-tile[data-type="outlook"]       { border-left-color: var(--c-admin);    background: var(--c-outlook-bg); }
-/* Leave reads as a distinct muted stripe */
-.sch-tile[data-type="leave"] {
-  background-image: repeating-linear-gradient(
-    -45deg, transparent 0 6px, rgba(36, 31, 26, 0.035) 6px 12px);
-}
-
-/* Current-time line (today only) */
-.sch-nowline {
-  position: absolute; left: 0; right: 0; z-index: 4; pointer-events: none;
-  border-top: 2px solid var(--now);
-}
-.sch-nowline::before {
-  content: ""; position: absolute; left: -4px; top: -4px;
-  width: 7px; height: 7px; border-radius: 50%; background: var(--now);
-}
-
-/* ── Week view: one row per therapist, Mon–Fri(+weekend) day cells ───────── */
-.sch-week { padding: 14px 16px 24px; overflow: auto; flex: 1; min-height: 0; }
-.sch-wk-row { margin-bottom: 18px; }
-.sch-wk-head {
-  display: flex; align-items: center; gap: 9px;
-  padding: 6px 2px; cursor: pointer; border-radius: var(--radius-sm);
-  transition: background var(--t-fast);
-}
-.sch-wk-head:hover { background: var(--border-soft); }
-.sch-wk-head .sch-h-av { width: 26px; height: 26px; font-size: 10px; }
-.sch-wk-head .sch-wk-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
-.sch-wk-head .sch-wk-sub { font-size: 11.5px; color: var(--muted); }
-.sch-wk-days {
-  display: grid; gap: 8px;
-  grid-template-columns: repeat(var(--sch-wk-cols, 5), minmax(150px, 1fr));
-}
-.sch-wk-day {
-  background: var(--panel); border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md); padding: 7px 8px;
-  min-height: 64px; cursor: pointer;
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
-}
-.sch-wk-day:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(15, 124, 108, 0.08); }
-.sch-wk-day.today { border-color: var(--accent); background: rgba(15, 124, 108, 0.03); }
-.sch-wk-day .sch-wk-daylabel {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--muted); margin-bottom: 5px;
-}
-.sch-wk-day.today .sch-wk-daylabel { color: var(--accent-deep); }
-.sch-wk-item {
-  display: flex; align-items: baseline; gap: 5px;
-  font-size: 11px; color: var(--ink-soft); padding: 1.5px 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sch-wk-item .sch-wk-dot {
-  width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0;
-  background: var(--c-therapy); align-self: center;
-}
-.sch-wk-item[data-type="travel"] .sch-wk-dot        { background: var(--c-travel); }
-.sch-wk-item[data-type="meeting"] .sch-wk-dot       { background: var(--c-meeting); }
-.sch-wk-item[data-type="teams_meeting"] .sch-wk-dot { background: var(--c-meeting); }
-.sch-wk-item[data-type="admin"] .sch-wk-dot         { background: var(--c-admin); }
-.sch-wk-item[data-type="report"] .sch-wk-dot        { background: var(--c-report); }
-.sch-wk-item[data-type="cpd"] .sch-wk-dot           { background: var(--c-cpd); }
-.sch-wk-item[data-type="lunch"] .sch-wk-dot         { background: var(--c-lunch); }
-.sch-wk-item[data-type="leave"] .sch-wk-dot         { background: var(--c-personal); }
-.sch-wk-item[data-type="outlook"] .sch-wk-dot       { background: var(--c-admin); }
-.sch-wk-item .sch-wk-time { font-variant-numeric: tabular-nums; color: var(--muted); flex-shrink: 0; }
-.sch-wk-more { font-size: 10.5px; color: var(--accent-deep); font-weight: 600; padding-top: 2px; }
-.sch-wk-quiet { font-size: 11px; color: var(--muted); padding: 4px 0; }
-
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .sch-grid { grid-template-columns: 48px repeat(var(--sch-cols, 1), minmax(170px, 1fr)); }
-  .sch-headcell .sch-h-sub { display: none; }
-}
-@media (max-width: 700px) {
-  /* Mobile: date + therapist selector + single-column agenda (focus mode). */
-  .sch-toolbar { gap: 6px; }
-  .sch-date-label { font-size: 12.5px; }
-  .sch-filters .sch-chip { padding: 3px 9px 3px 4px; font-size: 11px; }
-  .sch-mobile-note { display: block; }
-  .sch-grid { grid-template-columns: 44px repeat(var(--sch-cols, 1), minmax(230px, 85vw)); }
-}
-
-/* ── Phase 2: availability intelligence layer ─────────────────────────────── */
 .sch-toggle {
   display: inline-flex; align-items: center; gap: 7px;
   border: 1px solid var(--border); background: var(--panel);
@@ -321,200 +67,298 @@
   cursor: pointer; font-family: inherit;
   transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
 }
-.sch-toggle .sch-toggle-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--border); transition: background var(--t-fast);
-}
 .sch-toggle.on { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft); }
-.sch-toggle.on .sch-toggle-dot { background: var(--accent); }
-.sch-common-btn {
-  border: 1px solid var(--border); background: var(--panel);
-  border-radius: var(--radius-sm); padding: 5px 12px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
-  cursor: pointer; font-family: inherit;
-  transition: background var(--t-fast);
+.sch-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.sm-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.sm-ctl label {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
 }
-.sch-common-btn:hover { background: var(--border-soft); }
-.sch-common-btn.on { border-color: var(--accent); color: var(--accent-deep); }
+.sm-time { width: 92px; }
+.sm-suburb { width: 120px; }
 
-/* Availability bands paint UNDER event tiles (tiles are z-index 2) */
-.sch-avl { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; }
-.sch-avl.available {
-  background: rgba(15, 124, 108, 0.07);
-  box-shadow: inset 2px 0 0 rgba(15, 124, 108, 0.25);
-  pointer-events: auto; cursor: pointer;
-  transition: background var(--t-fast);
-}
-.sch-avl.available:hover { background: rgba(15, 124, 108, 0.14); }
-.sch-avl.outside_hours { background: rgba(36, 31, 26, 0.035); }
-.sch-avl.buffer { background: rgba(36, 31, 26, 0.05); }
-.sch-avl.short_gap { background: transparent; }
-.sch-avl.leave {
-  background: repeating-linear-gradient(-45deg,
-    rgba(36, 31, 26, 0.04) 0 8px, rgba(36, 31, 26, 0.09) 8px 16px);
-}
-.sch-avl-lbl {
-  position: absolute; top: 5px; left: 8px;
-  font-size: 10.5px; font-weight: 700; color: var(--accent-deep);
-  opacity: 0.85; pointer-events: none; white-space: nowrap;
-}
-.sch-col.sch-notworking {
-  background: repeating-linear-gradient(-45deg,
-    rgba(36, 31, 26, 0.025) 0 10px, rgba(36, 31, 26, 0.05) 10px 20px);
-  background-color: var(--bg);
-}
-.sch-nw-label {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
-  text-transform: uppercase; color: var(--muted); pointer-events: none;
-}
-.sch-cap { color: var(--accent-deep); font-weight: 700; }
-.sch-defbadge {
-  display: inline-block; font-size: 9.5px; font-weight: 700;
-  padding: 0 6px; border-radius: 999px; vertical-align: 1px;
-  background: var(--warn-soft); color: #7a4e0b; letter-spacing: 0.2px;
-}
-
-/* Common availability panel */
-.sch-common {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 16px;
+/* ── Summary bar: proposed slot + fit counts + common free ───────────────── */
+.sm-summary {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 16px; min-height: 34px;
   background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
+  font-size: 12.5px; color: var(--ink-soft);
 }
-.sch-common-sub { font-size: 12px; color: var(--ink-soft); }
-.sch-common-find {
-  border: none; border-radius: var(--radius-sm); padding: 5px 14px;
+.sm-summary strong { color: var(--ink); font-weight: 700; }
+.sm-target {
+  font-weight: 700; color: var(--accent-deep);
+  border-left: 2px solid var(--accent); padding-left: 10px;
+}
+.sm-sched-btn { padding: 3px 12px; font-size: 12px; }
+.sm-clear {
+  border: none; background: transparent; cursor: pointer; font-family: inherit;
+  font-size: 11.5px; font-weight: 600; color: var(--muted);
+  padding: 2px 8px; border-radius: var(--radius-sm);
+}
+.sm-clear:hover { background: rgba(36, 31, 26, 0.06); color: var(--ink); }
+.sm-cf-note { font-size: 12px; color: var(--accent-deep); font-weight: 600; }
+
+/* ── Status / empty states ───────────────────────────────────────────────── */
+.sch-status { padding: 42px; text-align: center; color: var(--muted); font-size: 13px; flex: 1; }
+
+/* ── Layout: matrix + one contextual inspector ───────────────────────────── */
+.sm-body { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.sm-scroll { flex: 1; overflow: auto; min-height: 0; position: relative; }
+.sm-grid { position: relative; min-height: 100%; }
+
+/* ── Header row: sticky corner + horizontal time scale ───────────────────── */
+.sm-headrow {
+  display: flex; position: sticky; top: 0; z-index: 30;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  height: 40px;
+}
+.sm-corner {
+  position: sticky; left: 0; z-index: 31;
+  width: 216px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px; padding: 0 8px;
+}
+.sm-search {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 3px 8px; font-size: 11.5px; font-family: inherit;
+  color: var(--ink); background: var(--bg);
+}
+.sm-selacts { display: flex; flex-direction: column; gap: 1px; }
+.sm-selacts button {
+  border: none; background: none; cursor: pointer; font-family: inherit;
+  font-size: 9.5px; font-weight: 700; color: var(--accent-deep);
+  padding: 0 4px; text-align: left; border-radius: 3px;
+}
+.sm-selacts button:hover { background: var(--accent-soft); }
+.sm-selacts button:disabled { color: var(--muted); cursor: default; background: none; }
+.sm-timehead { position: relative; height: 100%; flex-shrink: 0; }
+.sm-tick {
+  position: absolute; bottom: 4px; transform: translateX(-50%);
+  font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Common-free windows for the checked set — calm teal wash on the scale */
+.sm-cf {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(15, 124, 108, 0.07);
+  border-bottom: 3px solid rgba(15, 124, 108, 0.45);
+  pointer-events: auto;
+}
+.sm-headband {
+  position: absolute; top: 3px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent); color: #fff;
-  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  border-radius: 999px; font-size: 10.5px; font-weight: 700;
+  padding: 0 6px; white-space: nowrap; overflow: hidden;
+  pointer-events: none; min-width: 40px;
 }
-.sch-common-find:disabled { opacity: 0.5; cursor: not-allowed; }
-.sch-common-slot {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 1px solid var(--accent); background: var(--panel);
-  border-radius: 999px; padding: 4px 12px;
-  font-size: 12px; font-weight: 600; color: var(--accent-deep);
-  cursor: pointer; font-family: inherit;
+
+/* ── Therapist rows ──────────────────────────────────────────────────────── */
+.sm-rows { position: relative; }
+.sm-row {
+  display: flex; height: 46px;
+  border-bottom: 1px solid var(--border-soft);
   transition: background var(--t-fast);
 }
-.sch-common-slot:hover { background: var(--accent-soft); }
-.sch-common-slot .sch-common-dur {
-  font-weight: 400; color: var(--ink-soft); font-size: 11px;
-}
-.sch-common-none { font-size: 12px; color: var(--ink-soft); }
+.sm-row.sm-unchecked { height: 30px; opacity: 0.6; }
+.sm-row.sm-target-row .sm-rail { background: var(--accent-soft); }
+.sm-row.sm-inspected .sm-rail { box-shadow: inset 3px 0 0 var(--accent); }
 @keyframes schFlash {
   0% { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0.55); }
   100% { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0); }
 }
-.sch-col.sch-flash { animation: schFlash 1.6s ease-out 1; }
+.sm-row.sch-flash, .sm-ev.sch-flash { animation: schFlash 1.4s ease-out 1; }
 
-/* ── Phase 3: Quick Availability Finder ───────────────────────────────────── */
-.sch-day-wrap { display: flex; flex: 1; min-height: 0; min-width: 0; }
-.sch-day-wrap .sch-scroll { flex: 1; min-width: 0; }
-.sch-finder {
-  width: 312px; flex-shrink: 0; overflow-y: auto;
+/* Fixed left rail cell */
+.sm-rail {
+  position: sticky; left: 0; z-index: 20;
+  width: 216px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 8px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.sm-check { accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+.sm-ava {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 700; color: #fff;
+}
+.sm-ava-lg { width: 34px; height: 34px; font-size: 12px; }
+.sm-id { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.sm-name {
+  border: none; background: none; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; font-weight: 700; color: var(--ink); text-align: left;
+  padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sm-name:hover { color: var(--accent-deep); }
+.sm-role {
+  font-size: 10.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sm-row.sm-unchecked .sm-role, .sm-row.sm-unchecked .sm-chip { display: none; }
+.sch-defbadge {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 0 5px; border-radius: 999px; vertical-align: 1px;
+  background: var(--warn-soft); color: #7a4e0b; letter-spacing: 0.2px;
+}
+
+/* Row status chip for the proposed slot */
+.sm-chip {
+  flex-shrink: 0; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+}
+.sm-chip-available { background: var(--ok-soft); color: #22593a; }
+.sm-chip-tight { background: var(--warn-soft); color: #7a4e0b; }
+.sm-chip-conflict { background: rgba(194, 65, 46, 0.1); color: #8c2f21; }
+.sm-chip-outside { background: var(--border-soft); color: var(--ink-soft); }
+.sm-chip-unknown { background: var(--border-soft); color: var(--muted); }
+
+/* ── The track: availability paint + event blocks + band ─────────────────── */
+.sm-track {
+  position: relative; flex-shrink: 0; height: 100%;
+  background-color: var(--panel);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0, transparent 119px,
+    var(--border-soft) 119px, var(--border-soft) 120px);
+  cursor: crosshair; touch-action: pan-x pan-y;
+}
+.sm-track-off { background-image: none; background-color: var(--bg); cursor: default; }
+
+/* Availability paint (engine-derived). Quiet background = available. */
+.sch-avl { position: absolute; pointer-events: none; }
+.sm-paint { top: 0; bottom: 0; z-index: 0; }
+.sm-paint-off { background: rgba(36, 31, 26, 0.045); }
+.sm-paint-buffer { background: rgba(36, 31, 26, 0.055); }
+.sm-paint-short { background: rgba(36, 31, 26, 0.02); }
+.sm-paint-leave {
+  background: repeating-linear-gradient(-45deg,
+    rgba(36, 31, 26, 0.04) 0 8px, rgba(36, 31, 26, 0.09) 8px 16px);
+}
+.sm-row.sch-notworking .sm-track {
+  background-image: repeating-linear-gradient(-45deg,
+    rgba(36, 31, 26, 0.025) 0 10px, rgba(36, 31, 26, 0.05) 10px 20px);
+  background-color: var(--bg);
+}
+
+/* Event blocks — horizontal, pastel by type, safe-labelled */
+.sm-ev {
+  position: absolute; z-index: 2;
+  border: none; border-radius: 5px; padding: 1px 6px;
+  font-size: 10.5px; font-weight: 600; line-height: 1.25;
+  font-family: inherit; text-align: left; cursor: pointer;
+  overflow: hidden; box-sizing: border-box;
+  color: var(--tile-fg);
+  border-left: 3px solid var(--c-therapy);
+  background: var(--c-therapy-bg);
+  outline: 1px solid rgba(36, 31, 26, 0.05);
+  transition: box-shadow var(--t-fast);
+}
+.sm-ev span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-ev:hover { box-shadow: 0 2px 8px rgba(36, 31, 26, 0.16); z-index: 3; }
+.sm-ev-therapy       { border-left-color: var(--c-therapy);  background: var(--c-therapy-bg); }
+.sm-ev-travel        { border-left-color: var(--c-travel);   background: var(--c-travel-bg); }
+.sm-ev-meeting       { border-left-color: var(--c-meeting);  background: var(--c-meeting-bg); }
+.sm-ev-teams_meeting { border-left-color: var(--c-meeting);  background: var(--c-meeting-bg); }
+.sm-ev-admin         { border-left-color: var(--c-admin);    background: var(--c-admin-bg); }
+.sm-ev-report        { border-left-color: var(--c-report);   background: var(--c-report-bg); }
+.sm-ev-cpd           { border-left-color: var(--c-cpd);      background: var(--c-cpd-bg); }
+.sm-ev-lunch         { border-left-color: var(--c-lunch);    background: var(--c-lunch-bg); }
+.sm-ev-leave         {
+  border-left-color: var(--c-personal); background: var(--c-leave-bg);
+  background-image: repeating-linear-gradient(
+    -45deg, transparent 0 6px, rgba(36, 31, 26, 0.035) 6px 12px);
+}
+.sm-ev-outlook       { border-left-color: var(--c-admin);    background: var(--c-outlook-bg); }
+
+/* Current time — vertical line, today only */
+.sm-now {
+  position: absolute; top: 0; bottom: 0; z-index: 4; pointer-events: none;
+  border-left: 2px solid var(--now);
+}
+
+/* Proposed appointment band — the central scheduling interaction */
+.sm-bandseg.sch-req-slot, .sm-bandseg {
+  position: absolute; top: 1px; bottom: 1px; z-index: 5;
+  border: 2px dashed var(--accent); border-radius: 6px;
+  background: rgba(15, 124, 108, 0.08);
+  cursor: grab;
+}
+.sm-bandseg:active { cursor: grabbing; }
+.sm-bandseg:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.sm-band-grip {
+  position: absolute; right: -3px; top: 50%; transform: translateY(-50%);
+  width: 8px; height: 60%; border-radius: 3px;
+  background: var(--accent); opacity: 0.75; cursor: ew-resize;
+}
+
+/* ── Inspector: one contextual panel (therapist | map | recommendations) ── */
+.sm-inspector {
+  width: 324px; flex-shrink: 0; overflow-y: auto;
   border-left: 1px solid var(--border);
   background: var(--panel);
-  padding: 12px 14px 20px;
+  display: flex; flex-direction: column;
 }
-.sch-f-head {
+.sm-insp-head {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 13px; font-weight: 700; color: var(--ink);
-  padding-bottom: 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 10px;
+  padding: 10px 14px 8px; border-bottom: 1px solid var(--border-soft);
+  position: sticky; top: 0; background: var(--panel); z-index: 2;
 }
 .sch-f-close {
   border: none; background: none; cursor: pointer; color: var(--muted);
-  font-size: 13px; padding: 2px 6px; border-radius: var(--radius-sm);
+  font-size: 15px; padding: 2px 8px; border-radius: var(--radius-sm);
 }
 .sch-f-close:hover { background: var(--border-soft); color: var(--ink); }
-.sch-f-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.sch-f-lbl {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  font-size: 12px; font-weight: 600; color: var(--ink-soft);
-}
-.sch-f-input { font-size: 12.5px; max-width: 170px; flex: 1; }
-input.sch-f-input, select.sch-f-input {
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 4px 8px; font-family: inherit; color: var(--ink); background-color: var(--panel);
-}
-.sch-f-modes { display: inline-flex; background: var(--border-soft); border-radius: 999px; padding: 2px; gap: 2px; align-self: flex-start; }
-.sch-f-mode {
-  border: none; background: transparent; cursor: pointer;
-  padding: 3px 12px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; color: var(--ink-soft); font-family: inherit;
-}
-.sch-f-mode.on { background: var(--panel); color: var(--accent-deep); box-shadow: var(--shadow-sm); }
-.sch-f-range { display: flex; flex-direction: column; gap: 8px; }
-.sch-f-dayparts { display: flex; gap: 6px; }
-.sch-f-scope { font-size: 11px; color: var(--muted); }
-.sch-f-status { font-size: 12.5px; color: var(--muted); padding: 14px 0; }
-.sch-f-counts { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
-.sch-f-group {
+.sm-insp-body { padding: 12px 14px 20px; }
+.sm-insp-date { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin: 10px 0 4px; }
+.sm-insp-sub {
   font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--muted); margin: 10px 0 6px;
+  letter-spacing: 0.5px; color: var(--muted); margin: 14px 0 6px;
 }
-.sch-f-card {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 8px; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
-  margin-bottom: 6px; background: var(--panel);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+.sm-insp-note {
+  font-size: 12px; color: var(--ink-soft); line-height: 1.5;
+  background: var(--bg); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md); padding: 8px 10px; margin: 8px 0;
 }
-.sch-f-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(15, 124, 108, 0.08); }
-.sch-f-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-.sch-f-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.sch-f-name { font-size: 13px; font-weight: 700; color: var(--ink); }
-.sch-f-role { font-size: 11px; color: var(--muted); }
-.sch-f-fit { font-size: 12px; font-weight: 600; color: var(--accent-deep); }
-.sch-f-window { font-size: 11.5px; color: var(--ink-soft); }
-.sch-f-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-.sch-mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.sch-mini.primary:hover { background: var(--accent-deep); }
-.sch-f-none { font-size: 12.5px; color: var(--ink-soft); padding: 6px 0; }
-.sch-f-nudges { display: flex; gap: 6px; margin: 4px 0 8px; }
-.sch-f-sugg {
-  display: flex; align-items: center; gap: 7px; width: 100%;
-  border: 1px solid var(--border); background: var(--panel);
-  border-radius: var(--radius-sm); padding: 6px 9px; margin-bottom: 4px;
-  font-size: 12px; color: var(--ink); cursor: pointer; font-family: inherit; text-align: left;
-  transition: border-color var(--t-fast), background var(--t-fast);
-}
-.sch-f-sugg:hover { border-color: var(--accent); background: var(--accent-soft); }
-.sch-f-unav { margin-top: 10px; }
-.sch-f-unav summary {
-  cursor: pointer; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;
-}
-.sch-f-urow { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; }
-.sch-f-uname { font-weight: 600; color: var(--ink-soft); }
-.sch-f-ureason { color: var(--muted); margin-left: auto; text-align: right; }
-.sch-col.sch-hovered { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0.35); }
-.sch-req-slot {
-  position: absolute; left: 2px; right: 2px; z-index: 3; pointer-events: none;
-  border: 2px dashed var(--accent); border-radius: 6px;
-  background: rgba(15, 124, 108, 0.05);
-}
-@media (max-width: 900px) {
-  .sch-day-wrap { flex-direction: column; }
-  .sch-finder { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 45vh; }
-}
+.sm-insp-ev { font-size: 12px; color: var(--ink); padding: 3px 0; }
+.sm-insp-ev-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; margin-right: 4px; }
 
-/* ── Phase 4: Enhanced Therapist Focus Mode ───────────────────────────────── */
-.sch-focus-head {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  padding: 10px 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-.sch-fh-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.sch-fh-id { min-width: 0; }
+/* Therapist inspector: identity + capacity language (shared with focus era) */
+.sch-fh-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .sch-fh-name { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
 .sch-fh-role { font-size: 12px; color: var(--muted); }
-.sch-fh-stats { display: flex; gap: 14px; margin-left: 10px; }
+.sch-fh-stats { display: flex; gap: 12px; margin: 10px 0 4px; flex-wrap: wrap; }
 .sch-fh-stat { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
 .sch-fh-stat strong { color: var(--ink); font-weight: 700; }
-.sch-fh-stat.cap strong { color: var(--accent-deep); }
-.sch-fh-next { font-size: 12px; font-weight: 600; color: var(--accent-deep); white-space: nowrap; }
-.sch-weekstrip { display: flex; gap: 4px; margin-left: auto; }
+.sch-fh-next { font-size: 12px; font-weight: 600; color: var(--accent-deep); margin: 4px 0; }
+
+/* Open windows as actionable cards */
+.sch-avl-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1.5px dashed rgba(15, 124, 108, 0.45);
+  background: rgba(15, 124, 108, 0.07);
+  border-radius: var(--radius-md); padding: 7px 10px; margin-bottom: 6px;
+}
+.sch-avl-times { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.sch-avl-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent-deep); }
+.sch-avl-add {
+  flex-shrink: 0; border: 1px solid var(--accent); background: var(--panel);
+  border-radius: 999px; padding: 2px 11px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent-deep);
+  cursor: pointer; font-family: inherit;
+  transition: background var(--t-fast);
+}
+.sch-avl-add:hover { background: var(--accent-soft); }
+
+/* Week capacity strip */
+.sch-weekstrip { display: flex; gap: 4px; flex-wrap: wrap; }
 .sch-ws-day {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   border: 1px solid var(--border); background: var(--panel);
@@ -526,96 +370,98 @@ input.sch-f-input, select.sch-f-input {
 .sch-ws-day.on { border-color: var(--accent); background: var(--accent-soft); }
 .sch-ws-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-soft); }
 .sch-ws-cap { font-size: 10.5px; font-weight: 700; color: var(--accent-deep); }
-.sch-ws-day .sch-ws-cap:empty::before { content: '·'; }
 
-/* Focused availability: the gap card is the headline */
-.sch-avl.focus.available {
-  background: rgba(15, 124, 108, 0.08);
-  border: 1.5px dashed rgba(15, 124, 108, 0.45);
-  border-left: none; border-right: none;
-  box-shadow: none;
-}
-.sch-avl.focus.available:hover { background: rgba(15, 124, 108, 0.13); }
-.sch-avl-card {
-  position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 2px; pointer-events: none;
-}
-.sch-avl-tag {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.7px;
-  text-transform: uppercase; color: var(--accent-deep);
-}
-.sch-avl-times { font-size: 12.5px; font-weight: 600; color: var(--ink); }
-.sch-avl-add {
-  pointer-events: auto; align-self: flex-start; margin-top: 3px;
-  border: 1px solid var(--accent); background: var(--panel);
-  border-radius: 999px; padding: 2px 11px;
-  font-size: 11.5px; font-weight: 600; color: var(--accent-deep);
-  cursor: pointer; font-family: inherit;
-  transition: background var(--t-fast);
-}
-.sch-avl-add:hover { background: var(--accent-soft); }
-.sch-buf-lbl {
-  position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
-  font-size: 10px; font-weight: 600; color: var(--muted); pointer-events: none;
-}
-.sch-nw-label.focus {
-  font-size: 13px; text-transform: none; letter-spacing: 0;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius-md); padding: 12px 20px;
-  box-shadow: var(--shadow-sm); white-space: nowrap;
-}
-/* Non-clinical events sit back a little when one therapist is in focus */
-.sch-grid.focused .sch-tile[data-type="travel"],
-.sch-grid.focused .sch-tile[data-type="admin"],
-.sch-grid.focused .sch-tile[data-type="lunch"] { opacity: 0.75; }
-
-/* ── Phase 5/6: Scheduler Map panel ───────────────────────────────────────── */
-.sch-map-panel { display: flex; flex-direction: column; width: 340px; padding: 12px 12px 14px; }
+/* Map inspector */
 .sch-map-canvas {
-  width: 100%; height: 340px; flex-shrink: 0;
+  width: 100%; height: 320px; flex-shrink: 0;
   border-radius: var(--radius-md); overflow: hidden;
   border: 1px solid var(--border-soft);
   background: var(--border-soft);
+  margin-top: 8px;
 }
 .sch-map-toggle {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; font-weight: 600; color: var(--ink-soft); cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 11px; font-weight: 600; color: var(--ink-soft);
 }
+.sch-map-toggle label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .sch-map-toggle input { accent-color: var(--accent); }
-.sch-map-legend { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.sch-map-legend { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .sch-map-leg {
-  display: grid; grid-template-columns: 12px auto auto 1fr; align-items: center; gap: 7px;
+  display: flex; align-items: center; gap: 8px;
   border: 1px solid transparent; background: transparent;
   border-radius: var(--radius-sm); padding: 4px 6px;
   font-family: inherit; font-size: 12px; cursor: pointer; text-align: left;
-  transition: background var(--t-fast), border-color var(--t-fast);
+  transition: background var(--t-fast);
 }
 .sch-map-leg:hover { background: var(--border-soft); }
-.sch-map-leg-name { font-weight: 700; color: var(--ink); }
-.sch-map-leg-n { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.sch-map-leg-subs { color: var(--ink-soft); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sch-map-note { font-size: 11px; color: var(--muted); padding: 4px 6px; }
+.sch-map-leg-name { font-weight: 700; color: var(--ink); min-width: 0; }
+.sch-map-leg-n {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10.5px; font-weight: 700;
+}
+.sch-map-leg-subs { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-map-note { font-size: 11px; color: var(--muted); padding: 4px 0; }
 .sch-map-empty { font-size: 12.5px; color: var(--muted); padding: 10px 4px; }
-.sch-map-empty span { font-size: 11.5px; }
 .sch-map-pop { font-size: 12px; font-family: inherit; color: #241f1a; line-height: 1.5; }
-.sch-tile.sch-map-hi { box-shadow: 0 0 0 2px var(--accent); z-index: 5; }
-@media (max-width: 900px) {
-  .sch-map-panel { width: 100%; }
-  .sch-map-canvas { height: 300px; }
+.sch-map-retry, .sch-map-view {
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: var(--radius-sm); padding: 2px 10px; margin-top: 3px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent-deep);
+  cursor: pointer; font-family: inherit;
 }
 
-/* ── Phase 7/8: candidate recommendations ─────────────────────────────────── */
+/* Recommendations inspector */
+.sm-recs-form { margin-bottom: 10px; }
+.sm-recs-slot { font-size: 12.5px; color: var(--ink-soft); margin: 6px 0; }
+.sch-f-tele { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.sch-f-tele input { accent-color: var(--accent); }
+.sch-f-card {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  margin-bottom: 7px; background: var(--panel); cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.sch-f-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(15, 124, 108, 0.08); }
+.sch-f-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+.sch-f-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.sch-f-role { font-size: 11px; color: var(--muted); }
+.sch-f-window { font-size: 11.5px; font-weight: 600; color: var(--accent-deep); }
+.sm-reasons { display: flex; flex-direction: column; }
+.sch-f-reason { display: block; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+.sch-f-reason.neg { color: #7a4e0b; }
+.sm-travel { font-size: 11px; color: var(--ink-soft); }
+.sm-cand-np { opacity: 0.8; }
+.sch-f-urow { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; }
+.sch-f-uname { font-weight: 600; color: var(--ink-soft); }
+.sch-f-ureason { color: var(--muted); margin-left: auto; text-align: right; }
+
+/* Fit tiers — factual, deterministic language */
 .sch-tier {
   display: inline-block; font-size: 9.5px; font-weight: 800;
   letter-spacing: 0.5px; text-transform: uppercase;
-  padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
+  padding: 1px 8px; border-radius: 999px; align-self: flex-start;
 }
 .sch-tier.best { background: var(--ok-soft); color: #22593a; border: 1px solid #bfdfc9; }
 .sch-tier.good { background: var(--accent-soft); color: var(--accent-deep); border: 1px solid var(--accent); }
 .sch-tier.possible { background: var(--warn-soft); color: #7a4e0b; border: 1px solid #ecc668; }
 .sch-tier.poor { background: var(--border-soft); color: var(--ink-soft); border: 1px solid var(--border); }
-.sch-f-reason { display: block; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
-.sch-f-reason.warn { color: #7a4e0b; }
-.sch-f-tele { justify-content: flex-start !important; gap: 8px !important; }
-.sch-f-cand { border-left: 3px solid var(--border); }
-.sch-f-cand:first-of-type { border-left-color: var(--accent); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+.sch-mobile-note { display: none; padding: 8px 16px; font-size: 11.5px; color: var(--muted); }
+@media (max-width: 1024px) {
+  .sm-corner, .sm-rail { width: 176px; }
+  .sm-inspector { width: 290px; }
+}
+@media (max-width: 700px) {
+  /* Mobile: therapist list + status chips; pick times with the Start control. */
+  .sch-toolbar { gap: 6px; }
+  .sch-date-label { font-size: 12.5px; }
+  .sm-track { display: none; }
+  .sm-timehead { display: none; }
+  .sm-grid { width: auto !important; }
+  .sm-corner, .sm-rail { width: 100%; flex: 1; position: static; }
+  .sm-row { height: 52px; }
+  .sm-inspector { position: fixed; right: 0; top: 0; bottom: 0; z-index: 60; box-shadow: var(--shadow-md); }
+  .sch-mobile-note { display: block; }
+}
