@@ -66,7 +66,11 @@ function weekPlan(i) {
     [2, 10, 10.5, 'Travel — return',                   'travel',  null],
     [2, 13, 14, 'Client session — therapy',            'therapy', 1],
     [2, 13.5, 14.5, 'MDT call',                        'meeting', null],   // genuine overlap
-    [3,  9, 12, 'Community visits block',              'therapy', 2],
+    [3,  9, 10.5, 'Community visit — morning',         'therapy', 2],
+    [3, 10.75, 12, 'Community visit — midday',          'therapy', 1],
+    [3, 12.5, 13.75, 'Community visit — afternoon',     'therapy', 3],
+    [3, 14, 15, 'Telehealth session',                   'therapy', 'TELEHEALTH'],
+    [3, 15, 16, 'Client session — location TBC',        'therapy', 'NONE'],
     [3, 13, 13.5, 'Admin — notes',                     'admin',   null],
     [4,  9, 10, 'Client session — review',             'therapy', 3],
     [4, 10, 11, 'Client session — therapy',            'therapy', 0],   // back-to-back
@@ -75,7 +79,11 @@ function weekPlan(i) {
   if (i === 2) base.push([4, 13, 17, 'Annual leave (afternoon)', 'leave', null]);
   // Shift each therapist's day by i*0.5h so columns don't look cloned.
   return base.map(([d, s, e, title, type, sub]) =>
-    [d, s + i * 0.5, e + i * 0.5, title, type, sub === null ? null : SUBURBS[i][sub]]);
+    [d, s + i * 0.5, e + i * 0.5, title, type,
+      sub === null ? null
+        : sub === 'TELEHEALTH' ? 'Telehealth — video call'
+        : sub === 'NONE' ? null
+        : SUBURBS[i][sub]]);
 }
 
 // Monday 00:00 Perth of the current week, as a UTC Date.
@@ -180,6 +188,24 @@ async function main() {
       console.log(`  + approved full-day leave for ${t.name} on ${friday}`);
     }
   }
+
+  // Phase 5 QA: pre-cache suburb centroids so the map works without geocoding
+  // in development, plus one telehealth + one location-less session.
+  const CENTROIDS = [
+    ['Joondalup', -31.7443, 115.7661, '6027'], ['Wanneroo', -31.7469, 115.8034, '6065'],
+    ['Kingsley', -31.8106, 115.8010, '6026'], ['Madeley', -31.8118, 115.8290, '6065'],
+    ['Willetton', -32.0524, 115.8840, '6155'], ['Canning Vale', -32.0576, 115.9180, '6155'],
+    ['Riverton', -32.0342, 115.8970, '6148'], ['Fremantle', -32.0569, 115.7439, '6160'],
+    ['Rockingham', -32.2769, 115.7297, '6168'], ['Baldivis', -32.3298, 115.8322, '6171'],
+  ];
+  for (const [sub, lat, lng, pc] of CENTROIDS) {
+    await pool.query(`
+      INSERT INTO suburb_centroids (suburb_key, suburb, state, postcode, lat, lng, status, attempts, provider)
+      VALUES ($1, $2, 'WA', $3, $4, $5, 'ok', 1, 'seed')
+      ON CONFLICT (suburb_key) DO NOTHING`,
+      [sub.toLowerCase() + '|WA', sub, pc, lat, lng]);
+  }
+  console.log(`+ ${CENTROIDS.length} suburb centroids cached for the map`);
 
   console.log('\n✓ Demo calendar seeded for the current Perth week (Mon-Fri).');
   console.log('  Sign in as owner@opaltherapy.dev and open Calendar → Master.');

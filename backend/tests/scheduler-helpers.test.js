@@ -202,3 +202,46 @@ describe('phase 4 focus helpers', () => {
     expect(S.snap15(615)).toBe(615);
   });
 });
+
+describe('phase 6 footprint geometry', () => {
+  const P = (lat, lng, suburb) => ({ lat, lng, suburb: suburb || 'X' });
+
+  test('haversineKm: Perth CBD to Fremantle is ~19km', () => {
+    const d = S.haversineKm({ lat: -31.9523, lng: 115.8613 }, { lat: -32.0569, lng: 115.7439 });
+    expect(d).toBeGreaterThan(14); expect(d).toBeLessThan(24);
+  });
+
+  test('dedupSuburbPoints: repeat visits collapse to one point with a count', () => {
+    const out = S.dedupSuburbPoints([P(-32, 115.8, 'Willetton'), P(-32, 115.8, 'Willetton'), P(-32.05, 115.9, 'Canning Vale')]);
+    expect(out.length).toBe(2);
+    expect(out.find(p => p.suburb === 'Willetton').visits).toBe(2);
+  });
+
+  test('clusterPoints: nearby suburbs form one cluster', () => {
+    const clusters = S.clusterPoints([P(-32.05, 115.88), P(-32.06, 115.92), P(-32.03, 115.90)], 45);
+    expect(clusters.length).toBe(1);
+    expect(clusters[0].length).toBe(3);
+  });
+
+  test('clusterPoints: Kimberley towns split from Perth (no misleading giant hull)', () => {
+    const clusters = S.clusterPoints([
+      P(-32.05, 115.88), P(-32.06, 115.92),          // Perth south
+      P(-17.96, 122.24), P(-17.30, 123.63),          // Broome / Derby (~150km apart)
+    ], 45);
+    expect(clusters.length).toBe(3); // Perth pair together; Broome and Derby separate
+  });
+
+  test('convexHull: monotone chain returns the outer ring only', () => {
+    const hull = S.convexHull([
+      { lat: 0, lng: 0 }, { lat: 0, lng: 4 }, { lat: 4, lng: 4 }, { lat: 4, lng: 0 },
+      { lat: 2, lng: 2 }, // interior — must be excluded
+    ]);
+    expect(hull.length).toBe(4);
+    expect(hull.some(p => p.lat === 2 && p.lng === 2)).toBe(false);
+  });
+
+  test('convexHull: fewer than three points pass through unchanged', () => {
+    expect(S.convexHull([{ lat: 1, lng: 1 }]).length).toBe(1);
+    expect(S.convexHull([{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }]).length).toBe(2);
+  });
+});

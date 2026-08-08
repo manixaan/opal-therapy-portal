@@ -213,6 +213,70 @@
 
   function snap15(min) { return Math.round(min / 15) * 15; }
 
+  // ── Phase 6 pure geometry (deterministic, unit-tested) ────────────────────
+  function haversineKm(a, b) {
+    var R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+    var s1 = Math.sin(dLat / 2), s2 = Math.sin(dLng / 2);
+    var q = s1 * s1 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * s2 * s2;
+    return 2 * R * Math.asin(Math.sqrt(q));
+  }
+
+  // One geographic point per suburb with a visit count (repeat visits to the
+  // same suburb must not distort the footprint).
+  function dedupSuburbPoints(points) {
+    var by = {};
+    (points || []).forEach(function (p) {
+      var k = (p.suburb || '').toLowerCase();
+      if (!by[k]) by[k] = { suburb: p.suburb, lat: p.lat, lng: p.lng, visits: 0 };
+      by[k].visits += 1;
+    });
+    return Object.keys(by).map(function (k) { return by[k]; });
+  }
+
+  // Single-linkage clustering with a distance threshold — widely separated
+  // localities become separate clusters instead of one misleading giant hull.
+  function clusterPoints(points, maxKm) {
+    maxKm = maxKm || 45;
+    var clusters = [];
+    (points || []).forEach(function (p) {
+      var homes = [];
+      clusters.forEach(function (c, i) {
+        if (c.some(function (q) { return haversineKm(p, q) <= maxKm; })) homes.push(i);
+      });
+      if (!homes.length) { clusters.push([p]); return; }
+      // merge every cluster this point bridges
+      var target = clusters[homes[0]];
+      target.push(p);
+      for (var i = homes.length - 1; i >= 1; i--) {
+        target.push.apply(target, clusters[homes[i]]);
+        clusters.splice(homes[i], 1);
+      }
+    });
+    return clusters;
+  }
+
+  // Andrew monotone-chain convex hull over {lat, lng} points.
+  function convexHull(points) {
+    var pts = (points || []).slice().sort(function (a, b) { return a.lng - b.lng || a.lat - b.lat; });
+    if (pts.length < 3) return pts;
+    var cross = function (o, a, b) {
+      return (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng);
+    };
+    var lower = [];
+    pts.forEach(function (p) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    });
+    var upper = [];
+    for (var i = pts.length - 1; i >= 0; i--) {
+      var p2 = pts[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p2) <= 0) upper.pop();
+      upper.push(p2);
+    }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+
   // ── Exports for unit tests (node) ─────────────────────────────────────────
   var helpers = {
     perthParts: perthParts, addDaysYmd: addDaysYmd, mondayOfYmd: mondayOfYmd,
@@ -221,6 +285,8 @@
     disciplinesOf: disciplinesOf, eventsForTherapistDay: eventsForTherapistDay,
     groupWeek: groupWeek, apptCount: apptCount, isPlaceholderTitle: isPlaceholderTitle,
     clinicalMinutes: clinicalMinutes, nextAvailableSegment: nextAvailableSegment, snap15: snap15,
+    haversineKm: haversineKm, dedupSuburbPoints: dedupSuburbPoints,
+    clusterPoints: clusterPoints, convexHull: convexHull,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
   if (!global || !global.document) return; // node/test environment stops here
@@ -250,6 +316,17 @@
     avail: { key: null, byId: {}, meta: null, loading: false },
     common: { open: false, minDur: 30, loading: false, result: null },
     // Phase 3 — Quick Availability Finder (right intelligence panel)
+    // Phase 5/6 — Scheduler Map (right intelligence panel tab)
+    map: {
+      open: (function () { try { return localStorage.getItem('sch_map') === '1'; } catch (e) { return false; } })(),
+      footprints: (function () { try { return localStorage.getItem('sch_footprints') !== '0'; } catch (e) { return true; } })(),
+      sdk: 'none',              // none | loading | ready | error
+      gmap: null, el: null,     // persistent map DOM element survives re-renders
+      markers: [], polys: [], info: null,
+      points: null, pointsKey: null, loading: false, error: false,
+      meta: { telehealth: 0, unmappable: 0 },
+      userMoved: false, boundsKey: null,
+    },
     finder: {
       open: false, mode: 'exact',
       startMin: 10 * 60, durationMin: 60,
@@ -319,6 +396,7 @@
         SCHED.loading = false;
         render();
         loadAvailability();
+        if (SCHED.map.open) mapFetchPoints();
       })
       .catch(function (err) {
         SCHED.loading = false;
@@ -354,7 +432,8 @@
             'title="Distinguish true availability from empty calendar space" aria-pressed="' + (SCHED.overlay ? 'true' : 'false') + '">' +
             '<span class="sch-toggle-dot"></span>Availability</button>' +
           '<button type="button" class="sch-common-btn' + (SCHED.common.open ? ' on' : '') + '" data-act="common">Common availability</button>' +
-          '<button type="button" class="sch-common-btn' + (SCHED.finder.open ? ' on' : '') + '" data-act="finder">Find availability</button>'
+          '<button type="button" class="sch-common-btn' + (SCHED.finder.open ? ' on' : '') + '" data-act="finder">Find availability</button>' +
+          '<button type="button" class="sch-common-btn' + (SCHED.map.open ? ' on' : '') + '" data-act="map">Map</button>'
         : '') +
       '<button type="button" class="sch-add-btn" data-act="add">+ Appointment</button>';
 
@@ -372,8 +451,15 @@
       if (act === 'common') { SCHED.common.open = !SCHED.common.open; SCHED.common.result = null; render(); if (SCHED.common.open && !SCHED.overlay) loadAvailability(); }
       if (act === 'finder') {
         SCHED.finder.open = !SCHED.finder.open;
-        if (SCHED.finder.open) { SCHED.finder.result = null; render(); finderSearch(); }
+        if (SCHED.finder.open) { SCHED.map.open = false; persistMapOpen(); SCHED.finder.result = null; render(); finderSearch(); }
         else render();
+      }
+      if (act === 'map') {
+        SCHED.map.open = !SCHED.map.open;
+        if (SCHED.map.open) SCHED.finder.open = false;
+        persistMapOpen();
+        render();
+        if (SCHED.map.open) mapEnsure();
       }
       if (act === 'mode-day')  { SCHED.mode = 'day'; load(); }
       if (act === 'mode-week') { SCHED.mode = 'week'; load(); }
@@ -839,6 +925,296 @@
     return row && row.windows && row.windows.length ? row.windows[0].startMin : null;
   }
 
+  // ── Phase 5/6: Scheduler Map ──────────────────────────────────────────────
+  function persistMapOpen() {
+    try {
+      localStorage.setItem('sch_map', SCHED.map.open ? '1' : '0');
+      localStorage.setItem('sch_footprints', SCHED.map.footprints ? '1' : '0');
+    } catch (e) {}
+  }
+
+  // Lazy SDK: fetched only when the map first opens; the calendar never waits.
+  function mapEnsure() {
+    var m = SCHED.map;
+    if (m.sdk === 'ready') { mapFetchPoints(); return; }
+    if (m.sdk === 'loading') return;
+    m.sdk = 'loading'; renderMapStatus();
+    global.onGoogleMapsReady = global.onGoogleMapsReady || function () {};
+    var prevReady = global.onGoogleMapsReady;
+    global.onGoogleMapsReady = function () {
+      prevReady();
+      m.sdk = 'ready';
+      mapInit();
+      mapFetchPoints();
+    };
+    fetch('/api/maps/sdk-url', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('unavailable')); })
+      .then(function (j) {
+        if (global.google && global.google.maps) { global.onGoogleMapsReady(); return; }
+        var sc = document.createElement('script');
+        sc.src = j.url; sc.async = true;
+        sc.onerror = function () { m.sdk = 'error'; renderMapStatus(); };
+        document.head.appendChild(sc);
+      })
+      .catch(function () { m.sdk = 'error'; renderMapStatus(); });
+  }
+
+  function mapInit() {
+    var m = SCHED.map;
+    if (m.gmap || !global.google) return;
+    if (!m.el) { m.el = document.createElement('div'); m.el.className = 'sch-map-canvas'; }
+    m.gmap = new google.maps.Map(m.el, {
+      center: { lat: -31.95, lng: 115.86 }, zoom: 9,   // starting view only — bounds follow data
+      mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+      zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+      clickableIcons: false,
+    });
+    m.info = new google.maps.InfoWindow();
+    // Respect the user's viewport after a manual gesture (§18)
+    m.gmap.addListener('dragstart', function () { m.userMoved = true; });
+  }
+
+  function mapFetchPoints(force) {
+    var m = SCHED.map;
+    if (!m.open || SCHED.mode !== 'day') return;
+    var key = SCHED.date;
+    if (!force && m.pointsKey === key && m.points) { mapDraw(); return; }
+    m.loading = true; m.error = false; renderMapStatus();
+    fetch('/api/scheduler/map-points?date=' + key, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http')); })
+      .then(function (j) {
+        if (SCHED.date !== key) return; // superseded by a date change
+        m.points = j.points || [];
+        m.meta = { telehealth: j.telehealth || 0, unmappable: j.unmappable || 0 };
+        m.pointsKey = key; m.loading = false; m.userMoved = false;
+        renderMapStatus(); mapDraw();
+      })
+      .catch(function () { m.loading = false; m.error = true; renderMapStatus(); });
+  }
+
+  function mapVisiblePoints(visible) {
+    var ids = {};
+    (visible || filterTherapists(SCHED.therapists, {
+      ids: SCHED.filterIds, discipline: SCHED.discipline, focusId: SCHED.focusId,
+    })).forEach(function (t) { ids[t.id] = true; });
+    return (SCHED.map.points || []).filter(function (p) { return ids[p.therapistProfileId]; });
+  }
+
+  function mapClear() {
+    SCHED.map.markers.forEach(function (mk) { mk.setMap(null); });
+    SCHED.map.polys.forEach(function (pg) { pg.setMap(null); });
+    SCHED.map.markers = []; SCHED.map.polys = [];
+  }
+
+  function mapDraw() {
+    var m = SCHED.map;
+    if (!m.gmap || !m.points) return;
+    mapClear();
+    var pts = mapVisiblePoints();
+    var focus = SCHED.focusId;
+
+    // Same suburb, several therapists → deterministic small offsets so
+    // markers stay individually clickable.
+    var bySub = {};
+    pts.forEach(function (p) {
+      var k = p.suburb.toLowerCase();
+      bySub[k] = bySub[k] || [];
+      bySub[k].push(p);
+    });
+    var bounds = new google.maps.LatLngBounds();
+
+    Object.keys(bySub).forEach(function (k) {
+      // group per therapist within the suburb (one marker + visit count)
+      var byT = {};
+      bySub[k].forEach(function (p) {
+        byT[p.therapistProfileId] = byT[p.therapistProfileId] || [];
+        byT[p.therapistProfileId].push(p);
+      });
+      Object.keys(byT).forEach(function (tid, ti) {
+        var list = byT[tid].sort(function (a, b) { return a.startMin - b.startMin; });
+        var first = list[0];
+        var faded = focus && tid !== focus;
+        var pos = { lat: first.lat + ti * 0.006, lng: first.lng + ti * 0.006 };
+        bounds.extend(pos);
+        var mk = new google.maps.Marker({
+          map: m.gmap, position: pos,
+          title: first.therapistName + ' · ' + first.suburb +
+            (list.length > 1 ? ' · ' + list.length + ' visits' : ' · ' + fmtTime12(first.startMin)),
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE, scale: faded ? 6 : 9,
+            fillColor: first.therapistColour, fillOpacity: faded ? 0.3 : 0.95,
+            strokeColor: '#ffffff', strokeWeight: 2, strokeOpacity: faded ? 0.4 : 1,
+          },
+          zIndex: faded ? 1 : 3,
+          label: list.length > 1 ? { text: String(list.length), color: '#fff', fontSize: '10px', fontWeight: '700' } : null,
+        });
+        mk.__eids = list.map(function (p) { return p.eventId; });
+        mk.addListener('mouseover', function () { mapHighlightTiles(mk.__eids, true); });
+        mk.addListener('mouseout', function () { mapHighlightTiles(mk.__eids, false); });
+        mk.addListener('click', function () {
+          var content = document.createElement('div');
+          content.className = 'sch-map-pop';
+          content.innerHTML = '<strong>' + esc(first.therapistName) + '</strong><br>' +
+            list.map(function (p) { return fmtTime12(p.startMin) + '–' + fmtTime12(p.endMin); }).join(', ') +
+            '<br>' + esc(first.suburb);
+          var btn = document.createElement('button');
+          btn.className = 'sch-mini'; btn.textContent = 'View on calendar';
+          btn.addEventListener('click', function () {
+            m.info.close();
+            jumpToMinute(first.startMin);
+            mapHighlightTiles(mk.__eids, true);
+            setTimeout(function () { mapHighlightTiles(mk.__eids, false); }, 2400);
+          });
+          content.appendChild(document.createElement('br'));
+          content.appendChild(btn);
+          m.info.setContent(content);
+          m.info.open({ map: m.gmap, anchor: mk });
+        });
+        m.markers.push(mk);
+      });
+    });
+
+    // ── Phase 6: daily service footprints (derived, never stored) ──
+    if (m.footprints) {
+      var byTher = {};
+      pts.forEach(function (p) {
+        byTher[p.therapistProfileId] = byTher[p.therapistProfileId] || [];
+        byTher[p.therapistProfileId].push(p);
+      });
+      Object.keys(byTher).forEach(function (tid) {
+        var uniq = dedupSuburbPoints(byTher[tid]);
+        var clusters = clusterPoints(uniq, 45);
+        clusters.forEach(function (cluster) {
+          if (cluster.length < 3) return;      // 1-2 points: markers carry the story
+          var hull = convexHull(cluster);
+          if (hull.length < 3) return;
+          var faded = focus && tid !== focus;
+          var colour = byTher[tid][0].therapistColour;
+          m.polys.push(new google.maps.Polygon({
+            map: m.gmap,
+            paths: hull.map(function (h) { return { lat: h.lat, lng: h.lng }; }),
+            fillColor: colour, fillOpacity: faded ? 0.04 : (focus === tid ? 0.18 : 0.09),
+            strokeColor: colour, strokeOpacity: faded ? 0.1 : 0.35, strokeWeight: 1.5,
+            clickable: false, zIndex: 0,
+          }));
+        });
+      });
+    }
+
+    // Bounds: only on data/context changes, never fighting a manual viewport
+    var bKey = SCHED.date + '|' + (focus || 'all') + '|' + pts.length;
+    if (!m.userMoved && pts.length && m.boundsKey !== bKey) {
+      m.boundsKey = bKey;
+      m.gmap.fitBounds(bounds, 48);
+      if (pts.length === 1) m.gmap.setZoom(Math.min(m.gmap.getZoom(), 13));
+    }
+
+    renderMapLegend(pts);
+  }
+
+  function mapHighlightTiles(eids, on) {
+    (eids || []).forEach(function (eid) {
+      var tile = document.querySelector('.sch-tile[data-eid="' + eid + '"]');
+      if (tile) tile.classList.toggle('sch-map-hi', !!on);
+    });
+  }
+
+  // Calendar → map: hovering a tile emphasises its marker
+  function mapEmphasiseEvent(eid, on) {
+    var m = SCHED.map;
+    if (!m.gmap) return;
+    m.markers.forEach(function (mk) {
+      if ((mk.__eids || []).indexOf(eid) === -1) return;
+      var ic = mk.getIcon();
+      ic.scale = on ? 12 : 9;
+      mk.setIcon(ic);
+      mk.setZIndex(on ? 9 : 3);
+    });
+  }
+
+  function renderMapStatus() {
+    var host = document.getElementById('sch-map-status');
+    if (!host) return;
+    var m = SCHED.map;
+    if (m.sdk === 'error') host.innerHTML = 'Map unavailable. <button type="button" class="sch-mini" onclick="OpalScheduler._mapRetry()">Retry</button>';
+    else if (m.sdk === 'loading' || m.loading) host.textContent = 'Loading service locations…';
+    else if (m.error) host.innerHTML = 'Locations couldn\'t be loaded. <button type="button" class="sch-mini" onclick="OpalScheduler._mapRetry()">Retry</button>';
+    else host.textContent = '';
+  }
+
+  function renderMapLegend(pts) {
+    var host = document.getElementById('sch-map-legend');
+    if (!host) return;
+    var m = SCHED.map;
+    if (!pts.length) {
+      var msg = 'No service locations to show for this day.';
+      var extra = [];
+      if (m.meta.telehealth) extra.push('Telehealth: ' + m.meta.telehealth);
+      if (m.meta.unmappable) extra.push('Without location: ' + m.meta.unmappable);
+      host.innerHTML = '<div class="sch-map-empty">' + msg +
+        (extra.length ? '<br><span>' + extra.join(' · ') + '</span>' : '') + '</div>';
+      return;
+    }
+    var byT = {};
+    pts.forEach(function (p) {
+      byT[p.therapistProfileId] = byT[p.therapistProfileId] ||
+        { name: p.therapistName, colour: p.therapistColour, visits: 0, suburbs: [] };
+      byT[p.therapistProfileId].visits += 1;
+      if (byT[p.therapistProfileId].suburbs.indexOf(p.suburb) === -1) byT[p.therapistProfileId].suburbs.push(p.suburb);
+    });
+    var extra2 = [];
+    if (m.meta.telehealth) extra2.push('Telehealth today: ' + m.meta.telehealth);
+    if (m.meta.unmappable) extra2.push(m.meta.unmappable + ' without a mappable location');
+    host.innerHTML = Object.keys(byT).map(function (tid) {
+      var t = byT[tid];
+      return '<button type="button" class="sch-map-leg" data-tid="' + esc(tid) + '"' +
+        ' aria-label="' + esc(t.name + ', ' + t.visits + ' face-to-face visits today: ' + t.suburbs.join(', ')) + '">' +
+        '<span class="sch-f-dot" style="background:' + esc(t.colour) + ';"></span>' +
+        '<span class="sch-map-leg-name">' + esc(t.name) + '</span>' +
+        '<span class="sch-map-leg-n">' + t.visits + ' visit' + (t.visits === 1 ? '' : 's') + '</span>' +
+        '<span class="sch-map-leg-subs">' + esc(t.suburbs.join(' · ')) + '</span>' +
+        '</button>';
+    }).join('') + (extra2.length ? '<div class="sch-map-note">' + extra2.join(' · ') + '</div>' : '');
+    host.onclick = function (e) {
+      var b = e.target.closest('.sch-map-leg'); if (!b) return;
+      SCHED.focusId = SCHED.focusId === b.dataset.tid ? null : b.dataset.tid;
+      render(); loadAvailability(); loadWeekCapacity(); mapDraw();
+    };
+  }
+
+  function buildMapPanel() {
+    var m = SCHED.map;
+    var aside = document.createElement('aside');
+    aside.className = 'sch-finder sch-map-panel';
+    aside.id = 'sch-map-panel';
+    aside.innerHTML =
+      '<div class="sch-f-head">Map — ' + esc(fmtDayLabel(SCHED.date)) +
+        '<span style="flex:1"></span>' +
+        '<label class="sch-map-toggle"><input type="checkbox" id="sch-fp-toggle"' + (m.footprints ? ' checked' : '') + '> Operating areas</label>' +
+        '<button type="button" class="sch-f-close" data-act="close" aria-label="Hide map">&#10005;</button></div>' +
+      '<div id="sch-map-status" class="sch-f-status"></div>' +
+      '<div id="sch-map-host"></div>' +
+      '<div id="sch-map-legend" class="sch-map-legend" aria-live="polite"></div>';
+    aside.addEventListener('click', function (e) {
+      if (e.target.closest('[data-act="close"]')) { m.open = false; persistMapOpen(); render(); }
+    });
+    aside.addEventListener('change', function (e) {
+      if (e.target.id === 'sch-fp-toggle') { m.footprints = e.target.checked; persistMapOpen(); mapDraw(); }
+    });
+    return aside;
+  }
+
+  function mountMapPanel(wrap) {
+    var aside = buildMapPanel();
+    wrap.appendChild(aside);
+    var host = aside.querySelector('#sch-map-host');
+    if (!SCHED.map.el) { SCHED.map.el = document.createElement('div'); SCHED.map.el.className = 'sch-map-canvas'; }
+    host.appendChild(SCHED.map.el);   // persistent canvas — the map instance survives re-renders
+    renderMapStatus();
+    if (SCHED.map.sdk === 'ready') { mapDraw(); }
+    else mapEnsure();
+  }
+
   // ── Day grid ──────────────────────────────────────────────────────────────
   function renderDay(frag, visible) {
     var wrap = document.createElement('div');
@@ -992,6 +1368,7 @@
         var tile = document.createElement('div');
         tile.className = 'sch-tile';
         tile.setAttribute('data-type', it.ev.eventType || 'outlook');
+        if (it.ev.id) tile.setAttribute('data-eid', it.ev.id);
         var top = it.startMin / 60 * HOUR();
         // 4px bottom gap keeps back-to-back events visibly separate (matches
         // the personal calendar's separation rule)
@@ -1047,7 +1424,18 @@
     scroll.appendChild(grid);
     wrap.appendChild(scroll);
     if (SCHED.finder.open) wrap.appendChild(buildFinder());
+    else if (SCHED.map.open) mountMapPanel(wrap);
     frag.appendChild(wrap);
+
+    // Calendar → map cross-highlighting (delegated, subtle)
+    grid.addEventListener('mouseover', function (e) {
+      var tile = e.target.closest('.sch-tile[data-eid]');
+      if (tile && SCHED.map.open) mapEmphasiseEvent(tile.dataset.eid, true);
+    });
+    grid.addEventListener('mouseout', function (e) {
+      var tile = e.target.closest('.sch-tile[data-eid]');
+      if (tile && SCHED.map.open) mapEmphasiseEvent(tile.dataset.eid, false);
+    });
 
     // scroll to working hours on first paint of the day
     requestAnimationFrame(function () {
@@ -1179,10 +1567,15 @@
     else SCHED.date = addDaysYmd(SCHED.date || todayPerthYmd(),
       (SCHED.mode === 'week' ? 7 : 1) * dir);
     load();
+    if (SCHED.map.open) mapFetchPoints();
+    if (SCHED.finder.open) finderSearch();
   }
 
   function refresh() { load(true); }
 
-  global.OpalScheduler = { open: open, nav: nav, refresh: refresh, _state: SCHED };
+  global.OpalScheduler = {
+    open: open, nav: nav, refresh: refresh, _state: SCHED,
+    _mapRetry: function () { SCHED.map.sdk = 'none'; SCHED.map.error = false; mapEnsure(); },
+  };
 
 })(typeof window !== 'undefined' ? window : null);

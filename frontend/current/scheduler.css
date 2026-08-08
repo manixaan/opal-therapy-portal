@@ -568,3 +568,38 @@ input.sch-f-input, select.sch-f-input {
 .sch-grid.focused .sch-tile[data-type="travel"],
 .sch-grid.focused .sch-tile[data-type="admin"],
 .sch-grid.focused .sch-tile[data-type="lunch"] { opacity: 0.75; }
+
+/* ── Phase 5/6: Scheduler Map panel ───────────────────────────────────────── */
+.sch-map-panel { display: flex; flex-direction: column; width: 340px; padding: 12px 12px 14px; }
+.sch-map-canvas {
+  width: 100%; height: 340px; flex-shrink: 0;
+  border-radius: var(--radius-md); overflow: hidden;
+  border: 1px solid var(--border-soft);
+  background: var(--border-soft);
+}
+.sch-map-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; color: var(--ink-soft); cursor: pointer;
+}
+.sch-map-toggle input { accent-color: var(--accent); }
+.sch-map-legend { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.sch-map-leg {
+  display: grid; grid-template-columns: 12px auto auto 1fr; align-items: center; gap: 7px;
+  border: 1px solid transparent; background: transparent;
+  border-radius: var(--radius-sm); padding: 4px 6px;
+  font-family: inherit; font-size: 12px; cursor: pointer; text-align: left;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.sch-map-leg:hover { background: var(--border-soft); }
+.sch-map-leg-name { font-weight: 700; color: var(--ink); }
+.sch-map-leg-n { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.sch-map-leg-subs { color: var(--ink-soft); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-map-note { font-size: 11px; color: var(--muted); padding: 4px 6px; }
+.sch-map-empty { font-size: 12.5px; color: var(--muted); padding: 10px 4px; }
+.sch-map-empty span { font-size: 11.5px; }
+.sch-map-pop { font-size: 12px; font-family: inherit; color: #241f1a; line-height: 1.5; }
+.sch-tile.sch-map-hi { box-shadow: 0 0 0 2px var(--accent); z-index: 5; }
+@media (max-width: 900px) {
+  .sch-map-panel { width: 100%; }
+  .sch-map-canvas { height: 300px; }
+}

@@ -299,3 +299,64 @@ describe('find-availability', () => {
     ]);
   });
 });
+
+// ═══ Phase 5: map points ═════════════════════════════════════════════════════
+
+describe('scheduler map points', () => {
+  async function seedCentroid(sub, lat, lng) {
+    await db.pool.query(`INSERT INTO suburb_centroids (suburb_key, suburb, state, lat, lng, status, attempts)
+      VALUES ($1, $2, 'WA', $3, $4, 'ok', 1) ON CONFLICT (suburb_key) DO NOTHING`,
+      [sub.toLowerCase() + '|WA', sub, lat, lng]);
+  }
+
+  test('therapist denied; owner gets allowlisted suburb-precision points', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent: tAgent } = await agentFor(app, 'therapist', org);
+    expect([401, 403]).toContain((await tAgent.get(`/api/scheduler/map-points?date=${DATE}`)).status);
+
+    const { agent } = await agentFor(app, 'owner', org);
+    const t = await seedTherapist(org, 'Map Therapist', { schedule: { '2026-W33': { mon: 'office' } } });
+    await seedCentroid('Willetton', -32.0524, 115.884);
+    await seedEvent(t.profileId, t.userId, org, 9, 10,
+      { title: 'CONFIDENTIAL — Jane NDIS review', type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = '12 Hidden St, Willetton WA 6155', client_name = 'Jane Smith'
+      WHERE therapist_profile_id = $1`, [t.profileId]);
+    // telehealth + no-location + cancelled: all excluded
+    await seedEvent(t.profileId, t.userId, org, 11, 12, { type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = 'Telehealth — video call'
+      WHERE therapist_profile_id = $1 AND start_time = $2`, [t.profileId, perthIso(11)]);
+    await seedEvent(t.profileId, t.userId, org, 13, 14, { type: 'therapy' }); // no location
+    await seedEvent(t.profileId, t.userId, org, 15, 16, { type: 'therapy', status: 'cancelled' });
+
+    const r = await agent.get(`/api/scheduler/map-points?date=${DATE}`);
+    expect(r.status).toBe(200);
+    expect(r.body.points.length).toBe(1);
+    const p = r.body.points[0];
+    expect(p.suburb).toBe('Willetton');
+    expect(p.precision).toBe('suburb');
+    expect(p.startMin).toBe(9 * 60);
+    expect(r.body.telehealth).toBe(1);
+    expect(r.body.unmappable).toBe(1); // the 13:00 no-location session (cancelled excluded silently)
+
+    const raw = JSON.stringify(r.body);
+    for (const banned of ['CONFIDENTIAL', 'Jane', 'NDIS', 'Hidden St']) {
+      expect(raw).not.toContain(banned);
+    }
+  });
+
+  test('centroid cache is reused — no geocoding when cached', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent } = await agentFor(app, 'owner', org);
+    const t = await seedTherapist(org, 'Cache Therapist');
+    await seedCentroid('Baldivis', -32.3298, 115.8322);
+    await seedEvent(t.profileId, t.userId, org, 9, 10, { type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = 'Baldivis WA' WHERE therapist_profile_id = $1`, [t.profileId]);
+    const before = (await db.pool.query('SELECT attempts FROM suburb_centroids WHERE suburb_key = $1', ['baldivis|WA'])).rows[0].attempts;
+    const r = await agent.get(`/api/scheduler/map-points?date=${DATE}`);
+    expect(r.body.points.length).toBe(1);
+    const after = (await db.pool.query('SELECT attempts FROM suburb_centroids WHERE suburb_key = $1', ['baldivis|WA'])).rows[0].attempts;
+    expect(after).toBe(before); // cache hit — untouched
+  });
+});

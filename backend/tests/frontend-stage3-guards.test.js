@@ -770,8 +770,8 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p4" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p4" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p5" />');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p5" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -792,7 +792,7 @@ describe('master scheduler phase 1', () => {
     expect(SCHED_JS).toContain('/api/calendar/master?startDate=');
     expect(SCHED_JS).toContain('/api/scheduler/availability?date=');
     expect(SCHED_JS).toContain('/api/scheduler/common-availability');
-    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(5); // master + availability (day/week-capacity) + common + finder
+    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(7); // master + availability x2 + common + finder + sdk-url + map-points
   });
 
   test('cross-therapist tiles use safe labels, never raw Outlook subjects', () => {
@@ -946,5 +946,43 @@ describe('master scheduler phase 4 focus mode', () => {
   test('friendly non-working/leave states in focus', () => {
     expect(SCHED_JS).toContain("isn't scheduled to work this day.");
     expect(SCHED_JS).toContain(' is on leave this day.');
+  });
+});
+
+// ── Master Scheduler Phases 5+6: map + footprints (2026-08-08) ───────────────
+describe('master scheduler phases 5-6 map', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'scheduler-routes.js'), 'utf8');
+  const GEO = fs.readFileSync(path.join(__dirname, '..', 'geo.js'), 'utf8');
+
+  test('map SDK is lazy-loaded via the server-side key proxy only', () => {
+    expect(SCHED_JS).toContain("fetch('/api/maps/sdk-url'");
+    expect(SCHED_JS).not.toMatch(/key=AIza/);
+    expect(SCHED_JS).toContain("m.sdk === 'ready'"); // calendar never blocks on the SDK
+  });
+
+  test('map payload is allowlist-built at suburb precision', () => {
+    expect(GEO).toContain('function buildSchedulerMapPoint');
+    expect(GEO).toContain("precision: 'suburb'");
+    expect(ROUTES).toContain('/api/scheduler/map-points');
+    expect(ROUTES).toContain('requireMasterCalendarAccess');
+    expect(ROUTES).toContain('telehealth += 1');
+  });
+
+  test('footprints are derived daily, clustered, and never stored', () => {
+    expect(SCHED_JS).toContain('function clusterPoints');
+    expect(SCHED_JS).toContain('function convexHull');
+    expect(SCHED_JS).toContain('dedupSuburbPoints');
+    expect(SCHED_JS).toContain('if (cluster.length < 3) return;'); // 1-2 points: markers only
+    expect(SCHED_JS).not.toContain('therapist_daily_footprints');
+    expect(SCHED_JS).toContain('Operating areas');
+  });
+
+  test('cross-highlighting both directions + viewport respect', () => {
+    expect(SCHED_JS).toContain('mapEmphasiseEvent');
+    expect(SCHED_JS).toContain('mapHighlightTiles');
+    expect(SCHED_JS).toContain('m.userMoved = true');
+    expect(SCHED_JS).toContain('View on calendar');
   });
 });

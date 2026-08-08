@@ -23,6 +23,7 @@ const db = require('./database');
 const { requireAuth } = require('./permissions');
 const { requireMasterCalendarAccess } = require('./calendar-permissions');
 const engine = require('./availability-engine');
+const geo = require('./geo');
 
 const PERTH_TZ_OFFSET_MIN = 480; // AWST — no DST; parameterised in the engine
 
@@ -333,6 +334,66 @@ router.post('/api/scheduler/find-availability', requireAuth, requireMasterCalend
   } catch (err) {
     console.error('POST /api/scheduler/find-availability error:', err.message);
     res.status(500).json({ error: 'Availability search failed' });
+  }
+});
+
+/**
+ * GET /api/scheduler/map-points?date=YYYY-MM-DD
+ * Privacy-first scheduling geography for the selected Perth day (Phase 5).
+ * Face-to-face client sessions only, at SUBURB precision, via the
+ * suburb_centroids cache. Allowlist payload — no titles, clients, notes or
+ * street addresses. Owner/Admin only; one aggregated response.
+ */
+router.get('/api/scheduler/map-points', requireAuth, requireMasterCalendarAccess, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!isYmd(date)) return res.status(400).json({ error: 'date=YYYY-MM-DD is required' });
+
+    const orgId = req.user.organisation_id;
+    const profiles = (await db.getAllTherapistProfiles(orgId)).filter((p) => p.is_active !== false);
+    if (!profiles.length) return res.json({ date, points: [], telehealth: 0, unmappable: 0 });
+    const byProfile = new Map(profiles.map((p) => [p.id, {
+      therapistProfileId: p.id, displayName: p.display_name, colour: p.colour,
+    }]));
+
+    const dayStartUtc = new Date(Date.parse(`${date}T00:00:00Z`) - PERTH_TZ_OFFSET_MIN * 60000);
+    const dayEndUtc = new Date(dayStartUtc.getTime() + 24 * 3600 * 1000);
+    const events = await db.getEventsForTherapists(profiles.map((p) => p.id), {
+      startDate: dayStartUtc.toISOString(), endDate: dayEndUtc.toISOString(),
+    });
+
+    let telehealth = 0, unmappable = 0;
+    const eligible = [];
+    for (const ev of events) {
+      if (ev.is_deleted || ev.status === 'cancelled') continue;
+      if (ev.event_type !== 'therapy') continue;            // face-to-face client work only
+      const rawLoc = ev.manual_location || ev.location;
+      if (rawLoc && geo.VIRTUAL_RE.test(typeof rawLoc === 'string' ? rawLoc : JSON.stringify(rawLoc))) {
+        telehealth += 1; continue;                          // telehealth is never geography
+      }
+      const suburb = geo.extractSuburb(rawLoc);
+      if (!suburb) { unmappable += 1; continue; }
+      eligible.push({ ev, suburb });
+    }
+
+    const centroids = await geo.resolveCentroids(db.pool, eligible.map((e) => e.suburb));
+    const points = [];
+    for (const { ev, suburb } of eligible) {
+      const c = centroids.get(geo.suburbKey(suburb, 'WA'));
+      if (!c) { unmappable += 1; continue; }
+      const therapist = byProfile.get(ev.therapist_profile_id);
+      if (!therapist) continue;
+      const startMin = Math.round((new Date(ev.start_time) - dayStartUtc) / 60000);
+      const endMin = Math.round((new Date(ev.end_time) - dayStartUtc) / 60000);
+      points.push(geo.buildSchedulerMapPoint(ev, therapist, c,
+        Math.max(0, startMin), Math.min(1440, endMin)));
+    }
+    points.sort((a, b) => a.startMin - b.startMin);
+
+    res.json({ date, points, telehealth, unmappable });
+  } catch (err) {
+    console.error('GET /api/scheduler/map-points error:', err.message);
+    res.status(500).json({ error: 'Failed to load map points' });
   }
 });
 
