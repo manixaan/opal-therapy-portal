@@ -813,3 +813,22 @@ describe('master scheduler phase 1', () => {
     expect(SCHED_JS).toContain('HOUR() - 4)');
   });
 });
+
+// ── Billable/non-billable booking picker (2026-08-08) ────────────────────────
+describe('grouped booking-type picker', () => {
+  test('billable + non-billable sections with collapsible groups', () => {
+    expect(HTML).toContain('class="bk-section-label">Billable<');
+    expect(HTML).toContain('>Non-billable<');
+    for (const g of ['Direct services', 'Requested reports', 'Non-face-to-face', 'Provider travel']) {
+      expect(HTML).toContain('<summary>' + g + '</summary>');
+    }
+    for (const leaf of ['Therapy session', 'Assessment session', 'Initial assessment consultation',
+      'FCA', 'AT report', 'Progress report', 'Case noting', 'Resource preparation',
+      'Telehealth', 'Professional development', 'Supervision', 'Lunch']) {
+      expect(HTML).toContain('>' + leaf + '</button>');
+    }
+    expect(HTML).toContain('Bill up to 30 minutes each way');
+    expect(HTML).toContain('function selectBookingLeaf');
+    expect(HTML).toContain('selectBookingCat(leaf.cat)'); // rides the existing category plumbing
+  });
+});
