@@ -158,10 +158,10 @@ describe('installable web app', () => {
 
 // ── Compact calendar week view (2026-08-06) ──────────────────────────────────
 describe('compact calendar week view', () => {
-  test('hour height is the compact 48px and all coordinate math uses the constant', () => {
-    expect(HTML).toContain('const HOUR_PX = 48;');
-    // No stray hardcoded 60px/hour math reintroduced alongside the constant
-    expect(HTML).not.toMatch(/const HOUR_PX = 60/);
+  test('hour height is 72px (readable 15-min slots) and coordinate math uses the constant', () => {
+    expect(HTML).toContain('const HOUR_PX = 72;');
+    // No stray hardcoded per-hour math reintroduced alongside the constant
+    expect(HTML).not.toMatch(/const HOUR_PX = (48|60)/);
   });
 
   test('event tiles truncate with ellipsis instead of growing', () => {

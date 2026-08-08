@@ -1037,9 +1037,15 @@ window.opIcon = function (name, size) {
   .opa-greet .og-hi .og-name { color: var(--accent-deep); }
   .opa-greet .og-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.45; }
   h1.brand-opa {
-    font-size: 19px; font-weight: 700; letter-spacing: -0.02em;
-    color: var(--ink); margin: 0;
+    font-size: 21px; font-weight: 800; letter-spacing: -0.035em;
+    margin: 0; cursor: default; user-select: none;
+    background: linear-gradient(105deg, var(--accent-deep) 0%, var(--accent) 52%, var(--accent-2) 118%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: var(--accent-deep);
+    transition: transform var(--t-fast) var(--ease-out);
+    transform-origin: 30% 80%;
   }
+  h1.brand-opa:hover { transform: rotate(-3deg) scale(1.06); }
   .nav-more-menu, .hdr-account-menu {
     transform-origin: top right;
     animation: menuIn 180ms var(--ease-out);
@@ -13161,7 +13167,7 @@ function resetWizard() {
 }
 
 /* ---------- Calendar rendering ---------- */
-const HOUR_PX = 48;    // pixels per hour — compact Outlook-style density (was 60)
+const HOUR_PX = 72;    // pixels per hour — 15-min slots stay readable without a marathon scroll
 var START_H   = 0;     // visible grid start — full 24-hour day (midnight). Calendar always shows 0→24.
 var END_H     = 24;    // visible grid end   — midnight (full 24-hour day)
 var WORK_S    = 8;     // soft working-hours start for non-working band
@@ -16038,7 +16044,16 @@ function isTravelBlock(s) {
 function computeDayTravelSegments(day) {
   const sessions = sessionsForDay(day);
   const segs = [];
-  if (!sessions.length) { DAY_SEGMENTS.set(day, segs); return segs; }
+  const workS = (typeof WORK_S !== 'undefined' ? WORK_S : 8) * 60;
+  const workE = (typeof WORK_E !== 'undefined' ? WORK_E : 18) * 60;
+  if (!sessions.length) {
+    // Empty day: the whole working window is one free window — the old
+    // between-sessions-only algorithm reported ZERO free time on free days.
+    segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: {},
+      startMin: workS, endMin: workE, travelMin: 0, freeMin: workE - workS,
+      fromSessionId: null, toSessionId: null, anchorBaseId: null, cacheKey: '' });
+    DAY_SEGMENTS.set(day, segs); return segs;
+  }
 
   const base = dayAnchorBase(day); // base for start/end of day (from Mon-Fri dropdown)
 
@@ -16066,6 +16081,17 @@ function computeDayTravelSegments(day) {
         anchorBaseId: (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
         cacheKey: routeKey(baseKey, firstKey, 'driving')
       });
+    }
+  }
+
+  // --- leading free window: working-day start → (travel to) first session ---
+  {
+    const startSeg = segs.find(x => x.kind === 'start');
+    const leadEnd = startSeg ? startSeg.startMin : sessionStartMin(first);
+    if (leadEnd - workS >= 45) {
+      segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: sessionLocation(first),
+        startMin: workS, endMin: leadEnd, travelMin: 0, freeMin: leadEnd - workS,
+        fromSessionId: null, toSessionId: first.id, anchorBaseId: null, cacheKey: '' });
     }
   }
 
@@ -16127,6 +16153,17 @@ function computeDayTravelSegments(day) {
     }
   }
 
+  // --- trailing free window: last session (after return travel) → working-day end ---
+  {
+    const endSeg = segs.find(x => x.kind === 'end');
+    const tailStart = endSeg ? endSeg.endMin : sessionEndMin(last);
+    if (workE - tailStart >= 45) {
+      segs.push({ day, kind: 'gap', fromLoc: sessionLocation(last), toLoc: {},
+        startMin: tailStart, endMin: workE, travelMin: 0, freeMin: workE - tailStart,
+        fromSessionId: last.id, toSessionId: null, anchorBaseId: null, cacheKey: '' });
+    }
+  }
+
   DAY_SEGMENTS.set(day, segs);
   return segs;
 }
@@ -16150,9 +16187,11 @@ function refreshDayOverlays(day) {
    segment store. */
 function renderSegmentOverlay(col, seg) {
   if (seg.kind === 'gap') {
-    const curr = SESSIONS[seg.fromSessionId];
-    const next = SESSIONS[seg.toSessionId];
-    if (!curr || !next) return;
+    // Edge free windows (day start / day end / empty day) have a null
+    // endpoint — render them with a generic anchor instead of dropping them.
+    const edge = { id: null, patient: '', type: 'admin' };
+    const curr = SESSIONS[seg.fromSessionId] || edge;
+    const next = SESSIONS[seg.toSessionId] || edge;
     renderGapOverlay(col, seg.day, curr, next, seg.fromLoc, seg.toLoc,
                      seg.startMin, seg.endMin, seg.endMin - seg.startMin, seg.travelMin);
     return;
@@ -16224,15 +16263,22 @@ function renderGapOverlay(col, day, curr, next, from, to, gapStart, gapEnd, gapM
   el.innerHTML = `<span class="g-ico">${isMeaningful ? opIcon('spark', 12) : opIcon('clock', 12)}</span>
     <span class="g-label">${isMeaningful ? 'Free window' : 'Idle gap'} · ${gapMin} min (${free} free after travel)</span>
     <span class="g-time">${fmtMin(gapStart)}–${fmtMin(gapEnd)}</span>`;
+  const currLabel = curr.id ? (curr.patient || TYPE_LABEL[curr.type] || 'previous booking') : 'start of day';
+  const nextLabel = next.id ? (next.patient || TYPE_LABEL[next.type] || 'next booking') : 'end of day';
   el.title = isMeaningful
-    ? `Free window ${fmtMin(gapStart)}–${fmtMin(gapEnd)}: ${free} min usable between ${curr.patient || TYPE_LABEL[curr.type]} and ${next.patient || TYPE_LABEL[next.type]}. Tap for ranked suggestions.`
-    : `Idle gap between ${curr.patient || TYPE_LABEL[curr.type]} and ${next.patient || TYPE_LABEL[next.type]}. Tap for options.`;
+    ? `Free window ${fmtMin(gapStart)}–${fmtMin(gapEnd)}: ${free} min usable between ${currLabel} and ${nextLabel}. Tap for ranked suggestions.`
+    : `Idle gap between ${currLabel} and ${nextLabel}. Tap for options.`;
   el.dataset.day = day;
-  el.dataset.currId = curr.id;
-  el.dataset.nextId = next.id;
+  el.dataset.currId = curr.id || '';
+  el.dataset.nextId = next.id || '';
   el.onclick = (ev) => {
     ev.stopPropagation();
-    openGapOptions(day, curr.id, next.id);
+    if (curr.id && next.id) { openGapOptions(day, curr.id, next.id); return; }
+    // Edge windows go straight to booking with the window prefilled
+    if (typeof openBookingPanel === 'function') {
+      openBookingPanel({ day, startH: Math.floor(gapStart / 60), startM: gapStart % 60,
+                         endH: Math.floor(gapEnd / 60), endM: gapEnd % 60 });
+    }
   };
   col.appendChild(el);
 }
