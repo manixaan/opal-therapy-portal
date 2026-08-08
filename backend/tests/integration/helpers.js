@@ -18,6 +18,7 @@ if (!poolDbName || !poolDbName.endsWith('_test')) {
 }
 
 const ALL_TABLES = [
+  'opa_messages', 'opa_conversations', 'opa_feature_knowledge',
   'sync_log', 'conflicts', 'events',
   'user_notifications', 'user_settings', 'org_settings',
   'leave_requests', 'cpd_activities', 'credentials', 'pd_documents',
@@ -26,6 +27,13 @@ const ALL_TABLES = [
   'purchase_request_events', 'purchase_requests',
   'resource_ai_drafts', 'user_resource_progress',
   'snapshot_reminders', 'snapshot_tasks', 'travel_address_overrides',
+  // Resource Hub R2 (migration 011)
+  'resource_collection_items', 'resource_collections', 'resource_versions',
+  'policy_acknowledgements', 'learning_path_items', 'learning_paths',
+  'user_learning_progress', 'resource_views', 'resource_external_sources',
+  'external_sources', 'pd_events', 'cpd_entries', 'resource_feedback',
+  'quiz_attempts', 'quiz_questions', 'quizzes', 'resource_quick_links',
+  'search_misses',
   'users', 'organisations',
 ];
 

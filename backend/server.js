@@ -450,6 +450,10 @@ app.use('/', mapsRoutes);
 // Resource Hub (governed clinical resource repository; backend-enforced RBAC)
 app.use('/', require('./resources-routes'));
 
+// Resource Hub R2 (learning, standards, PD/CPD; separate module — R1 untouched)
+app.use('/', require('./resource-hub-r2-routes'));
+app.use('/', require('./opa-routes'));
+
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
 
