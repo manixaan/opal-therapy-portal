@@ -729,7 +729,7 @@ const DEFAULT_USER_SETTINGS = {
   calendarStartHour: 7,
   calendarEndHour: 18,
   weekStartsOn: 1,           // 1=Monday, 0=Sunday
-  showWeekends: false,
+  showWeekends: true,        // full Mon-Sun week (matches Outlook); Settings can hide
   showSploseEvents: true,
   showOutlookEvents: true,
   showTravelBlocks: true,

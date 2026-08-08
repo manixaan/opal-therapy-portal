@@ -116,20 +116,27 @@ router.get('/api/travel/logbook', requireAuth, denyReadOnly, async (req, res) =>
     // by Splose item id. Splose data stays untouched; the original address is
     // preserved as sourceDestination.
     if (entries.length) {
-      const ids = entries.map((e) => String(e.id));
-      const ov = await pool.query(
-        'SELECT splose_item_id, from_address, to_address FROM travel_address_overrides WHERE splose_item_id = ANY($1)', [ids]);
-      const byId = new Map(ov.rows.map((r) => [r.splose_item_id, r]));
-      entries.forEach((e) => {
-        const o = byId.get(String(e.id));
-        e.fromAddress = (o && o.from_address) || null;
-        if (o && (o.from_address || o.to_address)) e.addressEdited = true;
-        if (o && o.to_address) {
-          e.sourceDestination = e.destinationAddress;
-          e.destinationAddress = o.to_address;
-          e.calculationStatus = 'estimated';
-        }
-      });
+      // The overrides overlay is an enhancement — if it fails (e.g. a dev DB
+      // missing migration 009), degrade to un-overridden entries instead of
+      // 502ing the whole logbook.
+      try {
+        const ids = entries.map((e) => String(e.id));
+        const ov = await pool.query(
+          'SELECT splose_item_id, from_address, to_address FROM travel_address_overrides WHERE splose_item_id = ANY($1)', [ids]);
+        const byId = new Map(ov.rows.map((r) => [r.splose_item_id, r]));
+        entries.forEach((e) => {
+          const o = byId.get(String(e.id));
+          e.fromAddress = (o && o.from_address) || null;
+          if (o && (o.from_address || o.to_address)) e.addressEdited = true;
+          if (o && o.to_address) {
+            e.sourceDestination = e.destinationAddress;
+            e.destinationAddress = o.to_address;
+            e.calculationStatus = 'estimated';
+          }
+        });
+      } catch (ovErr) {
+        console.error('travel logbook overrides overlay skipped:', ovErr.message);
+      }
     }
 
     entries.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));

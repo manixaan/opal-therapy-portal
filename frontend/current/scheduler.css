@@ -99,8 +99,8 @@
 .sch-chip:hover { background: var(--border-soft); }
 .sch-select {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 4px 8px; font-size: 12px; font-family: inherit;
-  color: var(--ink-soft); background: var(--panel);
+  padding: 4px 24px 4px 8px; font-size: 12px; font-family: inherit;
+  color: var(--ink-soft); background-color: var(--panel);
 }
 .sch-focus-crumb {
   display: inline-flex; align-items: center; gap: 6px;

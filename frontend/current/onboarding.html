@@ -422,7 +422,7 @@
     <p class="section-sub">Sync your Outlook calendar so appointments appear automatically — no manual imports needed.</p>
 
     <div class="outlook-card">
-      <div class="outlook-logo">📅</div>
+      <div class="outlook-logo"></div>
       <div>
         <div class="label">Microsoft Outlook</div>
         <div class="sub">Sync appointments, availability, and Teams meetings</div>
@@ -430,12 +430,12 @@
     </div>
 
     <div class="callout info">
-      <span class="icon">ℹ️</span>
+      <span class="icon"></span>
       <span>Connecting Outlook allows the scheduler to read your calendar and automatically populate your appointments. Your calendar data stays private — it's only used within Opal Therapy.</span>
     </div>
 
     <div id="outlook-status-connected" class="callout success" style="display:none;">
-      <span class="icon">✅</span>
+      <span class="icon"></span>
       <span>Outlook is connected. Your calendar will begin syncing shortly.</span>
     </div>
 
@@ -461,14 +461,14 @@
     <p class="section-sub" id="step4-sub">Your default starting location is used to calculate travel time between appointments.</p>
 
     <div class="callout" id="step4-callout">
-      <span class="icon">📍</span>
+      <span class="icon"></span>
       <span id="step4-callout-text">Enter your default base — usually your home address or clinic. The scheduler uses this to estimate drive time to each appointment.</span>
     </div>
 
     <div class="field">
       <label for="s4-location" id="step4-location-label">Default base location <span class="required">*</span></label>
       <div class="location-wrap">
-        <span class="location-icon">📍</span>
+        <span class="location-icon"></span>
         <input type="text" id="s4-location" placeholder="Start typing an address…" autocomplete="off" />
       </div>
       <p class="field-hint">Full street address. You can update this any time in My Profile.</p>
@@ -498,7 +498,7 @@
     <div class="field">
       <label for="s5-base-addr">Address</label>
       <div class="location-wrap">
-        <span class="location-icon">🏢</span>
+        <span class="location-icon"></span>
         <input type="text" id="s5-base-addr" placeholder="Full address…" autocomplete="off" />
       </div>
     </div>
@@ -556,7 +556,7 @@
     <p class="section-sub">Set your annual CPD hour targets so the app can track your progress and send reminders.</p>
 
     <div class="callout info">
-      <span class="icon">📚</span>
+      <span class="icon"></span>
       <span>AHPRA requires OTs to complete <strong>30 hours</strong> of CPD per registration year. You can adjust targets and add entries any time in My Profile.</span>
     </div>
 
@@ -683,7 +683,7 @@
     <div class="review-list" id="review-list"></div>
 
     <div class="callout info" style="margin-bottom:20px;">
-      <span class="icon">💡</span>
+      <span class="icon"></span>
       <span>Skipped sections can be completed any time from <strong>My Profile</strong> in the app.</span>
     </div>
 
@@ -699,7 +699,7 @@
   <!-- ══ Done ══════════════════════════════════════════════════════════════ -->
   <div class="panel" id="panel-done">
     <div style="text-align:center;padding:16px 0 28px;">
-      <div style="font-size:52px;margin-bottom:16px;">🎉</div>
+      <div style="font-size:52px;margin-bottom:16px;"></div>
       <p class="section-title">You're all set!</p>
       <p class="section-sub" style="margin-bottom:0;">
         Your profile is ready. Taking you to the app now…
@@ -715,7 +715,7 @@
 const TOTAL_STEPS   = 9;
 const STEP_KEYS     = ['profile','professional','outlook','work-location','travel-bases','credentials','cpd','notifications','review'];
 const STEP_LABELS   = ['Your details','Professional details','Connect Outlook','Work location','Travel bases','Credentials & registration','CPD & PD goals','Notifications','Review & finish'];
-const STEP_ICONS    = ['👤','🩺','📅','📍','🏢','📋','📚','🔔','✅'];
+const STEP_ICONS    = ['','','','','','','','',''];
 const OPTIONAL_STEPS = [2,3,4,5,6,7]; // step numbers that can be skipped (1-indexed; 8 is notifs which always saves; 9 is review)
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -796,7 +796,7 @@ function populateStep1() {
   if (!USER) return;
   const role   = USER.role || 'therapist';
   const labels = { owner: 'Practice Owner', admin: 'Administrator', therapist: 'Therapist' };
-  const icons  = { owner: '👑', admin: '🛡️', therapist: '🩺' };
+  const icons  = { owner: '', admin: '', therapist: '' };
   document.getElementById('role-badge-wrap').innerHTML =
     `<div class="role-badge ${role}">${icons[role]} ${labels[role]}</div>`;
   document.getElementById('s1-email').value        = USER.email || '';
@@ -964,7 +964,7 @@ function renderBases() {
   el.innerHTML = travelBases.map((b, i) =>
     `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
        border:1px solid var(--border);border-radius:8px;font-size:13.5px;">
-       <span>🏢</span>
+       <span></span>
        <div style="flex:1"><strong>${escHtml(b.name)}</strong>
          ${b.name !== b.address ? `<br><span style="font-size:12px;color:var(--ink-soft)">${escHtml(b.address)}</span>` : ''}
        </div>

@@ -535,7 +535,7 @@ function populateRegisterPanel() {
   // Role badge
   const role  = inviteData.role || 'therapist';
   const label = ROLE_LABELS[role] || role;
-  const icons = { owner: '👑', admin: '🛡️', therapist: '🩺' };
+  const icons = { owner: '', admin: '', therapist: '' };
   document.getElementById('role-badge-wrap').innerHTML =
     `<div class="role-badge ${role}">${icons[role] || ''} ${label}</div>`;
 

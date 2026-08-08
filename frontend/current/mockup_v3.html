@@ -14,6 +14,46 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
 <link rel="stylesheet" href="/scheduler.css" />
 <script src="/scheduler.js" defer></script>
+<script>
+/* Opal line icons — one consistent stroke set replacing emoji throughout.
+   Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
+window.OP_ICONS = {
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  clock:    '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  alert:    '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  check:    '<polyline points="20 6 9 17 4 12"/>',
+  info:     '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  pin:      '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  car:      '<path d="M5 17H3v-6l2-5h12l2 5h2v6h-2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
+  book:     '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  coffee:   '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>',
+  mail:     '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+  chart:    '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  doc:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  card:     '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+  folder:   '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  search:   '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  gear:     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  bell:     '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  user:     '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  spark:    '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
+  ban:      '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
+  plus:     '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  trash:    '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  edit:     '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+  refresh:  '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+  lock:     '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  tree:     '<path d="M12 22v-7"/><path d="M12 15l-5-5h3L7 7h3L12 3l2 4h3l-3 3h3z"/>',
+  armchair: '<path d="M5 11a2 2 0 0 1 2 2v2h10v-2a2 2 0 1 1 4 0v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z"/><path d="M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5"/>',
+  forward:  '<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>',
+  help:     '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+};
+window.opIcon = function (name, size) {
+  var px = size || 14;
+  var body = window.OP_ICONS[name] || window.OP_ICONS.info;
+  return '<svg viewBox="0 0 24 24" width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;flex-shrink:0;">' + body + '</svg>';
+};
+</script>
 <style>
   :root {
     /* ── Design tokens (2026-08-08 playful-premium visual system) ──
@@ -148,6 +188,27 @@
   }
   button { font-family: inherit; cursor: pointer; }
   input, select, button, textarea { font-family: inherit; font-size: 13px; }
+  /* ── Dropdowns — one warm style everywhere (kills the OS silver chrome).
+     Element-level so every select inherits it; component classes with more
+     specific rules still win where they define their own properties. ── */
+  select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    background-color: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 28px 5px 10px;
+    color: var(--ink);
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235d564e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 11px;
+    transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  }
+  select:hover { border-color: var(--muted); }
+  select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  select:disabled { opacity: 0.5; cursor: not-allowed; }
+  select[multiple] { background-image: none; padding-right: 10px; }
 
   /* ─── Header ─── */
   header {
@@ -923,26 +984,58 @@
     background: linear-gradient(135deg, #2aa792 0%, #0f7c6c 58%, #cf7b57 108%);
     border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%;
     display: inline-block; position: relative; flex-shrink: 0;
-    animation: pebbleMorph 9s ease-in-out infinite;
+    animation: pebbleMorph 8s ease-in-out infinite, pebbleSway 13s ease-in-out infinite;
+    cursor: pointer;
   }
   .brand-pebble::after {
     content: ""; position: absolute; left: 30%; top: 26%;
     width: 34%; height: 30%;
     background: rgba(255, 255, 255, 0.55);
     border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%;
-    animation: pebbleDrift 9s ease-in-out infinite;
+    animation: pebbleDrift 8s ease-in-out infinite;
   }
-  /* Living-cell idle motion — slow, small, and killed by reduced-motion. */
+  /* Living-cell idle motion: the membrane morphs AND the whole cell gently
+     sways/breathes while the nucleus drifts. Slow, small, and collapsed
+     entirely by prefers-reduced-motion. */
   @keyframes pebbleMorph {
     0%, 100% { border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%; }
-    33%      { border-radius: 46% 54% 58% 42% / 56% 46% 54% 44%; }
-    66%      { border-radius: 54% 46% 44% 56% / 44% 54% 46% 56%; }
+    25%      { border-radius: 42% 58% 62% 38% / 58% 42% 58% 42%; }
+    50%      { border-radius: 52% 48% 40% 60% / 42% 58% 44% 58%; }
+    75%      { border-radius: 62% 38% 52% 48% / 52% 40% 60% 44%; }
+  }
+  @keyframes pebbleSway {
+    0%, 100% { transform: rotate(0deg)  scale(1); }
+    28%      { transform: rotate(-5deg) scale(1.05); }
+    58%      { transform: rotate(4deg)  scale(0.96); }
+    82%      { transform: rotate(-2deg) scale(1.02); }
   }
   @keyframes pebbleDrift {
     0%, 100% { left: 30%; top: 26%; border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%; }
-    33%      { left: 37%; top: 33%; border-radius: 45% 55% 48% 52% / 52% 45% 55% 48%; }
-    66%      { left: 25%; top: 30%; border-radius: 55% 45% 60% 40% / 48% 55% 45% 60%; }
+    25%      { left: 38%; top: 34%; border-radius: 45% 55% 48% 52% / 52% 45% 55% 48%; }
+    50%      { left: 27%; top: 36%; border-radius: 55% 45% 60% 40% / 48% 55% 45% 60%; }
+    75%      { left: 24%; top: 27%; border-radius: 48% 52% 42% 58% / 58% 48% 52% 42%; }
   }
+  /* ── Opa's greeting — a small speech bubble from the pebble ── */
+  .opa-greet-wrap { position: relative; display: inline-flex; align-items: center; }
+  .opa-greet {
+    position: absolute; top: calc(100% + 10px); left: -6px; z-index: 1400;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-md);
+    padding: 10px 14px; width: max-content; max-width: 260px;
+    opacity: 0; transform: translateY(-4px) scale(0.97);
+    pointer-events: none;
+    transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
+  }
+  .opa-greet::before {
+    content: ""; position: absolute; top: -6px; left: 16px;
+    width: 10px; height: 10px; background: var(--panel);
+    border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+    transform: rotate(45deg);
+  }
+  .opa-greet.show { opacity: 1; transform: none; pointer-events: auto; }
+  .opa-greet .og-hi { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .opa-greet .og-hi .og-name { color: var(--accent-deep); }
+  .opa-greet .og-sub { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; line-height: 1.45; }
   h1.brand-opa {
     font-size: 19px; font-weight: 700; letter-spacing: -0.02em;
     color: var(--ink); margin: 0;
@@ -1755,13 +1848,6 @@
   .settings-row .label .help { display: block; color: var(--muted); font-size: 11px; font-weight: 400; margin-top: 4px; }
   .settings-row .control input[type=text],
   .settings-row .control input[type=password],
-  .settings-row .control select {
-    width: 100%; padding: 8px 10px 8px 10px; padding-right: 28px;
-    border: 1px solid var(--border); border-radius: 8px;
-    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center / 14px 14px;
-    font-size: 13px; font-family: inherit; color: var(--ink); cursor: pointer;
-    -webkit-appearance: none; appearance: none;
-  }
   .toggle {
     display: inline-flex; align-items: center; gap: 8px;
     cursor: pointer; user-select: none;
@@ -2100,10 +2186,10 @@
 
   /* Show-weekends setting: hide Sat/Sun columns + headers in Week view */
   .cal-grid.hide-weekends.view-week { grid-template-columns: 50px repeat(5, 1fr); }
-  .cal-grid.hide-weekends .cal-head[data-day="sat"],
-  .cal-grid.hide-weekends .cal-head[data-day="sun"],
-  .cal-grid.hide-weekends #day-sat,
-  .cal-grid.hide-weekends #day-sun { display: none !important; }
+  .cal-grid.hide-weekends.view-week .cal-head[data-day="sat"],
+  .cal-grid.hide-weekends.view-week .cal-head[data-day="sun"],
+  .cal-grid.hide-weekends.view-week #day-sat,
+  .cal-grid.hide-weekends.view-week #day-sun { display: none !important; }
   /* Week-start ordering is driven by inline `order` set in applyWeekStart() */
 
   /* First-time empty state — shown when no sessions exist for the visible week.
@@ -2351,12 +2437,12 @@
     cursor: pointer;
     box-shadow: none;
     border-left: 3px solid var(--c-therapy);
-    outline: 1px solid rgba(15, 23, 42, 0.05);
+    outline: 1px solid rgba(15, 23, 42, 0.05); outline-offset: -1px;
     /* Back-to-back separation: every tile is drawn 4px shorter than its
        time slot, so a real gap of column background shows between an event
        that ends exactly when the next begins. Tops stay time-accurate. */
     overflow: hidden;
-    min-height: 9px;
+    min-height: 8px; /* 15-min slot (12px) minus the 4px gap */
     transition: box-shadow 0.15s ease;
     z-index: 2; /* sit above hour-line gridlines */
   }
@@ -2381,7 +2467,7 @@
   .session.s-med .s-sub { display: none; }
   /* Short events: time first, concise title if space allows, one line, no spill */
   .session.s-compact .s-sub { display: none; }
-  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; display: flex; align-items: center; gap: 5px; min-height: 14px; }
+  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; display: flex; align-items: center; gap: 5px; min-height: 8px; }
   .session.s-compact .s-time { display: block; order: -1; flex-shrink: 0; font-size: 10px; }
   .session.s-compact .s-title { flex: 1; min-width: 0; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
@@ -2418,8 +2504,8 @@
     text-decoration: none; letter-spacing: 0.3px;
   }
   /* Address status chips on appointment-type blocks. `.has-addr` gets a
-     subtle green 📍 dot; `.missing-addr` gets an amber warning stripe plus
-     a ⚠ glyph so the manager can spot incomplete bookings at a glance. */
+     subtle green  dot; `.missing-addr` gets an amber warning stripe plus
+     a  glyph so the manager can spot incomplete bookings at a glance. */
   /* Missing-address indicator: one minimal glyph in a reserved corner.
      Valid-address tiles carry no chip at all. Explanation + the Add/Fix
      address action live in the event detail panel. */
@@ -2679,7 +2765,7 @@
   .form-field textarea {
     padding: 8px 10px;
     border: 1px solid var(--border);
-    border-radius: 7px; background: white;
+    border-radius: 7px; background-color: white;
     font-size: 13px; font-family: inherit;
     color: var(--ink);
   }
@@ -2911,7 +2997,7 @@
   .dur-delta.warn { color: #9a5f0e; }
   /* Travel overlay on calendar columns */
   .travel-overlay {
-    position: absolute; left: 4px; right: 4px; z-index: 2;
+    position: absolute; left: 4px; right: 4px; z-index: 1;
     border-left: 3px solid #0f7c6c;
     background: repeating-linear-gradient(45deg, rgba(15,118,110,0.10), rgba(15,118,110,0.10) 5px, rgba(15,118,110,0.18) 5px, rgba(15,118,110,0.18) 10px);
     border-radius: 4px; padding: 2px 6px; font-size: 10px; color: #0f7c6c; font-weight: 600;
@@ -2945,10 +3031,9 @@
   .gap-overlay.smart {
     background: repeating-linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.16) 6px, rgba(16,185,129,0.28) 6px, rgba(16,185,129,0.28) 12px);
     border: 1.5px solid #2f7d4f; color: #064e3b;
-    box-shadow: 0 2px 8px rgba(16,185,129,0.18);
+    box-shadow: inset 0 0 0 1px rgba(47, 125, 79, 0.18);
   }
   .gap-overlay.smart:hover { box-shadow: 0 4px 14px rgba(16,185,129,0.30); }
-  .gap-overlay.smart .g-label::before { content: "✨ "; }
   /* Option scoring visuals inside the ranked-options panel */
   .gap-opt .g-score {
     font-size: 10px; color: var(--ink-soft); font-weight: 600;
@@ -3027,7 +3112,7 @@
   .wb-field .wb-hint { font-size: 11px; color: var(--ink-soft); }
   .wb-field select {
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
-    font: inherit; font-size: 12.5px; background: #fff;
+    font: inherit; font-size: 12.5px; background-color: #fff;
   }
   .wb-field .wb-remove {
     background: none; border: none; color: var(--ink-soft);
@@ -3209,7 +3294,7 @@
   }
   .wl-picker {
     font-size: 11px; padding: 5px 6px;
-    border: 1px solid var(--border); border-radius: 6px; background: white;
+    border: 1px solid var(--border); border-radius: 6px; background-color: white;
   }
   .wl-copy {
     font-size: 10px; color: var(--accent-deep);
@@ -3235,7 +3320,7 @@
   .form-grid-2 label { font-size: 11px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.4px; }
   .form-grid-2 input, .form-grid-2 select, .form-grid-2 textarea {
     padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px;
-    font-size: 13px; font-family: inherit; background: white;
+    font-size: 13px; font-family: inherit; background-color: white;
   }
   .form-grid-2 textarea { min-height: 70px; resize: vertical; }
   .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -3567,12 +3652,75 @@
   }
 
   /* Master Scheduler tiles/grid live in scheduler.css (Phase 1 extraction). */
+
+  /* ── Inline task/reminder composer (Today's work) ─────────────────
+     Adding a task = writing another line in a list, not filling a form. */
+  .sw-group-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--muted); margin: 6px 0 2px;
+  }
+  .sw-row {
+    display: flex; align-items: center; gap: 9px;
+    padding: 5px 4px; border-radius: var(--radius-sm);
+    transition: background var(--t-fast), opacity 300ms ease;
+  }
+  .sw-row:hover { background: var(--border-soft); }
+  .sw-row.saving { opacity: 0.6; }
+  .sw-circle {
+    border: none; background: none; padding: 0; margin: 0;
+    color: var(--muted); cursor: pointer; line-height: 0; flex-shrink: 0;
+    transition: color var(--t-fast), transform var(--t-fast);
+  }
+  .sw-circle:hover { color: var(--accent); transform: scale(1.08); }
+  .sw-circle.done { color: var(--accent); }
+  .sw-circle.ghost { color: var(--border); cursor: default; pointer-events: none; }
+  .sw-title { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sw-title.editable { cursor: text; }
+  .sw-row.done .sw-title { color: var(--muted); text-decoration: line-through; }
+  .sw-meta { font-size: 11.5px; color: var(--muted); }
+  .sw-meta.overdue { color: #9a5f0e; font-weight: 600; }
+  .sw-actions { display: inline-flex; gap: 4px; opacity: 0; transition: opacity var(--t-fast); }
+  .sw-row:hover .sw-actions, .sw-row:focus-within .sw-actions { opacity: 1; }
+  .sw-mini {
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: var(--radius-sm); padding: 1px 7px;
+    font-size: 11px; color: var(--ink-soft); cursor: pointer; font-family: inherit;
+    transition: background var(--t-fast);
+  }
+  .sw-mini:hover { background: var(--border-soft); }
+  .sw-mini:disabled { opacity: 0.35; cursor: default; }
+  .sw-mini.danger { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+  .sw-input {
+    flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+    font-family: inherit; font-size: 13px; color: var(--ink); padding: 2px 0;
+  }
+  .sw-input::placeholder { color: var(--muted); }
+  .sw-composer:focus-within { background: var(--border-soft); }
+  .sw-quick { display: inline-flex; gap: 4px; align-items: center; opacity: 0; transition: opacity var(--t-fast); }
+  .sw-composer:focus-within .sw-quick, .sw-quick:hover { opacity: 1; }
+  .sw-chip {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+    padding: 1px 9px; font-size: 11px; color: var(--ink-soft); cursor: pointer; font-family: inherit;
+  }
+  .sw-chip.on { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft); }
+  .sw-time { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 4px; font-size: 11px; font-family: inherit; color: var(--ink-soft); background: var(--panel); }
+  .sw-error { font-size: 11.5px; color: var(--danger); padding: 2px 4px 0 31px; }
+  .sw-completed { margin-top: 8px; }
+  .sw-completed summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .sw-done-anim .sw-title { text-decoration: line-through; color: var(--muted); transition: color 400ms ease; }
+  .sw-done-anim { opacity: 0.45; transition: opacity 420ms ease; }
 </style>
 </head>
 <body>
 
 <header data-help="app-header">
-  <div class="logo brand-pebble" aria-hidden="true"></div>
+  <span class="opa-greet-wrap">
+    <div class="logo brand-pebble" id="opa-pebble" role="button" tabindex="0" aria-label="Say hi to Opa" title="That's Opa — click to say hi"></div>
+    <div class="opa-greet" id="opa-greet" role="status">
+      <div class="og-hi">Hi — I'm <span class="og-name">Opa</span>!</div>
+      <div class="og-sub">Your practice sidekick. I keep an eye on the schedule today — one day I'll answer questions about everything in here.</div>
+    </div>
+  </span>
   <h1 class="brand-opa">Opa</h1>
   <div class="prac-badge" id="hdr-user-badge" title="Signed-in user">
     <div class="prac-avatar" id="prac-avatar">–</div>
@@ -3589,7 +3737,7 @@
 
   <div class="top-spacer"></div>
 
-  <button class="icon-btn" data-help="header-search" title="Global Search  (⌘K)" onclick="openGlobalSearch()" aria-label="Open global search">
+  <button class="icon-btn" data-help="header-search" title="Global Search  (K)" onclick="openGlobalSearch()" aria-label="Open global search">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
   </button>
   <button class="icon-btn" data-help="header-report" title="Daily &amp; Weekly Snapshot" onclick="openReportPanel('daily')" aria-label="Open snapshot report">
@@ -4052,7 +4200,7 @@
               </div>
             </div>
             <div class="search-row">
-              <span class="search-icon">⌕</span>
+              <span class="search-icon"></span>
               <input type="text" id="patient-search" placeholder="Search by name, suburb, NDIS #…" oninput="filterPatients()" />
             </div>
             <div class="patient-list" id="patient-list"></div>
@@ -4290,10 +4438,10 @@
         <div class="slots-toolbar" data-help="booking-slot-filters">
           <span class="filter-pill on">All filters on</span>
           <span class="filter-pill on">Cluster by region</span>
-          <span class="filter-pill on">⚖ Balance day intensity</span>
+          <span class="filter-pill on">Balance day intensity</span>
           <span class="filter-pill on">Plan capacity</span>
-          <span class="filter-pill">🌅 Morning preferred</span>
-          <span class="filter-pill">🌙 After 3pm</span>
+          <span class="filter-pill">Morning preferred</span>
+          <span class="filter-pill">After 3pm</span>
         </div>
 
         <!-- Suggestion cards rendered here by computeSlotSuggestions() / renderSlotSuggestions() -->
@@ -4496,7 +4644,7 @@
           <div id="case-noting-card" class="case-noting-banner" style="display: none;">
             <!-- Collapsed bar (always visible when open) -->
             <div class="case-noting-bar" onclick="toggleCaseNotingDetail()" role="button" aria-expanded="false" id="case-noting-bar">
-              <div class="cn-icon">📝</div>
+              <div class="cn-icon" data-icon="doc"></div>
               <span class="cn-title">Case noting check-in</span>
               <span class="cn-subtitle" id="case-noting-summary">You have 45 minutes of case noting needed this week</span>
               <div class="cn-spacer"></div>
@@ -4998,7 +5146,7 @@
       <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Live from Splose · <span id="billing-updated" data-splose-indicator="billing">loading…</span></p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <select id="billing-year" onchange="filterBilling()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:white;">
+      <select id="billing-year" onchange="filterBilling()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;">
         <option value="all">All time</option>
         <option value="2026">2026</option>
         <option value="2025">2025</option>
@@ -5336,7 +5484,8 @@
       <p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Provider travel with linked appointments and calculation details · <span data-splose-indicator="logbook" style="color:var(--accent)"></span></p>
     </div>
     <div style="display:flex;gap:8px;">
-      <select id="logbook-fy" onchange="loadLogbookData()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:white;">
+      <select id="logbook-fy" onchange="loadLogbookData()" style="font-size:12px;">
+        <option value="2027" selected>FY 2026–27</option>
         <option value="2026">FY 2025–26</option>
         <option value="2025">FY 2024–25</option>
         <option value="2024">FY 2023–24</option>
@@ -6185,7 +6334,7 @@
               <span>Adds a second verification step at login</span>
             </div>
             <div class="settings-row-control">
-              <span class="settings-coming-soon">🔒 Coming soon</span>
+              <span class="settings-coming-soon">Coming soon</span>
             </div>
           </div>
         </div>
@@ -6315,7 +6464,7 @@
 
         <!-- Pending approval banner (shows when accounts need attention) -->
         <div id="stg-pending-banner" style="display:none;background:#fcf6e8;border:1.5px solid #ecc668;border-radius:10px;padding:12px 16px;font-size:13px;color:#7a4e0b;margin-bottom:18px;">
-          <strong>⚠️ Accounts awaiting approval</strong> — scroll down to review and approve new team members.
+          <strong>Accounts awaiting approval</strong> — scroll down to review and approve new team members.
         </div>
 
         <!-- All users list -->
@@ -6347,9 +6496,9 @@
           <p style="margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);">Select a new role for <strong id="rcm-user-name"></strong>.</p>
           <input type="hidden" id="rcm-user-id" />
           <select id="rcm-role-select" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:20px;">
-            <option value="therapist">🩺 Therapist</option>
-            <option value="admin">🛡️ Admin</option>
-            <option value="owner">👑 Owner</option>
+            <option value="therapist">Therapist</option>
+            <option value="admin">Admin</option>
+            <option value="owner">Owner</option>
           </select>
           <div style="display:flex;gap:10px;">
             <button class="btn primary" onclick="submitRoleChange()" id="rcm-submit" style="font-size:13px;">Save role</button>
@@ -6401,10 +6550,10 @@
             <div>
               <label style="font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:4px;">Role <span style="color:var(--danger);">*</span></label>
               <select class="settings-select" id="invite-role" style="width:100%;box-sizing:border-box;">
-                <option value="therapist">🩺 Therapist</option>
+                <option value="therapist">Therapist</option>
                 <option value="read_only">Read-only</option>
-                <option value="admin">🛡️ Admin</option>
-                <option value="owner">👑 Owner</option>
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
               </select>
             </div>
             <div id="invite-treating-wrap">
@@ -7482,6 +7631,34 @@ window.APP_USER = null;
       if (av) av.textContent = ((u.displayName || u.name || '?').split(/\s+/).map(function(w){return w.replace(/[^\p{L}]/gu,'');}).filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('') || '?').toUpperCase();
       if (sub) sub.textContent = (u.roleTitle || ({owner:'Practice owner',admin:'Administrator',therapist:'Therapist',read_only:'Read-only'})[u.role] || u.role);
     })();
+    // ── Opa says hi — once per session on load, and on pebble click ──
+    (function opaGreeting() {
+      var pebble = document.getElementById('opa-pebble');
+      var bubble = document.getElementById('opa-greet');
+      if (!pebble || !bubble) return;
+      var hideTimer = null;
+      function show(autoHideMs) {
+        bubble.classList.add('show');
+        if (hideTimer) clearTimeout(hideTimer);
+        if (autoHideMs) hideTimer = setTimeout(function () { bubble.classList.remove('show'); }, autoHideMs);
+      }
+      function toggle() {
+        if (bubble.classList.contains('show')) { bubble.classList.remove('show'); if (hideTimer) clearTimeout(hideTimer); }
+        else show(7000);
+      }
+      pebble.addEventListener('click', toggle);
+      pebble.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+      document.addEventListener('click', function (e) {
+        if (!bubble.classList.contains('show')) return;
+        if (!e.target.closest('.opa-greet-wrap')) bubble.classList.remove('show');
+      });
+      try {
+        if (!sessionStorage.getItem('opa_greeted')) {
+          sessionStorage.setItem('opa_greeted', '1');
+          setTimeout(function () { show(6500); }, 1200);
+        }
+      } catch (e) { /* storage unavailable — skip the auto-greeting */ }
+    })();
     // Kick off honest freshness display + gentle polling
     if (typeof refreshFreshnessNow === 'function') setTimeout(function(){ refreshFreshnessNow(false); }, 2000);
 
@@ -8200,7 +8377,7 @@ async function acctRenderContacts() {
   var header = '<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">' +
     '<button class="btn" onclick="acctRefreshContactSuggestions(this)">Refresh suggestions</button>' +
     '<button class="btn ' + (gateOn ? '' : 'btn-locked') + '" ' + (gateOn ? '' : 'disabled') +
-    ' title="' + (gateOn ? 'Create a missing contact in Xero' : 'Disabled: requires ENABLE_XERO_WRITE and ENABLE_XERO_CONTACT_CREATE') + '">Create contact in Xero 🔒</button>' +
+    'title="'+ (gateOn ? 'Create a missing contact in Xero': 'Disabled: requires ENABLE_XERO_WRITE and ENABLE_XERO_CONTACT_CREATE') + '">Create contact in Xero </button>'+
     '<span style="font-size:11px;color:var(--muted);">' + (d.connected ? (d.xeroContactCount + ' Xero contacts synced') : 'Xero not connected') + '</span></div>';
   if (!rows.length) { el.innerHTML = header + '<div class="acct-note">No mappings yet. Sync Xero contacts, then refresh suggestions.</div>'; return; }
   el.innerHTML = header + '<table class="acct-table"><thead><tr><th>Splose client ID</th><th>Xero contact</th><th>Status</th><th>Confidence</th><th>Reason</th><th></th></tr></thead><tbody>' +
@@ -8335,7 +8512,7 @@ async function acctRenderCandidates() {
       } else if (c.status === 'approved_for_draft') {
         actions = '<button class="btn ' + (draftOn ? '' : 'btn-locked') + '" style="font-size:11px;" ' + (draftOn ? '' : 'disabled') +
           ' title="' + (draftOn ? 'Create a DRAFT invoice in Xero (never authorised or sent)' : 'Disabled: requires ENABLE_XERO_WRITE and ENABLE_XERO_DRAFT_INVOICE_CREATE') + '"' +
-          (draftOn ? ' onclick="acctCreateDraft(\'' + c.id + '\',this)"' : '') + '>Create draft in Xero 🔒</button>';
+          (draftOn ? 'onclick="acctCreateDraft(\''+ c.id + '\',this)"': '') + '>Create draft in Xero </button>';
       } else if (c.status === 'draft_created_in_xero') {
         actions = '<span class="acct-pill">in Xero</span>';
       }
@@ -8596,7 +8773,7 @@ function renderPatientsTable() {
   tb.innerHTML = sample.map(r => {
     const pct = Math.round((r.used / r.total) * 100);
     const fillClass = pct > 85 ? 'danger' : (pct > 70 ? 'warn' : '');
-    const warn = r.p.warn ? ' ⚠' : '';
+    const warn = r.p.warn ? ' !' : '';
     const regionLabel = r.p.region[0].toUpperCase() + r.p.region.slice(1);
     return `<tr>
       <td>
@@ -8867,7 +9044,7 @@ function renderPatients() {
     card.dataset.id        = p.id;
     card.dataset.patientId = p.id;
     card.dataset.search    = (p.first + ' ' + p.last + ' ' + p.suburb + ' ' + p.postcode + ' ' + p.id).toLowerCase();
-    const warn = p.warn ? ' ⚠' : '';
+    const warn = p.warn ? ' !' : '';
     card.innerHTML = `
       <div class="pat-avatar">${initials(p)}</div>
       <div class="pat-meta">
@@ -9270,13 +9447,13 @@ function reasonChipsFor(candidate, patient, type) {
   // Day intensity — truthful count
   const intensity = sameDay.length;
   if (intensity === 0) {
-    reasons.push({ tone:'good', text:`⚖ ${day.toUpperCase()} currently empty — light load` });
+    reasons.push({ tone:'good', text:`${day.toUpperCase()} currently empty — light load` });
   } else if (intensity <= 2) {
-    reasons.push({ tone:'good', text:`⚖ Light ${day.toUpperCase()} (${intensity} session${intensity===1?'':'s'})` });
+    reasons.push({ tone:'good', text:`Light ${day.toUpperCase()} (${intensity} session${intensity===1?'':'s'})` });
   } else if (intensity <= 4) {
-    reasons.push({ tone:'good', text:`⚖ ${day.toUpperCase()} balanced (${intensity} sessions)` });
+    reasons.push({ tone:'good', text:`${day.toUpperCase()} balanced (${intensity} sessions)` });
   } else {
-    reasons.push({ tone:'warn', text:`⚖ ${day.toUpperCase()} already heavy (${intensity} sessions) — adds load` });
+    reasons.push({ tone:'warn', text:`${day.toUpperCase()} already heavy (${intensity} sessions) — adds load` });
   }
 
   // Plan capacity — derived from real bookings for this patient
@@ -9552,7 +9729,7 @@ function renderRightContext() {
     const used = planUtilHoursForPatient(patient.id);
     ndisBody.innerHTML = `
       <div class="ndis-row"><span class="k">Plan management</span><span class="v">${patient.plan}</span></div>
-      ${fmtPlanEnd(patient.planEnds) ? `<div class="ndis-row"><span class="k">Plan ends</span><span class="v">${fmtPlanEnd(patient.planEnds)}${planEndsSoon(patient.planEnds) ? ' ⚠' : ''}</span></div>` : ''}
+      ${fmtPlanEnd(patient.planEnds) ? `<div class="ndis-row"><span class="k">Plan ends</span><span class="v">${fmtPlanEnd(patient.planEnds)}${planEndsSoon(patient.planEnds) ? ' !' : ''}</span></div>` : ''}
       <div class="ndis-row"><span class="k">Booked this week</span><span class="v">${used.toFixed(1)} hrs</span></div>
       <div class="micro" style="margin-top:8px;">${used === 0 ? 'No sessions for this client this week yet.' : 'Computed from the live calendar.'}</div>
     `;
@@ -11137,11 +11314,11 @@ function qaOnPatientChange() {
   const preview = document.getElementById('qa-default-preview');
   if (qaTypeNeedsPatient(t)) {
     lbl.textContent = "Use patient's home address";
-    preview.textContent = p ? `📍 ${p.address}` : '— Pick a patient first —';
+    preview.textContent = p ? `${p.address}` : '— Pick a patient first —';
   } else {
     lbl.textContent = 'Use my home base';
     const home = WORK_BASES.office; // home-1 has no address; office is the canonical home base
-    preview.textContent = home && home.addr ? `📍 ${home.addr}` : '— Set a home base in Profile →';
+    preview.textContent = home && home.addr ? `${home.addr}` : '— Set a home base in Profile →';
   }
 
   // Pre-fill recurring "until" with NDIS plan-end if a patient is picked
@@ -11376,7 +11553,7 @@ function renderCalendarWithEvents() {
         position: absolute;
         left: 4px; right: 4px;
         top: ${yPos}px;
-        height: ${(evt.duration / 60) * HOUR_PX}px;
+        height: ${(evt.duration / 60) * HOUR_PX - 4}px;
         background: linear-gradient(135deg, #e0a83a, #cf8b1f);
         border: 2px solid #b06e12;
         border-radius: 6px;
@@ -11559,7 +11736,7 @@ function createDragBlock(col, startMinutes, durationMinutes) {
   if (existing) existing.remove();
 
   const yPos = calMinutesToY(startMinutes);
-  const height = (durationMinutes / 60) * HOUR_PX;
+  const height = (durationMinutes / 60) * HOUR_PX - 4;
 
   const block = document.createElement('div');
   block.className = 'drag-block';
@@ -11620,7 +11797,7 @@ function handleDragMove(event) {
     dragState.currentMinutes = selEnd - selStart;
 
     dragState.block.style.top    = `${calMinutesToY(selStart)}px`;
-    dragState.block.style.height = `${((selEnd - selStart) / 60) * HOUR_PX}px`;
+    dragState.block.style.height = `${((selEnd - selStart) / 60) * HOUR_PX - 4}px`;
     dragState.block.style.boxShadow = '0 4px 12px rgba(122, 155, 142, 0.2)';
 
     const startTime = minutesToTime(selStart);
@@ -11784,7 +11961,7 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
     let mins = e - s;
     if (mins <= 0) mins += 1440; // handle midnight wrap
     const h = Math.floor(mins / 60), m = mins % 60;
-    durRow.textContent = `⏱ ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm' : ''}`.trim() + ` (${mins} min)`;
+    durRow.textContent = `${h >0 ? h + 'h ': ''}${m >0 ? m + 'm': ''}`.trim() + ` (${mins} min)`;
     // Clash check against existing sessions
     const conflicts = Object.values(SESSIONS).filter(sess => {
       if (sess.day !== day) return false;
@@ -11794,7 +11971,7 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
     });
     if (conflicts.length) {
       clashWarn.style.display = 'block';
-      clashWarn.textContent = `⚠ Overlaps with: ${conflicts.map(c => c.title || c.type).join(', ')}`;
+      clashWarn.textContent = `Overlaps with: ${conflicts.map(c => c.title || c.type).join(', ')}`;
     } else {
       clashWarn.style.display = 'none';
     }
@@ -11938,7 +12115,7 @@ function cnBuildVenueOptions(slot) {
       suburb: fromSuburb,
       meta: `${travelMin} min drive to ${toSuburb || 'next session'}`,
       why: 'Dictate notes hands-free during the drive — ideal for brief session summaries.',
-      icon: '🚗',
+      icon: opIcon('car'),
       score: 65,
       freeMin: travelMin,
     });
@@ -11954,7 +12131,7 @@ function cnBuildVenueOptions(slot) {
       suburb: fromSuburb,
       meta: `${stayFree} min here · then ${directMin} min drive`,
       why: 'Write up notes in the car or at the last location — no detour needed.',
-      icon: '🪑',
+      icon: opIcon('armchair'),
       score: sc.score,
       freeMin: stayFree,
     });
@@ -11969,7 +12146,7 @@ function cnBuildVenueOptions(slot) {
       suburb: toSuburb,
       meta: `Drive now · ${stayFree} min to note near next session`,
       why: 'Complete notes parked near the next clinic — eliminates arrival stress.',
-      icon: '⏩',
+      icon: opIcon('forward'),
       score: sc.score,
       freeMin: stayFree,
     });
@@ -11996,7 +12173,7 @@ function cnBuildVenueOptions(slot) {
         suburb: p.suburb,
         meta: `${p.suburb} · ${legTo}+${legBack} min travel · ${freeAt} min free`,
         why: p.why,
-        icon: ({ cafe: '☕', park: '🌳', library: '📚' })[p.type] || '📍',
+        icon: ({ cafe: opIcon('coffee'), park: opIcon('tree'), library: opIcon('book') })[p.type] || opIcon('pin'),
         score: sc.score,
         freeMin: freeAt,
         rating: p.rating,
@@ -12205,7 +12382,7 @@ function showCaseNotingPrompt() {
   dayList.innerHTML = Object.entries(weekData)
     .filter(([, d]) => d.minsNeeded > 0)
     .map(([day, d]) => {
-      const icon = d.isFullyCovered ? '✓' : d.idleSlots.length ? '○' : '⚠';
+      const icon = d.isFullyCovered ? '✓': d.idleSlots.length ? '○': '';
       const color = d.isFullyCovered ? 'var(--ok)' : d.idleSlots.length ? 'var(--accent)' : 'var(--warn)';
       return `<div class="cn-day-row">
         <span class="cn-day-label">${DAY_FULL[day]?.slice(0,3) || day}</span>
@@ -12262,7 +12439,7 @@ function showCaseNotingScheduler() {
     const best = d.idleSlots[0];
     const qColour = { ideal: '#3d6cae', ok: '#3d6cae', poor: '#b06e12' };
     const qBg     = { ideal: '#e8eff9', ok: '#e8eff9', poor: '#faf0da' };
-    const qIcon   = { ideal: '✦', ok: '○', poor: '⚠' };
+    const qIcon   = { ideal: '✦', ok: '○', poor: '!' };
 
     if (best) {
       const timeLabel = `${fmtTime(best.startH, best.startM)} – ${fmtTime(best.endH, best.endM)}`;
@@ -12305,7 +12482,7 @@ function showCaseNotingScheduler() {
         <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fcf6e8;border-radius:8px;margin-bottom:8px;border:1px solid #f3d9b8;">
           <span style="font-size:13px;font-weight:700;width:36px;flex-shrink:0;padding-top:2px;">${DAY_FULL[day]?.slice(0,3)}</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;color:#7a4e0b;font-weight:600;">⚠ No idle gap — schedule is full</div>
+            <div style="font-size:12px;color:#7a4e0b;font-weight:600;">No idle gap — schedule is full</div>
             <div style="font-size:11px;color:#9a5f0e;margin-top:2px;">${d.minsNeeded} min needed · ${d.clientSessions.map(s=>s.patient||'Client').join(', ')}</div>
             <div style="font-size:11px;color:#9a5f0e;margin-top:2px;">Consider scheduling after 6 pm or splitting across sessions</div>
           </div>
@@ -13291,7 +13468,7 @@ function addSession(col, opts) {
                 ' · click for details · drag to move · drag edges to resize';
   if (el.dataset.type === 'outlook') baseTip += '\n⇄ External calendar event (Outlook only)';
   if (addrClass === ' missing-addr') {
-    baseTip += '\n⚠ Please enter a full address for this appointment so travel time can be calculated.';
+    baseTip += '\n Please enter a full address for this appointment so travel time can be calculated.';
   }
   el.title = baseTip;
   el.dataset.id = id;
@@ -13916,12 +14093,12 @@ function showCalContextMenu(x, y, id) {
   menu.id         = 'cal-ctx-menu-active';
   menu.innerHTML  = `
     <div class="cal-ctx-menu-item" onclick="closeCalContextMenu(); openBlockDetail('${id}')">
-      <span class="ctx-icon">✏️</span> Open details
+      <span class="ctx-icon">${opIcon('edit', 13)}</span> Open details
     </div>
     <div class="cal-ctx-menu-sep"></div>
     <div class="cal-ctx-menu-item" style="color:var(--danger,#c2412e);"
          onclick="ctxDeleteEvent('${id}')">
-      <span class="ctx-icon">🗑</span> Delete event
+      <span class="ctx-icon">${opIcon('trash', 13)}</span> Delete event
     </div>
   `;
   document.body.appendChild(menu);
@@ -14077,7 +14254,7 @@ function openBlockDetail(id) {
   if (s.dbId) {
     parts.push(`<button class="btn"
       style="color:var(--danger,#c2412e);border-color:var(--danger,#c2412e);background:transparent;"
-      onclick="bdDeleteEvent('${id}')">🗑 Remove</button>`);
+      onclick="bdDeleteEvent('${id}')">' + opIcon('trash') + ' Remove</button>`);
   }
 
   if (s.cancelled) {
@@ -14357,7 +14534,7 @@ function bdSaveAddress(id) {
   // Disable the save button and show confirmation
   const btn = document.getElementById('bd-addr-save');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
-  if (status) status.textContent = fromPlaces ? '📍 Saved from Maps' : '✓ Saved';
+  if (status) status.textContent = fromPlaces ? 'Saved from Maps': '✓ Saved';
 
   // ── Refresh the confirmed-address card in the detail panel ──────────────
   // If the panel is showing the "confirmed" green card, update its text live.
@@ -14370,7 +14547,7 @@ function bdSaveAddress(id) {
     if (existingCard) {
       // Update the address text in the existing card in place
       const addrLine = existingCard.closest('[style*="background:#e5f2e8"]')?.querySelector('div[style*="font-weight:500"]');
-      if (addrLine) addrLine.textContent = '📍 ' + newAddr;
+      if (addrLine) addrLine.textContent = ''+ newAddr;
       const mapsLink = existingCard;
       mapsLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(newAddr)}`;
       // Collapse the edit section after save
@@ -14385,7 +14562,7 @@ function bdSaveAddress(id) {
   if (s.dbId) {
     (async () => {
       try {
-        if (status) status.textContent = '⏳ Syncing to Outlook…';
+        if (status) status.textContent = 'Syncing to Outlook…';
         const r = await fetch(`/api/outlook/events/${s.dbId}/location`, {
           method:  'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -14394,20 +14571,20 @@ function bdSaveAddress(id) {
         const json = await r.json().catch(() => ({}));
         if (r.ok) {
           if (status) status.textContent = json.savedToOutlook
-            ? '📍 Saved & synced to Outlook'
-            : '📍 Saved (no Outlook event yet)';
+            ? 'Saved & synced to Outlook'
+            : 'Saved (no Outlook event yet)';
         } else {
           console.warn('Outlook location sync failed:', json.error);
-          if (status) status.textContent = storageKey ? '📍 Saved locally (Outlook sync failed)' : '⚠ Outlook sync failed';
+          if (status) status.textContent = storageKey ? 'Saved locally (Outlook sync failed)': 'Outlook sync failed';
         }
       } catch (err) {
         console.warn('Outlook location sync error:', err);
-        if (status) status.textContent = '⚠ Saved locally (offline?)';
+        if (status) status.textContent = 'Saved locally (offline?)';
       }
     })();
   } else if (storageKey && status) {
     // Splose-only session — already saved to localStorage above
-    status.textContent = fromPlaces ? '📍 Saved from Maps' : '✓ Saved (will persist on reload)';
+    status.textContent = fromPlaces ? 'Saved from Maps': '✓ Saved (will persist on reload)';
   }
 
   // Trigger travel recalculation, then push updated travel blocks to Outlook
@@ -15141,7 +15318,7 @@ function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   v.className = 'impact-verdict ' + impact.verdict;
   const verdictText = {
     ok:      { icon: '✓', msg: 'Looks good — no blockers. Review the notes below, then confirm.' },
-    warn:    { icon: '⚠', msg: 'This move is possible but raises a few concerns. Review before confirming.' },
+    warn:    { icon: '', msg: 'This move is possible but raises a few concerns. Review before confirming.'},
     blocker: { icon: '✕', msg: "This move can't be done as-is — see blockers below. Adjust and try again." }
   }[impact.verdict];
   // Replace icons with simple text versions
@@ -15151,7 +15328,7 @@ function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   // list
   const list = document.getElementById('im-list');
   const cls = { blocker:'i-blocker', warn:'i-warn', info:'i-info', ok:'i-ok' };
-  const ico = { blocker:'✕', warn:'!', info:'ℹ', ok:'✓' };
+  const ico = { blocker:'✕', warn:'!', info:'', ok:'✓'};
   list.innerHTML = impact.impacts.length
     ? impact.impacts.map(i => `<li class="${cls[i.sev]||'i-info'}">
         <span class="ico">${ico[i.sev]||'•'}</span>
@@ -15904,7 +16081,11 @@ function renderSegmentOverlay(col, seg) {
   const el = document.createElement('div');
   el.className = 'travel-overlay ' + seg.kind;
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
-  el.style.height = Math.max(12, (seg.endMin - seg.startMin) / 60 * HOUR_PX - 4) + 'px';
+  // Floor for readability, but NEVER cross the slot boundary — a sub-15-min
+  // leg renders as a thin strip inside its own gap instead of overrunning
+  // the neighbouring session tile.
+  const segSlotPx = (seg.endMin - seg.startMin) / 60 * HOUR_PX;
+  el.style.height = Math.min(Math.max(12, segSlotPx - 4), Math.max(4, segSlotPx - 2)) + 'px';
   const tight = seg.kind === 'between' && (seg.endMin - seg.startMin) < seg.travelMin + 5;
   if (tight) el.style.borderLeftColor = '#9c3322';
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel';
@@ -15933,7 +16114,8 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   const el = document.createElement('div');
   el.className = 'travel-overlay';
   el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
-  el.style.height = Math.max(12, gapMin / 60 * HOUR_PX - 4) + 'px';
+  const legacySlotPx = gapMin / 60 * HOUR_PX;
+  el.style.height = Math.min(Math.max(12, legacySlotPx - 4), Math.max(4, legacySlotPx - 2)) + 'px';
   const tight = gapMin < travel + 5;
   el.style.borderLeftColor = tight ? '#9c3322' : '#0f7c6c';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
@@ -15952,13 +16134,14 @@ function renderGapOverlay(col, day, curr, next, from, to, gapStart, gapEnd, gapM
   const el = document.createElement('div');
   el.className = 'gap-overlay';
   el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
-  el.style.height = Math.max(22, gapMin / 60 * HOUR_PX - 4) + 'px';
+  const gapSlotPx = gapMin / 60 * HOUR_PX;
+  el.style.height = Math.min(Math.max(22, gapSlotPx - 4), Math.max(4, gapSlotPx - 2)) + 'px';
   const free = gapMin - travel;
   // "Meaningful" free window = ≥ 40 min AND actionable (enough time to cafe/park/home).
   // These get the distinctive .smart highlight and a clearer label.
   const isMeaningful = free >= 40 && gapMin >= 55;
   if (isMeaningful) el.classList.add('smart');
-  el.innerHTML = `<span class="g-ico">${isMeaningful ? '💡' : '⏳'}</span>
+  el.innerHTML = `<span class="g-ico">${isMeaningful ? opIcon('spark', 12) : opIcon('clock', 12)}</span>
     <span class="g-label">${isMeaningful ? 'Free window' : 'Idle gap'} · ${gapMin} min (${free} free after travel)</span>
     <span class="g-time">${fmtMin(gapStart)}–${fmtMin(gapEnd)}</span>`;
   el.title = isMeaningful
@@ -16193,7 +16376,7 @@ function openGapOptions(day, currId, nextId) {
       rating: p.rating, reviews: p.reviews,
       why: p.why,
       mapsUrl: mapsSearchLink(`${p.name} ${p.suburb} WA`),
-      icon: ({ cafe: '☕', park: '🌳', library: '📚' })[p.type] || '📍',
+      icon: ({ cafe: opIcon('coffee'), park: opIcon('tree'), library: opIcon('book') })[p.type] || opIcon('pin'),
       score: sc.score,
       components: sc.components,
       insufficient: freeAt < 10
@@ -16209,7 +16392,7 @@ function openGapOptions(day, currId, nextId) {
     meta: `No extra travel · ${stayFree} min here · then ${directMin} min to ${to.suburb}`,
     why: 'Catch up on notes in the car / at the last location. Safest against traffic, no wasted movement.',
     mapsUrl: mapsLink(from.suburb + ' WA', to.suburb + ' WA'),
-    icon: '🪑',
+    icon: opIcon('armchair'),
     score: stSc.score, components: stSc.components
   });
 
@@ -16220,7 +16403,7 @@ function openGapOptions(day, currId, nextId) {
     meta: `Drive now, wait ~${stayFree} min near next session`,
     why: 'Drop off paperwork early, find parking, then wait — best when traffic is uncertain.',
     mapsUrl: mapsLink(from.suburb + ' WA', to.suburb + ' WA'),
-    icon: '⏩',
+    icon: opIcon('forward'),
     score: earSc.score, components: earSc.components
   });
 
@@ -16234,7 +16417,7 @@ function openGapOptions(day, currId, nextId) {
   });
 
   // ---- Render ----
-  const head = `<h3>${gapMin >= 55 && (gapMin - directMin) >= 40 ? '✨ Free window' : 'Idle gap'} · ${fmtMin(gapStart)}–${fmtMin(gapEnd)} (${gapMin} min)</h3>
+  const head = `<h3>${gapMin >= 55 && (gapMin - directMin) >= 40 ? 'Free window': 'Idle gap'} · ${fmtMin(gapStart)}–${fmtMin(gapEnd)} (${gapMin} min)</h3>
     <div class="sub">
       Between <strong>${curr.patient || TYPE_LABEL[curr.type]}</strong> in ${from.suburb}
       and <strong>${next.patient || TYPE_LABEL[next.type]}</strong> in ${to.suburb}.
@@ -16261,7 +16444,7 @@ function openGapOptions(day, currId, nextId) {
         <div class="g-why">${o.why}</div>
       </div>
       <div class="g-cta">
-        <a href="${o.mapsUrl}" target="_blank" rel="noopener">📍 Open in Maps</a>
+        <a href="${o.mapsUrl}" target="_blank" rel="noopener">Open in Maps</a>
         ${o.backUrl ? `<a href="${o.backUrl}" target="_blank" rel="noopener">↩︎ Return leg</a>` : ''}
         ${o.insufficient ? `<span class="pill-chip">Too tight</span>` : ''}
       </div>
@@ -16884,7 +17067,7 @@ async function resyncAllEvents() {
   }
   console.log('🗑️ Starting complete re-sync (clear + fetch)...');
 
-  const confirmed = confirm('🗑️ This will clear all events and re-sync from your Outlook calendar (last 2 years). Continue?');
+  const confirmed = confirm('This will clear all events and re-sync from your Outlook calendar (last 2 years). Continue?');
   if (!confirmed) {
     console.log('User cancelled re-sync');
     return;
@@ -16897,7 +17080,7 @@ async function resyncAllEvents() {
     console.log('Button found:', !!btn);
     if (btn) {
       btn.disabled = true;
-      btn.textContent = '🗑️ Clearing old events...';
+      btn.textContent = 'Clearing old events...';
     }
 
     // Step 1: Clear all events
@@ -16915,7 +17098,7 @@ async function resyncAllEvents() {
     console.log(`✅ Cleared ${clearData.deletedCount} events from database`);
 
     // Step 2: Fetch fresh from Outlook
-    if (btn) btn.textContent = '📡 Syncing from Outlook...';
+    if (btn) btn.textContent = 'Syncing from Outlook...';
     console.log('📡 Fetching fresh events from Outlook API...');
     const syncResponse = await fetch('/api/sync/outlook-initial', {
       method: 'POST',
@@ -16931,7 +17114,7 @@ async function resyncAllEvents() {
 
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 Clear & Re-sync All (2 Years)';
+      btn.textContent = 'Clear & Re-sync All (2 Years)';
     }
 
     alert(`Complete re-sync done.\n\nCleared: ${clearData.deletedCount} old events\nSynced: ${syncData.upserted ?? syncData.eventsSynced ?? '?'} fresh events from Outlook\n\nRefreshing calendar...`);
@@ -16941,13 +17124,13 @@ async function resyncAllEvents() {
 
   } catch (error) {
     console.error('❌ Re-sync error:', error);
-    alert(`❌ Failed to re-sync:\n\n${error.message}\n\nPlease try again.`);
+    alert(`Failed to re-sync:\n\n${error.message}\n\nPlease try again.`);
 
     // Reset button
     const btn = document.querySelector('button[onclick="resyncAllEvents()"]');
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '🔄 Clear & Re-sync All (2 Years)';
+      btn.textContent = 'Clear & Re-sync All (2 Years)';
     }
   } finally {
     window.__syncInFlight = false;
@@ -16968,7 +17151,7 @@ async function fixCalendar() {
 
   window.__syncInFlight = true;
   const btn = document.querySelector('button[onclick="fixCalendar()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Fixing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Fixing...'; }
 
   try {
     const res = await fetch('/api/sync/cleanup', {
@@ -16983,7 +17166,7 @@ async function fixCalendar() {
     await loadOutlookEventsToCalendar();
   } catch (err) {
     console.error('❌ fixCalendar error:', err);
-    alert(`❌ Fix failed:\n\n${err.message}`);
+    alert(`Fix failed:\n\n${err.message}`);
   } finally {
     window.__syncInFlight = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Fix calendar (remove stale events)'; }
@@ -17056,9 +17239,9 @@ window.debugLocationReport = async function() {
 
   // Summary
   const total     = rows.length;
-  const hasAddr   = rows.filter(r => r['Has address?'].startsWith('✅')).length;
-  const partial   = rows.filter(r => r['Has address?'].startsWith('⚠️')).length;
-  const missing   = rows.filter(r => r['Has address?'].startsWith('❌')).length;
+  const hasAddr   = rows.filter(r => r['Has address?'].startsWith('')).length;
+  const partial   = rows.filter(r => r['Has address?'].startsWith('')).length;
+  const missing   = rows.filter(r => r['Has address?'].startsWith('')).length;
   console.log(`\nSummary: ${total} events | ✅ ${hasAddr} routable | ⚠️ ${partial} partial | ❌ ${missing} missing`);
 
   if (missing > 0 || partial > 0) {
@@ -18420,7 +18603,7 @@ async function enrichOutlookTilesWithSploseAddresses() {
             chip.className = 'addr-chip';
             s.element.appendChild(chip);
           }
-          chip.textContent = addrOk ? '📍' : '⚠';
+          chip.innerHTML = addrOk ? opIcon('pin', 11) : opIcon('alert', 11);
           chip.title = addrOk
             ? `${addr} (from Splose)`
             : `Address from Splose may be incomplete: "${addr}"`;
@@ -19009,7 +19192,7 @@ function openNDISDetail(idx) {
   }
 
   if (p.alert) {
-    html = `<div style="background:#fdf1ee;border:1px solid #f6d4c9;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#9c3322;">⚠ ${p.alert}</div>` + html;
+    html = `<div style="background:#fdf1ee;border:1px solid #f6d4c9;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#9c3322;">${p.alert}</div>` + html;
   }
 
   html += `<div style="margin-top:8px;"><button class="btn primary" style="width:100%" onclick="closeNDISDetail(); quickBook('${p.id}')">Book appointment →</button></div>`;
@@ -19128,7 +19311,7 @@ async function openClientProfile(patientId) {
     if (patient) {
       const age = patient.birthdate ? Math.floor((new Date()-new Date(patient.birthdate))/(365.25*24*3600*1000)) : null;
       html += sectionHead('Demographics');
-      if (patient.alert) html += `<div style="margin:8px 16px;padding:8px 12px;background:#fdf1ee;border:1px solid #f6d4c9;border-radius:6px;font-size:12px;color:#9c3322;">⚠ ${patient.alert}</div>`;
+      if (patient.alert) html += `<div style="margin:8px 16px;padding:8px 12px;background:#fdf1ee;border:1px solid #f6d4c9;border-radius:6px;font-size:12px;color:#9c3322;">${patient.alert}</div>`;
       if (patient.preferredName) html += row('Preferred name', patient.preferredName);
       if (patient.pronouns) html += row('Pronouns', patient.pronouns);
       html += row('Date of birth', fmtDate(patient.birthdate) + (age ? ` (${age} y/o)` : ''));
@@ -19198,7 +19381,7 @@ async function openClientProfile(patientId) {
         </div>
       </div>`;
       if (stats.rate >= 30) {
-        html += `<div style="margin:4px 16px 8px;padding:7px 10px;background:#fdf1ee;border-radius:6px;font-size:11.5px;color:#9c3322;">⚠ High cancellation rate — may affect NDIS funding eligibility</div>`;
+        html += `<div style="margin:4px 16px 8px;padding:7px 10px;background:#fdf1ee;border-radius:6px;font-size:11.5px;color:#9c3322;">High cancellation rate — may affect NDIS funding eligibility</div>`;
       }
       patAppts.slice(0, 8).forEach(a => {
         const status = a.patients?.[0]?.status || 'Confirmed';
@@ -19252,7 +19435,7 @@ async function openClientProfile(patientId) {
 async function loadLogbookData() {
   const module = 'logbook';
   const wrap = document.getElementById('logbook-table-wrap');
-  const fy   = document.getElementById('logbook-fy')?.value || '2026';
+  const fy   = document.getElementById('logbook-fy')?.value || '2027';
 
   // ── stale-while-revalidate (v2 cache: structured entries, not HTML) ──
   const cached = SploseSync.getCached(module);
@@ -19296,7 +19479,7 @@ async function loadLogbookData() {
   } catch (err) {
     console.warn('[SploseSync] logbook fetch failed:', err);
     const prior = SploseSync.getCached(module);
-    if (!(prior && prior._v === 2)) {
+    if (!(prior && prior._v === 2 && prior._fy === fy)) {
       if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:var(--danger);">Could not load travel data. Try Refresh.</div>';
     }
   } finally {
@@ -19559,28 +19742,28 @@ async function loadActivityFeed() {
         type: 'appointment', date: a.start,
         title: patMap[a.patients?.[0]?.patientId] || 'Appointment',
         sub: `Appointment · ${a.patients?.[0]?.status || 'Confirmed'}`,
-        icon: '📅', iconCls: 'fi-appt',
+        icon: opIcon('calendar'), iconCls: 'fi-appt',
         id: a.id, patientId: a.patients?.[0]?.patientId,
       })),
       ...suppActs.map(s => ({
         type: 'support', date: s.start,
         title: patMap[s.patientId] || 'Support activity',
         sub: `Support activity · ${s.itemCode || ''}`,
-        icon: '📋', iconCls: 'fi-support',
+        icon: opIcon('folder'), iconCls: 'fi-support',
         id: s.id, patientId: s.patientId,
       })),
       ...invoices.map(i => ({
         type: 'invoice', date: i.issueDate,
         title: `Invoice ${i.invoiceNumber}`,
         sub: `${patMap[i.patientId] || '—'} · ${i.status}`,
-        icon: '🧾', iconCls: 'fi-invoice',
+        icon: opIcon('doc'), iconCls: 'fi-invoice',
         amount: i.total, id: i.id, patientId: i.patientId,
       })),
       ...payments.map(p => ({
         type: 'payment', date: p.paymentDate,
         title: `Payment ${p.paymentNumber}`,
         sub: patMap[p.patientId] || '—',
-        icon: '💳', iconCls: 'fi-payment',
+        icon: opIcon('card'), iconCls: 'fi-payment',
         amount: p.amount, id: p.id, patientId: p.patientId,
       })),
     ].filter(i => i.date).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -20694,7 +20877,7 @@ async function runDormantCheckNow() {
     console.warn('[SploseSync] dormant fetch failed:', err);
     if (!cached) {
       body.innerHTML = `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--warn);">
-        ⚠ Could not load dormant cases: ${err.message}
+         Could not load dormant cases: ${err.message}
       </td></tr>`;
       stat.textContent = 'Check failed — is the server running?';
     } else {
@@ -20717,7 +20900,7 @@ function _renderDormantData({ data: dormant, thresholdDays, checkedAt }, body, s
 
   if (!dormant.length) {
     body.innerHTML = `<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--muted);">
-      ✅ All active clients have had a session within the last ${thresholdDays} days.
+       All active clients have had a session within the last ${thresholdDays} days.
     </td></tr>`;
     return;
   }
@@ -21636,7 +21819,8 @@ function renderCalendarPreviewBlocks(slots) {
     el.className = 'cal-preview-block' + (idx === 0 ? ' preview-selected' : '');
     el.dataset.slotIdx = idx;
     el.style.top    = tToY(slot.startH, slot.startM || 0) + 'px';
-    el.style.height = Math.max(18, (slot.durationMin / 60 * HOUR_PX) - 3) + 'px';
+    const prevSlotPx = slot.durationMin / 60 * HOUR_PX;
+    el.style.height = Math.min(Math.max(18, prevSlotPx - 4), Math.max(4, prevSlotPx - 2)) + 'px';
     el.innerHTML = `<span class="preview-label">${idx===0?'★ ':''} ${fmtT(slot.startH, slot.startM||0)}–${fmtT(endH,endM)}</span>`;
     el.title = `${idx===0?'Best fit: ':'Alt: '}${slot.dayLabel} ${fmtT(slot.startH, slot.startM||0)} – ${fmtT(endH, endM)} (score ${slot.score})`;
 
@@ -22481,7 +22665,7 @@ function clientSideSearch(q, role) {
       var name = ((p.firstName || '') + ' ' + (p.lastName || '')).toLowerCase();
       var ndis = (p.ndisNumber || '').toLowerCase();
       if (name.includes(ql) || ndis.includes(ql)) {
-        results.push({ group: 'Clients', icon: '👤',
+        results.push({ group: 'Clients', icon: opIcon('user'),
           title: (p.firstName || '') + ' ' + (p.lastName || ''),
           sub: p.ndisNumber ? 'NDIS: ' + p.ndisNumber : 'Client',
           tag: 'Client',
@@ -22508,7 +22692,7 @@ function clientSideSearch(q, role) {
   settingsSections.forEach(function(s) {
     if (s.label.toLowerCase().includes(ql) || s.desc.toLowerCase().includes(ql)) {
       (function(sec) {
-        results.push({ group: 'Settings', icon: '⚙️', title: s.label, sub: s.desc, tag: 'Settings',
+        results.push({ group: 'Settings', icon: opIcon('gear'), title: s.label, sub: s.desc, tag: 'Settings',
           action: function() { closeGlobalSearch(); switchTab('settings'); setTimeout(function() { showSettingsSection(sec); }, 100); }
         });
       })(s.section);
@@ -22517,16 +22701,16 @@ function clientSideSearch(q, role) {
 
   // Navigation
   var navItems = [
-    { label: 'My Profile', tab: 'profile', icon: '👤', desc: 'Leave, CPD, credentials' },
-    { label: 'Smart Booking', tab: 'book', icon: '📅', desc: 'Create a new appointment' },
-    { label: 'Calendar', tab: 'calendar', icon: '🗓️', desc: 'View your schedule' },
-    { label: 'Contacts', tab: 'contacts', icon: '📋', desc: 'Clients and referrers' },
-    { label: 'Activity', tab: 'activity', icon: '📊', desc: 'Session activity log' },
-    { label: 'Billing', tab: 'billing', icon: '💳', desc: 'Invoices and payments', roles: ['owner','admin'] },
-    { label: 'NDIS Cases', tab: 'ndis', icon: '📁', desc: 'NDIS case management' },
-    { label: 'Dormant Cases', tab: 'dormant', icon: '⚠️', desc: 'Inactive clients' },
-    { label: 'Travel Logbook', tab: 'logbook', icon: '🚗', desc: 'ATO travel records' },
-    { label: 'Settings', tab: 'settings', icon: '⚙️', desc: 'App preferences' },
+    { label: 'My Profile', tab: 'profile', icon: opIcon('user'), desc: 'Leave, CPD, credentials' },
+    { label: 'Smart Booking', tab: 'book', icon: opIcon('calendar'), desc: 'Create a new appointment' },
+    { label: 'Calendar', tab: 'calendar', icon: opIcon('calendar'), desc: 'View your schedule' },
+    { label: 'Contacts', tab: 'contacts', icon: opIcon('folder'), desc: 'Clients and referrers' },
+    { label: 'Activity', tab: 'activity', icon: opIcon('chart'), desc: 'Session activity log' },
+    { label: 'Billing', tab: 'billing', icon: opIcon('card'), desc: 'Invoices and payments', roles: ['owner','admin'] },
+    { label: 'NDIS Cases', tab: 'ndis', icon: opIcon('folder'), desc: 'NDIS case management' },
+    { label: 'Dormant Cases', tab: 'dormant', icon: opIcon('alert'), desc: 'Inactive clients' },
+    { label: 'Travel Logbook', tab: 'logbook', icon: opIcon('car'), desc: 'ATO travel records' },
+    { label: 'Settings', tab: 'settings', icon: opIcon('gear'), desc: 'App preferences' },
   ];
   navItems.forEach(function(n) {
     if (n.roles && !n.roles.includes(role)) return;
@@ -22549,7 +22733,7 @@ function clientSideSearch(q, role) {
       var sub   = (t.sub   || '').toLowerCase();
       if (label.includes(ql) || sub.includes(ql)) {
         (function(tourId, tourLabel, tourSub, tourIcon) {
-          results.push({ group: 'Help', icon: tourIcon || '❓',
+          results.push({ group: 'Help', icon: tourIcon || opIcon('help'),
             title: tourLabel, sub: tourSub, tag: 'Tour',
             action: function() { closeGlobalSearch(); tourStart(tourId); }
           });
@@ -22594,13 +22778,13 @@ function renderRecentSearches() {
   try { recents = JSON.parse(localStorage.getItem(SEARCH_RECENT_KEY) || '[]'); } catch(e) {}
   var el = document.getElementById('search-recent');
   if (!recents.length) {
-    el.innerHTML = '<div style="padding:20px 18px;font-size:12px;color:var(--muted);">Start typing to search clients, appointments, settings and more… &nbsp;<kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px;">⌘K</kbd></div>';
+    el.innerHTML = '<div style="padding:20px 18px;font-size:12px;color:var(--muted);">Start typing to search clients, appointments, settings and more… &nbsp;<kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px;">K</kbd></div>';
     return;
   }
   var html = '<div class="search-group-label">Recent searches</div>';
   recents.slice(0, 5).forEach(function(q) {
     html += '<div class="search-result-item" onclick="(function(){document.getElementById(\'search-q\').value=\'' + escapeHtml(q).replace(/'/g,"\\'") + '\';onSearchInput();})()">' +
-      '<div class="search-result-icon">🕐</div>' +
+      '<div class="search-result-icon">' + opIcon('clock') + '</div>' +
       '<div class="search-result-main"><div class="search-result-title">' + escapeHtml(q) + '</div></div>' +
       '</div>';
   });
@@ -22723,12 +22907,12 @@ function renderNotifications() {
   }
   empty.style.display = 'none';
 
-  var icons = { info: 'ℹ️', warning: '⚠️', error: '🔴', success: '✅' };
+  var icons = { info: opIcon('info'), warning: opIcon('alert'), error: opIcon('alert'), success: opIcon('check') };
   var html = '';
   visible.forEach(function(n) {
     var timeStr = n.createdAt ? formatRelativeTime(new Date(n.createdAt)) : '';
     html += '<div class="notif-item ' + (n.status === 'unread' ? 'unread' : '') + '" onclick="onNotifClick(\'' + n.id + '\')">' +
-      '<div class="notif-icon ' + (n.severity || 'info') + '">' + (icons[n.severity] || 'ℹ️') + '</div>' +
+      '<div class="notif-icon ' + (n.severity || 'info') + '">' + (icons[n.severity] || opIcon('info')) + '</div>' +
       '<div class="notif-body">' +
         '<div class="notif-title">' + escapeHtml(n.title) + '</div>' +
         '<div class="notif-msg">' + escapeHtml(n.message) + '</div>' +
@@ -22984,10 +23168,10 @@ function renderHelpPanel(filterQ) {
     html += '<div class="help-section">';
     html += '<div class="help-section-title">&#x26A1; Quick actions</div>';
     html += '<div class="help-quick-actions">';
-    html += '<button class="help-qa-btn" onclick="closeHelpPanel();switchTab(\'settings\');setTimeout(function(){showSettingsSection(\'integration-settings\');},100)">⚙ Check integrations</button>';
-    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openNotificationsPanel()">🔔 View alerts</button>';
-    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openReportPanel(\'daily\')">📊 Open snapshot</button>';
-    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openGlobalSearch()">🔍 Search (⌘K)</button>';
+    html += '<button class="help-qa-btn" onclick="closeHelpPanel();switchTab(\'settings\');setTimeout(function(){showSettingsSection(\'integration-settings\');},100)">' + opIcon('gear') + ' Check integrations</button>';
+    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openNotificationsPanel()">' + opIcon('bell') + ' View alerts</button>';
+    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openReportPanel(\'daily\')">' + opIcon('chart') + ' Open snapshot</button>';
+    html += '<button class="help-qa-btn" onclick="closeHelpPanel();openGlobalSearch()">'+ opIcon('search') + 'Search (K)</button>';
     html += '</div>';
     html += '</div>';
   }
@@ -23036,7 +23220,7 @@ function applySettingsRoleVisibility() {
   // Populate security section with logged-in user info
   var secEmail = document.getElementById('stg-sec-email');
   var secRole  = document.getElementById('stg-sec-role-badge');
-  var roleLabel = { owner: '👑 Owner', admin: '🛡️ Admin', therapist: '🩺 Therapist' };
+  var roleLabel = { owner: 'Owner', admin: 'Admin', therapist: 'Therapist' };
   if (secEmail && window.APP_USER) secEmail.textContent = window.APP_USER.email || '—';
   if (secRole  && window.APP_USER) {
     secRole.textContent = roleLabel[role] || role;
@@ -23230,7 +23414,7 @@ function showSettingsSaveMsg(msgId, ok, text) {
   if (!el) return;
   el.style.display = '';
   el.style.color   = ok ? 'var(--accent)' : 'var(--danger)';
-  el.textContent   = text || (ok ? '✓ Saved' : '⚠ Error');
+  el.textContent   = text || (ok ? '✓ Saved': 'Error');
   clearTimeout(el._hideTimer);
   el._hideTimer = setTimeout(function() { el.style.display = 'none'; }, 3000);
 }
@@ -23372,7 +23556,7 @@ async function loadTeamSetup() {
     var d = await r.json();
     var rows = (d.members || []).filter(function (m) { return m.isActive !== false; });
     if (!rows.length) { el.textContent = 'No members yet.'; return; }
-    var b = function (ok, txt) { return '<span style="white-space:nowrap;">' + (ok ? '✅' : '⚠️') + ' ' + txt + '</span>'; };
+    var b = function (ok, txt) { return '<span style="white-space:nowrap;">'+ (ok ? '': '') + ''+ txt + '</span>'; };
     el.innerHTML = rows.map(function (m) {
       var isTher = m.role === 'therapist';
       var bits = [
@@ -23465,7 +23649,7 @@ async function loadUserListForOwner() {
       suspended:            '<span style="background:#fdf1ee;color:#c2412e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Suspended</span>',
       deactivated:          '<span style="background:#f1ece4;color:#6e675e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Deactivated</span>',
     };
-    var roleLabels = { owner: '👑 Owner', admin: '🛡️ Admin', therapist: '🩺 Therapist' };
+    var roleLabels = { owner: 'Owner', admin: 'Admin', therapist: 'Therapist' };
 
     var html = '';
     // Sort: pending first, then active, then suspended/deactivated
@@ -23480,8 +23664,8 @@ async function loadUserListForOwner() {
 
       // Info flags
       var flags = [];
-      if (!u.hasOutlook)      flags.push('<span title="Outlook not connected" style="font-size:11px;color:#cf8b1f;">📅 No calendar</span>');
-      if (!u.hasWorkLocation) flags.push('<span title="No work location set" style="font-size:11px;color:#7a736a;">📍 No location</span>');
+      if (!u.hasOutlook)      flags.push('<span title="Outlook not connected" style="font-size:11px;color:#cf8b1f;">No calendar</span>');
+      if (!u.hasWorkLocation) flags.push('<span title="No work location set" style="font-size:11px;color:#7a736a;">No location</span>');
 
       // Action buttons (owner only, can't action yourself)
       var actions = '';
@@ -23529,9 +23713,9 @@ async function adminApprove(userId, userName) {
   try {
     var r = await fetch('/api/admin/users/' + userId + '/approve', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { showToast('✅ ' + userName + '\'s account approved'); loadUserListForOwner(); }
-    else       showToast('⚠️ ' + (d.error || 'Failed to approve'), true);
-  } catch (_) { showToast('⚠️ Network error', true); }
+    if (r.ok) { showToast(''+ userName + '\'s account approved'); loadUserListForOwner(); }
+    else       showToast(''+ (d.error || 'Failed to approve'), true);
+  } catch (_) { showToast('Network error', true); }
 }
 
 async function adminActivate(userId, userName) {
@@ -23539,9 +23723,9 @@ async function adminActivate(userId, userName) {
   try {
     var r = await fetch('/api/admin/users/' + userId + '/activate', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { showToast('✅ ' + userName + '\'s account re-activated'); loadUserListForOwner(); }
-    else       showToast('⚠️ ' + (d.error || 'Failed to activate'), true);
-  } catch (_) { showToast('⚠️ Network error', true); }
+    if (r.ok) { showToast(''+ userName + '\'s account re-activated'); loadUserListForOwner(); }
+    else       showToast(''+ (d.error || 'Failed to activate'), true);
+  } catch (_) { showToast('Network error', true); }
 }
 
 async function adminDeactivate(userId, userName) {
@@ -23550,8 +23734,8 @@ async function adminDeactivate(userId, userName) {
     var r = await fetch('/api/admin/users/' + userId + '/deactivate', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
     if (r.ok) { showToast('Account deactivated'); loadUserListForOwner(); }
-    else       showToast('⚠️ ' + (d.error || 'Failed'), true);
-  } catch (_) { showToast('⚠️ Network error', true); }
+    else       showToast(''+ (d.error || 'Failed'), true);
+  } catch (_) { showToast('Network error', true); }
 }
 
 function openRoleModal(userId, userName, currentRole) {
@@ -23576,9 +23760,9 @@ async function submitRoleChange() {
       body: JSON.stringify({ role }),
     });
     var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { closeRoleModal(); showToast('✅ ' + name + ' is now ' + role); loadUserListForOwner(); }
-    else       showToast('⚠️ ' + (d.error || 'Failed to change role'), true);
-  } catch (_) { showToast('⚠️ Network error', true); }
+    if (r.ok) { closeRoleModal(); showToast(''+ name + 'is now '+ role); loadUserListForOwner(); }
+    else       showToast(''+ (d.error || 'Failed to change role'), true);
+  } catch (_) { showToast('Network error', true); }
   btn.disabled = false; btn.textContent = 'Save role';
 }
 
@@ -23603,8 +23787,8 @@ async function submitSuspend() {
     });
     var d = await r.json().catch(function() { return {}; });
     if (r.ok) { closeSuspendModal(); showToast(name + '\'s account suspended'); loadUserListForOwner(); }
-    else       showToast('⚠️ ' + (d.error || 'Failed to suspend'), true);
-  } catch (_) { showToast('⚠️ Network error', true); }
+    else       showToast(''+ (d.error || 'Failed to suspend'), true);
+  } catch (_) { showToast('Network error', true); }
 }
 
 // ── Toast helper (simple in-app notification) ─────────────────
@@ -23681,7 +23865,7 @@ function forceSploseSync(btn) {
       // Refresh integration status after successful sync
       checkIntegrationStatuses();
     })
-    .catch(function() { btn.textContent = '⚠ Error'; })
+    .catch(function() { btn.textContent = 'Error'; })
     .finally(function() { setTimeout(function() { btn.disabled = false; btn.innerHTML = '⟳ Sync now'; }, 2500); });
 }
 
@@ -23776,8 +23960,8 @@ async function submitInvite() {
       var urlEl   = document.getElementById('invite-link-url');
       if (linkBox && whyEl && urlEl && d.registerUrl) {
         whyEl.textContent = d.emailFailed
-          ? '⚠ Invite created, but the email failed to send — copy the link below and share it yourself.'
-          : '⚠ Invite created. Email is not configured on this server — copy the link below and share it yourself.';
+          ? 'Invite created, but the email failed to send — copy the link below and share it yourself.'
+          : 'Invite created. Email is not configured on this server — copy the link below and share it yourself.';
         urlEl.value = d.registerUrl;
         linkBox.style.display = '';
         showMsg('Invite created — email NOT sent', false);
@@ -23802,7 +23986,7 @@ async function loadPendingInvites() {
     var d = await res.json();
     var invites = d.invites || [];
     if (!invites.length) { el.innerHTML = '<p style="color:var(--muted);padding:8px 0;">No pending invites.</p>'; return; }
-    var roleLabels = { owner: '👑 Owner', admin: '🛡️ Admin', therapist: '🩺 Therapist' };
+    var roleLabels = { owner: 'Owner', admin: 'Admin', therapist: 'Therapist' };
     var html = '';
     invites.forEach(function(inv) {
       var expDate = inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('en-AU') : '—';
@@ -24139,7 +24323,7 @@ function detectAndMarkCalendarConflicts() {
               s.el.classList.add('conflict-tile');
               var badge = document.createElement('span');
               badge.className = 'conflict-badge';
-              badge.textContent = '⚡ CONFLICT';
+              badge.textContent = 'CONFLICT';
               badge.title = 'This appointment overlaps with another scheduled session';
               var titleEl = s.el.querySelector('.s-title');
               if (titleEl) titleEl.appendChild(badge);
@@ -24163,7 +24347,7 @@ function detectAndMarkCalendarConflicts() {
         id: 'local-conflict',
         type: 'calendar_conflict',
         severity: 'error',
-        title: '⚡ Scheduling conflict detected',
+        title: 'Scheduling conflict detected',
         message: msg,
         status: 'unread',
         relatedEntityType: 'calendar',
@@ -24266,7 +24450,7 @@ function detectAndMarkRuralTrips() {
           if (alreadyBooked) {
             var dayLabel = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) : 'that day';
             var proceed = window.confirm(
-              '⚠️ Duplicate booking warning\n\n' +
+              'Duplicate booking warning\n\n' +
               (patient.first || 'This client') + ' may already have an appointment on ' + dayLabel + '.\n\n' +
               'Do you want to proceed anyway?'
             );
@@ -24316,7 +24500,7 @@ function detectAndMarkRuralTrips() {
     var alertHtml    = '';
     if (approvedHours < CPD_TARGET) {
       if (approvedHours < expected - 5) {
-        alertHtml = '<div class="cpd-alert-msg">⚠ Behind pace — need ' + hoursLeft.toFixed(1) + 'h more to reach ' + CPD_TARGET + 'h by year end.</div>';
+        alertHtml = '<div class="cpd-alert-msg">Behind pace — need '+ hoursLeft.toFixed(1) + 'h more to reach '+ CPD_TARGET + 'h by year end.</div>';
       }
     }
 
@@ -24361,7 +24545,7 @@ function detectAndMarkRuralTrips() {
     }
     empty.style.display = 'none';
 
-    var icons = { info: 'ℹ️', warning: '⚠️', error: '🔴', success: '✅' };
+    var icons = { info: opIcon('info'), warning: opIcon('alert'), error: opIcon('alert'), success: opIcon('check') };
     var html = '';
 
     visible.forEach(function(n) {
@@ -24388,7 +24572,7 @@ function detectAndMarkRuralTrips() {
       }
 
       html += '<div class="notif-item ' + (n.status === 'unread' ? 'unread' : '') + '" onclick="onNotifClick(\'' + n.id + '\')">' +
-        '<div class="notif-icon ' + (n.severity || 'info') + '">' + (icons[n.severity] || 'ℹ️') + '</div>' +
+        '<div class="notif-icon ' + (n.severity || 'info') + '">' + (icons[n.severity] || opIcon('info')) + '</div>' +
         '<div class="notif-body">' +
           '<div class="notif-title">' + escapeHtml(n.title) + '</div>' +
           '<div class="notif-msg">'   + escapeHtml(n.message) + '</div>' +
@@ -24747,7 +24931,7 @@ var HELP_TOURS = {
         body: 'Press <strong>Today</strong> to snap back to the current week. The arrows step forward or backward one week (or one day in Day view).',
         pad: 4, rounded: '8px' },
       { target: 'calendar-grid', title: 'Reading the week grid',
-        body: 'Each column is a day. <strong>Coloured blocks</strong> = sessions. <strong>Yellow blocks</strong> = driving time. <strong>⏳ Idle-gap blocks</strong> = free windows between sessions. Click any block for details.',
+        body: 'Each column is a day. <strong>Coloured blocks</strong> = sessions. <strong>Yellow blocks</strong> = driving time. <strong>Idle-gap blocks</strong> = free windows between sessions. Click any block for details.',
         pad: 4, rounded: '8px' },
       { target: 'cal-add-event', title: 'Add a new appointment',
         body: 'Click <strong>+ Add event</strong> to open Smart Booking, or click and drag on the calendar grid to pre-fill the date and time.',
@@ -24786,7 +24970,7 @@ var HELP_TOURS = {
         body: 'Each card shows the day, time, and a score. <strong>Conflict badges</strong> warn of overlaps. <strong>Travel badges</strong> show estimated driving time. Click a card to select it.',
         pad: 4, rounded: '8px' },
       { target: null, title: 'Conflict and travel warnings',
-        body: 'If a slot overlaps an existing session, a <strong>⚠ conflict badge</strong> appears — do not book over it without checking. If the client’s address is missing, fix it first for accurate travel routing.' },
+        body: 'If a slot overlaps an existing session, a <strong> conflict badge</strong> appears — do not book over it without checking. If the client’s address is missing, fix it first for accurate travel routing.'},
       { target: 'booking-confirm', title: 'Confirm the booking',
         body: 'Press <strong>Confirm booking</strong>. This saves to Splose, creates a travel block in Outlook (if enabled), and refreshes the calendar.',
         pad: 4, rounded: '8px' },
@@ -24794,7 +24978,7 @@ var HELP_TOURS = {
         body: 'Review the appointment details. Press <strong>Save appointment</strong> to confirm, or go back to change anything.',
         pad: 4, rounded: '8px' },
       { target: 'calendar-grid', title: 'After booking',
-        body: 'The session appears on the calendar immediately. A travel block is created in Outlook. If the client’s address is missing, a ⚠ badge appears on the tile — tap to add the address.',
+        body: 'The session appears on the calendar immediately. A travel block is created in Outlook. If the client’s address is missing, a  badge appears on the tile — tap to add the address.',
         action: function() { if (typeof switchTab === 'function') switchTab('calendar'); },
         pad: 4, rounded: '8px' },
     ]
@@ -24824,7 +25008,7 @@ var HELP_TOURS = {
         body: 'Each suggested slot has a score — higher is better. Scoring considers: suburb cluster match, day load balance, travel buffer, and time preference.',
         pad: 4, rounded: '8px' },
       { target: null, title: 'Idle gaps as booking windows',
-        body: 'Free windows between existing sessions (⏳ idle-gap blocks) are prioritised as booking slots. Placing a session in a gap is more efficient than adding it to a light day.' },
+        body: 'Free windows between existing sessions ( idle-gap blocks) are prioritised as booking slots. Placing a session in a gap is more efficient than adding it to a light day.'},
       { target: null, title: 'Master Calendar (Admin/Owner)',
         body: 'Admins and Owners can open <strong>Master Calendar</strong> to see all therapist calendars overlaid. Use this to compare availability, find capacity, and spot team-wide scheduling gaps.' },
       { target: null, title: 'Choosing and confirming',
@@ -24850,7 +25034,7 @@ var HELP_TOURS = {
       { target: null, title: 'Between-session travel',
         body: 'Travel goes from the <strong>end location of one session</strong> to the <strong>start location of the next</strong>. Both sessions need a valid address for this to work.' },
       { target: null, title: 'Missing address warnings',
-        body: 'A <strong>⚠ badge</strong> on a tile means the client has no address. Click the tile, then add the address in the Detail panel. The travel block appears after the next sync.' },
+        body: 'A <strong> badge</strong> on a tile means the client has no address. Click the tile, then add the address in the Detail panel. The travel block appears after the next sync.'},
       { target: null, title: 'Outlook travel blocks',
         body: 'When Outlook write-back is enabled, Opal creates a Travel event in Outlook between sessions. This blocks that time so others can’t schedule meetings over your driving time.' },
       { target: 'tab-travel', title: 'Travel & Logbook tab',
@@ -24867,19 +25051,19 @@ var HELP_TOURS = {
 
   'idle-gaps': {
     label: 'Idle Gaps & Free Windows',
-    icon: '⏳',
+    icon: '',
     sub: 'Make productive use of gaps between appointments',
     roles: ['therapist','admin','owner'],
     prepare: function() { if (typeof switchTab === 'function') switchTab('calendar'); },
     steps: [
       { target: 'calendar-grid', title: 'What are idle gaps?',
-        body: 'An idle gap is free time between two sessions long enough to do useful work. These appear as <strong>⏳ blocks</strong> in a subtle grey-beige colour. The label shows how many minutes are free.',
+        body: 'An idle gap is free time between two sessions long enough to do useful work. These appear as <strong> blocks</strong> in a subtle grey-beige colour. The label shows how many minutes are free.',
         pad: 4, rounded: '8px' },
       { target: 'gap-modal', title: 'Clicking an idle gap',
-        body: 'Click any ⏳ block to open the <strong>Idle Gap options panel</strong>. It shows the gap duration, the surrounding sessions, and quick-action buttons.',
+        body: 'Click any  block to open the <strong>Idle Gap options panel</strong>. It shows the gap duration, the surrounding sessions, and quick-action buttons.',
         pad: 0, rounded: '12px' },
       { target: null, title: 'Quick actions',
-        body: '<strong>\u{1F4C5} Book session</strong> — open Smart Booking pre-filled for this slot. <strong>\u{1F4DD} Case notes</strong> — catch-up notes. <strong>\u{1F393} CPD</strong> — log professional development. <strong>\u{1F3E2} Admin</strong> — block for admin work. <strong>☕ Break</strong> — mark as a break.' },
+        body: '<strong>\u{1F4C5} Book session</strong> — open Smart Booking pre-filled for this slot. <strong>\u{1F4DD} Case notes</strong> — catch-up notes. <strong>\u{1F393} CPD</strong> — log professional development. <strong>\u{1F3E2} Admin</strong> — block for admin work. <strong>Break</strong> — mark as a break.'},
       { target: null, title: 'Location-aware suggestions',
         body: 'If the gap falls between two sessions in the same suburb, the suggestion notes that a nearby booking is ideal — you can add a client without adding travel time.' },
       { target: null, title: 'Hide a gap',
@@ -24962,7 +25146,7 @@ var HELP_TOURS = {
 
   'settings-overview': {
     label: 'Settings Overview',
-    icon: '⚙️',
+    icon: '',
     sub: 'Configure your calendar, travel, reports, and notifications',
     roles: ['therapist','admin','owner'],
     prepare: function() { if (typeof switchTab === 'function') switchTab('settings'); },
@@ -25025,8 +25209,8 @@ var HELP_TOURS = {
     roles: ['therapist','admin','owner'],
     prepare: function() {},
     steps: [
-      { target: 'header-search', title: 'Global Search (⌘K)',
-        body: 'Click the search icon or press <strong>⌘K</strong> (Mac) / <strong>Ctrl+K</strong> (Windows) to open the search palette.',
+      { target: 'header-search', title: 'Global Search (K)',
+        body: 'Click the search icon or press <strong>K</strong> (Mac) / <strong>Ctrl+K</strong> (Windows) to open the search palette.',
         pad: 6, rounded: '50%',
         action: function() { if (typeof openGlobalSearch === 'function') openGlobalSearch(); } },
       { target: null, title: 'What you can search',
@@ -25161,20 +25345,20 @@ function isGapDismissed(day, currId, nextId) {
 
     // Build quick actions HTML
     var qa = '<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);">';
-    qa += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px;">⚡ Quick Actions · ' + freeLabel + '</div>';
+    qa += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px;">Quick Actions · '+ freeLabel + '</div>';
     qa += '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;">';
 
     // Work/admin actions
     if (gapMin >= 15) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'case-noting\',\'Case Noting\')">📝 Case notes</button>';
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'admin\',\'Admin Block\')">🗂 Admin</button>';
+      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'case-noting\',\'Case Noting\')">Case notes</button>';
+      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'admin\',\'Admin Block\')">Admin</button>';
     }
     if (gapMin >= 20) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'break\',\'Break\')">☕ Break</button>';
+      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'break\',\'Break\')">Break</button>';
     }
     if (gapMin >= 45) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'cpd\',\'CPD Activity\')">📚 CPD</button>';
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'emails\',\'Emails & Admin\')">📧 Emails</button>';
+      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'cpd\',\'CPD Activity\')">CPD</button>';
+      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'emails\',\'Emails & Admin\')">Emails</button>';
     }
     qa += '</div>';
 
@@ -25184,11 +25368,11 @@ function isGapDismissed(day, currId, nextId) {
     qa += 'var eh=' + Math.floor(gapEnd/60) + ',em=' + (gapEnd%60) + ';';
     qa += 'if(typeof openBookingPanel===\'function\')openBookingPanel({day:\'' + day + '\',date:\'' + dateStr + '\',startH:h,startM:m,endH:eh,endM:em});';
     qa += '})()">';
-    qa += '➕ Book appointment in this gap</button>';
+    qa += 'Book appointment in this gap</button>';
 
     // Hide this gap
     qa += '<button class="gap-qa-btn-dismiss" onclick="dismissGapOverlay(\'' + day + '\',\'' + currId + '\',\'' + nextId + '\')">';
-    qa += '🚫 Hide this gap (until page refresh)</button>';
+    qa += 'Hide this gap (until page refresh)</button>';
 
     qa += '</div>'; // end quick actions
 
@@ -25317,7 +25501,7 @@ function _renderTravelPanel(seg) {
   // Warning if tight
   if (tight) {
     html += '<div class="tp-warn-block">';
-    html += '<strong>⚠ Travel time may be insufficient</strong>';
+    html += '<strong>Travel time may be insufficient</strong>';
     html += 'Only ' + allotted + ' minutes is blocked, but travel is estimated at ' + seg.travelMin + ' minutes. Consider allowing ' + (seg.travelMin + 5) + ' minutes or more.';
     html += '</div>';
   }
@@ -25331,7 +25515,7 @@ function _renderTravelPanel(seg) {
   html += '<div><div class="tp-route-dot from"></div><div class="tp-route-line"></div></div>';
   html += '<div>';
   if (fromSession && !isTravelBlock(fromSession)) {
-    html += '<div class="tp-location-name">🗓 After: ' + (fromSession.patient || fromSession.title || 'Session') + '</div>';
+    html += '<div class="tp-location-name">After: '+ (fromSession.patient || fromSession.title || 'Session') + '</div>';
   }
   html += '<div class="tp-location-name">' + fromSub + '</div>';
   if (fromAddr && fromAddr !== fromSub + ' WA') html += '<div class="tp-location-addr">' + fromAddr + '</div>';
@@ -25342,7 +25526,7 @@ function _renderTravelPanel(seg) {
   html += '<div class="tp-route-dot to"></div>';
   html += '<div>';
   if (toSession && !isTravelBlock(toSession)) {
-    html += '<div class="tp-location-name">🗓 Next: ' + (toSession.patient || toSession.title || 'Session') + '</div>';
+    html += '<div class="tp-location-name">Next: '+ (toSession.patient || toSession.title || 'Session') + '</div>';
   }
   html += '<div class="tp-location-name">' + toSub + '</div>';
   if (toAddr && toAddr !== toSub + ' WA') html += '<div class="tp-location-addr">' + toAddr + '</div>';
@@ -25352,10 +25536,10 @@ function _renderTravelPanel(seg) {
 
   // Missing location warnings
   if (!from.suburb && !from.addr) {
-    html += '<div class="tp-warn-block"><strong>📍 Origin address missing</strong>Travel cannot be accurately calculated without a starting address.</div>';
+    html += '<div class="tp-warn-block"><strong>Origin address missing</strong>Travel cannot be accurately calculated without a starting address.</div>';
   }
   if (!to.suburb && !to.addr) {
-    html += '<div class="tp-warn-block"><strong>📍 Destination address missing</strong>Travel cannot be accurately calculated without a destination address.</div>';
+    html += '<div class="tp-warn-block"><strong>Destination address missing</strong>Travel cannot be accurately calculated without a destination address.</div>';
   }
 
   // Google Maps button
@@ -25623,6 +25807,14 @@ function _rptWeekStart(date) {
    /api/snapshot backend, rendered inside the daily panel. Personal scope
    only (backend enforces user_id); timeline items link to the calendar. */
 var __snapReminders = [], __snapTasks = [];
+// ── Inline composer state (frontend-only; empty composers never hit the API) ──
+var __swFocus = null;                       // 'task' | 'reminder' → refocus after render
+var __swVal = { task: '', reminder: '' };   // composer text survives re-renders/failures
+var __swErr = { task: null, reminder: null };
+var __swEditingId = null;                   // task id being edited inline
+var __swDeleteArm = null;                   // task id with an armed (two-step) delete
+var __swRemDay = 'today';                   // reminder composer: 'today' | 'tomorrow'
+var __swRemTime = '16:00';
 
 async function snapLoad() {
   try {
@@ -25635,50 +25827,180 @@ async function snapLoad() {
   } catch (_) { __snapReminders = []; __snapTasks = []; }
 }
 
-function snapRefresh() { snapLoad().then(function () { if (typeof renderReportPanel === 'function') renderReportPanel(); }); }
+// Surgical re-render: only the Today's-work section, then restore focus so
+// composing feels continuous (a full panel re-render would eat the caret).
+function snapRenderWork() {
+  var host = document.getElementById('snap-work');
+  if (!host) { if (typeof renderReportPanel === 'function') renderReportPanel(); return; }
+  var tmp = document.createElement('div');
+  tmp.innerHTML = buildSnapshotWorkHTML();
+  host.replaceWith(tmp.firstElementChild);
+  snapAfterRender();
+}
+function snapAfterRender() {
+  if (__swEditingId) {
+    var ed = document.getElementById('sw-edit-' + __swEditingId);
+    if (ed) { ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length); }
+    return;
+  }
+  if (__swFocus) {
+    var inp = document.getElementById(__swFocus === 'task' ? 'sw-task-input' : 'sw-rem-input');
+    if (inp) { inp.value = __swVal[__swFocus] || ''; inp.focus(); }
+  }
+}
+function snapRefresh() { snapLoad().then(snapRenderWork); }
 
 function snapOverdue(rem) { return rem.state === 'upcoming' && new Date(rem.due_at) < new Date(); }
 
-async function snapAddReminder() {
-  const title = prompt('Reminder title:'); if (!title) return;
-  const time = prompt('Due time today (HH:MM, 24h):', '16:00') || '16:00';
-  const d = new Date(); const [h, m] = time.split(':').map(Number);
-  const due = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 16, m || 0);
-  await fetch('/api/snapshot/reminders', { method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, dueAt: due.toISOString() }) }).catch(function () {});
-  snapRefresh();
+// ── Composer: create on Enter, never on empty ────────────────────
+function swFocusComposer(kind) {
+  __swFocus = kind;
+  var inp = document.getElementById(kind === 'task' ? 'sw-task-input' : 'sw-rem-input');
+  if (inp) { inp.scrollIntoView({ block: 'nearest' }); inp.focus(); }
 }
+function swComposerKey(ev, kind) {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    var text = ev.target.value.trim();
+    if (!text) { ev.target.blur(); __swFocus = null; return; }
+    if (kind === 'task') swCreateTask(text); else swCreateReminder(text);
+  } else if (ev.key === 'Escape') {
+    ev.target.value = ''; __swVal[kind] = ''; __swErr[kind] = null;
+    ev.target.blur(); __swFocus = null; snapRenderWork();
+  }
+}
+async function swCreateTask(title) {
+  var tempId = 'tmp-' + Date.now();
+  __snapTasks.push({ id: tempId, title: title, completed: false, _saving: true });
+  __swVal.task = ''; __swErr.task = null; __swFocus = 'task';
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/tasks', { method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title }) });
+    if (!r.ok) throw new Error('save failed');
+    var j = await r.json();
+    var i = __snapTasks.findIndex(t => t.id === tempId);
+    if (i >= 0) __snapTasks[i] = j.task;
+  } catch (_) {
+    __snapTasks = __snapTasks.filter(t => t.id !== tempId);
+    __swVal.task = title; __swErr.task = 'Could not save — press Enter to retry.';
+  }
+  snapRenderWork();
+}
+async function swCreateReminder(title) {
+  var base = new Date();
+  if (__swRemDay === 'tomorrow') base.setDate(base.getDate() + 1);
+  var hm = (__swRemTime || '16:00').split(':').map(Number);
+  var due = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hm[0] || 16, hm[1] || 0);
+  var tempId = 'tmp-' + Date.now();
+  __snapReminders.push({ id: tempId, title: title, due_at: due.toISOString(), state: 'upcoming', _saving: true });
+  __swVal.reminder = ''; __swErr.reminder = null; __swFocus = 'reminder';
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/reminders', { method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title, dueAt: due.toISOString() }) });
+    if (!r.ok) throw new Error('save failed');
+    var j = await r.json();
+    var i = __snapReminders.findIndex(x => x.id === tempId);
+    if (i >= 0) __snapReminders[i] = j.reminder;
+  } catch (_) {
+    __snapReminders = __snapReminders.filter(x => x.id !== tempId);
+    __swVal.reminder = title; __swErr.reminder = 'Could not save — press Enter to retry.';
+  }
+  snapRenderWork();
+}
+function swRemDaySet(day) { __swRemDay = day; snapRenderWork(); swFocusComposer('reminder'); }
+function swRemTimeSet(v) { __swRemTime = v || '16:00'; }
+
+// ── Completion circle (optimistic, gentle strike animation) ──────
+async function swTaskCircle(id) {
+  var t = __snapTasks.find(x => x.id === id); if (!t || String(id).indexOf('tmp-') === 0) return;
+  var next = !t.completed;
+  var row = document.getElementById('sw-task-' + id);
+  if (next && row) { row.classList.add('sw-done-anim'); await new Promise(res => setTimeout(res, 480)); }
+  t.completed = next;
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/tasks/' + id + '/' + (next ? 'complete' : 'reopen'), { method: 'POST', credentials: 'include' });
+    if (!r.ok) throw new Error();
+  } catch (_) { t.completed = !next; snapRenderWork(); }
+}
+async function swRemCircle(id) {
+  var rm = __snapReminders.find(x => x.id === id); if (!rm || String(id).indexOf('tmp-') === 0) return;
+  if (rm.state !== 'upcoming') { snapReminderAct(id, 'reopen'); return; }
+  var row = document.getElementById('sw-rem-' + id);
+  if (row) { row.classList.add('sw-done-anim'); await new Promise(res => setTimeout(res, 480)); }
+  snapReminderAct(id, 'complete');
+}
+
+// ── Inline title editing ─────────────────────────────────────────
+function swEditTask(id) { __swEditingId = id; __swDeleteArm = null; snapRenderWork(); }
+function swEditKey(ev, id) {
+  if (ev.key === 'Enter') { ev.preventDefault(); swEditCommit(id, ev.target.value); }
+  else if (ev.key === 'Escape') { __swEditingId = null; snapRenderWork(); }
+}
+async function swEditCommit(id, value) {
+  var t = __snapTasks.find(x => x.id === id);
+  __swEditingId = null;
+  var title = (value || '').trim();
+  if (!t || !title || title === t.title) { snapRenderWork(); return; }
+  var prev = t.title; t.title = title;
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/tasks/' + id, { method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title }) });
+    if (!r.ok) throw new Error();
+  } catch (_) {
+    t.title = prev; snapRenderWork();
+    if (typeof showToast === 'function') showToast('Edit not saved', 'Check your connection and try again.');
+  }
+}
+
+// ── Two-step delete (no confirm() dialog) ────────────────────────
+async function swTaskDelete(id) {
+  if (__swDeleteArm !== id) { __swDeleteArm = id; snapRenderWork(); return; }
+  __swDeleteArm = null;
+  var removed = __snapTasks.find(t => t.id === id);
+  __snapTasks = __snapTasks.filter(t => t.id !== id);
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/tasks/' + id, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error();
+  } catch (_) {
+    if (removed) { __snapTasks.push(removed); snapRenderWork(); }
+  }
+}
+
 async function snapReminderAct(id, action, body) {
   await fetch('/api/snapshot/reminders/' + id + '/' + action, { method: 'POST', credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }).catch(function () {});
   snapRefresh();
 }
-async function snapAddTask() {
-  const title = prompt('Task:'); if (!title) return;
-  await fetch('/api/snapshot/tasks', { method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) }).catch(function () {});
-  snapRefresh();
-}
-async function snapTaskToggle(id, done) {
-  await fetch('/api/snapshot/tasks/' + id + '/' + (done ? 'complete' : 'reopen'), { method: 'POST', credentials: 'include' }).catch(function () {});
-  snapRefresh();
-}
-async function snapTaskDelete(id) {
-  if (!confirm('Delete this task?')) return;
-  await fetch('/api/snapshot/tasks/' + id, { method: 'DELETE', credentials: 'include' }).catch(function () {});
-  snapRefresh();
-}
 async function snapTaskMove(id, dir) {
-  const active = __snapTasks.filter(t => !t.completed).map(t => t.id);
-  const i = active.indexOf(id); const j = i + dir;
-  if (i < 0 || j < 0 || j >= active.length) return;
-  [active[i], active[j]] = [active[j], active[i]];
+  var activeIdx = [];
+  __snapTasks.forEach(function (t, i) { if (!t.completed) activeIdx.push(i); });
+  var pos = activeIdx.findIndex(i => __snapTasks[i].id === id);
+  var swapPos = pos + dir;
+  if (pos < 0 || swapPos < 0 || swapPos >= activeIdx.length) return;
+  var a = activeIdx[pos], b = activeIdx[swapPos];
+  var tmp = __snapTasks[a]; __snapTasks[a] = __snapTasks[b]; __snapTasks[b] = tmp;
+  snapRenderWork();
+  var ids = __snapTasks.filter(t => !t.completed && String(t.id).indexOf('tmp-') !== 0).map(t => t.id);
   await fetch('/api/snapshot/tasks/order', { method: 'PUT', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: active }) }).catch(function () {});
-  snapRefresh();
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) }).catch(function () {});
 }
+// Back-compat shims (older callers/tests)
+function snapAddReminder() { swFocusComposer('reminder'); }
+function snapAddTask() { swFocusComposer('task'); }
+function snapTaskToggle(id, done) { return swTaskCircle(id); }
+function snapTaskDelete(id) { return swTaskDelete(id); }
 
+// ── Render ───────────────────────────────────────────────────────
+function swCircleSvg(done) {
+  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="12" r="9"/>' + (done ? '<polyline points="8 12.5 11 15.5 16 9.5"/>' : '') + '</svg>';
+}
 function buildSnapshotWorkHTML() {
   const esc = escapeHtml;
   const fmtT = iso => new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
@@ -25689,48 +26011,76 @@ function buildSnapshotWorkHTML() {
   const doneTasks = __snapTasks.filter(t => t.completed);
   const overdue = rems.filter(snapOverdue).length;
 
-  let html = '<div class="rpt-section"><div class="rpt-section-title" style="display:flex;align-items:center;gap:8px;">Today\'s work' +
+  let html = '<div class="rpt-section" id="snap-work"><div class="rpt-section-title" style="display:flex;align-items:center;gap:8px;">Today\'s work' +
     '<span style="font-weight:400;color:var(--muted);font-size:11.5px;">' + activeTasks.length + ' task' + (activeTasks.length === 1 ? '' : 's') +
     (overdue ? ' · <span style="color:#9a5f0e;font-weight:600;">' + overdue + ' overdue</span>' : '') + '</span>' +
     '<span style="flex:1"></span>' +
-    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddReminder()">Add reminder</button>' +
-    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddTask()">Add task</button></div>';
+    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="swFocusComposer(\'reminder\')">+ Reminder</button>' +
+    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="swFocusComposer(\'task\')">+ Task</button></div>';
 
-  // Reminders
-  if (rems.length) {
-    html += rems.map(r => {
-      const od = snapOverdue(r);
-      return '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
-        '<span style="flex:1;min-width:0;"><span style="font-weight:600;font-size:13px;">' + esc(r.title) + '</span>' +
-        ' <span style="font-size:11.5px;color:' + (od ? '#9a5f0e' : 'var(--muted)') + ';">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span>' +
-        (r.state === 'completed' ? ' <span class="rh-status-chip">done</span>' : '') + '</span>' +
-        (r.state === 'upcoming'
-          ? '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'defer\',{minutes:60})">+1h</button>' +
-            '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'complete\')">Done</button>' +
-            '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'dismiss\')">Dismiss</button>'
-          : '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'reopen\')">Reopen</button>') +
-        '</div>';
-    }).join('');
-  } else {
-    html += '<div class="rh-quiet">No reminders — add one for anything you must not miss today.</div>';
-  }
+  // ── Reminders ──
+  html += '<div class="sw-group-label">Reminders</div>';
+  html += rems.map(r => {
+    const od = snapOverdue(r);
+    const done = r.state === 'completed';
+    return '<div class="sw-row' + (done ? ' done' : '') + (r._saving ? ' saving' : '') + '" id="sw-rem-' + r.id + '">' +
+      '<button class="sw-circle' + (done ? ' done' : '') + '" aria-label="' + (done ? 'Reopen reminder' : 'Complete reminder') + '" onclick="swRemCircle(\'' + r.id + '\')">' + swCircleSvg(done) + '</button>' +
+      '<span class="sw-title">' + esc(r.title) +
+      ' <span class="sw-meta' + (od ? ' overdue' : '') + '">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span></span>' +
+      '<span class="sw-actions">' +
+      (r.state === 'upcoming'
+        ? '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'defer\',{minutes:60})">+1h</button>' +
+          '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'dismiss\')">Dismiss</button>'
+        : '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'reopen\')">Reopen</button>') +
+      '</span></div>';
+  }).join('');
+  // reminder composer: blank row + day/time quick controls
+  html += '<div class="sw-row sw-composer">' +
+    '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
+    '<input id="sw-rem-input" class="sw-input" type="text" placeholder="Add a reminder…" ' +
+      'value="' + esc(__swVal.reminder || '') + '" ' +
+      'oninput="__swVal.reminder=this.value" onkeydown="swComposerKey(event,\'reminder\')" onfocus="__swFocus=\'reminder\'">' +
+    '<span class="sw-quick">' +
+      '<button class="sw-chip' + (__swRemDay === 'today' ? ' on' : '') + '" onclick="swRemDaySet(\'today\')">Today</button>' +
+      '<button class="sw-chip' + (__swRemDay === 'tomorrow' ? ' on' : '') + '" onclick="swRemDaySet(\'tomorrow\')">Tomorrow</button>' +
+      '<input type="time" class="sw-time" value="' + esc(__swRemTime) + '" onchange="swRemTimeSet(this.value)" aria-label="Reminder time">' +
+    '</span></div>';
+  if (__swErr.reminder) html += '<div class="sw-error">' + esc(__swErr.reminder) + '</div>';
 
-  // Tasks
-  html += activeTasks.length ? activeTasks.map((t, i) =>
-    '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
-    '<input type="checkbox" style="accent-color:var(--accent);" aria-label="Complete task" onchange="snapTaskToggle(\'' + t.id + '\', true)">' +
-    '<span style="flex:1;font-size:13px;min-width:0;">' + esc(t.title) + '</span>' +
-    '<button class="btn" style="font-size:11px;padding:2px 7px;"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up" onclick="snapTaskMove(\'' + t.id + '\',-1)">Up</button>' +
-    '<button class="btn" style="font-size:11px;padding:2px 7px;"' + (i === activeTasks.length - 1 ? ' disabled' : '') + ' aria-label="Move down" onclick="snapTaskMove(\'' + t.id + '\',1)">Down</button>' +
-    '<button class="btn" style="font-size:11px;padding:2px 7px;" onclick="snapTaskDelete(\'' + t.id + '\')">Delete</button>' +
-    '</div>').join('')
-    : '<div class="rh-quiet">No active tasks. Add the small things you want done today.</div>';
+  // ── Tasks ──
+  html += '<div class="sw-group-label" style="margin-top:10px;">Tasks</div>';
+  html += activeTasks.map((t, i) => {
+    if (__swEditingId === t.id) {
+      return '<div class="sw-row editing" id="sw-task-' + t.id + '">' +
+        '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
+        '<input id="sw-edit-' + t.id + '" class="sw-input" type="text" value="' + esc(t.title) + '" ' +
+          'onkeydown="swEditKey(event,\'' + t.id + '\')" onblur="swEditCommit(\'' + t.id + '\', this.value)"></div>';
+    }
+    return '<div class="sw-row' + (t._saving ? ' saving' : '') + '" id="sw-task-' + t.id + '">' +
+      '<button class="sw-circle" aria-label="Complete task" onclick="swTaskCircle(\'' + t.id + '\')">' + swCircleSvg(false) + '</button>' +
+      '<span class="sw-title editable" title="Click to edit" onclick="swEditTask(\'' + t.id + '\')">' + esc(t.title) +
+        (t._saving ? ' <span class="sw-meta">saving…</span>' : '') + '</span>' +
+      '<span class="sw-actions">' +
+        '<button class="sw-mini"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up" onclick="snapTaskMove(\'' + t.id + '\',-1)">&#8593;</button>' +
+        '<button class="sw-mini"' + (i === activeTasks.length - 1 ? ' disabled' : '') + ' aria-label="Move down" onclick="snapTaskMove(\'' + t.id + '\',1)">&#8595;</button>' +
+        (__swDeleteArm === t.id
+          ? '<button class="sw-mini danger" onclick="swTaskDelete(\'' + t.id + '\')">Delete?</button>'
+          : '<button class="sw-mini" aria-label="Delete task" onclick="swTaskDelete(\'' + t.id + '\')">&#10005;</button>') +
+      '</span></div>';
+  }).join('');
+  // task composer — typing another line into the list
+  html += '<div class="sw-row sw-composer">' +
+    '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
+    '<input id="sw-task-input" class="sw-input" type="text" placeholder="Add a task…" ' +
+      'value="' + esc(__swVal.task || '') + '" ' +
+      'oninput="__swVal.task=this.value" onkeydown="swComposerKey(event,\'task\')" onfocus="__swFocus=\'task\'"></div>';
+  if (__swErr.task) html += '<div class="sw-error">' + esc(__swErr.task) + '</div>';
 
   if (doneTasks.length) {
-    html += '<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:var(--muted);">Completed (' + doneTasks.length + ')</summary>' +
-      doneTasks.map(t => '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
-        '<span style="flex:1;font-size:13px;color:var(--muted);text-decoration:line-through;">' + esc(t.title) + '</span>' +
-        '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapTaskToggle(\'' + t.id + '\', false)">Restore</button></div>').join('') +
+    html += '<details class="sw-completed"><summary>Completed (' + doneTasks.length + ')</summary>' +
+      doneTasks.map(t => '<div class="sw-row done" id="sw-task-' + t.id + '">' +
+        '<button class="sw-circle done" aria-label="Reopen task" onclick="swTaskCircle(\'' + t.id + '\')">' + swCircleSvg(true) + '</button>' +
+        '<span class="sw-title">' + esc(t.title) + '</span></div>').join('') +
       '</details>';
   }
   html += '</div>';
@@ -25777,20 +26127,20 @@ function buildDailyReportHTML(date, role) {
 
   // Summary cards
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('📅', metrics.appts, 'Appointments', metrics.uniqueClients + ' client' + (metrics.uniqueClients !== 1 ? 's' : ''), '#3d6cae');
-  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + targetH + 'h target', '#2f7d4f');
+  html += _rptCard('', metrics.appts, 'Appointments', metrics.uniqueClients + 'client'+ (metrics.uniqueClients !== 1 ? 's': ''), '#3d6cae');
+  html += _rptCard('', billableH.toFixed(1) + 'h', 'Billable', 'of '+ targetH + 'h target', '#2f7d4f');
   html += _rptCard('', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#b06e12');
-  html += _rptCard('💡', gaps.length, 'Free gaps', gaps.length > 0 ? 'available today' : 'none found', '#8b80c8');
-  if (attn.length > 0) html += _rptCard('⚠', attn.length, 'Attention', 'item' + (attn.length !== 1 ? 's' : '') + ' to review', '#c2412e');
+  html += _rptCard('', gaps.length, 'Free gaps', gaps.length >0 ? 'available today': 'none found', '#8b80c8');
+  if (attn.length >0) html += _rptCard('', attn.length, 'Attention', 'item'+ (attn.length !== 1 ? 's': '') + 'to review', '#c2412e');
   html += '</div>';
 
   // Overview bar
   html += '<div class="rpt-overview-bar">';
-  html += '<span>🕐 Start <strong>' + startT + '</strong></span>';
-  html += '<span>🏁 Finish <strong>' + endT + '</strong></span>';
-  html += '<span>📋 Booked <strong>' + _rptFmtH(metrics.totalMin) + '</strong></span>';
-  html += '<span>✅ Billable <strong>' + _rptFmtH(metrics.billableMin) + '</strong></span>';
-  if (metrics.nonBillableMin > 0) html += '<span>📝 Admin <strong>' + _rptFmtH(metrics.nonBillableMin) + '</strong></span>';
+  html += '<span>Start <strong>'+ startT + '</strong></span>';
+  html += '<span>Finish <strong>'+ endT + '</strong></span>';
+  html += '<span>Booked <strong>'+ _rptFmtH(metrics.totalMin) + '</strong></span>';
+  html += '<span>Billable <strong>'+ _rptFmtH(metrics.billableMin) + '</strong></span>';
+  if (metrics.nonBillableMin >0) html += '<span>Admin <strong>'+ _rptFmtH(metrics.nonBillableMin) + '</strong></span>';
   html += '</div>';
 
   // Visual Gantt strip — horizontal day bar
@@ -25838,7 +26188,7 @@ function buildDailyReportHTML(date, role) {
     var ringColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
     var r = 34, cx = 40, cy = 40, circ = 2 * Math.PI * r;
     var dash = (circ * Math.min(targetPct, 100) / 100).toFixed(1);
-    html += '<div class="rpt-section"><div class="rpt-section-title">🎯 Billable Target</div>';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Billable Target</div>';
     html += '<div class="rpt-ring-wrap">';
     html += '<svg class="rpt-ring-svg" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">';
     html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#e9e3d9" stroke-width="8"/>';
@@ -25850,7 +26200,7 @@ function buildDailyReportHTML(date, role) {
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + targetH + 'h target</small></div>';
-    html += '<div class="rpt-ring-sub">' + (targetPct >= 100 ? '✅ Daily target reached!' : '📍 ' + (targetH - billableH).toFixed(1) + 'h remaining to hit target') + '</div>';
+    html += '<div class="rpt-ring-sub">'+ (targetPct >= 100 ? 'Daily target reached!': ''+ (targetH - billableH).toFixed(1) + 'h remaining to hit target') + '</div>';
     if (targetPct < 100) {
       html += '<div class="rpt-ring-bar"><div class="rpt-ring-bar-fill" style="width:' + targetPct + '%;background:' + ringColor + '"></div></div>';
     }
@@ -25858,7 +26208,7 @@ function buildDailyReportHTML(date, role) {
   }
 
   // Timeline
-  html += '<div class="rpt-section"><div class="rpt-section-title">📆 Day Timeline</div><div class="rpt-timeline">';
+  html += '<div class="rpt-section"><div class="rpt-section-title">Day Timeline</div><div class="rpt-timeline">';
   var timeline = [];
   sessions.forEach(function(s) {
     if (s.type !== 'travel') timeline.push({ kind: 'session', s: s, startMin: s.startH * 60 + (s.startM || 0) });
@@ -25906,7 +26256,7 @@ function buildDailyReportHTML(date, role) {
         html += '<div class="rpt-timeline-row">';
         html += '<div class="rpt-tl-time">' + gapStartT + '<br><span class="rpt-tl-end">' + gapEndT + '</span></div>';
         html += '<div class="rpt-tl-dot gap"></div>';
-        html += '<div class="rpt-tl-body"><div class="rpt-tl-title">💡 Free window · ' + free + ' min usable</div>';
+        html += '<div class="rpt-tl-body"><div class="rpt-tl-title">Free window · '+ free + 'min usable</div>';
         html += '<div class="rpt-tl-meta"><span style="cursor:pointer;color:var(--accent);text-decoration:underline;" onclick="closeReportPanel();switchTab(\'book\')">Book appointment</span> · Case notes · CPD · Break</div></div></div>';
       }
     });
@@ -25923,21 +26273,21 @@ function buildDailyReportHTML(date, role) {
       var tight = allotted < seg.travelMin - 5;
       html += '<div class="rpt-travel-leg' + (tight ? ' tight' : '') + '">';
       html += '<div class="rpt-travel-route">' + from + ' → ' + to + '</div>';
-      html += '<div class="rpt-travel-detail">~' + seg.travelMin + ' min estimated' + (tight ? ' <span class="rpt-warn-chip">⚠ May be too short</span>' : '') + '</div>';
+      html += '<div class="rpt-travel-detail">~'+ seg.travelMin + 'min estimated'+ (tight ? '<span class="rpt-warn-chip">May be too short</span>': '') + '</div>';
       if (typeof mapsLink === 'function') {
         html += '<a class="rpt-maps-link" href="' + mapsLink(from + ' WA', to + ' WA') + '" target="_blank" rel="noopener">Open in Google Maps →</a>';
       }
       html += '</div>';
     });
     if (missing.length > 0) {
-      html += '<div class="rpt-warn-box">⚠ Travel cannot be fully calculated — ' + missing.length + ' appointment' + (missing.length > 1 ? 's are' : ' is') + ' missing a location address.</div>';
+      html += '<div class="rpt-warn-box">Travel cannot be fully calculated — '+ missing.length + 'appointment'+ (missing.length >1 ? 's are': 'is') + 'missing a location address.</div>';
     }
     html += '</div></div>';
   }
 
   // Free windows
   if (gaps.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">💡 Free Windows & Idle Gaps</div><div class="rpt-gap-list">';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Free Windows & Idle Gaps</div><div class="rpt-gap-list">';
     gaps.forEach(function(seg) {
       var gapMin  = seg.endMin - seg.startMin;
       var free    = gapMin - (seg.travelMin || 0);
@@ -25965,7 +26315,7 @@ function buildDailyReportHTML(date, role) {
 
   // Needs attention
   if (attn.length > 0) {
-    html += '<div class="rpt-section rpt-section-warn"><div class="rpt-section-title">⚠ Needs Attention</div><div class="rpt-attention-list">';
+    html += '<div class="rpt-section rpt-section-warn"><div class="rpt-section-title">Needs Attention</div><div class="rpt-attention-list">';
     attn.forEach(function(item) {
       html += '<div class="rpt-attention-item"><span class="rpt-attention-icon">' + item.icon + '</span><div><div class="rpt-attention-msg">' + item.msg + '</div>' + (item.action ? '<div class="rpt-attention-action">' + item.action + '</div>' : '') + '</div></div>';
     });
@@ -25974,7 +26324,7 @@ function buildDailyReportHTML(date, role) {
 
   // Recommendations
   if (recs.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">💬 Smart Recommendations</div><div class="rpt-rec-list">';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Smart Recommendations</div><div class="rpt-rec-list">';
     recs.forEach(function(r) {
       html += '<div class="rpt-rec-item"><span class="rpt-rec-icon">' + r.icon + '</span><div class="rpt-rec-text">' + r.text + '</div></div>';
     });
@@ -25983,10 +26333,10 @@ function buildDailyReportHTML(date, role) {
 
   // Action buttons
   html += '<div class="rpt-actions">';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">📅 Open Calendar</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'book\')">➕ Book Appointment</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">Open Calendar</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'book\')">Book Appointment</button>';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
-  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'weekly\')">📊 View This Week</button>';
+  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'weekly\')">View This Week</button>';
   html += '</div>';
 
   return html_prefix + html;
@@ -26043,11 +26393,11 @@ function buildWeeklyReportHTML(date, role) {
   // Summary cards
   var fillColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + weekTarget + 'h target', '#2f7d4f');
-  html += _rptCard('📅', totalAppts, 'Appointments', allClients.size + ' clients', '#3d6cae');
+  html += _rptCard('', billableH.toFixed(1) + 'h', 'Billable', 'of '+ weekTarget + 'h target', '#2f7d4f');
+  html += _rptCard('', totalAppts, 'Appointments', allClients.size + 'clients', '#3d6cae');
   html += _rptCard('', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#b06e12');
-  html += _rptCard('💡', totalGaps, 'Free gaps', 'across Mon–Fri', '#8b80c8');
-  if (totalMissing > 0) html += _rptCard('⚠', totalMissing, 'Missing addr', 'location' + (totalMissing > 1 ? 's' : '') + ' missing', '#c2412e');
+  html += _rptCard('', totalGaps, 'Free gaps', 'across Mon–Fri', '#8b80c8');
+  if (totalMissing >0) html += _rptCard('', totalMissing, 'Missing addr', 'location'+ (totalMissing >1 ? 's': '') + 'missing', '#c2412e');
   html += '</div>';
 
   // Weekly target progress — SVG ring
@@ -26055,7 +26405,7 @@ function buildWeeklyReportHTML(date, role) {
     var wRingColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
     var wr = 34, wcx = 40, wcy = 40, wCirc = 2 * Math.PI * wr;
     var wDash = (wCirc * Math.min(targetPct, 100) / 100).toFixed(1);
-    html += '<div class="rpt-section"><div class="rpt-section-title">🎯 Weekly Billable Target</div>';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Weekly Billable Target</div>';
     html += '<div class="rpt-ring-wrap">';
     html += '<svg class="rpt-ring-svg" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">';
     html += '<circle cx="' + wcx + '" cy="' + wcy + '" r="' + wr + '" fill="none" stroke="#e9e3d9" stroke-width="8"/>';
@@ -26067,7 +26417,7 @@ function buildWeeklyReportHTML(date, role) {
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + weekTarget + 'h target</small></div>';
-    html += '<div class="rpt-ring-sub">' + (targetPct >= 100 ? '✅ Weekly target reached!' : '📍 ' + (weekTarget - billableH).toFixed(1) + 'h remaining') + '</div>';
+    html += '<div class="rpt-ring-sub">'+ (targetPct >= 100 ? 'Weekly target reached!': ''+ (weekTarget - billableH).toFixed(1) + 'h remaining') + '</div>';
     if (targetPct < 100) {
       html += '<div class="rpt-ring-bar"><div class="rpt-ring-bar-fill" style="width:' + targetPct + '%;background:' + wRingColor + '"></div></div>';
     }
@@ -26079,7 +26429,7 @@ function buildWeeklyReportHTML(date, role) {
     var todayStr = _rptDateKey(new Date());
     var maxAppts = 1;
     weekData.forEach(function(d) { if (d.metrics.appts > maxAppts) maxAppts = d.metrics.appts; });
-    html += '<div class="rpt-section"><div class="rpt-section-title">📅 Appointments per Day</div>';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Appointments per Day</div>';
     html += '<div class="rpt-appt-chart">';
     weekData.forEach(function(day) {
       var n   = day.metrics.appts;
@@ -26095,7 +26445,7 @@ function buildWeeklyReportHTML(date, role) {
   })();
 
   // Daily breakdown cards
-  html += '<div class="rpt-section"><div class="rpt-section-title">📆 Daily Breakdown</div><div class="rpt-day-cards">';
+  html += '<div class="rpt-section"><div class="rpt-section-title">Daily Breakdown</div><div class="rpt-day-cards">';
   weekData.forEach(function(day) {
     var hasIssues = day.missing.length > 0;
     html += '<div class="rpt-day-card' + (hasIssues ? ' has-issues' : '') + '" onclick="rptOpenDay(\'' + day.dateStr + '\')">';
@@ -26106,14 +26456,14 @@ function buildWeeklyReportHTML(date, role) {
     if (day.travel.travelMin > 0) html += '<div class="rpt-day-stat"><strong>' + day.travel.travelMin + 'm</strong><span>travel</span></div>';
     if (day.gaps.length > 0)      html += '<div class="rpt-day-stat"><strong>' + day.gaps.length + '</strong><span>gaps</span></div>';
     html += '</div>';
-    if (hasIssues) html += '<div class="rpt-day-card-warn">⚠ ' + day.missing.length + ' missing address</div>';
+    if (hasIssues) html += '<div class="rpt-day-card-warn">'+ day.missing.length + 'missing address</div>';
     html += '<div class="rpt-day-card-open">View daily report →</div>';
     html += '</div>';
   });
   html += '</div></div>';
 
   // Workload mix bars
-  html += '<div class="rpt-section"><div class="rpt-section-title">📊 Workload Mix</div><div class="rpt-mix-bars">';
+  html += '<div class="rpt-section"><div class="rpt-section-title">Workload Mix</div><div class="rpt-mix-bars">';
   var REF_MIN = 480; // 8h reference bar
   weekData.forEach(function(day) {
     if (day.metrics.appts === 0 && day.travel.travelMin === 0) return;
@@ -26138,7 +26488,7 @@ function buildWeeklyReportHTML(date, role) {
 
   // Needs attention
   if (attn.length > 0) {
-    html += '<div class="rpt-section rpt-section-warn"><div class="rpt-section-title">⚠ Needs Attention</div><div class="rpt-attention-list">';
+    html += '<div class="rpt-section rpt-section-warn"><div class="rpt-section-title">Needs Attention</div><div class="rpt-attention-list">';
     attn.forEach(function(item) {
       html += '<div class="rpt-attention-item"><span class="rpt-attention-icon">' + item.icon + '</span><div><div class="rpt-attention-msg">' + item.msg + '</div>' + (item.action ? '<div class="rpt-attention-action">' + item.action + '</div>' : '') + '</div></div>';
     });
@@ -26147,7 +26497,7 @@ function buildWeeklyReportHTML(date, role) {
 
   // Recommendations
   if (recs.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">💬 Smart Recommendations</div><div class="rpt-rec-list">';
+    html += '<div class="rpt-section"><div class="rpt-section-title">Smart Recommendations</div><div class="rpt-rec-list">';
     recs.forEach(function(r) {
       html += '<div class="rpt-rec-item"><span class="rpt-rec-icon">' + r.icon + '</span><div class="rpt-rec-text">' + r.text + '</div></div>';
     });
@@ -26156,10 +26506,10 @@ function buildWeeklyReportHTML(date, role) {
 
   // Action buttons
   html += '<div class="rpt-actions">';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">📅 Open Calendar</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">Open Calendar</button>';
   html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'profile\')">👤 My Profile</button>';
-  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'daily\')">📋 View Today</button>';
+  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'profile\')">My Profile</button>';
+  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'daily\')">View Today</button>';
   html += '</div>';
 
   return html;
@@ -26170,27 +26520,27 @@ function buildWeeklyReportHTML(date, role) {
 function _rptDailyRecs(d) {
   var recs = [];
   if (d.billableH < d.targetH - 0.5) {
-    recs.push({ icon: '📈', text: 'You are ' + (d.targetH - d.billableH).toFixed(1) + 'h below your daily billable target. Consider booking available time if capacity allows.' });
+    recs.push({ icon: '', text: 'You are '+ (d.targetH - d.billableH).toFixed(1) + 'h below your daily billable target. Consider booking available time if capacity allows.'});
   }
   if (d.travel && d.travel.travelMin > 90) {
-    recs.push({ icon: '🚗', text: 'High travel day — ' + _rptFmtH(d.travel.travelMin) + ' estimated. Consider clustering nearby clients or reviewing route order.' });
+    recs.push({ icon: opIcon('car'), text: 'High travel day — ' + _rptFmtH(d.travel.travelMin) + ' estimated. Consider clustering nearby clients or reviewing route order.' });
   }
   if (d.gaps && d.gaps.length > 0) {
     var bigGap = null;
     d.gaps.forEach(function(g) { var f = g.endMin - g.startMin - (g.travelMin||0); if (!bigGap || f > (bigGap.endMin - bigGap.startMin - (bigGap.travelMin||0))) bigGap = g; });
     if (bigGap) {
       var free = bigGap.endMin - bigGap.startMin - (bigGap.travelMin || 0);
-      recs.push({ icon: '💡', text: free + '-minute free window available. Consider case notes, CPD, admin, or a proper break.' });
+      recs.push({ icon: '', text: free + '-minute free window available. Consider case notes, CPD, admin, or a proper break.'});
     }
   }
   if (d.missing && d.missing.length > 0) {
-    recs.push({ icon: '📍', text: d.missing.length + ' appointment' + (d.missing.length > 1 ? 's are' : ' is') + ' missing an address. Fix locations before the day starts to enable travel calculation.' });
+    recs.push({ icon: '', text: d.missing.length + 'appointment'+ (d.missing.length >1 ? 's are': 'is') + 'missing an address. Fix locations before the day starts to enable travel calculation.'});
   }
   var hasLunch = d.gaps && d.gaps.some(function(g) {
     return (g.endMin - g.startMin - (g.travelMin||0)) >= 25 && g.startMin >= 660 && g.startMin <= 840;
   });
   if (!hasLunch && d.sessions && d.sessions.length >= 3) {
-    recs.push({ icon: '🍽', text: 'No lunch break identified. Consider blocking 30 minutes around midday to avoid a full day without a break.' });
+    recs.push({ icon: '', text: 'No lunch break identified. Consider blocking 30 minutes around midday to avoid a full day without a break.'});
   }
   return recs.slice(0, 5);
 }
@@ -26198,7 +26548,7 @@ function _rptDailyRecs(d) {
 function _rptDailyAttn(d) {
   var items = [];
   (d.missing || []).forEach(function(s) {
-    items.push({ icon: '📍', msg: (s.patient || s.title || 'An appointment') + ' is missing a full address — travel time cannot be calculated.', action: 'Open the calendar tile and add a location address.' });
+    items.push({ icon: '', msg: (s.patient || s.title || 'An appointment') + 'is missing a full address — travel time cannot be calculated.', action: 'Open the calendar tile and add a location address.'});
   });
   if (d.travel && d.travel.legs) {
     d.travel.legs.forEach(function(seg) {
@@ -26206,12 +26556,12 @@ function _rptDailyAttn(d) {
       if (allotted < seg.travelMin - 5) {
         var from = (seg.fromLoc && seg.fromLoc.suburb) || 'Base';
         var to   = (seg.toLoc   && seg.toLoc.suburb)   || 'Base';
-        items.push({ icon: '⚡', msg: 'Travel from ' + from + ' to ' + to + ': estimated ' + seg.travelMin + ' min, but only ' + allotted + ' min is blocked.', action: 'Allow more travel time or adjust appointment times.' });
+        items.push({ icon: '', msg: 'Travel from '+ from + 'to '+ to + ': estimated '+ seg.travelMin + 'min, but only '+ allotted + 'min is blocked.', action: 'Allow more travel time or adjust appointment times.'});
       }
     });
   }
   if (d.billableH < d.targetH * 0.5) {
-    items.push({ icon: '⏱', msg: 'Billable hours (' + d.billableH.toFixed(1) + 'h) are significantly below the daily target (' + d.targetH + 'h).', action: 'Review schedule or book additional capacity.' });
+    items.push({ icon: '', msg: 'Billable hours ('+ d.billableH.toFixed(1) + 'h) are significantly below the daily target ('+ d.targetH + 'h).', action: 'Review schedule or book additional capacity.'});
   }
   return items;
 }
@@ -26219,24 +26569,24 @@ function _rptDailyAttn(d) {
 function _rptWeeklyRecs(d) {
   var recs = [];
   if (d.billableH < d.weekTarget * 0.85) {
-    recs.push({ icon: '📈', text: 'Billable hours are at ' + d.billableH.toFixed(1) + 'h vs a ' + d.weekTarget + 'h weekly target (' + Math.round(d.billableH / d.weekTarget * 100) + '%). Consider filling available slots.' });
+    recs.push({ icon: '', text: 'Billable hours are at '+ d.billableH.toFixed(1) + 'h vs a '+ d.weekTarget + 'h weekly target ('+ Math.round(d.billableH / d.weekTarget * 100) + '%). Consider filling available slots.'});
   }
   if (d.totalMissing > 0) {
-    recs.push({ icon: '📍', text: d.totalMissing + ' appointment location' + (d.totalMissing > 1 ? 's are' : ' is') + ' missing this week — fix before the day to enable accurate travel calculation.' });
+    recs.push({ icon: '', text: d.totalMissing + 'appointment location'+ (d.totalMissing >1 ? 's are': 'is') + 'missing this week — fix before the day to enable accurate travel calculation.'});
   }
   if (d.totalTravelMin > 180) {
-    recs.push({ icon: '🚗', text: 'High travel load this week — ' + _rptFmtH(d.totalTravelMin) + '. Consider clustering appointments by suburb to reduce drive time.' });
+    recs.push({ icon: opIcon('car'), text: 'High travel load this week — ' + _rptFmtH(d.totalTravelMin) + '. Consider clustering appointments by suburb to reduce drive time.' });
   }
   if (d.totalGaps >= 2) {
-    recs.push({ icon: '💡', text: d.totalGaps + ' free windows this week. Use them for case notes, CPD, supervision, or admin catch-up rather than leaving them unplanned.' });
+    recs.push({ icon: '', text: d.totalGaps + 'free windows this week. Use them for case notes, CPD, supervision, or admin catch-up rather than leaving them unplanned.'});
   }
   var heavyDay = null;
   d.weekData.forEach(function(day) { if (!heavyDay || day.travel.travelMin > heavyDay.travel.travelMin) heavyDay = day; });
   if (heavyDay && heavyDay.travel.travelMin >= 90) {
-    recs.push({ icon: '🗺', text: heavyDay.dayName + ' has the highest travel load (' + _rptFmtH(heavyDay.travel.travelMin) + '). Consider reviewing route order or rescheduling nearby clients.' });
+    recs.push({ icon: '', text: heavyDay.dayName + 'has the highest travel load ('+ _rptFmtH(heavyDay.travel.travelMin) + '). Consider reviewing route order or rescheduling nearby clients.'});
   }
   if (d.totalGaps >= 2) {
-    recs.push({ icon: '📚', text: 'With ' + d.totalGaps + ' free windows available this week, consider scheduling a CPD activity, supervision session, or professional development.' });
+    recs.push({ icon: '', text: 'With '+ d.totalGaps + 'free windows available this week, consider scheduling a CPD activity, supervision session, or professional development.'});
   }
   return recs.slice(0, 6);
 }
@@ -26244,15 +26594,15 @@ function _rptWeeklyRecs(d) {
 function _rptWeeklyAttn(d) {
   var items = [];
   if (d.totalMissing > 0) {
-    items.push({ icon: '📍', msg: d.totalMissing + ' appointment' + (d.totalMissing > 1 ? 's' : '') + ' this week missing location data.', action: 'Fix addresses on calendar tiles to enable travel calculation.' });
+    items.push({ icon: '', msg: d.totalMissing + 'appointment'+ (d.totalMissing >1 ? 's': '') + 'this week missing location data.', action: 'Fix addresses on calendar tiles to enable travel calculation.'});
   }
   if (d.billableH < d.weekTarget * 0.5) {
-    items.push({ icon: '⏱', msg: 'Weekly billable hours (' + d.billableH.toFixed(1) + 'h) are significantly below target (' + d.weekTarget + 'h).', action: 'Review available capacity and consider additional bookings.' });
+    items.push({ icon: '', msg: 'Weekly billable hours ('+ d.billableH.toFixed(1) + 'h) are significantly below target ('+ d.weekTarget + 'h).', action: 'Review available capacity and consider additional bookings.'});
   }
   d.weekData.forEach(function(day) {
     var conflicts = day.sessions.filter(function(s) { return s.element && s.element.classList.contains('conflict-tile'); });
     if (conflicts.length >= 2) {
-      items.push({ icon: '⚡', msg: day.dayName + ' has overlapping appointments.', action: 'Review and resolve scheduling conflicts on ' + day.dayName + '.' });
+      items.push({ icon: '', msg: day.dayName + 'has overlapping appointments.', action: 'Review and resolve scheduling conflicts on '+ day.dayName + '.'});
     }
   });
   return items;
@@ -26270,7 +26620,7 @@ function _rptCard(icon, value, label, sub, color) {
 }
 
 function _rptEmpty(title, msg) {
-  return '<div class="rpt-empty"><div class="rpt-empty-icon">📋</div>' +
+  return '<div class="rpt-empty"><div class="rpt-empty-icon"></div>'+
     '<div class="rpt-empty-title">' + title + '</div>' +
     '<div class="rpt-empty-msg">' + msg + '</div></div>';
 }

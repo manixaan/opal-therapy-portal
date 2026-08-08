@@ -575,7 +575,7 @@ describe('calendar clean status indicators', () => {
   });
 
   test('short events keep a minimum height and never spill', () => {
-    expect(HTML).toContain('min-height: 14px;');
+    expect(HTML).toContain('min-height: 8px;'); // floors lowered so short tiles never eat the 4px gap
     expect(HTML).toContain('.session.s-compact .s-title { flex: 1; min-width: 0; }');
   });
 
@@ -650,9 +650,23 @@ describe('snapshot day v1', () => {
     expect(HTML).toContain("'/api/snapshot/tasks/order'");
   });
 
-  test('reminder lifecycle actions exist; delete requires confirmation', () => {
+  test('reminder lifecycle actions exist; delete is a two-step inline confirm', () => {
     for (const a of ["'complete'", "'dismiss'", "'reopen'", "'defer'"]) expect(HTML).toContain('snapReminderAct(');
-    expect(HTML).toContain("if (!confirm('Delete this task?')) return;");
+    // prompt()/confirm() task flows are retired in favour of the inline composer
+    expect(HTML).not.toContain("prompt('Task:')");
+    expect(HTML).not.toContain("prompt('Reminder title:')");
+    expect(HTML).not.toContain("confirm('Delete this task?')");
+    expect(HTML).toContain('__swDeleteArm');
+  });
+
+  test('inline composer: list-style task entry, no modal, no empty records', () => {
+    expect(HTML).toContain('id="sw-task-input"');
+    expect(HTML).toContain('id="sw-rem-input"');
+    expect(HTML).toContain('swComposerKey(event,');
+    expect(HTML).toContain("if (!text) { ev.target.blur(); __swFocus = null; return; }"); // Enter on empty never creates
+    expect(HTML).toContain('function snapRenderWork()'); // surgical re-render keeps the caret
+    expect(HTML).toContain('function swEditCommit'); // inline title editing
+    expect(HTML).toContain('swCircleSvg'); // icon-system circle, not emoji
   });
 
   test('snapshot/report panel emoji sweep held', () => {
@@ -744,7 +758,8 @@ describe('playful premium design pass', () => {
   test('brand pebble has its living-cell idle motion', () => {
     expect(HTML).toContain('@keyframes pebbleMorph');
     expect(HTML).toContain('@keyframes pebbleDrift');
-    expect(HTML).toContain('animation: pebbleMorph 9s ease-in-out infinite;');
+    expect(HTML).toContain('animation: pebbleMorph 8s ease-in-out infinite, pebbleSway 13s ease-in-out infinite;');
+    expect(HTML).toContain('@keyframes pebbleSway');
   });
 });
 
