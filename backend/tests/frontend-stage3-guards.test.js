@@ -770,8 +770,8 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p5" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p5" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p6" />');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p6" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -984,5 +984,41 @@ describe('master scheduler phases 5-6 map', () => {
     expect(SCHED_JS).toContain('mapHighlightTiles');
     expect(SCHED_JS).toContain('m.userMoved = true');
     expect(SCHED_JS).toContain('View on calendar');
+  });
+});
+
+// ── Master Scheduler Phases 7+8: candidates + travel (2026-08-08) ────────────
+describe('master scheduler phases 7-8 candidates', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'scheduler-routes.js'), 'utf8');
+  const GEO = fs.readFileSync(path.join(__dirname, '..', 'geo.js'), 'utf8');
+
+  test('deterministic tiers with explanations — no percentages, no AI', () => {
+    expect(ROUTES).toContain('scorer.scoreCandidate');
+    expect(ROUTES).toContain('travelFeas.evaluateTravelFeasibility');
+    expect(SCHED_JS).toContain("best: 'Best fit'");
+    expect(SCHED_JS).not.toMatch(/\d+% match/);
+    expect(SCHED_JS).not.toContain('internalScore'); // score stays server-side
+  });
+
+  test('two-stage cost model: routes only for the viable shortlist', () => {
+    expect(ROUTES).toContain('ROUTE_STAGE_LIMIT');
+    expect(GEO).toContain('function travelMinutesBetween');
+    expect(GEO).toContain('_routeCache');
+    expect(GEO).toContain('WA Australia'); // suburb strings only to the provider
+  });
+
+  test('travel infeasibility is a hard slot exclusion with alternatives', () => {
+    expect(ROUTES).toContain("feas.status === 'travel_infeasible'");
+    expect(ROUTES).toContain('findFeasibleAlternative');
+    expect(SCHED_JS).toContain('Not practical for this location');
+    expect(SCHED_JS).toContain('Closest feasible option');
+  });
+
+  test('temporary client marker is visually distinct and never persisted', () => {
+    expect(SCHED_JS).toContain('mapShowClientPoint');
+    expect(SCHED_JS).toContain('not yet booked');
+    expect(SCHED_JS).toContain('m.clientMarker.setMap(null)');
   });
 });

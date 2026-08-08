@@ -360,3 +360,103 @@ describe('scheduler map points', () => {
     expect(after).toBe(before); // cache hit — untouched
   });
 });
+
+// ═══ Phases 7+8: candidates + travel feasibility ═════════════════════════════
+
+describe('candidate recommendations', () => {
+  const geo = require('../../geo');
+
+  afterEach(() => jest.restoreAllMocks());
+
+  async function seedCentroid2(sub, lat, lng) {
+    await db.pool.query(`INSERT INTO suburb_centroids (suburb_key, suburb, state, lat, lng, status, attempts)
+      VALUES ($1, $2, 'WA', $3, $4, 'ok', 1) ON CONFLICT (suburb_key) DO NOTHING`,
+      [sub.toLowerCase() + '|WA', sub, lat, lng]);
+  }
+
+  test('tiers are explainable; geography ranks same-suburb above distant; travel gates the slot', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent } = await agentFor(app, 'owner', org);
+    const week = { '2026-W33': { mon: 'office' } };
+    await seedCentroid2('Canning Vale', -32.0576, 115.918);
+    await seedCentroid2('Willetton', -32.0524, 115.884);
+    await seedCentroid2('Joondalup', -31.7443, 115.7661);
+
+    // Near therapist: free at 10-11, existing 9-10 session IN Canning Vale
+    const near = await seedTherapist(org, 'Near OT', { schedule: week });
+    await seedEvent(near.profileId, near.userId, org, 9, 10, { type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = 'Canning Vale WA' WHERE therapist_profile_id = $1`, [near.profileId]);
+
+    // Far therapist: free, but working in Joondalup (~35km away)
+    const far = await seedTherapist(org, 'Far OT', { schedule: week });
+    await seedEvent(far.profileId, far.userId, org, 9, 10, { type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = 'Joondalup WA' WHERE therapist_profile_id = $1`, [far.profileId]);
+
+    // Busy therapist: excluded outright
+    const busy = await seedTherapist(org, 'Busy OT', { schedule: week });
+    await seedEvent(busy.profileId, busy.userId, org, 9.5, 11.5, { type: 'therapy' });
+
+    jest.spyOn(geo, 'travelMinutesBetween').mockImplementation(async (a, b2) => 12);
+
+    // 10:30 start — leaves room for the 12-min travel leg after the 9-10 session
+    const r = await agent.post('/api/scheduler/candidates').send({
+      date: DATE, startMin: 630, durationMin: 60,
+      location: { suburb: 'Canning Vale' },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.clientPoint.suburb).toBe('Canning Vale');
+    const names = r.body.candidates.map((c) => c.displayName);
+    expect(names[0]).toBe('Near OT'); // same-suburb outranks distant
+    const nearC = r.body.candidates[0];
+    expect(nearC.fitTier).toBeTruthy();
+    expect(nearC.reasons.some((x) => x.code === 'same_suburb')).toBe(true);
+    expect(nearC.travel.status).toMatch(/travel_feasible|tight_fit/);
+    expect(nearC.internalScore).toBeUndefined(); // §37 — internal score never leaves the server
+    const farC = r.body.candidates.find((c) => c.displayName === 'Far OT');
+    expect(farC.reasons.some((x) => x.code === 'far_from_footprint')).toBe(true);
+    expect(r.body.excluded.some((u) => u.displayName === 'Busy OT' && u.reason === 'busy')).toBe(true);
+  });
+
+  test('telehealth ignores geography; travel-infeasible slot moves to notPractical with an alternative', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent } = await agentFor(app, 'owner', org);
+    const week = { '2026-W33': { mon: 'office' } };
+    await seedCentroid2('Canning Vale', -32.0576, 115.918);
+    await seedCentroid2('Joondalup', -31.7443, 115.7661);
+
+    const t = await seedTherapist(org, 'Squeezed OT', { schedule: week });
+    // 9-10 Joondalup, next 11:05-12 Joondalup — a 10:00-11:00 Canning Vale visit cannot work
+    await seedEvent(t.profileId, t.userId, org, 9, 10, { type: 'therapy' });
+    await seedEvent(t.profileId, t.userId, org, 11 + 5 / 60, 12, { type: 'therapy' });
+    await db.pool.query(`UPDATE events SET location = 'Joondalup WA' WHERE therapist_profile_id = $1`, [t.profileId]);
+
+    jest.spyOn(geo, 'travelMinutesBetween').mockImplementation(async () => 35); // long legs
+
+    const r = await agent.post('/api/scheduler/candidates').send({
+      date: DATE, startMin: 600, durationMin: 60, location: { suburb: 'Canning Vale' },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.candidates.length).toBe(0);
+    expect(r.body.notPractical.length).toBe(1);
+    expect(r.body.notPractical[0].travel.status).toBe('travel_infeasible');
+
+    // Telehealth: same request but no geography involvement
+    const r2 = await agent.post('/api/scheduler/candidates').send({
+      date: DATE, startMin: 13 * 60, durationMin: 60,
+      location: { suburb: 'Canning Vale' }, isTelehealth: true,
+    });
+    expect(r2.status).toBe(200);
+    const cand = r2.body.candidates[0];
+    expect(cand.travel.status).toBe('not_applicable');
+    expect(cand.reasons.some((x) => x.code === 'far_from_footprint')).toBe(false);
+  });
+
+  test('therapist role denied on candidates endpoint', async () => {
+    const app = buildApp();
+    const { agent } = await agentFor(app, 'therapist', await orgId());
+    expect([401, 403]).toContain((await agent.post('/api/scheduler/candidates')
+      .send({ date: DATE, startMin: 600, durationMin: 60 })).status);
+  });
+});

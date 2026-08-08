@@ -332,7 +332,8 @@
       startMin: 10 * 60, durationMin: 60,
       rangeStartMin: 8 * 60, rangeEndMin: 12 * 60,
       discipline: '',
-      loading: false, error: false, result: null,
+      suburb: '', telehealth: false,      // Phase 7: location-aware recommendations
+      loading: false, error: false, result: null, resultKind: 'finder',
       gen: 0, timer: null,
     },
   };
@@ -696,6 +697,7 @@
       f.loading = true; f.error = false;
       renderFinderOnly();
       var visible = filterTherapists(SCHED.therapists, { ids: SCHED.filterIds, discipline: SCHED.discipline, focusId: SCHED.focusId });
+      var useCandidates = f.mode === 'exact' && (f.suburb || '').trim().length >= 3;
       var body = {
         date: SCHED.date, durationMin: f.durationMin, mode: f.mode,
         therapistIds: visible.length === SCHED.therapists.length ? [] : visible.map(function (t) { return t.id; }),
@@ -703,20 +705,44 @@
       };
       if (f.mode === 'exact') body.startMin = f.startMin;
       else { body.rangeStartMin = f.rangeStartMin; body.rangeEndMin = f.rangeEndMin; }
-      fetch('/api/scheduler/find-availability', {
+      if (useCandidates) {
+        body.location = { suburb: f.suburb.trim() };
+        body.isTelehealth = f.telehealth;
+      }
+      fetch(useCandidates ? '/api/scheduler/candidates' : '/api/scheduler/find-availability', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http')); })
         .then(function (j) {
           if (gen !== f.gen) return; // superseded
-          f.loading = false; f.result = j; renderFinderOnly();
+          f.loading = false; f.result = j;
+          f.resultKind = useCandidates ? 'candidates' : 'finder';
+          renderFinderOnly();
+          mapShowClientPoint(useCandidates && j.clientPoint ? j.clientPoint : null);
         })
         .catch(function () {
           if (gen !== f.gen) return;
           f.loading = false; f.error = true; f.result = null; renderFinderOnly();
         });
     }, 280);
+  }
+
+  function mapShowClientPoint(pt) {
+    var m = SCHED.map;
+    if (m.clientMarker) { m.clientMarker.setMap(null); m.clientMarker = null; }
+    if (!pt || !m.gmap || !global.google) return;
+    m.clientMarker = new google.maps.Marker({
+      map: m.gmap, position: { lat: pt.lat, lng: pt.lng },
+      title: 'Proposed appointment — ' + pt.suburb + ' (not yet booked)',
+      icon: {
+        path: 'M 0,-12 L 3,-4 11,-4 5,1 7,9 0,4 -7,9 -5,1 -11,-4 -3,-4 Z',
+        fillColor: '#b5563a', fillOpacity: 1,
+        strokeColor: '#ffffff', strokeWeight: 1.5, scale: 1.1,
+      },
+      zIndex: 20,
+    });
+    m.gmap.panTo({ lat: pt.lat, lng: pt.lng });
   }
 
   function renderFinderOnly() {
@@ -780,16 +806,84 @@
                 return '<option value="' + esc(d) + '"' + (f.discipline === d ? ' selected' : '') + '>' + esc(d) + '</option>';
               }).join('') + '</select></label>'
           : '') +
-        '<div class="sch-f-scope">Searches the therapists selected in the filter bar.</div>' +
+        (f.mode === 'exact'
+          ? '<label class="sch-f-lbl">Location<input type="text" class="sch-f-input" data-f="suburb" placeholder="Suburb (optional)" value="' + esc(f.suburb) + '"></label>' +
+            ((f.suburb || '').trim().length >= 3
+              ? '<label class="sch-f-lbl sch-f-tele"><span>Telehealth</span><input type="checkbox" data-f="tele"' + (f.telehealth ? ' checked' : '') + '></label>'
+              : '')
+          : '') +
+        '<div class="sch-f-scope">Searches the therapists selected in the filter bar.' +
+          (f.mode === 'exact' ? ' Add a suburb for geographic recommendations.' : '') + '</div>' +
       '</div>';
 
     // ── Results ──
+    var TIER_LABELS = { best: 'Best fit', good: 'Good fit', possible: 'Possible', poor: 'Poor fit' };
+    function reasonRow(r) {
+      var neg = /far_|travel_tight|travel_infeasible|travel_unknown|geography_unknown|default_hours/.test(r.code);
+      return '<span class="sch-f-reason' + (neg ? ' warn' : '') + '">' + (neg ? '&#9651; ' : '&#10003; ') + esc(r.label) + '</span>';
+    }
+    function candidateCard(c, showTier) {
+      var slot = c.suggestedSlot || { startMin: f.startMin, endMin: f.startMin + f.durationMin };
+      return '<div class="sch-f-card sch-f-cand" data-tid="' + esc(c.therapistProfileId) + '">' +
+        '<span class="sch-f-dot" style="background:' + esc(c.colour || '#0f7c6c') + ';"></span>' +
+        '<span class="sch-f-main">' +
+          '<span class="sch-f-name">' + esc(c.displayName) +
+            (showTier && c.fitTier ? ' <span class="sch-tier ' + esc(c.fitTier) + '">' + TIER_LABELS[c.fitTier] + '</span>' : '') + '</span>' +
+          '<span class="sch-f-role">' + esc(c.roleTitle || '') + '</span>' +
+          '<span class="sch-f-fit">' + fmtTime12(slot.startMin) + '–' + fmtTime12(slot.endMin) + '</span>' +
+          (c.reasons || []).map(reasonRow).join('') +
+        '</span>' +
+        '<span class="sch-f-actions">' +
+          '<button type="button" class="sch-mini" data-act="view">View schedule</button>' +
+          '<button type="button" class="sch-mini primary" data-act="book">Schedule</button>' +
+        '</span></div>';
+    }
+
     if (f.loading) {
       html += '<div class="sch-f-status">Checking availability…</div>';
     } else if (f.error) {
       html += '<div class="sch-f-status">Availability couldn\'t be checked. <button type="button" class="sch-mini" data-act="retry">Retry</button></div>';
     } else if (!f.result) {
       html += '<div class="sch-f-status">Choose a time to find available therapists.</div>';
+    } else if (f.resultKind === 'candidates') {
+      var rc = f.result;
+      html += '<div class="sch-f-counts">' + rc.counts.candidates + ' candidate' + (rc.counts.candidates === 1 ? '' : 's') +
+        (rc.clientPoint ? ' for ' + esc(rc.clientPoint.suburb) : '') + '</div>';
+      if (!rc.clientPoint && (f.suburb || '').trim()) {
+        html += '<div class="sch-f-none">That suburb couldn\'t be located — showing availability without geography.</div>';
+      }
+      if (!rc.candidates.length && !rc.notPractical.length) {
+        html += '<div class="sch-f-none">No therapists can take this appointment.</div>';
+      }
+      var tiersSeen = {};
+      rc.candidates.forEach(function (c) {
+        var tier = c.fitTier || 'possible';
+        if (!tiersSeen[tier]) { tiersSeen[tier] = true; html += '<div class="sch-f-group">' + TIER_LABELS[tier] + '</div>'; }
+        html += candidateCard(c, false);
+      });
+      if (rc.notPractical.length) {
+        html += '<div class="sch-f-group">Not practical for this location</div>' +
+          rc.notPractical.map(function (n) {
+            return '<div class="sch-f-card" data-tid="' + esc(n.therapistProfileId) + '">' +
+              '<span class="sch-f-dot" style="background:' + esc(n.colour || '#99928a') + ';"></span>' +
+              '<span class="sch-f-main">' +
+                '<span class="sch-f-name">' + esc(n.displayName) + '</span>' +
+                (n.reasons || []).map(reasonRow).join('') +
+                (n.alternativeSlot
+                  ? '<button type="button" class="sch-f-sugg" data-sugg="' + n.alternativeSlot.startMin + '">Closest feasible option · ' +
+                      fmtTime12(n.alternativeSlot.startMin) + '–' + fmtTime12(n.alternativeSlot.endMin) + '</button>'
+                  : '') +
+              '</span></div>';
+          }).join('');
+      }
+      if (rc.excluded.length) {
+        html += '<details class="sch-f-unav"><summary>Unavailable · ' + rc.excluded.length + '</summary>' +
+          rc.excluded.map(function (u) {
+            return '<div class="sch-f-urow"><span class="sch-f-dot" style="background:' + esc(u.colour || '#99928a') + ';"></span>' +
+              '<span class="sch-f-uname">' + esc(u.displayName) + '</span>' +
+              '<span class="sch-f-ureason">' + esc(finderReasonText(u)) + '</span></div>';
+          }).join('') + '</details>';
+      }
     } else {
       var r = f.result;
       html += '<div class="sch-f-counts">' + r.counts.available + ' available · ' + r.counts.unavailable + ' unavailable</div>';
@@ -849,7 +943,7 @@
     aside.addEventListener('click', function (e) {
       var el = e.target.closest('[data-act],[data-mode],[data-part],[data-nudge],[data-sugg]');
       if (!el) return;
-      if (el.dataset.act === 'close') { SCHED.finder.open = false; render(); return; }
+      if (el.dataset.act === 'close') { SCHED.finder.open = false; mapShowClientPoint(null); render(); return; }
       if (el.dataset.act === 'retry') { finderSearch(); return; }
       if (el.dataset.mode) { f.mode = el.dataset.mode; f.result = null; render(); finderSearch(); return; }
       if (el.dataset.part) {
@@ -901,6 +995,8 @@
         var n = Math.max(5, Math.min(480, Number(v) || 60)); f.durationMin = n; finderSearch();
       }
       if (t.dataset.f === 'disc') { f.discipline = v; finderSearch(); }
+      if (t.dataset.f === 'suburb') { f.suburb = v; render(); finderSearch(); }
+      if (t.dataset.f === 'tele') { f.telehealth = t.checked; finderSearch(); }
     });
 
     // Hover cross-highlighting: result card ↔ therapist column

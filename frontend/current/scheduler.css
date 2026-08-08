@@ -603,3 +603,19 @@ input.sch-f-input, select.sch-f-input {
   .sch-map-panel { width: 100%; }
   .sch-map-canvas { height: 300px; }
 }
+
+/* ── Phase 7/8: candidate recommendations ─────────────────────────────────── */
+.sch-tier {
+  display: inline-block; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
+}
+.sch-tier.best { background: var(--ok-soft); color: #22593a; border: 1px solid #bfdfc9; }
+.sch-tier.good { background: var(--accent-soft); color: var(--accent-deep); border: 1px solid var(--accent); }
+.sch-tier.possible { background: var(--warn-soft); color: #7a4e0b; border: 1px solid #ecc668; }
+.sch-tier.poor { background: var(--border-soft); color: var(--ink-soft); border: 1px solid var(--border); }
+.sch-f-reason { display: block; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+.sch-f-reason.warn { color: #7a4e0b; }
+.sch-f-tele { justify-content: flex-start !important; gap: 8px !important; }
+.sch-f-cand { border-left: 3px solid var(--border); }
+.sch-f-cand:first-of-type { border-left-color: var(--accent); }

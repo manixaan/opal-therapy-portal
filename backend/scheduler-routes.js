@@ -24,6 +24,8 @@ const { requireAuth } = require('./permissions');
 const { requireMasterCalendarAccess } = require('./calendar-permissions');
 const engine = require('./availability-engine');
 const geo = require('./geo');
+const scorer = require('./candidate-scorer');
+const travelFeas = require('./travel-feasibility');
 
 const PERTH_TZ_OFFSET_MIN = 480; // AWST — no DST; parameterised in the engine
 
@@ -155,7 +157,7 @@ async function computeOrgAvailability(req, date, profileFilter, minDurationOverr
     };
   });
 
-  return { cfg, therapists };
+  return { cfg, therapists, eventsByProfile };
 }
 
 /**
@@ -394,6 +396,169 @@ router.get('/api/scheduler/map-points', requireAuth, requireMasterCalendarAccess
   } catch (err) {
     console.error('GET /api/scheduler/map-points error:', err.message);
     res.status(500).json({ error: 'Failed to load map points' });
+  }
+});
+
+/**
+ * POST /api/scheduler/candidates — Phase 7+8 orchestration.
+ * hard eligibility → canonical availability → geographic scoring →
+ * travel feasibility for the viable shortlist → explainable tiers.
+ * One aggregated pipeline; routes are only computed for the top viable
+ * candidates (two-stage cost model), via the suburb-level cache.
+ */
+const ROUTE_STAGE_LIMIT = 5; // route only the most plausible candidates (+ continuity)
+
+router.post('/api/scheduler/candidates', requireAuth, requireMasterCalendarAccess, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!isYmd(b.date)) return res.status(400).json({ error: 'date=YYYY-MM-DD is required' });
+    const durationMin = Number(b.durationMin);
+    if (!Number.isFinite(durationMin) || durationMin < 5 || durationMin > 480) {
+      return res.status(400).json({ error: 'durationMin must be between 5 and 480' });
+    }
+    const startMin = Number(b.startMin);
+    if (!Number.isFinite(startMin)) return res.status(400).json({ error: 'startMin is required' });
+    const isTelehealth = !!b.isTelehealth;
+    const clientSuburb = b.location && b.location.suburb ? String(b.location.suburb).trim() : null;
+
+    const filter = Array.isArray(b.therapistIds) && b.therapistIds.length ? new Set(b.therapistIds) : null;
+    const { cfg, therapists, eventsByProfile } = await computeOrgAvailability(req, b.date, filter);
+    const wanted = normDiscipline(b.discipline);
+    const eligible = wanted ? therapists.filter((t) => normDiscipline(t.roleTitle) === wanted) : therapists;
+
+    // Resolve every needed centroid in ONE cache pass: client suburb + all
+    // eligible therapists' day suburbs (for footprint proximity).
+    const suburbByEvent = new Map();
+    const allSuburbs = clientSuburb && !isTelehealth ? [clientSuburb] : [];
+    eligible.forEach((t) => {
+      (eventsByProfile.get(t.therapistProfileId) || []).forEach((ev) => {
+        if (ev.is_deleted || ev.status === 'cancelled' || ev.event_type !== 'therapy') return;
+        const sub = geo.extractSuburb(ev.manual_location || ev.location);
+        if (sub) { suburbByEvent.set(ev.id, sub); allSuburbs.push(sub); }
+      });
+    });
+    const centroids = await geo.resolveCentroids(db.pool, allSuburbs);
+    const centroidOf = (sub) => sub ? centroids.get(geo.suburbKey(sub, 'WA')) || null : null;
+    const clientC = clientSuburb ? centroidOf(clientSuburb) : null;
+    const clientPoint = clientC ? { suburb: clientC.suburb, lat: clientC.lat, lng: clientC.lng } : null;
+
+    const request = { startMin, durationMin };
+    const rows = eligible.map((t) => {
+      const matched = engine.classifyCandidate(t, request);
+      const dayPoints = (eventsByProfile.get(t.therapistProfileId) || [])
+        .map((ev) => { const sub = suburbByEvent.get(ev.id); const c = centroidOf(sub); return c ? { suburb: c.suburb, lat: c.lat, lng: c.lng } : null; })
+        .filter(Boolean);
+      const cand = scorer.scoreCandidate({
+        availability: t, matched, clientPoint, dayPoints,
+        isTelehealth, currentTherapistId: b.currentTherapistId || null,
+        durationMin, request,
+      });
+      return { t, matched, cand };
+    });
+
+    const excluded = rows.filter((r) => r.cand.status === 'excluded')
+      .map((r) => ({
+        therapistProfileId: r.cand.therapistProfileId, displayName: r.cand.displayName,
+        roleTitle: r.cand.roleTitle, colour: r.cand.colour,
+        reason: r.cand.excludedReason,
+        busyUntilMin: r.matched.busyUntilMin || null,
+      }))
+      .sort((a, z) => String(a.displayName).localeCompare(String(z.displayName)));
+
+    let candidates = scorer.rankCandidates(rows.filter((r) => r.cand.status === 'candidate').map((r) => r.cand));
+    const rowByTid = new Map(rows.map((r) => [r.cand.therapistProfileId, r]));
+
+    // ── Phase 8: travel feasibility for the viable shortlist ──
+    const notPractical = [];
+    if (clientPoint && !isTelehealth) {
+      const routeSet = new Set(candidates.slice(0, ROUTE_STAGE_LIMIT).map((c) => c.therapistProfileId));
+      if (b.currentTherapistId) routeSet.add(b.currentTherapistId);
+      const kept = [];
+      for (const cand of candidates) {
+        if (!routeSet.has(cand.therapistProfileId)) {
+          cand.travel = { status: 'not_assessed' };
+          kept.push(cand); continue;
+        }
+        const row = rowByTid.get(cand.therapistProfileId);
+        const seg = cand.window;
+        const events = eventsByProfile.get(cand.therapistProfileId) || [];
+        const findEvent = (id) => events.find((e) => e.id === id) || null;
+        const segMeta = (row.t.segments || []).find((x) => x.type === 'available' &&
+          x.startMin === seg.startMin && x.endMin === seg.endMin) || {};
+        const toCtx = (ev, edge) => {
+          if (!ev) return null;
+          const dayStartUtc = Date.parse(`${b.date}T00:00:00Z`) - PERTH_TZ_OFFSET_MIN * 60000;
+          const min = Math.round((new Date(edge === 'prev' ? ev.end_time : ev.start_time) - dayStartUtc) / 60000);
+          return { [edge === 'prev' ? 'endMin' : 'startMin']: min, suburb: suburbByEvent.get(ev.id) || null };
+        };
+        const prev = toCtx(findEvent(segMeta.prevEventId), 'prev');
+        const next = toCtx(findEvent(segMeta.nextEventId), 'next');
+        const [beforeMin, afterMin] = await Promise.all([
+          prev ? geo.travelMinutesBetween(prev.suburb, clientPoint.suburb) : Promise.resolve(0),
+          next ? geo.travelMinutesBetween(clientPoint.suburb, next.suburb) : Promise.resolve(0),
+        ]);
+        const feas = travelFeas.evaluateTravelFeasibility({
+          proposed: { startMin, durationMin, suburb: clientPoint.suburb },
+          segment: { startMin: seg.startMin, endMin: seg.endMin },
+          prev, next,
+          buffers: { beforeMin: cfg.bufferBeforeMin, afterMin: cfg.bufferAfterMin },
+          travel: { beforeMin: prev ? beforeMin : 0, afterMin: next ? afterMin : 0 },
+          isTelehealth: false,
+        });
+        cand.travel = {
+          status: feas.status,
+          beforeMinutes: prev ? beforeMin : null,
+          afterMinutes: next ? afterMin : null,
+          remainingMarginMinutes: feas.remainingMarginMinutes,
+          practicalWindow: feas.practicalWindow || null,
+          prevSuburb: prev ? prev.suburb : null,
+          nextSuburb: next ? next.suburb : null,
+          source: 'google_routes', precision: 'suburb',
+          reasons: feas.reasons,
+        };
+        cand.reasons = cand.reasons.concat(feas.reasons);
+        if (feas.status === 'travel_infeasible') {
+          // this slot is impractical — find the nearest feasible alternative
+          const segsCtx = (row.t.segments || []).filter((x) => x.type === 'available')
+            .map((x) => ({
+              segment: { startMin: x.startMin, endMin: x.endMin },
+              prev: toCtx(findEvent(x.prevEventId), 'prev'),
+              next: toCtx(findEvent(x.nextEventId), 'next'),
+              travel: { beforeMin: beforeMin, afterMin: afterMin },
+            }));
+          const alt = travelFeas.findFeasibleAlternative({
+            segmentsCtx: segsCtx, proposed: { startMin, durationMin },
+            buffers: { beforeMin: cfg.bufferBeforeMin, afterMin: cfg.bufferAfterMin },
+            durationMin,
+          });
+          notPractical.push({
+            therapistProfileId: cand.therapistProfileId, displayName: cand.displayName,
+            roleTitle: cand.roleTitle, colour: cand.colour,
+            travel: cand.travel, reasons: cand.reasons,
+            alternativeSlot: alt,
+          });
+          continue;
+        }
+        kept.push(cand);
+      }
+      candidates = kept;
+    } else {
+      candidates.forEach((c) => { c.travel = { status: isTelehealth ? 'not_applicable' : 'location_dependent' }; });
+    }
+
+    // §37 — the internal score is for server-side ordering only
+    candidates.forEach((c) => { delete c.internalScore; });
+    notPractical.forEach((c) => { delete c.internalScore; });
+
+    res.json({
+      requested: { date: b.date, startMin, endMin: startMin + durationMin, durationMin, isTelehealth },
+      clientPoint,
+      counts: { candidates: candidates.length, excluded: excluded.length, notPractical: notPractical.length },
+      candidates, notPractical, excluded,
+    });
+  } catch (err) {
+    console.error('POST /api/scheduler/candidates error:', err.message);
+    res.status(500).json({ error: 'Candidate search failed' });
   }
 });
 

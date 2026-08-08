@@ -133,4 +133,44 @@ async function resolveCentroids(pool, suburbs, state = 'WA') {
   return usable;
 }
 
-module.exports = { extractSuburb, suburbKey, buildSchedulerMapPoint, resolveCentroids, VIRTUAL_RE };
+// ── Travel minutes between suburb localities (Phase 8) ───────────────────────
+// Server-side Google Routes with an in-memory TTL cache. Suburb strings only
+// ("Willetton WA Australia") — client names/addresses never reach the
+// provider. Null on failure so callers report travel_unknown, never zero.
+const _routeCache = new Map(); // key -> { minutes, at }
+const ROUTE_TTL_MS = 6 * 3600 * 1000;
+
+async function travelMinutesBetween(fromSuburb, toSuburb) {
+  if (!fromSuburb || !toSuburb) return null;
+  if (fromSuburb.toLowerCase() === toSuburb.toLowerCase()) return 5; // same-suburb hop
+  const key = (fromSuburb + '→' + toSuburb).toLowerCase();
+  const hit = _routeCache.get(key);
+  if (hit && Date.now() - hit.at < ROUTE_TTL_MS) return hit.minutes;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+  if (!apiKey) return null;
+  try {
+    const resp = await axios.post('https://routes.googleapis.com/directions/v2:computeRoutes',
+      {
+        origin: { address: `${fromSuburb} WA Australia` },
+        destination: { address: `${toSuburb} WA Australia` },
+        travelMode: 'DRIVE',
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters',
+        },
+        timeout: 7000,
+      });
+    const route = resp.data && resp.data.routes && resp.data.routes[0];
+    if (!route || !route.duration) return null;
+    const minutes = Math.round(parseInt(route.duration, 10) / 60);
+    _routeCache.set(key, { minutes, at: Date.now() });
+    return minutes;
+  } catch (_) {
+    return null;
+  }
+}
+
+module.exports = { extractSuburb, suburbKey, buildSchedulerMapPoint, resolveCentroids, VIRTUAL_RE, travelMinutesBetween, _routeCache };
