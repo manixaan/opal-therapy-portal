@@ -12,6 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+<link rel="stylesheet" href="/scheduler.css" />
+<script src="/scheduler.js" defer></script>
 <style>
   :root {
     /* ── Design tokens (2026-08-08 playful-premium visual system) ──
@@ -2101,11 +2103,7 @@
   .cal-grid.hide-weekends .cal-head[data-day="sat"],
   .cal-grid.hide-weekends .cal-head[data-day="sun"],
   .cal-grid.hide-weekends #day-sat,
-  .cal-grid.hide-weekends #day-sun,
-  .cal-grid.hide-weekends #mch-sat,
-  .cal-grid.hide-weekends #mch-sun,
-  .cal-grid.hide-weekends #mcol-sat,
-  .cal-grid.hide-weekends #mcol-sun { display: none !important; }
+  .cal-grid.hide-weekends #day-sun { display: none !important; }
   /* Week-start ordering is driven by inline `order` set in applyWeekStart() */
 
   /* First-time empty state — shown when no sessions exist for the visible week.
@@ -2236,9 +2234,8 @@
      otherwise win the cascade — the shared frame must be authoritative. */
   #month-scroll-area .month-section { max-width: var(--cal-frame) !important; width: 100% !important; margin: 0 auto !important; }
   #month-scroll-area .month-grid { width: 100% !important; }
-  #master-chip-strip, #master-status { max-width: var(--cal-frame); width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; }
-  #master-grid-wrap { flex: 1; overflow: auto; }
-  #master-grid { max-width: var(--cal-frame) !important; width: 100% !important; margin: 0 auto !important; box-sizing: border-box; }
+  /* Master Scheduler (scheduler.css) intentionally uses the full width —
+     many therapist columns want the space, like Week view does. */
   .cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }
   /* Weekends: fully interactive, only a whisper of tonal distinction */
   .cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: #fbfaf7; }
@@ -3569,32 +3566,7 @@
     flex-shrink: 0;
   }
 
-  /* Master calendar event tile */
-  .master-tile {
-    position: absolute;
-    left: 3px; right: 3px;
-    border-radius: 5px;
-    padding: 3px 6px;
-    font-size: 11px;
-    overflow: hidden;
-    cursor: pointer;
-    box-sizing: border-box;
-    border-left: 4px solid transparent;
-    background: rgba(255,255,255,0.92);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
-    transition: box-shadow 0.1s;
-  }
-  .master-tile:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.18); z-index: 5; }
-  .master-tile .mt-header { display: flex; align-items: center; gap: 4px; margin-bottom: 1px; }
-  .master-tile .mt-badge {
-    flex-shrink: 0;
-    width: 16px; height: 16px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 8px; font-weight: 700; color: white;
-  }
-  .master-tile .mt-title { font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .master-tile .mt-sub { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Master Scheduler tiles/grid live in scheduler.css (Phase 1 extraction). */
 </style>
 </head>
 <body>
@@ -4407,7 +4379,7 @@
         <button class="view-tab" data-view="day"   onclick="setCalendarMode('day')"    data-help="cal-view-day"    title="Day view — see a single day in detail">Day</button>
         <button class="view-tab active" data-view="week" onclick="setCalendarMode('week')"   data-help="cal-view-week"   title="Week view — see your full week at a glance">Week</button>
         <button class="view-tab" data-view="month" onclick="setCalendarMode('month')"  data-help="cal-view-month"  title="Month view — scroll through the whole month">Month</button>
-        <button class="view-tab" data-view="master" id="master-view-tab" onclick="setCalendarMode('master')" data-help="cal-view-master" title="Master Calendar — compare all therapist schedules (Admin/Owner only)" style="display:none;">Master</button>
+        <button class="view-tab" data-view="master" id="master-view-tab" onclick="setCalendarMode('master')" data-help="cal-view-master" title="Master Scheduler — compare all therapist schedules (Admin/Owner only)" style="display:none;">Scheduler</button>
       </div>
 
       <div class="toolbar-divider"></div>
@@ -4579,39 +4551,10 @@
       </div>
     </div>
 
-    <!-- Master Calendar View (Owner/Admin only) -->
+    <!-- Master Scheduler (Owner/Admin only) — rendered by /scheduler.js as an
+         intelligent view over the aggregated /api/calendar/master data -->
     <div class="cal-view" id="cal-view-master" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
-      <!-- Therapist chip selector strip -->
-      <div id="master-chip-strip" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg);flex-wrap:wrap;min-height:50px;">
-        <span style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">Filter:</span>
-        <div id="master-chips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;"></div>
-        <button class="btn" id="master-refresh-btn" onclick="loadMasterCalendar(true)" style="font-size:12px;margin-left:auto;">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Refresh
-        </button>
-      </div>
-      <!-- Loading/error states -->
-      <div id="master-status" style="display:none;padding:40px;text-align:center;color:var(--muted);font-size:13px;"></div>
-      <!-- Master week grid -->
-      <div id="master-grid-wrap" style="flex:1;overflow:auto;display:flex;flex-direction:column;">
-        <div class="cal-grid view-week" id="master-grid" style="flex:1;">
-          <div class="cal-head"></div>
-          <div class="cal-head" id="mch-mon"><div class="day-num"></div><div class="day-name">Mon</div></div>
-          <div class="cal-head" id="mch-tue"><div class="day-num"></div><div class="day-name">Tue</div></div>
-          <div class="cal-head" id="mch-wed"><div class="day-num"></div><div class="day-name">Wed</div></div>
-          <div class="cal-head" id="mch-thu"><div class="day-num"></div><div class="day-name">Thu</div></div>
-          <div class="cal-head" id="mch-fri"><div class="day-num"></div><div class="day-name">Fri</div></div>
-          <div class="cal-head" id="mch-sat"><div class="day-num"></div><div class="day-name">Sat</div></div>
-          <div class="cal-head" id="mch-sun"><div class="day-num"></div><div class="day-name">Sun</div></div>
-          <div class="time-col" id="master-time-col"></div>
-          <div class="cal-col" id="mcol-mon" data-day="mon"></div>
-          <div class="cal-col" id="mcol-tue" data-day="tue"></div>
-          <div class="cal-col" id="mcol-wed" data-day="wed"></div>
-          <div class="cal-col" id="mcol-thu" data-day="thu"></div>
-          <div class="cal-col" id="mcol-fri" data-day="fri"></div>
-          <div class="cal-col" id="mcol-sat" data-day="sat"></div>
-          <div class="cal-col" id="mcol-sun" data-day="sun"></div>
-        </div>
-      </div>
+      <div id="scheduler-root"></div>
     </div>
 
       </div><!-- /.cal-main -->
@@ -13000,15 +12943,12 @@ function _applyCalGridHeight() {
 function rebuildCalendarGrid() {
   _applyCalGridHeight();
   _rebuildTimeColumn('time-col');
-  _rebuildTimeColumn('master-time-col');
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(function(day) {
-    ['day-','mcol-'].forEach(function(pfx) {
-      const col = document.getElementById(pfx + day);
-      if (col) {
-        col.querySelectorAll('.hour-line,.nonworking-band').forEach(el => el.remove());
-        if (typeof paintHourLines === 'function') paintHourLines(col);
-      }
-    });
+    const col = document.getElementById('day-' + day);
+    if (col) {
+      col.querySelectorAll('.hour-line,.nonworking-band').forEach(el => el.remove());
+      if (typeof paintHourLines === 'function') paintHourLines(col);
+    }
   });
 }
 
@@ -13034,7 +12974,6 @@ rebuildCalendarGrid();
   }
   function wire() {
     wireGrid('cal-grid');
-    wireGrid('master-grid-wrap'); // master calendar scroll container
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
@@ -13397,7 +13336,7 @@ function repositionAllSessionTiles() {
   });
   // Tops changed → re-run the side-by-side overlap layout for each day column.
   if (typeof reflowDayOverlaps === 'function') {
-    document.querySelectorAll('#cal-grid .cal-col, #cal-view-master .cal-col')
+    document.querySelectorAll('#cal-grid .cal-col')
       .forEach(function (c) { try { reflowDayOverlaps(c); } catch (e) {} });
   }
 }
@@ -17535,9 +17474,8 @@ function setCalendarMode(mode) {
 //     advance by day in day mode, week in week mode, month in month mode. ---
 function gotoPrev() {
   if (window.__calendarMode === 'master') {
-    if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
-    window.__currentWeekMonday.setUTCDate(window.__currentWeekMonday.getUTCDate() - 7);
-    MASTER_CAL.loaded = false; loadMasterCalendar(); return;
+    if (window.OpalScheduler) window.OpalScheduler.nav(-1);
+    return;
   }
   if (window.__calendarMode === 'month') return gotoPrevMonth();
   if (window.__calendarMode === 'day')   return gotoPrevDay();
@@ -17545,9 +17483,8 @@ function gotoPrev() {
 }
 function gotoNext() {
   if (window.__calendarMode === 'master') {
-    if (!window.__currentWeekMonday) window.__currentWeekMonday = __thisMondayPerth();
-    window.__currentWeekMonday.setUTCDate(window.__currentWeekMonday.getUTCDate() + 7);
-    MASTER_CAL.loaded = false; loadMasterCalendar(); return;
+    if (window.OpalScheduler) window.OpalScheduler.nav(1);
+    return;
   }
   if (window.__calendarMode === 'month') return gotoNextMonth();
   if (window.__calendarMode === 'day')   return gotoNextDay();
@@ -17555,8 +17492,7 @@ function gotoNext() {
 }
 function gotoToday() {
   if (window.__calendarMode === 'master') {
-    window.__currentWeekMonday = __thisMondayPerth();
-    MASTER_CAL.loaded = false; loadMasterCalendar();
+    if (window.OpalScheduler) window.OpalScheduler.nav('today');
     return;
   }
   if (window.__calendarMode === 'month') return gotoThisMonth();
@@ -19961,22 +19897,15 @@ if (typeof switchTab === 'function') {
     if (name === 'activity') loadActivityFeed();
     if (name === 'contacts') loadContactsData();
     if (name === 'profile')  loadProfileView();
-    if (name === 'master')   { initMasterTimeCol(); loadMasterCalendar(); }
+    if (name === 'master' && window.OpalScheduler) window.OpalScheduler.open();
   };
 }
 
 // ═══════════════════════════════════════════════════════
-//  MASTER CALENDAR — multi-therapist overlay view
-//  Owner/Admin only. Fetches from /api/calendar/master.
+//  MASTER SCHEDULER (Phase 1) — the view itself lives in /scheduler.js
+//  (+ /scheduler.css), rendering into #scheduler-root over the aggregated
+//  /api/calendar/master data. Only role gating + mode wiring remain here.
 // ═══════════════════════════════════════════════════════
-
-let MASTER_CAL = {
-  therapists: [],   // [{id, displayName, colour, initials}, …]
-  events:     [],   // raw events from API
-  filter:     null, // Set of selected therapist IDs; null = show all
-  loaded:     false,
-  timeColDone: false,
-};
 
 // ── Expose Master tab to Owner/Admin only ─────────────
 // Called from initAuth() after APP_USER is resolved.
@@ -20206,334 +20135,28 @@ function applyNavRoleVisibility(role) {
   }
 }
 
-// ── Paint hour labels into the master time column once ─
-function initMasterTimeCol() {
-  if (MASTER_CAL.timeColDone) return;
-  const tc = document.getElementById('master-time-col');
-  if (!tc) return;
-  for (let h = START_H; h < END_H; h++) {
-    const lbl = document.createElement('div');
-    lbl.className = 'time-label';
-    lbl.style.top = tToY(h) + 'px';
-    lbl.textContent = ((h % 12) || 12) + (h < 12 ? ' AM' : ' PM'); // 12-hour clock: 12 AM … 11 PM
-    tc.appendChild(lbl);
-  }
-  // Paint hour lines + non-working bands into each day column
-  ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
-    const col = document.getElementById('mcol-' + d);
-    if (col) paintHourLines(col);
-  });
-  MASTER_CAL.timeColDone = true;
-}
 
-// ── Update master week header dates ──────────────────
-function renderMasterWeekHeader() {
-  const mon = window.__currentWeekMonday;
-  if (!mon) return;
-  const days = ['mon','tue','wed','thu','fri','sat','sun'];
-  const todayKey = __perthDateStr(new Date());
-  days.forEach((d, i) => {
-    const dt = new Date(mon); dt.setUTCDate(mon.getUTCDate() + i);
-    const head = document.getElementById('mch-' + d);
-    if (!head) return;
-    head.querySelector('.day-num').textContent = parseInt(__perthParts(dt).day, 10);
-    head.querySelector('.day-name').textContent = d.charAt(0).toUpperCase() + d.slice(1);
-    head.classList.toggle('today', __ymd(dt) === todayKey);
-  });
-}
-
-// ── Fetch master calendar data and render ────────────
-async function loadMasterCalendar(forceRefresh = false) {
-  const statusEl = document.getElementById('master-status');
-  const gridWrap = document.getElementById('master-grid-wrap');
-
-  // If already loaded and not forcing, just re-render
-  if (MASTER_CAL.loaded && !forceRefresh) {
-    renderMasterCalendarWeek();
-    return;
-  }
-
-  if (statusEl) { statusEl.textContent = 'Loading…'; statusEl.style.display = ''; }
-  if (gridWrap) gridWrap.style.display = 'none';
-
-  const mon = window.__currentWeekMonday || __thisMondayPerth();
-  const nextMon = new Date(mon); nextMon.setUTCDate(mon.getUTCDate() + 7);
-  const startDate = __ymd(mon);
-  const endDate   = __ymd(nextMon);
-
-  try {
-    const r = await fetch(
-      `/api/calendar/master?startDate=${startDate}&endDate=${endDate}`,
-      { credentials: 'include' }
-    );
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      throw new Error(j.error || `HTTP ${r.status}`);
-    }
-    const data = await r.json();
-
-    MASTER_CAL.therapists = data.therapists || [];
-    MASTER_CAL.events     = data.events     || [];
-    MASTER_CAL.loaded     = true;
-
-    if (statusEl) statusEl.style.display = 'none';
-    if (gridWrap) gridWrap.style.display = '';
-
-    renderMasterChips();
-    renderMasterCalendarWeek();
-
-    // Scroll to working hours
-    requestAnimationFrame(() => {
-      const wrap = document.getElementById('master-grid-wrap');
-      if (wrap) wrap.scrollTop = tToY(WORK_S) + 32;
-    });
-  } catch (err) {
-    if (statusEl) {
-      statusEl.textContent = `Failed to load master calendar: ${err.message}`;
-      statusEl.style.display = '';
-    }
-    if (gridWrap) gridWrap.style.display = 'none';
-    console.error('Master calendar error:', err);
-  }
-}
-
-// ── Therapist chip strip ──────────────────────────────
-function renderMasterChips() {
-  const strip = document.getElementById('master-chips');
-  if (!strip) return;
-  strip.innerHTML = '';
-
-  if (MASTER_CAL.therapists.length === 0) {
-    strip.innerHTML = '<span style="font-size:12px;color:var(--muted);">No therapists found</span>';
-    return;
-  }
-
-  // "All" chip
-  const allChip = document.createElement('button');
-  allChip.className = 'master-chip' + (MASTER_CAL.filter === null ? '' : ' muted');
-  allChip.style.border = '2px solid #e9e3d9';
-  allChip.innerHTML = `<span class="chip-avatar" style="background:#7a736a;">★</span>All therapists`;
-  allChip.onclick = () => {
-    MASTER_CAL.filter = null;
-    renderMasterChips();
-    renderMasterCalendarWeek();
-  };
-  strip.appendChild(allChip);
-
-  MASTER_CAL.therapists.forEach(t => {
-    const isSelected = MASTER_CAL.filter === null || MASTER_CAL.filter.has(t.id);
-    const chip = document.createElement('button');
-    chip.className = 'master-chip' + (isSelected ? '' : ' muted');
-    chip.style.border = `2px solid ${t.colour || '#0f7c6c'}`;
-    chip.dataset.therapistId = t.id;
-    chip.innerHTML = `<span class="chip-avatar" style="background:${t.colour || '#0f7c6c'}">${t.initials}</span>${t.displayName}`;
-    chip.onclick = () => toggleMasterFilter(t.id);
-    strip.appendChild(chip);
-  });
-}
-
-function toggleMasterFilter(therapistId) {
-  if (MASTER_CAL.filter === null) {
-    // Switch from "all" to only this one selected
-    MASTER_CAL.filter = new Set([therapistId]);
-  } else if (MASTER_CAL.filter.has(therapistId)) {
-    MASTER_CAL.filter.delete(therapistId);
-    if (MASTER_CAL.filter.size === 0) MASTER_CAL.filter = null; // back to all
-  } else {
-    MASTER_CAL.filter.add(therapistId);
-  }
-  renderMasterChips();
-  renderMasterCalendarWeek();
-}
-
-// ── Side-by-side lanes for overlapping master tiles ───
-// Same idea as reflowDayOverlaps for the personal week view: cluster tiles
-// that overlap in time, then split the column width between the cluster's
-// lanes so busy multi-therapist days stay readable.
-function reflowMasterOverlaps(col) {
-  const tiles = Array.from(col.querySelectorAll('.master-tile'))
-    .map(el => ({ el, top: parseFloat(el.style.top) || 0,
-                  bottom: (parseFloat(el.style.top) || 0) + (parseFloat(el.style.height) || 0) }))
-    .sort((a, b) => a.top - b.top || a.bottom - b.bottom);
-
-  let cluster = [], clusterEnd = -Infinity;
-  const flush = () => {
-    if (!cluster.length) return;
-    const lanes = []; // laneIndex -> occupied-until y
-    cluster.forEach(t => {
-      let lane = lanes.findIndex(endY => endY <= t.top);
-      if (lane === -1) { lane = lanes.length; lanes.push(0); }
-      lanes[lane] = t.bottom;
-      t.lane = lane;
-    });
-    const n = lanes.length;
-    cluster.forEach(t => {
-      const w = 100 / n;
-      t.el.style.left  = `calc(${t.lane * w}% + 3px)`;
-      t.el.style.right = 'auto';
-      t.el.style.width = `calc(${w}% - 6px)`;
-    });
-    cluster = [];
-  };
-
-  tiles.forEach(t => {
-    if (t.top >= clusterEnd) { flush(); clusterEnd = t.bottom; }
-    else clusterEnd = Math.max(clusterEnd, t.bottom);
-    cluster.push(t);
-  });
-  flush();
-}
-
-// ── Render events onto the master week grid ───────────
-function renderMasterCalendarWeek() {
-  renderMasterWeekHeader();
-
-  // Clear existing tiles
-  ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
-    const col = document.getElementById('mcol-' + d);
-    if (!col) return;
-    col.querySelectorAll('.master-tile').forEach(el => el.remove());
-  });
-
-  const mon = window.__currentWeekMonday;
-  if (!mon) return;
-
-  // Build therapist lookup for quick colour/initials access
-  const therapistMap = {};
-  MASTER_CAL.therapists.forEach(t => { therapistMap[t.id] = t; });
-
-  // Filter and group events by Perth day
-  const eventsToShow = MASTER_CAL.events.filter(ev => {
-    if (ev.isDeleted || ev.isCancelled) return false;
-    if (MASTER_CAL.filter !== null && !MASTER_CAL.filter.has(ev.therapistProfileId)) return false;
-    return true;
-  });
-
-  // Group events by day-of-week within current visible week
-  const dayKeys = ['mon','tue','wed','thu','fri','sat','sun'];
-  const byDay = {};
-  dayKeys.forEach(d => { byDay[d] = []; });
-
-  eventsToShow.forEach(ev => {
-    const start = new Date(ev.start);
-    if (isNaN(start.getTime())) return;
-    // Map to Perth day of week
-    const perthParts = __perthParts(start);
-    const evDateStr = `${perthParts.year}-${perthParts.month}-${perthParts.day}`;
-    // Check if this event falls in the visible week
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(mon); d.setUTCDate(mon.getUTCDate() + i);
-      if (__ymd(d) === evDateStr) {
-        byDay[dayKeys[i]].push(ev);
-        break;
-      }
-    }
-  });
-
-  // Render tiles
-  dayKeys.forEach(dayKey => {
-    const col = document.getElementById('mcol-' + dayKey);
-    if (!col) return;
-    byDay[dayKey].forEach(ev => {
-      const t = therapistMap[ev.therapistProfileId] || {};
-      const colour = ev.therapistColour || t.colour || '#0f7c6c';
-      const initials = t.initials || '?';
-
-      const start = new Date(ev.start);
-      const end   = new Date(ev.end);
-      const pStart = __perthParts(start);
-      const startH = parseInt(pStart.hour, 10);
-      const startM = parseInt(pStart.minute, 10);
-      const durMin = Math.max(15, Math.round((end - start) / 60000));
-
-      const top    = tToY(startH, startM);
-      const height = Math.max(20, durMin / 60 * HOUR_PX - 4);
-
-      const tile = document.createElement('div');
-      tile.className = 'master-tile';
-      tile.style.cssText = `top:${top}px;height:${height}px;border-left-color:${colour};background:${colour}18;`;
-
-      // Never surface raw "(No title)"/"(No subject)" placeholders here either.
-      const rawTitle = (ev.title || '').trim();
-      const untitled = !rawTitle || rawTitle === '(No subject)' || rawTitle === '(No title)' || rawTitle === 'Untitled';
-      const safeTitle = untitled ? 'Untitled event' : rawTitle;
-
-      const timeStr = `${startH}:${String(startM).padStart(2,'0')}`;
-      tile.innerHTML = `
-        <div class="mt-header">
-          <span class="mt-badge" style="background:${colour}">${initials}</span>
-          <span class="mt-title">${safeTitle}</span>
-        </div>
-        ${height > 30 ? `<div class="mt-sub">${timeStr} · ${t.displayName || ''}</div>` : ''}
-      `;
-
-      tile.title = `${safeTitle}\n${t.displayName || ''}\n${timeStr}`;
-      col.appendChild(tile);
-    });
-    reflowMasterOverlaps(col);
-  });
-
-  if (eventsToShow.length === 0) {
-    const mon2 = document.getElementById('mcol-mon');
-    if (mon2) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'position:absolute;top:40%;left:50%;transform:translateX(-50%);font-size:12px;color:var(--muted);white-space:nowrap;pointer-events:none;';
-      empty.textContent = 'No events for the selected therapists this week';
-      mon2.appendChild(empty);
-    }
-  }
-}
-
-// ── Hook master mode into nav (prev/next/today) ───────
-// Extend setCalendarMode to handle 'master'
-(function patchCalendarModeForMaster() {
+// ── Hook Scheduler mode into the calendar mode switch ─
+(function patchCalendarModeForScheduler() {
   const _orig = window.setCalendarMode || setCalendarMode;
   window.setCalendarMode = function(mode) {
     const masterView = document.getElementById('cal-view-master');
     if (mode === 'master') {
-      // Update tab active state
       document.querySelectorAll('.view-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.view === 'master');
       });
-      // Hide other views
       ['cal-view-week','cal-view-month','cal-view-today'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
       if (masterView) masterView.style.display = 'flex';
       window.__calendarMode = 'master';
-      initMasterTimeCol();
-      loadMasterCalendar();
+      if (window.OpalScheduler) window.OpalScheduler.open();
       return;
     }
-    // For all other modes, hide master view first
+    // For all other modes, hide the scheduler view first
     if (masterView) masterView.style.display = 'none';
     _orig(mode);
-  };
-})();
-
-// Extend gotoPrev/Next/Today so master view re-renders on nav
-(function patchMasterNav() {
-  const _prev = window.gotoPrevWeek;
-  window.gotoPrevWeek = function() {
-    _prev && _prev();
-    if (window.__calendarMode === 'master') {
-      MASTER_CAL.loaded = false; loadMasterCalendar();
-    }
-  };
-  const _next = window.gotoNextWeek;
-  window.gotoNextWeek = function() {
-    _next && _next();
-    if (window.__calendarMode === 'master') {
-      MASTER_CAL.loaded = false; loadMasterCalendar();
-    }
-  };
-  const _today = window.gotoThisWeek || function(){};
-  window.gotoThisWeek = function() {
-    _today && _today();
-    if (window.__calendarMode === 'master') {
-      MASTER_CAL.loaded = false; loadMasterCalendar();
-    }
   };
 })();
 
@@ -24407,10 +24030,8 @@ function applyUserSettings(s, os) {
 
   // ── Show weekends — toggle CSS class on both grids ─────────────
   var showWeekends = s.showWeekends !== false; // full Mon-Sun week by default; Settings can hide weekends
-  ['cal-grid', 'master-grid'].forEach(function(gId) {
-    var g = document.getElementById(gId);
-    if (g) g.classList.toggle('hide-weekends', !showWeekends);
-  });
+  var mainGrid = document.getElementById('cal-grid');
+  if (mainGrid) mainGrid.classList.toggle('hide-weekends', !showWeekends);
 
   // ── Time format — rebuild axis labels + refresh tile time labels ─
   if (s.timeFormat) {

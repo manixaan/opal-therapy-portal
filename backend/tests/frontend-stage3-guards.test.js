@@ -677,11 +677,11 @@ describe('scheduler ui refinement', () => {
     expect(HTML).toContain('id="btn-outlook-only"');
   });
 
-  test('Month, Master and Day share the centred content frame', () => {
+  test('Month and Day share the centred content frame; Scheduler uses full width', () => {
     expect(HTML).toContain('--cal-frame: 1060px;');
     expect(HTML).toContain('#month-scroll-area .month-section { max-width: var(--cal-frame) !important');
-    expect(HTML).toContain('#master-grid { max-width: var(--cal-frame) !important');
     expect(HTML).toContain('.cal-grid.view-day { max-width: 860px; margin: 0 auto; width: 100%; }');
+    expect(HTML).not.toContain('#master-grid');
   });
 });
 
@@ -745,5 +745,56 @@ describe('playful premium design pass', () => {
     expect(HTML).toContain('@keyframes pebbleMorph');
     expect(HTML).toContain('@keyframes pebbleDrift');
     expect(HTML).toContain('animation: pebbleMorph 9s ease-in-out infinite;');
+  });
+});
+
+// ── Master Scheduler Phase 1 (2026-08-08) ────────────────────────────────────
+describe('master scheduler phase 1', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
+
+  test('scheduler assets are linked and the root container exists', () => {
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css" />');
+    expect(HTML).toContain('<script src="/scheduler.js" defer></script>');
+    expect(HTML).toContain('id="scheduler-root"');
+  });
+
+  test('the legacy master week grid is fully retired (no duplicate calendars)', () => {
+    ['MASTER_CAL', 'loadMasterCalendar', 'initMasterTimeCol', 'mcol-mon', 'mch-mon',
+     'master-grid', 'master-time-col'].forEach((sym) => {
+      expect(HTML).not.toContain(sym);
+    });
+  });
+
+  test('mode wiring delegates to OpalScheduler', () => {
+    expect(HTML).toContain('window.OpalScheduler.open()');
+    expect(HTML).toContain("window.OpalScheduler.nav('today')");
+    expect(HTML).toContain('>Scheduler</button>');
+  });
+
+  test('scheduler stays on the aggregated master endpoint (one request per range)', () => {
+    expect(SCHED_JS).toContain('/api/calendar/master?startDate=');
+    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(1);
+  });
+
+  test('cross-therapist tiles use safe labels, never raw Outlook subjects', () => {
+    expect(SCHED_JS).toContain('safeLabel(it.ev, mode)');
+    expect(SCHED_JS).toContain("return TYPE_LABELS[ev.eventType] || 'Busy';");
+    // '(No subject)' may appear only inside the placeholder DETECTOR, never as output
+    expect(SCHED_JS).toContain('function isPlaceholderTitle');
+  });
+
+  test('scheduler visuals stay on design tokens and carry no emojis', () => {
+    expect(SCHED_CSS).toContain('var(--accent');
+    expect(SCHED_CSS).toContain('var(--c-therapy)');
+    expect(SCHED_CSS).toContain('var(--now)');
+    const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    expect(EMOJI.test(SCHED_JS)).toBe(false);
+    expect(EMOJI.test(SCHED_CSS)).toBe(false);
+  });
+
+  test('back-to-back tiles keep the 4px separation rule in the scheduler too', () => {
+    expect(SCHED_JS).toContain('HOUR() - 4)');
   });
 });

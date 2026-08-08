@@ -41,31 +41,41 @@ const DEMO_THERAPISTS = [
   { email: 'demo.priya@opaltherapy.dev', name: 'Priya Nair',  colour: '#2f7d4f', roleTitle: 'Physiotherapist' },
 ];
 
-// Perth-local weekly pattern per therapist index. [dayIdx(0=Mon), startH, endH, title, type]
-// Includes: back-to-back pairs, travel, admin, meetings, lunch, report, one true overlap.
+// Suburb pools per therapist index — Maya works the northern corridor, Tom
+// the southern suburbs, Priya the coastal strip. Exercises suburb display.
+const SUBURBS = [
+  ['24 Grand Blvd, Joondalup WA 6027', '11 Scenic Dr, Wanneroo WA 6065', '3 Moolanda Blvd, Kingsley WA 6026', '8 Susan Rd, Madeley WA 6065'],
+  ['52 Burrendah Blvd, Willetton WA 6155', '19 Eucalyptus Blvd, Canning Vale WA 6155', '7 Corinthian Rd, Riverton WA 6148', '30 High Rd, Willetton WA 6155'],
+  ['14 Adelaide St, Fremantle WA 6160', '6 Chalgrove Ave, Rockingham WA 6168', '22 Makybe Dr, Baldivis WA 6171', '9 Parry St, Fremantle WA 6160'],
+];
+
+// Perth-local weekly pattern per therapist index. [dayIdx(0=Mon), startH, endH, title, type, suburbIdx|null]
+// Includes: back-to-back pairs, travel, admin, meetings, lunch, report, leave, one true overlap.
 function weekPlan(i) {
   const base = [
-    [0,  9, 10, 'Client session — initial assessment', 'therapy'],
-    [0, 10, 11, 'Client session — therapy',            'therapy'],   // back-to-back with the 9-10
-    [0, 11, 11.5, 'Travel to clinic',                  'travel'],
-    [0, 12, 13, 'Lunch',                               'lunch'],
-    [0, 13, 14.5, 'Report writing',                    'report'],
-    [1,  8.5, 9.5, 'Team meeting',                     'meeting'],
-    [1, 10, 11, 'Client session — therapy',            'therapy'],
-    [1, 11, 12, 'Client session — therapy',            'therapy'],   // back-to-back
-    [1, 14, 15, 'Case management',                     'admin'],
-    [2,  9, 10, 'Client session — school visit',       'therapy'],
-    [2, 10, 10.5, 'Travel — return',                   'travel'],
-    [2, 13, 14, 'Client session — therapy',            'therapy'],
-    [2, 13.5, 14.5, 'MDT call',                        'meeting'],   // genuine overlap
-    [3,  9, 12, 'Community visits block',              'therapy'],
-    [3, 13, 13.5, 'Admin — notes',                     'admin'],
-    [4,  9, 10, 'Client session — review',             'therapy'],
-    [4, 10, 11, 'Client session — therapy',            'therapy'],   // back-to-back
-    [4, 15, 16, 'Professional development',            'cpd'],
+    [0,  9, 10, 'Client session — initial assessment', 'therapy', 0],
+    [0, 10, 11, 'Client session — therapy',            'therapy', 1],   // back-to-back with the 9-10
+    [0, 11, 11.5, 'Travel to clinic',                  'travel',  null],
+    [0, 12, 13, 'Lunch',                               'lunch',   null],
+    [0, 13, 14.5, 'Report writing',                    'report',  null],
+    [1,  8.5, 9.5, 'Team meeting',                     'meeting', null],
+    [1, 10, 11, 'Client session — therapy',            'therapy', 2],
+    [1, 11, 12, 'Client session — therapy',            'therapy', 3],   // back-to-back
+    [1, 14, 15, 'Case management',                     'admin',   null],
+    [2,  9, 10, 'Client session — school visit',       'therapy', 0],
+    [2, 10, 10.5, 'Travel — return',                   'travel',  null],
+    [2, 13, 14, 'Client session — therapy',            'therapy', 1],
+    [2, 13.5, 14.5, 'MDT call',                        'meeting', null],   // genuine overlap
+    [3,  9, 12, 'Community visits block',              'therapy', 2],
+    [3, 13, 13.5, 'Admin — notes',                     'admin',   null],
+    [4,  9, 10, 'Client session — review',             'therapy', 3],
+    [4, 10, 11, 'Client session — therapy',            'therapy', 0],   // back-to-back
+    [4, 15, 16, 'Professional development',            'cpd',     null],
   ];
+  if (i === 2) base.push([4, 13, 17, 'Annual leave (afternoon)', 'leave', null]);
   // Shift each therapist's day by i*0.5h so columns don't look cloned.
-  return base.map(([d, s, e, title, type]) => [d, s + i * 0.5, e + i * 0.5, title, type]);
+  return base.map(([d, s, e, title, type, sub]) =>
+    [d, s + i * 0.5, e + i * 0.5, title, type, sub === null ? null : SUBURBS[i][sub]]);
 }
 
 // Monday 00:00 Perth of the current week, as a UTC Date.
@@ -132,15 +142,15 @@ async function main() {
     }
 
     let count = 0;
-    for (const [dayIdx, startH, endH, title, type] of weekPlan(i)) {
+    for (const [dayIdx, startH, endH, title, type, location] of weekPlan(i)) {
       // mondayUTC is the UTC instant of Perth Mon 00:00, so just add day+hours.
       const s = new Date(mondayUTC.getTime() + (dayIdx * 24 + startH) * 3600e3);
       const e = new Date(mondayUTC.getTime() + (dayIdx * 24 + endH) * 3600e3);
       await pool.query(`
         INSERT INTO events (id, user_id, title, start_time, end_time, event_type, status,
-                            source, created_by_source, therapist_profile_id, organisation_id, is_deleted)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'confirmed', 'manual', $6, $7, $8, FALSE)`,
-        [userId, title, s.toISOString(), e.toISOString(), type, DEMO_SOURCE, profileId, orgId]);
+                            source, created_by_source, therapist_profile_id, organisation_id, is_deleted, location)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'confirmed', 'manual', $6, $7, $8, FALSE, $9)`,
+        [userId, title, s.toISOString(), e.toISOString(), type, DEMO_SOURCE, profileId, orgId, location]);
       count++;
     }
     console.log(`✓ ${t.name.padEnd(12)} ${t.email}  (${count} events, colour ${t.colour})`);
