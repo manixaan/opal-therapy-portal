@@ -224,6 +224,10 @@
     focusId: null,
     loading: false,
     nowTimer: null,
+    // Phase 2 — availability intelligence layer
+    overlay: (function () { try { return localStorage.getItem('sch_overlay') === '1'; } catch (e) { return false; } })(),
+    avail: { key: null, byId: {}, meta: null, loading: false },
+    common: { open: false, minDur: 30, loading: false, result: null },
   };
 
   function esc(s) {
@@ -241,6 +245,29 @@
       return { start: mon, end: addDaysYmd(mon, 7) };
     }
     return { start: state.date, end: addDaysYmd(state.date, 1) };
+  }
+
+  function fmtDur(min) {
+    var h = Math.floor(min / 60), m = min % 60;
+    return (h ? h + 'h' : '') + (h && m ? ' ' : '') + (m || !h ? m + 'm' : '');
+  }
+
+  function loadAvailability(force) {
+    if (!SCHED.overlay || SCHED.mode !== 'day') return Promise.resolve();
+    var key = SCHED.date;
+    if (!force && SCHED.avail.key === key) return Promise.resolve();
+    SCHED.avail.loading = true;
+    return fetch('/api/scheduler/availability?date=' + key, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        SCHED.avail.loading = false;
+        if (!j) { SCHED.avail = { key: key, byId: {}, meta: null, loading: false }; return; }
+        var byId = {};
+        (j.therapists || []).forEach(function (t) { byId[t.therapistProfileId] = t; });
+        SCHED.avail = { key: key, byId: byId, meta: j, loading: false };
+        render();
+      })
+      .catch(function () { SCHED.avail.loading = false; });
   }
 
   function load(force) {
@@ -261,6 +288,7 @@
         SCHED.rangeKey = key;
         SCHED.loading = false;
         render();
+        loadAvailability();
       })
       .catch(function (err) {
         SCHED.loading = false;
@@ -291,6 +319,12 @@
         '<button type="button" data-act="mode-week"' + (SCHED.mode === 'week' ? ' class="active"' : '') + '>Week</button>' +
       '</div>' +
       '<div class="sch-spacer"></div>' +
+      (SCHED.mode === 'day'
+        ? '<button type="button" class="sch-toggle' + (SCHED.overlay ? ' on' : '') + '" data-act="overlay" ' +
+            'title="Distinguish true availability from empty calendar space" aria-pressed="' + (SCHED.overlay ? 'true' : 'false') + '">' +
+            '<span class="sch-toggle-dot"></span>Availability</button>' +
+          '<button type="button" class="sch-common-btn' + (SCHED.common.open ? ' on' : '') + '" data-act="common">Common availability</button>'
+        : '') +
       '<button type="button" class="sch-add-btn" data-act="add">+ Appointment</button>';
 
     tb.addEventListener('click', function (e) {
@@ -299,6 +333,12 @@
       if (act === 'prev')  nav(-1);
       if (act === 'next')  nav(1);
       if (act === 'today') nav('today');
+      if (act === 'overlay') {
+        SCHED.overlay = !SCHED.overlay;
+        try { localStorage.setItem('sch_overlay', SCHED.overlay ? '1' : '0'); } catch (err) {}
+        if (SCHED.overlay) { render(); loadAvailability(); } else { render(); }
+      }
+      if (act === 'common') { SCHED.common.open = !SCHED.common.open; SCHED.common.result = null; render(); if (SCHED.common.open && !SCHED.overlay) loadAvailability(); }
       if (act === 'mode-day')  { SCHED.mode = 'day'; load(); }
       if (act === 'mode-week') { SCHED.mode = 'week'; load(); }
       if (act === 'add') {
@@ -375,6 +415,75 @@
     frag.appendChild(bar);
   }
 
+  // ── Common availability (Phase 2) ─────────────────────────────────────────
+  function commonTherapistIds(visible) {
+    return visible.map(function (t) { return t.id; });
+  }
+
+  function renderCommon(frag, visible) {
+    if (!SCHED.common.open || SCHED.mode !== 'day') return;
+    var bar = document.createElement('div');
+    bar.className = 'sch-common';
+    var ids = commonTherapistIds(visible);
+    var res = SCHED.common.result;
+    var html = '<span class="sch-filter-label">Common availability</span>' +
+      '<span class="sch-common-sub">' + ids.length + ' therapist' + (ids.length === 1 ? '' : 's') + ' · ' + esc(fmtDayLabel(SCHED.date)) + '</span>' +
+      '<label class="sch-common-sub" for="sch-common-min">Minimum</label>' +
+      '<select id="sch-common-min" class="sch-select">' +
+        [30, 45, 60, 90].map(function (m) {
+          return '<option value="' + m + '"' + (SCHED.common.minDur === m ? ' selected' : '') + '>' + m + ' min</option>';
+        }).join('') + '</select>' +
+      '<button type="button" class="sch-common-find" data-act="find"' + (ids.length < 2 ? ' disabled title="Select at least two therapists"' : '') + '>' +
+        (SCHED.common.loading ? 'Finding…' : 'Find') + '</button>';
+    if (res) {
+      if (!res.slots.length) {
+        html += '<span class="sch-common-none">No common ' + res.minDurationMin + '-minute window — try a shorter minimum or fewer therapists.</span>';
+      } else {
+        html += res.slots.map(function (sl, i) {
+          return '<button type="button" class="sch-common-slot" data-slot="' + i + '">' +
+            fmtTime12(sl.startMin) + '–' + fmtTime12(sl.endMin) +
+            '<span class="sch-common-dur">' + esc(fmtDur(sl.durationMin)) + '</span></button>';
+        }).join('');
+      }
+    }
+    bar.innerHTML = html;
+    bar.addEventListener('click', function (e) {
+      var find = e.target.closest('[data-act="find"]');
+      if (find && !find.disabled) {
+        SCHED.common.loading = true; render();
+        fetch('/api/scheduler/common-availability', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: SCHED.date, therapistIds: ids, minDurationMin: SCHED.common.minDur }),
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (j) { SCHED.common.loading = false; SCHED.common.result = j; render(); })
+          .catch(function () { SCHED.common.loading = false; render(); });
+        return;
+      }
+      var slot = e.target.closest('[data-slot]');
+      if (slot && SCHED.common.result) {
+        var sl = SCHED.common.result.slots[Number(slot.dataset.slot)];
+        if (sl) jumpToMinute(sl.startMin);
+      }
+    });
+    var sel = bar.querySelector('#sch-common-min');
+    if (sel) sel.addEventListener('change', function (e) {
+      SCHED.common.minDur = Number(e.target.value) || 30; SCHED.common.result = null; render();
+    });
+    frag.appendChild(bar);
+  }
+
+  function jumpToMinute(min) {
+    var scroll = document.querySelector('#scheduler-root .sch-scroll');
+    if (scroll) scroll.scrollTo({ top: Math.max(0, min / 60 * HOUR() - 90), behavior: 'smooth' });
+    document.querySelectorAll('#scheduler-root .sch-col').forEach(function (c) {
+      c.classList.remove('sch-flash');
+      void c.offsetWidth; // restart the animation
+      c.classList.add('sch-flash');
+    });
+  }
+
   // ── Day grid ──────────────────────────────────────────────────────────────
   function renderDay(frag, visible) {
     var scroll = document.createElement('div');
@@ -399,11 +508,15 @@
       head.setAttribute('role', 'button');
       head.setAttribute('tabindex', '0');
       head.title = 'Focus on ' + t.displayName;
+      var avh = SCHED.overlay && SCHED.avail.key === SCHED.date ? SCHED.avail.byId[t.id] : null;
+      var subBits = [esc(t.roleTitle || '')];
+      if (avh && avh.working) subBits.push('<span class="sch-cap">' + esc(fmtDur(avh.capacity.availableMin)) + ' free</span>');
+      if (avh && avh.availabilityConfidence === 'default') subBits.push('<span class="sch-defbadge" title="No work schedule entered for this week — using the practice default hours">default hours</span>');
       head.innerHTML =
         '<span class="sch-h-av" style="background:' + esc(t.colour || '#0f7c6c') + ';">' + esc(t.initials || '?') + '</span>' +
         '<span class="sch-h-id">' +
           '<span class="sch-h-name">' + esc(t.displayName) + '</span>' +
-          '<span class="sch-h-sub">' + esc(t.roleTitle || '') + '</span>' +
+          '<span class="sch-h-sub">' + subBits.filter(Boolean).join(' · ') + '</span>' +
         '</span>' +
         '<span class="sch-h-count" title="Appointments this day">' + apptCount(dayEvents) + '</span>';
       var focus = function () { SCHED.focusId = t.id; render(); };
@@ -431,14 +544,59 @@
       col.className = 'sch-col';
       col.style.height = bodyH + 'px';
 
-      // soft off-hours wash (visual calm, explicitly NOT availability)
-      [['0', WORK_START_H], [String(WORK_END_H), 24 - WORK_END_H]].forEach(function (band) {
-        var off = document.createElement('div');
-        off.className = 'sch-offhours';
-        off.style.top = (Number(band[0]) * HOUR()) + 'px';
-        off.style.height = (band[1] * HOUR()) + 'px';
-        col.appendChild(off);
-      });
+      var av = SCHED.overlay && SCHED.avail.key === SCHED.date ? SCHED.avail.byId[t.id] : null;
+      if (av) {
+        // Real availability from the engine: paint every segment type.
+        if (!av.working) {
+          col.classList.add('sch-notworking');
+          var nw = document.createElement('div');
+          nw.className = 'sch-nw-label';
+          nw.textContent = av.segments.some(function (x) { return x.type === 'leave'; }) ? 'On leave' : 'Not working';
+          nw.style.top = (10.5 * HOUR()) + 'px';
+          col.appendChild(nw);
+        } else {
+          av.segments.forEach(function (seg) {
+            if (seg.type === 'busy') return; // tiles carry busy visually
+            var band = document.createElement('div');
+            band.className = 'sch-avl ' + seg.type;
+            band.style.top = (seg.startMin / 60 * HOUR()) + 'px';
+            band.style.height = ((seg.endMin - seg.startMin) / 60 * HOUR()) + 'px';
+            if (seg.type === 'available') {
+              var dur = seg.endMin - seg.startMin;
+              band.title = fmtDur(dur) + ' available · ' + fmtTime12(seg.startMin) + '–' + fmtTime12(seg.endMin) + ' · click to book';
+              if (dur >= 60 && (seg.endMin - seg.startMin) / 60 * HOUR() >= 34) {
+                var lbl = document.createElement('span');
+                lbl.className = 'sch-avl-lbl';
+                lbl.textContent = fmtDur(dur) + ' available';
+                band.appendChild(lbl);
+              }
+              (function (startMin, endMin) {
+                band.addEventListener('click', function () {
+                  if (typeof global.openBookingPanel !== 'function') return;
+                  var dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                  var pp = SCHED.date.split('-').map(Number);
+                  var dayKey = dayKeys[new Date(Date.UTC(pp[0], pp[1] - 1, pp[2])).getUTCDay()];
+                  global.openBookingPanel({
+                    day: dayKey, date: SCHED.date,
+                    startH: Math.floor(startMin / 60), startM: startMin % 60,
+                    endH: Math.floor(Math.min(startMin + 60, endMin) / 60), endM: Math.min(startMin + 60, endMin) % 60,
+                  });
+                });
+              })(seg.startMin, seg.endMin);
+            }
+            col.appendChild(band);
+          });
+        }
+      } else {
+        // soft off-hours wash (visual calm, explicitly NOT availability)
+        [['0', WORK_START_H], [String(WORK_END_H), 24 - WORK_END_H]].forEach(function (band) {
+          var off = document.createElement('div');
+          off.className = 'sch-offhours';
+          off.style.top = (Number(band[0]) * HOUR()) + 'px';
+          off.style.height = (band[1] * HOUR()) + 'px';
+          col.appendChild(off);
+        });
+      }
 
       var items = assignLanes(eventsForTherapistDay(SCHED.events, t.id, SCHED.date));
       items.forEach(function (it) {
@@ -600,6 +758,7 @@
       } else if (SCHED.mode === 'week') {
         renderWeek(frag, visible);
       } else {
+        renderCommon(frag, visible);
         renderDay(frag, visible);
       }
     }

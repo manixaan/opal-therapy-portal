@@ -770,8 +770,8 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css" />');
-    expect(HTML).toContain('<script src="/scheduler.js" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p2" />');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p2" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -788,9 +788,11 @@ describe('master scheduler phase 1', () => {
     expect(HTML).toContain('>Scheduler</button>');
   });
 
-  test('scheduler stays on the aggregated master endpoint (one request per range)', () => {
+  test('scheduler uses only aggregated endpoints (never one request per therapist)', () => {
     expect(SCHED_JS).toContain('/api/calendar/master?startDate=');
-    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(1);
+    expect(SCHED_JS).toContain('/api/scheduler/availability?date=');
+    expect(SCHED_JS).toContain('/api/scheduler/common-availability');
+    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(3); // master + availability + common
   });
 
   test('cross-therapist tiles use safe labels, never raw Outlook subjects', () => {
@@ -830,5 +832,49 @@ describe('grouped booking-type picker', () => {
     expect(HTML).toContain('Bill up to 30 minutes each way');
     expect(HTML).toContain('function selectBookingLeaf');
     expect(HTML).toContain('selectBookingCat(leaf.cat)'); // rides the existing category plumbing
+  });
+});
+
+// ── Master Scheduler Phase 2: availability layer (2026-08-08) ────────────────
+describe('master scheduler phase 2 availability', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
+
+  test('availability is an optional overlay toggle, off never changes Phase 1', () => {
+    expect(SCHED_JS).toContain("localStorage.getItem('sch_overlay')");
+    expect(SCHED_JS).toContain('data-act="overlay"');
+    expect(SCHED_JS).toContain('SCHED.overlay && SCHED.avail.key === SCHED.date');
+  });
+
+  test('availability visuals are calm opal tints, not bright green fills', () => {
+    expect(SCHED_CSS).toContain('.sch-avl.available');
+    expect(SCHED_CSS).toContain('rgba(15, 124, 108, 0.07)');
+    expect(SCHED_CSS).not.toMatch(/#(00ff00|0f0|4ade80|22c55e)/i);
+    expect(SCHED_CSS).toContain('.sch-col.sch-notworking');
+  });
+
+  test('default-hours honesty badge and capacity are wired', () => {
+    expect(SCHED_JS).toContain("availabilityConfidence === 'default'");
+    expect(SCHED_JS).toContain('default hours');
+    expect(SCHED_JS).toContain('capacity.availableMin');
+  });
+
+  test('common availability panel intersects and jumps the grid', () => {
+    expect(SCHED_JS).toContain('function renderCommon');
+    expect(SCHED_JS).toContain('function jumpToMinute');
+    expect(SCHED_JS).toContain('minDurationMin: SCHED.common.minDur');
+  });
+
+  test('backend engine and routes exist with privacy-safe payload mapping', () => {
+    const ENGINE = fs.readFileSync(path.join(__dirname, '..', 'availability-engine.js'), 'utf8');
+    const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'scheduler-routes.js'), 'utf8');
+    expect(ENGINE).toContain('function computeDayAvailability');
+    expect(ENGINE).toContain('function intersectAvailability');
+    expect(ENGINE).toContain('function isEventBlockingAvailability');
+    expect(ROUTES).toContain('requireMasterCalendarAccess');
+    // the segment mapping exposes times/types/ids only — no content field access
+    expect(ROUTES).toContain('startMin: s.startMin, endMin: s.endMin, type: s.type,');
+    expect(ROUTES).not.toMatch(/\.title\b|client_name/);
   });
 });

@@ -455,6 +455,7 @@ app.use('/', require('./travel-routes'));
 
 // Snapshot Day (personal reminders + daily tasks; strictly user-scoped)
 app.use('/', require('./snapshot-routes'));
+app.use('/', require('./scheduler-routes'));
 
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));

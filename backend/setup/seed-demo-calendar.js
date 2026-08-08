@@ -154,6 +154,31 @@ async function main() {
       count++;
     }
     console.log(`✓ ${t.name.padEnd(12)} ${t.email}  (${count} events, colour ${t.colour})`);
+
+    // Phase 2 QA data: work schedules + leave.
+    //   Maya  — full Mon-Fri schedule (configured confidence)
+    //   Tom   — schedule with Wednesday OFF (not-working column)
+    //   Priya — no schedule (default-hours badge) + approved Friday leave
+    const weekKey = (() => {
+      const d = new Date(mondayUTC.getTime() + PERTH_OFFSET_H * 3600e3);
+      const t2 = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const day = (t2.getUTCDay() + 6) % 7; t2.setUTCDate(t2.getUTCDate() - day + 3);
+      const ft = new Date(Date.UTC(t2.getUTCFullYear(), 0, 4));
+      const fd = (ft.getUTCDay() + 6) % 7; ft.setUTCDate(ft.getUTCDate() - fd + 3);
+      return `${t2.getUTCFullYear()}-W${String(1 + Math.round((t2 - ft) / 6048e5)).padStart(2, '0')}`;
+    })();
+    if (i === 0) await pool.query('UPDATE users SET work_location_schedule = $1 WHERE id = $2',
+      [JSON.stringify({ [weekKey]: { mon: 'office', tue: 'office', wed: 'office', thu: 'office', fri: 'office' } }), userId]);
+    if (i === 1) await pool.query('UPDATE users SET work_location_schedule = $1 WHERE id = $2',
+      [JSON.stringify({ [weekKey]: { mon: 'office', tue: 'office', thu: 'office', fri: 'office' } }), userId]);
+    if (i === 2) {
+      await pool.query('UPDATE users SET work_location_schedule = NULL WHERE id = $1', [userId]);
+      const friday = new Date(mondayUTC.getTime() + (4 * 24 + PERTH_OFFSET_H) * 3600e3).toISOString().slice(0, 10);
+      await pool.query(`DELETE FROM leave_requests WHERE user_id = $1`, [userId]);
+      await pool.query(`INSERT INTO leave_requests (user_id, organisation_id, leave_type, start_date, end_date, status)
+        VALUES ($1, $2, 'annual', $3, $3, 'approved')`, [userId, orgId, friday]);
+      console.log(`  + approved full-day leave for ${t.name} on ${friday}`);
+    }
   }
 
   console.log('\n✓ Demo calendar seeded for the current Perth week (Mon-Fri).');

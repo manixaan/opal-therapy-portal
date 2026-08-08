@@ -311,3 +311,99 @@
   .sch-mobile-note { display: block; }
   .sch-grid { grid-template-columns: 44px repeat(var(--sch-cols, 1), minmax(230px, 85vw)); }
 }
+
+/* ── Phase 2: availability intelligence layer ─────────────────────────────── */
+.sch-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: 999px; padding: 5px 13px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  cursor: pointer; font-family: inherit;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.sch-toggle .sch-toggle-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: background var(--t-fast);
+}
+.sch-toggle.on { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft); }
+.sch-toggle.on .sch-toggle-dot { background: var(--accent); }
+.sch-common-btn {
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: var(--radius-sm); padding: 5px 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  cursor: pointer; font-family: inherit;
+  transition: background var(--t-fast);
+}
+.sch-common-btn:hover { background: var(--border-soft); }
+.sch-common-btn.on { border-color: var(--accent); color: var(--accent-deep); }
+
+/* Availability bands paint UNDER event tiles (tiles are z-index 2) */
+.sch-avl { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; }
+.sch-avl.available {
+  background: rgba(15, 124, 108, 0.07);
+  box-shadow: inset 2px 0 0 rgba(15, 124, 108, 0.25);
+  pointer-events: auto; cursor: pointer;
+  transition: background var(--t-fast);
+}
+.sch-avl.available:hover { background: rgba(15, 124, 108, 0.14); }
+.sch-avl.outside_hours { background: rgba(36, 31, 26, 0.035); }
+.sch-avl.buffer { background: rgba(36, 31, 26, 0.05); }
+.sch-avl.short_gap { background: transparent; }
+.sch-avl.leave {
+  background: repeating-linear-gradient(-45deg,
+    rgba(36, 31, 26, 0.04) 0 8px, rgba(36, 31, 26, 0.09) 8px 16px);
+}
+.sch-avl-lbl {
+  position: absolute; top: 5px; left: 8px;
+  font-size: 10.5px; font-weight: 700; color: var(--accent-deep);
+  opacity: 0.85; pointer-events: none; white-space: nowrap;
+}
+.sch-col.sch-notworking {
+  background: repeating-linear-gradient(-45deg,
+    rgba(36, 31, 26, 0.025) 0 10px, rgba(36, 31, 26, 0.05) 10px 20px);
+  background-color: var(--bg);
+}
+.sch-nw-label {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--muted); pointer-events: none;
+}
+.sch-cap { color: var(--accent-deep); font-weight: 700; }
+.sch-defbadge {
+  display: inline-block; font-size: 9.5px; font-weight: 700;
+  padding: 0 6px; border-radius: 999px; vertical-align: 1px;
+  background: var(--warn-soft); color: #7a4e0b; letter-spacing: 0.2px;
+}
+
+/* Common availability panel */
+.sch-common {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+}
+.sch-common-sub { font-size: 12px; color: var(--ink-soft); }
+.sch-common-find {
+  border: none; border-radius: var(--radius-sm); padding: 5px 14px;
+  background: var(--accent); color: #fff;
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.sch-common-find:disabled { opacity: 0.5; cursor: not-allowed; }
+.sch-common-slot {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--accent); background: var(--panel);
+  border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 600; color: var(--accent-deep);
+  cursor: pointer; font-family: inherit;
+  transition: background var(--t-fast);
+}
+.sch-common-slot:hover { background: var(--accent-soft); }
+.sch-common-slot .sch-common-dur {
+  font-weight: 400; color: var(--ink-soft); font-size: 11px;
+}
+.sch-common-none { font-size: 12px; color: var(--ink-soft); }
+@keyframes schFlash {
+  0% { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0.55); }
+  100% { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0); }
+}
+.sch-col.sch-flash { animation: schFlash 1.6s ease-out 1; }
