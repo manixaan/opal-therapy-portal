@@ -22,7 +22,9 @@ process.env.TZ = 'UTC';
 // ===== IMPORTS =====
 // These are like loading tools from a toolbox before building
 
-require('dotenv').config(); // Load environment variables from .env file
+// Load .env from this file's directory so startup works from any cwd
+// (e.g. `node backend/server.js` from the repo root).
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 // ===== TELEMETRY FIRST =====
 // Application Insights instruments http/pg by patching the modules at

@@ -127,7 +127,7 @@ describe('installable web app', () => {
       expect(html).toContain('<link rel="manifest" href="/site.webmanifest" />');
       expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />');
       expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
-      expect(html).toContain('<meta name="theme-color" content="#00a8cc" />');
+      expect(html).toContain('<meta name="theme-color" content="#0f7c6c" />');
     }
   });
 
@@ -183,7 +183,7 @@ describe('compact calendar week view', () => {
     expect(anchor).toBeGreaterThan(-1);
     const head = HTML.slice(anchor, anchor + 600);
     expect(head).toContain('position: sticky');
-    expect(HTML).toContain('.cal-col.today { background: rgba(0, 168, 204, 0.035); }');
+    expect(HTML).toContain('.cal-col.today { background: rgba(15, 124, 108, 0.04); }');
   });
 
   test('overlap layout algorithm is unchanged (side-by-side lanes)', () => {
@@ -500,11 +500,11 @@ describe('travel logbook journey view', () => {
 // ── Design tokens (2026-08-06 visual system) ─────────────────────────────────
 describe('design token system', () => {
   test('token scales exist and core components consume them', () => {
-    expect(HTML).toContain('--radius-lg: 14px;');
+    expect(HTML).toContain('--radius-lg: 16px;');
     expect(HTML).toContain('--shadow-sm:');
     expect(HTML).toContain('--focus-ring:');
     expect(HTML).toContain('box-shadow: var(--focus-ring);');
-    expect(HTML).toContain('--bg: #faf9f7;');
+    expect(HTML).toContain('--bg: #faf6f0;');
   });
 });
 
@@ -688,7 +688,7 @@ describe('scheduler ui refinement', () => {
 // ── Calendar polish: separation + title recovery (2026-08-07) ────────────────
 describe('calendar polish', () => {
   test('back-to-back events carry a page-coloured separation hairline', () => {
-    expect(HTML).toContain('box-shadow: 0 2px 0 0 var(--bg, #faf9f7);');
+    expect(HTML).toContain('box-shadow: 0 2px 0 0 var(--bg, #faf6f0);');
   });
 
   test('missing Outlook titles show a recovery state, never (No subject)', () => {
@@ -699,5 +699,43 @@ describe('calendar polish', () => {
     // bounded: one delta refresh per session, quiet failure toast
     expect(HTML).toContain('window.__titleRecoveryDone || __titleRecoveryPending');
     expect(HTML).toContain('Event title could not be synced from Outlook');
+  });
+});
+
+// ── Playful-premium visual pass (2026-08-08) ─────────────────────────────────
+describe('playful premium design pass', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+
+  test('every served page loads the Plus Jakarta Sans typeface', () => {
+    const pages = fs.readdirSync(FRONTEND).filter((f) => f.endsWith('.html'));
+    for (const page of pages) {
+      const html = fs.readFileSync(path.join(FRONTEND, page), 'utf8');
+      expect(html).toContain('family=Plus+Jakarta+Sans');
+    }
+  });
+
+  test('legacy purple brand and cyan accent are fully retired', () => {
+    const pages = fs.readdirSync(FRONTEND).filter((f) => f.endsWith('.html'));
+    for (const page of pages) {
+      const html = fs.readFileSync(path.join(FRONTEND, page), 'utf8');
+      expect(html).not.toContain('#5b6af0');
+      expect(html).not.toContain('#00a8cc');
+    }
+  });
+
+  test('token layer defines the dual-accent warm system', () => {
+    expect(HTML).toContain('--accent: #0f7c6c;');
+    expect(HTML).toContain('--accent-2: #d96f4e;');
+    expect(HTML).toContain('--bg: #faf6f0;');
+    expect(HTML).toContain('--now: var(--accent-2);');
+  });
+
+  test('keyboard focus is visible via a zero-specificity global rule', () => {
+    expect(HTML).toContain(':focus-visible');
+    expect(HTML).toContain('--focus-ring');
+  });
+
+  test('reduced motion support is retained', () => {
+    expect(HTML).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });

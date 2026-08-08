@@ -8,36 +8,50 @@
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="manifest" href="/site.webmanifest" />
-<meta name="theme-color" content="#00a8cc" />
+<meta name="theme-color" content="#0f7c6c" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
 <style>
   :root {
-    /* ── Design tokens (2026-08-06 visual system) ──
-       Calm, warm-neutral base; one confident accent; consistent scales. */
-    --bg: #faf9f7;            /* warm page background */
+    /* ── Design tokens (2026-08-08 playful-premium visual system) ──
+       Warm cream base, deep opal-teal accent, terracotta second accent.
+       Colour guides attention; surfaces stay calm and clinical-friendly. */
+    --bg: #faf6f0;            /* warm cream page background */
     --panel: #ffffff;
-    --ink: #211f1d;
-    --ink-soft: #5f5b56;
-    --muted: #97928c;
-    --border: #e7e4df;
-    --border-soft: #f4f2ef;
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --shadow-sm: 0 1px 2px rgba(33, 31, 29, 0.05);
-    --shadow-md: 0 4px 14px rgba(33, 31, 29, 0.08);
-    --shadow-lg: 0 10px 32px rgba(33, 31, 29, 0.13);
+    --ink: #241f1a;
+    --ink-soft: #5d564e;
+    --muted: #99928a;
+    --border: #e9e3d9;
+    --border-soft: #f4efe7;
+    --radius-sm: 7px;
+    --radius-md: 11px;
+    --radius-lg: 16px;
+    --radius-xl: 22px;
+    --shadow-sm: 0 1px 2px rgba(36, 31, 26, 0.05);
+    --shadow-md: 0 4px 14px rgba(36, 31, 26, 0.08);
+    --shadow-lg: 0 10px 32px rgba(36, 31, 26, 0.13);
     --space-1: 4px; --space-2: 8px; --space-3: 12px;
     --space-4: 16px; --space-5: 24px; --space-6: 32px;
     --focus-ring: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
-    --accent: #00a8cc;
-    --accent-deep: #0088aa;
-    --accent-soft: #e8f4f8;
-    --warn: #ff6b6b;
-    --warn-soft: #ffe8e8;
-    --danger: #ff5252;
-    --danger-soft: #ffebeb;
-    --ok: #00a8cc;
-    --ok-soft: #e8f4f8;
+    --t-fast: 140ms;          /* hover / press */
+    --t-med: 190ms;           /* menus / tooltips */
+    --t-panel: 260ms;         /* panels / drawers */
+    --accent: #0f7c6c;        /* deep opal teal */
+    --accent-deep: #0a5d51;
+    --accent-soft: #e4f2ec;
+    --accent-2: #d96f4e;      /* warm terracotta — used sparingly */
+    --accent-2-deep: #b5563a;
+    --accent-2-soft: #faeae1;
+    --now: var(--accent-2);   /* current-time indicator */
+    --warn: #b06e12;
+    --warn-soft: #faf0da;
+    --danger: #c2412e;
+    --danger-soft: #fbe9e5;
+    --ok: #2f7d4f;
+    --ok-soft: #e5f2e8;
+    --info: #3d6cae;
+    --info-soft: #e8eff9;
 
     /* ── Event type colours — vivid border + readable bg ──────────────────
        Each category has a clearly distinct hue so blocks are identifiable
@@ -120,7 +134,7 @@
   html, body { height: 100%; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     background: var(--bg);
     color: var(--ink);
     font-size: 14px;
@@ -148,7 +162,7 @@
     background: linear-gradient(135deg, var(--accent), var(--accent-deep));
     color: white; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 4px rgba(122, 155, 142, 0.25);
+    box-shadow: 0 2px 4px rgba(15, 124, 108, 0.25);
   }
   header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   header h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 6px; }
@@ -867,20 +881,21 @@
     position: sticky; top: 53px; z-index: 999;
     flex-shrink: 0; /* don't compress when the view below fills remaining space */
   }
+  .tabs { padding: 5px 14px; gap: 4px; align-items: center; }
   .tab {
-    padding: 11px 16px;
+    padding: 7px 14px;
     border: none; background: transparent;
     color: var(--ink-soft);
-    border-bottom: 2px solid transparent;
     font-size: 13px; font-weight: 500;
     display: flex; align-items: center; gap: 7px;
     cursor: pointer;
     user-select: none;
   }
   .tab:hover { color: var(--ink); }
-  .tab.active { color: var(--accent-deep); border-bottom-color: var(--accent); font-weight: 600; }
-  .tab { transition: color 110ms, background 110ms; border-radius: 6px 6px 0 0; }
-  .tab:hover { background: rgba(0, 168, 204, 0.05); }
+  .tab.active { color: var(--accent-deep); background: var(--accent-soft); font-weight: 600; }
+  .tab { transition: color var(--t-fast), background var(--t-fast); border-radius: 999px; }
+  .tab:hover { background: rgba(15, 124, 108, 0.06); }
+  .tab:active { transform: translateY(0.5px); }
   .tab .tab-badge {
     font-size: 10px; font-weight: 700;
     background: var(--danger); color: white;
@@ -892,10 +907,18 @@
      hover/press 120-180ms · menus 160-220ms · panels 220-320ms;
      ease-out entering, ease-in leaving. Reduced motion collapses it all. */
   :root { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); }
+  /* Visible keyboard focus everywhere; :where() keeps specificity at zero so
+     component-level focus styles still win where they exist. */
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: none; box-shadow: var(--focus-ring);
+  }
+  /* Gentle press feedback on chrome controls (reduced-motion collapses it). */
+  .icon-btn, .help-qa-btn, .pf-card { transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+  .icon-btn:active, .help-qa-btn:active, .pf-card:active { transform: translateY(0.5px); }
   /* ── Brand: Opa — a warm organic pebble mark + soft wordmark ── */
   .brand-pebble {
     width: 30px; height: 30px;
-    background: linear-gradient(135deg, #2bb8d4 0%, #0e8fae 55%, #6fbfa8 130%);
+    background: linear-gradient(135deg, #2aa792 0%, #0f7c6c 58%, #cf7b57 108%);
     border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%;
     display: inline-block; position: relative; flex-shrink: 0;
   }
@@ -987,7 +1010,7 @@
     cursor: pointer; text-align: left; font-family: inherit;
     transition: border-color 120ms, box-shadow 120ms;
   }
-  .pf-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0, 168, 204, 0.10); }
+  .pf-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(15, 124, 108, 0.10); }
   .pf-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .pf-card-icon { width: 19px; height: 19px; color: var(--accent-deep); margin-bottom: 2px; }
   .pf-card-title { font-size: 14px; font-weight: 600; color: var(--ink); }
@@ -1755,8 +1778,8 @@
   .day-text { flex: 1; }
   .day-text .title { font-weight: 600; }
   .day-text .meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .day-row.now { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.1); }
-  .day-row.now .day-time { background: var(--danger-soft); color: var(--danger); }
+  .day-row.now { border-color: var(--now); box-shadow: 0 0 0 2px rgba(217, 111, 78, 0.12); }
+  .day-row.now .day-time { background: var(--accent-2-soft); color: var(--accent-2-deep); }
   .nav-item {
     display: flex; align-items: center; gap: 9px;
     padding: 8px 10px; border-radius: 8px;
@@ -2142,7 +2165,7 @@
     font-weight: 600;
   }
   /* Subtle wash over today's whole column — identifiable without a heavy border */
-  .cal-col.today { background: rgba(0, 168, 204, 0.035); }
+  .cal-col.today { background: rgba(15, 124, 108, 0.04); }
   .cal-head.today .day-name { color: var(--accent); font-weight: 600; letter-spacing: 0.6px; }
   /* Clickable day header in week view — drill-down to Day View */
   .cal-head[data-day] { cursor: pointer; transition: background 120ms; }
@@ -2316,7 +2339,7 @@
     /* Back-to-back separation: a page-coloured hairline under every tile so
        an event ending exactly when the next begins reads as two blocks.
        Positioning stays time-accurate (the gap is shaved from height). */
-    box-shadow: 0 2px 0 0 var(--bg, #faf9f7);
+    box-shadow: 0 2px 0 0 var(--bg, #faf6f0);
     overflow: hidden;
     min-height: 9px;
     transition: box-shadow 0.15s ease;
@@ -2456,13 +2479,13 @@
 
   .now-line {
     position: absolute; left: 0; right: 0;
-    border-top: 2px solid var(--danger);
+    border-top: 2px solid var(--now);
     z-index: 4;
   }
   .now-line::before {
     content: ""; position: absolute; left: -5px; top: -5px;
     width: 8px; height: 8px; border-radius: 50%;
-    background: var(--danger);
+    background: var(--now);
   }
 
   /* Right stats panel (week view) */
@@ -20283,9 +20306,9 @@ function renderMasterChips() {
     const isSelected = MASTER_CAL.filter === null || MASTER_CAL.filter.has(t.id);
     const chip = document.createElement('button');
     chip.className = 'master-chip' + (isSelected ? '' : ' muted');
-    chip.style.border = `2px solid ${t.colour || '#5b6af0'}`;
+    chip.style.border = `2px solid ${t.colour || '#0f7c6c'}`;
     chip.dataset.therapistId = t.id;
-    chip.innerHTML = `<span class="chip-avatar" style="background:${t.colour || '#5b6af0'}">${t.initials}</span>${t.displayName}`;
+    chip.innerHTML = `<span class="chip-avatar" style="background:${t.colour || '#0f7c6c'}">${t.initials}</span>${t.displayName}`;
     chip.onclick = () => toggleMasterFilter(t.id);
     strip.appendChild(chip);
   });
@@ -20357,7 +20380,7 @@ function renderMasterCalendarWeek() {
     if (!col) return;
     byDay[dayKey].forEach(ev => {
       const t = therapistMap[ev.therapistProfileId] || {};
-      const colour = ev.therapistColour || t.colour || '#5b6af0';
+      const colour = ev.therapistColour || t.colour || '#0f7c6c';
       const initials = t.initials || '?';
 
       const start = new Date(ev.start);
@@ -21789,7 +21812,7 @@ async function loadBspTherapists() {
       id:           p.id,
       userId:       p.user_id,
       displayName:  p.display_name,
-      colour:       p.colour || '#5b6af0',
+      colour:       p.colour || '#0f7c6c',
       sploseUserId: p.splose_user_id || null,
     }));
 
@@ -22312,7 +22335,7 @@ async function initSchedulingAssistant() {
         therapists = (data.profiles || []).map(p => ({
           id:          p.id,
           displayName: p.display_name || p.displayName || 'Therapist',
-          colour:      p.colour || '#5b6af0',
+          colour:      p.colour || '#0f7c6c',
           initials:    (p.display_name || p.displayName || '?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(),
         }));
       }
@@ -22321,7 +22344,7 @@ async function initSchedulingAssistant() {
       therapists = [{
         id:          u.therapistProfileId,
         displayName: u.displayName || u.name,
-        colour:      '#5b6af0',
+        colour:      '#0f7c6c',
         initials:    (u.displayName || u.name || '?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(),
       }];
     }
