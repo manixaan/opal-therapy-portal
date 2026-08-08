@@ -301,7 +301,12 @@
       if (act === 'today') nav('today');
       if (act === 'mode-day')  { SCHED.mode = 'day'; load(); }
       if (act === 'mode-week') { SCHED.mode = 'week'; load(); }
-      if (act === 'add' && typeof global.switchTab === 'function') global.switchTab('book');
+      if (act === 'add') {
+        // Open the Smart Booking slide-over directly — switchTab('book') would
+        // raw-switch to the default week grid underneath the scheduler.
+        if (typeof global.openBookingPanel === 'function') global.openBookingPanel();
+        else if (typeof global.switchTab === 'function') global.switchTab('book');
+      }
     });
     tb.querySelector('.sch-date-input').addEventListener('change', function (e) {
       if (e.target.value) { SCHED.date = e.target.value; load(); }
