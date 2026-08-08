@@ -407,3 +407,164 @@
   100% { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0); }
 }
 .sch-col.sch-flash { animation: schFlash 1.6s ease-out 1; }
+
+/* ── Phase 3: Quick Availability Finder ───────────────────────────────────── */
+.sch-day-wrap { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.sch-day-wrap .sch-scroll { flex: 1; min-width: 0; }
+.sch-finder {
+  width: 312px; flex-shrink: 0; overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px 14px 20px;
+}
+.sch-f-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 700; color: var(--ink);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 10px;
+}
+.sch-f-close {
+  border: none; background: none; cursor: pointer; color: var(--muted);
+  font-size: 13px; padding: 2px 6px; border-radius: var(--radius-sm);
+}
+.sch-f-close:hover { background: var(--border-soft); color: var(--ink); }
+.sch-f-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.sch-f-lbl {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 12px; font-weight: 600; color: var(--ink-soft);
+}
+.sch-f-input { font-size: 12.5px; max-width: 170px; flex: 1; }
+input.sch-f-input, select.sch-f-input {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 8px; font-family: inherit; color: var(--ink); background-color: var(--panel);
+}
+.sch-f-modes { display: inline-flex; background: var(--border-soft); border-radius: 999px; padding: 2px; gap: 2px; align-self: flex-start; }
+.sch-f-mode {
+  border: none; background: transparent; cursor: pointer;
+  padding: 3px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: var(--ink-soft); font-family: inherit;
+}
+.sch-f-mode.on { background: var(--panel); color: var(--accent-deep); box-shadow: var(--shadow-sm); }
+.sch-f-range { display: flex; flex-direction: column; gap: 8px; }
+.sch-f-dayparts { display: flex; gap: 6px; }
+.sch-f-scope { font-size: 11px; color: var(--muted); }
+.sch-f-status { font-size: 12.5px; color: var(--muted); padding: 14px 0; }
+.sch-f-counts { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
+.sch-f-group {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); margin: 10px 0 6px;
+}
+.sch-f-card {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px; border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  margin-bottom: 6px; background: var(--panel);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.sch-f-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(15, 124, 108, 0.08); }
+.sch-f-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.sch-f-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sch-f-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.sch-f-role { font-size: 11px; color: var(--muted); }
+.sch-f-fit { font-size: 12px; font-weight: 600; color: var(--accent-deep); }
+.sch-f-window { font-size: 11.5px; color: var(--ink-soft); }
+.sch-f-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.sch-mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.sch-mini.primary:hover { background: var(--accent-deep); }
+.sch-f-none { font-size: 12.5px; color: var(--ink-soft); padding: 6px 0; }
+.sch-f-nudges { display: flex; gap: 6px; margin: 4px 0 8px; }
+.sch-f-sugg {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: var(--radius-sm); padding: 6px 9px; margin-bottom: 4px;
+  font-size: 12px; color: var(--ink); cursor: pointer; font-family: inherit; text-align: left;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.sch-f-sugg:hover { border-color: var(--accent); background: var(--accent-soft); }
+.sch-f-unav { margin-top: 10px; }
+.sch-f-unav summary {
+  cursor: pointer; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); margin-bottom: 6px;
+}
+.sch-f-urow { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; }
+.sch-f-uname { font-weight: 600; color: var(--ink-soft); }
+.sch-f-ureason { color: var(--muted); margin-left: auto; text-align: right; }
+.sch-col.sch-hovered { box-shadow: inset 0 0 0 2px rgba(15, 124, 108, 0.35); }
+.sch-req-slot {
+  position: absolute; left: 2px; right: 2px; z-index: 3; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 6px;
+  background: rgba(15, 124, 108, 0.05);
+}
+@media (max-width: 900px) {
+  .sch-day-wrap { flex-direction: column; }
+  .sch-finder { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 45vh; }
+}
+
+/* ── Phase 4: Enhanced Therapist Focus Mode ───────────────────────────────── */
+.sch-focus-head {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sch-fh-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sch-fh-id { min-width: 0; }
+.sch-fh-name { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+.sch-fh-role { font-size: 12px; color: var(--muted); }
+.sch-fh-stats { display: flex; gap: 14px; margin-left: 10px; }
+.sch-fh-stat { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+.sch-fh-stat strong { color: var(--ink); font-weight: 700; }
+.sch-fh-stat.cap strong { color: var(--accent-deep); }
+.sch-fh-next { font-size: 12px; font-weight: 600; color: var(--accent-deep); white-space: nowrap; }
+.sch-weekstrip { display: flex; gap: 4px; margin-left: auto; }
+.sch-ws-day {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: var(--radius-sm); padding: 4px 9px;
+  cursor: pointer; font-family: inherit;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.sch-ws-day:hover { border-color: var(--accent); }
+.sch-ws-day.on { border-color: var(--accent); background: var(--accent-soft); }
+.sch-ws-name { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ink-soft); }
+.sch-ws-cap { font-size: 10.5px; font-weight: 700; color: var(--accent-deep); }
+.sch-ws-day .sch-ws-cap:empty::before { content: '·'; }
+
+/* Focused availability: the gap card is the headline */
+.sch-avl.focus.available {
+  background: rgba(15, 124, 108, 0.08);
+  border: 1.5px dashed rgba(15, 124, 108, 0.45);
+  border-left: none; border-right: none;
+  box-shadow: none;
+}
+.sch-avl.focus.available:hover { background: rgba(15, 124, 108, 0.13); }
+.sch-avl-card {
+  position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 2px; pointer-events: none;
+}
+.sch-avl-tag {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.7px;
+  text-transform: uppercase; color: var(--accent-deep);
+}
+.sch-avl-times { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.sch-avl-add {
+  pointer-events: auto; align-self: flex-start; margin-top: 3px;
+  border: 1px solid var(--accent); background: var(--panel);
+  border-radius: 999px; padding: 2px 11px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent-deep);
+  cursor: pointer; font-family: inherit;
+  transition: background var(--t-fast);
+}
+.sch-avl-add:hover { background: var(--accent-soft); }
+.sch-buf-lbl {
+  position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
+  font-size: 10px; font-weight: 600; color: var(--muted); pointer-events: none;
+}
+.sch-nw-label.focus {
+  font-size: 13px; text-transform: none; letter-spacing: 0;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 20px;
+  box-shadow: var(--shadow-sm); white-space: nowrap;
+}
+/* Non-clinical events sit back a little when one therapist is in focus */
+.sch-grid.focused .sch-tile[data-type="travel"],
+.sch-grid.focused .sch-tile[data-type="admin"],
+.sch-grid.focused .sch-tile[data-type="lunch"] { opacity: 0.75; }

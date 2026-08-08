@@ -140,6 +140,7 @@ async function computeOrgAvailability(req, date, profileFilter, minDurationOverr
     return {
       therapistProfileId: p.id,
       displayName: p.display_name,
+      roleTitle: p.role_title || null,
       colour: p.colour,
       working: result.working,
       workingHoursSource: result.workingHoursSource,
@@ -216,6 +217,122 @@ router.post('/api/scheduler/common-availability', requireAuth, requireMasterCale
   } catch (err) {
     console.error('POST /api/scheduler/common-availability error:', err.message);
     res.status(500).json({ error: 'Failed to compute common availability' });
+  }
+});
+
+/**
+ * POST /api/scheduler/find-availability
+ * "Who can actually take this appointment?" — consumes the canonical Phase 2
+ * engine; one aggregated evaluation for the whole eligible therapist set.
+ *
+ * Body: {
+ *   date: 'YYYY-MM-DD',
+ *   mode?: 'exact' | 'range'        (default exact)
+ *   startMin?: minutes-of-day       (exact mode)
+ *   durationMin: number,
+ *   rangeStartMin?, rangeEndMin?,   (range mode)
+ *   discipline?: string,            (normalised match on role_title)
+ *   therapistIds?: string[]         (empty/omitted = everyone)
+ * }
+ */
+const normDiscipline = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+router.post('/api/scheduler/find-availability', requireAuth, requireMasterCalendarAccess, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!isYmd(b.date)) return res.status(400).json({ error: 'date=YYYY-MM-DD is required' });
+    const durationMin = Number(b.durationMin);
+    if (!Number.isFinite(durationMin) || durationMin < 5 || durationMin > 480) {
+      return res.status(400).json({ error: 'durationMin must be between 5 and 480' });
+    }
+    const mode = b.mode === 'range' ? 'range' : 'exact';
+    let startMin = null, rangeStart = null, rangeEnd = null;
+    if (mode === 'exact') {
+      startMin = Number(b.startMin);
+      if (!Number.isFinite(startMin) || startMin < 0 || startMin + durationMin > 1440) {
+        return res.status(400).json({ error: 'startMin must leave room for the duration within the day' });
+      }
+    } else {
+      rangeStart = Number(b.rangeStartMin); rangeEnd = Number(b.rangeEndMin);
+      if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd - rangeStart < durationMin) {
+        return res.status(400).json({ error: 'range must be at least as long as the duration' });
+      }
+    }
+
+    const filter = Array.isArray(b.therapistIds) && b.therapistIds.length
+      ? new Set(b.therapistIds) : null;
+    const { therapists } = await computeOrgAvailability(req, b.date, filter);
+
+    const wanted = normDiscipline(b.discipline);
+    const eligible = wanted
+      ? therapists.filter((t) => normDiscipline(t.roleTitle) === wanted)
+      : therapists;
+
+    const REASON_LABEL = {
+      busy: 'Busy', leave: 'On leave', not_working: 'Not working',
+      outside_hours: 'Outside working hours', too_short: 'Not enough free time',
+    };
+
+    if (mode === 'exact') {
+      const request = { startMin, durationMin };
+      const candidates = eligible.map((t) => engine.classifyCandidate(t, request));
+      const available = engine.sortCandidates(candidates.filter((c) => c.status === 'available'));
+      const unavailable = candidates.filter((c) => c.status !== 'available')
+        .map((c) => ({
+          therapistProfileId: c.therapistProfileId, displayName: c.displayName,
+          roleTitle: c.roleTitle, colour: c.colour,
+          reason: c.reason, reasonLabel: REASON_LABEL[c.reason] || 'Unavailable',
+          busyUntilMin: c.busyUntilMin, availableMin: c.availableMin,
+          availabilityConfidence: c.availabilityConfidence,
+        }))
+        .sort((a, z) => String(a.displayName).localeCompare(String(z.displayName)));
+
+      const suggestions = available.length === 0
+        ? engine.nearestAlternatives(eligible, request)
+        : [];
+
+      return res.json({
+        requested: { date: b.date, mode, startMin, endMin: startMin + durationMin, durationMin },
+        counts: { available: available.length, unavailable: unavailable.length },
+        available, unavailable, suggestions,
+      });
+    }
+
+    // range mode: availability WINDOWS (never sliding permutations)
+    const rows = eligible.map((t) => {
+      const windows = engine.rangeWindows(t, rangeStart, rangeEnd, durationMin);
+      const probe = engine.classifyCandidate(t, { startMin: rangeStart, durationMin });
+      return { t, windows, probe };
+    });
+    const available = rows.filter((r) => r.windows.length)
+      .map((r) => ({
+        therapistProfileId: r.t.therapistProfileId, displayName: r.t.displayName,
+        roleTitle: r.t.roleTitle, colour: r.t.colour,
+        workingHoursSource: r.t.workingHoursSource,
+        availabilityConfidence: r.t.availabilityConfidence,
+        windows: r.windows,
+        totalWindowMin: r.windows.reduce((a, w) => a + w.durationMin, 0),
+      }))
+      .sort((a, z) => z.totalWindowMin - a.totalWindowMin ||
+        String(a.displayName).localeCompare(String(z.displayName)));
+    const unavailable = rows.filter((r) => !r.windows.length)
+      .map((r) => ({
+        therapistProfileId: r.t.therapistProfileId, displayName: r.t.displayName,
+        roleTitle: r.t.roleTitle, colour: r.t.colour,
+        reason: r.probe.reason || 'busy',
+        reasonLabel: REASON_LABEL[r.probe.reason] || 'No window long enough',
+        availabilityConfidence: r.t.availabilityConfidence,
+      }))
+      .sort((a, z) => String(a.displayName).localeCompare(String(z.displayName)));
+
+    res.json({
+      requested: { date: b.date, mode, rangeStartMin: rangeStart, rangeEndMin: rangeEnd, durationMin },
+      counts: { available: available.length, unavailable: unavailable.length },
+      available, unavailable, suggestions: [],
+    });
+  } catch (err) {
+    console.error('POST /api/scheduler/find-availability error:', err.message);
+    res.status(500).json({ error: 'Availability search failed' });
   }
 });
 

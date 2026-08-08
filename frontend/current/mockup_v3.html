@@ -12,8 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
-<link rel="stylesheet" href="/scheduler.css?v=p2" />
-<script src="/scheduler.js?v=p2" defer></script>
+<link rel="stylesheet" href="/scheduler.css?v=p4" />
+<script src="/scheduler.js?v=p4" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -4579,10 +4579,10 @@ window.opIcon = function (name, size) {
       </button>
       <!-- Segmented view toggle -->
       <div class="view-tabs" id="view-tabs" data-help="cal-view-tabs">
-        <button class="view-tab" data-view="day"   onclick="setCalendarMode('day')"    data-help="cal-view-day"    title="Day view — see a single day in detail">Day</button>
-        <button class="view-tab active" data-view="week" onclick="setCalendarMode('week')"   data-help="cal-view-week"   title="Week view — see your full week at a glance">Week</button>
-        <button class="view-tab" data-view="month" onclick="setCalendarMode('month')"  data-help="cal-view-month"  title="Month view — scroll through the whole month">Month</button>
-        <button class="view-tab" data-view="master" id="master-view-tab" onclick="setCalendarMode('master')" data-help="cal-view-master" title="Master Scheduler — compare all therapist schedules (Admin/Owner only)" style="display:none;">Scheduler</button>
+        <button class="view-tab" data-view="day"   onclick="window.__viewManuallySet=true;setCalendarMode('day')"    data-help="cal-view-day"    title="Day view — see a single day in detail">Day</button>
+        <button class="view-tab active" data-view="week" onclick="window.__viewManuallySet=true;setCalendarMode('week')"   data-help="cal-view-week"   title="Week view — see your full week at a glance">Week</button>
+        <button class="view-tab" data-view="month" onclick="window.__viewManuallySet=true;setCalendarMode('month')"  data-help="cal-view-month"  title="Month view — scroll through the whole month">Month</button>
+        <button class="view-tab" data-view="master" id="master-view-tab" onclick="window.__viewManuallySet=true;setCalendarMode('master')" data-help="cal-view-master" title="Master Scheduler — compare all therapist schedules (Admin/Owner only)" style="display:none;">Scheduler</button>
       </div>
 
       <div class="toolbar-divider"></div>
@@ -18304,7 +18304,7 @@ function renderCalVis() {
   }).join('');
   const u = window.APP_USER;
   if (u && (u.role === 'owner' || u.role === 'admin')) {
-    html += '<button type="button" class="cal-vis-link" onclick="setCalendarMode(\'master\')">All therapists (Master view)</button>';
+    html += '<button type="button" class="cal-vis-link" onclick="window.__viewManuallySet=true;setCalendarMode(\'master\')">All therapists (Master view)</button>';
   }
   list.innerHTML = html;
   applyCalVisibility();
@@ -24335,10 +24335,13 @@ function applyUserSettings(s, os) {
   }
 
   // ── Default calendar view ─────────────────────────────────────
-  if (s.calendarDefaultView && typeof setCalendarMode === 'function') {
+  // Late-arriving settings must never stomp a view the user has already
+  // chosen this session (e.g. switching to the Scheduler right after load).
+  if (s.calendarDefaultView && typeof setCalendarMode === 'function' && !window.__viewManuallySet) {
     // Only switch if the calendar tab is currently visible (don't disrupt other tabs)
     var calView = document.getElementById('view-calendar');
-    if (calView && calView.classList.contains('active')) {
+    if (calView && calView.classList.contains('active') &&
+        (window.__calendarMode || 'week') === 'week') {
       setCalendarMode(s.calendarDefaultView);
     }
   }

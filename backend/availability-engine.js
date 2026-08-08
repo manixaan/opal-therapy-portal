@@ -373,6 +373,230 @@ function intersectAvailability(segmentArrays, minDurationMin) {
     }));
 }
 
+// ── Candidate matching (find availability) ───────────────────────────────────
+//
+// Pure classification of computeDayAvailability results against a request.
+// therapistResult is the route-level shape: the engine's day output plus
+// identity fields ({ therapistProfileId, displayName, roleTitle, colour,
+// working, workingHoursSource, availabilityConfidence, capacity, segments }).
+// Buffers are already carved into segments upstream — nothing here ever
+// re-derives them or re-reads events.
+
+const BLOCKING_TYPES = ['busy', 'buffer', 'leave', 'short_gap'];
+
+/** The segment containing a minute-of-day (startMin <= m < endMin), or null. */
+function segmentAt(segments, min) {
+  for (const s of segments) {
+    if (s && s.startMin <= min && min < s.endMin) return s;
+  }
+  return null;
+}
+
+/**
+ * End of the blocking run covering the requested start: walk forward from
+ * the segment containing fromMin through contiguous non-available
+ * (busy/buffer/leave/short_gap) segments. Reaching 'available' returns
+ * that boundary — the next moment the therapist stops being blocked.
+ * Reaching 'outside_hours' (or the day end) means blocked to the end of
+ * the working window → null.
+ */
+function busyRunEnd(segments, fromMin) {
+  let i = segments.findIndex((s) => s && s.startMin <= fromMin && fromMin < s.endMin);
+  if (i === -1) return null;
+  while (i < segments.length && BLOCKING_TYPES.indexOf(segments[i].type) !== -1) i++;
+  const next = segments[i];
+  return next && next.type === 'available' ? next.startMin : null;
+}
+
+/**
+ * Classify ONE therapist's computed day against an exact-mode request
+ * ({ startMin, durationMin }). Returns a candidate that carries identity
+ * and provenance alongside the verdict, so Phase 7 can enrich it later
+ * (travel, locations) without reshaping:
+ *
+ *   requestedSlotFits  true ⟺ one 'available' segment fully contains
+ *                      [startMin, startMin + durationMin]
+ *   status             'available' | 'unavailable'
+ *   reason             null when fitting; otherwise, in precedence order:
+ *                      'leave' (working:false with a leave segment),
+ *                      'not_working' (working:false otherwise),
+ *                      'outside_hours' (interval overlaps only
+ *                      outside_hours), 'too_short' (start sits in an
+ *                      available segment that cannot hold the full
+ *                      interval), 'busy' (everything else)
+ *   window/windowMin   the FULL available segment holding a fitting
+ *                      request (null otherwise)
+ *   availableMin       'too_short' only: the overlapping available
+ *                      segment's length
+ *   busyUntilMin       'busy' only: end of the blocking run at the
+ *                      requested start — null if blocked to end of window
+ */
+function classifyCandidate(therapistResult, request) {
+  const t = therapistResult || {};
+  const req = request || {};
+  const reqStart = req.startMin;
+  const reqDur = req.durationMin;
+  if (!Number.isFinite(reqStart) || !Number.isFinite(reqDur) || reqDur <= 0) {
+    throw new Error('classifyCandidate: request needs numeric startMin and durationMin > 0');
+  }
+  const reqEnd = reqStart + reqDur;
+  const segments = Array.isArray(t.segments) ? t.segments : [];
+
+  const candidate = {
+    therapistProfileId: t.therapistProfileId !== undefined ? t.therapistProfileId : null,
+    displayName: t.displayName !== undefined ? t.displayName : null,
+    roleTitle: t.roleTitle !== undefined ? t.roleTitle : null,
+    colour: t.colour !== undefined ? t.colour : null,
+    workingHoursSource: t.workingHoursSource !== undefined ? t.workingHoursSource : null,
+    availabilityConfidence: t.availabilityConfidence !== undefined ? t.availabilityConfidence : null,
+    requestedSlotFits: false,
+    status: 'unavailable',
+    reason: null,
+    window: null,
+    windowMin: null,
+    availableMin: null,
+    busyUntilMin: null,
+  };
+
+  const fitSeg = segments.find((s) =>
+    s && s.type === 'available' && s.startMin <= reqStart && s.endMin >= reqEnd);
+  if (fitSeg) {
+    candidate.requestedSlotFits = true;
+    candidate.status = 'available';
+    candidate.window = { startMin: fitSeg.startMin, endMin: fitSeg.endMin };
+    candidate.windowMin = fitSeg.endMin - fitSeg.startMin;
+    return candidate;
+  }
+
+  // Not fitting — reasons in precedence order.
+  if (!t.working) {
+    candidate.reason = segments.some((s) => s && s.type === 'leave') ? 'leave' : 'not_working';
+    return candidate;
+  }
+  const overlapping = segments.filter((s) => s && s.startMin < reqEnd && s.endMin > reqStart);
+  if (overlapping.every((s) => s.type === 'outside_hours')) {
+    candidate.reason = 'outside_hours';
+    return candidate;
+  }
+  const startSeg = segmentAt(segments, reqStart);
+  if (startSeg && startSeg.type === 'available') {
+    candidate.reason = 'too_short';
+    candidate.availableMin = startSeg.endMin - startSeg.startMin;
+    return candidate;
+  }
+  candidate.reason = 'busy';
+  candidate.busyUntilMin = busyRunEnd(segments, reqStart);
+  return candidate;
+}
+
+/**
+ * Range mode: the therapist's 'available' segments clipped to
+ * [rangeStartMin, rangeEndMin], keeping only clips long enough for the
+ * requested duration. Whole windows — NOT sliding start permutations.
+ * Returns sorted [{startMin, endMin, durationMin}].
+ */
+function rangeWindows(therapistResult, rangeStartMin, rangeEndMin, durationMin) {
+  const t = therapistResult || {};
+  const segments = Array.isArray(t.segments) ? t.segments : [];
+  const out = [];
+  for (const s of segments) {
+    if (!s || s.type !== 'available') continue;
+    const startMin = Math.max(s.startMin, rangeStartMin);
+    const endMin = Math.min(s.endMin, rangeEndMin);
+    if (endMin > startMin && endMin - startMin >= durationMin) {
+      out.push({ startMin, endMin, durationMin: endMin - startMin });
+    }
+  }
+  return out;
+}
+
+/**
+ * Snap a suggested start to 5-minute granularity, preferring the side
+ * toward the requested time; falls back to the far side, then the raw
+ * minute — whichever stays a valid start within [lo, hi].
+ */
+function snapStart(s, lo, hi, reqStart) {
+  if (s % 5 === 0) return s;
+  const down = s - (s % 5);
+  const up = down + 5;
+  const toward = s > reqStart ? down : up;
+  const away = s > reqStart ? up : down;
+  if (toward >= lo && toward <= hi) return toward;
+  if (away >= lo && away <= hi) return away;
+  return s;
+}
+
+/**
+ * Exact-mode fallback when nobody fits: per therapist, the nearest valid
+ * start at/after the requested start and the nearest at/before it (up to
+ * maxPerDirection each way). A segment's candidate start is the requested
+ * start clamped into [segment.startMin, segment.endMin - durationMin],
+ * snapped to 5-minute granularity toward the requested time. Bounded to
+ * the given day's segments only. Returns a flat list sorted by |deltaMin|
+ * (stable — per therapist, earlier suggestions are inserted before
+ * later), capped at 6:
+ *   [{therapistProfileId, displayName, colour, startMin, endMin, deltaMin}]
+ */
+function nearestAlternatives(therapistResults, request, maxPerDirection = 1) {
+  const req = request || {};
+  const reqStart = req.startMin;
+  const reqDur = req.durationMin;
+  if (!Number.isFinite(reqStart) || !Number.isFinite(reqDur) || reqDur <= 0) {
+    throw new Error('nearestAlternatives: request needs numeric startMin and durationMin > 0');
+  }
+  const list = Array.isArray(therapistResults) ? therapistResults : [];
+  const out = [];
+  for (const t of list) {
+    if (!t || !Array.isArray(t.segments)) continue;
+    const earlier = [];
+    const later = [];
+    for (const seg of t.segments) {
+      if (!seg || seg.type !== 'available') continue;
+      const lo = seg.startMin;
+      const hi = seg.endMin - reqDur;
+      if (hi < lo) continue;                              // segment cannot hold the duration
+      const s = snapStart(Math.min(Math.max(reqStart, lo), hi), lo, hi, reqStart);
+      const deltaMin = s - reqStart;
+      if (deltaMin === 0) continue;                       // the request itself fits here
+      (deltaMin > 0 ? later : earlier).push({ startMin: s, deltaMin });
+    }
+    earlier.sort((a, b) => b.deltaMin - a.deltaMin);      // nearest earlier first
+    later.sort((a, b) => a.deltaMin - b.deltaMin);        // nearest later first
+    const picks = earlier.slice(0, maxPerDirection).concat(later.slice(0, maxPerDirection));
+    for (const p of picks) {
+      out.push({
+        therapistProfileId: t.therapistProfileId !== undefined ? t.therapistProfileId : null,
+        displayName: t.displayName !== undefined ? t.displayName : null,
+        colour: t.colour !== undefined ? t.colour : null,
+        startMin: p.startMin,
+        endMin: p.startMin + reqDur,
+        deltaMin: p.deltaMin,
+      });
+    }
+  }
+  return out
+    .sort((a, b) => Math.abs(a.deltaMin) - Math.abs(b.deltaMin))   // stable → ties keep insertion order
+    .slice(0, 6);
+}
+
+/**
+ * Presentation order for the available list: requested-slot fits first
+ * (every candidate here fits today — kept for future mixed lists), then
+ * the roomiest window (windowMin desc), then displayName asc. Factual
+ * ordering only — no scoring, no recommendation. Never mutates.
+ */
+function sortCandidates(available) {
+  return (Array.isArray(available) ? available : []).slice().sort((a, b) => {
+    const fitDiff = (b && b.requestedSlotFits ? 1 : 0) - (a && a.requestedSlotFits ? 1 : 0);
+    if (fitDiff !== 0) return fitDiff;
+    const winDiff = ((b && b.windowMin) || 0) - ((a && a.windowMin) || 0);
+    if (winDiff !== 0) return winDiff;
+    const an = a && a.displayName ? String(a.displayName) : '';
+    const bn = b && b.displayName ? String(b.displayName) : '';
+    return an < bn ? -1 : (an > bn ? 1 : 0);
+  });
+}
+
 module.exports = {
   DAY_MIN,
   normalizeEvent,
@@ -384,4 +608,8 @@ module.exports = {
   eventDayInterval,
   computeDayAvailability,
   intersectAvailability,
+  classifyCandidate,
+  rangeWindows,
+  nearestAlternatives,
+  sortCandidates,
 };

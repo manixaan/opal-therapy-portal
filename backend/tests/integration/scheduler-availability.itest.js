@@ -225,3 +225,77 @@ describe('common availability', () => {
     expect(r.status).toBe(400);
   });
 });
+
+// ═══ Phase 3: find-availability ══════════════════════════════════════════════
+
+describe('find-availability', () => {
+  test('therapist role is denied; owner searches in one aggregated request', async () => {
+    const app = buildApp();
+    const { agent: tAgent } = await agentFor(app, 'therapist', await orgId());
+    expect([401, 403]).toContain((await tAgent.post('/api/scheduler/find-availability')
+      .send({ date: DATE, startMin: 600, durationMin: 60 })).status);
+  });
+
+  test('exact-time search: fits, too-short, busy-until, discipline + id filters, privacy', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent } = await agentFor(app, 'owner', org);
+    const week = { '2026-W33': { mon: 'office' } };
+
+    const free = await seedTherapist(org, 'Free OT', { schedule: week });
+    await db.pool.query('UPDATE therapist_profiles SET role_title = $1 WHERE id = $2',
+      ['Occupational Therapist', free.profileId]);
+
+    const busy = await seedTherapist(org, 'Busy OT', { schedule: week });
+    await db.pool.query('UPDATE therapist_profiles SET role_title = $1 WHERE id = $2',
+      ['Occupational Therapist', busy.profileId]);
+    await seedEvent(busy.profileId, busy.userId, org, 9, 11.5,
+      { type: 'outlook', title: 'SECRET dentist appointment' }); // private busy across request
+
+    const speechie = await seedTherapist(org, 'Speech Person', { schedule: week });
+    await db.pool.query('UPDATE therapist_profiles SET role_title = $1 WHERE id = $2',
+      ['Speech Pathologist', speechie.profileId]);
+
+    // 10:00–11:00 request
+    const r = await agent.post('/api/scheduler/find-availability')
+      .send({ date: DATE, startMin: 600, durationMin: 60, discipline: 'occupational therapist' });
+    expect(r.status).toBe(200);
+    const names = r.body.available.map((c) => c.displayName);
+    expect(names).toContain('Free OT');
+    expect(names).not.toContain('Speech Person'); // discipline filter
+    const busyRow = r.body.unavailable.find((u) => u.displayName === 'Busy OT');
+    expect(busyRow.reason).toBe('busy');
+    expect(busyRow.busyUntilMin).toBe(11.5 * 60); // busy until 11:30
+    expect(JSON.stringify(r.body)).not.toContain('SECRET'); // no private content
+
+    // available window metadata is present and factual
+    const freeRow = r.body.available.find((c) => c.displayName === 'Free OT');
+    expect(freeRow.window.startMin).toBeLessThanOrEqual(600);
+    expect(freeRow.window.endMin).toBeGreaterThanOrEqual(660);
+    expect(freeRow.workingHoursSource).toBe('organisation_default');
+
+    // therapistIds filter narrows the set
+    const r2 = await agent.post('/api/scheduler/find-availability')
+      .send({ date: DATE, startMin: 600, durationMin: 60, therapistIds: [busy.profileId] });
+    expect(r2.body.counts.available).toBe(0);
+    expect(r2.body.counts.unavailable).toBe(1);
+    expect(r2.body.suggestions.length).toBeGreaterThan(0); // nearest alternative offered
+  });
+
+  test('range mode returns windows, not permutations', async () => {
+    const app = buildApp();
+    const org = await orgId();
+    const { agent } = await agentFor(app, 'owner', org);
+    const t = await seedTherapist(org, 'Range OT', { schedule: { '2026-W33': { mon: 'office' } } });
+    await seedEvent(t.profileId, t.userId, org, 10, 11); // free 8-10 and 11-17 within org hours
+
+    const r = await agent.post('/api/scheduler/find-availability')
+      .send({ date: DATE, mode: 'range', rangeStartMin: 9 * 60, rangeEndMin: 13 * 60, durationMin: 60 });
+    expect(r.status).toBe(200);
+    const row = r.body.available.find((c) => c.displayName === 'Range OT');
+    expect(row.windows).toEqual([
+      { startMin: 9 * 60, endMin: 10 * 60, durationMin: 60 },
+      { startMin: 11 * 60, endMin: 13 * 60, durationMin: 120 },
+    ]);
+  });
+});

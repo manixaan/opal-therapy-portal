@@ -173,3 +173,32 @@ describe('day scoping and filtering', () => {
     expect(mins).toEqual([...mins].sort((a, b) => a - b));
   });
 });
+
+describe('phase 4 focus helpers', () => {
+  const items = (arr) => arr.map(([s2, e2, type]) => ({ ev: { eventType: type }, startMin: s2, endMin: e2 }));
+
+  test('clinicalMinutes counts therapy time only', () => {
+    const day = items([[540, 600, 'therapy'], [600, 630, 'travel'], [630, 690, 'therapy'], [690, 720, 'admin']]);
+    expect(S.clinicalMinutes(day)).toBe(120);
+    expect(S.clinicalMinutes([])).toBe(0);
+  });
+
+  test('nextAvailableSegment finds the first available at/after a time', () => {
+    const segs = [
+      { startMin: 0, endMin: 480, type: 'outside_hours' },
+      { startMin: 480, endMin: 540, type: 'available' },
+      { startMin: 540, endMin: 600, type: 'busy' },
+      { startMin: 600, endMin: 660, type: 'available' },
+    ];
+    expect(S.nextAvailableSegment(segs, 0).startMin).toBe(480);
+    expect(S.nextAvailableSegment(segs, 550).startMin).toBe(600);
+    expect(S.nextAvailableSegment(segs, 700)).toBe(null);
+    expect(S.nextAvailableSegment([], 0)).toBe(null);
+  });
+
+  test('snap15 rounds to the calendar grid', () => {
+    expect(S.snap15(602)).toBe(600);
+    expect(S.snap15(608)).toBe(615);
+    expect(S.snap15(615)).toBe(615);
+  });
+});

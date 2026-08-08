@@ -770,8 +770,8 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p2" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p2" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p4" />');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p4" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -792,7 +792,7 @@ describe('master scheduler phase 1', () => {
     expect(SCHED_JS).toContain('/api/calendar/master?startDate=');
     expect(SCHED_JS).toContain('/api/scheduler/availability?date=');
     expect(SCHED_JS).toContain('/api/scheduler/common-availability');
-    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(3); // master + availability + common
+    expect((SCHED_JS.match(/fetch\(/g) || []).length).toBe(5); // master + availability (day/week-capacity) + common + finder
   });
 
   test('cross-therapist tiles use safe labels, never raw Outlook subjects', () => {
@@ -844,7 +844,7 @@ describe('master scheduler phase 2 availability', () => {
   test('availability is an optional overlay toggle, off never changes Phase 1', () => {
     expect(SCHED_JS).toContain("localStorage.getItem('sch_overlay')");
     expect(SCHED_JS).toContain('data-act="overlay"');
-    expect(SCHED_JS).toContain('SCHED.overlay && SCHED.avail.key === SCHED.date');
+    expect(SCHED_JS).toContain('(SCHED.overlay || SCHED.focusId) && SCHED.avail.key === SCHED.date');
   });
 
   test('availability visuals are calm opal tints, not bright green fills', () => {
@@ -876,5 +876,75 @@ describe('master scheduler phase 2 availability', () => {
     // the segment mapping exposes times/types/ids only — no content field access
     expect(ROUTES).toContain('startMin: s.startMin, endMin: s.endMin, type: s.type,');
     expect(ROUTES).not.toMatch(/\.title\b|client_name/);
+  });
+});
+
+// ── Master Scheduler Phase 3: quick availability finder (2026-08-08) ─────────
+describe('master scheduler phase 3 finder', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'scheduler-routes.js'), 'utf8');
+
+  test('finder consumes the canonical engine — no frontend availability math', () => {
+    expect(ROUTES).toContain('engine.classifyCandidate');
+    expect(ROUTES).toContain('engine.rangeWindows');
+    expect(ROUTES).toContain('engine.nearestAlternatives');
+    expect(SCHED_JS).toContain('/api/scheduler/find-availability');
+    // stale responses can never overwrite newer criteria
+    expect(SCHED_JS).toContain('if (gen !== f.gen) return;');
+  });
+
+  test('results are factual — no fit tiers, scores or geographic claims', () => {
+    for (const banned of ['Best Fit', 'Good Fit', 'Poor Fit', 'best choice', 'close to client', '% match']) {
+      expect(SCHED_JS).not.toContain(banned);
+    }
+  });
+
+  test('view-calendar and schedule actions integrate with existing surfaces', () => {
+    expect(SCHED_JS).toContain("el.dataset.act === 'view'");
+    expect(SCHED_JS).toContain('selectBspTherapist');
+    expect(SCHED_JS).toContain('sch-req-slot'); // requested slot emphasised on the grid
+  });
+
+  test('unavailable reasons stay content-free', () => {
+    expect(SCHED_JS).toContain("'Busy until '");
+    expect(ROUTES).toContain("busy: 'Busy'");
+  });
+});
+
+// ── Master Scheduler Phase 4: enhanced focus mode (2026-08-08) ───────────────
+describe('master scheduler phase 4 focus mode', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SCHED_JS  = fs.readFileSync(path.join(FRONTEND, 'scheduler.js'), 'utf8');
+  const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
+
+  test('focus header: capacity language is scheduling, never performance', () => {
+    expect(SCHED_JS).toContain('sch-fh-stats');
+    expect(SCHED_JS).toContain("'</strong> clinical</span>'");
+    expect(SCHED_JS).toContain("'</strong> available</span>'");
+    expect(SCHED_JS).toContain('Next available ');
+    expect(SCHED_JS).toContain('No further availability today');
+    for (const banned of ['productivity', 'performance', 'efficiency rating', 'utilisation score']) {
+      expect(SCHED_JS.toLowerCase()).not.toContain(banned);
+    }
+  });
+
+  test('gaps are actionable cards fed by the canonical engine', () => {
+    expect(SCHED_JS).toContain('sch-avl-card');
+    expect(SCHED_JS).toContain('+ Add appointment');
+    expect(SCHED_JS).toContain('snap15(clicked)'); // click-within-gap snapping
+    expect(SCHED_JS).toContain("seg.type === 'buffer' && inFocus"); // buffers explained
+    expect(SCHED_CSS).toContain('.sch-avl.focus.available');
+  });
+
+  test('focus availability always loads; finder scopes to the focused therapist', () => {
+    expect(SCHED_JS).toContain('(!SCHED.overlay && !SCHED.focusId)');
+    expect(SCHED_JS).toContain('focusId: SCHED.focusId });'); // finder visible set
+    expect(SCHED_JS).toContain('function loadWeekCapacity');
+  });
+
+  test('friendly non-working/leave states in focus', () => {
+    expect(SCHED_JS).toContain("isn't scheduled to work this day.");
+    expect(SCHED_JS).toContain(' is on leave this day.');
   });
 });
