@@ -687,8 +687,10 @@ describe('scheduler ui refinement', () => {
 
 // ── Calendar polish: separation + title recovery (2026-08-07) ────────────────
 describe('calendar polish', () => {
-  test('back-to-back events carry a page-coloured separation hairline', () => {
-    expect(HTML).toContain('box-shadow: 0 2px 0 0 var(--bg, #faf6f0);');
+  test('back-to-back events carry a real 4px separation gap', () => {
+    expect(HTML).toContain('* HOUR_PX - 4)');
+    expect(HTML).not.toContain('* HOUR_PX - 2)');
+    expect(HTML).not.toContain('box-shadow: 0 2px 0 0 var(--bg');
   });
 
   test('missing Outlook titles show a recovery state, never (No subject)', () => {

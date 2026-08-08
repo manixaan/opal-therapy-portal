@@ -2355,10 +2355,9 @@
     box-shadow: none;
     border-left: 3px solid var(--c-therapy);
     outline: 1px solid rgba(15, 23, 42, 0.05);
-    /* Back-to-back separation: a page-coloured hairline under every tile so
-       an event ending exactly when the next begins reads as two blocks.
-       Positioning stays time-accurate (the gap is shaved from height). */
-    box-shadow: 0 2px 0 0 var(--bg, #faf6f0);
+    /* Back-to-back separation: every tile is drawn 4px shorter than its
+       time slot, so a real gap of column background shows between an event
+       that ends exactly when the next begins. Tops stay time-accurate. */
     overflow: hidden;
     min-height: 9px;
     transition: box-shadow 0.15s ease;
@@ -13314,7 +13313,7 @@ function addSession(col, opts) {
     el.style.background = opts.color;
   }
   el.style.top    = tToY(opts.startH, opts.startM || 0) + 'px';
-  el.style.height = (durMin(opts) / 60 * HOUR_PX - 2) + 'px';
+  el.style.height = (durMin(opts) / 60 * HOUR_PX - 4) + 'px';
   const noSubject = !opts.title || opts.title === '(No subject)' || opts.title === '(No title)' || opts.title === 'Untitled';
   // A subject-less Outlook event is a sync/mapping gap, not a real name:
   // schedule ONE bounded delta refresh per session (no hammering).
@@ -13392,7 +13391,7 @@ function repositionAllSessionTiles() {
     if (s && s.element && typeof s.startH === 'number') {
       s.element.style.top = tToY(s.startH, s.startM || 0) + 'px';
       if (typeof s.endH === 'number') {
-        s.element.style.height = (durMin(s) / 60 * HOUR_PX - 2) + 'px';
+        s.element.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
       }
     }
   });
@@ -14797,7 +14796,7 @@ function onBlockPointerMove(e) {
     // create ghost marker that shows where the block WILL snap to
     const ghost = document.createElement('div');
     ghost.className = 'drop-ghost';
-    ghost.style.height = (drag.durationMin / 60 * HOUR_PX - 2) + 'px';
+    ghost.style.height = (drag.durationMin / 60 * HOUR_PX - 4) + 'px';
     ghost.innerHTML = '<span class="ghost-label"></span>';
     drag.ghost = ghost;
     drag.origCol.appendChild(ghost);
@@ -14946,7 +14945,7 @@ function onBlockResizeMove(e) {
 
   // Live preview: update element top/height but don't commit to state yet
   resize.el.style.top    = ((newStart - START_H * 60) / 60 * HOUR_PX) + 'px';
-  resize.el.style.height = (newDur / 60 * HOUR_PX - 2) + 'px';
+  resize.el.style.height = (newDur / 60 * HOUR_PX - 4) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(resize.el, newDur);
 
   // Update duration tooltip
@@ -14986,7 +14985,7 @@ function onBlockResizeEnd(e) {
   if (!changed) {
     // No movement — treat as a plain click and open the detail panel
     el.style.top    = tToY(s.startH, s.startM || 0) + 'px';
-    el.style.height = (durMin(s) / 60 * HOUR_PX - 2) + 'px';
+    el.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
     resize = null;
     openBlockDetail(id);
     return;
@@ -15248,7 +15247,7 @@ function cancelMove() {
     const s = SESSIONS[pendingMove.id];
     if (s && s.element) {
       s.element.style.top    = tToY(s.startH, s.startM || 0) + 'px';
-      s.element.style.height = (durMin(s) / 60 * HOUR_PX - 2) + 'px';
+      s.element.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
       s.element.classList.remove('resizing', 'dragging');
     }
   }
@@ -15291,7 +15290,7 @@ function commitMove() {
   }
   s.element.style.top = tToY(sh, sm) + 'px';
   // Resize in case duration changed via the detail-drawer timing editor or edge-handle resize
-  s.element.style.height = (duration / 60 * HOUR_PX - 2) + 'px';
+  s.element.style.height = (duration / 60 * HOUR_PX - 4) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
   // Also update the displayed label timestamp in title
@@ -15966,7 +15965,7 @@ function renderSegmentOverlay(col, seg) {
   const el = document.createElement('div');
   el.className = 'travel-overlay ' + seg.kind;
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
-  el.style.height = Math.max(12, (seg.endMin - seg.startMin) / 60 * HOUR_PX - 2) + 'px';
+  el.style.height = Math.max(12, (seg.endMin - seg.startMin) / 60 * HOUR_PX - 4) + 'px';
   const tight = seg.kind === 'between' && (seg.endMin - seg.startMin) < seg.travelMin + 5;
   if (tight) el.style.borderLeftColor = '#9c3322';
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel';
@@ -15995,7 +15994,7 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   const el = document.createElement('div');
   el.className = 'travel-overlay';
   el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
-  el.style.height = Math.max(12, gapMin / 60 * HOUR_PX - 2) + 'px';
+  el.style.height = Math.max(12, gapMin / 60 * HOUR_PX - 4) + 'px';
   const tight = gapMin < travel + 5;
   el.style.borderLeftColor = tight ? '#9c3322' : '#0f7c6c';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
@@ -16014,7 +16013,7 @@ function renderGapOverlay(col, day, curr, next, from, to, gapStart, gapEnd, gapM
   const el = document.createElement('div');
   el.className = 'gap-overlay';
   el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
-  el.style.height = Math.max(22, gapMin / 60 * HOUR_PX - 2) + 'px';
+  el.style.height = Math.max(22, gapMin / 60 * HOUR_PX - 4) + 'px';
   const free = gapMin - travel;
   // "Meaningful" free window = ≥ 40 min AND actionable (enough time to cafe/park/home).
   // These get the distinctive .smart highlight and a clearer label.
@@ -20448,7 +20447,7 @@ function renderMasterCalendarWeek() {
       const durMin = Math.max(15, Math.round((end - start) / 60000));
 
       const top    = tToY(startH, startM);
-      const height = Math.max(20, durMin / 60 * HOUR_PX - 2);
+      const height = Math.max(20, durMin / 60 * HOUR_PX - 4);
 
       const tile = document.createElement('div');
       tile.className = 'master-tile';
