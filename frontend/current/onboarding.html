@@ -23,12 +23,12 @@
       --surface:     #ffffff;
       --bg:          #faf6f0;
       --border:      #e9e3d9;
-      --danger:      #dc2626;
-      --success:     #16a34a;
-      --success-bg:  #f0fdf4;
-      --warn-bg:     #fffbeb;
-      --warn-bdr:    #fcd34d;
-      --warn-txt:    #92400e;
+      --danger:      #c2412e;
+      --success:     #2f7d4f;
+      --success-bg:  #e5f2e8;
+      --warn-bg:     #fcf6e8;
+      --warn-bdr:    #ecc668;
+      --warn-txt:    #7a4e0b;
       --radius:      12px;
       --shadow:      0 4px 24px rgba(0,0,0,0.08);
     }
@@ -103,7 +103,7 @@
       margin-bottom: 6px;
     }
     label .required { color: var(--danger); margin-left: 2px; }
-    label .optional { font-weight: 400; color: #9ca3af; }
+    label .optional { font-weight: 400; color: #a39b90; }
 
     input[type="text"],
     input[type="number"],
@@ -141,8 +141,8 @@
       color: var(--warn-txt);
     }
     .callout .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-    .callout.info    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
-    .callout.success { background: var(--success-bg); border-color: #bbf7d0; color: #166534; }
+    .callout.info    { background: #e8eff9; border-color: #c3d4ec; color: #1e40af; }
+    .callout.success { background: var(--success-bg); border-color: #bfdfc9; color: #22593a; }
 
     /* ── Toggle switch ── */
     .toggle-row {
@@ -182,8 +182,8 @@
       font-size: 12px; font-weight: 600; margin-bottom: 16px;
     }
     .role-badge.owner     { background: #f0f0ff; color: #0f7c6c; }
-    .role-badge.admin     { background: #fff7ed; color: #c2410c; }
-    .role-badge.therapist { background: #f0fdf4; color: #16a34a; }
+    .role-badge.admin     { background: #fcf3e8; color: #a8511a; }
+    .role-badge.therapist { background: #e5f2e8; color: #2f7d4f; }
 
     /* ── Buttons ── */
     .btn-row { display: flex; gap: 10px; margin-top: 20px; }
@@ -227,7 +227,7 @@
 
     /* ── Error ── */
     .error-box {
-      background: #fef2f2; border: 1px solid #fca5a5;
+      background: #fdf1ee; border: 1px solid #eeb3a4;
       color: var(--danger); border-radius: 8px;
       padding: 10px 14px; font-size: 13px;
       margin-bottom: 16px; display: none;
@@ -263,8 +263,8 @@
       font-size: 11px; font-weight: 600; padding: 2px 7px;
       border-radius: 10px; margin-left: auto; flex-shrink: 0;
     }
-    .review-item .badge.done   { background: #f0fdf4; color: #16a34a; }
-    .review-item .badge.skip   { background: #f8f9fc; color: #9ca3af; }
+    .review-item .badge.done   { background: #e5f2e8; color: #2f7d4f; }
+    .review-item .badge.skip   { background: #f8f9fc; color: #a39b90; }
     .review-item .step-icon { font-size: 16px; }
 
     /* ── Outlook connect card ── */
@@ -289,7 +289,7 @@
       border-radius: 20px; padding: 4px 10px;
       font-size: 12.5px; font-weight: 500; cursor: pointer;
     }
-    .tag .rm { font-size: 14px; line-height: 1; color: #888; }
+    .tag .rm { font-size: 14px; line-height: 1; color: #8a8379; }
     .tag-input-wrap { display: flex; gap: 8px; margin-top: 8px; }
     .tag-input-wrap input { flex: 1; }
     .tag-add-btn {
@@ -968,7 +968,7 @@ function renderBases() {
        <div style="flex:1"><strong>${escHtml(b.name)}</strong>
          ${b.name !== b.address ? `<br><span style="font-size:12px;color:var(--ink-soft)">${escHtml(b.address)}</span>` : ''}
        </div>
-       <button onclick="removeBase(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;">×</button>
+       <button onclick="removeBase(${i})" style="background:none;border:none;cursor:pointer;color:#c2412e;font-size:18px;">×</button>
      </div>`
   ).join('');
 }

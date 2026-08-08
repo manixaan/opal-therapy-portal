@@ -196,18 +196,18 @@
   .outlook-connect-banner {
     display: flex; align-items: center; gap: 10px;
     padding: 8px 16px;
-    background: #fffbeb;
-    border-bottom: 1px solid #fde68a;
-    font-size: 12.5px; color: #92400e;
+    background: #fcf6e8;
+    border-bottom: 1px solid #f0d894;
+    font-size: 12.5px; color: #7a4e0b;
   }
-  .outlook-connect-banner svg { width: 16px; height: 16px; stroke: #d97706; stroke-width: 2; fill: none; flex-shrink: 0; }
+  .outlook-connect-banner svg { width: 16px; height: 16px; stroke: #b06e12; stroke-width: 2; fill: none; flex-shrink: 0; }
   .outlook-connect-banner .spacer { flex: 1; }
   .outlook-connect-banner button {
-    padding: 5px 12px; border: 1px solid #d97706;
-    border-radius: 6px; background: white; color: #92400e;
+    padding: 5px 12px; border: 1px solid #b06e12;
+    border-radius: 6px; background: white; color: #7a4e0b;
     font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  .outlook-connect-banner button:hover { background: #fffbeb; }
+  .outlook-connect-banner button:hover { background: #fcf6e8; }
 
   /* Legacy sync-status / sync-btn kept for any JS that still touches them */
   .sync-status { display: none; }
@@ -347,16 +347,16 @@
     transition: background 80ms; position: relative;
   }
   .notif-item:hover { background: var(--bg); }
-  .notif-item.unread { background: #f0f7ff; }
-  .notif-item.unread:hover { background: #e8f1fc; }
+  .notif-item.unread { background: #eef3fa; }
+  .notif-item.unread:hover { background: #e3ecf7; }
   .notif-icon {
     width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; font-size: 16px;
   }
-  .notif-icon.info { background: #eff6ff; }
-  .notif-icon.warning { background: #fffbeb; }
-  .notif-icon.error { background: #fef2f2; }
-  .notif-icon.success { background: #f0fdf4; }
+  .notif-icon.info { background: #e8eff9; }
+  .notif-icon.warning { background: #fcf6e8; }
+  .notif-icon.error { background: #fdf1ee; }
+  .notif-icon.success { background: #e5f2e8; }
   .notif-body { flex: 1; min-width: 0; }
   .notif-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
   .notif-msg { font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
@@ -422,9 +422,9 @@
     font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: auto;
     flex-shrink: 0;
   }
-  .help-role-badge.owner { background: #fce7f3; color: #9d174d; }
-  .help-role-badge.admin { background: #ede9fe; color: #5b21b6; }
-  .help-role-badge.therapist { background: #ecfdf5; color: #065f46; }
+  .help-role-badge.owner { background: #f9e7e0; color: #a13d47; }
+  .help-role-badge.admin { background: #e8e5f7; color: #6d63a8; }
+  .help-role-badge.therapist { background: #e5f2e8; color: #22593a; }
   .help-role-badge.all { background: var(--accent-soft); color: var(--accent-deep); }
 
   /* ─── Help panel — tour cards (new) ─── */
@@ -436,8 +436,8 @@
     transition: background 80ms, border-color 80ms; font-family: inherit;
   }
   .help-tour-card:hover { background: var(--accent-soft); border-color: var(--accent); }
-  .help-tour-card--done { background: #f0fdf4; border-color: #bbf7d0; }
-  .help-tour-card--done:hover { background: #dcfce7; }
+  .help-tour-card--done { background: #e5f2e8; border-color: #bfdfc9; }
+  .help-tour-card--done:hover { background: #dcefe3; }
   .help-tour-card-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
   .help-tour-card-body { flex: 1; min-width: 0; }
   .help-tour-card-title { font-size: 13px; font-weight: 600; color: var(--ink); }
@@ -445,7 +445,7 @@
   .help-tour-card-go { font-size: 18px; color: var(--muted); flex-shrink: 0; }
   .help-done-badge {
     font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-    background: #dcfce7; color: #15803d; flex-shrink: 0;
+    background: #dcefe3; color: #276a43; flex-shrink: 0;
   }
 
   /* ─── Help panel — setup prompts ─── */
@@ -453,16 +453,16 @@
   .help-setup-item {
     display: flex; align-items: flex-start; gap: 8px;
     padding: 10px 12px; border-radius: 8px; margin-bottom: 4px;
-    background: #fffbeb; border: 1px solid #fde68a;
+    background: #fcf6e8; border: 1px solid #f0d894;
   }
   .help-setup-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
-  .help-setup-text { font-size: 12px; color: #92400e; flex: 1; line-height: 1.4; }
+  .help-setup-text { font-size: 12px; color: #7a4e0b; flex: 1; line-height: 1.4; }
   .help-setup-btn {
     font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
-    border: 1px solid #f59e0b; background: white; color: #92400e;
+    border: 1px solid #cf8b1f; background: white; color: #7a4e0b;
     cursor: pointer; flex-shrink: 0; font-family: inherit;
   }
-  .help-setup-btn:hover { background: #fef3c7; }
+  .help-setup-btn:hover { background: #faf0da; }
 
   /* ─── Help panel — quick actions ─── */
   .help-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -519,15 +519,15 @@
   }
   #travel-panel-body { flex: 1; overflow-y: auto; padding: 20px; }
   .tp-route-block {
-    background: var(--bg, #f8f9fb); border-radius: 12px; padding: 16px;
+    background: var(--bg, #faf6f0); border-radius: 12px; padding: 16px;
     margin-bottom: 14px;
   }
   .tp-route-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); margin-bottom: 8px; }
   .tp-route-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
   .tp-route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
-  .tp-route-dot.from { background: #059669; }
-  .tp-route-dot.to   { background: #dc2626; }
+  .tp-route-dot.from { background: #2f7d4f; }
+  .tp-route-dot.to   { background: #c2412e; }
   .tp-route-line { width: 2px; height: 20px; background: var(--border); margin-left: 4px; margin-bottom: 4px; }
   .tp-location-name { font-size: 13px; font-weight: 600; color: var(--ink); }
   .tp-location-addr { font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
@@ -537,14 +537,14 @@
   .tp-stat-val { font-size: 18px; font-weight: 700; color: var(--ink); }
   .tp-stat-lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.4px;
     color: var(--muted); font-weight: 600; margin-top: 2px; }
-  .tp-warn-block { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 14px; font-size: 13px; color: #92400e; }
+  .tp-warn-block { background: #faf0da; border: 1px solid #ecc668; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 14px; font-size: 13px; color: #7a4e0b; }
   .tp-warn-block strong { display: block; margin-bottom: 3px; }
   .tp-source-chip { display: inline-block; padding: 2px 8px; border-radius: 10px;
     font-size: 11px; font-weight: 600; margin-bottom: 12px; }
-  .tp-source-chip.outlook { background: #eff6ff; color: #1d4ed8; }
-  .tp-source-chip.calculated { background: #ecfdf5; color: #065f46; }
-  .tp-source-chip.algo { background: #f5f3ff; color: #5b21b6; }
+  .tp-source-chip.outlook { background: #e8eff9; color: #3d6cae; }
+  .tp-source-chip.calculated { background: #e5f2e8; color: #22593a; }
+  .tp-source-chip.algo { background: #efedf9; color: #6d63a8; }
   .tp-maps-btn {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     width: 100%; padding: 11px 16px; border-radius: 10px;
@@ -568,7 +568,7 @@
     transform: translate(-50%, -48%); opacity: 0;
     pointer-events: none;
     width: min(940px, 96vw); max-height: 90vh;
-    background: var(--bg, #f8f9fb); border-radius: 18px;
+    background: var(--bg, #faf6f0); border-radius: 18px;
     box-shadow: 0 28px 80px rgba(0,0,0,0.22);
     display: flex; flex-direction: column; z-index: 8500;
     transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s;
@@ -581,7 +581,7 @@
   }
   #report-modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
   .report-tabs {
-    display: flex; gap: 3px; background: var(--bg, #f4f5f7);
+    display: flex; gap: 3px; background: var(--bg, #f2eee6);
     border-radius: 9px; padding: 3px;
   }
   .report-tab {
@@ -608,7 +608,7 @@
     background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
     color: var(--ink-soft); transition: all 0.12s;
   }
-  #report-close-btn:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+  #report-close-btn:hover { background: #fbe9e5; color: #c2412e; border-color: #eeb3a4; }
   #report-content { flex: 1; overflow-y: auto; padding: 18px 22px 24px; }
 
   /* Summary cards */
@@ -633,7 +633,7 @@
     background: white; border-radius: 12px; padding: 14px 16px;
     margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   }
-  .rpt-section-warn { border-left: 3px solid #f59e0b; }
+  .rpt-section-warn { border-left: 3px solid #cf8b1f; }
   .rpt-section-title {
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--muted); margin-bottom: 10px; padding-bottom: 7px;
@@ -649,7 +649,7 @@
   .rpt-timeline-row {
     display: grid; grid-template-columns: 58px 14px 1fr;
     gap: 10px; align-items: start; padding: 7px 0;
-    border-bottom: 1px solid var(--bg, #f4f5f7); position: relative;
+    border-bottom: 1px solid var(--bg, #f2eee6); position: relative;
   }
   .rpt-timeline-row:last-child { border-bottom: none; }
   .rpt-tl-time { font-size: 10.5px; font-weight: 600; color: var(--ink-soft); padding-top: 2px; line-height: 1.35; }
@@ -657,29 +657,29 @@
   .rpt-tl-dot {
     width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; flex-shrink: 0;
   }
-  .rpt-tl-dot.billable { background: #059669; }
-  .rpt-tl-dot.nonbillable { background: #6b7280; }
-  .rpt-tl-dot.travel { background: #d97706; }
-  .rpt-tl-dot.gap { background: #7c3aed; }
+  .rpt-tl-dot.billable { background: #2f7d4f; }
+  .rpt-tl-dot.nonbillable { background: #7a736a; }
+  .rpt-tl-dot.travel { background: #b06e12; }
+  .rpt-tl-dot.gap { background: #8b80c8; }
   .rpt-tl-title { font-size: 13px; font-weight: 600; color: var(--ink); }
   .rpt-tl-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-  .rpt-warn-chip { background: #fef3c7; color: #92400e; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600; }
+  .rpt-warn-chip { background: #faf0da; color: #7a4e0b; border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600; }
   .rpt-badge { border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 600; }
-  .rpt-badge.billable { background: #d1fae5; color: #065f46; }
+  .rpt-badge.billable { background: #dcefe3; color: #22593a; }
   /* Travel */
   .rpt-travel-list { display: flex; flex-direction: column; gap: 9px; }
-  .rpt-travel-leg { background: var(--bg, #f8f9fb); border-radius: 8px; padding: 9px 12px; }
-  .rpt-travel-leg.tight { border-left: 3px solid #dc2626; }
+  .rpt-travel-leg { background: var(--bg, #faf6f0); border-radius: 8px; padding: 9px 12px; }
+  .rpt-travel-leg.tight { border-left: 3px solid #c2412e; }
   .rpt-travel-route { font-size: 13px; font-weight: 600; color: var(--ink); }
   .rpt-travel-detail { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
   .rpt-maps-link { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--accent); text-decoration: none; }
   .rpt-maps-link:hover { text-decoration: underline; }
-  .rpt-warn-box { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: #92400e; margin-top: 8px; }
+  .rpt-warn-box { background: #faf0da; border: 1px solid #ecc668; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: #7a4e0b; margin-top: 8px; }
   /* Gap list */
   .rpt-gap-list { display: flex; flex-direction: column; gap: 9px; }
-  .rpt-gap-item { background: var(--bg, #f8f9fb); border-radius: 8px; padding: 9px 12px; border-left: 3px solid #7c3aed; }
+  .rpt-gap-item { background: var(--bg, #faf6f0); border-radius: 8px; padding: 9px 12px; border-left: 3px solid #8b80c8; }
   .rpt-gap-header { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink); margin-bottom: 5px; }
-  .rpt-gap-size { font-weight: 600; color: #7c3aed; }
+  .rpt-gap-size { font-weight: 600; color: #8b80c8; }
   .rpt-gap-suggestions { display: flex; flex-wrap: wrap; gap: 4px; }
   .rpt-chip { background: var(--accent-soft, #e6f0ed); color: var(--accent-deep, #2d6a5e); border-radius: 20px; padding: 3px 10px; font-size: 11.5px; font-weight: 500; }
   /* Attention + recs */
@@ -709,17 +709,17 @@
   /* Weekly day cards */
   .rpt-day-cards { display: grid; grid-template-columns: repeat(5,1fr); gap: 9px; }
   .rpt-day-card {
-    background: var(--bg, #f8f9fb); border-radius: 10px; padding: 11px;
+    background: var(--bg, #faf6f0); border-radius: 10px; padding: 11px;
     cursor: pointer; transition: all 0.12s; border: 1.5px solid transparent;
   }
   .rpt-day-card:hover { background: white; border-color: var(--accent); }
-  .rpt-day-card.has-issues { border-color: #fcd34d; }
+  .rpt-day-card.has-issues { border-color: #ecc668; }
   .rpt-day-card-name { font-size: 13px; font-weight: 700; color: var(--ink); }
   .rpt-day-date { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-top: 1px; }
   .rpt-day-card-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 7px 0 5px; }
   .rpt-day-stat strong { display: block; font-size: 14px; font-weight: 700; color: var(--ink); }
   .rpt-day-stat span { font-size: 10px; color: var(--muted); }
-  .rpt-day-card-warn { font-size: 10px; color: #92400e; background: #fef3c7; border-radius: 4px; padding: 2px 6px; margin-top: 2px; }
+  .rpt-day-card-warn { font-size: 10px; color: #7a4e0b; background: #faf0da; border-radius: 4px; padding: 2px 6px; margin-top: 2px; }
   .rpt-day-card-open { font-size: 11px; color: var(--accent); margin-top: 5px; }
   /* Workload mix */
   .rpt-mix-bars { display: flex; flex-direction: column; gap: 7px; }
@@ -727,15 +727,15 @@
   .rpt-mix-label { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); }
   .rpt-mix-bar-track { height: 14px; background: var(--border); border-radius: 4px; overflow: hidden; display: flex; }
   .rpt-mix-fill { height: 100%; }
-  .rpt-mix-fill.billable { background: #059669; }
-  .rpt-mix-fill.nonbillable { background: #6b7280; }
-  .rpt-mix-fill.travel { background: #d97706; }
+  .rpt-mix-fill.billable { background: #2f7d4f; }
+  .rpt-mix-fill.nonbillable { background: #7a736a; }
+  .rpt-mix-fill.travel { background: #b06e12; }
   .rpt-mix-total { font-size: 11px; color: var(--ink-soft); text-align: right; }
   .rpt-mix-legend { display: flex; gap: 12px; margin-top: 7px; font-size: 11.5px; color: var(--ink-soft); }
   .rpt-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
-  .rpt-legend-dot.billable { background: #059669; }
-  .rpt-legend-dot.nonbillable { background: #6b7280; }
-  .rpt-legend-dot.travel { background: #d97706; }
+  .rpt-legend-dot.billable { background: #2f7d4f; }
+  .rpt-legend-dot.nonbillable { background: #7a736a; }
+  .rpt-legend-dot.travel { background: #b06e12; }
   /* SVG progress ring */
   .rpt-ring-wrap { display: flex; align-items: center; gap: 20px; padding: 4px 0 2px; }
   .rpt-ring-svg { flex-shrink: 0; }
@@ -747,20 +747,20 @@
   .rpt-ring-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
   /* Visual day Gantt strip */
   .rpt-gantt-wrap { margin: 10px 0 2px; }
-  .rpt-gantt-strip { height: 26px; border-radius: 6px; overflow: hidden; display: flex; position: relative; background: #f1f5f9; }
+  .rpt-gantt-strip { height: 26px; border-radius: 6px; overflow: hidden; display: flex; position: relative; background: #f1ece4; }
   .rpt-gantt-block { height: 100%; position: absolute; top: 0; min-width: 2px; }
-  .rpt-gantt-block.billable    { background: #059669; opacity: 0.9; }
-  .rpt-gantt-block.nonbillable { background: #64748b; opacity: 0.8; }
-  .rpt-gantt-block.travel      { background: #d97706; opacity: 0.85; }
-  .rpt-gantt-block.gap         { background: #ede9fe; border: 1px solid #c4b5fd; }
+  .rpt-gantt-block.billable    { background: #2f7d4f; opacity: 0.9; }
+  .rpt-gantt-block.nonbillable { background: #6e675e; opacity: 0.8; }
+  .rpt-gantt-block.travel      { background: #b06e12; opacity: 0.85; }
+  .rpt-gantt-block.gap         { background: #e8e5f7; border: 1px solid #c9c2e8; }
   .rpt-gantt-ticks { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 4px; padding: 0 1px; }
   /* Appointment count bar chart (weekly) */
   .rpt-appt-chart { display: flex; align-items: flex-end; gap: 8px; height: 72px; margin: 6px 0 10px; }
   .rpt-appt-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; cursor: pointer; }
   .rpt-appt-bar-col:hover .rpt-appt-bar { opacity: 0.8; }
-  .rpt-appt-bar { width: 100%; border-radius: 4px 4px 0 0; background: #4f46e5; min-height: 4px; transition: height 0.3s; }
-  .rpt-appt-bar.today { background: #059669; }
-  .rpt-appt-bar.zero { background: #e5e7eb; min-height: 2px; }
+  .rpt-appt-bar { width: 100%; border-radius: 4px 4px 0 0; background: #3d6cae; min-height: 4px; transition: height 0.3s; }
+  .rpt-appt-bar.today { background: #2f7d4f; }
+  .rpt-appt-bar.zero { background: #e9e3d9; min-height: 2px; }
   .rpt-appt-count { font-size: 10.5px; font-weight: 600; color: var(--ink); }
   .rpt-appt-day   { font-size: 10px; color: var(--muted); }
 
@@ -810,7 +810,7 @@
   }
   .settings-toggle input { opacity: 0; width: 0; height: 0; }
   .settings-toggle-slider {
-    position: absolute; cursor: pointer; inset: 0; background: #d1d5db;
+    position: absolute; cursor: pointer; inset: 0; background: #d5cec2;
     border-radius: 11px; transition: 0.2s;
   }
   .settings-toggle-slider:before {
@@ -848,8 +848,8 @@
     display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
   }
-  .settings-status-pill.connected { background: #ecfdf5; color: #065f46; }
-  .settings-status-pill.disconnected { background: #fef2f2; color: #991b1b; }
+  .settings-status-pill.connected { background: #e5f2e8; color: #22593a; }
+  .settings-status-pill.disconnected { background: #fdf1ee; color: #9c3322; }
   .settings-status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
   /* ─── SVG Icons System ─── */
@@ -998,7 +998,9 @@
 
   /* ── My Profile dashboard (2026-08-06 redesign) ── */
   .pf-summary { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-  .pf-summary h2 { margin: 0 0 2px; font-size: 19px; }
+  /* .pf-summary sits on a .panel, so out-cascade the .panel h2 header style
+     (padding + full-width underline) that otherwise lands on the name. */
+  .pf-summary.panel h2 { margin: 0 0 2px; padding: 0; font-size: 19px; border-bottom: none; display: block; }
   .pf-summary .role { font-size: 13px; color: var(--ink-soft); }
   .pf-summary .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .pf-summary-id { flex: 1; min-width: 0; }
@@ -1010,8 +1012,8 @@
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     flex-shrink: 0; vertical-align: middle;
   }
-  .pf-dot.ok { background: #16a34a; }
-  .pf-dot.warn { background: var(--warn, #f59e0b); }
+  .pf-dot.ok { background: #2f7d4f; }
+  .pf-dot.warn { background: var(--warn, #cf8b1f); }
   .pf-cards {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: 12px;
@@ -1197,10 +1199,10 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
-  .pat-tag.east { background: #fff3e0; color: #ff9500; }
+  .pat-tag.east { background: #faf0da; color: #d97f2a; }
   .pat-tag.west { background: var(--accent-soft); color: var(--accent); }
-  .pat-tag.south { background: #e0f7fa; color: #007aff; }
-  .pat-tag.central { background: #f3e5f5; color: #af52de; }
+  .pat-tag.south { background: #e4f2ec; color: #3d6cae; }
+  .pat-tag.central { background: #efedf9; color: #a89fd6; }
 
   .splose-pill {
     display: inline-flex; align-items: center; gap: 6px;
@@ -1344,15 +1346,15 @@
   .ndis-row .v { font-weight: 600; }
 
   .progress-bar {
-    height: 8px; background: #e5e5ea; border-radius: 4px; overflow: hidden;
+    height: 8px; background: #e9e3d9; border-radius: 4px; overflow: hidden;
     margin-top: 6px;
   }
   .progress-fill {
     height: 100%; border-radius: 4px;
-    background: linear-gradient(90deg, var(--accent), #007aff);
+    background: linear-gradient(90deg, var(--accent), #3d6cae);
   }
-  .progress-fill.warn   { background: linear-gradient(90deg, #ff9500, #ff6b00); }
-  .progress-fill.danger { background: linear-gradient(90deg, #ff3b30, #ff453a); }
+  .progress-fill.warn   { background: linear-gradient(90deg, #d97f2a, #ff6b00); }
+  .progress-fill.danger { background: linear-gradient(90deg, #c2412e, #ff453a); }
 
   /* ─── Case noting — slim collapsible banner ─── */
   .case-noting-banner {
@@ -1417,11 +1419,11 @@
   .cn-venue-chip {
     display: inline-flex; align-items: center; gap: 3px;
     padding: 2px 8px; border-radius: 12px; font-size: 10.5px;
-    background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1;
+    background: #eef3fa; border: 1px solid #c3d4ec; color: #315a91;
     white-space: nowrap; cursor: default; line-height: 1.5;
   }
-  .cn-venue-chip.cn-chip-top { background: #ecfdf5; border-color: #86efac; color: #166534; font-weight: 600; }
-  .cn-venue-chip.cn-chip-warn { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+  .cn-venue-chip.cn-chip-top { background: #e5f2e8; border-color: #86efac; color: #22593a; font-weight: 600; }
+  .cn-venue-chip.cn-chip-warn { background: #faf0da; border-color: #ecc668; color: #7a4e0b; }
 
   .cn-day-row {
     display: flex; align-items: center; gap: 10px;
@@ -1468,7 +1470,7 @@
 
   /* Confirm step */
   .confirm-summary {
-    background: #f5f5f7;
+    background: #f5f1ea;
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 14px;
@@ -1485,18 +1487,18 @@
   .api-preview {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 11px;
-    background: #2c2c2e; color: #f5f5f7;
+    background: #2b2620; color: #f5f1ea;
     padding: 12px 14px;
     border-radius: 10px;
     overflow-x: auto;
     white-space: pre;
     line-height: 1.5;
-    border: 1px solid #424245;
+    border: 1px solid #3b352e;
   }
-  .api-preview .k { color: #ff9500; }
+  .api-preview .k { color: #d97f2a; }
   .api-preview .s { color: var(--accent); }
-  .api-preview .n { color: #007aff; }
-  .api-preview .c { color: #8e8e93; }
+  .api-preview .n { color: #3d6cae; }
+  .api-preview .c { color: #948d84; }
 
   .step-actions {
     display: flex; justify-content: space-between; gap: 10px;
@@ -1559,7 +1561,7 @@
   }
   .pat-table th {
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--muted); font-weight: 600; background: #fafafa;
+    color: var(--muted); font-weight: 600; background: #faf8f4;
   }
   .pat-table tbody tr { cursor: pointer; }
   .pat-table tbody tr:hover { background: var(--bg); }
@@ -1619,7 +1621,7 @@
   /* Session-type detail card */
   .st-detail {
     margin-top: 14px; padding: 14px 16px;
-    background: #f9fafb; border: 1px solid var(--border);
+    background: #faf8f4; border: 1px solid var(--border);
     border-radius: 10px;
     display: none;
   }
@@ -1712,7 +1714,7 @@
     color: var(--ink-soft);
     display: inline-flex; align-items: center; gap: 6px;
   }
-  .alert-filters button:hover { background: #f3f4f6; }
+  .alert-filters button:hover { background: #f1ece4; }
   .alert-filters button.on {
     background: var(--accent-soft);
     color: var(--accent-deep);
@@ -1734,9 +1736,9 @@
     padding: 2px 7px; border-radius: 10px;
     letter-spacing: 0.3px; text-transform: uppercase;
   }
-  .cat-badge.under  { background: #fff3e0; color: #ff9500; }
-  .cat-badge.stale  { background: #e0f7fa; color: #0097a7; }
-  .cat-badge.near   { background: #ffe5e5; color: #ff3b30; }
+  .cat-badge.under  { background: #faf0da; color: #d97f2a; }
+  .cat-badge.stale  { background: #e4f2ec; color: #0f7c6c; }
+  .cat-badge.near   { background: #fbe9e5; color: #c2412e; }
 
   .alert-row.hidden { display: none; }
 
@@ -1799,7 +1801,7 @@
     color: var(--ink-soft); font-size: 13px;
     cursor: pointer;
   }
-  .nav-item:hover { background: #f3f4f6; }
+  .nav-item:hover { background: #f1ece4; }
   .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
   .legend-cat {
@@ -1848,7 +1850,7 @@
     padding: 4px 10px;
     border: 1px solid var(--border);
     border-radius: 20px;
-    background: #fafafa;
+    background: #faf8f4;
     cursor: default;
     user-select: none;
     position: relative;
@@ -1856,7 +1858,7 @@
   .cal-sync-strip:hover .cal-sync-menu { display: block; }
   .cal-sync-strip .sync-dot-sm {
     width: 6px; height: 6px; border-radius: 50%;
-    background: #22c55e;
+    background: #3d8f5f;
     flex-shrink: 0;
   }
   .cal-sync-strip .sync-dot-sm.disconnected { background: var(--muted); }
@@ -1926,11 +1928,11 @@
     min-height: 0;
     overflow: hidden;
   }
-  .month-cell.other-month { background: #fafafa; }
+  .month-cell.other-month { background: #faf8f4; }
   /* Clickable day cell — drill into Day View */
   .month-cell[data-date] { cursor: pointer; }
   .month-cell[data-date]:hover { background: var(--accent-soft); }
-  .month-cell.selected-day { background: #f0f7ff; outline: 2px solid var(--accent); outline-offset: -2px; }
+  .month-cell.selected-day { background: #eef3fa; outline: 2px solid var(--accent); outline-offset: -2px; }
   .month-cell .month-date {
     font-size: 13px; font-weight: 500; color: var(--ink);
     margin-bottom: 2px;
@@ -1962,7 +1964,7 @@
   .month-event[data-type="admin"]      { background: var(--c-admin-bg);      border-left-color: var(--c-admin); }
   .month-event[data-type="lunch"]      { background: var(--c-lunch-bg);      border-left-color: var(--c-lunch); }
   .month-event[data-type="leave"]      { background: var(--c-leave-bg);      border-left-color: var(--c-personal); }
-  .month-event[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #6366f1; }
+  .month-event[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #3d6cae; }
   .month-cell .more-link {
     font-size: 11px; color: var(--accent-deep);
     cursor: pointer; margin-top: 2px;
@@ -2020,7 +2022,7 @@
   /* ─── Segmented view toggle ─── */
   .view-tabs {
     display: inline-flex; align-items: center;
-    background: #f3f4f6;
+    background: #f1ece4;
     border-radius: 8px;
     padding: 3px;
     gap: 1px;
@@ -2029,7 +2031,7 @@
     background: transparent; border: none;
     padding: 5px 12px;
     font-size: 12.5px; font-weight: 500;
-    color: #6b7280;
+    color: #7a736a;
     cursor: pointer;
     border-radius: 6px;
     transition: background 0.12s, color 0.12s;
@@ -2056,7 +2058,7 @@
     font-size: 12.5px; font-weight: 500; color: var(--ink);
     cursor: pointer; transition: background 0.12s, border-color 0.12s;
   }
-  .btn-today:hover { background: var(--border-soft); border-color: #ccc; }
+  .btn-today:hover { background: var(--border-soft); border-color: #c7c0b5; }
 
   /* Nav arrows */
   .nav-arrow {
@@ -2072,16 +2074,16 @@
   /* Outlook-only validation mode: hide app-generated/support blocks */
   .cal-grid.outlook-only .session.support { display: none !important; }
   .cal-grid.outlook-only .travel-chip, .cal-grid.outlook-only .addr-chip { display: none !important; }
-  .cal-outlook-only-btn.active { background: #2563eb; color: #fff; }
+  .cal-outlook-only-btn.active { background: #3d6cae; color: #fff; }
   /* Visual refresh: calmer, more Outlook-like tiles */
   .session { border-radius: 4px; border-width: 1px; box-shadow: none; font-size: 11.5px; line-height: 1.25; padding: 2px 6px; border-left-width: 3px; }
   .session .session-title, .session b { font-weight: 600; }
-  .cal-head { border-bottom: 1px solid #e5e7eb; }
-  .cal-head.today .day-num { background:#2563eb; color:#fff; border-radius:50%; display:inline-block; min-width:22px; text-align:center; }
+  .cal-head { border-bottom: 1px solid #e9e3d9; }
+  .cal-head.today .day-num { background:#3d6cae; color:#fff; border-radius:50%; display:inline-block; min-width:22px; text-align:center; }
   .cal-grid {
     display: grid;
     grid-template-columns: 50px repeat(7, 1fr);
-    border: 1px solid #e5e7eb;
+    border: 1px solid #e9e3d9;
     border-radius: 0 0 10px 10px;
     overflow: hidden;
     background: white;
@@ -2099,7 +2101,11 @@
   .cal-grid.hide-weekends .cal-head[data-day="sat"],
   .cal-grid.hide-weekends .cal-head[data-day="sun"],
   .cal-grid.hide-weekends #day-sat,
-  .cal-grid.hide-weekends #day-sun { display: none !important; }
+  .cal-grid.hide-weekends #day-sun,
+  .cal-grid.hide-weekends #mch-sat,
+  .cal-grid.hide-weekends #mch-sun,
+  .cal-grid.hide-weekends #mcol-sat,
+  .cal-grid.hide-weekends #mcol-sun { display: none !important; }
   /* Week-start ordering is driven by inline `order` set in applyWeekStart() */
 
   /* First-time empty state — shown when no sessions exist for the visible week.
@@ -2149,14 +2155,14 @@
   .cal-head {
     padding: 6px 4px 5px; text-align: center;
     border-bottom: 1px solid var(--border);
-    background: #fafafa;
+    background: #faf8f4;
     position: sticky; top: 0; z-index: 20;
     /* Solid background prevents event bleed-through while scrolling */
     isolation: isolate;
     display: flex; flex-direction: row; align-items: center; justify-content: center;
     gap: 5px; min-height: 30px;
   }
-  .cal-head:first-child { background: #fafafa; } /* time gutter */
+  .cal-head:first-child { background: #faf8f4; } /* time gutter */
   .cal-head .day-num {
     font-size: 13px; font-weight: 600; line-height: 1;
     color: var(--ink); display: block;
@@ -2198,8 +2204,8 @@
   .time-col {
     position: relative;
     min-height: 0; /* actual height injected by _applyCalGridHeight() via !important */
-    background: #fafafa;
-    border-right: 1px solid #e5e7eb;
+    background: #faf8f4;
+    border-right: 1px solid #e9e3d9;
   }
   .time-label {
     /* Top-aligned at the hour gridline (Outlook style): the number labels the
@@ -2209,7 +2215,7 @@
        top-align to the line — which read as a "distorted"/unfinished scale. */
     position: absolute; right: 8px;
     top: 0; /* exact px set inline via tToY(h) */
-    font-size: 11px; color: #8b919b;
+    font-size: 11px; color: #948d84;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.2px;
     line-height: 1;
@@ -2217,7 +2223,7 @@
   }
   .hour-line {
     position: absolute; left: 0; right: 0;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid #f1ece4;
     z-index: 0;
     pointer-events: none;
   }
@@ -2282,11 +2288,11 @@
   .allday-gutter {
     font-size: 9px; color: var(--muted); text-align: right;
     padding: 3px 8px 3px 0; text-transform: uppercase; letter-spacing: 0.4px;
-    background: #fafafa; border-bottom: 1px solid var(--border);
+    background: #faf8f4; border-bottom: 1px solid var(--border);
     position: sticky; top: 30px; z-index: 19;
   }
   .allday-cell {
-    border-left: 1px solid #f0f0f0; border-bottom: 1px solid var(--border);
+    border-left: 1px solid #f1ece4; border-bottom: 1px solid var(--border);
     background: white; padding: 1px 2px; min-width: 0;
     position: sticky; top: 30px; z-index: 19;
   }
@@ -2330,7 +2336,7 @@
   .nonworking-band {
     position: absolute; left: 0; right: 0;
     /* DISABLED: Therapist can now schedule at any time (flexible hours)
-       Was: background: repeating-linear-gradient(...); background-color: #f3f4f6; */
+       Was: background: repeating-linear-gradient(...); background-color: #f1ece4; */
     display: none;
     pointer-events: none;
   }
@@ -2401,7 +2407,7 @@
   .session[data-type="admin"]      { background: var(--c-admin-bg);      border-left-color: var(--c-admin); }
   .session[data-type="lunch"]      { background: var(--c-lunch-bg);      border-left-color: var(--c-lunch); }
   .session[data-type="leave"]      { background: var(--c-leave-bg);      border-left-color: var(--c-personal); }
-  .session[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #6366f1; }
+  .session[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #3d6cae; }
   .session[data-type="outlook"]    { background: var(--c-outlook-bg);    border-left-color: var(--c-therapy); }
   /* Keep legacy .support class working */
   .session.cancelled {
@@ -2425,17 +2431,17 @@
     position: absolute; top: 1px; right: 2px;
     width: 12px; height: 12px; line-height: 12px; text-align: center;
     font-size: 9px; font-weight: 700;
-    background: #b45309; color: white; border-radius: 50%;
+    background: #9a5f0e; color: white; border-radius: 50%;
   }
 
   /* ── Conflict highlighting ─────────────────────────────────────────── */
   .session.conflict-tile {
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.9) inset, 0 2px 8px rgba(239,68,68,0.25) !important;
-    border-left-color: #ef4444 !important;
+    border-left-color: #c2412e !important;
   }
   .conflict-badge {
     display: inline-block;
-    background: #ef4444;
+    background: #c2412e;
     color: white;
     font-size: 9px;
     font-weight: 700;
@@ -2454,7 +2460,7 @@
   }
   .rural-badge {
     display: inline-block;
-    background: #6366f1;
+    background: #3d6cae;
     color: white;
     font-size: 9px;
     font-weight: 700;
@@ -2470,9 +2476,9 @@
   .cpd-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
   .cpd-progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
   .cpd-progress-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
-  .cpd-progress-fill.good  { background: var(--success, #10b981); }
-  .cpd-progress-fill.warn  { background: var(--warn, #f59e0b); }
-  .cpd-progress-fill.danger { background: var(--danger, #ef4444); }
+  .cpd-progress-fill.good  { background: var(--success, #2f7d4f); }
+  .cpd-progress-fill.warn  { background: var(--warn, #cf8b1f); }
+  .cpd-progress-fill.danger { background: var(--danger, #c2412e); }
   .cpd-alert-msg { font-size: 12px; color: var(--danger); margin-top: 4px; font-weight: 600; }
 
   /* ── Notif retry button ──────────────────────────────────────────────── */
@@ -2556,15 +2562,15 @@
 
   .splose-confirm {
     background: var(--warn-soft);
-    border: 1px solid #fbbf24;
+    border: 1px solid #e0a83a;
     border-radius: 10px;
     padding: 12px 14px;
     margin-top: 12px;
     font-size: 12px;
-    color: #78350f;
+    color: #6b450a;
     display: flex; gap: 10px; align-items: flex-start;
   }
-  .splose-confirm strong { color: #78350f; }
+  .splose-confirm strong { color: #6b450a; }
 
   .timeline {
     border-left: 2px solid var(--border);
@@ -2713,7 +2719,7 @@
   /* Toast */
   .toast {
     position: fixed; bottom: 24px; right: 24px;
-    background: #0f172a; color: white;
+    background: #241f1a; color: white;
     padding: 12px 18px; border-radius: 10px;
     font-size: 13px; line-height: 1.4;
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
@@ -2724,8 +2730,8 @@
     max-width: 420px;
   }
   .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
-  .toast .toast-icon { color: #22c55e; font-weight: 700; font-size: 16px; line-height: 1; margin-top: 1px; }
-  .toast .toast-sub { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+  .toast .toast-icon { color: #3d8f5f; font-weight: 700; font-size: 16px; line-height: 1; margin-top: 1px; }
+  .toast .toast-sub { font-size: 11px; color: #a39b90; margin-top: 3px; }
 
   /* Footnote / status bar */
   .footnote {
@@ -2848,7 +2854,7 @@
   }
   .detail-footer {
     padding: 12px 20px; border-top: 1px solid var(--border);
-    display: flex; gap: 8px; background: #fafafa;
+    display: flex; gap: 8px; background: #faf8f4;
   }
   .detail-footer button { flex: 1; }
   /* ── Detail drawer tabs ── */
@@ -2856,7 +2862,7 @@
   .detail-panel.active { display: flex; }
   /* ── Notes box pinned at bottom of detail drawer ── */
   .bd-notes-box {
-    border-top: 1px solid var(--border); background: #fafafa; flex-shrink: 0;
+    border-top: 1px solid var(--border); background: #faf8f4; flex-shrink: 0;
   }
   .bd-notes-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -2888,7 +2894,7 @@
   .notes-editor ul, .notes-editor ol { margin: 4px 0 4px 18px; padding: 0; }
   .notes-editor li { margin: 2px 0; }
   .notes-statusbar {
-    display: flex; justify-content: space-between; background: #fafafa; flex-shrink: 0;
+    display: flex; justify-content: space-between; background: #faf8f4; flex-shrink: 0;
   }
   /* Editable time row inside detail drawer */
   .detail-body .row.time-edit-row { align-items: flex-start; padding: 10px 0; }
@@ -2906,13 +2912,13 @@
   .time-edit-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .btn.btn-xs { padding: 4px 10px; font-size: 11px; }
   .dur-delta { font-size: 11px; color: var(--accent-deep); font-weight: 600; }
-  .dur-delta.warn { color: #b45309; }
+  .dur-delta.warn { color: #9a5f0e; }
   /* Travel overlay on calendar columns */
   .travel-overlay {
     position: absolute; left: 4px; right: 4px; z-index: 2;
-    border-left: 3px solid #0f766e;
+    border-left: 3px solid #0f7c6c;
     background: repeating-linear-gradient(45deg, rgba(15,118,110,0.10), rgba(15,118,110,0.10) 5px, rgba(15,118,110,0.18) 5px, rgba(15,118,110,0.18) 10px);
-    border-radius: 4px; padding: 2px 6px; font-size: 10px; color: #0f766e; font-weight: 600;
+    border-radius: 4px; padding: 2px 6px; font-size: 10px; color: #0f7c6c; font-weight: 600;
     display: flex; align-items: center; gap: 4px; overflow: hidden;
     cursor: pointer; user-select: none;
   }
@@ -2923,8 +2929,8 @@
   .gap-overlay {
     position: absolute; left: 4px; right: 4px; z-index: 2;
     background: repeating-linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.18) 6px, rgba(251,191,36,0.32) 6px, rgba(251,191,36,0.32) 12px);
-    border: 1.5px dashed #b45309; border-radius: 5px;
-    padding: 4px 8px; font-size: 10.5px; color: #78350f; font-weight: 700;
+    border: 1.5px dashed #9a5f0e; border-radius: 5px;
+    padding: 4px 8px; font-size: 10.5px; color: #6b450a; font-weight: 700;
     display: flex; align-items: center; gap: 5px;
     cursor: pointer; user-select: none;
     transition: box-shadow 0.15s ease;
@@ -2935,14 +2941,14 @@
   .gap-overlay .g-time { opacity: 0.75; font-weight: 500; font-size: 9.5px; margin-left: auto; white-space: nowrap; }
   /* Start-of-day / end-of-day travel (base → first session, last session → base).
      Same visual family as between-session travel but with a subtle left bar tag. */
-  .travel-overlay.start { border-left-color: #0369a1; color: #075985;
+  .travel-overlay.start { border-left-color: #315a91; color: #075985;
     background: repeating-linear-gradient(45deg, rgba(3,105,161,0.09), rgba(3,105,161,0.09) 5px, rgba(3,105,161,0.17) 5px, rgba(3,105,161,0.17) 10px); }
-  .travel-overlay.end   { border-left-color: #7c3aed; color: #5b21b6;
+  .travel-overlay.end   { border-left-color: #8b80c8; color: #6d63a8;
     background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
   /* Smart-recommendation gap highlight — distinct from session blocks AND from regular travel */
   .gap-overlay.smart {
     background: repeating-linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.16) 6px, rgba(16,185,129,0.28) 6px, rgba(16,185,129,0.28) 12px);
-    border: 1.5px solid #059669; color: #064e3b;
+    border: 1.5px solid #2f7d4f; color: #064e3b;
     box-shadow: 0 2px 8px rgba(16,185,129,0.18);
   }
   .gap-overlay.smart:hover { box-shadow: 0 4px 14px rgba(16,185,129,0.30); }
@@ -2955,9 +2961,9 @@
   .gap-opt .g-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
   .gap-opt .g-tag  {
     font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600;
-    background: #e0f2fe; color: #075985;
+    background: #e8eff9; color: #075985;
   }
-  .gap-opt .g-tag.warn { background: #fef3c7; color: #92400e; }
+  .gap-opt .g-tag.warn { background: #faf0da; color: #7a4e0b; }
   .gap-opt .g-tag.bad  { background: var(--danger-soft); color: var(--danger); }
   .gap-opt.downranked { opacity: 0.58; }
   .gap-opt.downranked .g-rank { background: var(--border); color: var(--ink-soft); }
@@ -2990,14 +2996,14 @@
     font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
     margin-top: 2px;
   }
-  .gap-opt.rank-2 .g-rank { background: #6b7280; }
+  .gap-opt.rank-2 .g-rank { background: #7a736a; }
   .gap-opt.rank-3 .g-rank,
   .gap-opt.rank-4 .g-rank,
-  .gap-opt.rank-5 .g-rank { background: #9ca3af; }
+  .gap-opt.rank-5 .g-rank { background: #a39b90; }
   .gap-opt .g-main { flex: 1; min-width: 0; }
   .gap-opt .g-name { font-weight: 600; font-size: 13px; color: var(--ink); }
   .gap-opt .g-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .gap-opt .g-stars { color: #ff9500; font-weight: 600; }
+  .gap-opt .g-stars { color: #d97f2a; font-weight: 600; }
   .gap-opt .g-why { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; font-style: italic; }
   .gap-opt .g-cta { display: flex; flex-direction: column; gap: 4px; }
   .gap-opt .g-cta a {
@@ -3014,7 +3020,7 @@
   /* Work-base field */
   .wb-field {
     display: flex; gap: 10px; align-items: center; margin-top: 10px;
-    padding: 10px 14px; background: #f5f5f7; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; background: #f5f1ea; border: 1px solid var(--border); border-radius: 8px;
   }
   .wb-field label { font-size: 12px; color: var(--ink-soft); font-weight: 600; min-width: 120px; }
   .wb-field input[type="text"] {
@@ -3033,7 +3039,7 @@
   }
   .wb-field .wb-remove:hover { color: var(--danger); }
   .wb-field.base-home { background: #fff; }
-  .wb-field.base-remote { background: #f1f5f9; }
+  .wb-field.base-remote { background: #f1ece4; }
 
   /* ── Move-impact modal ── */
   .impact-modal {
@@ -3068,8 +3074,8 @@
     display: flex; align-items: center; gap: 10px;
   }
   .impact-verdict.ok      { background: var(--accent-soft); color: var(--accent-deep); border: 1px solid var(--accent); }
-  .impact-verdict.warn    { background: #fff3e0; color: #e65100; border: 1px solid #ffb74d; }
-  .impact-verdict.blocker { background: #ffe5e5; color: #b71c1c; border: 1px solid #ff8a80; }
+  .impact-verdict.warn    { background: #faf0da; color: #a8511a; border: 1px solid #e0a83a; }
+  .impact-verdict.blocker { background: #fbe9e5; color: #9c3322; border: 1px solid #eeb3a4; }
   .impact-verdict .v-icon { font-size: 18px; }
   .impact-list { list-style: none; margin: 0; padding: 0; }
   .impact-list li {
@@ -3079,9 +3085,9 @@
     border: 1px solid;
     display: flex; gap: 10px; align-items: flex-start;
   }
-  .impact-list li.i-blocker { background: #ffe5e5; border-color: #ff8a80; color: #b71c1c; }
-  .impact-list li.i-warn    { background: #fff3e0; border-color: #ffb74d; color: #e65100; }
-  .impact-list li.i-info    { background: #e0f7fa; border-color: #80deea; color: #00838f; }
+  .impact-list li.i-blocker { background: #fbe9e5; border-color: #eeb3a4; color: #9c3322; }
+  .impact-list li.i-warn    { background: #faf0da; border-color: #e0a83a; color: #a8511a; }
+  .impact-list li.i-info    { background: #e4f2ec; border-color: #a8d8cf; color: #0a5d51; }
   .impact-list li.i-ok      { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
   .impact-list li .ico { font-size: 14px; line-height: 1.2; flex-shrink: 0; }
   .impact-list li .ttl { font-weight: 600; }
@@ -3099,16 +3105,16 @@
   .alarm-banner {
     margin: 0 18px 14px;
     padding: 12px 16px;
-    background: linear-gradient(135deg, #fef3c7, #fffbeb);
-    border: 1px solid #fcd34d;
-    border-left: 4px solid #d97706;
+    background: linear-gradient(135deg, #faf0da, #fcf6e8);
+    border: 1px solid #ecc668;
+    border-left: 4px solid #b06e12;
     border-radius: 10px;
     display: flex; align-items: center; gap: 12px;
-    font-size: 13px; color: #78350f;
+    font-size: 13px; color: #6b450a;
   }
   .alarm-banner .alarm-icon { font-size: 18px; line-height: 1; }
   .alarm-banner .alarm-msg { flex: 1; line-height: 1.4; }
-  .alarm-banner .alarm-msg strong { color: #92400e; }
+  .alarm-banner .alarm-msg strong { color: #7a4e0b; }
   .alarm-banner .alarm-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .alarm-banner.hidden { display: none; }
 
@@ -3126,7 +3132,7 @@
   }
   .profile-sidebar .avatar-big {
     width: 72px; height: 72px; border-radius: 50%;
-    background: linear-gradient(135deg, #6f5dd4, #a78bfa);
+    background: linear-gradient(135deg, #8b80c8, #a89fd6);
     color: white; font-weight: 700; font-size: 26px;
     display: flex; align-items: center; justify-content: center;
     margin: 0 auto 10px;
@@ -3187,7 +3193,7 @@
     transition: box-shadow 120ms, border-color 120ms;
   }
   .wl-day:hover { border-color: var(--accent); box-shadow: 0 3px 10px rgba(111,93,212,0.12); }
-  .wl-day.empty { background: repeating-linear-gradient(45deg, #fff, #fff 6px, #fafafa 6px, #fafafa 12px); }
+  .wl-day.empty { background: repeating-linear-gradient(45deg, #fff, #fff 6px, #faf8f4 6px, #faf8f4 12px); }
   .wl-dayhead {
     font-size: 12px; font-weight: 600; color: var(--ink);
     display: flex; justify-content: space-between; align-items: baseline;
@@ -3250,9 +3256,9 @@
     font-size: 11px; font-weight: 600;
   }
   .status-pill.approved { background: var(--accent-soft); color: var(--accent); }
-  .status-pill.pending  { background: #fff3e0; color: #e65100; }
-  .status-pill.denied   { background: #ffe5e5; color: #b71c1c; }
-  .status-pill.draft    { background: #e5e5ea; color: #3a3a3c; }
+  .status-pill.pending  { background: #faf0da; color: #a8511a; }
+  .status-pill.denied   { background: #fbe9e5; color: #9c3322; }
+  .status-pill.draft    { background: #e9e3d9; color: #332c25; }
 
   /* ── Profile data sections — empty states + approval tabs ── */
   .pf-loading { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
@@ -3632,11 +3638,11 @@
   <button class="icon-btn" data-help="header-help" title="Help" onclick="openHelpPanel()" aria-label="Open help" style="font-size:15px;font-weight:700;color:var(--ink-soft);">?</button>
 
   <!-- Current user chip + sign out -->
-  <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid var(--border,#dde3ec);padding-left:12px;">
+  <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid var(--border,#e9e3d9);padding-left:12px;">
     <span class="hdr-account-wrap">
       <button id="app-user-chip" type="button" aria-haspopup="true" aria-expanded="false"
         onclick="toggleAccountMenu(event)"
-        style="font-size:12px;font-weight:500;color:var(--ink-soft,#6b7280);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;background:none;border:1px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;"
+        style="font-size:12px;font-weight:500;color:var(--ink-soft,#7a736a);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;background:none;border:1px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;"
         title="Account">
         Loading…
       </button>
@@ -3789,7 +3795,7 @@
         <!-- Read view -->
         <div id="pf-details-read">
           <p class="section-desc" style="margin-bottom:12px;">Splose practitioner details (AHPRA, NDIS provider number) are managed in Splose.</p>
-          <div id="pf-save-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;color:#15803d;"></div>
+          <div id="pf-save-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:#e5f2e8;border:1px solid #bfdfc9;border-radius:8px;font-size:13px;color:#276a43;"></div>
           <div class="detail-grid-2" id="pf-details-grid">
             <!-- populated by loadProfileView() -->
           </div>
@@ -3825,7 +3831,7 @@
             </div>
           </div>
 
-          <div id="pf-form-error" style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#dc2626;"></div>
+          <div id="pf-form-error" style="display:none;margin-top:12px;padding:10px 14px;background:#fdf1ee;border:1px solid #eeb3a4;border-radius:8px;font-size:13px;color:#c2412e;"></div>
 
           <div style="display:flex;gap:8px;margin-top:16px;">
             <button type="submit" class="btn primary" id="pf-save-btn" style="min-width:100px;">Save changes</button>
@@ -4430,16 +4436,16 @@
         <div class="cal-legend-popover" id="cal-legend-popover" style="display:none;">
           <div class="cl-title">Outlook Categories</div>
           <div class="cl-grid">
-            <div class="cl-row"><span class="cl-dot" style="background:#0284c7;"></span><span class="cl-label">Client Appointments</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#4f46e5;"></span><span class="cl-label">Case Management</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#d97706;"></span><span class="cl-label">Report Writing</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#7c3aed;"></span><span class="cl-label">Travel</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#ea580c;"></span><span class="cl-label">Admin</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#16a34a;"></span><span class="cl-label">Meetings</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#2563eb;"></span><span class="cl-label">PD / CPD</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#db2777;"></span><span class="cl-label">Business Related</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#dc2626;"></span><span class="cl-label">Do Not Book</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#6b7280;"></span><span class="cl-label">Cancellations</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">Client Appointments</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">Case Management</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#b06e12;"></span><span class="cl-label">Report Writing</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#8b80c8;"></span><span class="cl-label">Travel</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#c2611e;"></span><span class="cl-label">Admin</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#2f7d4f;"></span><span class="cl-label">Meetings</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">PD / CPD</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#a13d47;"></span><span class="cl-label">Business Related</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#c2412e;"></span><span class="cl-label">Do Not Book</span></div>
+            <div class="cl-row"><span class="cl-dot" style="background:#7a736a;"></span><span class="cl-label">Cancellations</span></div>
           </div>
         </div>
       </div>
@@ -4464,7 +4470,7 @@
             Fix calendar (remove stale events)
           </button>
           <div class="menu-divider"></div>
-          <button onclick="resyncAllEvents()" style="color:#ef4444;">
+          <button onclick="resyncAllEvents()" style="color:#c2412e;">
             <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Clear &amp; re-sync all
           </button>
@@ -4669,13 +4675,13 @@
   .rh-panel.active { display: block; }
   .rh-soon {
     display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-    text-transform: uppercase; background: #f4f4f5; color: var(--ink-soft);
+    text-transform: uppercase; background: #f2eee6; color: var(--ink-soft);
     border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; margin-left: 8px;
   }
   .rh-step { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; font-size: 12.5px; }
   .rh-step .step { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-weight: 500; }
   .rh-step .arrow { color: var(--muted); }
-  .rh-status-chip { display: inline-block; font-size: 11px; border: 1px solid var(--border); background: #fafafa; color: var(--ink-soft); border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; }
+  .rh-status-chip { display: inline-block; font-size: 11px; border: 1px solid var(--border); background: #faf8f4; color: var(--ink-soft); border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; }
   .rh-searchbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
   .rh-searchbar input[type="search"] { flex: 1; min-width: 240px; padding: 9px 14px; border: 1px solid var(--border); border-radius: var(--radius-md, 10px); font-size: 13.5px; background: var(--panel); }
   .rh-searchbar select { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md, 10px); background: var(--panel); font-size: 12.5px; }
@@ -4704,7 +4710,7 @@
   .rh-lbl { display: block; font-size: 12px; color: var(--ink-soft); margin: 10px 0 3px; }
   .rh-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit; box-sizing: border-box; }
   .rh-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-  .rh-err { margin-top: 10px; padding: 8px 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 7px; font-size: 12.5px; color: #dc2626; }
+  .rh-err { margin-top: 10px; padding: 8px 12px; background: #fdf1ee; border: 1px solid #eeb3a4; border-radius: 7px; font-size: 12.5px; color: #c2412e; }
   .rh-item { padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
   .rh-item:last-child { border-bottom: none; }
   .rh-kit { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg, 14px); padding: 16px; margin-bottom: 12px; }
@@ -4879,7 +4885,7 @@
       </select>
       <label style="display:block;font-size:12px;color:var(--ink-soft);margin:8px 0 3px;">Link (optional)</label>
       <input type="url" id="rhs-url" placeholder="https://…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;">
-      <div id="rhs-err" style="display:none;margin-top:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:7px;font-size:12.5px;color:#dc2626;"></div>
+      <div id="rhs-err" style="display:none;margin-top:10px;padding:8px 12px;background:#fdf1ee;border:1px solid #eeb3a4;border-radius:7px;font-size:12.5px;color:#c2412e;"></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="btn primary" id="rhs-send" onclick="rhSubmitResource()">Submit for review</button>
@@ -4904,7 +4910,7 @@
   .acct-card .val { font-size:22px; font-weight:700; margin-top:4px; }
   .acct-flags { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
   .acct-flag { font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); }
-  .acct-flag.on { color:#16a34a; border-color:#16a34a55; }
+  .acct-flag.on { color:#2f7d4f; border-color:#2f7d4f55; }
   .acct-flag.off { color:var(--muted); }
   .acct-table { width:100%; border-collapse:collapse; font-size:13px; }
   .acct-table th, .acct-table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
@@ -4912,15 +4918,15 @@
   .acct-pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
   .acct-subnav button:disabled { opacity:.45; cursor:not-allowed; }
   .acct-exc-count { display:inline-block; min-width:16px; padding:1px 5px; margin-left:4px; font-size:10px;
-    border-radius:999px; background:#dc2626; color:#fff; text-align:center; }
+    border-radius:999px; background:#c2412e; color:#fff; text-align:center; }
   .acct-sev { font-size:10px; font-weight:700; letter-spacing:.4px; padding:2px 7px; border-radius:999px; text-transform:uppercase; }
-  .acct-sev.high { background:#fee2e2; color:#b91c1c; }
-  .acct-sev.medium { background:#fef3c7; color:#b45309; }
+  .acct-sev.high { background:#fbe9e5; color:#9c3322; }
+  .acct-sev.medium { background:#faf0da; color:#9a5f0e; }
   .acct-sev.low { background:var(--surface-2,rgba(0,0,0,0.05)); color:var(--muted); }
   .acct-conf { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
-  .acct-conf.mapped { background:#dcfce7; color:#15803d; border-color:#15803d33; }
-  .acct-conf.needs_review { background:#fef3c7; color:#b45309; border-color:#b4530933; }
-  .acct-conf.unmapped { background:#fee2e2; color:#b91c1c; border-color:#b91c1c33; }
+  .acct-conf.mapped { background:#dcefe3; color:#276a43; border-color:#276a4333; }
+  .acct-conf.needs_review { background:#faf0da; color:#9a5f0e; border-color:#9a5f0e33; }
+  .acct-conf.unmapped { background:#fbe9e5; color:#9c3322; border-color:#9c332233; }
   .btn-locked { opacity:.5; cursor:not-allowed; }
 </style>
 <div class="acct-page">
@@ -4984,7 +4990,7 @@
   .b-stat .bs-val { font-size: 24px; font-weight: 700; line-height: 1.1; margin-bottom: 4px; }
   .b-stat .bs-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
   .b-stat .bs-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .b-stat.ok .bs-val { color: #16a34a; }
+  .b-stat.ok .bs-val { color: #2f7d4f; }
   .b-stat.warn .bs-val { color: var(--warn); }
   .b-stat.danger .bs-val { color: var(--danger); }
 
@@ -4994,33 +5000,33 @@
   .b-panel-head h3 { font-size: 13px; font-weight: 600; margin: 0; }
   .b-panel-head .sub { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 6px; }
 
-  .inv-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #fafafa; }
+  .inv-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #faf8f4; }
   .inv-search { flex: 1; padding: 6px 10px 6px 30px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: white; }
   .inv-filter { padding: 4px 10px; border: 1px solid var(--border); border-radius: 16px; background: white; font-size: 12px; color: var(--ink-soft); cursor: pointer; }
   .inv-filter.on { background: var(--accent-soft); color: var(--accent-deep); border-color: var(--accent); font-weight: 600; }
 
   .inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .inv-table thead th { padding: 8px 12px; text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); border-bottom: 1px solid var(--border); background: #fafafa; }
+  .inv-table thead th { padding: 8px 12px; text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); border-bottom: 1px solid var(--border); background: #faf8f4; }
   .inv-table tbody tr { border-bottom: 1px solid var(--border-soft); cursor: pointer; transition: background 0.1s; }
   .inv-table tbody tr:last-child { border-bottom: none; }
   .inv-table tbody tr:hover { background: var(--border-soft); }
   .inv-table td { padding: 9px 12px; vertical-align: middle; }
 
   .status-pill { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .status-paid { background: #f0fdf4; color: #15803d; }
-  .status-unpaid { background: #fffbeb; color: #92400e; }
-  .status-overdue { background: #fef2f2; color: #991b1b; }
-  .status-partial { background: #eff6ff; color: #1d4ed8; }
+  .status-paid { background: #e5f2e8; color: #276a43; }
+  .status-unpaid { background: #fcf6e8; color: #7a4e0b; }
+  .status-overdue { background: #fdf1ee; color: #9c3322; }
+  .status-partial { background: #e8eff9; color: #3d6cae; }
 
   .amount-cell { font-weight: 600; font-size: 12px; text-align: right; }
-  .amount-paid { color: #16a34a; }
+  .amount-paid { color: #2f7d4f; }
   .amount-owed { color: var(--danger); }
 
   .payment-item { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
   .payment-item:last-child { border-bottom: none; }
   .payment-item .p-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
   .payment-item .p-num { font-weight: 600; }
-  .payment-item .p-amt { font-weight: 700; color: #16a34a; }
+  .payment-item .p-amt { font-weight: 700; color: #2f7d4f; }
   .payment-item .p-sub { color: var(--muted); font-size: 11px; }
 
   .chart-wrap { padding: 14px; }
@@ -5036,7 +5042,7 @@
   .inv-line:last-child { border-bottom:none; }
   .inv-line .ik { color:var(--muted); }
   .inv-line .iv { font-weight:500; text-align:right; max-width:220px; }
-  .line-item-row { padding:8px 10px; background:#fafafa; border-radius:6px; margin-bottom:6px; font-size:11px; }
+  .line-item-row { padding:8px 10px; background:#faf8f4; border-radius:6px; margin-bottom:6px; font-size:11px; }
   .line-item-row .li-desc { color:var(--ink-soft); }
   .line-item-row .li-meta { display:flex; justify-content:space-between; margin-top:3px; }
   .line-item-row .li-code { font-family:monospace; font-size:10px; color:var(--muted); }
@@ -5147,7 +5153,7 @@
   .ndis-stat .stat-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
   .ndis-stat.warn .stat-val { color: var(--warn); }
   .ndis-stat.danger .stat-val { color: var(--danger); }
-  .ndis-stat.ok .stat-val { color: #16a34a; }
+  .ndis-stat.ok .stat-val { color: #2f7d4f; }
 
   .ndis-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .ndis-search { flex: 1; padding: 8px 12px 8px 34px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: white; }
@@ -5155,7 +5161,7 @@
   .ndis-filter-pill.on { background: var(--accent-soft); color: var(--accent-deep); border-color: var(--accent); font-weight: 600; }
 
   .ndis-table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-size: 13px; }
-  .ndis-table thead th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: #fafafa; border-bottom: 1px solid var(--border); }
+  .ndis-table thead th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: #faf8f4; border-bottom: 1px solid var(--border); }
   .ndis-table tbody tr { border-bottom: 1px solid var(--border-soft); transition: background 0.1s; cursor: pointer; }
   .ndis-table tbody tr:last-child { border-bottom: none; }
   .ndis-table tbody tr:hover { background: var(--border-soft); }
@@ -5168,21 +5174,21 @@
   .client-sub { font-size: 11px; color: var(--muted); }
 
   .fund-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .fund-plan { background: #eff6ff; color: #1d4ed8; }
-  .fund-ndia { background: #f0fdf4; color: #15803d; }
-  .fund-self { background: #faf5ff; color: #7e22ce; }
+  .fund-plan { background: #e8eff9; color: #3d6cae; }
+  .fund-ndia { background: #e5f2e8; color: #276a43; }
+  .fund-self { background: #efedf9; color: #6d63a8; }
 
   .expiry-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px; }
-  .expiry-ok { background: #f0fdf4; color: #15803d; }
-  .expiry-warn { background: #fffbeb; color: #92400e; }
-  .expiry-danger { background: #fef2f2; color: #991b1b; }
-  .expiry-expired { background: #f3f4f6; color: #6b7280; text-decoration: line-through; }
+  .expiry-ok { background: #e5f2e8; color: #276a43; }
+  .expiry-warn { background: #fcf6e8; color: #7a4e0b; }
+  .expiry-danger { background: #fdf1ee; color: #9c3322; }
+  .expiry-expired { background: #f1ece4; color: #7a736a; text-decoration: line-through; }
 
   .hours-bar-wrap { display: flex; align-items: center; gap: 8px; }
-  .hours-bar-bg { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; min-width: 60px; }
-  .hours-bar-fill { height: 100%; border-radius: 3px; background: #16a34a; }
-  .hours-bar-fill.warn { background: #d97706; }
-  .hours-bar-fill.danger { background: #dc2626; }
+  .hours-bar-bg { flex: 1; height: 6px; background: #e9e3d9; border-radius: 3px; overflow: hidden; min-width: 60px; }
+  .hours-bar-fill { height: 100%; border-radius: 3px; background: #2f7d4f; }
+  .hours-bar-fill.warn { background: #b06e12; }
+  .hours-bar-fill.danger { background: #c2412e; }
   .hours-text { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 50px; text-align: right; }
 
   .ndis-loading { padding: 60px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -5338,12 +5344,12 @@
   .lb-stat .lv { font-size: 22px; font-weight: 700; color: var(--accent); }
   .lb-stat .ll { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
   .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .lb-table thead th { padding: 9px 13px; text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: #fafafa; border-bottom: 1px solid var(--border); }
+  .lb-table thead th { padding: 9px 13px; text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: #faf8f4; border-bottom: 1px solid var(--border); }
   .lb-table tbody tr { border-bottom: 1px solid var(--border-soft); }
   .lb-table tbody tr:last-child { border-bottom: none; }
   .lb-table td { padding: 9px 13px; vertical-align: middle; }
-  .lb-type { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
-  .lb-src { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #f4f4f5; color: var(--ink-soft); border: 1px solid var(--border); white-space: nowrap; }
+  .lb-type { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #e8eff9; color: #3d6cae; }
+  .lb-src { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; background: #f2eee6; color: var(--ink-soft); border: 1px solid var(--border); white-space: nowrap; }
   .lb-workspace { display: flex; gap: 16px; align-items: flex-start; }
   .lb-main { flex: 1; min-width: 0; }
   .lb-detail {
@@ -5374,7 +5380,7 @@
   .lb-j-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
   .lb-j-review {
     display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600;
-    color: #92400e; background: #fef3c7; border-radius: 5px; padding: 1px 7px;
+    color: #7a4e0b; background: #faf0da; border-radius: 5px; padding: 1px 7px;
   }
   .lb-j-right { text-align: right; flex-shrink: 0; }
   .lb-j-dur { font-size: 13px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -5457,10 +5463,10 @@
   .cc-name { font-weight: 600; font-size: 13px; line-height: 1.3; }
   .cc-company { font-size: 11px; color: var(--muted); }
   .cc-type-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 8px; margin-bottom: 8px; }
-  .type-pm { background: #eff6ff; color: #1d4ed8; }
-  .type-ref { background: #f0fdf4; color: #15803d; }
-  .type-gp { background: #faf5ff; color: #7e22ce; }
-  .type-other { background: #f1f5f9; color: #475569; }
+  .type-pm { background: #e8eff9; color: #3d6cae; }
+  .type-ref { background: #e5f2e8; color: #276a43; }
+  .type-gp { background: #efedf9; color: #6d63a8; }
+  .type-other { background: #f1ece4; color: #575046; }
   .cc-detail { font-size: 11.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   .cc-detail svg { flex-shrink: 0; color: var(--muted); }
   .cc-assoc { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-soft); font-size: 11px; color: var(--muted); }
@@ -5540,10 +5546,10 @@
   .feed-item { display: flex; gap: 12px; padding: 10px 12px; background: white; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.1s, box-shadow 0.1s; }
   .feed-item:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,168,204,0.08); }
   .feed-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
-  .fi-appt { background: #eff6ff; }
-  .fi-support { background: #f0fdf4; }
-  .fi-invoice { background: #fffbeb; }
-  .fi-payment { background: #f0fdf4; }
+  .fi-appt { background: #e8eff9; }
+  .fi-support { background: #e5f2e8; }
+  .fi-invoice { background: #fcf6e8; }
+  .fi-payment { background: #e5f2e8; }
   .feed-body { flex: 1; min-width: 0; }
   .feed-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .feed-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
@@ -6366,7 +6372,7 @@
         </div>
 
         <!-- Pending approval banner (shows when accounts need attention) -->
-        <div id="stg-pending-banner" style="display:none;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;font-size:13px;color:#92400e;margin-bottom:18px;">
+        <div id="stg-pending-banner" style="display:none;background:#fcf6e8;border:1.5px solid #ecc668;border-radius:10px;padding:12px 16px;font-size:13px;color:#7a4e0b;margin-bottom:18px;">
           <strong>⚠️ Accounts awaiting approval</strong> — scroll down to review and approve new team members.
         </div>
 
@@ -6422,7 +6428,7 @@
               style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;">
           </div>
           <div style="display:flex;gap:10px;">
-            <button class="btn" style="background:#dc2626;color:#fff;font-size:13px;" onclick="submitSuspend()">Suspend account</button>
+            <button class="btn" style="background:#c2412e;color:#fff;font-size:13px;" onclick="submitSuspend()">Suspend account</button>
             <button class="btn" onclick="closeSuspendModal()" style="font-size:13px;">Cancel</button>
           </div>
         </div>
@@ -6434,7 +6440,7 @@
           <h3 style="margin:0 0 4px;font-size:16px;font-weight:700;color:var(--ink);">Invite Team Member</h3>
           <p style="margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);">A registration link will be created — emailed automatically when email is configured, otherwise shown here to copy.</p>
           <div id="invite-link-box" style="display:none;background:var(--surface-2,#f6f7fb);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
-            <div id="invite-link-why" style="font-size:12px;font-weight:600;color:var(--warn,#b45309);margin-bottom:6px;"></div>
+            <div id="invite-link-why" style="font-size:12px;font-weight:600;color:var(--warn,#9a5f0e);margin-bottom:6px;"></div>
             <div style="display:flex;gap:8px;align-items:center;">
               <input class="settings-input" id="invite-link-url" readonly style="flex:1;font-size:11px;font-family:monospace;box-sizing:border-box;">
               <button class="btn" style="font-size:12px;white-space:nowrap;" onclick="copyInviteLinkFromBox(this)">Copy link</button>
@@ -6575,10 +6581,10 @@
 
     <!-- Legend -->
     <div style="display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;font-size:11px;color:var(--ink-soft);">
-      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#dcfce7;border:1px solid #86efac;"></span>Free</span>
-      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#fee2e2;border:1px solid #fca5a5;"></span>Busy</span>
-      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#fef3c7;border:1px solid #fcd34d;"></span>Outside working hours</span>
-      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#bfdbfe;border:1px solid #93c5fd;"></span>Common free slot</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#dcefe3;border:1px solid #86efac;"></span>Free</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#fbe9e5;border:1px solid #eeb3a4;"></span>Busy</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#faf0da;border:1px solid #ecc668;"></span>Outside working hours</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#c3d4ec;border:1px solid #9db9dd;"></span>Common free slot</span>
     </div>
   </div>
 
@@ -6692,11 +6698,11 @@
               <tr style="background: var(--bg); border-bottom: 1px solid var(--border);">
                 <th style="padding: 8px; text-align: left;">Client</th>
                 <th style="padding: 8px; text-align: center;">Slot</th>
-                <th style="padding: 8px; text-align: center; background: #e5f2f2; color: var(--accent-deep);">Cluster</th>
-                <th style="padding: 8px; text-align: center; background: #f0f0f0;">Travel</th>
-                <th style="padding: 8px; text-align: center; background: #fff4e0; color: var(--warn);">Urgency</th>
-                <th style="padding: 8px; text-align: center; background: #eef0f4;">Preference</th>
-                <th style="padding: 8px; text-align: center; background: #f9f9f9;">Balance</th>
+                <th style="padding: 8px; text-align: center; background: #e4f2ec; color: var(--accent-deep);">Cluster</th>
+                <th style="padding: 8px; text-align: center; background: #f1ece4;">Travel</th>
+                <th style="padding: 8px; text-align: center; background: #faf0da; color: var(--warn);">Urgency</th>
+                <th style="padding: 8px; text-align: center; background: #ece7df;">Preference</th>
+                <th style="padding: 8px; text-align: center; background: #faf8f4;">Balance</th>
                 <th style="padding: 8px; text-align: center; font-weight: 600;">Total</th>
               </tr>
             </thead>
@@ -7531,7 +7537,7 @@ window.APP_USER = null;
       var av = document.getElementById('prac-avatar');
       var sub = document.getElementById('prac-sub');
       if (nm) nm.textContent = u.displayName || u.name || u.email;
-      if (av) av.textContent = (u.displayName || u.name || '?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+      if (av) av.textContent = ((u.displayName || u.name || '?').split(/\s+/).map(function(w){return w.replace(/[^\p{L}]/gu,'');}).filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('') || '?').toUpperCase();
       if (sub) sub.textContent = (u.roleTitle || ({owner:'Practice owner',admin:'Administrator',therapist:'Therapist',read_only:'Read-only'})[u.role] || u.role);
     })();
     // Kick off honest freshness display + gentle polling
@@ -9164,32 +9170,32 @@ window.addEventListener('DOMContentLoaded', () => setTimeout(bootstrapSploseConf
 // and dark readable text.
 const OUTLOOK_PRESET_COLOURS = {
   // Ann's categories:
-  preset3:  { bg: '#e0f2fe', border: '#0284c7', text: '#0c4a6e' }, // Client Appointments → bright blue
-  preset11: { bg: '#eef2ff', border: '#4f46e5', text: '#1e1b4b' }, // Case Management    → indigo
-  preset1:  { bg: '#fef3c7', border: '#d97706', text: '#78350f' }, // Report Writing     → amber
-  preset8:  { bg: '#ede9fe', border: '#7c3aed', text: '#2e1065' }, // Travel             → purple
-  preset7:  { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12' }, // Admin              → orange
-  preset4:  { bg: '#dcfce7', border: '#16a34a', text: '#14532d' }, // Meetings           → green
-  preset24: { bg: '#fee2e2', border: '#dc2626', text: '#7f1d1d' }, // Do Not Book        → red
-  preset16: { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' }, // PD                 → blue
-  preset9:  { bg: '#fce7f3', border: '#db2777', text: '#831843' }, // Business Related   → pink
-  preset0:  { bg: '#f3f4f6', border: '#6b7280', text: '#1f2937' }, // Cancellations      → gray
+  preset3:  { bg: '#e8eff9', border: '#3d6cae', text: '#2c4d78' }, // Client Appointments → bright blue
+  preset11: { bg: '#eef2ff', border: '#3d6cae', text: '#3f3a66' }, // Case Management    → indigo
+  preset1:  { bg: '#faf0da', border: '#b06e12', text: '#6b450a' }, // Report Writing     → amber
+  preset8:  { bg: '#e8e5f7', border: '#8b80c8', text: '#3f3a66' }, // Travel             → purple
+  preset7:  { bg: '#fcf3e8', border: '#c2611e', text: '#7c2d12' }, // Admin              → orange
+  preset4:  { bg: '#dcefe3', border: '#2f7d4f', text: '#14532d' }, // Meetings           → green
+  preset24: { bg: '#fbe9e5', border: '#c2412e', text: '#7f1d1d' }, // Do Not Book        → red
+  preset16: { bg: '#dbe6f5', border: '#3d6cae', text: '#2c4d78' }, // PD                 → blue
+  preset9:  { bg: '#f9e7e0', border: '#a13d47', text: '#8a333c' }, // Business Related   → pink
+  preset0:  { bg: '#f1ece4', border: '#7a736a', text: '#332c25' }, // Cancellations      → gray
   // Generic presets for other users' categories
-  preset2:  { bg: '#fef9c3', border: '#ca8a04', text: '#713f12' }, // Yellow
-  preset5:  { bg: '#ccfbf1', border: '#0d9488', text: '#134e4a' }, // Teal
-  preset6:  { bg: '#ecfccb', border: '#65a30d', text: '#365314' }, // Lime
-  preset10: { bg: '#f0fdf4', border: '#22c55e', text: '#14532d' }, // Light green
-  preset12: { bg: '#f1f5f9', border: '#64748b', text: '#0f172a' }, // Slate
-  preset13: { bg: '#e2e8f0', border: '#475569', text: '#0f172a' }, // Dark slate
-  preset14: { bg: '#d1d5db', border: '#374151', text: '#111827' }, // Charcoal
-  preset15: { bg: '#fee2e2', border: '#b91c1c', text: '#7f1d1d' }, // Dark red
-  preset17: { bg: '#ffedd5', border: '#c2410c', text: '#7c2d12' }, // Dark orange
-  preset18: { bg: '#fefce8', border: '#a16207', text: '#713f12' }, // Dark yellow
-  preset19: { bg: '#d1fae5', border: '#059669', text: '#064e3b' }, // Dark green
-  preset20: { bg: '#cffafe', border: '#0891b2', text: '#164e63' }, // Dark teal
-  preset21: { bg: '#d9f99d', border: '#4d7c0f', text: '#365314' }, // Dark olive
-  preset22: { bg: '#dbeafe', border: '#1d4ed8', text: '#1e3a8a' }, // Dark blue
-  preset23: { bg: '#ede9fe', border: '#6d28d9', text: '#2e1065' }, // Dark purple
+  preset2:  { bg: '#faf0da', border: '#b06e12', text: '#713f12' }, // Yellow
+  preset5:  { bg: '#e4f2ec', border: '#0f7c6c', text: '#0a5d51' }, // Teal
+  preset6:  { bg: '#ecfccb', border: '#557a2e', text: '#365314' }, // Lime
+  preset10: { bg: '#e5f2e8', border: '#3d8f5f', text: '#14532d' }, // Light green
+  preset12: { bg: '#f1ece4', border: '#6e675e', text: '#241f1a' }, // Slate
+  preset13: { bg: '#e5dfd4', border: '#575046', text: '#241f1a' }, // Dark slate
+  preset14: { bg: '#d5cec2', border: '#46403a', text: '#241f1a' }, // Charcoal
+  preset15: { bg: '#fbe9e5', border: '#9c3322', text: '#7f1d1d' }, // Dark red
+  preset17: { bg: '#ffedd5', border: '#a8511a', text: '#7c2d12' }, // Dark orange
+  preset18: { bg: '#fcf6e8', border: '#9a5f0e', text: '#713f12' }, // Dark yellow
+  preset19: { bg: '#dcefe3', border: '#2f7d4f', text: '#064e3b' }, // Dark green
+  preset20: { bg: '#cffafe', border: '#0f7c6c', text: '#2c4d78' }, // Dark teal
+  preset21: { bg: '#d9f99d', border: '#48682a', text: '#365314' }, // Dark olive
+  preset22: { bg: '#dbe6f5', border: '#3d6cae', text: '#2c4d78' }, // Dark blue
+  preset23: { bg: '#e8e5f7', border: '#6d63a8', text: '#3f3a66' }, // Dark purple
 };
 
 // Category name → colour map (populated by loadOutlookCategories on boot)
@@ -10702,12 +10708,12 @@ function renderAvailabilityMatrix() {
   tbody.innerHTML = clients.map(client => {
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'];
     const daysUntil = daysUntilExpiry(client.planExpiry);
-    const urgencyColor = daysUntil < 14 ? '#fee2e2' : daysUntil < 30 ? '#fff4e0' : '#dcfce7';
+    const urgencyColor = daysUntil < 14 ? '#fbe9e5' : daysUntil < 30 ? '#faf0da' : '#dcefe3';
 
     return `<tr style="border-bottom: 1px solid var(--border);">
       <td style="padding: 8px 12px; font-weight: 500;">${client.name}</td>
       ${days.map(day => `
-        <td style="padding: 8px 12px; text-align: center; background: ${client.availability[day] ? '#e5f2f2' : '#f9f9f9'}; font-size: 11px; color: var(--ink-soft);">
+        <td style="padding: 8px 12px; text-align: center; background: ${client.availability[day] ? '#e4f2ec' : '#faf8f4'}; font-size: 11px; color: var(--ink-soft);">
           ${client.availability[day] ? `<span style="font-weight: 600;">${client.availability[day]}</span>` : '—'}
         </td>
       `).join('')}
@@ -10907,11 +10913,11 @@ function displayScheduleResults(booked, clients, slots) {
     <tr style="border-bottom: 1px solid var(--border);">
       <td style="padding: 8px; font-weight: 500;">${booking.client.name}</td>
       <td style="padding: 8px; font-size: 11px; text-align: center;">${booking.slot.time}</td>
-      <td style="padding: 8px; text-align: center; background: #e5f2f2; color: var(--accent-deep); font-weight: 600;">${booking.score.breakdown.clustering}</td>
-      <td style="padding: 8px; text-align: center; background: #f0f0f0;">${booking.score.breakdown.travel}</td>
-      <td style="padding: 8px; text-align: center; background: #fff4e0; color: var(--warn); font-weight: 600;">${booking.score.breakdown.urgency}</td>
-      <td style="padding: 8px; text-align: center; background: #eef0f4;">${booking.score.breakdown.preference}</td>
-      <td style="padding: 8px; text-align: center; background: #f9f9f9;">${booking.score.breakdown.balance}</td>
+      <td style="padding: 8px; text-align: center; background: #e4f2ec; color: var(--accent-deep); font-weight: 600;">${booking.score.breakdown.clustering}</td>
+      <td style="padding: 8px; text-align: center; background: #f1ece4;">${booking.score.breakdown.travel}</td>
+      <td style="padding: 8px; text-align: center; background: #faf0da; color: var(--warn); font-weight: 600;">${booking.score.breakdown.urgency}</td>
+      <td style="padding: 8px; text-align: center; background: #ece7df;">${booking.score.breakdown.preference}</td>
+      <td style="padding: 8px; text-align: center; background: #faf8f4;">${booking.score.breakdown.balance}</td>
       <td style="padding: 8px; text-align: center; font-weight: 600; color: var(--accent);">${Math.round(booking.score.total)}</td>
     </tr>
   `).join('');
@@ -11429,8 +11435,8 @@ function renderCalendarWithEvents() {
         left: 4px; right: 4px;
         top: ${yPos}px;
         height: ${(evt.duration / 60) * HOUR_PX}px;
-        background: linear-gradient(135deg, #fbbf24, #f59e0b);
-        border: 2px solid #d97706;
+        background: linear-gradient(135deg, #e0a83a, #cf8b1f);
+        border: 2px solid #b06e12;
         border-radius: 6px;
         padding: 6px;
         font-size: 11px;
@@ -11806,7 +11812,7 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
         border:1.5px solid var(--border);border-radius:8px;outline:none;
         font-family:inherit;color:var(--ink);background:white;box-sizing:border-box;
       ">
-      <div id="ecp-clash-warn" style="display:none;margin-top:6px;padding:7px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;"></div>
+      <div id="ecp-clash-warn" style="display:none;margin-top:6px;padding:7px 10px;background:#fdf1ee;border:1px solid #f6d4c9;border-radius:6px;font-size:11px;color:#9c3322;"></div>
     </div>
 
     <div style="display:flex;gap:10px;">
@@ -12297,23 +12303,23 @@ function showCaseNotingScheduler() {
   const dayCards = ['mon','tue','wed','thu','fri'].map(day => {
     const d = weekData[day];
     if (d.minsNeeded === 0) return `
-      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f9fafb;border-radius:8px;margin-bottom:8px;border:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#faf8f4;border-radius:8px;margin-bottom:8px;border:1px solid var(--border);">
         <span style="font-size:13px;font-weight:600;width:36px;flex-shrink:0;">${DAY_FULL[day]?.slice(0,3)}</span>
         <span style="font-size:12px;color:var(--muted);flex:1;">No client sessions</span>
       </div>`;
 
     if (d.isFullyCovered) return `
-      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f0fdf4;border-radius:8px;margin-bottom:8px;border:1px solid #bbf7d0;">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#e5f2e8;border-radius:8px;margin-bottom:8px;border:1px solid #bfdfc9;">
         <span style="font-size:13px;font-weight:700;width:36px;flex-shrink:0;">${DAY_FULL[day]?.slice(0,3)}</span>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;color:#166534;font-weight:600;">✓ Covered — ${d.minsNeeded} min scheduled</div>
-          <div style="font-size:11px;color:#4ade80;margin-top:2px;">${d.clientSessions.map(s=>s.patient||'Client').join(', ')}</div>
+          <div style="font-size:12px;color:#22593a;font-weight:600;">✓ Covered — ${d.minsNeeded} min scheduled</div>
+          <div style="font-size:11px;color:#55a877;margin-top:2px;">${d.clientSessions.map(s=>s.patient||'Client').join(', ')}</div>
         </div>
       </div>`;
 
     const best = d.idleSlots[0];
-    const qColour = { ideal: '#0284c7', ok: '#0284c7', poor: '#d97706' };
-    const qBg     = { ideal: '#e0f2fe', ok: '#e0f2fe', poor: '#fef3c7' };
+    const qColour = { ideal: '#3d6cae', ok: '#3d6cae', poor: '#b06e12' };
+    const qBg     = { ideal: '#e8eff9', ok: '#e8eff9', poor: '#faf0da' };
     const qIcon   = { ideal: '✦', ok: '○', poor: '⚠' };
 
     if (best) {
@@ -12354,12 +12360,12 @@ function showCaseNotingScheduler() {
     } else {
       // No idle gap found
       return `
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fffbeb;border-radius:8px;margin-bottom:8px;border:1px solid #fed7aa;">
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:#fcf6e8;border-radius:8px;margin-bottom:8px;border:1px solid #f3d9b8;">
           <span style="font-size:13px;font-weight:700;width:36px;flex-shrink:0;padding-top:2px;">${DAY_FULL[day]?.slice(0,3)}</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:12px;color:#92400e;font-weight:600;">⚠ No idle gap — schedule is full</div>
-            <div style="font-size:11px;color:#b45309;margin-top:2px;">${d.minsNeeded} min needed · ${d.clientSessions.map(s=>s.patient||'Client').join(', ')}</div>
-            <div style="font-size:11px;color:#b45309;margin-top:2px;">Consider scheduling after 6 pm or splitting across sessions</div>
+            <div style="font-size:12px;color:#7a4e0b;font-weight:600;">⚠ No idle gap — schedule is full</div>
+            <div style="font-size:11px;color:#9a5f0e;margin-top:2px;">${d.minsNeeded} min needed · ${d.clientSessions.map(s=>s.patient||'Client').join(', ')}</div>
+            <div style="font-size:11px;color:#9a5f0e;margin-top:2px;">Consider scheduling after 6 pm or splitting across sessions</div>
           </div>
         </div>`;
     }
@@ -12388,7 +12394,7 @@ function showCaseNotingScheduler() {
         ${dayCards}
       </div>
 
-      <div style="padding:14px 22px;border-top:1px solid var(--border);background:#fafafa;border-radius:0 0 14px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <div style="padding:14px 22px;border-top:1px solid var(--border);background:#faf8f4;border-radius:0 0 14px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:12px;color:var(--muted);flex:1;">
           ${scheduleableCount > 0 ? `${scheduleableCount} day${scheduleableCount!==1?'s':''} with idle gaps found` : 'No scheduleable gaps found this week'}
         </span>
@@ -12903,7 +12909,7 @@ async function confirmBooking() {
       body.innerHTML = `
         <p style="margin:0 0 8px;">Appointment <code>${refId}</code> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
         <p style="margin:0 0 4px;font-size:12px;color:var(--muted);">${sploseId ? 'Written to Splose ✓' : 'Splose IDs not loaded — retry after config loads.'}</p>
-        <p style="margin:0;font-size:12px;color:${outlookId ? 'var(--muted)' : 'var(--warn, #b45309)'};">${outlookNote}</p>`;
+        <p style="margin:0;font-size:12px;color:${outlookId ? 'var(--muted)' : 'var(--warn, #9a5f0e)'};">${outlookNote}</p>`;
     }
     if (modal) modal.classList.add('show');
     WIZARD_BOOKED = true;
@@ -13533,7 +13539,7 @@ function refreshCalendarEmptyState() {
           </div>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
             <button class="ces-cta" onclick="switchTab('book')">＋ Book one client</button>
-            <button class="ces-cta" style="background:#0f766e;" onclick="openAutoSchedule()">Auto-fit multiple clients</button>
+            <button class="ces-cta" style="background:#0f7c6c;" onclick="openAutoSchedule()">Auto-fit multiple clients</button>
           </div>
           <div class="ces-tips">
             Each session asks for a <strong>location</strong> (online or in-person → default address from Splose, or custom).
@@ -13632,8 +13638,8 @@ function dayRowHTML(r) {
     mdt:'var(--c-mdt)', travel:'var(--c-travel)', report:'var(--c-report)', admin:'var(--c-admin)',
     lunch:'var(--c-lunch)', cpd:'var(--c-cpd)'
   }[r.type] || 'var(--c-admin)';
-  const nowTag = r.now ? ' <span class="pat-tag" style="background:#fee2e2;color:#991b1b;">NOW</span>' : '';
-  const cancelTag = r.cancelled ? ' <span class="pat-tag" style="background:#fee2e2;color:#991b1b;">Cancelled</span>' : '';
+  const nowTag = r.now ? ' <span class="pat-tag" style="background:#fbe9e5;color:#9c3322;">NOW</span>' : '';
+  const cancelTag = r.cancelled ? ' <span class="pat-tag" style="background:#fbe9e5;color:#9c3322;">Cancelled</span>' : '';
   const rowClass = 'day-row' + (r.now ? ' now' : '') + (r.cancelled ? ' cancelled' : '');
   const btnLabel = r.now ? 'Open notes' : 'Open';
   const btnClass = r.now ? 'btn primary' : 'btn';
@@ -13665,7 +13671,7 @@ function renderDay(key) {
         <h3>${d.isToday ? 'Up next' : 'First up'}</h3>
         <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${d.upNext.title}</div>
         <div class="micro">${d.upNext.meta}</div>
-        <div style="margin-top:8px;"><span class="pat-tag" style="background:#fef3c7;color:#92400e;">${d.upNext.tag}</span></div>
+        <div style="margin-top:8px;"><span class="pat-tag" style="background:#faf0da;color:#7a4e0b;">${d.upNext.tag}</span></div>
       </div>
       <div class="panel panel-pad" style="margin-bottom:12px;">
         <h3>${d.isToday ? "Today's totals" : "Day totals"}</h3>
@@ -13735,7 +13741,7 @@ function renderToday() {
         <h3>${d.isToday ? 'Up next' : 'First up'}</h3>
         <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${d.upNext.title}</div>
         <div class="micro">${d.upNext.meta}</div>
-        <div style="margin-top:8px;"><span class="pat-tag" style="background:#fef3c7;color:#92400e;">${d.upNext.tag}</span></div>
+        <div style="margin-top:8px;"><span class="pat-tag" style="background:#faf0da;color:#7a4e0b;">${d.upNext.tag}</span></div>
       </div>
       <div class="panel panel-pad" style="margin-bottom:12px;">
         <h3>${d.isToday ? "Today's totals" : "Day totals"}</h3>
@@ -13975,7 +13981,7 @@ function showCalContextMenu(x, y, id) {
       <span class="ctx-icon">✏️</span> Open details
     </div>
     <div class="cal-ctx-menu-sep"></div>
-    <div class="cal-ctx-menu-item" style="color:var(--danger,#dc2626);"
+    <div class="cal-ctx-menu-item" style="color:var(--danger,#c2412e);"
          onclick="ctxDeleteEvent('${id}')">
       <span class="ctx-icon">🗑</span> Delete event
     </div>
@@ -14041,12 +14047,12 @@ function openBlockDetail(id) {
 
   const tags = [];
   const _billing = getBillingTier(s);
-  if (_billing === 'full')  tags.push('<span class="detail-tag" style="background:#dcfce7;color:#166534;">$ Billable · full rate</span>');
-  if (_billing === 'half')  tags.push('<span class="detail-tag" style="background:#fef9c3;color:#854d0e;">½$ Billable · travel rate</span>');
+  if (_billing === 'full')  tags.push('<span class="detail-tag" style="background:#dcefe3;color:#22593a;">$ Billable · full rate</span>');
+  if (_billing === 'half')  tags.push('<span class="detail-tag" style="background:#faf0da;color:#854d0e;">½$ Billable · travel rate</span>');
   if (_billing === 'none')  tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger);">Non-billable</span>');
-  if (s.cancelled) tags.push('<span class="detail-tag" style="background:#fee2e2;color:#991b1b;">Cancelled</span>');
+  if (s.cancelled) tags.push('<span class="detail-tag" style="background:#fbe9e5;color:#9c3322;">Cancelled</span>');
   const _needsLoc = sessionNeedsFullAddress(s);
-  if (!_needsLoc) tags.push('<span class="detail-tag" style="background:#f0f9ff;color:#0369a1;">No fixed location required</span>');
+  if (!_needsLoc) tags.push('<span class="detail-tag" style="background:#eef3fa;color:#315a91;">No fixed location required</span>');
 
   const rows = [];
   rows.push(row('Session type', TYPE_LABEL[s.type] || s.type));
@@ -14088,7 +14094,7 @@ function openBlockDetail(id) {
 
   if (s.note) {
     rows.push(row('<span class="section-head" style="margin:0;">Note</span>', '', true));
-    rows.push(`<div style="padding:8px 10px;background:#fafafa;border-radius:6px;margin-top:4px;font-size:12.5px;color:var(--ink-soft);">${s.note}</div>`);
+    rows.push(`<div style="padding:8px 10px;background:#faf8f4;border-radius:6px;margin-top:4px;font-size:12.5px;color:var(--ink-soft);">${s.note}</div>`);
   }
 
   document.getElementById('bd-body').innerHTML = (tags.length ? `<div class="detail-tags" style="margin-bottom:10px;">${tags.join('')}</div>` : '') + rows.join('');
@@ -14132,7 +14138,7 @@ function openBlockDetail(id) {
   // Delete / remove from Outlook — only shown for events that have a DB record
   if (s.dbId) {
     parts.push(`<button class="btn"
-      style="color:var(--danger,#dc2626);border-color:var(--danger,#dc2626);background:transparent;"
+      style="color:var(--danger,#c2412e);border-color:var(--danger,#c2412e);background:transparent;"
       onclick="bdDeleteEvent('${id}')">🗑 Remove</button>`);
   }
 
@@ -14221,8 +14227,8 @@ function __bdLocationRows(rows, s, id) {
     manual_text:     'Manually set',
   }[s.addressSource || locObj.source] || '';
   const sourceBadgeStyle = (s.addressSource === 'manual' || s.addressSource === 'manual_text')
-    ? 'background:#fefce8;color:#854d0e;'
-    : 'background:#dcfce7;color:#166534;';
+    ? 'background:#fcf6e8;color:#854d0e;'
+    : 'background:#dcefe3;color:#22593a;';
   const sourceBadge = sourceLabel
     ? `<span style="font-size:10.5px;padding:1px 6px;border-radius:4px;${sourceBadgeStyle}">${sourceLabel}</span>`
     : '';
@@ -14235,11 +14241,11 @@ function __bdLocationRows(rows, s, id) {
       <div class="k" style="display:flex;justify-content:space-between;width:100%;align-items:center;">
         <span>Address</span>${sourceBadge}
       </div>
-      <div style="width:100%;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:9px 11px;display:flex;flex-direction:column;gap:5px;">
-        <div style="font-size:13px;font-weight:500;color:var(--ink,#1a1a2e);line-height:1.4;">${addr}</div>
+      <div style="width:100%;background:#e5f2e8;border:1.5px solid #bfdfc9;border-radius:8px;padding:9px 11px;display:flex;flex-direction:column;gap:5px;">
+        <div style="font-size:13px;font-weight:500;color:var(--ink,#241f1a);line-height:1.4;">${addr}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <a href="${mapsUrl}" target="_blank" rel="noopener"
-            style="font-size:11.5px;color:#1d4ed8;text-decoration:none;padding:2px 7px;background:#eff6ff;border-radius:4px;border:1px solid #bfdbfe;">
+            style="font-size:11.5px;color:#3d6cae;text-decoration:none;padding:2px 7px;background:#e8eff9;border-radius:4px;border:1px solid #c3d4ec;">
             Open in Maps ↗
           </a>
           <button class="btn btn-xs" style="font-size:11.5px;padding:2px 8px;"
@@ -14256,7 +14262,7 @@ function __bdLocationRows(rows, s, id) {
             value="${(addr || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
             placeholder="Start typing an address…"
             autocomplete="off"
-            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid var(--border,#dde3ec);border-radius:8px;font-size:13px;background:#fff;font-family:inherit;color:var(--ink,#1a1a2e);"
+            style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid var(--border,#e9e3d9);border-radius:8px;font-size:13px;background:#fff;font-family:inherit;color:var(--ink,#241f1a);"
             oninput="bdAddrChanged('${id}')"
           />
         </div>
@@ -14277,11 +14283,11 @@ function __bdLocationRows(rows, s, id) {
       </div>
       <div style="width:100%;display:flex;flex-direction:column;gap:5px;">
         ${locObj.isMissing
-          ? `<div style="font-size:11.5px;color:var(--warn,#d97706);padding:5px 7px;background:#fffbeb;border-radius:5px;border-left:2px solid var(--warn,#d97706);">
+          ? `<div style="font-size:11.5px;color:var(--warn,#b06e12);padding:5px 7px;background:#fcf6e8;border-radius:5px;border-left:2px solid var(--warn,#b06e12);">
               Address required for travel calculation. ${locObj.missingReason || 'No address on record'} — add it below.
              </div>`
           : addr
-          ? `<div style="font-size:11.5px;color:var(--warn,#d97706);padding:3px 0;">Partial address — a full street address gives more accurate travel time.</div>`
+          ? `<div style="font-size:11.5px;color:var(--warn,#b06e12);padding:3px 0;">Partial address — a full street address gives more accurate travel time.</div>`
           : ''}
         <div id="bd-addr-edit-section" style="width:100%;display:flex;flex-direction:column;gap:5px;">
           <div id="bd-addr-wrap" style="width:100%;position:relative;">
@@ -14289,7 +14295,7 @@ function __bdLocationRows(rows, s, id) {
               value="${(addr || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
               placeholder="Start typing an address…"
               autocomplete="off"
-              style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid var(--border,#dde3ec);border-radius:8px;font-size:13px;background:#fff;font-family:inherit;color:var(--ink,#1a1a2e);"
+              style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid var(--border,#e9e3d9);border-radius:8px;font-size:13px;background:#fff;font-family:inherit;color:var(--ink,#241f1a);"
               oninput="bdAddrChanged('${id}')"
             />
           </div>
@@ -14425,7 +14431,7 @@ function bdSaveAddress(id) {
     const existingCard = document.querySelector('#bd-body .row [href*="maps.google"]');
     if (existingCard) {
       // Update the address text in the existing card in place
-      const addrLine = existingCard.closest('[style*="background:#f0fdf4"]')?.querySelector('div[style*="font-weight:500"]');
+      const addrLine = existingCard.closest('[style*="background:#e5f2e8"]')?.querySelector('div[style*="font-weight:500"]');
       if (addrLine) addrLine.textContent = '📍 ' + newAddr;
       const mapsLink = existingCard;
       mapsLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(newAddr)}`;
@@ -14659,8 +14665,8 @@ function bdRecalc(id) {
 
   // duration pill
   durEl.textContent = dur > 0 ? `${dur} min` : 'invalid';
-  durEl.style.background = dur > 0 && dur <= 480 ? '' : '#fee2e2';
-  durEl.style.color      = dur > 0 && dur <= 480 ? '' : '#b91c1c';
+  durEl.style.background = dur > 0 && dur <= 480 ? '' : '#fbe9e5';
+  durEl.style.color      = dur > 0 && dur <= 480 ? '' : '#9c3322';
 
   // delta caption
   const startChanged = startMin !== origStart;
@@ -15316,10 +15322,10 @@ function titleBase(s) {
      dropdown (`LOCATIONS`) and in WORK_LOCATION[weekKey][day].
 */
 const WORK_BASES = {
-  office: { id: 'office', label: 'Perth metro office', addr: '100 Burrendah Blvd, Willetton WA 6155', suburb: 'Willetton', region: 'central', icon: '', color: '#6f5dd4' },
+  office: { id: 'office', label: 'Perth metro office', addr: '100 Burrendah Blvd, Willetton WA 6155', suburb: 'Willetton', region: 'central', icon: '', color: '#8b80c8' },
   homes:  [
     // Seeded sample so the UI shows something on first load. Remove/edit freely.
-    { id: 'home-1', label: 'Home (Riverton)',   kind: 'local',  addr: '', suburb: 'Riverton', region: 'south', icon: '', color: '#a16207' }
+    { id: 'home-1', label: 'Home (Riverton)',   kind: 'local',  addr: '', suburb: 'Riverton', region: 'south', icon: '', color: '#9a5f0e' }
   ]
 };
 
@@ -15354,7 +15360,7 @@ function addHomeBase() {
     suburb: '',
     region: 'central',
     icon: '',
-    color: '#a16207'
+    color: '#9a5f0e'
   };
   WORK_BASES.homes.push(h);
   renderHomeBases();
@@ -15388,7 +15394,7 @@ function setHomeBase(id, field, value) {
   if (field === 'kind')   {
     h.kind = value === 'remote' ? 'remote' : 'local';
     h.icon = '';
-    h.color = h.kind === 'remote' ? '#475569' : '#a16207';
+    h.color = h.kind === 'remote' ? '#575046' : '#9a5f0e';
     // Re-render the row to flip background colour + icon
     renderHomeBases();
   }
@@ -15962,7 +15968,7 @@ function renderSegmentOverlay(col, seg) {
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
   el.style.height = Math.max(12, (seg.endMin - seg.startMin) / 60 * HOUR_PX - 2) + 'px';
   const tight = seg.kind === 'between' && (seg.endMin - seg.startMin) < seg.travelMin + 5;
-  if (tight) el.style.borderLeftColor = '#b91c1c';
+  if (tight) el.style.borderLeftColor = '#9c3322';
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
@@ -15991,7 +15997,7 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
   el.style.height = Math.max(12, gapMin / 60 * HOUR_PX - 2) + 'px';
   const tight = gapMin < travel + 5;
-  el.style.borderLeftColor = tight ? '#b91c1c' : '#0f766e';
+  el.style.borderLeftColor = tight ? '#9c3322' : '#0f7c6c';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
     <span class="t-label">${travel} min · ${from.suburb} → ${to.suburb}</span>`;
   el.title = `Google Maps travel ${from.suburb} → ${to.suburb} ≈ ${travel} min. Gap is ${gapMin} min. Click for directions.`;
@@ -16351,7 +16357,7 @@ function rebuildLocationCatalogue() {
     next.office = {
       label:  WORK_BASES.office.label || 'Perth metro office',
       icon:   WORK_BASES.office.icon  || '',
-      color:  WORK_BASES.office.color || '#6f5dd4',
+      color:  WORK_BASES.office.color || '#8b80c8',
       region: WORK_BASES.office.region || 'central',
       source: 'office'
     };
@@ -16361,14 +16367,14 @@ function rebuildLocationCatalogue() {
     next[h.id] = {
       label:  h.label,
       icon:   h.icon  || '',
-      color:  h.color || (h.kind === 'remote' ? '#475569' : '#a16207'),
+      color:  h.color || (h.kind === 'remote' ? '#575046' : '#9a5f0e'),
       region: h.region || 'central',
       source: 'home',
       kind:   h.kind
     };
   });
   // On leave — always available, never a base (full-day busy-time in Splose)
-  next.leave = { label: 'On leave', icon: '', color: '#64748b', region: 'none', source: 'leave' };
+  next.leave = { label: 'On leave', icon: '', color: '#6e675e', region: 'none', source: 'leave' };
   LOCATIONS = next;
 }
 rebuildLocationCatalogue();
@@ -19068,7 +19074,7 @@ function openNDISDetail(idx) {
   }
 
   if (p.alert) {
-    html = `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#991b1b;">⚠ ${p.alert}</div>` + html;
+    html = `<div style="background:#fdf1ee;border:1px solid #f6d4c9;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#9c3322;">⚠ ${p.alert}</div>` + html;
   }
 
   html += `<div style="margin-top:8px;"><button class="btn primary" style="width:100%" onclick="closeNDISDetail(); quickBook('${p.id}')">Book appointment →</button></div>`;
@@ -19098,15 +19104,15 @@ function closeNDISDetail() {
 
   const panel = document.createElement('div');
   panel.id = 'cp-panel';
-  panel.style.cssText = 'position:fixed;top:0;right:-520px;width:500px;height:100vh;background:white;border-left:1px solid #e0e0e0;box-shadow:-6px 0 28px rgba(0,0,0,0.10);transition:right 0.25s ease;z-index:300;overflow-y:auto;font-family:inherit;font-size:13px;';
+  panel.style.cssText = 'position:fixed;top:0;right:-520px;width:500px;height:100vh;background:white;border-left:1px solid #ddd6cb;box-shadow:-6px 0 28px rgba(0,0,0,0.10);transition:right 0.25s ease;z-index:300;overflow-y:auto;font-family:inherit;font-size:13px;';
   panel.innerHTML = `
-    <div id="cp-head" style="padding:16px;border-bottom:1px solid #e0e0e0;display:flex;align-items:center;gap:12px;position:sticky;top:0;background:white;z-index:1;">
-      <div id="cp-avatar" style="width:44px;height:44px;border-radius:50%;background:#e8f4f8;color:#0088aa;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;"></div>
+    <div id="cp-head" style="padding:16px;border-bottom:1px solid #ddd6cb;display:flex;align-items:center;gap:12px;position:sticky;top:0;background:white;z-index:1;">
+      <div id="cp-avatar" style="width:44px;height:44px;border-radius:50%;background:#e8f4f8;color:#0a5d51;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0;"></div>
       <div style="flex:1;min-width:0;">
         <div id="cp-name" style="font-weight:700;font-size:16px;"></div>
-        <div id="cp-sub" style="font-size:11px;color:#999;margin-top:1px;"></div>
+        <div id="cp-sub" style="font-size:11px;color:#99928a;margin-top:1px;"></div>
       </div>
-      <button onclick="closeClientProfile()" style="border:none;background:none;font-size:22px;color:#aaa;cursor:pointer;padding:4px;">×</button>
+      <button onclick="closeClientProfile()" style="border:none;background:none;font-size:22px;color:#a8a196;cursor:pointer;padding:4px;">×</button>
     </div>
     <div id="cp-body" style="padding:0 0 24px;"></div>`;
   document.body.appendChild(panel);
@@ -19131,7 +19137,7 @@ async function openClientProfile(patientId) {
   document.getElementById('cp-avatar').textContent = initials;
   document.getElementById('cp-name').textContent = patient ? `${patient.firstname} ${patient.lastname}` : 'Loading…';
   document.getElementById('cp-sub').textContent = patient?.ndisNumber ? `NDIS ${patient.ndisNumber}` : '';
-  body.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:12px;">Loading profile…</div>';
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:#99928a;font-size:12px;">Loading profile…</div>';
 
   panel.style.right = '0';
   overlay.style.display = 'block';
@@ -19178,8 +19184,8 @@ async function openClientProfile(patientId) {
     const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit',timeZone:'Australia/Perth'}) : '';
     const fmtAmt  = v => '$' + Number(v||0).toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2});
 
-    const sectionHead = title => `<div style="padding:12px 16px 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#999;border-top:1px solid #f0f0f0;margin-top:4px;">${title}</div>`;
-    const row = (k, v) => `<div style="display:flex;justify-content:space-between;padding:6px 16px;border-bottom:1px solid #f8f8f8;"><span style="color:#888">${k}</span><span style="font-weight:500;text-align:right;max-width:280px">${v}</span></div>`;
+    const sectionHead = title => `<div style="padding:12px 16px 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#99928a;border-top:1px solid #f1ece4;margin-top:4px;">${title}</div>`;
+    const row = (k, v) => `<div style="display:flex;justify-content:space-between;padding:6px 16px;border-bottom:1px solid #faf8f4;"><span style="color:#8a8379">${k}</span><span style="font-weight:500;text-align:right;max-width:280px">${v}</span></div>`;
 
     let html = '';
 
@@ -19187,7 +19193,7 @@ async function openClientProfile(patientId) {
     if (patient) {
       const age = patient.birthdate ? Math.floor((new Date()-new Date(patient.birthdate))/(365.25*24*3600*1000)) : null;
       html += sectionHead('Demographics');
-      if (patient.alert) html += `<div style="margin:8px 16px;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:12px;color:#991b1b;">⚠ ${patient.alert}</div>`;
+      if (patient.alert) html += `<div style="margin:8px 16px;padding:8px 12px;background:#fdf1ee;border:1px solid #f6d4c9;border-radius:6px;font-size:12px;color:#9c3322;">⚠ ${patient.alert}</div>`;
       if (patient.preferredName) html += row('Preferred name', patient.preferredName);
       if (patient.pronouns) html += row('Pronouns', patient.pronouns);
       html += row('Date of birth', fmtDate(patient.birthdate) + (age ? ` (${age} y/o)` : ''));
@@ -19211,7 +19217,7 @@ async function openClientProfile(patientId) {
       if (patient.ndisInfo?.startDate) html += row('Plan start', fmtDate(patient.ndisInfo.startDate));
       if (patient.ndisInfo?.endDate) {
         const daysLeft = Math.ceil((new Date(patient.ndisInfo.endDate) - new Date()) / (1000*60*60*24));
-        const colour = daysLeft < 0 ? '#991b1b' : daysLeft < 30 ? '#92400e' : '#15803d';
+        const colour = daysLeft < 0 ? '#9c3322' : daysLeft < 30 ? '#7a4e0b' : '#276a43';
         html += row('Plan end', `<span style="color:${colour};font-weight:600">${fmtDate(patient.ndisInfo.endDate)} (${daysLeft < 0 ? 'expired' : daysLeft+'d left'})</span>`);
       }
     }
@@ -19222,13 +19228,13 @@ async function openClientProfile(patientId) {
       cases.slice(0, 5).forEach(c => {
         const pm = c.contactId ? contactMap[c.contactId] : null;
         const expDays = c.expiryDate ? Math.ceil((new Date(c.expiryDate)-new Date())/(1000*60*60*24)) : null;
-        const expColour = expDays === null ? '#888' : expDays < 0 ? '#991b1b' : expDays < 30 ? '#92400e' : '#15803d';
-        html += `<div style="margin:4px 16px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:8px;">
+        const expColour = expDays === null ? '#8a8379' : expDays < 0 ? '#9c3322' : expDays < 30 ? '#7a4e0b' : '#276a43';
+        html += `<div style="margin:4px 16px;padding:10px 12px;background:#faf8f4;border:1px solid #ece7df;border-radius:8px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
             <span style="font-weight:600">Case #${c.caseNumber}</span>
             <span style="font-size:11px;color:${expColour};font-weight:600">${expDays !== null ? (expDays < 0 ? 'Expired' : `${expDays}d left`) : 'No expiry'}</span>
           </div>
-          <div style="font-size:11px;color:#888">${c.hours ? c.hours+'h allocated · ' : ''}${c.items?.length||0} sessions · expires ${fmtDate(c.expiryDate)}${pm ? ` · PM: ${pm.companyName||pm.name}` : ''}</div>
+          <div style="font-size:11px;color:#8a8379">${c.hours ? c.hours+'h allocated · ' : ''}${c.items?.length||0} sessions · expires ${fmtDate(c.expiryDate)}${pm ? ` · PM: ${pm.companyName||pm.name}` : ''}</div>
         </div>`;
       });
     }
@@ -19236,34 +19242,34 @@ async function openClientProfile(patientId) {
     // Cancellation stats + recent appointments
     if (patAppts.length) {
       const stats = computeCancellationStats(patAppts, patientId);
-      const rateColour = stats.rate >= 30 ? '#991b1b' : stats.rate >= 15 ? '#92400e' : '#15803d';
+      const rateColour = stats.rate >= 30 ? '#9c3322' : stats.rate >= 15 ? '#7a4e0b' : '#276a43';
       html += sectionHead(`Appointments · ${stats.total} total`);
       html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 16px;">
-        <div style="text-align:center;background:#fafafa;border-radius:8px;padding:8px;">
-          <div style="font-size:18px;font-weight:700;color:#15803d">${stats.attended}</div>
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;">Attended</div>
+        <div style="text-align:center;background:#faf8f4;border-radius:8px;padding:8px;">
+          <div style="font-size:18px;font-weight:700;color:#276a43">${stats.attended}</div>
+          <div style="font-size:10px;color:#8a8379;text-transform:uppercase;letter-spacing:.4px;">Attended</div>
         </div>
-        <div style="text-align:center;background:#fafafa;border-radius:8px;padding:8px;">
-          <div style="font-size:18px;font-weight:700;color:#92400e">${stats.cancelled}</div>
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;">Cancelled</div>
+        <div style="text-align:center;background:#faf8f4;border-radius:8px;padding:8px;">
+          <div style="font-size:18px;font-weight:700;color:#7a4e0b">${stats.cancelled}</div>
+          <div style="font-size:10px;color:#8a8379;text-transform:uppercase;letter-spacing:.4px;">Cancelled</div>
         </div>
-        <div style="text-align:center;background:#fafafa;border-radius:8px;padding:8px;">
-          <div style="font-size:18px;font-weight:700;color:#991b1b">${stats.dna}</div>
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;">DNA</div>
+        <div style="text-align:center;background:#faf8f4;border-radius:8px;padding:8px;">
+          <div style="font-size:18px;font-weight:700;color:#9c3322">${stats.dna}</div>
+          <div style="font-size:10px;color:#8a8379;text-transform:uppercase;letter-spacing:.4px;">DNA</div>
         </div>
-        <div style="text-align:center;background:#fafafa;border-radius:8px;padding:8px;">
+        <div style="text-align:center;background:#faf8f4;border-radius:8px;padding:8px;">
           <div style="font-size:18px;font-weight:700;color:${rateColour}">${stats.rate}%</div>
-          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.4px;">Cancel rate</div>
+          <div style="font-size:10px;color:#8a8379;text-transform:uppercase;letter-spacing:.4px;">Cancel rate</div>
         </div>
       </div>`;
       if (stats.rate >= 30) {
-        html += `<div style="margin:4px 16px 8px;padding:7px 10px;background:#fef2f2;border-radius:6px;font-size:11.5px;color:#991b1b;">⚠ High cancellation rate — may affect NDIS funding eligibility</div>`;
+        html += `<div style="margin:4px 16px 8px;padding:7px 10px;background:#fdf1ee;border-radius:6px;font-size:11.5px;color:#9c3322;">⚠ High cancellation rate — may affect NDIS funding eligibility</div>`;
       }
       patAppts.slice(0, 8).forEach(a => {
         const status = a.patients?.[0]?.status || 'Confirmed';
         const isBad = status.toLowerCase().includes('cancel') || status.toLowerCase().includes('not arrive') || status.toLowerCase().includes('dna');
-        const statusColour = isBad ? '#991b1b' : '#15803d';
-        html += `<div style="display:flex;justify-content:space-between;padding:6px 16px;border-bottom:1px solid #f8f8f8;">
+        const statusColour = isBad ? '#9c3322' : '#276a43';
+        html += `<div style="display:flex;justify-content:space-between;padding:6px 16px;border-bottom:1px solid #faf8f4;">
           <span style="color:#555">${fmtDate(a.start)} · ${fmtTime(a.start)}</span>
           <span style="font-size:11px;color:${statusColour};font-weight:${isBad?'600':'400'}">${status}</span>
         </div>`;
@@ -19276,7 +19282,7 @@ async function openClientProfile(patientId) {
       const totalPaid   = invoices.reduce((s,i) => s+(i.paidAmount||0),0);
       html += sectionHead(`Invoices · ${fmtAmt(totalBilled)} billed · ${fmtAmt(totalBilled-totalPaid)} outstanding`);
       invoices.slice(0,8).sort((a,b)=>new Date(b.issueDate)-new Date(a.issueDate)).forEach(inv => {
-        const statusColour = inv.status==='Paid'?'#15803d':inv.status==='Overdue'?'#991b1b':'#92400e';
+        const statusColour = inv.status==='Paid'?'#276a43':inv.status==='Overdue'?'#9c3322':'#7a4e0b';
         html += row(inv.invoiceNumber, `<span style="color:${statusColour};font-weight:600">${inv.status}</span> · ${fmtAmt(inv.total)}`);
       });
     }
@@ -19286,14 +19292,14 @@ async function openClientProfile(patientId) {
       const totalMins = travel.reduce((s,t) => s+(t.toMinutes||0)+(t.returnMinutes||0),0);
       html += sectionHead(`Provider travel · ${travel.length} trips · ${totalMins} mins total`);
       travel.slice(0,5).forEach(t => {
-        html += `<div style="padding:6px 16px;border-bottom:1px solid #f8f8f8;font-size:12px;">
+        html += `<div style="padding:6px 16px;border-bottom:1px solid #faf8f4;font-size:12px;">
           <div style="color:#555">${t.appointmentAddress || '—'}</div>
-          <div style="color:#aaa;font-size:11px;margin-top:2px;">${t.toMinutes||0} min to · ${t.returnMinutes||0} min return · ${t.type||'Travel'}</div>
+          <div style="color:#a8a196;font-size:11px;margin-top:2px;">${t.toMinutes||0} min to · ${t.returnMinutes||0} min return · ${t.type||'Travel'}</div>
         </div>`;
       });
     }
 
-    if (!html) html = '<div style="padding:40px;text-align:center;color:#aaa;">No clinical data found for this client.</div>';
+    if (!html) html = '<div style="padding:40px;text-align:center;color:#a8a196;">No clinical data found for this client.</div>';
 
     body.innerHTML = html;
     // Add quick-book button at bottom
@@ -19320,7 +19326,7 @@ async function loadLogbookData() {
     if (!SploseSync.isStale(module)) return;
     SploseSync.setIndicator(module, true);
   } else {
-    if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:#999;font-size:12px;">Loading travel data…</div>';
+    if (wrap) wrap.innerHTML = '<div style="padding:40px;text-align:center;color:#99928a;font-size:12px;">Loading travel data…</div>';
   }
 
   try {
@@ -19541,7 +19547,7 @@ async function lbSaveAddresses(id) {
   const fromV = (document.getElementById('lb-edit-from') || {}).value || '';
   const toV = (document.getElementById('lb-edit-to') || {}).value || '';
   if (!toV.trim()) {
-    msg.style.display = ''; msg.style.color = '#dc2626';
+    msg.style.display = ''; msg.style.color = '#c2412e';
     msg.textContent = 'A destination address is required.';
     return;
   }
@@ -19551,11 +19557,11 @@ async function lbSaveAddresses(id) {
     body: JSON.stringify({ fromAddress: fromV, toAddress: toV }),
   }).catch(function () { return null; });
   if (!r || !r.ok) {
-    msg.style.display = ''; msg.style.color = '#dc2626';
+    msg.style.display = ''; msg.style.color = '#c2412e';
     msg.textContent = 'Could not save — please try again.';
     return;
   }
-  msg.style.display = ''; msg.style.color = '#15803d';
+  msg.style.display = ''; msg.style.color = '#276a43';
   msg.textContent = 'Addresses saved.';
   // Bust the v2 cache and re-render so the journey row shows the new route;
   // __lbSelectedId restores this selection and the list position.
@@ -19714,11 +19720,11 @@ let CONTACTS_DATA = { contacts: [], patients: [], invoices: [] };
 let contactTypeFilter = 'all';
 
 const TYPE_COLOURS = {
-  'Plan manager': { bg:'#eff6ff', fg:'#1d4ed8', av:'#bfdbfe' },
-  'Referrer':     { bg:'#f0fdf4', fg:'#15803d', av:'#bbf7d0' },
-  'GP':           { bg:'#faf5ff', fg:'#7e22ce', av:'#e9d5ff' },
-  'Specialist':   { bg:'#fff7ed', fg:'#c2410c', av:'#fed7aa' },
-  'default':      { bg:'#f1f5f9', fg:'#475569', av:'#e2e8f0' },
+  'Plan manager': { bg:'#e8eff9', fg:'#3d6cae', av:'#c3d4ec' },
+  'Referrer':     { bg:'#e5f2e8', fg:'#276a43', av:'#bfdfc9' },
+  'GP':           { bg:'#efedf9', fg:'#6d63a8', av:'#e9d5ff' },
+  'Specialist':   { bg:'#fcf3e8', fg:'#a8511a', av:'#f3d9b8' },
+  'default':      { bg:'#f1ece4', fg:'#575046', av:'#e5dfd4' },
 };
 
 function contactColours(type) {
@@ -19908,7 +19914,7 @@ function openContactDetail(idx) {
 
   const invCount = (c.associatedInvoiceIds || []).length;
   if (invCount) {
-    html += `<div style="margin-top:14px;padding:10px 12px;background:#eff6ff;border-radius:8px;font-size:12px;color:#1d4ed8;">
+    html += `<div style="margin-top:14px;padding:10px 12px;background:#e8eff9;border-radius:8px;font-size:12px;color:#3d6cae;">
       ${invCount} invoice${invCount!==1?'s':''} associated with this contact
     </div>`;
   }
@@ -20306,8 +20312,8 @@ function renderMasterChips() {
   // "All" chip
   const allChip = document.createElement('button');
   allChip.className = 'master-chip' + (MASTER_CAL.filter === null ? '' : ' muted');
-  allChip.style.border = '2px solid #e5e7eb';
-  allChip.innerHTML = `<span class="chip-avatar" style="background:#6b7280;">★</span>All therapists`;
+  allChip.style.border = '2px solid #e9e3d9';
+  allChip.innerHTML = `<span class="chip-avatar" style="background:#7a736a;">★</span>All therapists`;
   allChip.onclick = () => {
     MASTER_CAL.filter = null;
     renderMasterChips();
@@ -20339,6 +20345,44 @@ function toggleMasterFilter(therapistId) {
   }
   renderMasterChips();
   renderMasterCalendarWeek();
+}
+
+// ── Side-by-side lanes for overlapping master tiles ───
+// Same idea as reflowDayOverlaps for the personal week view: cluster tiles
+// that overlap in time, then split the column width between the cluster's
+// lanes so busy multi-therapist days stay readable.
+function reflowMasterOverlaps(col) {
+  const tiles = Array.from(col.querySelectorAll('.master-tile'))
+    .map(el => ({ el, top: parseFloat(el.style.top) || 0,
+                  bottom: (parseFloat(el.style.top) || 0) + (parseFloat(el.style.height) || 0) }))
+    .sort((a, b) => a.top - b.top || a.bottom - b.bottom);
+
+  let cluster = [], clusterEnd = -Infinity;
+  const flush = () => {
+    if (!cluster.length) return;
+    const lanes = []; // laneIndex -> occupied-until y
+    cluster.forEach(t => {
+      let lane = lanes.findIndex(endY => endY <= t.top);
+      if (lane === -1) { lane = lanes.length; lanes.push(0); }
+      lanes[lane] = t.bottom;
+      t.lane = lane;
+    });
+    const n = lanes.length;
+    cluster.forEach(t => {
+      const w = 100 / n;
+      t.el.style.left  = `calc(${t.lane * w}% + 3px)`;
+      t.el.style.right = 'auto';
+      t.el.style.width = `calc(${w}% - 6px)`;
+    });
+    cluster = [];
+  };
+
+  tiles.forEach(t => {
+    if (t.top >= clusterEnd) { flush(); clusterEnd = t.bottom; }
+    else clusterEnd = Math.max(clusterEnd, t.bottom);
+    cluster.push(t);
+  });
+  flush();
 }
 
 // ── Render events onto the master week grid ───────────
@@ -20410,18 +20454,24 @@ function renderMasterCalendarWeek() {
       tile.className = 'master-tile';
       tile.style.cssText = `top:${top}px;height:${height}px;border-left-color:${colour};background:${colour}18;`;
 
+      // Never surface raw "(No title)"/"(No subject)" placeholders here either.
+      const rawTitle = (ev.title || '').trim();
+      const untitled = !rawTitle || rawTitle === '(No subject)' || rawTitle === '(No title)' || rawTitle === 'Untitled';
+      const safeTitle = untitled ? 'Untitled event' : rawTitle;
+
       const timeStr = `${startH}:${String(startM).padStart(2,'0')}`;
       tile.innerHTML = `
         <div class="mt-header">
           <span class="mt-badge" style="background:${colour}">${initials}</span>
-          <span class="mt-title">${ev.title || 'Event'}</span>
+          <span class="mt-title">${safeTitle}</span>
         </div>
         ${height > 30 ? `<div class="mt-sub">${timeStr} · ${t.displayName || ''}</div>` : ''}
       `;
 
-      tile.title = `${ev.title || 'Event'}\n${t.displayName || ''}\n${timeStr}`;
+      tile.title = `${safeTitle}\n${t.displayName || ''}\n${timeStr}`;
       col.appendChild(tile);
     });
+    reflowMasterOverlaps(col);
   });
 
   if (eventsToShow.length === 0) {
@@ -20541,7 +20591,7 @@ function loadProfileView() {
   // ── Sidebar identity ─────────────────────────────────
   const displayName = u.displayName || u.name || u.email;
   const initials = displayName
-    .split(/\s+/).filter(Boolean).slice(0, 2)
+    .split(/\s+/).map(w => w.replace(/[^\p{L}]/gu, '')).filter(Boolean).slice(0, 2)
     .map(w => w[0].toUpperCase()).join('') || '?';
 
   const el = id => document.getElementById(id);
@@ -20796,8 +20846,8 @@ function drawBillingChart(ctx, months, billed, collected) {
     data: {
       labels: months.map(m => m.label),
       datasets: [
-        { label: 'Billed', data: billed, backgroundColor: '#bfdbfe', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 3 },
-        { label: 'Collected', data: collected, backgroundColor: '#bbf7d0', borderColor: '#16a34a', borderWidth: 1, borderRadius: 3 },
+        { label: 'Billed', data: billed, backgroundColor: '#c3d4ec', borderColor: '#4d79b3', borderWidth: 1, borderRadius: 3 },
+        { label: 'Collected', data: collected, backgroundColor: '#bfdfc9', borderColor: '#2f7d4f', borderWidth: 1, borderRadius: 3 },
       ]
     },
     options: {
@@ -20806,7 +20856,7 @@ function drawBillingChart(ctx, months, billed, collected) {
       scales: {
         x: { grid: { display: false }, ticks: { font: { size: 10 } } },
         y: {
-          grid: { color: '#f3f4f6' },
+          grid: { color: '#f1ece4' },
           ticks: { font: { size: 10 }, callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }
         }
       }
@@ -20898,8 +20948,8 @@ function renderTopClients(invoices) {
         <span style="font-size:12px;font-weight:500">${name}</span>
         <span style="font-size:12px;color:var(--ink-soft)">${fmtAUD(val)}</span>
       </div>
-      <div style="height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden;">
-        <div style="height:100%;width:${pct}%;background:#3b82f6;border-radius:2px;"></div>
+      <div style="height:4px;background:#e9e3d9;border-radius:2px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:#4d79b3;border-radius:2px;"></div>
       </div>
     </div>`;
   }).join('');
@@ -20935,7 +20985,7 @@ function openInvDetail(idx) {
       <div class="inv-line"><span class="ik">Due date</span><span class="iv">${fmtDate(inv.dueDate)}</span></div>
       <div class="inv-line"><span class="ik">Subtotal</span><span class="iv">${fmtAUD(inv.subtotal)}</span></div>
       <div class="inv-line"><span class="ik">Total</span><span class="iv" style="font-weight:700">${fmtAUD(inv.total)}</span></div>
-      <div class="inv-line"><span class="ik">Paid</span><span class="iv" style="color:#16a34a">${fmtAUD(inv.paidAmount)}</span></div>
+      <div class="inv-line"><span class="ik">Paid</span><span class="iv" style="color:#2f7d4f">${fmtAUD(inv.paidAmount)}</span></div>
       ${owed > 0 ? `<div class="inv-line"><span class="ik">Owing</span><span class="iv" style="color:var(--danger);font-weight:700">${fmtAUD(owed)}</span></div>` : ''}
     </div>
     ${lineItems ? `<div style="margin-bottom:4px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Line items</div>${lineItems}` : ''}`;
@@ -21211,17 +21261,17 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
         width: 100% !important;
         padding: 9px 12px !important;
         font-size: 13px !important;
-        border: 1.5px solid #dde3ec !important;
+        border: 1.5px solid #e9e3d9 !important;
         border-radius: 8px !important;
         outline: none !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-        color: #1a1a2e !important;
+        color: #241f1a !important;
         background: #ffffff !important;
         box-sizing: border-box !important;
         margin: 0 !important;
       }
       gmp-place-autocomplete::part(input):focus {
-        border-color: #4a7fc1 !important;
+        border-color: #3d6cae !important;
         box-shadow: 0 0 0 3px rgba(74,127,193,0.15) !important;
       }
     `;
@@ -21356,34 +21406,34 @@ window.showQuickAdd = function(...args) {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 12px;
   background: white;
-  border-bottom: 1px solid #e5eaf2;
+  border-bottom: 1px solid #ece6dc;
   flex-shrink: 0;
 }
 .bsp-header-left { display: flex; align-items: center; gap: 8px; }
-.bsp-icon { width: 16px; height: 16px; stroke: var(--accent, #4a7fc1); }
-.bsp-title { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+.bsp-icon { width: 16px; height: 16px; stroke: var(--accent, #3d6cae); }
+.bsp-title { font-size: 14px; font-weight: 600; color: #241f1a; }
 .bsp-close {
   width: 30px; height: 30px; border: none; background: transparent;
   border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  color: #6b7280; transition: background 0.15s, color 0.15s;
+  color: #7a736a; transition: background 0.15s, color 0.15s;
 }
-.bsp-close:hover { background: #f1f4f8; color: #1a1a2e; }
+.bsp-close:hover { background: #f1f4f8; color: #241f1a; }
 .bsp-close svg { width: 15px; height: 15px; }
 
 /* ── Pre-fill strip ── */
 .bsp-prefill-strip {
   display: flex; align-items: center; gap: 7px;
   padding: 7px 16px;
-  background: #eff6ff; border-bottom: 1px solid #bfdbfe;
-  font-size: 12px; color: #1d4ed8; flex-shrink: 0;
+  background: #e8eff9; border-bottom: 1px solid #c3d4ec;
+  font-size: 12px; color: #3d6cae; flex-shrink: 0;
 }
-.bsp-prefill-strip svg { stroke: #3b82f6; flex-shrink: 0; }
+.bsp-prefill-strip svg { stroke: #4d79b3; flex-shrink: 0; }
 .bsp-prefill-clear {
   margin-left: auto; border: none; background: transparent;
-  color: #6b7280; cursor: pointer; font-size: 12px; padding: 0 2px;
+  color: #7a736a; cursor: pointer; font-size: 12px; padding: 0 2px;
   line-height: 1;
 }
-.bsp-prefill-clear:hover { color: #ef4444; }
+.bsp-prefill-clear:hover { color: #c2412e; }
 
 /* ── Therapist selector strip (owner/admin only) ── */
 #bsp-therapist-strip {
@@ -21404,7 +21454,7 @@ window.showQuickAdd = function(...args) {
   transition: border-color 0.15s; line-height: 1.4;
 }
 .bsp-t-chip:hover { border-color: var(--brand); }
-.bsp-t-chip.selected { border-color: var(--brand); background: #eff6ff; color: var(--brand); }
+.bsp-t-chip.selected { border-color: var(--brand); background: #e8eff9; color: var(--brand); }
 .bsp-t-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── Scrollable body ── */
@@ -21437,25 +21487,25 @@ window.showQuickAdd = function(...args) {
   position: absolute;
   left: 2px; right: 2px;
   background: rgba(74,127,193,0.18);
-  border: 1.5px dashed #4a7fc1;
+  border: 1.5px dashed #3d6cae;
   border-radius: 5px;
   z-index: 20;
   cursor: pointer;
   display: flex; align-items: flex-start;
   padding: 3px 5px;
-  font-size: 10px; font-weight: 600; color: #1d4ed8;
+  font-size: 10px; font-weight: 600; color: #3d6cae;
   transition: background 0.15s, border-color 0.15s;
   box-sizing: border-box;
   overflow: hidden;
 }
 .cal-preview-block:hover {
   background: rgba(74,127,193,0.28);
-  border-color: #2563eb;
+  border-color: #3d6cae;
 }
 .cal-preview-block.preview-selected {
   background: rgba(74,127,193,0.35);
-  border: 2px solid #2563eb;
-  color: #1e3a8a;
+  border: 2px solid #3d6cae;
+  color: #2c4d78;
 }
 .cal-preview-block .preview-label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -21480,16 +21530,16 @@ window.showQuickAdd = function(...args) {
 .bsp-step-heading {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 14px; padding-bottom: 12px;
-  border-bottom: 1px solid #e5eaf2;
+  border-bottom: 1px solid #ece6dc;
 }
 .bsp-step-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.6px; color: #4a7fc1;
-  background: #eff6ff; border: 1px solid #bfdbfe;
+  letter-spacing: 0.6px; color: #3d6cae;
+  background: #e8eff9; border: 1px solid #c3d4ec;
   padding: 2px 7px; border-radius: 20px;
 }
 .bsp-step-title {
-  font-size: 14px; font-weight: 700; color: #1a1a2e;
+  font-size: 14px; font-weight: 700; color: #241f1a;
 }
 
 /* ── Booking category cards ── */
@@ -21503,7 +21553,7 @@ window.showQuickAdd = function(...args) {
   align-items: center; gap: 12px;
   padding: 11px 13px;
   background: white;
-  border: 1.5px solid #e5eaf2;
+  border: 1.5px solid #ece6dc;
   border-radius: 10px;
   cursor: pointer; text-align: left;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
@@ -21517,13 +21567,13 @@ window.showQuickAdd = function(...args) {
 /* Force all click events to resolve at the button, not child elements */
 .booking-cat-chip > * { pointer-events: none; }
 .booking-cat-chip:hover {
-  border-color: #4a7fc1;
+  border-color: #3d6cae;
   background: #f5f9ff;
   box-shadow: 0 1px 6px rgba(74,127,193,0.10);
 }
 .booking-cat-chip.active {
-  border-color: #4a7fc1;
-  background: #eff6ff;
+  border-color: #3d6cae;
+  background: #e8eff9;
   box-shadow: 0 0 0 3px rgba(74,127,193,0.14);
 }
 
@@ -21535,17 +21585,17 @@ window.showQuickAdd = function(...args) {
 }
 .bcat-icon svg { width: 18px; height: 18px; }
 .bcat-icon--client  { background: #e8f5e9; }
-.bcat-icon--client svg  { stroke: #2e7d32; }
+.bcat-icon--client svg  { stroke: #2f7d4f; }
 .bcat-icon--email   { background: #e3f2fd; }
-.bcat-icon--email svg   { stroke: #1565c0; }
-.bcat-icon--admin   { background: #fff3e0; }
-.bcat-icon--admin svg   { stroke: #e65100; }
-.bcat-icon--noting  { background: #f3e5f5; }
-.bcat-icon--noting svg  { stroke: #6a1b9a; }
+.bcat-icon--email svg   { stroke: #315a91; }
+.bcat-icon--admin   { background: #faf0da; }
+.bcat-icon--admin svg   { stroke: #a8511a; }
+.bcat-icon--noting  { background: #efedf9; }
+.bcat-icon--noting svg  { stroke: #6d63a8; }
 .bcat-icon--custom  { background: #fce4ec; }
-.bcat-icon--custom svg  { stroke: #ad1457; }
-.booking-cat-chip.active .bcat-icon--client { background: #c8e6c9; }
-.booking-cat-chip.active .bcat-icon--email  { background: #bbdefb; }
+.bcat-icon--custom svg  { stroke: #a13d47; }
+.booking-cat-chip.active .bcat-icon--client { background: #dcefe3; }
+.booking-cat-chip.active .bcat-icon--email  { background: #c3d4ec; }
 .booking-cat-chip.active .bcat-icon--admin  { background: #ffe0b2; }
 .booking-cat-chip.active .bcat-icon--noting { background: #e1bee7; }
 .booking-cat-chip.active .bcat-icon--custom { background: #f8bbd0; }
@@ -21553,43 +21603,43 @@ window.showQuickAdd = function(...args) {
 /* Card text */
 .bcat-body { flex: 1; min-width: 0; }
 .bcat-name {
-  font-size: 13px; font-weight: 600; color: #1a1a2e;
+  font-size: 13px; font-weight: 600; color: #241f1a;
   margin-bottom: 1px;
 }
 .bcat-desc {
-  font-size: 11px; color: #6b7280; line-height: 1.4;
+  font-size: 11px; color: #7a736a; line-height: 1.4;
 }
-.booking-cat-chip.active .bcat-name { color: #1d4ed8; }
+.booking-cat-chip.active .bcat-name { color: #3d6cae; }
 
 /* Default duration badge */
 .bcat-dur {
   font-size: 11px; font-weight: 600;
-  color: #6b7280;
-  background: #f3f4f6; border-radius: 6px;
+  color: #7a736a;
+  background: #f1ece4; border-radius: 6px;
   padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
 }
 .booking-cat-chip.active .bcat-dur {
-  background: #dbeafe; color: #1d4ed8;
+  background: #dbe6f5; color: #3d6cae;
 }
 
 /* ── When & Where timing section ── */
 .bsp-timing-section {
   background: white;
-  border: 1.5px solid #e5eaf2;
+  border: 1.5px solid #ece6dc;
   border-radius: 12px;
   padding: 14px 16px;
   margin-top: 14px; margin-bottom: 16px;
 }
 .bsp-section-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: #4a7fc1;
+  letter-spacing: 0.5px; color: #3d6cae;
   margin-bottom: 12px;
 }
 .bsp-field-label {
-  font-size: 11px; font-weight: 600; color: #374151;
+  font-size: 11px; font-weight: 600; color: #46403a;
   display: block; margin-bottom: 5px;
 }
-.bsp-optional { font-weight: 400; color: #9ca3af; }
+.bsp-optional { font-weight: 400; color: #a39b90; }
 
 /* Day chips */
 .bsp-day-row { margin-bottom: 12px; }
@@ -21599,13 +21649,13 @@ window.showQuickAdd = function(...args) {
 .bsp-day-chip {
   flex: 1; min-width: 44px;
   padding: 6px 8px; font-size: 12px; font-weight: 600;
-  border: 1.5px solid #e5eaf2; border-radius: 7px;
-  background: #f9fafb; cursor: pointer; color: #374151;
+  border: 1.5px solid #ece6dc; border-radius: 7px;
+  background: #faf8f4; cursor: pointer; color: #46403a;
   transition: all 0.15s; text-align: center;
 }
-.bsp-day-chip:hover { border-color: #4a7fc1; background: #eff6ff; color: #1d4ed8; }
+.bsp-day-chip:hover { border-color: #3d6cae; background: #e8eff9; color: #3d6cae; }
 .bsp-day-chip.active {
-  background: #4a7fc1; border-color: #4a7fc1;
+  background: #3d6cae; border-color: #3d6cae;
   color: white; box-shadow: 0 1px 4px rgba(74,127,193,0.3);
 }
 
@@ -21617,17 +21667,17 @@ window.showQuickAdd = function(...args) {
 .bsp-time-field { flex: 1; }
 .bsp-time-field input[type="time"] {
   width: 100%; padding: 8px 10px;
-  font-size: 15px; font-weight: 600; color: #1d4ed8;
-  background: #f0f4ff; border: 1.5px solid #c7d7f5;
+  font-size: 15px; font-weight: 600; color: #3d6cae;
+  background: #f0f4ff; border: 1.5px solid #c3d4ec;
   border-radius: 8px; font-family: inherit;
   cursor: pointer; outline: none;
   transition: border-color 0.15s;
   box-sizing: border-box;
 }
-.bsp-time-field input[type="time"]:focus { border-color: #4a7fc1; }
+.bsp-time-field input[type="time"]:focus { border-color: #3d6cae; }
 .bsp-time-arrow {
   display: flex; align-items: center; padding-bottom: 9px;
-  color: #9ca3af;
+  color: #a39b90;
 }
 .bsp-time-arrow svg { width: 14px; height: 14px; }
 
@@ -21638,29 +21688,29 @@ window.showQuickAdd = function(...args) {
   margin-bottom: 8px;
 }
 .bsp-dur-value {
-  font-size: 13px; font-weight: 700; color: #1d4ed8;
-  background: #dbeafe; padding: 2px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; color: #3d6cae;
+  background: #dbe6f5; padding: 2px 8px; border-radius: 6px;
 }
 
 /* Slider track & thumb */
 .bsp-dur-slider {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 4px;
-  background: linear-gradient(to right, #4a7fc1 var(--pct, 25%), #e5eaf2 var(--pct, 25%));
+  background: linear-gradient(to right, #3d6cae var(--pct, 25%), #ece6dc var(--pct, 25%));
   border-radius: 4px; outline: none; cursor: pointer;
   margin-bottom: 10px;
 }
 .bsp-dur-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 18px; height: 18px; border-radius: 50%;
-  background: #4a7fc1; border: 2.5px solid white;
+  background: #3d6cae; border: 2.5px solid white;
   box-shadow: 0 1px 6px rgba(74,127,193,0.45);
   cursor: pointer; transition: transform 0.1s;
 }
 .bsp-dur-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .bsp-dur-slider::-moz-range-thumb {
   width: 18px; height: 18px; border-radius: 50%;
-  background: #4a7fc1; border: 2.5px solid white;
+  background: #3d6cae; border: 2.5px solid white;
   box-shadow: 0 1px 6px rgba(74,127,193,0.45);
   cursor: pointer;
 }
@@ -21671,25 +21721,25 @@ window.showQuickAdd = function(...args) {
 }
 .bsp-dur-preset {
   padding: 4px 9px; font-size: 11px; font-weight: 600;
-  border: 1.5px solid #e5eaf2; border-radius: 6px;
-  background: #f9fafb; color: #6b7280;
+  border: 1.5px solid #ece6dc; border-radius: 6px;
+  background: #faf8f4; color: #7a736a;
   cursor: pointer; transition: all 0.12s;
 }
-.bsp-dur-preset:hover { border-color: #4a7fc1; color: #1d4ed8; background: #eff6ff; }
+.bsp-dur-preset:hover { border-color: #3d6cae; color: #3d6cae; background: #e8eff9; }
 .bsp-dur-preset.active {
-  background: #4a7fc1; border-color: #4a7fc1;
+  background: #3d6cae; border-color: #3d6cae;
   color: white;
 }
 
 /* Location field */
 .bsp-loc-field input[type="text"] {
   width: 100%; padding: 8px 10px;
-  font-size: 13px; color: #1a1a2e;
-  border: 1.5px solid #e5eaf2; border-radius: 8px;
-  font-family: inherit; outline: none; background: #f9fafb;
+  font-size: 13px; color: #241f1a;
+  border: 1.5px solid #ece6dc; border-radius: 8px;
+  font-family: inherit; outline: none; background: #faf8f4;
   transition: border-color 0.15s; box-sizing: border-box;
 }
-.bsp-loc-field input[type="text"]:focus { border-color: #4a7fc1; background: white; }
+.bsp-loc-field input[type="text"]:focus { border-color: #3d6cae; background: white; }
 
 /* cat-form spacing */
 .cat-form { padding: 0 0 4px 0; }
@@ -22283,7 +22333,7 @@ document.addEventListener('DOMContentLoaded', () => {
   font-weight: 700;
   color: var(--ink);
   font-size: 11px;
-  background: #f3f4f6;
+  background: #f1ece4;
   border-bottom: 2px solid var(--border);
   padding: 5px 8px;
 }
@@ -22294,16 +22344,16 @@ document.addEventListener('DOMContentLoaded', () => {
   position: relative;
 }
 .sa-cell:hover { opacity: 0.75; }
-.sa-cell.free       { background: #dcfce7; }
-.sa-cell.busy       { background: #fee2e2; }
-.sa-cell.offhours   { background: #fef9c3; }
-.sa-cell.common     { background: #bfdbfe; }
-.sa-cell.common.busy { background: #fecaca; }
+.sa-cell.free       { background: #dcefe3; }
+.sa-cell.busy       { background: #fbe9e5; }
+.sa-cell.offhours   { background: #faf0da; }
+.sa-cell.common     { background: #c3d4ec; }
+.sa-cell.common.busy { background: #f6d4c9; }
 .sa-now-line {
   position: absolute;
   top: 0; bottom: 0;
   width: 2px;
-  background: #ef4444;
+  background: #c2412e;
   z-index: 3;
   pointer-events: none;
 }
@@ -22499,7 +22549,7 @@ function schedAssistantRender() {
       ? (__perthDateStr(new Date()) === d.toISOString().slice(0,10))
       : (new Date().toDateString() === d.toDateString());
     const label = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
-    html += `<th class="sa-col-head sa-day-head${isToday ? '" style="background:#eff6ff;color:var(--accent)' : ''}" colspan="${daySlots.length}">${label}</th>`;
+    html += `<th class="sa-col-head sa-day-head${isToday ? '" style="background:#e8eff9;color:var(--accent)' : ''}" colspan="${daySlots.length}">${label}</th>`;
   });
   html += '</tr>';
 
@@ -23368,8 +23418,8 @@ function applySettingsRoleVisibility() {
   if (secEmail && window.APP_USER) secEmail.textContent = window.APP_USER.email || '—';
   if (secRole  && window.APP_USER) {
     secRole.textContent = roleLabel[role] || role;
-    secRole.style.background = isOwner ? '#fef3c7' : isPrivileged ? '#eff6ff' : '#f0fdf4';
-    secRole.style.color      = isOwner ? '#92400e' : isPrivileged ? '#1d4ed8' : '#15803d';
+    secRole.style.background = isOwner ? '#faf0da' : isPrivileged ? '#e8eff9' : '#e5f2e8';
+    secRole.style.color      = isOwner ? '#7a4e0b' : isPrivileged ? '#3d6cae' : '#276a43';
   }
 }
 
@@ -23787,11 +23837,11 @@ async function loadUserListForOwner() {
 
     // Status labels + colors
     var statusBadge = {
-      active:               '<span style="background:#f0fdf4;color:#16a34a;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Active</span>',
-      pending_verification: '<span style="background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending email</span>',
-      pending_approval:     '<span style="background:#fff7ed;color:#c2410c;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending approval</span>',
-      suspended:            '<span style="background:#fef2f2;color:#dc2626;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Suspended</span>',
-      deactivated:          '<span style="background:#f1f5f9;color:#64748b;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Deactivated</span>',
+      active:               '<span style="background:#e5f2e8;color:#2f7d4f;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Active</span>',
+      pending_verification: '<span style="background:#faf0da;color:#7a4e0b;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending email</span>',
+      pending_approval:     '<span style="background:#fcf3e8;color:#a8511a;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending approval</span>',
+      suspended:            '<span style="background:#fdf1ee;color:#c2412e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Suspended</span>',
+      deactivated:          '<span style="background:#f1ece4;color:#6e675e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Deactivated</span>',
     };
     var roleLabels = { owner: '👑 Owner', admin: '🛡️ Admin', therapist: '🩺 Therapist' };
 
@@ -23808,8 +23858,8 @@ async function loadUserListForOwner() {
 
       // Info flags
       var flags = [];
-      if (!u.hasOutlook)      flags.push('<span title="Outlook not connected" style="font-size:11px;color:#f59e0b;">📅 No calendar</span>');
-      if (!u.hasWorkLocation) flags.push('<span title="No work location set" style="font-size:11px;color:#6b7280;">📍 No location</span>');
+      if (!u.hasOutlook)      flags.push('<span title="Outlook not connected" style="font-size:11px;color:#cf8b1f;">📅 No calendar</span>');
+      if (!u.hasWorkLocation) flags.push('<span title="No work location set" style="font-size:11px;color:#7a736a;">📍 No location</span>');
 
       // Action buttons (owner only, can't action yourself)
       var actions = '';
@@ -23819,11 +23869,11 @@ async function loadUserListForOwner() {
         }
         if (status === 'active') {
           actions += '<button class="btn" onclick="openRoleModal(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\',\'' + u.role + '\')" style="font-size:11px;padding:5px 10px;">Role</button> ';
-          actions += '<button class="btn" onclick="openSuspendModal(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:#dc2626;">Suspend</button> ';
+          actions += '<button class="btn" onclick="openSuspendModal(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:#c2412e;">Suspend</button> ';
         }
         if (status === 'suspended') {
           actions += '<button class="btn primary" onclick="adminActivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;">Re-activate</button> ';
-          actions += '<button class="btn" onclick="adminDeactivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:#6b7280;">Deactivate</button> ';
+          actions += '<button class="btn" onclick="adminDeactivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:#7a736a;">Deactivate</button> ';
         }
         if (status === 'deactivated') {
           actions += '<button class="btn primary" onclick="adminActivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;">Restore</button> ';
@@ -23836,7 +23886,7 @@ async function loadUserListForOwner() {
       html += '<strong style="font-size:13.5px;">' + escapeHtml(u.name || u.email) + '</strong>';
       html += '<span style="font-size:12px;color:var(--muted);">' + roleLabel + '</span>';
       html += badge;
-      if (isMe) html += '<span style="font-size:11px;color:#6b7280;background:#f1f5f9;border-radius:10px;padding:2px 8px;">You</span>';
+      if (isMe) html += '<span style="font-size:11px;color:#7a736a;background:#f1ece4;border-radius:10px;padding:2px 8px;">You</span>';
       html += '</div>';
       html += '<div style="font-size:12px;color:var(--muted);">' + escapeHtml(u.email) + '</div>';
       if (flags.length) html += '<div style="display:flex;gap:8px;margin-top:4px;">' + flags.join('') + '</div>';
@@ -23941,11 +23991,11 @@ function showToast(msg, isError) {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'admin-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;';
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
-  toast.style.background = isError ? '#dc2626' : '#1a1a2e';
+  toast.style.background = isError ? '#c2412e' : '#241f1a';
   toast.style.opacity    = '1';
   clearTimeout(toast._timer);
   toast._timer = setTimeout(function() { toast.style.opacity = '0'; }, 3000);
@@ -25553,7 +25603,7 @@ function isGapDismissed(day, currId, nextId) {
       background: none; color: var(--ink-soft); font-size: 12px;
       cursor: pointer; font-family: inherit; text-align: left; transition: all .12s;
     }
-    .gap-qa-btn-dismiss:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .gap-qa-btn-dismiss:hover { background: #fbe9e5; color: #c2412e; border-color: #eeb3a4; }
   `;
   document.head.appendChild(s);
 })();
@@ -26021,7 +26071,7 @@ function buildSnapshotWorkHTML() {
 
   let html = '<div class="rpt-section"><div class="rpt-section-title" style="display:flex;align-items:center;gap:8px;">Today\'s work' +
     '<span style="font-weight:400;color:var(--muted);font-size:11.5px;">' + activeTasks.length + ' task' + (activeTasks.length === 1 ? '' : 's') +
-    (overdue ? ' · <span style="color:#b45309;font-weight:600;">' + overdue + ' overdue</span>' : '') + '</span>' +
+    (overdue ? ' · <span style="color:#9a5f0e;font-weight:600;">' + overdue + ' overdue</span>' : '') + '</span>' +
     '<span style="flex:1"></span>' +
     '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddReminder()">Add reminder</button>' +
     '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="snapAddTask()">Add task</button></div>';
@@ -26032,7 +26082,7 @@ function buildSnapshotWorkHTML() {
       const od = snapOverdue(r);
       return '<div class="rh-item" style="display:flex;align-items:center;gap:8px;">' +
         '<span style="flex:1;min-width:0;"><span style="font-weight:600;font-size:13px;">' + esc(r.title) + '</span>' +
-        ' <span style="font-size:11.5px;color:' + (od ? '#b45309' : 'var(--muted)') + ';">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span>' +
+        ' <span style="font-size:11.5px;color:' + (od ? '#9a5f0e' : 'var(--muted)') + ';">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span>' +
         (r.state === 'completed' ? ' <span class="rh-status-chip">done</span>' : '') + '</span>' +
         (r.state === 'upcoming'
           ? '<button class="btn" style="font-size:11px;padding:2px 8px;" onclick="snapReminderAct(\'' + r.id + '\',\'defer\',{minutes:60})">+1h</button>' +
@@ -26107,11 +26157,11 @@ function buildDailyReportHTML(date, role) {
 
   // Summary cards
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('📅', metrics.appts, 'Appointments', metrics.uniqueClients + ' client' + (metrics.uniqueClients !== 1 ? 's' : ''), '#4f46e5');
-  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + targetH + 'h target', '#059669');
-  html += _rptCard('', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#d97706');
-  html += _rptCard('💡', gaps.length, 'Free gaps', gaps.length > 0 ? 'available today' : 'none found', '#7c3aed');
-  if (attn.length > 0) html += _rptCard('⚠', attn.length, 'Attention', 'item' + (attn.length !== 1 ? 's' : '') + ' to review', '#dc2626');
+  html += _rptCard('📅', metrics.appts, 'Appointments', metrics.uniqueClients + ' client' + (metrics.uniqueClients !== 1 ? 's' : ''), '#3d6cae');
+  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + targetH + 'h target', '#2f7d4f');
+  html += _rptCard('', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#b06e12');
+  html += _rptCard('💡', gaps.length, 'Free gaps', gaps.length > 0 ? 'available today' : 'none found', '#8b80c8');
+  if (attn.length > 0) html += _rptCard('⚠', attn.length, 'Attention', 'item' + (attn.length !== 1 ? 's' : '') + ' to review', '#c2412e');
   html += '</div>';
 
   // Overview bar
@@ -26165,18 +26215,18 @@ function buildDailyReportHTML(date, role) {
 
   // Billable target — SVG ring
   if (role !== 'admin') {
-    var ringColor = targetPct >= 100 ? '#059669' : targetPct >= 70 ? '#d97706' : '#dc2626';
+    var ringColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
     var r = 34, cx = 40, cy = 40, circ = 2 * Math.PI * r;
     var dash = (circ * Math.min(targetPct, 100) / 100).toFixed(1);
     html += '<div class="rpt-section"><div class="rpt-section-title">🎯 Billable Target</div>';
     html += '<div class="rpt-ring-wrap">';
     html += '<svg class="rpt-ring-svg" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">';
-    html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#e5e7eb" stroke-width="8"/>';
+    html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#e9e3d9" stroke-width="8"/>';
     html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + ringColor + '" stroke-width="8"';
     html += ' stroke-dasharray="' + dash + ' ' + circ.toFixed(1) + '"';
     html += ' stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
     html += '<text x="' + cx + '" y="' + (cy - 4) + '" text-anchor="middle" font-size="14" font-weight="700" fill="' + ringColor + '">' + targetPct + '%</text>';
-    html += '<text x="' + cx + '" y="' + (cy + 12) + '" text-anchor="middle" font-size="9" fill="#9ca3af">billed</text>';
+    html += '<text x="' + cx + '" y="' + (cy + 12) + '" text-anchor="middle" font-size="9" fill="#a39b90">billed</text>';
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + targetH + 'h target</small></div>';
@@ -26371,29 +26421,29 @@ function buildWeeklyReportHTML(date, role) {
   var html = '';
 
   // Summary cards
-  var fillColor = targetPct >= 100 ? '#059669' : targetPct >= 70 ? '#d97706' : '#dc2626';
+  var fillColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + weekTarget + 'h target', '#059669');
-  html += _rptCard('📅', totalAppts, 'Appointments', allClients.size + ' clients', '#4f46e5');
-  html += _rptCard('', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#d97706');
-  html += _rptCard('💡', totalGaps, 'Free gaps', 'across Mon–Fri', '#7c3aed');
-  if (totalMissing > 0) html += _rptCard('⚠', totalMissing, 'Missing addr', 'location' + (totalMissing > 1 ? 's' : '') + ' missing', '#dc2626');
+  html += _rptCard('⏱', billableH.toFixed(1) + 'h', 'Billable', 'of ' + weekTarget + 'h target', '#2f7d4f');
+  html += _rptCard('📅', totalAppts, 'Appointments', allClients.size + ' clients', '#3d6cae');
+  html += _rptCard('', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#b06e12');
+  html += _rptCard('💡', totalGaps, 'Free gaps', 'across Mon–Fri', '#8b80c8');
+  if (totalMissing > 0) html += _rptCard('⚠', totalMissing, 'Missing addr', 'location' + (totalMissing > 1 ? 's' : '') + ' missing', '#c2412e');
   html += '</div>';
 
   // Weekly target progress — SVG ring
   if (role !== 'admin') {
-    var wRingColor = targetPct >= 100 ? '#059669' : targetPct >= 70 ? '#d97706' : '#dc2626';
+    var wRingColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
     var wr = 34, wcx = 40, wcy = 40, wCirc = 2 * Math.PI * wr;
     var wDash = (wCirc * Math.min(targetPct, 100) / 100).toFixed(1);
     html += '<div class="rpt-section"><div class="rpt-section-title">🎯 Weekly Billable Target</div>';
     html += '<div class="rpt-ring-wrap">';
     html += '<svg class="rpt-ring-svg" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">';
-    html += '<circle cx="' + wcx + '" cy="' + wcy + '" r="' + wr + '" fill="none" stroke="#e5e7eb" stroke-width="8"/>';
+    html += '<circle cx="' + wcx + '" cy="' + wcy + '" r="' + wr + '" fill="none" stroke="#e9e3d9" stroke-width="8"/>';
     html += '<circle cx="' + wcx + '" cy="' + wcy + '" r="' + wr + '" fill="none" stroke="' + wRingColor + '" stroke-width="8"';
     html += ' stroke-dasharray="' + wDash + ' ' + wCirc.toFixed(1) + '"';
     html += ' stroke-linecap="round" transform="rotate(-90 ' + wcx + ' ' + wcy + ')"/>';
     html += '<text x="' + wcx + '" y="' + (wcy - 4) + '" text-anchor="middle" font-size="14" font-weight="700" fill="' + wRingColor + '">' + targetPct + '%</text>';
-    html += '<text x="' + wcx + '" y="' + (wcy + 12) + '" text-anchor="middle" font-size="9" fill="#9ca3af">billed</text>';
+    html += '<text x="' + wcx + '" y="' + (wcy + 12) + '" text-anchor="middle" font-size="9" fill="#a39b90">billed</text>';
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + weekTarget + 'h target</small></div>';

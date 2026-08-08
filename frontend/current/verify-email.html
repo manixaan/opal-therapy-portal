@@ -23,8 +23,8 @@
       --surface:     #ffffff;
       --bg:          #faf6f0;
       --border:      #e9e3d9;
-      --danger:      #dc2626;
-      --success:     #16a34a;
+      --danger:      #c2412e;
+      --success:     #2f7d4f;
       --radius:      12px;
       --shadow:      0 4px 24px rgba(0,0,0,0.08);
     }
@@ -73,14 +73,14 @@
     /* Success state */
     .success-icon {
       width: 56px; height: 56px;
-      background: #f0fdf4;
+      background: #e5f2e8;
       border-radius: 50%;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 16px;
     }
-    .success-icon svg { width: 28px; height: 28px; fill: #16a34a; }
+    .success-icon svg { width: 28px; height: 28px; fill: #2f7d4f; }
 
     /* Error / info */
     .msg-box {
@@ -92,9 +92,9 @@
       text-align: left;
     }
     .msg-box.visible { display: block; }
-    .msg-box.error   { background: #fef2f2; border: 1px solid #fca5a5; color: var(--danger); }
-    .msg-box.info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
-    .msg-box.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .msg-box.error   { background: #fdf1ee; border: 1px solid #eeb3a4; color: var(--danger); }
+    .msg-box.info    { background: #e8eff9; border: 1px solid #c3d4ec; color: #3d6cae; }
+    .msg-box.success { background: #e5f2e8; border: 1px solid #bfdfc9; color: #22593a; }
 
     .btn {
       display: inline-flex;
@@ -199,8 +199,8 @@
 
   <!-- ── View: Token error ── -->
   <div class="view" id="view-error">
-    <div class="logo-mark" style="background:#fef2f2">
-      <svg viewBox="0 0 24 24" style="fill:#dc2626"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    <div class="logo-mark" style="background:#fdf1ee">
+      <svg viewBox="0 0 24 24" style="fill:#c2412e"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
     </div>
     <h1>Link expired</h1>
     <p class="sub" id="error-sub">This verification link has expired or has already been used. Request a new one below.</p>
