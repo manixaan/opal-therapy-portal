@@ -14,6 +14,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
 <script src="/scheduler.js?v=p9" defer></script>
+<link rel="stylesheet" href="/resourcehub.css?v=r2" />
+<link rel="stylesheet" href="/opa.css?v=1" />
+<script src="/resourcehub.js?v=r2" defer></script>
+<script src="/opa.js?v=1" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -4171,26 +4175,8 @@ window.opIcon = function (name, size) {
         <span class="h2-sub" id="book-week-sub">This week</span>
       </h2>
 
-      <!-- Stepper -->
-      <div class="stepper-compact" id="stepper-compact" aria-live="polite"></div>
-      <div class="stepper" id="stepper" aria-label="Booking progress">
-        <div class="step active" data-step="1"><div class="step-num">1</div><div>Booking Type</div></div>
-        <div class="step-line"></div>
-        <div class="step" data-step="2"><div class="step-num">2</div><div>Session type</div></div>
-        <div class="step-line"></div>
-        <div class="step" data-step="3"><div class="step-num">3</div><div>Suggested slots</div></div>
-        <div class="step-line"></div>
-        <div class="step" data-step="4"><div class="step-num">4</div><div>Confirm</div></div>
-      </div>
-
       <!-- Step 1: Booking Type -->
       <div class="step-body" id="step-1" data-help="booking-step1">
-
-        <!-- Step heading -->
-        <div class="bsp-step-heading">
-          <span class="bsp-step-badge">Step 1</span>
-          <span class="bsp-step-title">Booking Type</span>
-        </div>
 
         <!-- Booking category cards -->
         <div class="bk-picker" id="booking-cat-chips" data-help="booking-type-cards">
@@ -4390,149 +4376,10 @@ window.opIcon = function (name, size) {
         </div>
 
         <div class="step-actions">
-          <button class="btn" disabled>← Back</button>
-          <button class="btn primary" id="step1-next-btn" onclick="step1Next()">Next: choose session type →</button>
+          <button class="btn primary" id="create-booking-btn" onclick="createBookingNow()">Create appointment</button>
         </div>
       </div>
 
-      <!-- Step 2: Session type -->
-      <div class="step-body" id="step-2" style="display:none;">
-        <p class="lead">Eight session types map onto three Splose write-surfaces: Appointment, Support-Activity, or Busy-Time.</p>
-
-        <h3>Client-facing (Splose Appointment)</h3>
-        <div class="chip-grid" style="margin-bottom:14px;">
-          <button class="stype-chip" data-stype="initial">
-            <div class="stype-swatch" style="background:var(--c-initial)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Initial</div>
-              <div class="stype-sub">First consult · 60 min</div>
-            </div>
-            <div class="stype-id">125821</div>
-          </button>
-          <button class="stype-chip selected" data-stype="therapy">
-            <div class="stype-swatch" style="background:var(--c-therapy)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Therapy</div>
-              <div class="stype-sub">Standard session · 60 min</div>
-            </div>
-            <div class="stype-id">125320</div>
-          </button>
-          <button class="stype-chip" data-stype="assessment">
-            <div class="stype-swatch" style="background:var(--c-assessment)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Assessment</div>
-              <div class="stype-sub">Standardised · 90 min</div>
-            </div>
-            <div class="stype-id">131003</div>
-          </button>
-          <button class="stype-chip" data-stype="mdt">
-            <div class="stype-swatch" style="background:var(--c-mdt)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">MDT</div>
-              <div class="stype-sub">Multidisciplinary · 60 min</div>
-            </div>
-            <div class="stype-id">166733</div>
-          </button>
-        </div>
-
-        <h3>Billable non-face-to-face (Support-Activity)</h3>
-        <div class="chip-grid" style="margin-bottom:14px;">
-          <button class="stype-chip" data-stype="report">
-            <div class="stype-swatch" style="background:var(--c-report)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Report writing</div>
-              <div class="stype-sub">Progress / FCA / Letter</div>
-            </div>
-            <div class="stype-id">support</div>
-          </button>
-          <button class="stype-chip" data-stype="travel-b">
-            <div class="stype-swatch" style="background:var(--c-travel)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Travel (billable)</div>
-              <div class="stype-sub">Linked to client visit</div>
-            </div>
-            <div class="stype-id">support</div>
-          </button>
-        </div>
-
-        <h3>Internal (Busy-Time)</h3>
-        <div class="chip-grid">
-          <button class="stype-chip" data-stype="travel-nb">
-            <div class="stype-swatch" style="background:var(--c-travel)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Travel (non-billable)</div>
-              <div class="stype-sub">No client linkage</div>
-            </div>
-            <div class="stype-id">55337</div>
-          </button>
-          <button class="stype-chip" data-stype="admin">
-            <div class="stype-swatch" style="background:var(--c-admin)"></div>
-            <div class="stype-meta">
-              <div class="stype-name">Admin / Case noting</div>
-              <div class="stype-sub">Default 30 min</div>
-            </div>
-            <div class="stype-id">55339</div>
-          </button>
-        </div>
-
-        <p class="micro" style="margin-top:14px;">
-          ↪ <em>Case noting</em> is folded under Admin until Ann's workflow is confirmed.
-          Splose has no dedicated busy-time-type or service for it.
-        </p>
-
-        <div class="step-actions">
-          <button class="btn" onclick="goStep(1)">← Back</button>
-          <button class="btn primary" onclick="goStep(3)">Find slots →</button>
-        </div>
-      </div>
-
-      <!-- Step 3: Slot suggestions (dynamic) -->
-      <div class="step-body" id="step-3" data-help="booking-step3" style="display:none;">
-        <p class="lead" id="step3-lead">Computing slot suggestions…</p>
-
-        <div class="slots-toolbar" data-help="booking-slot-filters">
-          <span class="filter-pill on">All filters on</span>
-          <span class="filter-pill on">Cluster by region</span>
-          <span class="filter-pill on">Balance day intensity</span>
-          <span class="filter-pill on">Plan capacity</span>
-          <span class="filter-pill">Morning preferred</span>
-          <span class="filter-pill">After 3pm</span>
-        </div>
-
-        <!-- Suggestion cards rendered here by computeSlotSuggestions() / renderSlotSuggestions() -->
-        <div id="slot-suggestions" data-help="booking-slot-suggestions"></div>
-
-        <p class="micro" id="step3-footer">
-          Computed against the current weekly calendar (Splose-shaped) using your existing sessions for clustering and day intensity.
-        </p>
-
-        <div class="step-actions">
-          <button class="btn" onclick="goStep(2)">← Back</button>
-          <button class="btn primary" id="step3-confirm-btn" data-help="booking-confirm" onclick="goStep(4)">Confirm booking →</button>
-        </div>
-      </div>
-
-      <!-- Step 4: Confirm (dynamic) -->
-      <div class="step-body" id="step-4" data-help="booking-step4" style="display:none;">
-        <p class="lead">Final check before writing to Splose.</p>
-
-        <div class="confirm-summary" id="confirm-summary">
-          <h4>Appointment summary</h4>
-          <!-- Rows populated by renderConfirmSummary() -->
-        </div>
-
-        <h3 style="margin-top:14px;">Will POST to Splose</h3>
-        <div class="api-preview" id="confirm-api-preview"><span class="c">// POST https://api.splose.com/v1/appointments</span></div>
-
-        <div class="step-actions">
-          <button class="btn" onclick="goStepBack4()">← Back</button>
-          <button class="btn primary" onclick="confirmBooking()">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -3px; margin-right: 6px;">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>Write to Splose
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Right context (dynamic — populated by renderRightContext()) -->
@@ -4551,12 +4398,6 @@ window.opIcon = function (name, size) {
         </div>
       </div>
 
-      <div class="panel ndis-card" id="ctx-week-card">
-        <h3>This week</h3>
-        <div id="ctx-week-body">
-          <!-- Populated by renderRightContext() — reflects actual SESSIONS state. -->
-        </div>
-      </div>
     </div>
   </div>
 
@@ -4869,40 +4710,14 @@ window.opIcon = function (name, size) {
   <p style="color:var(--muted);margin:0 0 12px;">Shared therapy materials, drafting tools and purchasing — in one workspace.</p>
 
   <div class="rh-tabs" role="tablist">
-    <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Resource Library</button>
+    <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Hub</button>
     <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio</button>
     <button class="rh-tab" role="tab" data-rh="store" onclick="rhSwitch('store')">Therapy Store &amp; Purchase Requests</button>
   </div>
 
-  <!-- ── Resource Library ── -->
+  <!-- ── Resource Hub R2 (rendered by /resourcehub.js into #rh2-root) ── -->
   <div class="rh-panel active" id="rh-panel-shared">
-    <div class="rh-searchbar">
-      <input type="search" id="res-search" placeholder="Search resources, topics, templates…" oninput="resReload()" aria-label="Search resources">
-      <select id="res-tag-filter" onchange="resReload()" aria-label="Filter by tag"><option value="">All tags</option></select>
-      <select id="res-type-filter" onchange="resReload()" aria-label="Filter by type">
-        <option value="">All types</option>
-        <option value="worksheet">Worksheet</option>
-        <option value="handout">Handout</option>
-        <option value="session_plan">Session plan</option>
-        <option value="product_link">Product link</option>
-        <option value="research">Research</option>
-        <option value="pd_video">PD video</option>
-        <option value="template">Template</option>
-      </select>
-      <select id="res-status-filter" onchange="resReload()" style="display:none;" aria-label="Filter by status">
-        <option value="">Approved (default)</option>
-        <option value="submitted_for_review">Submitted for review</option>
-        <option value="draft">Drafts</option>
-        <option value="archived">Archived</option>
-      </select>
-      <button class="btn" onclick="rhResetFilters()">Reset</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="res-submit-btn" onclick="rhOpenSubmit()">Submit a resource</button>
-    </div>
-    <div class="rh-sections" id="rh-sections" role="tablist" aria-label="Library sections"></div>
-    <div id="rh-topic-chips" style="display:none;margin:0 0 10px;"></div>
-    <div id="rh-kits" style="display:none;"></div>
-    <div id="res-list" class="acct-note">Loading…</div>
+    <div id="rh2-root"></div>
   </div>
 
   <!-- ── AI Resource Studio ── -->
@@ -7804,7 +7619,7 @@ function rhSwitch(area) {
     var p = document.getElementById('rh-panel-' + a);
     if (p) p.classList.toggle('active', a === area);
   });
-  if (area === 'shared') resReload();
+  if (area === 'shared') { if (typeof window.RH2 !== 'undefined' && typeof RH2.open === 'function') RH2.open(); else resReload(); }
   if (area === 'ai' && typeof rhLoadDrafts === 'function') rhLoadDrafts();
   if (area === 'store' && typeof rhLoadStore === 'function') rhLoadStore();
 }
@@ -8346,7 +8161,7 @@ async function resFav(id, on) {
 }
 document.addEventListener('click', function (e) {
   var t = e.target.closest && e.target.closest('.tab[data-tab="resources"]');
-  if (t) setTimeout(resReload, 50);
+  if (t) setTimeout(function () { if (typeof window.RH2 !== 'undefined' && typeof RH2.open === 'function') RH2.open(); else resReload(); }, 50);
 });
 
 /* ── Accounting module (owner-only) ─────────────────────────────────────────
@@ -8871,39 +8686,6 @@ function renderPatientsTable() {
 }
 
 /* ---------- Stepper ---------- */
-function goStep(n) {
-  for (let i = 1; i <= 4; i++) {
-    document.getElementById('step-' + i).style.display = (i === n) ? 'block' : 'none';
-  }
-  document.querySelectorAll('#stepper .step').forEach(el => {
-    const k = parseInt(el.dataset.step, 10);
-    el.classList.toggle('done',   k <  n);
-    el.classList.toggle('active', k === n);
-    if (k === n) el.setAttribute('aria-current', 'step'); else el.removeAttribute('aria-current');
-  });
-  var _sc = document.getElementById('stepper-compact');
-  if (_sc) {
-    var _lbl = { 1: 'Booking Type', 2: 'Session type', 3: 'Suggested slots', 4: 'Confirm' }[n] || '';
-    _sc.textContent = 'Step ' + n + ' of 4: ' + _lbl;
-  }
-  // Step-3 entry triggers a fresh suggestion compute against the live
-  // SESSIONS state — empty calendar → empty-state reasons; partial calendar
-  // → real cluster/intensity reasons. Right-context panels also refresh so
-  // they reflect the actual week.
-  // Step 3 (slot suggestions) is only used by the client flow.
-  // Non-client categories skip steps 2 and 3 and go directly to step 4.
-  if (n === 3 && typeof renderSlotSuggestions === 'function' &&
-      (BOOKING_STATE.category === 'client' || !BOOKING_STATE.category)) {
-    loadSploseAppointmentsIntoSessions().then(() => renderSlotSuggestions());
-  }
-  if (n === 4 && typeof renderConfirmSummary === 'function') {
-    renderConfirmSummary();
-  }
-  if (typeof renderRightContext === 'function') {
-    renderRightContext();
-  }
-}
-
 /* ---------- Load real Splose appointments into SESSIONS for scheduler ---------- */
 async function loadSploseAppointmentsIntoSessions() {
   try {
@@ -9455,8 +9237,9 @@ function getSelectedPatient() {
   return null;
 }
 function getSelectedType() {
-  const el = document.querySelector('.stype-chip.selected');
-  return el ? el.dataset.stype : 'therapy';
+  // Session type follows the Booking Type choice — no separate step.
+  const st = BOOKING_STATE ? BOOKING_STATE.serviceType : null;
+  return (st === 'assessment' || st === 'initial') ? st : 'therapy';
 }
 function getSelectedTypeDuration() {
   return TYPE_DURATION[getSelectedType()] || 60;
@@ -9793,7 +9576,6 @@ function renderRightContext() {
   const ndisBody = document.getElementById('ctx-ndis-body');
   const ndisTitle = document.getElementById('ctx-ndis-title');
   const regionBody = document.getElementById('ctx-region-body');
-  const weekBody = document.getElementById('ctx-week-body');
 
   // NDIS card
   if (patient) {
@@ -9829,32 +9611,6 @@ function renderRightContext() {
     regionBody.innerHTML = '<div class="micro">Pick a patient on step 1 to see region info.</div>';
   }
 
-  // Week density card
-  const counts = {};
-  let totalMin = 0;
-  DAY_KEYS.forEach(d => { counts[d] = 0; });
-  Object.values(SESSIONS).forEach(s => {
-    if (counts[s.day] != null) {
-      counts[s.day]++;
-      totalMin += durMin(s);
-    }
-  });
-  const totalHrs = (totalMin / 60).toFixed(1);
-  const target = 28;
-  const utilPct = Math.min(100, Math.round((totalMin/60) / target * 100));
-  const maxCount = Math.max(1, ...Object.values(counts));
-  const bars = DAY_KEYS.map(d => {
-    const pct = Math.round(counts[d] / maxCount * 100);
-    const cls = counts[d] >= 4 ? 'heavy' : 'light';
-    return `<div class="density-bar ${cls}" style="height:${Math.max(8, pct)}%;"><div class="lab">${d[0].toUpperCase()+d.slice(1)}</div></div>`;
-  }).join('');
-  weekBody.innerHTML = `
-    <div class="ndis-row"><span class="k">Booked</span><span class="v">${totalHrs} hrs</span></div>
-    <div class="ndis-row"><span class="k">Billable target</span><span class="v">${target} hrs</span></div>
-    <div class="ndis-row"><span class="k">Utilisation</span><span class="v">${utilPct}%</span></div>
-    <div class="density-bars">${bars}</div>
-    <div class="micro" style="margin-top:22px;">${Object.keys(SESSIONS).length === 0 ? 'Calendar is empty — bars will populate as sessions land.' : 'Reflects the actual sessions in your calendar.'}</div>
-  `;
 }
 
 function renderConfirmSummary() {
@@ -11246,8 +11002,6 @@ function quickBook(patientId) {
   // Also set BOOKING_STATE so step 3 can find the patient even without DOM selection
   const patient = PATIENTS.find(p => String(p.id) === String(patientId));
   if (patient) BOOKING_STATE.selectedPatient = patient;
-  // Jump directly to session-type step (step 2)
-  goStep(2);
 }
 
 /* ---------- New patient modal ---------- */
@@ -12638,7 +12392,7 @@ function cnScheduleAll() {
 
 function goToSmartBooking(category) {
   if (typeof switchTab === 'function') switchTab('book');
-  setTimeout(() => { selectBookingCat(category); goStep(1); }, 100);
+  setTimeout(() => { selectBookingCat(category); }, 100);
 }
 
 // Re-run prompt whenever the calendar re-renders
@@ -12722,13 +12476,6 @@ function selectBookingCat(cat) {
     document.getElementById(sectionMap[cat]).style.display = 'block';
   }
 
-  // Update step 1 Next button label
-  const nextBtn = document.getElementById('step1-next-btn');
-  if (cat === 'client') {
-    nextBtn.textContent = 'Next: choose session type →';
-  } else {
-    nextBtn.textContent = 'Next: choose time →';
-  }
 }
 
 /* ---------- Pick the right Splose busy-time type ID for a booking category ----------
@@ -12778,7 +12525,7 @@ function _getBspTiming() {
 }
 
 /* ---------- Step 1: Capture form data and advance ---------- */
-function step1Next() {
+function createBookingNow() {
   const cat = BOOKING_STATE.category;
 
   if (!cat) {
@@ -12786,16 +12533,6 @@ function step1Next() {
     return;
   }
 
-  if (cat === 'client') {
-    if (!BOOKING_STATE.selectedPatient) {
-      showToast('Select a patient', 'Please select a patient before continuing.', 'warn');
-      return;
-    }
-    goStep(2);
-    return;
-  }
-
-  // ── Non-client categories: timing lives in the WHEN & WHERE panel ──────────
   const timing = _getBspTiming();
   if (!timing || !timing.day) {
     showToast('Set a time', 'Please choose a day and start time in the "When & Where" section.', 'warn');
@@ -12806,7 +12543,12 @@ function step1Next() {
     return;
   }
 
-  if (cat === 'email') {
+  if (cat === 'client') {
+    if (!BOOKING_STATE.selectedPatient && !getSelectedPatient()) {
+      showToast('Select a patient', 'Please select a patient before creating the appointment.', 'warn');
+      return;
+    }
+  } else if (cat === 'email') {
     const title = document.getElementById('email-title').value.trim();
     if (!title) { showToast('Title required', 'Please enter a title for this email block.', 'warn'); return; }
     BOOKING_STATE.formData = { category: 'email', title, notes: document.getElementById('email-notes').value.trim(), timing };
@@ -12822,15 +12564,8 @@ function step1Next() {
     BOOKING_STATE.formData = { category: 'custom', name, notes: document.getElementById('custom-notes').value.trim(), timing };
   }
 
-  // Non-client skips steps 2 & 3 — time is already captured above
-  goStep(4);
-}
-
-/* ---------- Back navigation from step 4 ---------- */
-function goStepBack4() {
-  // Client flow came through steps 1→2→3→4; non-client skips 2 and 3
-  if (BOOKING_STATE.category === 'client') goStep(3);
-  else goStep(1);
+  // One surface, one action — create straight from the form.
+  confirmBooking();
 }
 
 /* ---------- Step 4: Confirmation and Calendar Add ---------- */
@@ -12911,9 +12646,9 @@ function renderConfirmSummary() {
 /* ---------- Confirm Booking and Add to Calendar ---------- */
 async function confirmBooking() {
   const cat = BOOKING_STATE.category;
-  const btn = document.querySelector('#step-4 .btn.primary');
+  const btn = document.getElementById('create-booking-btn');
   const resetBtn = () => {
-    if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Write to Splose`; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Create appointment`; }
   };
 
   // ── Non-client fast path (email / admin / bulk-noting / custom) ────────────
@@ -12978,6 +12713,7 @@ async function confirmBooking() {
       }
       if (modal) modal.classList.add('show');
       WIZARD_BOOKED = true;
+      resetBtn();
 
       // Navigate the calendar to the week of this event so it's visible on
       // the canvas immediately — and stays visible after Cmd+R because the
@@ -12999,10 +12735,11 @@ async function confirmBooking() {
   // ── Client session path ───────────────────────────────────────────────────
   const patient = getSelectedPatient();
   const type    = getSelectedType();
-  const slot    = getSelectedSlot();
+  const _t      = _getBspTiming();
+  const slot    = (_t && _t.day) ? { day: _t.day, startH: _t.startH, startM: _t.startM, durationMin: _t.durationMin } : null;
 
   if (!slot) {
-    showToast('Pick a slot first', 'Go back to step 3 and choose one of the suggested slots.');
+    showToast('Set a time', 'Choose a day and start time in the "When & Where" section.', 'warn');
     return;
   }
 
@@ -13029,7 +12766,7 @@ async function confirmBooking() {
 
     // Validate — hard-block on missing critical IDs
     const resetBtn = () => {
-      if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Write to Splose`; }
+      if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Create appointment`; }
     };
 
     if (!practitionerId || !locationId) {
@@ -13135,6 +12872,7 @@ async function confirmBooking() {
     }
     if (modal) modal.classList.add('show');
     WIZARD_BOOKED = true;
+    resetBtn();
 
     // Navigate to the event's week and persist the position so Cmd+R stays there
     if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function') {
@@ -13150,7 +12888,7 @@ async function confirmBooking() {
     console.error('confirmBooking error:', err.message);
     showToast('Splose write failed', err.message, 'warn');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Write to Splose`; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Create appointment`; }
   }
 }
 
@@ -13180,7 +12918,6 @@ function resetWizard() {
   const summary = document.getElementById('confirm-summary');
   if (summary) summary.innerHTML = '<h4>Appointment summary</h4>';
   if (typeof renderRightContext === 'function') renderRightContext();
-  goStep(1);
 }
 
 /* ---------- Calendar rendering ---------- */
@@ -21726,11 +21463,8 @@ function openBookingPanel(opts = {}) {
     document.getElementById('bsp-prefill-strip').style.display = 'none';
   }
 
-  // Reset wizard to step 1 for a fresh booking
-  if (!opts.keepState && typeof goStep === 'function') {
-    if (typeof resetWizard === 'function') resetWizard();
-    else goStep(1);
-  }
+  // Reset the form for a fresh booking
+  if (!opts.keepState && typeof resetWizard === 'function') resetWizard();
 
   // Dirty-tracking: mark dirty on any input change inside the panel
   setTimeout(() => {
@@ -22152,23 +21886,6 @@ function _bspApplyTimingPrefill(opts) {
     if (_origClose) _origClose(confirmIfDirty);
     _bspDurManual = false;
     clearPreviewBlocks();
-  };
-})();
-
-/* Update step1Next to read from unified timing fields */
-(function() {
-  const _origStep1Next = window.step1Next;
-  window.step1Next = function() {
-    // Inject timing data into BOOKING_STATE.formData before calling original
-    const day   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
-    const start = document.getElementById('bsp-start')?.value;
-    const end   = document.getElementById('bsp-end')?.value;
-    const dur   = parseInt(document.getElementById('bsp-dur-slider')?.value || '60');
-    const loc   = document.getElementById('bsp-location')?.value || '';
-    if (BOOKING_STATE) {
-      BOOKING_STATE.timingFields = { day, start, end, durationMin: dur, location: loc };
-    }
-    if (_origStep1Next) _origStep1Next();
   };
 })();
 

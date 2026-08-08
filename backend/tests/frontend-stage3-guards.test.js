@@ -359,7 +359,7 @@ describe('resource hub v1', () => {
 
   test('three functional areas — no Coming Soon, no disabled tabs', () => {
     const v = view();
-    expect(v).toContain('>Resource Library</button>');
+    expect(v).toContain('>Hub</button>'); // R2: the Library panel became the full Hub
     expect(v).toContain('>AI Resource Studio</button>');
     expect(v).toContain('Therapy Store &amp; Purchase Requests</button>');
     expect(v).not.toContain('Coming soon');
@@ -602,10 +602,14 @@ describe('contextual smart booking + interaction pass', () => {
     expect(HTML).toContain('Booking for:');
   });
 
-  test('stepper: four even steps on desktop, compact label on narrow screens', () => {
-    expect(HTML).toContain('id="stepper-compact"');
-    expect(HTML).toContain("'Step ' + n + ' of 4: ' + _lbl");
-    expect(HTML).toContain(".setAttribute('aria-current', 'step')");
+  test('booking is a single form with one Create action — the wizard is retired', () => {
+    expect(HTML).toContain('id="create-booking-btn"');
+    expect(HTML).toContain('function createBookingNow');
+    // no stepper, no session-type step, no suggested-slots step, no confirm step
+    expect(HTML).not.toContain('id="stepper"');
+    expect(HTML).not.toContain('id="step-2"');
+    expect(HTML).not.toContain('id="slot-suggestions"');
+    expect(HTML).not.toContain('id="confirm-summary"');
   });
 
   test('contextual account panel behaves (focus return, Escape, outside click)', () => {
