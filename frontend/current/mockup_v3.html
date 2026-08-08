@@ -3756,6 +3756,23 @@ window.opIcon = function (name, size) {
   }
   .bk-note::before { content: "–"; position: absolute; left: 16px; color: var(--muted); }
   .bk-note.quiet { color: var(--muted); font-size: 11.5px; padding-bottom: 10px; }
+
+  /* ── Address autocomplete (own panel over the server-side Places proxy) ── */
+  .pac-panel {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 4000;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+    overflow: hidden; max-height: 260px; overflow-y: auto;
+  }
+  .pac-item {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    border: none; background: transparent; font-family: inherit;
+    padding: 8px 12px;
+    transition: background var(--t-fast);
+  }
+  .pac-item:hover, .pac-item.hi { background: var(--accent-soft); }
+  .pac-item .pac-name { display: block; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pac-item .pac-sub { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -14317,7 +14334,7 @@ function openBlockDetail(id) {
   if (s.dbId) {
     parts.push(`<button class="btn"
       style="color:var(--danger,#c2412e);border-color:var(--danger,#c2412e);background:transparent;"
-      onclick="bdDeleteEvent('${id}')">' + opIcon('trash') + ' Remove</button>`);
+      onclick="bdDeleteEvent('${id}')">${opIcon('trash', 13)} Remove</button>`);
   }
 
   if (s.cancelled) {
@@ -14427,13 +14444,13 @@ function __bdLocationRows(rows, s, id) {
             Open in Maps ↗
           </a>
           <button class="btn btn-xs" style="font-size:11.5px;padding:2px 8px;"
-            onclick="document.getElementById('bd-addr-edit-section').style.display='block';document.getElementById('bd-addr-input').focus();">
+            onclick="document.getElementById('bd-addr-edit-section').style.display='flex';document.getElementById('bd-addr-input').focus();">
             Change address
           </button>
         </div>
       </div>
       <!-- Collapsible edit section — hidden by default when address is already confirmed -->
-      <div id="bd-addr-edit-section" style="width:100%;display:none;flex-direction:column;gap:5px;padding-top:2px;">
+      <div id="bd-addr-edit-section" style="grid-column:1 / -1;width:100%;display:none;flex-direction:column;gap:5px;padding-top:6px;">
         <div style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">Update address</div>
         <div id="bd-addr-wrap" style="width:100%;position:relative;">
           <input type="text" id="bd-addr-input"
@@ -14444,7 +14461,7 @@ function __bdLocationRows(rows, s, id) {
             oninput="bdAddrChanged('${id}')"
           />
         </div>
-        <div style="font-size:11px;color:var(--ink-soft);">Google Places — select from dropdown for verified coordinates.</div>
+        <div style="font-size:11px;color:var(--ink-soft);">Pick a suggestion to verify the address for travel calculation.</div>
         <div style="display:flex;gap:6px;align-items:center;">
           <button class="btn btn-xs" id="bd-addr-save" disabled
             style="opacity:0.5;cursor:not-allowed;"
@@ -14459,7 +14476,7 @@ function __bdLocationRows(rows, s, id) {
       <div class="k" style="display:flex;justify-content:space-between;width:100%;align-items:center;">
         <span>Address</span>${sourceBadge}
       </div>
-      <div style="width:100%;display:flex;flex-direction:column;gap:5px;">
+      <div style="grid-column:1 / -1;width:100%;display:flex;flex-direction:column;gap:5px;">
         ${locObj.isMissing
           ? `<div style="font-size:11.5px;color:var(--warn,#b06e12);padding:5px 7px;background:#fcf6e8;border-radius:5px;border-left:2px solid var(--warn,#b06e12);">
               Address required for travel calculation. ${locObj.missingReason || 'No address on record'} — add it below.
@@ -14467,7 +14484,7 @@ function __bdLocationRows(rows, s, id) {
           : addr
           ? `<div style="font-size:11.5px;color:var(--warn,#b06e12);padding:3px 0;">Partial address — a full street address gives more accurate travel time.</div>`
           : ''}
-        <div id="bd-addr-edit-section" style="width:100%;display:flex;flex-direction:column;gap:5px;">
+        <div id="bd-addr-edit-section" style="grid-column:1 / -1;width:100%;display:flex;flex-direction:column;gap:5px;">
           <div id="bd-addr-wrap" style="width:100%;position:relative;">
             <input type="text" id="bd-addr-input"
               value="${(addr || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
@@ -14477,7 +14494,7 @@ function __bdLocationRows(rows, s, id) {
               oninput="bdAddrChanged('${id}')"
             />
           </div>
-          <div style="font-size:11px;color:var(--ink-soft);">Google Places — select from dropdown for verified coordinates.</div>
+          <div style="font-size:11px;color:var(--ink-soft);">Pick a suggestion to verify the address for travel calculation.</div>
           <div style="display:flex;gap:6px;align-items:center;">
             <button class="btn btn-xs" id="bd-addr-save" disabled
               style="opacity:0.5;cursor:not-allowed;"
@@ -21090,96 +21107,81 @@ window.addEventListener('DOMContentLoaded', () => {
 ──────────────────────────────────────────────────────────────────────────── */
 function attachPlacesAutocomplete(inputEl, onSelect) {
   if (!inputEl || inputEl._placesInit) return;
-  if (!window.google?.maps?.places) return;
-
-  // As of March 2025, new Google Cloud projects can only use PlaceAutocompleteElement.
-  // This function hides the original <input>, inserts PlaceAutocompleteElement next to it,
-  // and mirrors the selected value back into the hidden input so all existing form reads work.
-  const PAEClass = google.maps.places.PlaceAutocompleteElement;
-  if (typeof PAEClass === 'undefined') {
-    console.warn('⚠️ PlaceAutocompleteElement not available — no autocomplete');
-    return;
-  }
-
   inputEl._placesInit = true;
 
-  // Inject styling once — force light mode, hide search icon, match site's input style
-  if (!document.getElementById('gmp-pac-overrides')) {
-    const s = document.createElement('style');
-    s.id = 'gmp-pac-overrides';
-    s.textContent = `
-      gmp-place-autocomplete {
-        display: block;
-        width: 100%;
-        color-scheme: light;
-        /* Remove the element-level focus ring */
-        outline: none !important;
-        border: none !important;
-        box-shadow: none !important;
-      }
-      /* Hide the search icon */
-      gmp-place-autocomplete::part(icon),
-      gmp-place-autocomplete::part(leading-icon) {
-        display: none !important;
-        width: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      gmp-place-autocomplete::part(input) {
-        width: 100% !important;
-        padding: 9px 12px !important;
-        font-size: 13px !important;
-        border: 1.5px solid #e9e3d9 !important;
-        border-radius: 8px !important;
-        outline: none !important;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-        color: #241f1a !important;
-        background: #ffffff !important;
-        box-sizing: border-box !important;
-        margin: 0 !important;
-      }
-      gmp-place-autocomplete::part(input):focus {
-        border-color: #3d6cae !important;
-        box-shadow: 0 0 0 3px rgba(74,127,193,0.15) !important;
-      }
-    `;
-    document.head.appendChild(s);
+  // Own autocomplete over the server-side Places proxy (/api/maps/places).
+  // The Google PlaceAutocompleteElement uses a CLOSED shadow DOM — it cannot
+  // be styled and rendered as a tiny unstyled box — so we keep our native
+  // input and draw our own suggestion panel in the design system. The API
+  // key never reaches the browser.
+  var wrap = inputEl.parentElement;
+  if (wrap && getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+  var list = document.createElement('div');
+  list.className = 'pac-panel';
+  list.style.display = 'none';
+  wrap.appendChild(list);
+
+  var items = [], hi = -1, seq = 0, timer = null;
+
+  function close() { list.style.display = 'none'; list.innerHTML = ''; items = []; hi = -1; }
+  function choose(i) {
+    var it = items[i]; if (!it) return;
+    inputEl.value = it.addr;
+    inputEl.dataset.lat = it.lat; inputEl.dataset.lng = it.lng;
+    close();
+    if (onSelect) onSelect(it.addr, it.lat, it.lng);
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
-
-  // Hide original input — keep it in DOM so existing .value reads still work
-  inputEl.style.display = 'none';
-
-  // Create and insert PlaceAutocompleteElement immediately after the hidden input
-  // Restrict to Western Australia bounding box — only WA results will appear
-  const waBounds = { south: -35.5, west: 112.9, north: -13.5, east: 129.0 };
-  const pac = new PAEClass({
-    locationRestriction: waBounds,
-    types: ['geocode', 'establishment'],
+  function render() {
+    if (!items.length) { close(); return; }
+    list.innerHTML = items.map(function (it, i) {
+      return '<button type="button" class="pac-item' + (i === hi ? ' hi' : '') + '" data-i="' + i + '">' +
+        '<span class="pac-name">' + escapeHtml(it.name) + '</span>' +
+        '<span class="pac-sub">' + escapeHtml(it.addr) + '</span></button>';
+    }).join('');
+    list.style.display = 'block';
+  }
+  list.addEventListener('mousedown', function (e) { // mousedown wins over input blur
+    var b = e.target.closest('.pac-item'); if (!b) return;
+    e.preventDefault(); choose(Number(b.dataset.i));
   });
-  pac.style.cssText = 'display:block;width:100%;color-scheme:light;';
-  inputEl.parentNode.insertBefore(pac, inputEl.nextSibling);
-
-  pac.addEventListener('gmp-placeselect', async ({ place }) => {
-    try {
-      await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-      const addr = place.formattedAddress || place.displayName || '';
-      const lat  = String(place.location?.lat() ?? '');
-      const lng  = String(place.location?.lng() ?? '');
-      // Mirror into hidden input so any code reading inputEl.value still works
-      inputEl.value       = addr;
-      inputEl.dataset.lat = lat;
-      inputEl.dataset.lng = lng;
-      if (onSelect) onSelect(addr, lat, lng);
-    } catch (err) {
-      console.warn('PlaceAutocompleteElement fetchFields error:', err);
-    }
+  inputEl.addEventListener('keydown', function (e) {
+    if (list.style.display === 'none') return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(hi + 1, items.length - 1); render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(hi - 1, 0); render(); }
+    else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); choose(hi); }
+    else if (e.key === 'Escape') { close(); }
   });
-
-  console.log('✅ PlaceAutocompleteElement attached to', inputEl.id || inputEl.placeholder);
+  inputEl.addEventListener('blur', function () { setTimeout(close, 150); });
+  inputEl.addEventListener('input', function () {
+    var q = inputEl.value.trim();
+    delete inputEl.dataset.lat; delete inputEl.dataset.lng;
+    if (timer) clearTimeout(timer);
+    if (q.length < 3) { close(); return; }
+    timer = setTimeout(function () {
+      var mySeq = ++seq;
+      fetch('/api/maps/places', { method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q + ', WA, Australia', maxResultCount: 6 }) })
+        .then(function (r) { return r.ok ? r.json() : { places: [] }; })
+        .then(function (j) {
+          if (mySeq !== seq) return; // a newer query superseded this response
+          items = (j.places || []).map(function (pl) {
+            return {
+              name: (pl.displayName && pl.displayName.text) || pl.formattedAddress || '',
+              addr: pl.formattedAddress || (pl.displayName && pl.displayName.text) || '',
+              lat: String(pl.location && pl.location.latitude != null ? pl.location.latitude : ''),
+              lng: String(pl.location && pl.location.longitude != null ? pl.location.longitude : ''),
+            };
+          }).filter(function (it) { return it.addr; });
+          hi = items.length ? 0 : -1;
+          render();
+        }).catch(function () {});
+    }, 220);
+  });
 }
 
 function initGooglePlacesAutocomplete() {
-  if (!window.google?.maps?.places) return;
   const qaInput = document.getElementById('qa-custom-address');
   if (qaInput) attachPlacesAutocomplete(qaInput);
   // If the detail panel is open, wire it too (handles SDK-loaded-after-panel case)
@@ -21208,17 +21210,6 @@ window.showQuickAdd = function(...args) {
 };
 </script>
 
-<!-- PlaceAutocompleteElement — force light mode + remove outer focus ring -->
-<style>
-  gmp-place-autocomplete {
-    display: block;
-    width: 100%;
-    color-scheme: light;
-    outline: none !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-</style>
 
 <!-- Google Maps JS SDK — loaded dynamically so the API key stays server-side.
      The backend /api/maps/sdk-url endpoint returns the URL with the key injected. -->
