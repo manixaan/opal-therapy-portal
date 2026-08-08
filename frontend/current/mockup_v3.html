@@ -921,12 +921,25 @@
     background: linear-gradient(135deg, #2aa792 0%, #0f7c6c 58%, #cf7b57 108%);
     border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%;
     display: inline-block; position: relative; flex-shrink: 0;
+    animation: pebbleMorph 9s ease-in-out infinite;
   }
   .brand-pebble::after {
     content: ""; position: absolute; left: 30%; top: 26%;
     width: 34%; height: 30%;
     background: rgba(255, 255, 255, 0.55);
     border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%;
+    animation: pebbleDrift 9s ease-in-out infinite;
+  }
+  /* Living-cell idle motion — slow, small, and killed by reduced-motion. */
+  @keyframes pebbleMorph {
+    0%, 100% { border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%; }
+    33%      { border-radius: 46% 54% 58% 42% / 56% 46% 54% 44%; }
+    66%      { border-radius: 54% 46% 44% 56% / 44% 54% 46% 56%; }
+  }
+  @keyframes pebbleDrift {
+    0%, 100% { left: 30%; top: 26%; border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%; }
+    33%      { left: 37%; top: 33%; border-radius: 45% 55% 48% 52% / 52% 45% 55% 48%; }
+    66%      { left: 25%; top: 30%; border-radius: 55% 45% 60% 40% / 48% 55% 45% 60%; }
   }
   h1.brand-opa {
     font-size: 19px; font-weight: 700; letter-spacing: -0.02em;

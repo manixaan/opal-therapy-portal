@@ -738,4 +738,10 @@ describe('playful premium design pass', () => {
   test('reduced motion support is retained', () => {
     expect(HTML).toContain('@media (prefers-reduced-motion: reduce)');
   });
+
+  test('brand pebble has its living-cell idle motion', () => {
+    expect(HTML).toContain('@keyframes pebbleMorph');
+    expect(HTML).toContain('@keyframes pebbleDrift');
+    expect(HTML).toContain('animation: pebbleMorph 9s ease-in-out infinite;');
+  });
 });
