@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Opal Therapy Portal</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<link rel="icon" href="/favicon.ico" sizes="32x32" />
+<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+<link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="manifest" href="/site.webmanifest" />
 <meta name="theme-color" content="#0f7c6c" />
@@ -3663,34 +3663,43 @@ window.opIcon = function (name, size) {
 
   /* Master Scheduler tiles/grid live in scheduler.css (Phase 1 extraction). */
 
-  /* ── Inline task/reminder composer (Today's work) ─────────────────
-     Adding a task = writing another line in a list, not filling a form. */
-  .sw-group-label {
-    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.5px; color: var(--muted); margin: 6px 0 2px;
-  }
+  /* ── Today's work — one unified To-Do-style list ──────────────────
+     Tasks and reminders share a single list; a reminder is simply a row
+     whose due time shows on the right. Adding a task = writing another
+     line in the list, not filling a form. Rows stay clean by default;
+     quick actions appear on hover ('•••') or selection (Today/Remind/•••). */
   .sw-row {
-    display: flex; align-items: center; gap: 9px;
-    padding: 5px 4px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 8px; border-radius: var(--radius-sm);
+    position: relative; cursor: pointer;
     transition: background var(--t-fast), opacity 300ms ease;
   }
   .sw-row:hover { background: var(--border-soft); }
+  .sw-row.selected { background: var(--accent-soft); box-shadow: inset 0 0 0 1px rgba(15, 124, 108, 0.28); }
   .sw-row.saving { opacity: 0.6; }
+  .sw-row.done { opacity: 0.8; }
   .sw-circle {
     border: none; background: none; padding: 0; margin: 0;
     color: var(--muted); cursor: pointer; line-height: 0; flex-shrink: 0;
     transition: color var(--t-fast), transform var(--t-fast);
   }
   .sw-circle:hover { color: var(--accent); transform: scale(1.08); }
-  .sw-circle.done { color: var(--accent); }
   .sw-circle.ghost { color: var(--border); cursor: default; pointer-events: none; }
+  .sw-check {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+  }
   .sw-title { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sw-title.editable { cursor: text; }
-  .sw-row.done .sw-title { color: var(--muted); text-decoration: line-through; }
+  .sw-row.done .sw-title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border); }
   .sw-meta { font-size: 11.5px; color: var(--muted); }
-  .sw-meta.overdue { color: #9a5f0e; font-weight: 600; }
-  .sw-actions { display: inline-flex; gap: 4px; opacity: 0; transition: opacity var(--t-fast); }
-  .sw-row:hover .sw-actions, .sw-row:focus-within .sw-actions { opacity: 1; }
+  .sw-when { font-size: 11.5px; color: var(--muted); flex-shrink: 0; }
+  .sw-when.overdue { color: var(--accent-2-deep); }
+  .sw-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .sw-actions .sw-mini { display: none; }
+  .sw-row:hover .sw-actions .sw-more,
+  .sw-row.selected .sw-actions .sw-mini,
+  .sw-row:focus-within .sw-actions .sw-mini { display: inline-block; }
   .sw-mini {
     border: 1px solid var(--border); background: var(--panel);
     border-radius: var(--radius-sm); padding: 1px 7px;
@@ -3698,27 +3707,45 @@ window.opIcon = function (name, size) {
     transition: background var(--t-fast);
   }
   .sw-mini:hover { background: var(--border-soft); }
-  .sw-mini:disabled { opacity: 0.35; cursor: default; }
-  .sw-mini.danger { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+  .sw-mini.sw-more { letter-spacing: 1px; }
   .sw-input {
     flex: 1; min-width: 0; border: none; outline: none; background: transparent;
     font-family: inherit; font-size: 13px; color: var(--ink); padding: 2px 0;
   }
   .sw-input::placeholder { color: var(--muted); }
+  .sw-composer { cursor: text; }
   .sw-composer:focus-within { background: var(--border-soft); }
-  .sw-quick { display: inline-flex; gap: 4px; align-items: center; opacity: 0; transition: opacity var(--t-fast); }
-  .sw-composer:focus-within .sw-quick, .sw-quick:hover { opacity: 1; }
-  .sw-chip {
-    border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
-    padding: 1px 9px; font-size: 11px; color: var(--ink-soft); cursor: pointer; font-family: inherit;
-  }
-  .sw-chip.on { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft); }
   .sw-time { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 4px; font-size: 11px; font-family: inherit; color: var(--ink-soft); background: var(--panel); }
-  .sw-error { font-size: 11.5px; color: var(--danger); padding: 2px 4px 0 31px; }
-  .sw-completed { margin-top: 8px; }
-  .sw-completed summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .sw-error { font-size: 11.5px; color: var(--danger); padding: 2px 4px 0 36px; }
+  .sw-pop {
+    position: absolute; right: 6px; top: calc(100% - 2px); z-index: 60;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+    padding: 4px; min-width: 176px; cursor: default;
+  }
+  .sw-pop-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--muted); padding: 6px 10px 2px;
+  }
+  .sw-pop-item {
+    display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px;
+    border: none; background: none; font-family: inherit; font-size: 12.5px;
+    color: var(--ink); padding: 7px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; text-align: left;
+  }
+  .sw-pop-item:hover { background: var(--border-soft); }
+  .sw-pop-item.danger { color: var(--danger); }
+  .sw-pop-sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
+  .sw-completed-toggle {
+    display: flex; align-items: center; gap: 6px; margin-top: 6px;
+    border: none; background: none; font-family: inherit; font-size: 12px;
+    color: var(--muted); cursor: pointer; padding: 6px 8px; border-radius: var(--radius-sm);
+  }
+  .sw-completed-toggle:hover { background: var(--border-soft); }
+  .sw-caret { display: inline-block; transition: transform var(--t-fast); }
+  .sw-caret.open { transform: rotate(90deg); }
   .sw-done-anim .sw-title { text-decoration: line-through; color: var(--muted); transition: color 400ms ease; }
-  .sw-done-anim { opacity: 0.45; transition: opacity 420ms ease; }
+  .sw-done-anim { opacity: 0.45; transition: opacity 700ms ease; }
 
   /* ── Booking-type picker: billable/non-billable groups with drop-downs ── */
   .bk-picker { display: flex; flex-direction: column; gap: 4px; }
@@ -4768,7 +4795,11 @@ window.opIcon = function (name, size) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
           <h3 style="margin:0;flex:1;">Product catalogue</h3>
           <input type="search" id="rh-store-search" class="rh-input" style="max-width:220px;" placeholder="Search products…" oninput="rhLoadCatalogue()">
+          <input type="search" id="rh-supplier-search" class="rh-input" style="max-width:260px;display:none;" placeholder="Search OT suppliers for products…"
+                 onkeydown="if(event.key==='Enter')rhSupplierSearch()">
+          <button class="btn" id="rh-supplier-btn" style="display:none;font-size:12px;" onclick="rhSupplierSearch()">Search suppliers</button>
         </div>
+        <div id="rh-supplier-results" style="display:none;"></div>
         <div id="rh-catalogue" class="rh-quiet">Loading…</div>
         <p class="rh-quiet" style="margin-top:10px;">Product suitability for an individual client remains a therapist judgment.</p>
       </div>
@@ -8022,7 +8053,47 @@ async function rhLoadStore() {
   rhLoadRequests();
 }
 
+var _storeSearchEnabled = null;
+async function rhStoreSearchConfig() {
+  if (_storeSearchEnabled !== null) return;
+  var d = await fetch('/api/store/search/config', { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+  _storeSearchEnabled = !!d.enabled;
+  var inp = document.getElementById('rh-supplier-search');
+  var btn = document.getElementById('rh-supplier-btn');
+  if (inp && _storeSearchEnabled) { inp.style.display = ''; btn.style.display = ''; }
+}
+async function rhSupplierSearch() {
+  var q = (document.getElementById('rh-supplier-search') || {}).value || '';
+  var host = document.getElementById('rh-supplier-results');
+  if (!host || q.trim().length < 2) return;
+  host.style.display = '';
+  host.innerHTML = '<div class="rh-quiet">Searching suppliers&hellip;</div>';
+  var d = await fetch('/api/store/search?q=' + encodeURIComponent(q.trim()), { credentials: 'include' })
+    .then(function (r) { return r.json().catch(function () { return {}; }); }).catch(function () { return {}; });
+  var rows = d.results || [];
+  if (!rows.length) {
+    host.innerHTML = '<div class="rh-quiet">' + (d.message ? escapeHtml(d.message) :
+      'No supplier results for "' + escapeHtml(q) + '". Try another term, or add the product manually with New request.') + '</div>';
+    return;
+  }
+  host.innerHTML = '<div class="rh-quiet" style="margin-bottom:6px;">Supplier results — prices shown on supplier sites are the source of truth.</div>' +
+    rows.map(function (r) {
+      return '<div class="rh-item">' +
+        '<div style="display:flex;gap:10px;align-items:flex-start;">' +
+        (r.thumbnail ? '<img src="' + escapeHtml(r.thumbnail) + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" />' : '') +
+        '<div style="min-width:0;flex:1;">' +
+        '<div style="font-weight:600;font-size:13px;">' + escapeHtml(r.title) + '</div>' +
+        '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(r.snippet) + '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<span class="rh-quiet" style="margin:0;">' + escapeHtml(r.site) + '</span><div style="flex:1"></div>' +
+        '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.link) + '" target="_blank" rel="noopener noreferrer">Open</a>' +
+        '<button class="btn" style="font-size:12px;" onclick="rhOpenPurchase(\'' + escapeHtml(r.title).replace(/'/g, '') + '\',\'' + escapeHtml(r.link) + '\')">Request to buy</button>' +
+        '</div></div></div></div>';
+    }).join('');
+}
 async function rhLoadCatalogue() {
+  rhStoreSearchConfig();
   var host = document.getElementById('rh-catalogue');
   if (!host) return;
   var q = encodeURIComponent((document.getElementById('rh-store-search') || {}).value || '');
@@ -20010,11 +20081,11 @@ var NAV_ADMIN_ONLY_TABS = ['billing', 'ndis', 'dormant'];
 
 var ROLE_NAV = {
   owner: {
-    primary: ['profile', 'calendar'],
+    primary: ['profile', 'calendar', 'resources'],
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
       ['Travel', ['travel', 'logbook']],
-      ['Business', ['resources', 'accounting', 'settings']],
+      ['Business', ['accounting', 'settings']],
     ] },
   },
   admin: {
@@ -25653,18 +25724,21 @@ function _rptWeekStart(date) {
 
 // ── Daily report ─────────────────────────────────────────────
 
-/* ── Snapshot Day V1 (2026-08-07): reminders + daily tasks over the new
-   /api/snapshot backend, rendered inside the daily panel. Personal scope
-   only (backend enforces user_id); timeline items link to the calendar. */
+/* ── Snapshot Day V2 (2026-08-09): ONE unified To-Do-style list over the
+   /api/snapshot backend, rendered inside the daily panel. Reminders and
+   tasks present as a single list — a reminder is simply a row whose due
+   time shows on the right. Presentation is unified; architecture is not:
+   every row keeps its origin (kind 'reminder' | 'task') and calls the
+   matching endpoints. Personal scope only (backend enforces user_id). */
 var __snapReminders = [], __snapTasks = [];
-// ── Inline composer state (frontend-only; empty composers never hit the API) ──
-var __swFocus = null;                       // 'task' | 'reminder' → refocus after render
-var __swVal = { task: '', reminder: '' };   // composer text survives re-renders/failures
-var __swErr = { task: null, reminder: null };
-var __swEditingId = null;                   // task id being edited inline
-var __swDeleteArm = null;                   // task id with an armed (two-step) delete
-var __swRemDay = 'today';                   // reminder composer: 'today' | 'tomorrow'
-var __swRemTime = '16:00';
+// ── UI state (frontend-only; empty composers never hit the API) ──
+var __swFocus = null;         // truthy → refocus the composer after re-render
+var __swVal = '';             // composer text survives re-renders/failures
+var __swErr = null;           // composer save error (typed text is never discarded)
+var __swEditingKey = null;    // 'kind:id' of the row in inline title edit
+var __swSelectedKey = null;   // 'kind:id' of the selected row (reveals quick actions)
+var __swPop = null;           // open popover: { key, type: 'menu' | 'remind' | 'date' }
+var __swPendingDone = {};     // 'kind:id' → timer for the ~800ms completion animation
 
 async function snapLoad() {
   try {
@@ -25688,42 +25762,109 @@ function snapRenderWork() {
   snapAfterRender();
 }
 function snapAfterRender() {
-  if (__swEditingId) {
-    var ed = document.getElementById('sw-edit-' + __swEditingId);
+  if (__swEditingKey) {
+    var ed = document.getElementById('sw-edit-' + __swEditingKey.replace(':', '-'));
     if (ed) { ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length); }
     return;
   }
   if (__swFocus) {
-    var inp = document.getElementById(__swFocus === 'task' ? 'sw-task-input' : 'sw-rem-input');
-    if (inp) { inp.value = __swVal[__swFocus] || ''; inp.focus(); }
+    var inp = document.getElementById('sw-composer-input');
+    if (inp) { inp.value = __swVal || ''; inp.focus(); }
   }
 }
 function snapRefresh() { snapLoad().then(snapRenderWork); }
 
-function snapOverdue(rem) { return rem.state === 'upcoming' && new Date(rem.due_at) < new Date(); }
+// ── Unified row model (presentation only — origin preserved) ─────
+function swKey(kind, id) { return kind + ':' + id; }
+function swFind(kind, id) {
+  var list = kind === 'task' ? __snapTasks : __snapReminders;
+  return list.find(function (x) { return x.id === id; });
+}
+// Date-only due dates (Today / Tomorrow / Pick a date…) are stored as the
+// end-of-day sentinel 23:59 so they rank after timed rows and never read
+// as overdue mid-day; timed reminders keep their real times.
+function swIsDateOnly(d) { return d.getHours() === 23 && d.getMinutes() === 59; }
+function swModel() {
+  var todayKey = new Date().toDateString();
+  var items = [];
+  __snapReminders.forEach(function (r) {
+    if (r.state === 'dismissed') return; // dismiss lives on the notification surface, not here
+    if (r.state === 'completed' && new Date(r.due_at).toDateString() !== todayKey) return;
+    items.push({ kind: 'reminder', id: r.id, title: r.title, when: r.due_at || null,
+                 done: r.state === 'completed', saving: !!r._saving, raw: r });
+  });
+  __snapTasks.forEach(function (t) {
+    items.push({ kind: 'task', id: t.id, title: t.title, when: t.due_time || null,
+                 done: !!t.completed, saving: !!t._saving, raw: t });
+  });
+  var active = items.filter(function (it) { return !it.done; });
+  var done = items.filter(function (it) { return it.done; });
+  active.sort(swCompare); // stable sort: ties keep API order; renders only on discrete actions
+  done.sort(function (a, b) {
+    return new Date(b.raw.completed_at || 0) - new Date(a.raw.completed_at || 0);
+  });
+  return { active: active, done: done };
+}
+// Sort: overdue first, then due-today by time, then today-without-time
+// (date-only sentinel), then dated later, then undated.
+function swGroupOf(it) {
+  if (!it.when) return 4;
+  var d = new Date(it.when), now = new Date();
+  if (d < now) return 0;
+  if (d.toDateString() === now.toDateString()) return swIsDateOnly(d) ? 2 : 1;
+  return 3;
+}
+function swCompare(a, b) {
+  var ga = swGroupOf(a), gb = swGroupOf(b);
+  if (ga !== gb) return ga - gb;
+  if (ga === 4) return 0; // undated: keep the API's sort_order
+  return new Date(a.when) - new Date(b.when);
+}
+// Right-side label: time-only if today, 'Tomorrow', else 'D Mmm';
+// overdue ('Yesterday' / an earlier time / a past date) in muted terracotta.
+function swWhenLabel(it) {
+  if (!it.when) return null;
+  var d = new Date(it.when), now = new Date();
+  var startOf = function (x) { return new Date(x.getFullYear(), x.getMonth(), x.getDate()); };
+  var dayDiff = Math.round((startOf(d) - startOf(now)) / 86400000);
+  var dateOnly = swIsDateOnly(d);
+  var overdue = !it.done && d < now;
+  var text;
+  if (dayDiff === 0) text = dateOnly ? 'Today' : d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+  else if (dayDiff === 1) text = 'Tomorrow';
+  else if (dayDiff === -1) text = 'Yesterday';
+  else text = d.getDate() + ' ' + d.toLocaleDateString('en-AU', { month: 'short' });
+  return { text: text, overdue: overdue };
+}
+function swAbsorb(kind, row) {
+  if (!row) return;
+  var list = kind === 'task' ? __snapTasks : __snapReminders;
+  var i = list.findIndex(function (x) { return x.id === row.id; });
+  if (i >= 0) list[i] = row;
+}
 
-// ── Composer: create on Enter, never on empty ────────────────────
-function swFocusComposer(kind) {
-  __swFocus = kind;
-  var inp = document.getElementById(kind === 'task' ? 'sw-task-input' : 'sw-rem-input');
+// ── Composer: the permanent last active row; Enter creates, never on empty ──
+function swFocusComposer() {
+  __swFocus = true;
+  var inp = document.getElementById('sw-composer-input');
   if (inp) { inp.scrollIntoView({ block: 'nearest' }); inp.focus(); }
 }
-function swComposerKey(ev, kind) {
+function swComposerKey(ev) {
   if (ev.key === 'Enter') {
     ev.preventDefault();
     var text = ev.target.value.trim();
     if (!text) { ev.target.blur(); __swFocus = null; return; }
-    if (kind === 'task') swCreateTask(text); else swCreateReminder(text);
+    swCreateTask(text);
   } else if (ev.key === 'Escape') {
-    ev.target.value = ''; __swVal[kind] = ''; __swErr[kind] = null;
+    ev.target.value = ''; __swVal = ''; __swErr = null;
     ev.target.blur(); __swFocus = null; snapRenderWork();
   }
 }
 async function swCreateTask(title) {
   var tempId = 'tmp-' + Date.now();
   __snapTasks.push({ id: tempId, title: title, completed: false, _saving: true });
-  __swVal.task = ''; __swErr.task = null; __swFocus = 'task';
-  snapRenderWork();
+  __swVal = ''; __swErr = null; __swFocus = true;
+  snapRenderWork(); // fresh empty composer, immediately refocused
   try {
     var r = await fetch('/api/snapshot/tasks', { method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title }) });
@@ -25733,205 +25874,368 @@ async function swCreateTask(title) {
     if (i >= 0) __snapTasks[i] = j.task;
   } catch (_) {
     __snapTasks = __snapTasks.filter(t => t.id !== tempId);
-    __swVal.task = title; __swErr.task = 'Could not save — press Enter to retry.';
+    __swVal = title; __swErr = 'Could not save — press Enter to retry.';
   }
   snapRenderWork();
 }
-async function swCreateReminder(title) {
-  var base = new Date();
-  if (__swRemDay === 'tomorrow') base.setDate(base.getDate() + 1);
-  var hm = (__swRemTime || '16:00').split(':').map(Number);
-  var due = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hm[0] || 16, hm[1] || 0);
-  var tempId = 'tmp-' + Date.now();
-  __snapReminders.push({ id: tempId, title: title, due_at: due.toISOString(), state: 'upcoming', _saving: true });
-  __swVal.reminder = ''; __swErr.reminder = null; __swFocus = 'reminder';
-  snapRenderWork();
-  try {
-    var r = await fetch('/api/snapshot/reminders', { method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title, dueAt: due.toISOString() }) });
-    if (!r.ok) throw new Error('save failed');
-    var j = await r.json();
-    var i = __snapReminders.findIndex(x => x.id === tempId);
-    if (i >= 0) __snapReminders[i] = j.reminder;
-  } catch (_) {
-    __snapReminders = __snapReminders.filter(x => x.id !== tempId);
-    __swVal.reminder = title; __swErr.reminder = 'Could not save — press Enter to retry.';
-  }
-  snapRenderWork();
-}
-function swRemDaySet(day) { __swRemDay = day; snapRenderWork(); swFocusComposer('reminder'); }
-function swRemTimeSet(v) { __swRemTime = v || '16:00'; }
 
-// ── Completion circle (optimistic, gentle strike animation) ──────
-async function swTaskCircle(id) {
-  var t = __snapTasks.find(x => x.id === id); if (!t || String(id).indexOf('tmp-') === 0) return;
-  var next = !t.completed;
-  var row = document.getElementById('sw-task-' + id);
-  if (next && row) { row.classList.add('sw-done-anim'); await new Promise(res => setTimeout(res, 480)); }
-  t.completed = next;
+// ── Selection: click a row → quick actions; click the selected title → edit ──
+function swRowClick(ev, kind, id) {
+  if (ev.target.closest('.sw-circle, .sw-actions, .sw-pop, input')) return;
+  var key = swKey(kind, id);
+  if (__swSelectedKey === key) return;
+  __swSelectedKey = key; __swPop = null;
+  snapRenderWork();
+}
+function swTitleClick(ev, kind, id) {
+  ev.stopPropagation();
+  var key = swKey(kind, id);
+  if (__swSelectedKey === key) { swEditStart(kind, id); return; }
+  __swSelectedKey = key; __swPop = null;
+  snapRenderWork();
+}
+// One document-level binding: outside click / Escape closes popovers and
+// clears the selection (never while an inline edit is in progress).
+(function () {
+  if (window.__swDocBound) return; window.__swDocBound = true;
+  document.addEventListener('click', function (ev) {
+    if (!__swSelectedKey && !__swPop) return;
+    if (ev.target.closest && (ev.target.closest('.sw-row') || ev.target.closest('.sw-pop'))) return;
+    __swSelectedKey = null; __swPop = null; snapRenderWork();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && (__swSelectedKey || __swPop) && !__swEditingKey) {
+      __swSelectedKey = null; __swPop = null; snapRenderWork();
+    }
+  });
+})();
+
+// ── Completion circle: fill + strike, then the row moves after ~800ms.
+// A second click during the animation cancels it (easy accidental-click
+// reversal); clicking a completed row's check reopens it.
+function swCircle(kind, id) {
+  if (String(id).indexOf('tmp-') === 0) return;
+  var it = swFind(kind, id); if (!it) return;
+  var key = swKey(kind, id);
+  if (__swPendingDone[key]) {
+    clearTimeout(__swPendingDone[key]); delete __swPendingDone[key];
+    snapRenderWork(); return;
+  }
+  var isDone = kind === 'task' ? !!it.completed : it.state === 'completed';
+  if (isDone) { swSetDone(kind, id, false); return; }
+  var row = document.getElementById('sw-row-' + kind + '-' + id);
+  if (row) {
+    row.classList.add('sw-done-anim');
+    var btn = row.querySelector('.sw-circle');
+    if (btn) { btn.innerHTML = swCircleSvg(true); btn.setAttribute('aria-label', 'Reopen'); }
+  }
+  __swPendingDone[key] = setTimeout(function () {
+    delete __swPendingDone[key];
+    swSetDone(kind, id, true);
+  }, 800);
+}
+async function swSetDone(kind, id, done) {
+  var it = swFind(kind, id); if (!it) return;
+  var revert;
+  if (kind === 'task') { revert = it.completed; it.completed = done; }
+  else { revert = it.state; it.state = done ? 'completed' : 'upcoming'; }
+  it.completed_at = done ? new Date().toISOString() : null;
   snapRenderWork();
   try {
-    var r = await fetch('/api/snapshot/tasks/' + id + '/' + (next ? 'complete' : 'reopen'), { method: 'POST', credentials: 'include' });
+    var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks/' : 'reminders/') + id +
+      '/' + (done ? 'complete' : 'reopen'), { method: 'POST', credentials: 'include' });
     if (!r.ok) throw new Error();
-  } catch (_) { t.completed = !next; snapRenderWork(); }
-}
-async function swRemCircle(id) {
-  var rm = __snapReminders.find(x => x.id === id); if (!rm || String(id).indexOf('tmp-') === 0) return;
-  if (rm.state !== 'upcoming') { snapReminderAct(id, 'reopen'); return; }
-  var row = document.getElementById('sw-rem-' + id);
-  if (row) { row.classList.add('sw-done-anim'); await new Promise(res => setTimeout(res, 480)); }
-  snapReminderAct(id, 'complete');
+    var j = await r.json();
+    swAbsorb(kind, j.task || j.reminder);
+    snapRenderWork();
+  } catch (_) {
+    if (kind === 'task') it.completed = revert; else it.state = revert;
+    snapRenderWork();
+  }
 }
 
-// ── Inline title editing ─────────────────────────────────────────
-function swEditTask(id) { __swEditingId = id; __swDeleteArm = null; snapRenderWork(); }
-function swEditKey(ev, id) {
-  if (ev.key === 'Enter') { ev.preventDefault(); swEditCommit(id, ev.target.value); }
-  else if (ev.key === 'Escape') { __swEditingId = null; snapRenderWork(); }
+// ── Inline title editing (Enter/blur saves, Escape restores) ─────
+function swEditStart(kind, id) {
+  if (String(id).indexOf('tmp-') === 0) return;
+  var it = swFind(kind, id); if (!it) return;
+  // Completed rows are not editable (the backend freezes completed reminders).
+  if (kind === 'task' ? it.completed : it.state !== 'upcoming') return;
+  __swEditingKey = swKey(kind, id); __swPop = null;
+  snapRenderWork();
 }
-async function swEditCommit(id, value) {
-  var t = __snapTasks.find(x => x.id === id);
-  __swEditingId = null;
+function swEditKey(ev, kind, id) {
+  if (ev.key === 'Enter') { ev.preventDefault(); swEditCommit(kind, id, ev.target.value); }
+  else if (ev.key === 'Escape') { __swEditingKey = null; snapRenderWork(); }
+}
+async function swEditCommit(kind, id, value) {
+  if (__swEditingKey !== swKey(kind, id)) return; // Escape or a second commit already handled it
+  __swEditingKey = null;
+  var it = swFind(kind, id);
   var title = (value || '').trim();
-  if (!t || !title || title === t.title) { snapRenderWork(); return; }
-  var prev = t.title; t.title = title;
+  if (!it || !title || title === it.title) { snapRenderWork(); return; }
+  var prev = it.title; it.title = title;
   snapRenderWork();
   try {
-    var r = await fetch('/api/snapshot/tasks/' + id, { method: 'PATCH', credentials: 'include',
+    var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks/' : 'reminders/') + id, {
+      method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title }) });
     if (!r.ok) throw new Error();
   } catch (_) {
-    t.title = prev; snapRenderWork();
-    if (typeof showToast === 'function') showToast('Edit not saved', 'Check your connection and try again.');
+    it.title = prev; snapRenderWork();
+    if (typeof showToast === 'function') showToast('Edit not saved — check your connection and try again.', true);
   }
 }
 
-// ── Two-step delete (no confirm() dialog) ────────────────────────
-async function swTaskDelete(id) {
-  if (__swDeleteArm !== id) { __swDeleteArm = id; snapRenderWork(); return; }
-  __swDeleteArm = null;
-  var removed = __snapTasks.find(t => t.id === id);
-  __snapTasks = __snapTasks.filter(t => t.id !== id);
+// ── Quick actions: Today / Remind / ••• (due dates + reminders) ──
+function swPopToggle(ev, kind, id, type) {
+  ev.stopPropagation();
+  var key = swKey(kind, id);
+  __swPop = (__swPop && __swPop.key === key && __swPop.type === type) ? null : { key: key, type: type };
+  __swSelectedKey = key;
+  snapRenderWork();
+}
+function swEod(offsetDays) {
+  var d = new Date();
+  d.setDate(d.getDate() + (offsetDays || 0));
+  d.setHours(23, 59, 0, 0);
+  return d;
+}
+function swSetWhenPreset(kind, id, preset) {
+  var d;
+  if (preset === 'today') d = swEod(0);
+  else if (preset === 'tomorrow') d = swEod(1);
+  else { // 'week' — the coming Friday (from the weekend: next week's Friday)
+    d = new Date();
+    d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7));
+    d.setHours(23, 59, 0, 0);
+  }
+  swSetWhen(kind, id, d);
+}
+function swRemindPreset(kind, id, preset) {
+  var d = new Date();
+  if (preset === 'later') { d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 3); }
+  else { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); } // tomorrow morning
+  swSetWhen(kind, id, d);
+}
+function swRemindCustom(kind, id, hhmm) {
+  if (!hhmm) return;
+  var hm = hhmm.split(':').map(Number);
+  var d = new Date(); d.setHours(hm[0] || 0, hm[1] || 0, 0, 0);
+  if (d < new Date()) d.setDate(d.getDate() + 1); // that time has passed → tomorrow
+  swSetWhen(kind, id, d);
+}
+function swDatePicked(kind, id, val) {
+  if (!val) return;
+  var p = val.split('-').map(Number);
+  swSetWhen(kind, id, new Date(p[0], p[1] - 1, p[2], 23, 59, 0, 0));
+}
+async function swSetWhen(kind, id, dateObj) {
+  var it = swFind(kind, id);
+  if (!it || String(id).indexOf('tmp-') === 0) return;
+  __swPop = null;
+  var iso = dateObj.toISOString();
+  var field = kind === 'task' ? 'due_time' : 'due_at';
+  var prev = it[field]; it[field] = iso;
   snapRenderWork();
   try {
-    var r = await fetch('/api/snapshot/tasks/' + id, { method: 'DELETE', credentials: 'include' });
+    var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks/' : 'reminders/') + id, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(kind === 'task' ? { dueTime: iso } : { dueAt: iso }) });
     if (!r.ok) throw new Error();
+    var j = await r.json();
+    swAbsorb(kind, j.task || j.reminder);
+    snapRenderWork();
   } catch (_) {
-    if (removed) { __snapTasks.push(removed); snapRenderWork(); }
+    it[field] = prev; snapRenderWork();
+    if (typeof showToast === 'function') showToast('Change not saved — try again.', true);
   }
 }
 
+// ── Delete: optimistic removal + toast undo. The backend DELETE is a
+// hard delete (snapshot-routes.js), so Undo re-creates the row with the
+// same fields; the restored row simply gets a fresh id from the server.
+async function swDelete(kind, id) {
+  __swPop = null; __swSelectedKey = null;
+  var list = kind === 'task' ? __snapTasks : __snapReminders;
+  var idx = list.findIndex(function (x) { return x.id === id; });
+  if (idx < 0) return;
+  var removed = list.splice(idx, 1)[0];
+  snapRenderWork();
+  try {
+    var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks/' : 'reminders/') + id,
+      { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error();
+    swUndoToast((kind === 'task' ? 'Task' : 'Reminder') + ' deleted', function () { swRestore(kind, removed); });
+  } catch (_) {
+    list.splice(Math.min(idx, list.length), 0, removed);
+    snapRenderWork();
+    if (typeof showToast === 'function') showToast('Delete failed — try again.', true);
+  }
+}
+async function swRestore(kind, row) {
+  var body = kind === 'task'
+    ? { title: row.title, note: row.note || undefined, dueTime: row.due_time || undefined }
+    : { title: row.title, dueAt: row.due_at, note: row.note || undefined, priority: row.priority || undefined };
+  try {
+    var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks' : 'reminders'), {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error();
+    var j = await r.json();
+    var restored = j.task || j.reminder;
+    (kind === 'task' ? __snapTasks : __snapReminders).push(restored);
+    snapRenderWork();
+    var wasDone = kind === 'task' ? !!row.completed : row.state === 'completed';
+    if (wasDone) swSetDone(kind, restored.id, true); // deleted-while-completed stays completed
+  } catch (_) {
+    if (typeof showToast === 'function') showToast('Could not restore — try again.', true);
+  }
+}
+// Undo toast — follows the live showToast pattern (the second, admin-toast
+// definition is the one that wins at runtime; it renders plain text only,
+// so the undo variant carries its own action button).
+function swUndoToast(msg, onUndo) {
+  var t = document.getElementById('sw-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'sw-toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 14px 10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;display:flex;align-items:center;gap:14px;';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = '';
+  var span = document.createElement('span'); span.textContent = msg;
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = 'Undo';
+  btn.style.cssText = 'border:none;background:none;color:#7fd4c6;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px;padding:2px 4px;';
+  btn.onclick = function () { t.style.opacity = '0'; clearTimeout(t._timer); onUndo(); };
+  t.appendChild(span); t.appendChild(btn);
+  t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function () { t.style.opacity = '0'; t.style.pointerEvents = 'none'; }, 6000);
+}
+
+// ── Completed section: collapsed state persists per browser ──────
+function swCompletedCollapsed() {
+  try { return localStorage.getItem('sw_completed_collapsed') !== '0'; } catch (_) { return true; }
+}
+function swToggleCompleted() {
+  try { localStorage.setItem('sw_completed_collapsed', swCompletedCollapsed() ? '0' : '1'); } catch (_) {}
+  snapRenderWork();
+}
+
+// Reminder lifecycle helper — dismiss/defer stay backend-supported for the
+// notification surface (they are deliberately not part of the list rows).
 async function snapReminderAct(id, action, body) {
   await fetch('/api/snapshot/reminders/' + id + '/' + action, { method: 'POST', credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }).catch(function () {});
   snapRefresh();
 }
-async function snapTaskMove(id, dir) {
-  var activeIdx = [];
-  __snapTasks.forEach(function (t, i) { if (!t.completed) activeIdx.push(i); });
-  var pos = activeIdx.findIndex(i => __snapTasks[i].id === id);
-  var swapPos = pos + dir;
-  if (pos < 0 || swapPos < 0 || swapPos >= activeIdx.length) return;
-  var a = activeIdx[pos], b = activeIdx[swapPos];
-  var tmp = __snapTasks[a]; __snapTasks[a] = __snapTasks[b]; __snapTasks[b] = tmp;
-  snapRenderWork();
-  var ids = __snapTasks.filter(t => !t.completed && String(t.id).indexOf('tmp-') !== 0).map(t => t.id);
-  await fetch('/api/snapshot/tasks/order', { method: 'PUT', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) }).catch(function () {});
-}
 // Back-compat shims (older callers/tests)
-function snapAddReminder() { swFocusComposer('reminder'); }
-function snapAddTask() { swFocusComposer('task'); }
-function snapTaskToggle(id, done) { return swTaskCircle(id); }
-function snapTaskDelete(id) { return swTaskDelete(id); }
+function snapAddReminder() { swFocusComposer(); }
+function snapAddTask() { swFocusComposer(); }
+function snapTaskToggle(id, done) { return swCircle('task', id); }
+function snapTaskDelete(id) { return swDelete('task', id); }
 
 // ── Render ───────────────────────────────────────────────────────
+// Icon-system circle: open ring while active; on completion the circle
+// fills with the opIcon('check') mark — never a literal character.
 function swCircleSvg(done) {
-  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-    '<circle cx="12" cy="12" r="9"/>' + (done ? '<polyline points="8 12.5 11 15.5 16 9.5"/>' : '') + '</svg>';
+  if (done) return '<span class="sw-check">' + window.opIcon('check', 11) + '</span>';
+  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>';
+}
+function swPopHtml(it, args) {
+  if (!__swPop || __swPop.key !== swKey(it.kind, it.id)) return '';
+  if (__swPop.type === 'remind') {
+    return '<div class="sw-pop" onclick="event.stopPropagation()">' +
+      '<div class="sw-pop-label">Remind me</div>' +
+      '<button type="button" class="sw-pop-item" onclick="swRemindPreset(' + args + ',\'later\')">Later today</button>' +
+      '<button type="button" class="sw-pop-item" onclick="swRemindPreset(' + args + ',\'tomorrow\')">Tomorrow morning</button>' +
+      '<div class="sw-pop-sep"></div>' +
+      '<label class="sw-pop-item" style="cursor:default;">Custom time' +
+        '<input type="time" class="sw-time" onchange="swRemindCustom(' + args + ', this.value)" aria-label="Custom reminder time"></label>' +
+      '</div>';
+  }
+  if (__swPop.type === 'date') {
+    return '<div class="sw-pop" onclick="event.stopPropagation()">' +
+      '<div class="sw-pop-label">Due date</div>' +
+      '<label class="sw-pop-item" style="cursor:default;">Date' +
+        '<input type="date" class="sw-time" onchange="swDatePicked(' + args + ', this.value)" aria-label="Due date"></label>' +
+      '</div>';
+  }
+  return '<div class="sw-pop" onclick="event.stopPropagation()">' +
+    '<div class="sw-pop-label">Set due date</div>' +
+    '<button type="button" class="sw-pop-item" onclick="swSetWhenPreset(' + args + ',\'today\')">Today</button>' +
+    '<button type="button" class="sw-pop-item" onclick="swSetWhenPreset(' + args + ',\'tomorrow\')">Tomorrow</button>' +
+    '<button type="button" class="sw-pop-item" onclick="swSetWhenPreset(' + args + ',\'week\')">This week</button>' +
+    '<button type="button" class="sw-pop-item" onclick="swPopToggle(event,' + args + ',\'date\')">Pick a date&#8230;</button>' +
+    '<div class="sw-pop-sep"></div>' +
+    '<button type="button" class="sw-pop-item" onclick="swPopToggle(event,' + args + ',\'remind\')">Add reminder</button>' +
+    '<button type="button" class="sw-pop-item danger" onclick="event.stopPropagation();swDelete(' + args + ')">Delete</button>' +
+    '</div>';
+}
+function swRowHtml(it) {
+  var esc = escapeHtml;
+  var key = swKey(it.kind, it.id);
+  var args = "'" + it.kind + "','" + it.id + "'";
+  var domId = 'sw-row-' + it.kind + '-' + it.id;
+
+  if (__swEditingKey === key) {
+    return '<div class="sw-row editing" id="' + domId + '">' +
+      '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
+      '<input id="sw-edit-' + it.kind + '-' + it.id + '" class="sw-input" type="text" value="' + esc(it.title) + '" ' +
+        'onkeydown="swEditKey(event,' + args + ')" onblur="swEditCommit(' + args + ', this.value)"></div>';
+  }
+
+  var pending = !!__swPendingDone[key]; // mid completion animation
+  var showDone = it.done || pending;
+  var cls = 'sw-row' + (it.done ? ' done' : '') +
+    (__swSelectedKey === key ? ' selected' : '') +
+    (it.saving ? ' saving' : '') + (pending ? ' sw-done-anim' : '');
+  var w = swWhenLabel(it);
+  var h = '<div class="' + cls + '" id="' + domId + '" onclick="swRowClick(event,' + args + ')">';
+  h += '<button type="button" class="sw-circle" aria-label="' + (showDone ? 'Reopen' : 'Complete') + '" ' +
+    'onclick="event.stopPropagation();swCircle(' + args + ')">' + swCircleSvg(showDone) + '</button>';
+  h += '<span class="sw-title" onclick="swTitleClick(event,' + args + ')">' + esc(it.title) +
+    (it.saving ? ' <span class="sw-meta">saving&#8230;</span>' : '') + '</span>';
+  if (w) h += '<span class="sw-when' + (w.overdue ? ' overdue' : '') + '">' + esc(w.text) + '</span>';
+  if (!it.done && !it.saving) {
+    h += '<span class="sw-actions">' +
+      '<button type="button" class="sw-mini" onclick="event.stopPropagation();swSetWhenPreset(' + args + ',\'today\')">Today</button>' +
+      '<button type="button" class="sw-mini" onclick="swPopToggle(event,' + args + ',\'remind\')">Remind</button>' +
+      '<button type="button" class="sw-mini sw-more" aria-label="More actions" onclick="swPopToggle(event,' + args + ',\'menu\')">&#8226;&#8226;&#8226;</button>' +
+      '</span>';
+    h += swPopHtml(it, args);
+  }
+  h += '</div>';
+  return h;
 }
 function buildSnapshotWorkHTML() {
-  const esc = escapeHtml;
-  const fmtT = iso => new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-  const todayKey = new Date().toDateString();
-  const rems = __snapReminders.filter(r => r.state !== 'dismissed' &&
-    (r.state === 'upcoming' ? true : new Date(r.due_at).toDateString() === todayKey));
-  const activeTasks = __snapTasks.filter(t => !t.completed);
-  const doneTasks = __snapTasks.filter(t => t.completed);
-  const overdue = rems.filter(snapOverdue).length;
+  var esc = escapeHtml;
+  var model = swModel();
+  var collapsed = swCompletedCollapsed();
 
-  let html = '<div class="rpt-section" id="snap-work"><div class="rpt-section-title" style="display:flex;align-items:center;gap:8px;">Today\'s work' +
-    '<span style="font-weight:400;color:var(--muted);font-size:11.5px;">' + activeTasks.length + ' task' + (activeTasks.length === 1 ? '' : 's') +
-    (overdue ? ' · <span style="color:#9a5f0e;font-weight:600;">' + overdue + ' overdue</span>' : '') + '</span>' +
+  // Quiet header: title + right-aligned remaining count, nothing else.
+  var html = '<div class="rpt-section" id="snap-work">' +
+    '<div class="rpt-section-title" style="display:flex;align-items:baseline;gap:8px;">Today\'s work' +
     '<span style="flex:1"></span>' +
-    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="swFocusComposer(\'reminder\')">+ Reminder</button>' +
-    '<button class="btn" style="font-size:11.5px;padding:3px 10px;" onclick="swFocusComposer(\'task\')">+ Task</button></div>';
+    '<span style="font-weight:400;color:var(--muted);letter-spacing:0;text-transform:none;">' +
+      model.active.length + ' remaining</span></div>';
 
-  // ── Reminders ──
-  html += '<div class="sw-group-label">Reminders</div>';
-  html += rems.map(r => {
-    const od = snapOverdue(r);
-    const done = r.state === 'completed';
-    return '<div class="sw-row' + (done ? ' done' : '') + (r._saving ? ' saving' : '') + '" id="sw-rem-' + r.id + '">' +
-      '<button class="sw-circle' + (done ? ' done' : '') + '" aria-label="' + (done ? 'Reopen reminder' : 'Complete reminder') + '" onclick="swRemCircle(\'' + r.id + '\')">' + swCircleSvg(done) + '</button>' +
-      '<span class="sw-title">' + esc(r.title) +
-      ' <span class="sw-meta' + (od ? ' overdue' : '') + '">' + (od ? 'overdue · ' : '') + fmtT(r.due_at) + '</span></span>' +
-      '<span class="sw-actions">' +
-      (r.state === 'upcoming'
-        ? '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'defer\',{minutes:60})">+1h</button>' +
-          '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'dismiss\')">Dismiss</button>'
-        : '<button class="sw-mini" onclick="snapReminderAct(\'' + r.id + '\',\'reopen\')">Reopen</button>') +
-      '</span></div>';
-  }).join('');
-  // reminder composer: blank row + day/time quick controls
-  html += '<div class="sw-row sw-composer">' +
+  html += model.active.map(swRowHtml).join('');
+
+  // Composer — the permanent last active row.
+  html += '<div class="sw-row sw-composer" onclick="swFocusComposer()">' +
     '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
-    '<input id="sw-rem-input" class="sw-input" type="text" placeholder="Add a reminder…" ' +
-      'value="' + esc(__swVal.reminder || '') + '" ' +
-      'oninput="__swVal.reminder=this.value" onkeydown="swComposerKey(event,\'reminder\')" onfocus="__swFocus=\'reminder\'">' +
-    '<span class="sw-quick">' +
-      '<button class="sw-chip' + (__swRemDay === 'today' ? ' on' : '') + '" onclick="swRemDaySet(\'today\')">Today</button>' +
-      '<button class="sw-chip' + (__swRemDay === 'tomorrow' ? ' on' : '') + '" onclick="swRemDaySet(\'tomorrow\')">Tomorrow</button>' +
-      '<input type="time" class="sw-time" value="' + esc(__swRemTime) + '" onchange="swRemTimeSet(this.value)" aria-label="Reminder time">' +
-    '</span></div>';
-  if (__swErr.reminder) html += '<div class="sw-error">' + esc(__swErr.reminder) + '</div>';
+    '<input id="sw-composer-input" class="sw-input" type="text" placeholder="Add a task&#8230;" ' +
+      'value="' + esc(__swVal || '') + '" ' +
+      'oninput="__swVal=this.value" onkeydown="swComposerKey(event)" onfocus="__swFocus=true" onblur="__swFocus=null"></div>';
+  if (__swErr) html += '<div class="sw-error">' + esc(__swErr) + '</div>';
 
-  // ── Tasks ──
-  html += '<div class="sw-group-label" style="margin-top:10px;">Tasks</div>';
-  html += activeTasks.map((t, i) => {
-    if (__swEditingId === t.id) {
-      return '<div class="sw-row editing" id="sw-task-' + t.id + '">' +
-        '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
-        '<input id="sw-edit-' + t.id + '" class="sw-input" type="text" value="' + esc(t.title) + '" ' +
-          'onkeydown="swEditKey(event,\'' + t.id + '\')" onblur="swEditCommit(\'' + t.id + '\', this.value)"></div>';
-    }
-    return '<div class="sw-row' + (t._saving ? ' saving' : '') + '" id="sw-task-' + t.id + '">' +
-      '<button class="sw-circle" aria-label="Complete task" onclick="swTaskCircle(\'' + t.id + '\')">' + swCircleSvg(false) + '</button>' +
-      '<span class="sw-title editable" title="Click to edit" onclick="swEditTask(\'' + t.id + '\')">' + esc(t.title) +
-        (t._saving ? ' <span class="sw-meta">saving…</span>' : '') + '</span>' +
-      '<span class="sw-actions">' +
-        '<button class="sw-mini"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up" onclick="snapTaskMove(\'' + t.id + '\',-1)">&#8593;</button>' +
-        '<button class="sw-mini"' + (i === activeTasks.length - 1 ? ' disabled' : '') + ' aria-label="Move down" onclick="snapTaskMove(\'' + t.id + '\',1)">&#8595;</button>' +
-        (__swDeleteArm === t.id
-          ? '<button class="sw-mini danger" onclick="swTaskDelete(\'' + t.id + '\')">Delete?</button>'
-          : '<button class="sw-mini" aria-label="Delete task" onclick="swTaskDelete(\'' + t.id + '\')">&#10005;</button>') +
-      '</span></div>';
-  }).join('');
-  // task composer — typing another line into the list
-  html += '<div class="sw-row sw-composer">' +
-    '<span class="sw-circle ghost">' + swCircleSvg(false) + '</span>' +
-    '<input id="sw-task-input" class="sw-input" type="text" placeholder="Add a task…" ' +
-      'value="' + esc(__swVal.task || '') + '" ' +
-      'oninput="__swVal.task=this.value" onkeydown="swComposerKey(event,\'task\')" onfocus="__swFocus=\'task\'"></div>';
-  if (__swErr.task) html += '<div class="sw-error">' + esc(__swErr.task) + '</div>';
-
-  if (doneTasks.length) {
-    html += '<details class="sw-completed"><summary>Completed (' + doneTasks.length + ')</summary>' +
-      doneTasks.map(t => '<div class="sw-row done" id="sw-task-' + t.id + '">' +
-        '<button class="sw-circle done" aria-label="Reopen task" onclick="swTaskCircle(\'' + t.id + '\')">' + swCircleSvg(true) + '</button>' +
-        '<span class="sw-title">' + esc(t.title) + '</span></div>').join('') +
-      '</details>';
+  if (model.done.length) {
+    html += '<button type="button" class="sw-completed-toggle" onclick="swToggleCompleted()" aria-expanded="' + (!collapsed) + '">' +
+      '<span class="sw-caret' + (collapsed ? '' : ' open') + '">&#9656;</span>Completed (' + model.done.length + ')</button>';
+    if (!collapsed) html += model.done.map(swRowHtml).join('');
   }
   html += '</div>';
   return html;

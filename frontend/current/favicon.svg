@@ -1,12 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Opal Therapy Portal icon — keep in sync with scripts/generate-icons.js -->
+  <!-- Opa — the Opal Therapy living-cell mark (matches .brand-pebble / #opa-fab) -->
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#00b8d9"/>
-      <stop offset="1" stop-color="#007a9c"/>
+    <linearGradient id="opa-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2aa792"/>
+      <stop offset="0.58" stop-color="#0f7c6c"/>
+      <stop offset="1" stop-color="#cf7b57"/>
     </linearGradient>
   </defs>
-  <rect width="100" height="100" rx="22" fill="url(#g)"/>
-  <circle cx="48" cy="56" r="22.75" fill="none" stroke="#ffffff" stroke-width="10.5"/>
-  <path d="M76 13.5 Q77 24 87.5 25 Q77 26 76 36.5 Q75 26 64.5 25 Q75 24 76 13.5 Z" fill="#ffffff"/>
+  <!-- organic membrane: asymmetric blob echoing border-radius 58% 42% 52% 48% / 50% 58% 42% 50% -->
+  <path fill="url(#opa-g)" d="M 52 4
+    C 75 5 96 21 96 48
+    C 96 75 76 96 47 96
+    C 22 96 4 77 4 49
+    C 4 23 26 3 52 4 Z"/>
+  <!-- nucleus -->
+  <ellipse cx="46" cy="41" rx="17" ry="15" fill="#ffffff" opacity="0.55"
+           transform="rotate(-12 46 41)"/>
 </svg>

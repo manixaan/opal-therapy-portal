@@ -126,7 +126,7 @@ describe('installable web app', () => {
       const html = fs.readFileSync(path.join(FRONTEND, page), 'utf8');
       expect(html).toContain('<link rel="manifest" href="/site.webmanifest" />');
       expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />');
-      expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+      expect(html).toContain('<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />');
       expect(html).toContain('<meta name="theme-color" content="#0f7c6c" />');
     }
   });
@@ -212,7 +212,9 @@ describe('role-based navigation (RBAC)', () => {
     expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] }");
     expect(HTML).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] }");
     expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
-    expect(HTML).toContain("['Business', ['resources', 'accounting', 'settings']]");
+    // Resource Hub R2 promoted 'resources' into the owner's primary nav
+    expect(HTML).toContain("primary: ['profile', 'calendar', 'resources']");
+    expect(HTML).toContain("['Business', ['accounting', 'settings']]");
     // admin gets a Travel menu only — no business/practice groups
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
@@ -643,34 +645,47 @@ describe('contextual smart booking + interaction pass', () => {
   });
 });
 
-// ── Snapshot Day V1 (2026-08-07) ─────────────────────────────────────────────
-describe('snapshot day v1', () => {
-  test('reminders + tasks module wired to the snapshot API', () => {
+// ── Snapshot Day V2 (2026-08-09): one unified To-Do-style work list ──────────
+describe('snapshot day unified work list', () => {
+  test('one list over both snapshot APIs — presentation unified, origin preserved', () => {
     expect(HTML).toContain("fetch('/api/snapshot/reminders'");
     expect(HTML).toContain("fetch('/api/snapshot/tasks'");
     expect(HTML).toContain('function buildSnapshotWorkHTML()');
     expect(HTML).toContain('return html_prefix + html;');
-    expect(HTML).toContain('function snapTaskMove(id, dir)'); // reorder persists via PUT order
-    expect(HTML).toContain("'/api/snapshot/tasks/order'");
+    expect(HTML).toContain('function swModel()'); // reminders + tasks merged for rendering only
+    expect(HTML).toContain("kind === 'task' ? 'tasks/' : 'reminders/'"); // rows call their own endpoints
+    expect(HTML).toContain('function swCompare('); // overdue → today → dated → undated ordering
   });
 
-  test('reminder lifecycle actions exist; delete is a two-step inline confirm', () => {
-    for (const a of ["'complete'", "'dismiss'", "'reopen'", "'defer'"]) expect(HTML).toContain('snapReminderAct(');
-    // prompt()/confirm() task flows are retired in favour of the inline composer
+  test('quiet header + composer replace the + Reminder / + Task buttons', () => {
+    expect(HTML).not.toContain('>+ Reminder</button>');
+    expect(HTML).not.toContain('>+ Task</button>');
+    expect(HTML).toContain("' remaining</span>");
+    expect(HTML).toContain('id="sw-composer-input"');
+    expect(HTML).toContain('swComposerKey(event)');
+    expect(HTML).toContain("if (!text) { ev.target.blur(); __swFocus = null; return; }"); // Enter on empty never creates
+    expect(HTML).toContain('function snapRenderWork()'); // surgical re-render keeps the caret
+    expect(HTML).toContain('function swEditCommit'); // inline title editing (Enter saves, Escape restores)
+    expect(HTML).toContain("opIcon('check'"); // icon-system check mark, never a literal character
+  });
+
+  test('delete is optimistic with toast undo; no prompt()/confirm() anywhere', () => {
+    expect(HTML).toContain('function swDelete(');
+    expect(HTML).toContain('function swUndoToast(');
+    expect(HTML).toContain('function swRestore('); // hard-delete backend → Undo re-creates the row
     expect(HTML).not.toContain("prompt('Task:')");
     expect(HTML).not.toContain("prompt('Reminder title:')");
     expect(HTML).not.toContain("confirm('Delete this task?')");
-    expect(HTML).toContain('__swDeleteArm');
+    // the reminder-specific '+1h / Dismiss' inline controls are gone from list rows
+    expect(HTML).not.toContain("'defer',{minutes:60})\">+1h</button>");
+    expect(HTML).toContain('function snapReminderAct('); // dismiss/defer stay for the notification surface
   });
 
-  test('inline composer: list-style task entry, no modal, no empty records', () => {
-    expect(HTML).toContain('id="sw-task-input"');
-    expect(HTML).toContain('id="sw-rem-input"');
-    expect(HTML).toContain('swComposerKey(event,');
-    expect(HTML).toContain("if (!text) { ev.target.blur(); __swFocus = null; return; }"); // Enter on empty never creates
-    expect(HTML).toContain('function snapRenderWork()'); // surgical re-render keeps the caret
-    expect(HTML).toContain('function swEditCommit'); // inline title editing
-    expect(HTML).toContain('swCircleSvg'); // icon-system circle, not emoji
+  test('completion + collapsible Completed section persist via API and localStorage', () => {
+    expect(HTML).toContain("(done ? 'complete' : 'reopen')"); // completion circle uses the API lifecycle
+    expect(HTML).toContain('__swPendingDone'); // ~800ms animation with cancel-on-second-click
+    expect(HTML).toContain("localStorage.getItem('sw_completed_collapsed')");
+    expect(HTML).toContain('function swToggleCompleted()');
   });
 
   test('snapshot/report panel emoji sweep held', () => {
