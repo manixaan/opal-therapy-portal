@@ -462,6 +462,10 @@ app.use('/', require('./travel-routes'));
 app.use('/', require('./snapshot-routes'));
 app.use('/', require('./scheduler-routes'));
 
+// Mobile companion API (own-day aggregates + voice-note drafts; local data
+// only — never calls Splose/Outlook/Xero/AI; strictly caller-scoped)
+app.use('/', require('./mobile-routes'));
+
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));
 
