@@ -14341,7 +14341,9 @@ function openBlockDetail(id) {
   const __bdId = id; // capture for closure
   setTimeout(() => {
     const addrInput = document.getElementById('bd-addr-input');
-    if (addrInput && typeof attachPlacesAutocomplete === 'function' && window.google?.maps?.places) {
+    // No SDK gate: our autocomplete uses the server-side /api/maps/places
+    // proxy, not the Google JS SDK (which only loads with the Scheduler map).
+    if (addrInput && typeof attachPlacesAutocomplete === 'function') {
       attachPlacesAutocomplete(addrInput, (selectedAddr, lat, lng) => {
         // Store lat/lng on the input so bdSaveAddress can read them
         addrInput.dataset.lat = lat || '';
