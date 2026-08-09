@@ -12892,26 +12892,14 @@ async function confirmBooking() {
         if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
       }
 
-      // Success modal
-      const modal = document.getElementById('modal-booked');
-      const body  = modal?.querySelector('.modal-body');
-      if (body) {
-        const outlookLine = outlookId
-          ? `<p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Added to Outlook calendar ✓</p>`
-          : `<p style="margin:4px 0 0;font-size:12px;color:var(--muted);">Outlook not connected — event added to app calendar only.</p>`;
-        body.innerHTML = `
-          <p style="margin:0 0 6px;"><strong>${outlookTitle}</strong> added for <strong>${DAY_LABELS[t.day] || t.day} ${fmtTime(t.startH, t.startM)} – ${fmtTime(t.endH, t.endM)} AWST · ${t.durationMin} min</strong>.</p>
-          ${outlookLine}
-          <p style="margin:6px 0 0;font-size:12px;color:var(--muted);">Splose does not support creating busy-time blocks via API — add this manually in Splose if needed.</p>`;
-      }
-      if (modal) modal.classList.add('show');
+      // No success modal — land the user straight on the calendar with the
+      // new event in view; a quiet toast confirms the write.
       WIZARD_BOOKED = true;
       resetBtn();
-
-      // Navigate the calendar to the week of this event so it's visible on
-      // the canvas immediately — and stays visible after Cmd+R because the
-      // week position is now saved to localStorage by gotoWeekOf().
+      if (typeof resetWizard === 'function') resetWizard();
+      if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
       if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
+      showToast(`${outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
 
       // Note: no manual delta sync needed — the backend POST /api/outlook/events
       // already writes to the local DB synchronously, so the event survives Cmd+R
@@ -13027,22 +13015,15 @@ async function confirmBooking() {
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
     }
 
-    // Show success modal — honest Outlook-only reporting (no Splose write occurs)
-    const modal = document.getElementById('modal-booked');
-    const body  = modal?.querySelector('.modal-body');
-    if (body) {
-      body.innerHTML = `
-        <p style="margin:0 0 8px;"><strong>${_outlookTitle}</strong> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
-        <p style="margin:0;font-size:12px;color:${outlookId ? 'var(--muted)' : 'var(--warn, #9a5f0e)'};">${outlookNote}</p>`;
-    }
-    if (modal) modal.classList.add('show');
+    // No success modal — go straight to the calendar with the event in view.
     WIZARD_BOOKED = true;
     resetBtn();
-
-    // Navigate to the event's week and persist the position so Cmd+R stays there
+    if (typeof resetWizard === 'function') resetWizard();
+    if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
     if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function') {
       gotoWeekOf(DAY_DATES[slot.day]);
     }
+    showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the
