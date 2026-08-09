@@ -107,6 +107,54 @@ router.get('/api/store/search', requireAuth, async (req, res) => {
   }
 });
 
+const isHttpsUrl = (u) => { try { return new URL(u).protocol === 'https:'; } catch (e) { return false; } };
+
+// Owner action: set/clear a product thumbnail directly.
+router.post('/api/store/products/:id/thumbnail', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') return res.status(403).json({ error: 'role_denied' });
+    const url = req.body && req.body.url ? String(req.body.url).slice(0, 2000) : null;
+    if (url && !isHttpsUrl(url)) return res.status(400).json({ error: 'invalid_url' });
+    const db = require('./database');
+    const r = await db.pool.query(
+      `UPDATE resources SET thumbnail_url = $1, updated_at = NOW()
+        WHERE id = $2 AND resource_type = 'product_link' RETURNING id`,
+      [url, req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
+// Owner action: backfill missing catalogue thumbnails from supplier search.
+// Explicit button press only — one PSE query per product without a photo.
+router.post('/api/store/backfill-thumbnails', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') return res.status(403).json({ error: 'role_denied' });
+    if (!enabled()) return res.json({ enabled: false, updated: 0 });
+    const db = require('./database');
+    const rows = (await db.pool.query(
+      `SELECT id, title FROM resources
+        WHERE resource_type = 'product_link' AND status = 'approved'
+          AND (thumbnail_url IS NULL OR thumbnail_url = '') LIMIT 20`)).rows;
+    let updated = 0; const misses = [];
+    for (const row of rows) {
+      try {
+        const resp = await axios.get('https://www.googleapis.com/customsearch/v1', {
+          params: { key: process.env.GOOGLE_CSE_KEY, cx: process.env.GOOGLE_CSE_CX,
+                    q: row.title, num: 3, gl: 'au', safe: 'active' },
+          timeout: 8000,
+        });
+        const hit = mapItems(resp.data && resp.data.items).find((r2) => r2.thumbnail);
+        if (hit) {
+          await db.pool.query('UPDATE resources SET thumbnail_url = $1 WHERE id = $2', [hit.thumbnail, row.id]);
+          updated += 1;
+        } else misses.push(row.title);
+      } catch (e) { misses.push(row.title); }
+    }
+    res.json({ enabled: true, scanned: rows.length, updated, misses });
+  } catch (e) { res.status(500).json({ error: 'server_error' }); }
+});
+
 module.exports = router;
 module.exports.mapItems = mapItems;
 module.exports._resetStoreSearchRateLimit = _resetStoreSearchRateLimit;
