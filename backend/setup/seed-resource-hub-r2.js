@@ -8,12 +8,15 @@
  *
  *   - resources (upsert by organisation_id + slug; marker source_reference='r2-seed:<hash>')
  *   - resource_versions (version 1 'initial' for policies)
- *   - resource_collections + items (8 curated shelves)
+ *   - resource_collections + items (9 curated shelves incl. the OT Knowledge
+ *     Library; knowledge-library NDIS-core rows are cross-listed into 'ndis')
  *   - learning_paths + items (4 starter kits)
- *   - resource_tag_links + resource_tags.aliases (existing R1 vocabulary only)
+ *   - resource_tag_links + resource_tags.aliases (existing R1 vocabulary plus
+ *     the controlled cost/origin/flag categories seeded here)
  *   - external_sources + resource_external_sources (official source registry)
  *   - resource_quick_links (9 links)
- *   - pd_events (3 sample events, future dates relative to run time)
+ *   - pd_events (3 sample events with run-relative dates, plus fixed-date
+ *     course listings idempotent by title + starts_at)
  *   - quizzes + quiz_questions (Responsible AI knowledge check)
  *
  *   node backend/setup/seed-resource-hub-r2.js          # seed / refresh
@@ -37,6 +40,7 @@ const { Pool } = require('pg');
 
 const core = require('./r2-content/core');
 const ndisClinical = require('./r2-content/ndis-clinical');
+const knowledgeLibrary = require('./r2-content/knowledge-library');
 
 const pool = new Pool({
   host:     process.env.DB_HOST     || 'localhost',
@@ -57,13 +61,24 @@ const seedHash = (r) => crypto.createHash('sha256')
   .digest('hex').slice(0, 16);
 const seedRef = (r) => `${SEED_MARKER}:${seedHash(r)}`;
 
-const ALL_RESOURCES = [...core.resources, ...ndisClinical.resources];
-const COLLECTIONS = core.collections;
+const ALL_RESOURCES = [...core.resources, ...ndisClinical.resources, ...knowledgeLibrary.resources];
+
+// Collections: the core shelves, with the knowledge-library's NDIS-core rows
+// cross-listed into the existing 'ndis' shelf (same resource, two shelves —
+// never a duplicate row), plus the OT Knowledge Library shelf itself.
+const COLLECTIONS = core.collections
+  .map((c) => c.key === 'ndis'
+    ? { ...c, slugs: [...c.slugs, ...knowledgeLibrary.ndisCollectionExtras.filter((s) => !c.slugs.includes(s))] }
+    : c)
+  .concat([knowledgeLibrary.collection]);
+
 const LEARNING_PATHS = core.learningPaths;
 const QUICK_LINKS = core.quickLinks;
 const PD_EVENTS = core.pdEvents;
+const FIXED_PD_EVENTS = knowledgeLibrary.pdEvents;
 const QUIZ = core.quiz;
 const EXTERNAL_SOURCES = ndisClinical.externalSources;
+const CONTROLLED_TAGS = knowledgeLibrary.controlledTags;
 
 // ── Tag links + aliases ─────────────────────────────────────────────────────
 // Maps seeded resources onto the EXISTING R1 77-tag vocabulary (no new tags
@@ -72,7 +87,7 @@ const EXTERNAL_SOURCES = ndisClinical.externalSources;
 // professional boundaries, school, risk assessment — hit via the tag-alias
 // search path, not just incidental substring matches.
 
-const TAG_ALIASES = [
+const CORE_TAG_ALIASES = [
   { category: 'type', name: 'Assessment support',
     aliases: ['FCA', 'functional capacity assessment', 'functional assessment'] },
   { category: 'therapy_area', name: 'Assistive technology',
@@ -93,8 +108,26 @@ const TAG_ALIASES = [
     aliases: ['school', 'classroom'] },
 ];
 
-// slug → [[category, name], ...] — every pair must exist in the R1 vocabulary.
-const TAG_LINKS = {
+// Union of the core alias sets and the knowledge-library additions, merged
+// per tag so the single UPDATE per tag carries every alias (the alias write
+// is a full replace, so partial lists would clobber each other).
+const TAG_ALIASES = (() => {
+  const byTag = new Map();
+  for (const t of [...CORE_TAG_ALIASES, ...knowledgeLibrary.tagAliases]) {
+    const key = `${t.category}::${t.name}`;
+    const existing = byTag.get(key);
+    if (existing) {
+      for (const a of t.aliases) if (!existing.aliases.includes(a)) existing.aliases.push(a);
+    } else {
+      byTag.set(key, { category: t.category, name: t.name, aliases: [...t.aliases] });
+    }
+  }
+  return [...byTag.values()];
+})();
+
+// slug → [[category, name], ...] — every pair must exist in the R1 vocabulary
+// (or in the knowledge-library's controlled cost/origin/flag categories).
+const CORE_TAG_LINKS = {
   // Assessment + reporting
   'fca-workflow': [['type', 'Assessment support']],
   'template-fca-report': [['type', 'Assessment support'], ['type', 'Report-writing phrase bank']],
@@ -155,6 +188,20 @@ const TAG_LINKS = {
   'caregiver-coaching': [['therapy_area', 'Parent coaching']],
 };
 
+// Merged link map: core links plus the knowledge-library's (which also stamp
+// cost/origin/flag and extra memberships onto pre-existing R2 slugs).
+const TAG_LINKS = (() => {
+  const merged = {};
+  for (const [slug, tags] of Object.entries(CORE_TAG_LINKS)) merged[slug] = [...tags];
+  for (const [slug, tags] of Object.entries(knowledgeLibrary.tagLinks)) {
+    merged[slug] = merged[slug] || [];
+    for (const t of tags) {
+      if (!merged[slug].some(([c, n]) => c === t[0] && n === t[1])) merged[slug].push(t);
+    }
+  }
+  return merged;
+})();
+
 function assertUniqueSlugs() {
   const seen = new Set();
   for (const r of ALL_RESOURCES) {
@@ -184,6 +231,12 @@ async function clean(orgId) {
       WHERE (category, name) IN (${TAG_ALIASES.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ')})`,
     TAG_ALIASES.flatMap((t) => [t.category, t.name]));
   console.log(`- reset aliases on ${ta.rowCount} tags`);
+
+  const ct = await pool.query(
+    `DELETE FROM resource_tags
+      WHERE (category, name) IN (${CONTROLLED_TAGS.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ')})`,
+    CONTROLLED_TAGS.flatMap((t) => [t.category, t.name]));
+  console.log(`- removed ${ct.rowCount} controlled tags (cost/origin/flag; links cascade)`);
 
   const c = await pool.query(
     `DELETE FROM resource_collections WHERE organisation_id IS NOT DISTINCT FROM $1 AND key = ANY($2)`,
@@ -227,7 +280,8 @@ async function upsertResources(orgId, ownerId) {
       !!r.mandatory, !!r.ack, !!r.cpdEligible, r.cpdHours || null,  // 12-15
       r.authority || 'internal', r.sourcePublisher || null,         // 16-17
       r.sourceTitle || null, r.sourceEffective || null,             // 18-19
-      (r.authority && r.authority !== 'internal') || r.sourcePublisher ? VERIFIED_AT : null, // 20
+      r.sourceVerifiedAt                                            // 20
+        || ((r.authority && r.authority !== 'internal') || r.sourcePublisher ? VERIFIED_AT : null),
     ];
 
     const { rows: existing } = await pool.query(
@@ -364,6 +418,21 @@ async function upsertLearningPaths(orgId, idBySlug) {
   return { counts, skipped };
 }
 
+// New controlled tag categories (cost: Free/Paid, origin: Australia/
+// International, flag: Essential). Insert-if-missing — never renames or
+// removes anything a person added to the vocabulary.
+async function upsertControlledTags() {
+  let created = 0;
+  for (const t of CONTROLLED_TAGS) {
+    const res = await pool.query(
+      `INSERT INTO resource_tags (category, name) VALUES ($1, $2)
+       ON CONFLICT (category, name) DO NOTHING`,
+      [t.category, t.name]);
+    created += res.rowCount;
+  }
+  return { defined: CONTROLLED_TAGS.length, created };
+}
+
 async function upsertTagLinksAndAliases(idBySlug) {
   const skipped = [];
   let aliasTags = 0;
@@ -460,10 +529,12 @@ async function upsertQuickLinks(orgId) {
 }
 
 async function upsertPdEvents(orgId, ownerId) {
-  // Dates are relative to run time, so refresh seeded events on every run.
+  // Sample events carry dates relative to run time, so those are refreshed
+  // wholesale on every run (delete by title, reinsert with fresh dates).
   await pool.query(
-    `DELETE FROM pd_events WHERE organisation_id IS NOT DISTINCT FROM $1 AND source = $2`,
-    [orgId, SEED_MARKER]);
+    `DELETE FROM pd_events WHERE organisation_id IS NOT DISTINCT FROM $1
+      AND source = $2 AND title = ANY($3)`,
+    [orgId, SEED_MARKER, PD_EVENTS.map((e) => e.title)]);
   for (const e of PD_EVENTS) {
     const start = new Date(Date.now() + e.daysFromNow * 24 * 3600e3);
     start.setUTCHours(e.startHour - 8, 0, 0, 0); // Perth-local start hour (AWST, no DST)
@@ -477,7 +548,28 @@ async function upsertPdEvents(orgId, ownerId) {
        start.toISOString(), end.toISOString(), e.mode, e.location, e.costCents, e.cpdHours,
        e.registrationUrl, JSON.stringify(e.targetRoles), SEED_MARKER, ownerId]);
   }
-  return PD_EVENTS.length;
+
+  // Fixed-date course listings (knowledge library): idempotent by
+  // (title, starts_at, source). cpd_hours and cost stay NULL — never invented.
+  let fixedNew = 0;
+  for (const e of FIXED_PD_EVENTS) {
+    const existing = await pool.query(
+      `SELECT 1 FROM pd_events
+        WHERE organisation_id IS NOT DISTINCT FROM $1
+          AND title = $2 AND starts_at = $3::timestamptz AND source = $4`,
+      [orgId, e.title, e.startsAt, SEED_MARKER]);
+    if (existing.rows.length) continue;
+    await pool.query(
+      `INSERT INTO pd_events (organisation_id, title, provider, description, topic,
+         starts_at, ends_at, timezone, mode, location, cost_cents, cpd_hours,
+         registration_url, target_roles, source, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, NULL, NULL, $10, $11, $12, 'upcoming', $13)`,
+      [orgId, e.title, e.provider, e.description, e.topic,
+       e.startsAt, e.timezone, e.mode, e.location, e.registrationUrl,
+       JSON.stringify(['therapist']), SEED_MARKER, ownerId]);
+    fixedNew++;
+  }
+  return { relative: PD_EVENTS.length, fixed: FIXED_PD_EVENTS.length, fixedNew };
 }
 
 async function upsertQuiz(idBySlug) {
@@ -562,6 +654,9 @@ async function main() {
   const versions = await upsertPolicyVersions(idBySlug, ownerId);
   console.log(`+ policy versions created this run: ${versions}`);
 
+  const ctl = await upsertControlledTags();
+  console.log(`+ controlled tags (cost/origin/flag): ${ctl.defined} defined, ${ctl.created} created this run`);
+
   const tags = await upsertTagLinksAndAliases(idBySlug);
   console.log(`+ tag aliases set on ${tags.aliasTags} tags; new tag links this run: ${tags.newLinks}`);
 
@@ -580,7 +675,8 @@ async function main() {
   console.log(`+ quick links: ${ql}`);
 
   const pd = await upsertPdEvents(orgId, ownerId);
-  console.log(`+ PD events (future-dated): ${pd}`);
+  console.log(`+ PD events: ${pd.relative} sample (refreshed, run-relative dates), `
+    + `${pd.fixed} fixed-date course listings (${pd.fixedNew} new this run)`);
 
   const qq = await upsertQuiz(idBySlug);
   console.log(`+ quiz on '${QUIZ.resourceSlug}': ${qq} questions, pass threshold ${QUIZ.passThreshold}`);

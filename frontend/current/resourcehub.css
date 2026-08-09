@@ -32,6 +32,10 @@
 /* ── Headings / hero ── */
 .rh2-h1 { margin: 0; font-size: 20px; }
 .rh2-h2 { margin: 0 0 10px; font-size: 15px; }
+/* The hero is a semantic <header>; neutralise the app shell's global sticky
+   header rule (header { position: sticky; z-index: 1000 }) so the hub header
+   scrolls with the page and never floats over the navigation dropdown. */
+.rh2-hero { position: static; z-index: auto; top: auto; }
 .rh2-hero h1 { margin: 0 0 2px; font-size: 22px; }
 .rh2-tagline { margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
 .rh2-hero-search {

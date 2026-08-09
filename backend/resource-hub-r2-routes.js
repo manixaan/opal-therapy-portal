@@ -259,15 +259,18 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(t.aliases) al WHERE al ILIKE ${p}))))`;
   }
   if (req.query.contentType) { params.push(str(req.query.contentType, 40)); where += ` AND r.content_type = $${params.length}`; }
+  let collectionKeyIdx = null; // param index, reused for curated ordering below
   if (req.query.collectionKey) {
     params.push(str(req.query.collectionKey, 60));
+    collectionKeyIdx = params.length;
     where += ` AND EXISTS (SELECT 1 FROM resource_collection_items ci
                  JOIN resource_collections c ON c.id = ci.collection_id
                 WHERE ci.resource_id = r.id AND c.key = $${params.length}
                   AND c.organisation_id IS NOT DISTINCT FROM $1)`;
   }
-  if (req.query.tagId && isUuid(req.query.tagId)) {
-    params.push(req.query.tagId);
+  // tagId may repeat (e.g. a topic tag plus a cost tag) — each one ANDs.
+  for (const tagId of [].concat(req.query.tagId || []).filter((t) => isUuid(String(t)))) {
+    params.push(tagId);
     where += ` AND EXISTS (SELECT 1 FROM resource_tag_links l WHERE l.resource_id = r.id AND l.tag_id = $${params.length})`;
   }
   if (req.query.authority && AUTHORITY_LEVELS.includes(req.query.authority)) {
@@ -294,7 +297,16 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
     az: 'r.title ASC',
     popular: 'view_count DESC, r.title ASC',
   };
-  const orderBy = sorts[req.query.sort] || sorts.relevant;
+  let orderBy = sorts[req.query.sort] || sorts.relevant;
+  // Browsing a collection with the default sort follows the curated shelf
+  // order (e.g. the Knowledge Library guide + Essentials shortlist surface
+  // first; Start Here reads in its intended sequence). Explicit sorts win.
+  if (collectionKeyIdx && (!req.query.sort || req.query.sort === 'relevant')) {
+    orderBy = `(SELECT ci2.sort_order FROM resource_collection_items ci2
+                  JOIN resource_collections c2 ON c2.id = ci2.collection_id
+                 WHERE ci2.resource_id = r.id AND c2.key = $${collectionKeyIdx}
+                   AND c2.organisation_id IS NOT DISTINCT FROM $1) ASC, r.title ASC`;
+  }
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
 
   const { rows } = await pool.query(

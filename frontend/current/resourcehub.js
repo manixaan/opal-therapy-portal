@@ -200,8 +200,9 @@
     booted: false,
     view: 'home', // home | library | detail | learning | admin
     topics: null, // therapy_area tags [{id,name}]
+    costs: null,  // cost tags (Free/Paid) [{id,name}]
     home: null, homeLoading: false,
-    lib: { q: '', type: '', topic: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false },
+    lib: { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
     admin: {
@@ -248,7 +249,7 @@
     // 'Saved' is the library filtered to the user's favourites — entering it
     // clears other filters so the saved list is never silently narrowed.
     if (view === 'saved') {
-      S.lib = { q: '', type: '', topic: '', population: '', setting: '', authority: '', sort: 'relevant', saved: true, rows: null, loading: false };
+      S.lib = { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: true, rows: null, loading: false };
       view = 'library';
     } else if (view === 'library' && S.lib.saved) {
       S.lib.saved = false;
@@ -412,7 +413,7 @@
   }
 
   function openCollection(key) {
-    S.lib = { q: '', type: '', topic: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, collection: String(key || '') };
+    S.lib = { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, collection: String(key || '') };
     nav('library');
   }
 
@@ -421,7 +422,9 @@
   async function loadTopics() {
     if (S.topics) return;
     var d = await api('/api/resources/tags');
-    S.topics = (d.ok && d.tags) ? d.tags.filter(function (t) { return t.category === 'therapy_area'; }) : [];
+    var all = (d.ok && d.tags) ? d.tags : [];
+    S.topics = all.filter(function (t) { return t.category === 'therapy_area'; });
+    S.costs = all.filter(function (t) { return t.category === 'cost'; }); // Free, Paid (name order)
   }
 
   async function loadLibrary() {
@@ -436,6 +439,7 @@
     if (f.q) qs.push('q=' + encodeURIComponent(f.q));
     if (f.type) qs.push('contentType=' + encodeURIComponent(f.type));
     if (f.topic) qs.push('tagId=' + encodeURIComponent(f.topic));
+    if (f.cost) qs.push('tagId=' + encodeURIComponent(f.cost)); // repeated tagId params AND together server-side
     if (f.population) qs.push('population=' + encodeURIComponent(f.population));
     if (f.setting) qs.push('setting=' + encodeURIComponent(f.setting));
     if (f.authority) qs.push('authority=' + encodeURIComponent(f.authority));
@@ -461,6 +465,7 @@
   function renderLibrary() {
     var f = S.lib;
     var topicOpts = (S.topics || []).map(function (t) { return [t.id, t.name]; });
+    var costOpts = (S.costs || []).map(function (t) { return [t.id, t.name]; });
     var authOpts = Object.keys(AUTHORITY).map(function (k) { return [k, AUTHORITY[k].label]; });
     var out = '<div class="rh2-page"><h1 class="rh2-h1">' + (f.saved ? 'Saved' : 'Library') + '</h1>' +
       '<div class="rh2-filters">' +
@@ -468,6 +473,7 @@
       'oninput="RH2.libInput(this.value)">' +
       sel('rh2-f-type', 'All types', CONTENT_TYPES, f.type, "RH2.libFilter('type',this.value)") +
       sel('rh2-f-topic', 'All topics', topicOpts, f.topic, "RH2.libFilter('topic',this.value)") +
+      sel('rh2-f-cost', 'All costs', costOpts, f.cost, "RH2.libFilter('cost',this.value)") +
       sel('rh2-f-pop', 'All populations', POPULATIONS, f.population, "RH2.libFilter('population',this.value)") +
       sel('rh2-f-set', 'All settings', SETTINGS, f.setting, "RH2.libFilter('setting',this.value)") +
       sel('rh2-f-auth', 'All authorities', authOpts, f.authority, "RH2.libFilter('authority',this.value)") +
