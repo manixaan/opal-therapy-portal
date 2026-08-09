@@ -7350,7 +7350,9 @@ window.opIcon = function (name, size) {
 <!-- Styled replacement for browser confirm() in the calendar delete flow.
      Copy is set by openDeleteEventModal(); the cascade line appears only when
      linked travel blocks will be removed with the event. -->
-<div class="modal-backdrop" id="modal-del-event" style="z-index:95;" onclick="if(event.target===this)closeDeleteEventModal()">
+<!-- z-index sits above the detail drawer (1100) so the confirmation is never
+     hidden when the delete starts from the drawer footer. -->
+<div class="modal-backdrop" id="modal-del-event" style="z-index:1200;" onclick="if(event.target===this)closeDeleteEventModal()">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="del-event-title" style="width:420px;">
     <h3 id="del-event-title" style="display:flex;align-items:center;gap:8px;color:var(--danger,#c2412e);"></h3>
     <div class="modal-body">
@@ -11840,7 +11842,12 @@ function handleDragMove(event) {
     dragState.block.style.boxShadow = '0 4px 12px rgba(122, 155, 142, 0.2)';
 
     const startTime = minutesToTime(selStart);
-    dragState.block.innerHTML = `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${selEnd - selStart} min</div></div>`;
+    const durMinutes = selEnd - selStart;
+    // Short blocks can't fit two stacked lines — compact to one line (or
+    // time only for 15-min slots) so the label never spills past the edges.
+    dragState.block.innerHTML = durMinutes < 45
+      ? `<div style="text-align:center;line-height:1;pointer-events:none;font-size:10.5px;font-weight:600;white-space:nowrap;">${startTime}${durMinutes >= 30 ? ` &middot; ${durMinutes} min` : ''}</div>`
+      : `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${durMinutes} min</div></div>`;
   });
 }
 
@@ -21414,6 +21421,8 @@ window.showQuickAdd = function(...args) {
   border: 1.5px solid rgba(74,127,193,0.5);
   border-radius: 4px;
   pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
   z-index: 18;
 }
 
