@@ -2897,7 +2897,7 @@ window.opIcon = function (name, size) {
   .detail-backdrop {
     position: fixed; inset: 0;
     background: rgba(15, 23, 42, 0.35);
-    display: none; z-index: 80;
+    display: none; z-index: 1090;
     animation: fadeIn 120ms ease;
   }
   .detail-backdrop.show { display: block; }
@@ -2907,7 +2907,8 @@ window.opIcon = function (name, size) {
     width: 440px; max-width: 92vw;
     background: white;
     box-shadow: -6px 0 24px rgba(0,0,0,0.18);
-    z-index: 81;
+    /* above the sticky app header (z 1000) so the drawer top is never hidden */
+    z-index: 1100;
     transition: right 220ms ease;
     display: flex; flex-direction: column;
   }
