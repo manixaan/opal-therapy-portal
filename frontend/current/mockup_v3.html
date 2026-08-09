@@ -7346,6 +7346,25 @@ window.opIcon = function (name, size) {
   </div>
 </div>
 
+<!-- ============ Delete event confirmation modal ============ -->
+<!-- Styled replacement for browser confirm() in the calendar delete flow.
+     Copy is set by openDeleteEventModal(); the cascade line appears only when
+     linked travel blocks will be removed with the event. -->
+<div class="modal-backdrop" id="modal-del-event" style="z-index:95;" onclick="if(event.target===this)closeDeleteEventModal()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="del-event-title" style="width:420px;">
+    <h3 id="del-event-title" style="display:flex;align-items:center;gap:8px;color:var(--danger,#c2412e);"></h3>
+    <div class="modal-body">
+      <p id="del-event-msg" style="margin:0 0 6px;font-size:13.5px;"></p>
+      <p id="del-event-cascade" style="display:none;margin:0 0 6px;font-size:12.5px;color:var(--danger,#c2412e);font-weight:600;"></p>
+      <p style="margin:0;font-size:12px;color:var(--muted);">This removes the event from this calendar and from Outlook. It cannot be undone.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="del-event-cancel" onclick="closeDeleteEventModal()">Cancel</button>
+      <button class="btn" id="del-event-confirm" style="background:var(--danger,#c2412e);border-color:var(--danger,#c2412e);color:#fff;"></button>
+    </div>
+  </div>
+</div>
+
 <!-- Leave Request Modal -->
 <div class="modal-backdrop" id="modal-leave-request">
   <div class="modal large">
@@ -14106,30 +14125,136 @@ function closeCalContextMenu() {
   if (m) m.remove();
 }
 
-async function ctxDeleteEvent(id) {
+function ctxDeleteEvent(id) {
   closeCalContextMenu();
+  deleteEventFlow(id);
+}
+
+/* ── Shared delete flow: styled confirmation + travel-block cascade ─────────
+   Both entry points (detail drawer + right-click menu) run through here.
+   1. A dryRun preview asks the backend which linked travel blocks would go
+      with the event, so the confirmation states the cascade accurately.
+   2. The styled modal (#modal-del-event) replaces the browser confirm dialog.
+   3. On confirm: optimistic canvas removal, then the real DELETE — the
+      backend soft-deletes locally and best-effort removes from Outlook.   */
+
+let __delEventConfirmFn = null;
+
+async function deleteEventFlow(id) {
   const s = SESSIONS[id];
   if (!s) return;
-
   const label = s.patient || s.title || 'this event';
-  if (!confirm(`Delete "${label}"?\n\nThis removes it from Outlook and the database. Cannot be undone.`)) return;
 
+  // Accurate cascade count BEFORE deleting (dryRun touches nothing)
+  let cascadeCount = 0, cascadeIds = [];
   if (s.dbId) {
     try {
-      const r    = await fetch(`/api/outlook/events/${s.dbId}`, { method: 'DELETE', credentials: 'include' });
-      const json = await r.json().catch(() => ({}));
-      if (!r.ok) { alert(`Delete failed: ${json.error || 'Unknown error'}`); return; }
-      console.log(`🗑️ Deleted from DB + Outlook: ${id} (Outlook removed: ${json.deletedFromOutlook})`);
-    } catch (err) {
-      alert('Could not delete — check your connection and try again.');
-      return;
-    }
+      const r = await fetch(`/api/outlook/events/${s.dbId}?dryRun=1`, { method: 'DELETE', credentials: 'include' });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.dryRun) {
+        cascadeCount = j.travelBlocksDeleted || 0;
+        cascadeIds   = j.travelBlockIds || [];
+      }
+    } catch (_) { /* preview unavailable — confirm still shows, without the count */ }
   }
 
-  // Remove tile from the DOM and SESSIONS registry
-  if (s.element?.parentNode) s.element.parentNode.removeChild(s.element);
+  openDeleteEventModal(label, cascadeCount, () => performDeleteEvent(id, cascadeIds));
+}
+
+function openDeleteEventModal(label, cascadeCount, onConfirm) {
+  const backdrop = document.getElementById('modal-del-event');
+  if (!backdrop) { onConfirm(); return; } // markup missing — never block deletion
+
+  document.getElementById('del-event-title').innerHTML =
+    (typeof opIcon === 'function' ? opIcon('trash', 14) : '') + ' Delete event';
+  document.getElementById('del-event-msg').textContent = `Delete "${label}"?`;
+
+  const cascadeLine = document.getElementById('del-event-cascade');
+  if (cascadeCount > 0) {
+    cascadeLine.textContent = `${cascadeCount} linked travel block${cascadeCount === 1 ? '' : 's'} will also be removed.`;
+    cascadeLine.style.display = '';
+  } else {
+    cascadeLine.style.display = 'none';
+  }
+
+  const confirmBtn = document.getElementById('del-event-confirm');
+  confirmBtn.textContent = 'Delete event';
+  __delEventConfirmFn = onConfirm;
+  confirmBtn.onclick = () => {
+    const fn = __delEventConfirmFn;
+    closeDeleteEventModal();
+    if (typeof fn === 'function') fn();
+  };
+
+  backdrop.classList.add('show');
+  document.addEventListener('keydown', __delEventEscape);
+  document.getElementById('del-event-cancel').focus();
+}
+
+function closeDeleteEventModal() {
+  const backdrop = document.getElementById('modal-del-event');
+  if (backdrop) backdrop.classList.remove('show');
+  __delEventConfirmFn = null;
+  document.removeEventListener('keydown', __delEventEscape);
+}
+
+function __delEventEscape(e) {
+  if (e.key === 'Escape') closeDeleteEventModal();
+}
+
+/* Remove one tile from the canvas + SESSIONS; collects its column for reflow. */
+function __removeSessionTile(id, cols) {
+  const s = SESSIONS[id];
+  if (!s) return;
+  if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
+  if (cols && s.col) cols.add(s.col);
   delete SESSIONS[id];
-  if (typeof reflowDayOverlaps === 'function' && s.col) reflowDayOverlaps(s.col);
+}
+
+async function performDeleteEvent(id, cascadeIds) {
+  const s = SESSIONS[id];
+  if (!s) return;
+  const dbId = s.dbId;
+
+  // Optimistic: pull the event tile and its travel-block tiles off the canvas
+  const cols = new Set();
+  __removeSessionTile(id, cols);
+  (cascadeIds || []).forEach((travelDbId) => {
+    const tid = Object.keys(SESSIONS).find((k) => SESSIONS[k] && SESSIONS[k].dbId === travelDbId);
+    if (tid) __removeSessionTile(tid, cols);
+  });
+  cols.forEach((col) => { if (typeof reflowDayOverlaps === 'function' && col) reflowDayOverlaps(col); });
+
+  const drawer = document.getElementById('detail-drawer');
+  if (drawer && drawer.classList.contains('show') && typeof closeBlockDetail === 'function') closeBlockDetail();
+
+  if (!dbId) { showToast('Event removed'); return; }
+
+  try {
+    const r    = await fetch(`/api/outlook/events/${dbId}`, { method: 'DELETE', credentials: 'include' });
+    const json = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showToast(json.error || 'Could not delete event', true);
+      if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar(); // restore canvas
+      return;
+    }
+
+    // Reconcile: remove any cascaded blocks the preview didn't cover
+    const extraCols = new Set();
+    (json.travelBlockIds || []).forEach((travelDbId) => {
+      const tid = Object.keys(SESSIONS).find((k) => SESSIONS[k] && SESSIONS[k].dbId === travelDbId);
+      if (tid) __removeSessionTile(tid, extraCols);
+    });
+    extraCols.forEach((col) => { if (typeof reflowDayOverlaps === 'function' && col) reflowDayOverlaps(col); });
+
+    const n = json.travelBlocksDeleted || 0;
+    showToast(n ? `Event deleted (with ${n} travel block${n === 1 ? '' : 's'})` : 'Event deleted');
+    console.log(`🗑️ Event deleted: ${id} (Outlook removed: ${json.deletedFromOutlook}, travel blocks: ${n})`);
+  } catch (err) {
+    console.error('Delete event error:', err);
+    showToast('Could not delete — check your connection and try again.', true);
+    if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+  }
 }
 
 /* ---------- Detail drawer ---------- */
@@ -14237,11 +14362,12 @@ function openBlockDetail(id) {
       Navigate
     </a>`);
   }
-  // Delete / remove from Outlook — only shown for events that have a DB record
+  // Delete — only shown for events that have a DB record. Opens the shared
+  // styled confirmation (travel-block cascade stated) — no browser dialogs.
   if (s.dbId) {
     parts.push(`<button class="btn"
       style="color:var(--danger,#c2412e);border-color:var(--danger,#c2412e);background:transparent;"
-      onclick="bdDeleteEvent('${id}')">${opIcon('trash', 13)} Remove</button>`);
+      onclick="bdDeleteEvent('${id}')">${opIcon('trash', 13)} Delete</button>`);
   }
 
   if (s.cancelled) {
@@ -14263,41 +14389,13 @@ function row(k, v, rawKey) {
 
 /**
  * bdDeleteEvent(id)
- * Removes an event from Outlook (via backend) and soft-deletes the local DB record.
- * After success, removes the calendar tile and closes the detail panel.
+ * Detail-drawer entry point into the shared delete flow: styled confirmation
+ * (with the travel-block cascade stated up front), then optimistic removal.
  */
-async function bdDeleteEvent(id) {
+function bdDeleteEvent(id) {
   const s = SESSIONS[id];
   if (!s || !s.dbId) return;
-
-  const label = s.clientName || s.title || 'this event';
-  const confirmed = window.confirm(
-    `Remove "${label}" from Outlook and the local database?\n\nThis cannot be undone.`
-  );
-  if (!confirmed) return;
-
-  try {
-    const r = await fetch(`/api/outlook/events/${s.dbId}`, { method: 'DELETE' });
-    const json = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      alert(`Failed to remove event: ${json.error || 'Unknown error'}`);
-      return;
-    }
-
-    // Remove calendar tile from the DOM
-    if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
-
-    // Remove from SESSIONS so it can't be re-opened
-    delete SESSIONS[id];
-
-    // Close the detail panel
-    closeBlockDetail();
-
-    console.log(`🗑️ Event removed: ${id} (Outlook: ${json.deletedFromOutlook})`);
-  } catch (err) {
-    console.error('Delete event error:', err);
-    alert('Could not remove event — check your connection and try again.');
-  }
+  deleteEventFlow(id);
 }
 
 // ── Location section builder ───────────────────────────────────────────────
@@ -14618,6 +14716,13 @@ async function syncTravelBlocksToOutlook(day) {
     const key = `${day}|${seg.startMin}|${seg.endMin}|${seg.fromLoc || ''}|${seg.toLoc || ''}`;
     if (window.__travelBlocksPushed.has(key)) continue;
 
+    // Link the block to the appointment it serves (migration 016) so deleting
+    // the appointment cascades to this travel block. Travel TO a session
+    // belongs to that session; the end-of-day return leg belongs to the
+    // session it departs from.
+    const relatedSession = SESSIONS[seg.toSessionId] || SESSIONS[seg.fromSessionId] || null;
+    const relatedEventId = (relatedSession && relatedSession.dbId) || null;
+
     try {
       const r = await fetch('/api/outlook/travel-blocks', {
         method:  'POST',
@@ -14630,6 +14735,7 @@ async function syncTravelBlocksToOutlook(day) {
           fromAddress: seg.fromAddr  || seg.fromLoc || '',
           toAddress:   seg.toAddr    || seg.toLoc   || '',
           travelMin:   seg.travelMin || null,
+          relatedEventId,
         }),
       });
       if (r.ok) {
@@ -21168,7 +21274,7 @@ window.showQuickAdd = function(...args) {
 #booking-panel-backdrop {
   position: fixed; inset: 0;
   background: rgba(10,20,40,0.18);
-  z-index: 890;
+  z-index: 1090;
   opacity: 0; pointer-events: none;
   transition: opacity 0.28s ease;
 }
@@ -21181,7 +21287,8 @@ window.showQuickAdd = function(...args) {
   width: 480px; max-width: 100vw;
   background: #f8f9fc;
   box-shadow: -6px 0 32px rgba(0,0,0,0.13);
-  z-index: 900;
+  /* above the sticky app header (z 1000) so the panel top is never clipped */
+  z-index: 1100;
   transform: translateX(102%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex; flex-direction: column;
@@ -21226,7 +21333,7 @@ window.showQuickAdd = function(...args) {
 /* ── Therapist selector strip (owner/admin only) ── */
 #bsp-therapist-strip {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  padding: 6px 16px 8px; border-bottom: 1px solid var(--border);
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
   background: var(--bg); flex-shrink: 0;
 }
 .bsp-t-label {
