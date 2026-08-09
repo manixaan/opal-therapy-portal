@@ -12,11 +12,21 @@
  *   ENABLE_AUTOMATIC_REMOTE_DELETE — sync-initiated deletions pushed to remote
  *                                    systems (e.g. Splose cancellation
  *                                    cascading a delete into Outlook)
+ *   ENABLE_SPLOSE_CALENDAR_SYNC    — Splose CALENDAR coupling (appointment
+ *                                    poller + frontend appointment merge).
+ *                                    OFF by default in EVERY environment:
+ *                                    calendar integration is Outlook-only
+ *                                    (two-way mirror); Splose serves patient/
+ *                                    client data only. Set to the string
+ *                                    'true' to re-enable the legacy coupling.
  *
  * Resolution: explicit env value ('true'/'false') always wins. When unset:
  * development/test default TRUE (full functionality locally), staging and
  * production default FALSE (fail-safe: a forgotten setting can only make the
  * pilot read-only, never surprise-write into a clinician's calendar).
+ * EXCEPTION: ENABLE_SPLOSE_CALENDAR_SYNC defaults FALSE everywhere — the
+ * Outlook-only mirror is the intended state, so this flag fails closed even
+ * in development.
  *
  * Enforcement is layered:
  *   - outlook-oauth.js / splose-api.js write functions throw
@@ -36,12 +46,22 @@ function isOutlookWriteEnabled() { return resolveFlag('ENABLE_OUTLOOK_WRITE'); }
 function isSploseWriteEnabled() { return resolveFlag('ENABLE_SPLOSE_WRITE'); }
 function isAutomaticRemoteDeleteEnabled() { return resolveFlag('ENABLE_AUTOMATIC_REMOTE_DELETE'); }
 
+/**
+ * Splose CALENDAR coupling (appointment poller + frontend appointment merge).
+ * Fails closed in every environment — only the exact string 'true' enables it.
+ * Calendar integration is Outlook-only; Splose remains for patient data.
+ */
+function isSploseCalendarSyncEnabled() {
+  return process.env.ENABLE_SPLOSE_CALENDAR_SYNC === 'true';
+}
+
 /** Sanitised snapshot for diagnostics/boot logs. */
 function featureFlagState() {
   return {
     outlookWrite: isOutlookWriteEnabled(),
     sploseWrite: isSploseWriteEnabled(),
     automaticRemoteDelete: isAutomaticRemoteDeleteEnabled(),
+    sploseCalendarSync: isSploseCalendarSyncEnabled(),
   };
 }
 
@@ -60,6 +80,7 @@ module.exports = {
   isOutlookWriteEnabled,
   isSploseWriteEnabled,
   isAutomaticRemoteDeleteEnabled,
+  isSploseCalendarSyncEnabled,
   featureFlagState,
   featureDisabledError,
 };

@@ -905,6 +905,9 @@ router.get('/api/settings/integrations/status', requireAuth, async (req, res) =>
   } catch (e) {
     statuses.splose = { connected: null, error: 'Status unavailable' };
   }
+  // Outlook-only mirror: whether Splose still feeds the calendar (legacy
+  // coupling, env-gated) or serves patient/client data only (the default).
+  statuses.splose.calendarSyncEnabled = require('./feature-flags').isSploseCalendarSyncEnabled();
 
   // Outlook: check if user has a non-expired OAuth token
   try {

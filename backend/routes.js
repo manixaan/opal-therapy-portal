@@ -1506,9 +1506,15 @@ router.get('/api/splose/status', requireAuth, denySploseToReadOnly, async (req, 
 /**
  * GET /api/splose/sync-status
  * Returns current in-process Splose sync health without triggering a live call.
+ * calendarSyncEnabled tells the frontend whether Splose appointments still
+ * feed the calendar (legacy coupling) or Splose is patients-only — the header
+ * pill and loadSploseAppointmentsIntoSessions read this flag.
  */
 router.get('/api/splose/sync-status', requireAuth, denySploseToReadOnly, (req, res) => {
-  res.json(sploSyncState);
+  res.json({
+    ...sploSyncState,
+    calendarSyncEnabled: require('./feature-flags').isSploseCalendarSyncEnabled(),
+  });
 });
 
 /**
@@ -2421,6 +2427,12 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
  * Update the title, time, or location of an existing Outlook event.
  * Only fields provided in the body are changed (partial update).
  *
+ * Outlook-only mirror semantics: the LOCAL row is saved first (the app edit is
+ * authoritative), then the change is propagated to Outlook via Graph PATCH.
+ * A Graph failure degrades gracefully — the local change persists, the row is
+ * marked sync_status='pending', a sync_log row + notification record the
+ * failure, and the next delta sync / retry reconciles the mirror.
+ *
  * Body: { title?, startTime?, endTime?, location? }
  */
 router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
@@ -2439,43 +2451,56 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'This event has no Outlook ID — push it to Outlook first' });
     }
 
-    const user = await db.getUser(req.session.userId);
-    const accessToken = await getValidAccessToken(user);
+    // Staged-rollout gate (unchanged semantics): when Outlook write-back is
+    // disabled the route makes NO change at all — local edits that can never
+    // reach Outlook would silently diverge from the mirror.
+    const flags = require('./feature-flags');
+    if (!flags.isOutlookWriteEnabled()) {
+      handleFeatureDisabled(flags.featureDisabledError('ENABLE_OUTLOOK_WRITE', 'Outlook write-back'), res);
+      return;
+    }
 
-    // Push partial update to Outlook (only defined fields are sent)
-    await outlookApi.updateOutlookEvent(accessToken, outlookId, { title, startTime, endTime, location });
-
-    // Mirror changes to local DB
+    // 1. Persist the local change FIRST — it must survive an Outlook failure.
     await db.updateEvent(dbId, { title, startTime, endTime, location, lastModifiedBy: 'app' });
 
+    // 2. Propagate to Outlook (partial update — only defined fields are sent).
+    try {
+      const user = await db.getUser(req.session.userId);
+      const accessToken = await getValidAccessToken(user);
+      await outlookApi.updateOutlookEvent(accessToken, outlookId, { title, startTime, endTime, location });
+    } catch (outlookErr) {
+      // Graceful degradation: local change persists; record the sync failure.
+      console.error('Outlook update failed (local change kept):', outlookErr.response?.data || outlookErr.message);
+      await db.updateEvent(dbId, { syncStatus: 'pending' }).catch(() => {});
+      await db.pool.query(
+        `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'updated', 'app', 'outlook', 'failed', $2)`,
+        [dbId, outlookErr.message]
+      ).catch(() => {});
+      const userId = req.user?.id || req.session?.userId;
+      if (userId) {
+        storeNotificationLazy(userId, {
+          type: 'outlook_writeback_failed',
+          title: 'Outlook event update failed',
+          message: `Could not sync appointment changes to Outlook: ${outlookErr.message}. Your local changes are saved and will be reconciled.`,
+          severity: 'error',
+          relatedEntity: 'integration',
+          actionPayload: { action: 'reconnect_outlook' },
+        }).catch(() => {});
+      }
+      return res.json({ ok: true, outlookId, savedToDb: true, savedToOutlook: false, syncError: outlookErr.message });
+    }
+
+    await db.updateEvent(dbId, { syncStatus: 'synced' }).catch(() => {});
     await db.pool.query(
       `INSERT INTO sync_log (event_id, action, source, target, status) VALUES ($1, 'updated', 'app', 'outlook', 'success')`,
       [dbId]
     ).catch(() => {});
 
     console.log(`✏️ Outlook event updated: ${outlookId}`);
-    res.json({ ok: true, outlookId });
+    res.json({ ok: true, outlookId, savedToDb: true, savedToOutlook: true });
   } catch (err) {
     if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook update error:', err.response?.data || err.message);
-    const userId = req.user?.id || req.session?.userId;
-    const { dbId } = req.params;
-    if (dbId) {
-      await db.pool.query(
-        `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'updated', 'app', 'outlook', 'failed', $2)`,
-        [dbId, err.message]
-      ).catch(() => {});
-    }
-    if (userId) {
-      storeNotificationLazy(userId, {
-        type: 'outlook_writeback_failed',
-        title: 'Outlook event update failed',
-        message: `Could not sync appointment changes to Outlook: ${err.message}. Your local changes are saved.`,
-        severity: 'error',
-        relatedEntity: 'integration',
-        actionPayload: { action: 'reconnect_outlook' },
-      }).catch(() => {});
-    }
     res.status(500).json({ error: 'Failed to update Outlook event', details: err.message });
   }
 });

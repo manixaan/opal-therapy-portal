@@ -3,7 +3,9 @@
  *
  * What this does:
  * - Runs a server that listens for requests from your frontend (mockup_v3.html)
- * - Syncs events between: Your App ↔ Splose ↔ Outlook ↔ Teams
+ * - Mirrors calendar events two ways: Your App ↔ Outlook (Splose serves
+ *   patient/client data only — its calendar coupling is gated OFF by default
+ *   behind ENABLE_SPLOSE_CALENDAR_SYNC)
  * - Handles user authentication with Microsoft
  * - Stores event data in a database
  * - Sends real-time updates to connected clients
@@ -780,24 +782,36 @@ setTimeout(() => {
 // Splose-side cancellations every 15 minutes and converges local + Outlook.
 // Deletions run behind sync-safety thresholds — an empty/truncated/anomalous
 // Splose response blocks the whole batch, audits, and notifies owners.
+//
+// OUTLOOK-ONLY MIRROR (2026-08): the calendar integration is Outlook-only —
+// the app and Outlook mirror each other; Splose serves patient/client data
+// only. This poller (the last Splose→calendar feed) is therefore gated behind
+// ENABLE_SPLOSE_CALENDAR_SYNC, which fails closed to OFF in every environment.
+// The module is kept intact so the legacy coupling can be re-enabled with the
+// env flag if ever needed. Historical Splose-sourced events already in the DB
+// remain — they are simply no longer refreshed.
 
 const SPLOSE_POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-const { createSplosePoller } = require('./splose-poller');
-const { runSploseSync } = createSplosePoller({
-  db,
-  sploseApi: require('./splose-api'),
-  outlookApi: require('./outlook-oauth'),
-  io,
-  getValidTokenForUser,
-  storeNotification: (...args) => require('./app-routes').storeNotification(...args),
-});
+if (require('./feature-flags').isSploseCalendarSyncEnabled()) {
+  const { createSplosePoller } = require('./splose-poller');
+  const { runSploseSync } = createSplosePoller({
+    db,
+    sploseApi: require('./splose-api'),
+    outlookApi: require('./outlook-oauth'),
+    io,
+    getValidTokenForUser,
+    storeNotification: (...args) => require('./app-routes').storeNotification(...args),
+  });
 
-// Start Splose poller 8 seconds after boot to avoid hammering on startup
-setTimeout(() => {
-  console.log('⏱️  Background Splose cancellation sync started (every 15 minutes)');
-  setInterval(runSploseSync, SPLOSE_POLL_INTERVAL_MS);
-  runSploseSync();
-}, 8000);
+  // Start Splose poller 8 seconds after boot to avoid hammering on startup
+  setTimeout(() => {
+    console.log('⏱️  Background Splose cancellation sync started (every 15 minutes)');
+    setInterval(runSploseSync, SPLOSE_POLL_INTERVAL_MS);
+    runSploseSync();
+  }, 8000);
+} else {
+  console.log('ℹ️  Splose calendar sync disabled (ENABLE_SPLOSE_CALENDAR_SYNC=false) — calendar is Outlook-only; Splose serves patient data only');
+}
 
 // ===== OUTLOOK WEBHOOK INFRASTRUCTURE =====
 // When WEBHOOK_BASE_URL is set in .env, the server registers a Microsoft Graph

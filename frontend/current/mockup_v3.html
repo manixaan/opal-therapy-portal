@@ -3017,33 +3017,15 @@ window.opIcon = function (name, size) {
   .travel-overlay:hover { filter: brightness(0.97); box-shadow: 0 2px 6px rgba(15,118,110,0.2); }
   .travel-overlay .t-ico { font-size: 11px; }
   .travel-overlay .t-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* Idle-gap overlay on calendar columns */
-  .gap-overlay {
-    position: absolute; left: 4px; right: 4px; z-index: 2;
-    background: repeating-linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.18) 6px, rgba(251,191,36,0.32) 6px, rgba(251,191,36,0.32) 12px);
-    border: 1.5px dashed #9a5f0e; border-radius: 5px;
-    padding: 4px 8px; font-size: 10.5px; color: #6b450a; font-weight: 700;
-    display: flex; align-items: center; gap: 5px;
-    cursor: pointer; user-select: none;
-    transition: box-shadow 0.15s ease;
-  }
-  .gap-overlay:hover { box-shadow: 0 3px 10px rgba(180,83,9,0.25); filter: brightness(1.03); }
-  .gap-overlay .g-ico { font-size: 13px; }
-  .gap-overlay .g-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gap-overlay .g-time { opacity: 0.75; font-weight: 500; font-size: 9.5px; margin-left: auto; white-space: nowrap; }
+  /* Idle-gap overlay CSS REMOVED (2026-08-09): the free-time/gap overlay no
+     longer renders on the calendar — travel-leg indicators below remain. */
   /* Start-of-day / end-of-day travel (base → first session, last session → base).
      Same visual family as between-session travel but with a subtle left bar tag. */
   .travel-overlay.start { border-left-color: #315a91; color: #075985;
     background: repeating-linear-gradient(45deg, rgba(3,105,161,0.09), rgba(3,105,161,0.09) 5px, rgba(3,105,161,0.17) 5px, rgba(3,105,161,0.17) 10px); }
   .travel-overlay.end   { border-left-color: #8b80c8; color: #6d63a8;
     background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
-  /* Smart-recommendation gap highlight — distinct from session blocks AND from regular travel */
-  .gap-overlay.smart {
-    background: repeating-linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.16) 6px, rgba(16,185,129,0.28) 6px, rgba(16,185,129,0.28) 12px);
-    border: 1.5px solid #2f7d4f; color: #064e3b;
-    box-shadow: inset 0 0 0 1px rgba(47, 125, 79, 0.18);
-  }
-  .gap-overlay.smart:hover { box-shadow: 0 4px 14px rgba(16,185,129,0.30); }
+  /* (.gap-overlay.smart green-hatch highlight removed with the gap overlay, 2026-08-09) */
   /* Option scoring visuals inside the ranked-options panel */
   .gap-opt .g-score {
     font-size: 10px; color: var(--ink-soft); font-weight: 600;
@@ -4787,6 +4769,8 @@ window.opIcon = function (name, size) {
   .rh-tab:hover { color: var(--ink); }
   .rh-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
   .rh-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .rh-tab[disabled] { color: var(--muted); cursor: not-allowed; opacity: 0.75; }
+  .rh-tab[disabled]:hover { color: var(--muted); }
   .rh-panel { display: none; }
   .rh-panel.active { display: block; }
   .rh-soon {
@@ -4842,7 +4826,9 @@ window.opIcon = function (name, size) {
   <div class="rh-tabs" role="tablist">
     <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Hub</button>
     <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio</button>
-    <button class="rh-tab" role="tab" data-rh="store" onclick="rhSwitch('store')">Therapy Store &amp; Purchase Requests</button>
+    <!-- Therapy Store PARKED as "Coming soon" (2026-08-09, Antony's decision):
+         UI-only parking — the panel markup and all store/purchase JS stay intact. -->
+    <button class="rh-tab" role="tab" data-rh="store" disabled aria-disabled="true" title="Therapy Store is coming soon">Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>
   </div>
 
   <!-- ── Resource Hub R2 (rendered by /resourcehub.js into #rh2-root) ── -->
@@ -6215,7 +6201,7 @@ window.opIcon = function (name, size) {
           <div class="settings-group-header">Splose</div>
           <div class="settings-row">
             <div class="settings-row-label">
-              <strong>Splose sync</strong>
+              <strong>Splose patient data</strong>
               <span id="stg-splose-last-sync">Checking status…</span>
             </div>
             <div class="settings-row-control">
@@ -6227,7 +6213,7 @@ window.opIcon = function (name, size) {
           <div class="settings-row">
             <div class="settings-row-label">
               <strong>Manual sync</strong>
-              <span>Force a fresh pull from Splose now</span>
+              <span>Force a fresh Outlook calendar sync now</span>
             </div>
             <div class="settings-row-control">
               <button class="btn" onclick="forceSploseSync(this)" style="font-size:12px;">⟳ Sync now</button>
@@ -7749,6 +7735,10 @@ window.resTagsLoaded = false;
 function rhIsOwner() { return !!(window.APP_USER && window.APP_USER.role === 'owner'); }
 
 function rhSwitch(area) {
+  // Therapy Store parked as "Coming soon" (2026-08-09): quietly refuse to
+  // switch to the store panel even if called programmatically. UI parking
+  // only — the panel markup and store/purchase JS remain intact.
+  if (area === 'store') return;
   document.querySelectorAll('.rh-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.rh === area); });
   ['shared', 'ai', 'store'].forEach(function (a) {
     var p = document.getElementById('rh-panel-' + a);
@@ -8879,7 +8869,13 @@ function renderPatientsTable() {
 
 /* ---------- Stepper ---------- */
 /* ---------- Load real Splose appointments into SESSIONS for scheduler ---------- */
+/* Outlook-only mirror: the calendar mirrors Outlook two ways and Splose serves
+   patient/client data only. This legacy Splose→calendar merge is a NO-OP unless
+   the backend reports the coupling re-enabled (ENABLE_SPLOSE_CALENDAR_SYNC),
+   surfaced via /api/splose/sync-status → calendarSyncEnabled. */
+window.SPLOSE_CALENDAR_SYNC_ENABLED = false; // default OFF until the backend says otherwise
 async function loadSploseAppointmentsIntoSessions() {
+  if (window.SPLOSE_CALENDAR_SYNC_ENABLED !== true) return; // Splose: patients only
   try {
     const start = DAY_DATES['mon'];
     const end   = DAY_DATES['fri'];
@@ -11090,6 +11086,12 @@ function downloadSchedule() {
 
 async function sendToSplose() {
   // Called from the "Write to Splose" confirm step.
+  // Outlook-only mirror: the app no longer sends calendar events to Splose
+  // unless the legacy coupling is explicitly re-enabled on the backend.
+  if (window.SPLOSE_CALENDAR_SYNC_ENABLED !== true) {
+    showToast('Splose calendar sync is off', 'Appointments are created in Outlook via Smart Booking — Splose serves patient data only.', 'warn');
+    return;
+  }
   // Reads BOOKING_STATE and POSTs to the backend Splose proxy.
   const state = window.BOOKING_STATE || {};
   const btn = document.querySelector('[onclick="sendToSplose()"]');
@@ -11675,7 +11677,6 @@ function _calColPointerDown(e) {
       e.target.closest('.resize-handle') ||
       e.target.closest('.slot-card') ||
       e.target.classList.contains('drag-block') ||
-      e.target.closest('.gap-overlay') ||
       e.target.closest('.travel-overlay')) return;
 
   const col = e.currentTarget;
@@ -12935,7 +12936,7 @@ async function confirmBooking() {
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving to Splose…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating appointment…'; }
 
   try {
     const isClientSession = ['initial','therapy','assessment','mdt'].includes(type);
@@ -12948,63 +12949,37 @@ async function confirmBooking() {
     const startISO = `${dateStr}T${String(slot.startH).padStart(2,'0')}:${String(slot.startM).padStart(2,'0')}:00+08:00`;
     const endISO   = `${dateStr}T${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}:00+08:00`;
 
-    // Use selected therapist's Splose user ID when set (owner/admin booking for a therapist)
-    const practitionerId = _bspSelectedTherapist?.sploseUserId
-                        || window.SPLOSE_CONFIG?.practitionerId;
-    const locationId     = window.SPLOSE_CONFIG?.locationId;
-    const serviceId      = TYPE_SERVICE_ID[type];
-    const patientId      = patient?.id;
-    const caseId         = BOOKING_STATE.selectedCaseId;
-
-    // Validate — hard-block on missing critical IDs
     const resetBtn = () => {
       if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Create appointment`; }
     };
 
-    if (!practitionerId || !locationId) {
-      console.warn('Missing Splose config: practitionerId or locationId');
-      showToast('Configuration error', 'Practitioner or location not configured — check Splose settings.', 'warn');
-      resetBtn(); return;
-    }
-    if (!serviceId) {
-      console.warn('No serviceId for session type:', type);
-      showToast('Unknown session type', `No Splose service mapped for "${type}". Contact your administrator.`, 'warn');
-      resetBtn(); return;
-    }
-    if (isClientSession && !patientId) {
+    // Patient selection still matters (patient data comes from Splose), but the
+    // Splose scheduling IDs (service/case/practitioner/location) are no longer
+    // required — the calendar mirror is Outlook-only and Splose receives no
+    // calendar events from the app.
+    if (isClientSession && !patient?.id) {
       showToast('No patient selected', 'Please select a patient before creating the appointment.', 'warn');
       resetBtn(); return;
     }
-    if (isClientSession && !caseId) {
-      showToast('Case not loaded', "Patient's active case hasn't loaded yet — wait a moment and try again. If this persists, confirm the patient has an active case in Splose.", 'warn');
-      resetBtn(); return;
-    }
 
-    let sploseId = null;
-    if (true) {  // all validation passed above
-      const endpoint = isClientSession ? '/api/splose/appointments' : '/api/splose/busy-times';
-      const payload  = isClientSession
-        ? { start: startISO, end: endISO, serviceId, locationId, practitionerId, patientId, caseId, note: BOOKING_STATE.formData?.notes || '' }
-        : { start: startISO, end: endISO, busyTimeTypeId: serviceId, practitionerIds: [practitionerId] };
-
-      const resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-      const result = await resp.json();
-      if (!resp.ok) throw new Error(result.details || result.error || `HTTP ${resp.status}`);
-      sploseId = result.id;
-      console.log(`✅ Written to Splose: ${sploseId}`);
-    }
-
-    // Write to Outlook — always attempted, result shown in the success modal
+    // ── Write to Outlook — the single calendar write path (app ↔ Outlook mirror) ──
+    // Client sessions use the imported-event conventions: title
+    // 'Client Appointment — <First Last>' and the 'Client Appointments' Outlook
+    // category, so event-type classification (→ therapy) and billing/location
+    // rules match events imported from Outlook.
+    const OUTLOOK_CATEGORY_BY_TYPE = {
+      initial: 'Client Appointments', therapy: 'Client Appointments',
+      assessment: 'Client Appointments', mdt: 'Client Appointments',
+      travel: 'Travel', 'travel-b': 'Travel', 'travel-nb': 'Travel',
+      report: 'Report Writing', admin: 'Admin', cpd: 'PD',
+    };
     const _outlookTherapistUserId = _bspSelectedTherapist?.userId || null;
     const _patName      = patient ? `${patient.first} ${patient.last}` : '';
-    const _outlookTitle = _patName
-      ? `${TYPE_LABEL[type] || 'Session'} — ${_patName}`
-      : (TYPE_LABEL[type] || 'Session');
+    const _outlookTitle = (isClientSession && _patName)
+      ? `Client Appointment — ${_patName}`
+      : (_patName ? `${TYPE_LABEL[type] || 'Session'} — ${_patName}` : (TYPE_LABEL[type] || 'Session'));
+    const _outlookCategory = OUTLOOK_CATEGORY_BY_TYPE[type] || null;
+    const _outlookLocation = (isClientSession && patient?.address) ? patient.address : '';
     let outlookId   = null;
     let outlookNote = '';
     try {
@@ -13016,7 +12991,8 @@ async function confirmBooking() {
           title:     _outlookTitle,
           startTime: startISO,
           endTime:   endISO,
-          ...(sploseId                 ? { sploseId }                                           : {}),
+          ...(_outlookLocation         ? { location: _outlookLocation }                         : {}),
+          ...(_outlookCategory         ? { categories: [_outlookCategory] }                     : {}),
           ...(_outlookTherapistUserId  ? { targetTherapistUserId: _outlookTherapistUserId }     : {}),
         }),
       });
@@ -13047,19 +13023,16 @@ async function confirmBooking() {
         patientId: patient?.id,
         region: patient?.region || 'central',
         suburb: patient?.suburb || '',
-        sploseId,
       });
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
     }
 
-    // Show success modal
+    // Show success modal — honest Outlook-only reporting (no Splose write occurs)
     const modal = document.getElementById('modal-booked');
     const body  = modal?.querySelector('.modal-body');
     if (body) {
-      const refId = sploseId ? `#${sploseId}` : `#A-${Math.floor(10000 + Math.random()*89999)}`;
       body.innerHTML = `
-        <p style="margin:0 0 8px;">Appointment <code>${refId}</code> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
-        <p style="margin:0 0 4px;font-size:12px;color:var(--muted);">${sploseId ? 'Written to Splose ✓' : 'Splose IDs not loaded — retry after config loads.'}</p>
+        <p style="margin:0 0 8px;"><strong>${_outlookTitle}</strong> created for <strong>${patient ? `${patient.first} ${patient.last}` : 'internal block'} · ${slot.dayLabel || DAY_LABELS[slot.day]} ${fmtTime(slot.startH, slot.startM)} AWST</strong>.</p>
         <p style="margin:0;font-size:12px;color:${outlookId ? 'var(--muted)' : 'var(--warn, #9a5f0e)'};">${outlookNote}</p>`;
     }
     if (modal) modal.classList.add('show');
@@ -13078,7 +13051,7 @@ async function confirmBooking() {
 
   } catch (err) {
     console.error('confirmBooking error:', err.message);
-    showToast('Splose write failed', err.message, 'warn');
+    showToast('Booking failed', err.message, 'warn');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Create appointment`; }
   }
@@ -16118,7 +16091,7 @@ function computeDayTravelSegments(day) {
 function clearDayOverlays(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
-  col.querySelectorAll('.travel-overlay, .gap-overlay').forEach(el => el.remove());
+  col.querySelectorAll('.travel-overlay').forEach(el => el.remove());
 }
 function refreshDayOverlays(day) {
   const col = document.getElementById('day-' + day);
@@ -16133,13 +16106,11 @@ function refreshDayOverlays(day) {
    segment store. */
 function renderSegmentOverlay(col, seg) {
   if (seg.kind === 'gap') {
-    // Edge free windows (day start / day end / empty day) have a null
-    // endpoint — render them with a generic anchor instead of dropping them.
-    const edge = { id: null, patient: '', type: 'admin' };
-    const curr = SESSIONS[seg.fromSessionId] || edge;
-    const next = SESSIONS[seg.toSessionId] || edge;
-    renderGapOverlay(col, seg.day, curr, next, seg.fromLoc, seg.toLoc,
-                     seg.startMin, seg.endMin, seg.endMin - seg.startMin, seg.travelMin);
+    // FREE-TIME/GAP OVERLAY REMOVED (2026-08-09, Antony's directive): the
+    // green hatched "Free window / Idle gap" bands and cards made the calendar
+    // look crowded. Gap SEGMENTS are still computed — the Snapshot report and
+    // idle-slot suggestion engine read them from DAY_SEGMENTS — but nothing is
+    // painted on the calendar canvas. Travel-leg indicators below still render.
     return;
   }
   // Travel kinds: 'start' | 'between' | 'end'
@@ -16195,39 +16166,8 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   col.appendChild(el);
 }
 
-function renderGapOverlay(col, day, curr, next, from, to, gapStart, gapEnd, gapMin, travel) {
-  const el = document.createElement('div');
-  el.className = 'gap-overlay';
-  el.style.top    = tToY(Math.floor(gapStart/60), gapStart%60) + 'px';
-  const gapSlotPx = gapMin / 60 * HOUR_PX;
-  el.style.height = Math.min(Math.max(22, gapSlotPx - 4), Math.max(4, gapSlotPx - 2)) + 'px';
-  const free = gapMin - travel;
-  // "Meaningful" free window = ≥ 40 min AND actionable (enough time to cafe/park/home).
-  // These get the distinctive .smart highlight and a clearer label.
-  const isMeaningful = free >= 40 && gapMin >= 55;
-  if (isMeaningful) el.classList.add('smart');
-  el.innerHTML = `<span class="g-ico">${isMeaningful ? opIcon('spark', 12) : opIcon('clock', 12)}</span>
-    <span class="g-label">${isMeaningful ? 'Free window' : 'Idle gap'} · ${gapMin} min (${free} free after travel)</span>
-    <span class="g-time">${fmtMin(gapStart)}–${fmtMin(gapEnd)}</span>`;
-  const currLabel = curr.id ? (curr.patient || TYPE_LABEL[curr.type] || 'previous booking') : 'start of day';
-  const nextLabel = next.id ? (next.patient || TYPE_LABEL[next.type] || 'next booking') : 'end of day';
-  el.title = isMeaningful
-    ? `Free window ${fmtMin(gapStart)}–${fmtMin(gapEnd)}: ${free} min usable between ${currLabel} and ${nextLabel}. Tap for ranked suggestions.`
-    : `Idle gap between ${currLabel} and ${nextLabel}. Tap for options.`;
-  el.dataset.day = day;
-  el.dataset.currId = curr.id || '';
-  el.dataset.nextId = next.id || '';
-  el.onclick = (ev) => {
-    ev.stopPropagation();
-    if (curr.id && next.id) { openGapOptions(day, curr.id, next.id); return; }
-    // Edge windows go straight to booking with the window prefilled
-    if (typeof openBookingPanel === 'function') {
-      openBookingPanel({ day, startH: Math.floor(gapStart / 60), startM: gapStart % 60,
-                         endH: Math.floor(gapEnd / 60), endM: gapEnd % 60 });
-    }
-  };
-  col.appendChild(el);
-}
+/* renderGapOverlay REMOVED (2026-08-09): the free-time/gap overlay no longer
+   exists — see the note in renderSegmentOverlay. */
 
 function refreshAllOverlays() {
   ['mon','tue','wed','thu','fri'].forEach(d => refreshDayOverlays(d));
@@ -16237,16 +16177,15 @@ function previewAllTravel() {
   // Invalidate cached per-session Splose lookups so edits to bases propagate
   Object.values(SESSIONS).forEach(s => { delete s.__loc; });
   refreshAllOverlays();
-  // Count travel legs rendered
+  // Count travel legs rendered (the free-time/gap overlay was removed 2026-08-09)
   const legs = document.querySelectorAll('.travel-overlay').length;
-  const gaps = document.querySelectorAll('.gap-overlay').length;
   const office = WORK_BASES.office;
   const homesN = (WORK_BASES.homes || []).length;
   const homeSummary = homesN
     ? `${homesN} home base${homesN === 1 ? '' : 's'} (${WORK_BASES.homes.map(h => h.label).join(', ')})`
     : 'no home bases configured';
   showToast('Travel matrix refreshed',
-    `${legs} travel leg${legs===1?'':'s'} + ${gaps} idle-gap window${gaps===1?'':'s'} computed via Google Distance Matrix (sample). Office: ${office.suburb}; ${homeSummary}.`);
+    `${legs} travel leg${legs===1?'':'s'} computed via Google Distance Matrix (sample). Office: ${office.suburb}; ${homeSummary}.`);
 }
 
 /* ---------- Idle-gap options modal ---------- */
@@ -16818,7 +16757,8 @@ function toggleLocationAlarm(el) {
 /* ---------- Initial render on load ---------- */
 renderWorkLocationEditor();
 refreshAlarm();
-// Paint travel legs + idle-gap windows onto every day column now that SESSIONS is populated
+// Paint travel legs onto every day column now that SESSIONS is populated
+// (the idle-gap/free-window overlay was removed 2026-08-09)
 if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
 
 /* ---------- Live data freshness (Stage 2) ----------
@@ -16855,8 +16795,14 @@ async function refreshFreshnessNow(manual) {
       var ss = await fetch('/api/splose/sync-status', { credentials: 'include' });
       if (ss.ok) {
         var sp = await ss.json();
-        parts.push('Splose: ' + (sp.ok ? ('checked ' + (_fmtAgo(sp.lastOk) || 'recently')) : 'error'));
-        if (!sp.ok) ok = false;
+        window.SPLOSE_CALENDAR_SYNC_ENABLED = sp.calendarSyncEnabled === true;
+        if (!window.SPLOSE_CALENDAR_SYNC_ENABLED) {
+          // Outlook-only mirror: Splose no longer feeds the calendar — say so honestly
+          parts.push('Splose: patients only');
+        } else {
+          parts.push('Splose: ' + (sp.ok ? ('checked ' + (_fmtAgo(sp.lastOk) || 'recently')) : 'error'));
+          if (!sp.ok) ok = false;
+        }
       }
     }
     txt.textContent = parts.join(' · ') || 'Status unavailable';
@@ -23539,17 +23485,25 @@ async function disconnectOutlookFromSettings(btn) {
 }
 
 async function checkIntegrationStatuses() {
-  // Splose: optimistic (we always attempt sync)
+  // Splose: optimistic (we always attempt the patient-data connection)
   var slosePill    = document.getElementById('stg-splose-status');
   var sloseLastSync = document.getElementById('stg-splose-last-sync');
   if (slosePill)    { slosePill.className = 'settings-status-pill connected'; slosePill.innerHTML = '<span class="settings-status-dot"></span> Connected'; }
-  if (sloseLastSync) sloseLastSync.textContent = 'Syncing every 90 seconds';
+  if (sloseLastSync) sloseLastSync.textContent = 'Patient data only — calendar sync is Outlook-only';
 
   try {
     var res = await fetch('/api/settings/integrations/status', { credentials: 'include' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var d = await res.json();
     var st = d.statuses || {};
+
+    // Splose calendar coupling state (honest label — patients-only by default)
+    if (sloseLastSync) {
+      var spl = st.splose || {};
+      sloseLastSync.textContent = spl.calendarSyncEnabled === true
+        ? 'Calendar sync enabled (legacy coupling)'
+        : 'Patient data only — calendar sync is Outlook-only';
+    }
 
     // Outlook
     var outlookPill    = document.getElementById('stg-outlook-status');
@@ -24186,11 +24140,8 @@ function applyUserSettings(s, os) {
     el.style.display = showTravel ? '' : 'none';
   });
 
-  // ── Show/hide idle gap overlays ───────────────────────────────
-  var showGaps = s.showIdleGaps !== false;
-  document.querySelectorAll('.gap-overlay').forEach(function(el) {
-    el.style.display = showGaps ? '' : 'none';
-  });
+  // (Idle-gap overlay show/hide removed 2026-08-09 — the gap overlay no longer
+  //  exists on the calendar; the showIdleGaps setting now only affects reports.)
 
   // ── Show/hide Splose vs Outlook tiles ─────────────────────────
   var showSplose  = s.showSploseEvents  !== false;
@@ -24964,7 +24915,7 @@ var HELP_TOURS = {
         body: 'Switch between the main areas here. <strong>Smart Booking</strong> creates appointments. <strong>Calendar</strong> shows your week. Some tabs are only visible to Admins and Owners.',
         pad: 2, rounded: '8px' },
       { target: 'tab-calendar', title: 'Open the Calendar',
-        body: 'The Calendar tab shows your full week with all sessions, travel legs, and idle gaps as colour-coded blocks. Click any block for details.',
+        body: 'The Calendar tab shows your full week with all sessions and travel legs as colour-coded blocks. Click any block for details.',
         action: function() { if (typeof switchTab === 'function') switchTab('calendar'); },
         pad: 2, rounded: '8px' },
       { target: 'cal-view-tabs', title: 'Change your view',
@@ -25051,7 +25002,7 @@ var HELP_TOURS = {
         body: 'Each suggested slot has a score — higher is better. Scoring considers: suburb cluster match, day load balance, travel buffer, and time preference.',
         pad: 4, rounded: '8px' },
       { target: null, title: 'Idle gaps as booking windows',
-        body: 'Free windows between existing sessions ( idle-gap blocks) are prioritised as booking slots. Placing a session in a gap is more efficient than adding it to a light day.'},
+        body: 'Free windows between existing sessions are prioritised as booking slots. Placing a session in a gap is more efficient than adding it to a light day.'},
       { target: null, title: 'Master Calendar (Admin/Owner)',
         body: 'Admins and Owners can open <strong>Master Calendar</strong> to see all therapist calendars overlaid. Use this to compare availability, find capacity, and spot team-wide scheduling gaps.' },
       { target: null, title: 'Choosing and confirming',
@@ -25100,17 +25051,10 @@ var HELP_TOURS = {
     prepare: function() { if (typeof switchTab === 'function') switchTab('calendar'); },
     steps: [
       { target: 'calendar-grid', title: 'What are idle gaps?',
-        body: 'An idle gap is free time between two sessions long enough to do useful work. These appear as <strong> blocks</strong> in a subtle grey-beige colour. The label shows how many minutes are free.',
+        body: 'An idle gap is free time between two sessions long enough to do useful work. Gaps are not drawn on the calendar — the canvas stays clean — but Opal still tracks them behind the scenes.',
         pad: 4, rounded: '8px' },
-      { target: 'gap-modal', title: 'Clicking an idle gap',
-        body: 'Click any  block to open the <strong>Idle Gap options panel</strong>. It shows the gap duration, the surrounding sessions, and quick-action buttons.',
-        pad: 0, rounded: '12px' },
-      { target: null, title: 'Quick actions',
-        body: '<strong>\u{1F4C5} Book session</strong> — open Smart Booking pre-filled for this slot. <strong>\u{1F4DD} Case notes</strong> — catch-up notes. <strong>\u{1F393} CPD</strong> — log professional development. <strong>\u{1F3E2} Admin</strong> — block for admin work. <strong>Break</strong> — mark as a break.'},
       { target: null, title: 'Location-aware suggestions',
-        body: 'If the gap falls between two sessions in the same suburb, the suggestion notes that a nearby booking is ideal — you can add a client without adding travel time.' },
-      { target: null, title: 'Hide a gap',
-        body: 'If you don’t want to use a gap (e.g. intentional recovery time), click <strong>Hide</strong>. The block disappears for this session. Refresh the calendar to restore it.' },
+        body: 'If a gap falls between two sessions in the same suburb, the Snapshot suggestion notes that a nearby booking is ideal — you can add a client without adding travel time.' },
       { target: 'header-report', title: 'Gaps in the Daily Snapshot',
         body: 'The Daily Snapshot shows all idle gaps for the day, their duration, and smart recommendations. Open the Snapshot (calendar icon in header) for a daily gap summary.',
         pad: 6, rounded: '50%' },
@@ -25290,8 +25234,6 @@ var HELP_TOURS = {
         pad: 4, rounded: '12px' },
       { target: null, title: 'CPD reminders',
         body: 'If CPD reminders are enabled (Settings → Notifications), you’ll receive alerts when you’re behind schedule.' },
-      { target: null, title: 'Adding CPD from idle gaps',
-        body: 'Click an idle gap on the calendar and choose <strong>\u{1F393} CPD</strong> from the quick actions. This opens the CPD log pre-filled with the date and time.' },
     ]
   },
 
@@ -25305,13 +25247,13 @@ var HELP_TOURS = {
       setTimeout(function(){ if(typeof showSettingsSection==='function') showSettingsSection('integration-settings'); }, 150);
     },
     steps: [
-      { target: 'sync-status', title: 'Splose sync status',
-        body: 'The sync pill shows whether the Splose delta feed is active. <strong>Green</strong> = syncing every 90 seconds. <strong>Red</strong> = sync failure — check Settings → Integrations.',
+      { target: 'sync-status', title: 'Calendar sync status',
+        body: 'The sync pill shows the Outlook mirror state. <strong>Green</strong> = delta sync running (about every 90 seconds). <strong>Red</strong> = sync failure — check Settings → Integrations. Splose shows as <strong>patients only</strong>: it supplies patient data, not calendar events.',
         pad: 6, rounded: '20px' },
-      { target: null, title: 'How Splose sync works',
-        body: 'Opal polls Splose every 90 seconds using the <strong>delta feed</strong> — only changes since the last sync are fetched. You can force a full sync from Settings → Integrations.' },
+      { target: null, title: 'How calendar sync works',
+        body: 'The calendar and Outlook mirror each other two ways. Opal polls Outlook every 90 seconds using the <strong>delta feed</strong> — only changes since the last sync are fetched — and bookings, edits and deletions made here are pushed straight back to Outlook.' },
       { target: null, title: 'Outlook calendar connection',
-        body: 'Connecting your Microsoft account lets Opal read your Outlook events and write back travel blocks and appointments. Without this, the calendar only shows Splose sessions.' },
+        body: 'Connecting your Microsoft account lets Opal read your Outlook events and write back appointments, edits and travel blocks. Without this, bookings stay in the app calendar only.' },
       { target: null, title: 'Outlook write-back',
         body: 'When write-back is enabled (Settings → Business), every new booking and travel block is written to Outlook automatically. This blocks driving time so others can’t schedule meetings over it.' },
       { target: null, title: 'Google Maps integration',
@@ -25326,160 +25268,13 @@ var HELP_TOURS = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  TASK #119 — IDLE GAP QUICK ACTIONS + BOOK + HIDE
+//  TASK #119 — IDLE GAP QUICK ACTIONS + BOOK + HIDE — REMOVED
 // ═══════════════════════════════════════════════════════════════
-
-// SessionStorage key for hidden gaps
-var GAP_DISMISSED_KEY = 'opal_hidden_gaps';
-
-function _gapDismissedSet() {
-  try { return new Set(JSON.parse(sessionStorage.getItem(GAP_DISMISSED_KEY) || '[]')); }
-  catch(e) { return new Set(); }
-}
-function _gapDismissKey(day, currId, nextId) {
-  return day + '|' + currId + '|' + nextId;
-}
-function dismissGapOverlay(day, currId, nextId) {
-  var key  = _gapDismissKey(day, currId, nextId);
-  var set  = _gapDismissedSet();
-  set.add(key);
-  try { sessionStorage.setItem(GAP_DISMISSED_KEY, JSON.stringify([...set])); } catch(e) {}
-  closeGapModal();
-  // Remove the overlay element from the DOM
-  var el = document.querySelector('.gap-overlay[data-day="' + day + '"][data-curr-id="' + currId + '"][data-next-id="' + nextId + '"]');
-  if (el) el.remove();
-  showToast('Gap hidden', 'This idle gap will not appear again until you refresh the page.');
-}
-
-function isGapDismissed(day, currId, nextId) {
-  return _gapDismissedSet().has(_gapDismissKey(day, currId, nextId));
-}
-
-// Patch openGapOptions to prepend quick actions
-(function patchOpenGapOptionsWithQuickActions() {
-  var _origOpen = window.openGapOptions;
-  if (typeof _origOpen !== 'function') return;
-
-  window.openGapOptions = function(day, currId, nextId) {
-    // Check if dismissed
-    if (isGapDismissed(day, currId, nextId)) return;
-    // Call original to populate head + body
-    _origOpen.call(this, day, currId, nextId);
-
-    // Now inject quick actions BEFORE the location cards
-    var body = document.getElementById('gap-modal-body');
-    if (!body) return;
-
-    var curr = window.SESSIONS && window.SESSIONS[currId];
-    var next = window.SESSIONS && window.SESSIONS[nextId];
-
-    // Figure out gap details from pendingGap (set by original)
-    var pg = window.pendingGap || {};
-    var gapMin  = pg.gapMin || 0;
-    var gapStart = pg.gapStart || 0;
-    var gapEnd   = pg.gapEnd   || 0;
-    var gapDayDates = window.DAY_DATES || {};
-    var dateStr = gapDayDates[day] || '';
-
-    // Size classification
-    var freeLabel = gapMin >= 60 ? 'Large block (' + gapMin + ' min)' :
-                    gapMin >= 30 ? 'Admin window (' + gapMin + ' min)' :
-                                   'Quick task (' + gapMin + ' min)';
-
-    // Build quick actions HTML
-    var qa = '<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);">';
-    qa += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px;">Quick Actions · '+ freeLabel + '</div>';
-    qa += '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;">';
-
-    // Work/admin actions
-    if (gapMin >= 15) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'case-noting\',\'Case Noting\')">Case notes</button>';
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'admin\',\'Admin Block\')">Admin</button>';
-    }
-    if (gapMin >= 20) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'break\',\'Break\')">Break</button>';
-    }
-    if (gapMin >= 45) {
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'cpd\',\'CPD Activity\')">CPD</button>';
-      qa += '<button class="gap-qa-btn" onclick="closeGapModal();addGapBlock(\'emails\',\'Emails & Admin\')">Emails</button>';
-    }
-    qa += '</div>';
-
-    // Book appointment in this gap
-    qa += '<button class="gap-qa-btn-primary" onclick="closeGapModal();(function(){';
-    qa += 'var h=' + Math.floor(gapStart/60) + ',m=' + (gapStart%60) + ';';
-    qa += 'var eh=' + Math.floor(gapEnd/60) + ',em=' + (gapEnd%60) + ';';
-    qa += 'if(typeof openBookingPanel===\'function\')openBookingPanel({day:\'' + day + '\',date:\'' + dateStr + '\',startH:h,startM:m,endH:eh,endM:em});';
-    qa += '})()">';
-    qa += 'Book appointment in this gap</button>';
-
-    // Hide this gap
-    qa += '<button class="gap-qa-btn-dismiss" onclick="dismissGapOverlay(\'' + day + '\',\'' + currId + '\',\'' + nextId + '\')">';
-    qa += 'Hide this gap (until page refresh)</button>';
-
-    qa += '</div>'; // end quick actions
-
-    // Prepend to modal body
-    body.innerHTML = qa + body.innerHTML;
-  };
-})();
-
-// CSS for gap quick action buttons injected into head
-(function injectGapQaBtnStyles() {
-  if (document.getElementById('gap-qa-styles')) return;
-  var s = document.createElement('style');
-  s.id = 'gap-qa-styles';
-  s.textContent = `
-    .gap-qa-btn {
-      padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
-      background: white; font-size: 12.5px; cursor: pointer; font-family: inherit;
-      color: var(--ink); transition: all .12s;
-    }
-    .gap-qa-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
-    .gap-qa-btn-primary {
-      display: block; width: 100%; padding: 9px 14px; margin-bottom: 6px;
-      border: 1.5px solid var(--accent); border-radius: 9px;
-      background: var(--accent-soft); color: var(--accent-deep);
-      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
-      text-align: left; transition: all .12s;
-    }
-    .gap-qa-btn-primary:hover { background: var(--accent); color: white; }
-    .gap-qa-btn-dismiss {
-      display: block; width: 100%; padding: 7px 14px;
-      border: 1px solid var(--border); border-radius: 8px;
-      background: none; color: var(--ink-soft); font-size: 12px;
-      cursor: pointer; font-family: inherit; text-align: left; transition: all .12s;
-    }
-    .gap-qa-btn-dismiss:hover { background: #fbe9e5; color: #c2412e; border-color: #eeb3a4; }
-  `;
-  document.head.appendChild(s);
-})();
-
-// addGapBlock — creates a named block for the gap (placeholder — logs for now, extend to Outlook write-back)
-function addGapBlock(type, label) {
-  var pg = window.pendingGap;
-  if (!pg) return;
-  var h   = Math.floor(pg.gapStart / 60);
-  var m   = pg.gapStart % 60;
-  var eh  = Math.floor(pg.gapEnd   / 60);
-  var em  = pg.gapEnd   % 60;
-  var day = pg.day;
-  var timeLabel = (h % 12 || 12) + ':' + String(m).padStart(2,'0') + (h<12?'am':'pm') +
-    ' – ' + (eh % 12 || 12) + ':' + String(em).padStart(2,'0') + (eh<12?'am':'pm');
-  showToast('Preview only — not saved', label + ' ' + timeLabel + ' on ' + day.charAt(0).toUpperCase() + day.slice(1) + ' is a suggestion preview: nothing was saved to your calendar.');
-  closeGapModal();
-  // Future: create Outlook block via write-back
-}
-
-// Patch renderGapOverlay to respect dismissed gaps
-(function patchRenderGapOverlayDismissCheck() {
-  var _orig = window.renderGapOverlay;
-  if (typeof _orig !== 'function') return;
-  window.renderGapOverlay = function(col, day, curr, next, from, to, gapStart, gapEnd, gapMin, travel) {
-    if (isGapDismissed(day, curr && curr.id, next && next.id)) return;
-    return _orig.apply(this, arguments);
-  };
-})();
+// The free-time/gap overlay was removed from the calendar (2026-08-09,
+// Antony's directive — it made the canvas look crowded). The dismiss
+// machinery, quick-action injection and renderGapOverlay patch that lived
+// here only served that overlay, so they were removed with it. Travel-leg
+// indicators (TASK #118 below) are unaffected and still render.
 
 // ═══════════════════════════════════════════════════════════════
 //  TASK #118 — TRAVEL DETAILS PANEL

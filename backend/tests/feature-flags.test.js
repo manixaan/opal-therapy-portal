@@ -14,6 +14,7 @@ function freshFlags(env) {
   delete process.env.ENABLE_OUTLOOK_WRITE;
   delete process.env.ENABLE_SPLOSE_WRITE;
   delete process.env.ENABLE_AUTOMATIC_REMOTE_DELETE;
+  delete process.env.ENABLE_SPLOSE_CALENDAR_SYNC;
   Object.assign(process.env, env);
   return require('../feature-flags');
 }
@@ -54,11 +55,36 @@ describe('flag resolution matrix', () => {
     expect(f.isOutlookWriteEnabled()).toBe(false);
   });
 
-  test('featureFlagState reports all three flags', () => {
+  test('featureFlagState reports all four flags', () => {
     const f = freshFlags({ NODE_ENV: 'staging', ENABLE_OUTLOOK_WRITE: 'true' });
     expect(f.featureFlagState()).toEqual({
       outlookWrite: true, sploseWrite: false, automaticRemoteDelete: false,
+      sploseCalendarSync: false,
     });
+  });
+});
+
+describe('ENABLE_SPLOSE_CALENDAR_SYNC — Outlook-only mirror (fails closed everywhere)', () => {
+  test('unset means OFF in EVERY environment, including development and test', () => {
+    for (const NODE_ENV of ['development', 'test', 'staging', 'production']) {
+      const f = freshFlags({ NODE_ENV });
+      expect(f.isSploseCalendarSyncEnabled()).toBe(false);
+    }
+  });
+
+  test('only the exact string "true" enables the legacy coupling', () => {
+    expect(freshFlags({ NODE_ENV: 'development', ENABLE_SPLOSE_CALENDAR_SYNC: 'true' })
+      .isSploseCalendarSyncEnabled()).toBe(true);
+    for (const value of ['yes', '1', 'TRUE', 'on', 'false', '']) {
+      const f = freshFlags({ NODE_ENV: 'development', ENABLE_SPLOSE_CALENDAR_SYNC: value });
+      expect(f.isSploseCalendarSyncEnabled()).toBe(false);
+    }
+  });
+
+  test('the other flags are unaffected by the calendar-sync flag', () => {
+    const f = freshFlags({ NODE_ENV: 'development', ENABLE_SPLOSE_CALENDAR_SYNC: 'true' });
+    expect(f.isSploseWriteEnabled()).toBe(true);   // dev default unchanged
+    expect(f.isOutlookWriteEnabled()).toBe(true);  // dev default unchanged
   });
 });
 

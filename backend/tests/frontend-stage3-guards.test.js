@@ -360,13 +360,26 @@ describe('resource hub v1', () => {
   const view = () => HTML.slice(HTML.indexOf('<section class="view" id="view-resources">'),
                                 HTML.indexOf('<!-- ============ ACCOUNTING TAB'));
 
-  test('three functional areas — no Coming Soon, no disabled tabs', () => {
+  test('two live areas; Therapy Store deliberately parked as Coming soon', () => {
+    // PRODUCT DECISION 2026-08-09 (Antony): the Therapy Store is parked. The
+    // store sub-tab is disabled with a "Coming soon" chip and rhSwitch quietly
+    // refuses 'store'. This is UI parking only — the store panel markup, the
+    // store/purchase JS and the admin Purchasing queue all remain intact.
     const v = view();
     expect(v).toContain('>Hub</button>'); // R2: the Library panel became the full Hub
     expect(v).toContain('>AI Resource Studio</button>');
-    expect(v).toContain('Therapy Store &amp; Purchase Requests</button>');
-    expect(v).not.toContain('Coming soon');
-    expect(v).not.toContain('rh-soon">Not enabled');
+    expect(v).toContain('Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>');
+    // Store tab is non-interactive: disabled + aria-disabled, no onclick
+    expect(v).toMatch(/data-rh="store"[^>]*\bdisabled\b/);
+    expect(v).toMatch(/data-rh="store"[^>]*aria-disabled="true"/);
+    expect(v).not.toMatch(/data-rh="store"[^>]*onclick/);
+    // The other two tabs remain enabled and clickable
+    expect(v).toMatch(/data-rh="shared"[^>]*onclick="rhSwitch\('shared'\)"/);
+    expect(v).toMatch(/data-rh="ai"[^>]*onclick="rhSwitch\('ai'\)"/);
+    expect(v).not.toMatch(/data-rh="shared"[^>]*\bdisabled\b/);
+    expect(v).not.toMatch(/data-rh="ai"[^>]*\bdisabled\b/);
+    // Programmatic guard: rhSwitch('store') is a quiet no-op
+    expect(HTML).toContain("if (area === 'store') return;");
   });
 
   test('library has sections, search, filters, reset and saved view', () => {
@@ -1047,5 +1060,95 @@ describe('master scheduler phases 7-8 candidates', () => {
     expect(SCHED_JS).toContain('mapShowClientPoint');
     expect(SCHED_JS).toContain('not yet booked');
     expect(SCHED_JS).toContain('m.clientMarker.setMap(null)');
+  });
+});
+
+// ── Outlook-only calendar mirror (2026-08-09) ────────────────────────────────
+// Directive: the app and Outlook mirror each other; Splose serves patient/
+// client data only and neither feeds nor receives calendar events by default.
+describe('outlook-only booking mirror', () => {
+  const booking = () => HTML.slice(
+    HTML.indexOf('async function confirmBooking()'),
+    HTML.indexOf('function resetWizard()'));
+
+  test('confirmBooking never writes to Splose — no Splose endpoints in the booking flow', () => {
+    expect(booking()).not.toContain('/api/splose/appointments');
+    expect(booking()).not.toContain('/api/splose/busy-times');
+    expect(booking()).not.toContain("'Saving to Splose…'");
+  });
+
+  test('client sessions use the imported-event conventions (title + category)', () => {
+    expect(booking()).toContain('`Client Appointment — ${_patName}`');
+    expect(booking()).toContain("'Client Appointments'");
+    expect(booking()).toContain("'Creating appointment…'");
+  });
+
+  test('no fake Splose reference IDs or false "Written to Splose" claims in the modal', () => {
+    expect(booking()).not.toContain('Written to Splose');
+    expect(booking()).not.toContain('Math.random()*89999');
+  });
+
+  test('Splose scheduling-ID hard-blocks are gone; patient selection is still required', () => {
+    expect(booking()).not.toContain('Practitioner or location not configured');
+    expect(booking()).not.toContain('No Splose service mapped');
+    expect(booking()).not.toContain("Patient's active case hasn't loaded yet");
+    expect(booking()).toContain("showToast('No patient selected'");
+  });
+});
+
+describe('splose calendar decoupling (patients only)', () => {
+  test('loadSploseAppointmentsIntoSessions is a no-op unless the backend flag enables it', () => {
+    expect(HTML).toContain('window.SPLOSE_CALENDAR_SYNC_ENABLED = false;');
+    expect(HTML).toContain("if (window.SPLOSE_CALENDAR_SYNC_ENABLED !== true) return; // Splose: patients only");
+  });
+
+  test('header pill reports the honest patients-only state and reads the backend flag', () => {
+    expect(HTML).toContain("parts.push('Splose: patients only');");
+    expect(HTML).toContain('sp.calendarSyncEnabled === true');
+  });
+
+  test('legacy sendToSplose path is gated off with an honest message', () => {
+    const fn = HTML.slice(HTML.indexOf('async function sendToSplose()'), HTML.indexOf('function resetAutoFit()'));
+    expect(fn).toContain("showToast('Splose calendar sync is off'");
+    expect(fn.indexOf('Splose calendar sync is off')).toBeLessThan(fn.indexOf('/api/splose/appointments'));
+  });
+
+  test('settings integration card no longer claims Splose syncs the calendar', () => {
+    expect(HTML).not.toContain("sloseLastSync.textContent = 'Syncing every 90 seconds'");
+    expect(HTML).toContain('Patient data only — calendar sync is Outlook-only');
+  });
+});
+
+// ── Free-time/gap overlay removed from the calendar (2026-08-09) ─────────────
+// Antony's directive: the green hatched "Free window / Idle gap" bands and
+// cards crowded the calendar — gone completely. Travel-leg indicators stay.
+describe('free-time gap overlay removed', () => {
+  test('no gap overlay is rendered and its machinery is gone', () => {
+    expect(HTML).not.toContain('function renderGapOverlay');
+    expect(HTML).not.toContain("el.className = 'gap-overlay'");
+    expect(HTML).not.toContain('dismissGapOverlay');
+    expect(HTML).not.toContain('isGapDismissed');
+    expect(HTML).not.toContain('GAP_DISMISSED_KEY');
+    expect(HTML).not.toContain('gap-qa-btn');
+    // the render dispatch explicitly skips gap segments
+    expect(HTML).toContain('FREE-TIME/GAP OVERLAY REMOVED');
+  });
+
+  test('the hatched gap CSS is gone (travel-overlay CSS remains)', () => {
+    expect(HTML).not.toContain('.gap-overlay {');
+    expect(HTML).not.toContain('.gap-overlay:hover');
+    expect(HTML).not.toContain('.gap-overlay.smart {');
+    expect(HTML).toContain('.travel-overlay {');
+  });
+
+  test('travel-leg indicators still render on the calendar', () => {
+    expect(HTML).toContain("el.className = 'travel-overlay ' + seg.kind;");
+    expect(HTML).toContain('function renderSegmentOverlay');
+    expect(HTML).toContain('openTravelPanel(seg)');
+  });
+
+  test('gap segments are still computed for the Snapshot report and suggestions', () => {
+    expect(HTML).toContain('function computeDayTravelSegments');
+    expect(HTML).toContain("segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: {},");
   });
 });

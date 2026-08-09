@@ -57,7 +57,7 @@ const RECORDS = [
   },
   {
     module: 'calendar', feature: 'Add a calendar event', route: '/calendar',
-    summary: 'Create an event directly on the calendar (meetings, admin blocks and similar). Client appointments are best created through Smart Booking, which also writes to Splose or Outlook.',
+    summary: 'Create an event directly on the calendar (meetings, admin blocks and similar). Client appointments are best created through Smart Booking, which also writes to your Outlook calendar.',
     aliases: ['add event', 'new event', 'create event'],
     instructions: [
       'Open the Calendar tab.',
@@ -82,18 +82,18 @@ const RECORDS = [
     related_features: ['Calendar day, week and month views', 'Calendar defaults and working hours'],
   },
   {
-    module: 'calendar', feature: 'Splose appointment import', route: '/calendar', status: 'partial',
-    summary: 'PARTIAL: Splose data flows one way into the Portal. Appointments are imported read-only and cancellations in Splose are detected by a background poller so the calendars converge. The Portal does not edit existing Splose appointments; the only write toward Splose is creating a new appointment through Smart Booking.',
-    aliases: ['splose', 'splose sync', 'splose import'],
+    module: 'calendar', feature: 'Splose patient data', route: '/calendar',
+    summary: 'Splose supplies patient and client data only — the patient picker, NDIS plan details and travel logbook data. Calendar integration is Outlook-only: the Portal calendar and Outlook mirror each other two ways, and Splose neither feeds nor receives calendar events. Splose appointments imported before the change remain visible as historical events but are no longer refreshed.',
+    aliases: ['splose', 'splose sync', 'splose import', 'splose patients'],
     instructions: [
-      'No setup is needed — Splose appointments appear on the Calendar automatically once the practice connection is configured by the owner.',
-      'To create a new Splose appointment from the Portal, use the Smart Booking tab.',
+      'No setup is needed — patient data appears in the Portal automatically once the practice connection is configured by the owner.',
+      'To create an appointment from the Portal, use the Smart Booking tab — it is written to your Outlook calendar and mirrored here.',
     ],
     troubleshooting: [
-      'If a Splose appointment is missing, check you are on the right week and check the sync status pill in the header for the last successful sync.',
-      'Changes made to an appointment inside Splose can take a sync cycle to appear in the Portal.',
+      'The header sync pill shows "Splose: patients only" — this is expected; Splose no longer syncs calendar events.',
+      'Appointments created or changed inside Splose do NOT appear on the Portal calendar — book in the Portal or Outlook instead.',
     ],
-    related_features: ['Smart Booking appointment creation', 'Outlook sync status'],
+    related_features: ['Smart Booking appointment creation', 'Connect Outlook'],
   },
   {
     module: 'calendar', feature: 'Master Scheduler matrix', route: '/calendar', minimum_role: 'admin',
@@ -153,7 +153,7 @@ const RECORDS = [
   // ═══ Smart Booking ═════════════════════════════════════════════════════════
   {
     module: 'book', feature: 'Smart Booking appointment creation', route: '/book',
-    summary: 'Smart Booking is a single form for creating an appointment: choose a booking type, pick the patient where relevant, set When & Where, then Create appointment. Depending on the booking type it writes a real Splose appointment or an Outlook calendar block.',
+    summary: 'Smart Booking is a single form for creating an appointment: choose a booking type, pick the patient where relevant, set When & Where, then Create appointment. Every booking is written to your Outlook calendar and mirrored in the Portal — client sessions appear in Outlook as "Client Appointment — <patient name>". Nothing is written to Splose.',
     aliases: ['smart booking', 'create appointment', 'book appointment', 'new booking'],
     instructions: [
       'Open the Smart Booking tab.',
@@ -164,13 +164,13 @@ const RECORDS = [
     ],
     troubleshooting: [
       'If Create appointment complains about a missing time, set a day and start time in the When & Where section first.',
-      'If Outlook is not connected, Outlook-type blocks are added to the app calendar only.',
+      'If Outlook is not connected, bookings are added to the app calendar only — connect Outlook from Settings, Integrations.',
     ],
     related_features: ['Booking types', 'Connect Outlook'],
   },
   {
     module: 'book', feature: 'Booking types', route: '/book',
-    summary: 'Booking types are grouped categories on the Smart Booking form (client sessions and non-client blocks). The type decides what details are asked for and whether the result is written to Splose as an appointment or to Outlook as a block — there is no separate session-type step.',
+    summary: 'Booking types are grouped categories on the Smart Booking form (client sessions and non-client blocks). The type decides what details are asked for and how the resulting Outlook event is titled and categorised — every booking type writes to Outlook; there is no separate session-type step.',
     aliases: ['booking types', 'appointment types', 'session type'],
     instructions: [
       'Open the Smart Booking tab.',
