@@ -1,0 +1,144 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPAL SUPPORT POPUP — floating, draggable Support window (supportpop.js).
+   Mirrors the Opa shell (opa.css): same tokens, radii and shadows. The window
+   deliberately has NO page-dimming layer — the app behind it stays fully
+   interactive while an issue is being written up.
+   Stacking: above the app header (1000) and side drawers (1100), below the
+   Opa assistant (1500+).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#supportpop {
+  position: fixed; z-index: 1150;
+  display: none; flex-direction: column;
+  min-width: 360px; min-height: 420px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  opacity: 0; transform: translateY(10px) scale(0.98);
+  transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
+}
+#supportpop.sp-show { display: flex; opacity: 1; transform: none; }
+#supportpop.sp-mobile {
+  left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+  width: 100% !important; height: 84vh !important;
+  min-width: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* ── Header (drag handle) ── */
+.sp-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none;
+}
+.sp-head:active { cursor: grabbing; }
+.sp-head-icon { color: var(--accent); display: inline-flex; flex-shrink: 0; }
+.sp-head-id { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.sp-head-id strong { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+.sp-head-id span { font-size: 10.5px; color: var(--muted); }
+.sp-head-btns { margin-left: auto; display: flex; gap: 2px; }
+.sp-head-btns button {
+  width: 28px; height: 28px; border: none; background: none; cursor: pointer;
+  border-radius: var(--radius-sm); color: var(--ink-soft); font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; font-family: inherit;
+  transition: background var(--t-fast);
+}
+.sp-head-btns button:hover { background: var(--border-soft); color: var(--ink); }
+.sp-head-btns button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── Segmented sub-view switch ── */
+.sp-seg { display: flex; gap: 6px; padding: 10px 14px 0; flex-shrink: 0; }
+.sp-seg-btn {
+  flex: 1; border: 1px solid var(--border); background: var(--panel);
+  border-radius: 999px; padding: 6px 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  cursor: pointer; font-family: inherit;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.sp-seg-btn:hover { border-color: var(--accent); color: var(--accent-deep); }
+.sp-seg-btn[aria-selected="true"] {
+  border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft);
+}
+.sp-seg-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── Body ── */
+.sp-body { flex: 1; overflow-y: auto; padding: 10px 14px 14px; min-height: 0; }
+
+#supportpop label {
+  display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-soft);
+  margin: 12px 0 4px;
+}
+#supportpop input[type="text"], #supportpop select, #supportpop textarea {
+  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel); color: var(--ink);
+}
+#supportpop input[type="text"]:focus, #supportpop select:focus, #supportpop textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+#supportpop textarea { resize: vertical; }
+#supportpop input[type="file"] { font-size: 12px; color: var(--ink-soft); max-width: 100%; }
+
+.sp-privacy {
+  font-size: 11.5px; color: var(--ink-soft); background: #fdf6ec; border: 1px solid #ecd9bd;
+  border-radius: var(--radius-sm); padding: 9px 11px; margin-top: 14px; line-height: 1.5;
+}
+.sp-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.sp-success { text-align: center; padding: 18px 6px; }
+.sp-success .sp-success-icon { color: var(--accent); margin-bottom: 8px; }
+.sp-success p { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.sp-success .sp-quiet { font-weight: 400; }
+.sp-quiet { font-size: 12px; color: var(--muted); }
+
+/* ── My tickets sub-view ── */
+.sp-mine-head { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.sp-mine-head span { font-size: 14px; font-weight: 700; color: var(--ink); flex: 1; overflow-wrap: anywhere; }
+
+/* ── Voice dictation ── */
+.sp-voice-row { display: flex; gap: 6px; align-items: flex-start; }
+.sp-voice-row input[type="text"], .sp-voice-row textarea { flex: 1; }
+.sp-mic {
+  width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 50%;
+  background: var(--panel); color: var(--ink-soft); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative; flex-shrink: 0; padding: 0;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.sp-mic:hover { border-color: var(--accent); color: var(--accent-deep); }
+.sp-mic:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.sp-mic.sp-mic-on { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-soft); }
+.sp-mic.sp-mic-on::after {
+  content: ""; position: absolute; top: 1px; right: 1px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--accent-2, #d96f4e);
+  animation: spMicPulse 1.2s ease-in-out infinite;
+}
+@keyframes spMicPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+.sp-voice-interim { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 3px; min-height: 0; }
+.sp-voice-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+.sp-voice-note {
+  font-size: 11.5px; color: var(--accent-2, #d96f4e); margin-top: 4px;
+}
+
+/* ── Resize grip ── */
+.sp-resize {
+  position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
+  cursor: nwse-resize; touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 0 50%, var(--border) 50% 58%, transparent 58% 70%,
+      var(--border) 70% 78%, transparent 78%);
+  border-bottom-right-radius: var(--radius-lg);
+}
+#supportpop.sp-mobile .sp-resize { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  #supportpop, .sp-mic.sp-mic-on::after {
+    transition: none !important; animation: none !important;
+  }
+}

@@ -1203,3 +1203,108 @@ describe('event delete cascade UX', () => {
     expect(HTML).toContain('SESSIONS[seg.toSessionId] || SESSIONS[seg.fromSessionId]');
   });
 });
+
+// ── Support popup: floating window + voice dictation (2026-08-09) ────────────
+// Support is a top-level launcher tab for EVERY role; clicking it opens a
+// floating, draggable window (NOT a modal — the page behind stays fully
+// interactive) with a New-issue form and the user's own tickets. The
+// /api/support/* contract is unchanged.
+describe('support popup', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const SP_JS = fs.readFileSync(path.join(FRONTEND, 'supportpop.js'), 'utf8');
+  const SP_CSS = fs.readFileSync(path.join(FRONTEND, 'supportpop.css'), 'utf8');
+
+  test('assets are linked next to the Opa assets', () => {
+    expect(HTML).toContain('<link rel="stylesheet" href="/supportpop.css?v=1" />');
+    expect(HTML).toContain('<script src="/supportpop.js?v=1" defer></script>');
+  });
+
+  test('Support launcher tab exists for every role and never routes through switchTab', () => {
+    const at = HTML.indexOf('id="tab-support-pop"');
+    expect(at).toBeGreaterThan(-1);
+    const btn = HTML.slice(HTML.lastIndexOf('<button', at), HTML.indexOf('</button>', at));
+    expect(btn).toContain('window.SupportPop && window.SupportPop.toggle()');
+    expect(btn).not.toContain('data-tab='); // launcher, not a view tab
+    // role gating: the default-deny loop targets .tab[data-tab] only, and
+    // applyNavRoleVisibility re-asserts the launcher explicitly for all roles
+    expect(HTML).toContain("var supLauncher = document.getElementById('tab-support-pop');");
+    expect(HTML).toContain("if (supLauncher) supLauncher.style.display = '';");
+    // shared tab wiring skips launcher buttons without data-tab
+    expect(HTML).toContain("tabs.forEach(t => { if (t.dataset.tab) t.addEventListener('click', () => switchTab(t.dataset.tab)); });");
+    // the admin/owner Support Tickets CENTRE view is untouched
+    expect(HTML).toContain('data-tab="support"');
+    expect(HTML).toContain("if (name === 'support' && typeof supOpenCentre === 'function') supOpenCentre();");
+  });
+
+  test('popup is a floating window: draggable, resizable, persisted — no page-dimming layer', () => {
+    expect(SP_JS).toContain('function supClampRect(rect, vp)');
+    expect(SP_JS).toContain('function supDefaultRect(vp)');
+    expect(SP_JS).toContain('var SUP_MIN_W = 360, SUP_MIN_H = 420;');
+    expect(SP_JS).toContain("localStorage.setItem('support.window.x'");
+    expect(SP_JS).toContain("localStorage.setItem('support.window.height'");
+    expect(SP_JS).toContain("panel.setAttribute('role', 'dialog');");
+    expect(SP_JS).toContain("if (e.key === 'Escape') SupportPop.close();");
+    expect(SP_JS).toContain('setPointerCapture');
+    expect(SP_JS).not.toMatch(/backdrop/i); // never a modal
+    expect(SP_CSS).not.toMatch(/backdrop/i);
+    expect(SP_CSS).toContain('z-index: 1150;'); // above header/drawers, below Opa (1500+)
+    expect(SP_CSS).toContain('min-width: 360px; min-height: 420px;');
+    expect(SP_CSS).toContain('#supportpop.sp-mobile'); // <700px bottom-sheet
+    expect(SP_JS).toContain('function isMobile() { return vp().w < 700; }');
+    // a hidden/0x0 viewport must never destroy the saved position
+    expect(SP_JS).toContain('if (w < 200 || h < 200)');
+  });
+
+  test('account-menu entries and the Resource Hub bridge route into the popup', () => {
+    expect(HTML).toContain('if (window.SupportPop && window.SupportPop.openReport) { window.SupportPop.openReport(prefill); return; }');
+    expect(HTML).toContain('if (window.SupportPop && window.SupportPop.openMyTickets) { window.SupportPop.openMyTickets(ticketId); return; }');
+    // account menu still goes through the stable OpalSupport bridge
+    expect(HTML).toContain('onclick="toggleAccountMenu();window.OpalSupport.openReport()"');
+    expect(HTML).toContain('onclick="toggleAccountMenu();window.OpalSupport.openMyTickets()"');
+  });
+
+  test('My tickets rendering is shared with the drawer, not duplicated', () => {
+    expect(HTML).toContain('window.supMySetCtx = function (ctx)');
+    expect(HTML).toContain('function supMyEls()');
+    expect(HTML).toContain('window.supMySetCtx(null); // legacy drawer opener renders into the drawer');
+    expect(SP_JS).toContain('global.supMySetCtx({ body: body, title: el(\'sp-mine-title\'), back: el(\'sp-mine-back\') });');
+    expect(SP_JS).toContain('global.supMyShowDetail(ticketId)');
+    expect(SP_JS).toContain('global.supMyShowList()');
+  });
+
+  test('screenshot precheck + upload exist once and both surfaces use them', () => {
+    expect(HTML).toContain('window.supPrecheckScreenshot = function (file)');
+    expect(HTML).toContain('window.supUploadScreenshot = async function (ticketId, file)');
+    expect(HTML).toContain('var precheckError = window.supPrecheckScreenshot(file);');
+    expect(SP_JS).toContain('global.supPrecheckScreenshot(file)');
+    expect(SP_JS).toContain('global.supUploadScreenshot(d.ticket.id, file)');
+  });
+
+  test('New-issue form keeps the exact report contract and privacy notice', () => {
+    expect(SP_JS).toContain("global.supApi('/api/support/tickets', { method: 'POST', body: {");
+    expect(SP_JS).toContain('expectedBehaviour:');
+    expect(SP_JS).toContain('reportedPriority:');
+    expect(SP_JS).toContain('technicalContext: technicalContext');
+    expect(SP_JS).toContain('global.createIssueContext()');
+    expect(SP_JS).toContain('Please do not include participant names, clinical information or other sensitive personal information in technical support tickets.');
+    expect(SP_JS).toContain("'Thanks — ticket ' + d.ticket.ticket_number + ' has been created.'");
+  });
+
+  test('voice dictation is feature-detected, en-AU, honest, and never auto-submits', () => {
+    expect(SP_JS).toContain('global.SpeechRecognition || global.webkitSpeechRecognition || null');
+    expect(SP_JS).toContain("rec.lang = 'en-AU';");
+    expect(SP_JS).toContain('rec.continuous = true;');
+    expect(SP_JS).toContain('rec.interimResults = true;');
+    // unsupported browsers render no mic buttons at all
+    expect(SP_JS).toContain("if (!SR) return ''; // unsupported browser: no mic buttons at all");
+    expect(SP_JS).toContain('Voice input is not available in this browser — you can type as normal.');
+    expect(SP_JS).toContain("Voice dictation uses your browser's speech service.");
+    // dictation edits the field only; the recogniser callbacks never submit
+    const onresult = SP_JS.slice(SP_JS.indexOf('rec.onresult'), SP_JS.indexOf('rec.onerror'));
+    expect(onresult.length).toBeGreaterThan(100);
+    expect(onresult).not.toContain('submitReport');
+    // mic stops on close and on submit
+    expect(SP_JS).toContain('stopVoice(); // closing the window always ends dictation');
+    expect(SP_JS).toContain('stopVoice(); // submitting always ends dictation; submission is manual only');
+  });
+});

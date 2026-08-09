@@ -16,8 +16,10 @@
 <script src="/scheduler.js?v=p9" defer></script>
 <link rel="stylesheet" href="/resourcehub.css?v=r2" />
 <link rel="stylesheet" href="/opa.css?v=1" />
+<link rel="stylesheet" href="/supportpop.css?v=1" />
 <script src="/resourcehub.js?v=r2" defer></script>
 <script src="/opa.js?v=1" defer></script>
+<script src="/supportpop.js?v=1" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -3893,6 +3895,13 @@ window.opIcon = function (name, size) {
 </button>
 <button class="tab" data-tab="resources">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Resources
+  </button>
+  <!-- Support launcher (all roles): opens the floating Support popup, not a
+       view — deliberately no data-tab, so switchTab and the role-based
+       default-deny loop (which target .tab[data-tab]) never touch it. -->
+  <button class="tab" id="tab-support-pop" title="Support — report an issue or follow your tickets"
+    onclick="window.SupportPop && window.SupportPop.toggle()">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Support
   </button>
   <button class="tab" data-tab="support" style="display:none;">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg> Support Tickets
@@ -8787,7 +8796,10 @@ function switchTab(name) {
     WIZARD_BOOKED = false;
   }
 }
-tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+// Launcher-style .tab buttons without data-tab (e.g. #tab-support-pop, which
+// opens the floating Support popup) carry their own onclick and must never
+// route through switchTab — the nav guard would treat undefined as denied.
+tabs.forEach(t => { if (t.dataset.tab) t.addEventListener('click', () => switchTab(t.dataset.tab)); });
 
 /* ---------- Calendar-tab view switching (today/week/month) ---------- */
 function switchCalendarView(viewName) {
@@ -20358,6 +20370,14 @@ function applyNavRoleVisibility(role) {
     el.style.display = allowed.includes(el.dataset.tab) ? '' : 'none';
   });
 
+  // Support popup launcher: available to EVERY role (therapist, read_only,
+  // admin, owner). It has no data-tab — it opens a floating window, not a
+  // view — so the default-deny loop above never touches it; this line keeps
+  // that guarantee explicit. The admin/owner Support Tickets CENTRE view
+  // (data-tab="support") stays governed by ROLE_NAV as before.
+  var supLauncher = document.getElementById('tab-support-pop');
+  if (supLauncher) supLauncher.style.display = '';
+
   // Build (or rebuild) the dropdown for roles that have one. The real tab
   // BUTTONS move into the menu, so switchTab's active-state bookkeeping,
   // badges (#ndis-alert-badge, #dormant-badge) and read_only CSS guards all
@@ -26992,7 +27012,12 @@ var __supReportPrefill = null;
 var __supCreatedTicket = null;
 
 window.OpalSupport = {
+  // Both entries route into the floating Support popup (supportpop.js) —
+  // Report an issue lands on its New-issue view, My tickets on its list view.
+  // The legacy modal/drawer below stay as a fallback only for the case where
+  // the popup asset failed to load; the API contract is unchanged either way.
   openReport: function (prefill) {
+    if (window.SupportPop && window.SupportPop.openReport) { window.SupportPop.openReport(prefill); return; }
     __supReportPrefill = prefill || null;
     __supCreatedTicket = null;
     document.getElementById('sup-report-form').style.display = '';
@@ -27009,7 +27034,10 @@ window.OpalSupport = {
     document.getElementById('modal-support-report').classList.add('show');
     document.getElementById('sup-r-title').focus();
   },
-  openMyTickets: function (ticketId) { supOpenMyTickets(ticketId); },
+  openMyTickets: function (ticketId) {
+    if (window.SupportPop && window.SupportPop.openMyTickets) { window.SupportPop.openMyTickets(ticketId); return; }
+    supOpenMyTickets(ticketId);
+  },
 };
 
 function supCloseReport() { document.getElementById('modal-support-report').classList.remove('show'); }
@@ -27046,6 +27074,29 @@ async function supApi(path, opts) {
 
 /* ── Report submission ─────────────────────────────────────────────────── */
 
+/* Shared screenshot precheck + upload — one implementation used by both the
+   legacy report modal and the floating Support popup (supportpop.js). */
+window.supPrecheckScreenshot = function (file) {
+  if (!file) return null;
+  var okTypes = ['image/png', 'image/jpeg', 'image/webp'];
+  if (okTypes.indexOf(file.type) === -1) return 'Screenshot must be PNG, JPEG or WEBP';
+  if (file.size > 5 * 1024 * 1024) return 'Screenshot exceeds the 5 MB limit';
+  return null;
+};
+window.supUploadScreenshot = async function (ticketId, file) {
+  var base64 = await new Promise(function (resolve) {
+    var fr = new FileReader();
+    fr.onload = function () { resolve(String(fr.result).split(',')[1] || null); };
+    fr.onerror = function () { resolve(null); };
+    fr.readAsDataURL(file);
+  });
+  if (!base64) return false;
+  var up = await supApi('/api/support/tickets/' + ticketId + '/attachments', { method: 'POST', body: {
+    fileName: file.name, fileMime: file.type, fileData: base64, fileSizeBytes: file.size,
+  } });
+  return !!up.__ok;
+};
+
 async function supSubmitReport() {
   var title = document.getElementById('sup-r-title').value.trim();
   var desc = document.getElementById('sup-r-desc').value.trim();
@@ -27054,11 +27105,8 @@ async function supSubmitReport() {
 
   var shotInput = document.getElementById('sup-r-shot');
   var file = shotInput.files && shotInput.files[0];
-  if (file) {
-    var okTypes = ['image/png', 'image/jpeg', 'image/webp'];
-    if (okTypes.indexOf(file.type) === -1) { showToast('Screenshot must be PNG, JPEG or WEBP', true); return; }
-    if (file.size > 5 * 1024 * 1024) { showToast('Screenshot exceeds the 5 MB limit', true); return; }
-  }
+  var precheckError = window.supPrecheckScreenshot(file);
+  if (precheckError) { showToast(precheckError, true); return; }
 
   var btn = document.getElementById('sup-r-submit');
   btn.disabled = true; btn.textContent = 'Submitting…';
@@ -27084,18 +27132,8 @@ async function supSubmitReport() {
   __supCreatedTicket = d.ticket;
 
   if (file) {
-    var base64 = await new Promise(function (resolve) {
-      var fr = new FileReader();
-      fr.onload = function () { resolve(String(fr.result).split(',')[1] || null); };
-      fr.onerror = function () { resolve(null); };
-      fr.readAsDataURL(file);
-    });
-    if (base64) {
-      var up = await supApi('/api/support/tickets/' + d.ticket.id + '/attachments', { method: 'POST', body: {
-        fileName: file.name, fileMime: file.type, fileData: base64, fileSizeBytes: file.size,
-      } });
-      if (!up.__ok) showToast('Ticket created, but the screenshot could not be attached', true);
-    }
+    var uploaded = await window.supUploadScreenshot(d.ticket.id, file);
+    if (!uploaded) showToast('Ticket created, but the screenshot could not be attached', true);
   }
 
   document.getElementById('sup-report-form').style.display = 'none';
@@ -27111,9 +27149,24 @@ function supViewCreatedTicket() {
   supOpenMyTickets(__supCreatedTicket ? __supCreatedTicket.id : null);
 }
 
-/* ── My Tickets drawer (all roles) ─────────────────────────────────────── */
+/* ── My Tickets (all roles) — shared renderer, two hosts ────────────────
+   The list/detail/verify/comment logic below renders into a render-target
+   context: by default the legacy drawer's elements, or — via supMySetCtx —
+   the floating Support popup's container (supportpop.js). One implementation,
+   two surfaces; the drawer remains only as the no-popup fallback. */
+
+var __supMyCtx = null; // null → drawer elements
+window.supMySetCtx = function (ctx) { __supMyCtx = ctx || null; };
+function supMyEls() {
+  return __supMyCtx || {
+    body: document.getElementById('sup-my-body'),
+    title: document.getElementById('sup-my-title'),
+    back: document.getElementById('sup-my-back'),
+  };
+}
 
 async function supOpenMyTickets(ticketId) {
+  window.supMySetCtx(null); // legacy drawer opener renders into the drawer
   document.getElementById('sup-my-overlay').classList.add('open');
   document.getElementById('sup-my-panel').classList.add('open');
   if (ticketId) { await supMyShowDetail(ticketId); } else { await supMyShowList(); }
@@ -27124,9 +27177,10 @@ function supCloseMyTickets() {
 }
 
 async function supMyShowList() {
-  document.getElementById('sup-my-title').textContent = 'My tickets';
-  document.getElementById('sup-my-back').style.display = 'none';
-  var body = document.getElementById('sup-my-body');
+  var els = supMyEls();
+  els.title.textContent = 'My tickets';
+  els.back.style.display = 'none';
+  var body = els.body;
   body.innerHTML = '<div class="sup-quiet">Loading…</div>';
   var d = await supApi('/api/support/tickets');
   var rows = d.tickets || [];
@@ -27193,13 +27247,14 @@ function supAttachmentsHtml(attachments) {
 }
 
 async function supMyShowDetail(id) {
-  var body = document.getElementById('sup-my-body');
-  document.getElementById('sup-my-back').style.display = '';
+  var els = supMyEls();
+  var body = els.body;
+  els.back.style.display = '';
   body.innerHTML = '<div class="sup-quiet">Loading…</div>';
   var d = await supApi('/api/support/tickets/' + id);
   if (!d.__ok || !d.ticket) { body.innerHTML = '<div class="sup-quiet">This ticket could not be loaded.</div>'; return; }
   var t = d.ticket;
-  document.getElementById('sup-my-title').textContent = t.ticket_number;
+  els.title.textContent = t.ticket_number;
 
   var html = '<div class="m" style="font-size:11.5px;color:var(--muted);">' +
     escapeHtml(SUP_TYPE_LABELS[t.type] || t.type) + ' · Reported ' + escapeHtml(supFmtWhen(t.created_at)) + '</div>' +
