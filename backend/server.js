@@ -141,6 +141,10 @@ app.use('/api/accounting/webhooks/xero', express.raw({ type: '*/*' }));
 // keeps the small default limit as a request-size defence.
 app.use('/api/profile/documents', bodyParser.json({ limit: '8mb' }));
 
+// Support-ticket screenshots use the same base64 upload pattern (5 MB cap
+// enforced in the route) — the /api/support subtree gets the larger limit.
+app.use('/api/support', bodyParser.json({ limit: '8mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -468,6 +472,10 @@ app.use('/', require('./mobile-routes'));
 
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));
+
+// Opal Portal support — internal ticketing & feedback (all roles report;
+// admin/owner triage). Soft states only; attachments stay private.
+app.use('/', require('./support-routes'));
 
 // AI Resource Studio drafts (local store only — no external AI calls)
 app.use('/', require('./ai-drafts-routes'));

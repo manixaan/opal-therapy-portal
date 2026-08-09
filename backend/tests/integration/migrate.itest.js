@@ -32,11 +32,12 @@ describe('migration runner', () => {
       '004_accounting_xero_module.sql', '005_resource_hub_foundation.sql',
       '006_accounting_exceptions_and_mapping.sql', '007_resource_hub_v1.sql',
       '008_snapshot_day.sql', '009_travel_overrides.sql', '010_suburb_centroids.sql',
-      '011_resource_hub_r2.sql', '012_opa_ai.sql',
+      '011_resource_hub_r2.sql', '012_opa_ai.sql', '013_product_thumbnails.sql',
+      '014_support_tickets.sql', '015_voice_notes.sql',
     ]));
 
     const { rows } = await db.pool.query('SELECT id FROM schema_migrations ORDER BY id');
-    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012']);
+    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015']);
   });
 
   test('is idempotent — a second run applies nothing', async () => {

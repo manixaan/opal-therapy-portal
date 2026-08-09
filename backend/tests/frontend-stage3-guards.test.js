@@ -214,7 +214,8 @@ describe('role-based navigation (RBAC)', () => {
     expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
     expect(HTML).toContain("primary: ['profile', 'calendar', 'resources']");
-    expect(HTML).toContain("['Business', ['accounting', 'settings']]");
+    // Support Tickets (2026-08-09) joined the owner Business group
+    expect(HTML).toContain("['Business', ['accounting', 'settings', 'support']]");
     // admin gets a Travel menu only — no business/practice groups
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
@@ -631,7 +632,8 @@ describe('contextual smart booking + interaction pass', () => {
     expect(HTML).toContain('function admLoadPurchases()');
     const roleNav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
     const adminCfg = roleNav.slice(roleNav.indexOf('admin: {'), roleNav.indexOf('therapist:'));
-    expect(adminCfg).toContain("['Operations', ['purchases']]");
+    // Support Tickets (2026-08-09) joined the admin Operations group
+    expect(adminCfg).toContain("['Operations', ['purchases', 'support']]");
     const ownerCfg = roleNav.slice(roleNav.indexOf('owner: {'), roleNav.indexOf('admin: {'));
     expect(ownerCfg).not.toContain('purchases');
   });

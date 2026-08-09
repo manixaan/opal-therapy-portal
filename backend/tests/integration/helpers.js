@@ -34,6 +34,9 @@ const ALL_TABLES = [
   'external_sources', 'pd_events', 'cpd_entries', 'resource_feedback',
   'quiz_attempts', 'quiz_questions', 'quizzes', 'resource_quick_links',
   'search_misses',
+  // Support tickets (migration 014) — children before parents
+  'support_ticket_events', 'support_ticket_attachments', 'support_ticket_comments',
+  'support_tickets', 'support_ticket_counters',
   'users', 'organisations',
 ];
 

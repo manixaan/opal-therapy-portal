@@ -643,6 +643,13 @@
           out += '<label class="rh2-lbl" for="rh2-fb-comment">Comment (optional)</label>' +
             '<textarea id="rh2-fb-comment" class="rh2-input" rows="2" maxlength="1000"></textarea>' +
             '<button type="button" class="rh2-btn rh2-btn-primary" style="margin-top:8px;" onclick="RH2.fbSubmit()">Send feedback</button>';
+          // Support bridge: content problems can become a tracked ticket.
+          // Guarded so the hub keeps working if the support module is absent.
+          if ((st.fbKind === 'needs_update' || st.fbKind === 'missing') &&
+              typeof window.OpalSupport !== 'undefined' && window.OpalSupport.openReport) {
+            out += '<p class="rh2-quiet" style="margin-top:8px;">Needs a fix rather than a note? ' +
+              '<a href="#" onclick="RH2.raiseTicket();return false;">Raise a support ticket</a></p>';
+          }
         }
       }
       out += '</section>';
@@ -745,6 +752,19 @@
   }
 
   function toggleVersions() { S.detail.showVersions = !S.detail.showVersions; render(); }
+
+  /** Support bridge — opens the portal's report modal prefilled for this
+   *  resource. typeof-guarded: nothing breaks when the module is absent. */
+  function raiseTicket() {
+    if (typeof window.OpalSupport === 'undefined' || !window.OpalSupport.openReport) return;
+    var r = detailRes() || {};
+    var title = String(pick(r, 'title') || 'resource');
+    window.OpalSupport.openReport({
+      type: 'resource_issue',
+      title: ('Issue with "' + title + '"').slice(0, 200),
+      technicalContext: { resourceId: S.detail.id },
+    });
+  }
 
   async function quizSubmit() {
     var st = S.detail;
@@ -1467,6 +1487,7 @@
     ackConfirm: ackConfirmFn,
     fbSelect: fbSelect,
     fbSubmit: fbSubmit,
+    raiseTicket: raiseTicket,
     toggleVersions: toggleVersions,
     quizSubmit: quizSubmit,
     quizRetry: quizRetry,

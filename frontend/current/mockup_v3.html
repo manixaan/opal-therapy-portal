@@ -3869,6 +3869,8 @@ window.opIcon = function (name, size) {
       <div class="hdr-account-menu" id="hdr-account-menu" role="menu" aria-label="Account">
         <button role="menuitem" onclick="toggleAccountMenu();switchTab('profile')">My Profile</button>
         <button role="menuitem" id="acct-settings-item" style="display:none;" onclick="toggleAccountMenu();switchTab('settings')">Settings</button>
+        <button role="menuitem" onclick="toggleAccountMenu();window.OpalSupport.openReport()">Report an issue</button>
+        <button role="menuitem" onclick="toggleAccountMenu();window.OpalSupport.openMyTickets()">My tickets</button>
         <button role="menuitem" onclick="window.signOut()">Sign out</button>
       </div>
     </span>
@@ -3908,6 +3910,9 @@ window.opIcon = function (name, size) {
 </button>
 <button class="tab" data-tab="resources">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Resources
+  </button>
+  <button class="tab" data-tab="support" style="display:none;">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg> Support Tickets
   </button>
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
@@ -4673,6 +4678,104 @@ window.opIcon = function (name, size) {
 </div>
 </section>
 
+<!-- ============ SUPPORT TICKETS TAB (admin/owner centre) ============ -->
+<section class="view" id="view-support">
+<style>
+  .sup-stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+  .sup-stat {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 10px 16px; min-width: 130px; box-shadow: var(--shadow-sm);
+  }
+  .sup-stat .v { font-size: 20px; font-weight: 700; color: var(--ink); }
+  .sup-stat .l { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .sup-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+  .sup-filters select, .sup-filters input {
+    font-family: inherit; font-size: 12.5px; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--panel); color: var(--ink);
+  }
+  .sup-table-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: auto; }
+  .sup-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .sup-table th {
+    text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .sup-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  .sup-table tbody tr { cursor: pointer; }
+  .sup-table tbody tr:hover { background: var(--accent-soft, #eef6f4); }
+  .sup-table tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .sup-chip {
+    display: inline-block; font-size: 11px; border: 1px solid var(--border); background: #faf8f4;
+    color: var(--ink-soft); border-radius: 6px; padding: 2px 8px; white-space: nowrap;
+  }
+  .sup-chip.st-new { background: #fdf3e7; border-color: #ecd9bd; color: #8a5a1c; }
+  .sup-chip.st-triaged { background: #eef2fb; border-color: #ccd8f0; color: #3a5490; }
+  .sup-chip.st-in_progress { background: #e9f4f2; border-color: #bfdcd6; color: #0f6c5e; }
+  .sup-chip.st-ready_to_test { background: #f3eefb; border-color: #d9cdf0; color: #5f3f9e; }
+  .sup-chip.st-resolved, .sup-chip.st-closed { background: #eef6ef; border-color: #cfe3d1; color: #2e6b3a; }
+  .sup-chip.st-wont_fix, .sup-chip.st-duplicate { background: #f4f2ef; color: var(--muted); }
+  .sup-chip.pr-critical, .sup-chip.pr-p1 { background: #fbeae7; border-color: #ecc8c0; color: #a03325; }
+  .sup-chip.pr-high, .sup-chip.pr-p2 { background: #fdf3e7; border-color: #ecd9bd; color: #8a5a1c; }
+  .sup-detail-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 18px; box-shadow: var(--shadow-sm);
+  }
+  .sup-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; }
+  @media (max-width: 900px) { .sup-detail-grid { grid-template-columns: 1fr; } }
+  .sup-meta-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); }
+  .sup-meta-row .k { color: var(--muted); }
+  .sup-meta-row .v { text-align: right; color: var(--ink-soft); overflow-wrap: anywhere; }
+  .sup-timeline { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; }
+  .sup-timeline li { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-soft); color: var(--ink-soft); }
+  .sup-timeline .when { color: var(--muted); white-space: nowrap; }
+  .sup-comment { border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: 9px 12px; margin: 8px 0; font-size: 12.5px; background: #fdfcf9; }
+  .sup-comment .who { font-weight: 600; font-size: 11.5px; margin-bottom: 3px; color: var(--ink-soft); }
+  .sup-comment .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .sup-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .sup-inline-input { font-family: inherit; font-size: 12.5px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .sup-quiet { font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; }
+  .sup-privacy { font-size: 11.5px; color: var(--muted); background: #faf8f4; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin: 10px 0 0; }
+</style>
+<div class="acct-page">
+  <h1 style="margin:0 0 4px;">Support Tickets</h1>
+  <p style="color:var(--muted);margin:0 0 14px;">Issues and requests reported by the team. Triage priority, assign, and move tickets through the workflow — reporters verify fixes before tickets resolve.</p>
+  <div class="sup-stats" id="sup-stats"></div>
+  <div id="sup-list-pane">
+    <div class="sup-filters">
+      <select id="sup-f-status" onchange="supLoadList()">
+        <option value="">All statuses</option>
+        <option value="new">New</option><option value="triaged">Triaged</option>
+        <option value="in_progress">In progress</option><option value="ready_to_test">Ready to test</option>
+        <option value="resolved">Resolved</option><option value="closed">Closed</option>
+        <option value="wont_fix">Won't fix</option><option value="duplicate">Duplicate</option>
+      </select>
+      <select id="sup-f-type" onchange="supLoadList()">
+        <option value="">All types</option>
+        <option value="bug">Bug</option><option value="feature_request">Feature request</option>
+        <option value="resource_issue">Resource issue</option><option value="data_issue">Data issue</option>
+        <option value="usability">Usability</option><option value="other">Other</option>
+      </select>
+      <select id="sup-f-priority" onchange="supLoadList()">
+        <option value="">All priorities</option>
+        <option value="p1">P1</option><option value="p2">P2</option>
+        <option value="p3">P3</option><option value="p4">P4</option>
+      </select>
+      <input type="search" id="sup-f-q" placeholder="Search number, title, description…" style="min-width:220px;"
+             oninput="supSearchDebounced()" />
+    </div>
+    <div class="sup-table-wrap">
+      <table class="sup-table" aria-label="Support tickets">
+        <thead><tr>
+          <th>Ticket</th><th>Title</th><th>Type</th><th>Priority</th><th>Status</th>
+          <th>Reporter</th><th>Assignee</th><th>Updated</th>
+        </tr></thead>
+        <tbody id="sup-tbody"><tr><td colspan="8" class="sup-quiet" style="padding:16px;">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="sup-detail-pane" style="display:none;"></div>
+</div>
+</section>
+
 <section class="view" id="view-resources">
 <style>
   .rh-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
@@ -4798,6 +4901,7 @@ window.opIcon = function (name, size) {
           <input type="search" id="rh-supplier-search" class="rh-input" style="max-width:260px;display:none;" placeholder="Search OT suppliers for products…"
                  onkeydown="if(event.key==='Enter')rhSupplierSearch()">
           <button class="btn" id="rh-supplier-btn" style="display:none;font-size:12px;" onclick="rhSupplierSearch()">Search suppliers</button>
+          <button class="btn" id="rh-thumb-btn" style="display:none;font-size:12px;" onclick="rhBackfillThumbs()">Fetch photos</button>
         </div>
         <div id="rh-supplier-results" style="display:none;"></div>
         <div id="rh-catalogue" class="rh-quiet">Loading…</div>
@@ -8062,6 +8166,19 @@ async function rhStoreSearchConfig() {
   var inp = document.getElementById('rh-supplier-search');
   var btn = document.getElementById('rh-supplier-btn');
   if (inp && _storeSearchEnabled) { inp.style.display = ''; btn.style.display = ''; }
+  var tb = document.getElementById('rh-thumb-btn');
+  if (tb && _storeSearchEnabled && window.APP_USER && APP_USER.role === 'owner') tb.style.display = '';
+}
+async function rhBackfillThumbs() {
+  var btn = document.getElementById('rh-thumb-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Fetching photos\u2026'; }
+  var d = await fetch('/api/store/backfill-thumbnails', { method: 'POST', credentials: 'include' })
+    .then(function (r) { return r.json().catch(function () { return {}; }); }).catch(function () { return {}; });
+  if (btn) { btn.disabled = false; btn.textContent = 'Fetch photos'; }
+  if (typeof showToast === 'function') {
+    showToast(d.updated != null ? ('Photos added to ' + d.updated + ' product' + (d.updated === 1 ? '' : 's')) : 'Photo fetch unavailable right now');
+  }
+  rhLoadCatalogue();
 }
 async function rhSupplierSearch() {
   var q = (document.getElementById('rh-supplier-search') || {}).value || '';
@@ -8103,14 +8220,18 @@ async function rhLoadCatalogue() {
   host.innerHTML = rows.length ? rows.map(function (r) {
     var host2 = '';
     try { host2 = new URL(r.external_url).hostname.replace(/^www\./, ''); } catch (_) {}
-    return '<div class="rh-item"><div style="font-weight:600;font-size:13px;">' + escapeHtml(r.title) + '</div>' +
+    var thumb = (r.thumbnail_url && /^https:\/\//i.test(r.thumbnail_url))
+      ? '<img src="' + escapeHtml(r.thumbnail_url) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0;" />'
+      : '';
+    return '<div class="rh-item" style="display:flex;gap:10px;align-items:flex-start;">' + thumb +
+      '<div style="min-width:0;flex:1;"><div style="font-weight:600;font-size:13px;">' + escapeHtml(r.title) + '</div>' +
       (r.description ? '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(r.description) + '</div>' : '') +
       '<div style="display:flex;gap:6px;align-items:center;">' +
       (host2 ? '<span class="rh-quiet" style="margin:0;">' + escapeHtml(host2) + '</span>' : '') +
       '<div style="flex:1"></div>' +
       (/^https?:\/\//i.test(r.external_url || '') ? '<a class="btn" style="font-size:12px;" href="' + escapeHtml(r.external_url) + '" target="_blank" rel="noopener noreferrer">Open link</a>' : '') +
       '<button class="btn" style="font-size:12px;" onclick="rhOpenPurchase(\'' + escapeHtml(r.title).replace(/'/g, '') + '\',\'' + escapeHtml(r.external_url || '') + '\')">Request to buy</button>' +
-      '</div></div>';
+      '</div></div></div>';
   }).join('') : '<div class="rh-quiet">No products in the catalogue yet — approved product links appear here.</div>';
 }
 
@@ -20085,14 +20206,14 @@ var ROLE_NAV = {
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
       ['Travel', ['travel', 'logbook']],
-      ['Business', ['accounting', 'settings']],
+      ['Business', ['accounting', 'settings', 'support']],
     ] },
   },
   admin: {
     primary: ['profile', 'calendar'],
     menu: { label: 'Menu', groups: [
       ['Travel', ['travel', 'logbook']],
-      ['Operations', ['purchases']],
+      ['Operations', ['purchases', 'support']],
     ] },
   },
   therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] },
@@ -20252,6 +20373,7 @@ function applyNavRoleVisibility(role) {
       }
       var out = _preGuardSwitchTab(name);
       if (name === 'purchases' && typeof admLoadPurchases === 'function') admLoadPurchases();
+      if (name === 'support' && typeof supOpenCentre === 'function') supOpenCentre();
       toggleNavMoreMenu(false);
       var moreBtn = document.getElementById('nav-more-btn');
       if (moreBtn) {
@@ -26828,6 +26950,644 @@ function rptOpenDay(dateStr) {
   };
 })();
 
+</script>
+
+<!-- ═══════════════ OPAL SUPPORT — report modal + My Tickets drawer ═══════════════ -->
+<style>
+  #modal-support-report .modal { width: 560px; }
+  #modal-support-report label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-soft); margin: 12px 0 4px; }
+  #modal-support-report input[type="text"], #modal-support-report select, #modal-support-report textarea {
+    width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink);
+  }
+  #modal-support-report textarea { resize: vertical; }
+  .sup-privacy-note {
+    font-size: 11.5px; color: var(--ink-soft); background: #fdf6ec; border: 1px solid #ecd9bd;
+    border-radius: var(--radius-sm); padding: 9px 11px; margin-top: 14px; line-height: 1.5;
+  }
+  #sup-my-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.35); z-index: 48; }
+  #sup-my-overlay.open { display: block; }
+  #sup-my-panel {
+    position: fixed; top: 0; right: -440px; width: 420px; max-width: 94vw; height: 100vh;
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg);
+    z-index: 49; transition: right 0.25s; display: flex; flex-direction: column;
+  }
+  #sup-my-panel.open { right: 0; }
+  #sup-my-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  #sup-my-head h3 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; }
+  #sup-my-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+  .sup-my-row {
+    border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: 10px 12px;
+    margin-bottom: 8px; cursor: pointer; background: var(--panel);
+  }
+  .sup-my-row:hover { background: var(--accent-soft, #eef6f4); }
+  .sup-my-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .sup-my-row .t { font-size: 13px; font-weight: 600; color: var(--ink); margin: 2px 0 4px; overflow-wrap: anywhere; }
+  .sup-my-row .m { font-size: 11.5px; color: var(--muted); }
+  .sup-verify-bar {
+    background: #f3eefb; border: 1px solid #d9cdf0; border-radius: var(--radius-md);
+    padding: 12px; margin: 12px 0; font-size: 12.5px;
+  }
+</style>
+
+<div class="modal-backdrop" id="modal-support-report" onclick="if(event.target===this)supCloseReport()">
+  <div class="modal" role="dialog" aria-labelledby="sup-report-title">
+    <h3 id="sup-report-title">Report an issue</h3>
+    <div class="modal-body" id="sup-report-body" style="max-height:70vh;overflow-y:auto;">
+      <div id="sup-report-form">
+        <label for="sup-r-type">What kind of issue is this?</label>
+        <select id="sup-r-type">
+          <option value="bug">Something is broken (bug)</option>
+          <option value="feature_request">An idea or feature request</option>
+          <option value="resource_issue">A problem with a resource</option>
+          <option value="data_issue">Data looks wrong</option>
+          <option value="usability">Something is confusing or hard to use</option>
+          <option value="other">Something else</option>
+        </select>
+        <label for="sup-r-title">Short summary</label>
+        <input type="text" id="sup-r-title" maxlength="200" placeholder="e.g. Week view tiles overlap after resizing" />
+        <label for="sup-r-desc">What happened?</label>
+        <textarea id="sup-r-desc" rows="4" maxlength="5000" placeholder="What were you doing, and what went wrong?"></textarea>
+        <div id="sup-r-expected-wrap">
+          <label for="sup-r-expected">What did you expect to happen?</label>
+          <textarea id="sup-r-expected" rows="2" maxlength="3000"></textarea>
+        </div>
+        <label for="sup-r-impact">How much is this affecting you?</label>
+        <select id="sup-r-impact">
+          <option value="low">Low — a minor annoyance</option>
+          <option value="medium" selected>Medium — slows me down</option>
+          <option value="high">High — blocking part of my work</option>
+          <option value="critical">Critical — I cannot work until this is fixed</option>
+        </select>
+        <label for="sup-r-shot">Screenshot (optional — PNG, JPEG or WEBP, up to 5 MB)</label>
+        <input type="file" id="sup-r-shot" accept="image/png,image/jpeg,image/webp" />
+        <div class="sup-privacy-note">Please do not include participant names, clinical information or other sensitive personal information in technical support tickets.</div>
+      </div>
+      <div id="sup-report-success" style="display:none;text-align:center;padding:18px 6px;">
+        <div style="color:var(--accent);margin-bottom:8px;" id="sup-success-icon"></div>
+        <p style="font-size:14px;font-weight:600;margin:0 0 6px;" id="sup-success-msg"></p>
+        <p class="sup-quiet" style="margin:0 0 14px;">You can follow progress under My tickets in the account menu. We will let you know when there is something to test.</p>
+        <button class="btn primary" type="button" onclick="supViewCreatedTicket()">View ticket</button>
+      </div>
+    </div>
+    <div class="modal-actions" id="sup-report-actions">
+      <button class="btn" type="button" onclick="supCloseReport()">Cancel</button>
+      <button class="btn primary" type="button" id="sup-r-submit" onclick="supSubmitReport()">Submit ticket</button>
+    </div>
+  </div>
+</div>
+
+<div id="sup-my-overlay" onclick="supCloseMyTickets()"></div>
+<div id="sup-my-panel" role="dialog" aria-label="My support tickets">
+  <div id="sup-my-head">
+    <h3 id="sup-my-title">My tickets</h3>
+    <button class="btn" type="button" id="sup-my-back" style="display:none;" onclick="supMyShowList()">Back</button>
+    <button class="btn" type="button" onclick="supCloseMyTickets()" aria-label="Close">Close</button>
+  </div>
+  <div id="sup-my-body"><div class="sup-quiet">Loading…</div></div>
+</div>
+
+<script>
+/* ═══════════════ OPAL SUPPORT — internal ticketing & feedback ═══════════════
+   All rendering goes through escapeHtml(); context capture never reads page
+   text or DOM content — route/module/version/browser/viewport only. */
+
+var SUP_TYPE_LABELS = {
+  bug: 'Bug', feature_request: 'Feature request', resource_issue: 'Resource issue',
+  data_issue: 'Data issue', usability: 'Usability', other: 'Other',
+};
+var SUP_STATUS_LABELS = {
+  new: 'New', triaged: 'Triaged', in_progress: 'In progress', ready_to_test: 'Ready to test',
+  resolved: 'Resolved', closed: 'Closed', wont_fix: "Won't fix", duplicate: 'Duplicate',
+};
+var SUP_MODULE_LABELS = {
+  profile: 'My Profile', book: 'Smart Booking', calendar: 'Calendar', contacts: 'Contacts',
+  activity: 'Activity', billing: 'Billing', ndis: 'NDIS Cases', dormant: 'Dormant Cases',
+  travel: 'Travel', logbook: 'Travel Logbook', purchases: 'Purchasing', resources: 'Resource Hub',
+  accounting: 'Accounting', settings: 'Settings', support: 'Support', autofit: 'Auto-fit',
+};
+// Client mirror of the server transition map (server remains authoritative).
+var SUP_TRANSITIONS = {
+  new: ['triaged', 'in_progress', 'wont_fix', 'duplicate'],
+  triaged: ['in_progress', 'wont_fix', 'duplicate'],
+  in_progress: ['ready_to_test', 'wont_fix', 'duplicate'],
+  ready_to_test: ['resolved', 'in_progress'],
+  resolved: ['closed', 'in_progress'],
+  closed: ['in_progress'],
+  wont_fix: [], duplicate: [],
+};
+
+/* Issue context: environment facts only — NEVER page text or DOM content. */
+window.createIssueContext = function () {
+  var activeTab = document.querySelector('.tab.active[data-tab]');
+  var route = activeTab ? activeTab.dataset.tab : 'unknown';
+  var appVersion = window.APP_VERSION ||
+    (document.querySelector('meta[name="app-version"]') || {}).content || 'dev';
+  return {
+    route: route,
+    module: SUP_MODULE_LABELS[route] || route,
+    appVersion: String(appVersion).slice(0, 40),
+    browser: String(navigator.userAgent || '').slice(0, 180),
+    viewport: window.innerWidth + 'x' + window.innerHeight,
+    timestamp: new Date().toISOString(),
+  };
+};
+
+var __supReportPrefill = null;
+var __supCreatedTicket = null;
+
+window.OpalSupport = {
+  openReport: function (prefill) {
+    __supReportPrefill = prefill || null;
+    __supCreatedTicket = null;
+    document.getElementById('sup-report-form').style.display = '';
+    document.getElementById('sup-report-success').style.display = 'none';
+    document.getElementById('sup-report-actions').style.display = '';
+    document.getElementById('sup-r-title').value = (prefill && prefill.title) || '';
+    document.getElementById('sup-r-desc').value = '';
+    document.getElementById('sup-r-expected').value = '';
+    document.getElementById('sup-r-shot').value = '';
+    document.getElementById('sup-r-impact').value = 'medium';
+    var typeSel = document.getElementById('sup-r-type');
+    typeSel.value = (prefill && SUP_TYPE_LABELS[prefill.type]) ? prefill.type : 'bug';
+    supReportTypeChanged();
+    document.getElementById('modal-support-report').classList.add('show');
+    document.getElementById('sup-r-title').focus();
+  },
+  openMyTickets: function (ticketId) { supOpenMyTickets(ticketId); },
+};
+
+function supCloseReport() { document.getElementById('modal-support-report').classList.remove('show'); }
+function supReportTypeChanged() {
+  var t = document.getElementById('sup-r-type').value;
+  document.getElementById('sup-r-expected-wrap').style.display = (t === 'bug') ? '' : 'none';
+}
+document.getElementById('sup-r-type').addEventListener('change', supReportTypeChanged);
+
+function supFmtWhen(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  } catch (_) { return ''; }
+}
+function supChip(cls, text) {
+  return '<span class="sup-chip ' + escapeHtml(cls) + '">' + escapeHtml(text) + '</span>';
+}
+function supStatusChip(s) { return supChip('st-' + s, SUP_STATUS_LABELS[s] || s); }
+
+async function supApi(path, opts) {
+  opts = opts || {};
+  try {
+    var r = await fetch(path, {
+      method: opts.method || 'GET', credentials: 'include',
+      headers: opts.body ? { 'Content-Type': 'application/json' } : {},
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    var d = await r.json().catch(function () { return {}; });
+    d.__status = r.status; d.__ok = r.ok;
+    return d;
+  } catch (_) { return { __ok: false, __status: 0, error: 'Network error' }; }
+}
+
+/* ── Report submission ─────────────────────────────────────────────────── */
+
+async function supSubmitReport() {
+  var title = document.getElementById('sup-r-title').value.trim();
+  var desc = document.getElementById('sup-r-desc').value.trim();
+  if (!title) { showToast('Please add a short summary', true); return; }
+  if (!desc) { showToast('Please describe what happened', true); return; }
+
+  var shotInput = document.getElementById('sup-r-shot');
+  var file = shotInput.files && shotInput.files[0];
+  if (file) {
+    var okTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (okTypes.indexOf(file.type) === -1) { showToast('Screenshot must be PNG, JPEG or WEBP', true); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast('Screenshot exceeds the 5 MB limit', true); return; }
+  }
+
+  var btn = document.getElementById('sup-r-submit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  var ctx = window.createIssueContext();
+  var technicalContext = { timestamp: ctx.timestamp };
+  if (__supReportPrefill && __supReportPrefill.technicalContext) {
+    var pf = __supReportPrefill.technicalContext;
+    for (var k in pf) { if (Object.prototype.hasOwnProperty.call(pf, k)) technicalContext[k] = pf[k]; }
+  }
+  var d = await supApi('/api/support/tickets', { method: 'POST', body: {
+    type: document.getElementById('sup-r-type').value,
+    title: title, description: desc,
+    expectedBehaviour: document.getElementById('sup-r-expected').value.trim() || undefined,
+    reportedPriority: document.getElementById('sup-r-impact').value,
+    module: ctx.module, route: ctx.route, browser: ctx.browser, viewport: ctx.viewport,
+    technicalContext: technicalContext,
+  } });
+  btn.disabled = false; btn.textContent = 'Submit ticket';
+  if (!d.__ok || !d.ticket) {
+    showToast(d.message || d.error || 'Could not create the ticket', true);
+    return;
+  }
+  __supCreatedTicket = d.ticket;
+
+  if (file) {
+    var base64 = await new Promise(function (resolve) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result).split(',')[1] || null); };
+      fr.onerror = function () { resolve(null); };
+      fr.readAsDataURL(file);
+    });
+    if (base64) {
+      var up = await supApi('/api/support/tickets/' + d.ticket.id + '/attachments', { method: 'POST', body: {
+        fileName: file.name, fileMime: file.type, fileData: base64, fileSizeBytes: file.size,
+      } });
+      if (!up.__ok) showToast('Ticket created, but the screenshot could not be attached', true);
+    }
+  }
+
+  document.getElementById('sup-report-form').style.display = 'none';
+  document.getElementById('sup-report-actions').style.display = 'none';
+  document.getElementById('sup-success-icon').innerHTML = opIcon('check', 28);
+  document.getElementById('sup-success-msg').textContent =
+    'Thanks — ticket ' + d.ticket.ticket_number + ' has been created.';
+  document.getElementById('sup-report-success').style.display = '';
+}
+
+function supViewCreatedTicket() {
+  supCloseReport();
+  supOpenMyTickets(__supCreatedTicket ? __supCreatedTicket.id : null);
+}
+
+/* ── My Tickets drawer (all roles) ─────────────────────────────────────── */
+
+async function supOpenMyTickets(ticketId) {
+  document.getElementById('sup-my-overlay').classList.add('open');
+  document.getElementById('sup-my-panel').classList.add('open');
+  if (ticketId) { await supMyShowDetail(ticketId); } else { await supMyShowList(); }
+}
+function supCloseMyTickets() {
+  document.getElementById('sup-my-overlay').classList.remove('open');
+  document.getElementById('sup-my-panel').classList.remove('open');
+}
+
+async function supMyShowList() {
+  document.getElementById('sup-my-title').textContent = 'My tickets';
+  document.getElementById('sup-my-back').style.display = 'none';
+  var body = document.getElementById('sup-my-body');
+  body.innerHTML = '<div class="sup-quiet">Loading…</div>';
+  var d = await supApi('/api/support/tickets');
+  var rows = d.tickets || [];
+  if (!d.__ok) { body.innerHTML = '<div class="sup-quiet">Could not load your tickets. Please try again.</div>'; return; }
+  if (!rows.length) {
+    body.innerHTML = '<div class="sup-quiet">No tickets yet. If something is broken or confusing, use ' +
+      '<strong>Report an issue</strong> in the account menu and it will show up here.</div>' +
+      '<button class="btn primary" style="margin-top:12px;" type="button" onclick="supCloseMyTickets();window.OpalSupport.openReport()">Report an issue</button>';
+    return;
+  }
+  body.innerHTML = rows.map(function (t) {
+    return '<div class="sup-my-row" tabindex="0" role="button" onclick="supMyShowDetail(\'' + escapeHtml(t.id) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();supMyShowDetail(\'' + escapeHtml(t.id) + '\');}">' +
+      '<div class="m">' + escapeHtml(t.ticket_number) + ' · ' + escapeHtml(SUP_TYPE_LABELS[t.type] || t.type) + '</div>' +
+      '<div class="t">' + escapeHtml(t.title) + '</div>' +
+      '<div class="m">' + supStatusChip(t.status) + ' · Updated ' + escapeHtml(supFmtWhen(t.updated_at)) + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function supEventSentence(e) {
+  var d = e.detail || {};
+  var who = e.actor_name ? escapeHtml(e.actor_name) : 'Someone';
+  switch (e.event) {
+    case 'created': return who + ' reported this ticket';
+    case 'commented': return who + ' commented';
+    case 'attachment_added': return who + ' attached ' + escapeHtml(d.fileName || 'a file');
+    case 'assigned': return who + ' updated the assignee';
+    case 'triage_updated': return who + ' updated ' + escapeHtml(String(d.field || 'triage').replace(/_/g, ' '));
+    case 'status_changed':
+      var s = who + ' moved this from ' + escapeHtml(SUP_STATUS_LABELS[d.from] || d.from) +
+        ' to ' + escapeHtml(SUP_STATUS_LABELS[d.to] || d.to);
+      if (d.reason) s += ' — ' + escapeHtml(d.reason);
+      if (d.duplicateOf) s += ' (duplicate of ' + escapeHtml(d.duplicateOf) + ')';
+      return s;
+    default: return who + ' ' + escapeHtml(String(e.event).replace(/_/g, ' '));
+  }
+}
+
+function supTimelineHtml(events) {
+  if (!events || !events.length) return '';
+  return '<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:16px 0 4px;">Timeline</h4>' +
+    '<ul class="sup-timeline">' + events.map(function (e) {
+      return '<li><span class="when">' + escapeHtml(supFmtWhen(e.created_at)) + '</span><span>' + supEventSentence(e) + '</span></li>';
+    }).join('') + '</ul>';
+}
+
+function supCommentsHtml(comments) {
+  if (!comments || !comments.length) return '<p class="sup-quiet">No comments yet.</p>';
+  return comments.map(function (c) {
+    return '<div class="sup-comment"><div class="who">' + escapeHtml(c.author_name || 'Unknown') +
+      ' · ' + escapeHtml(supFmtWhen(c.created_at)) + '</div>' +
+      '<div class="body">' + escapeHtml(c.body) + '</div></div>';
+  }).join('');
+}
+
+function supAttachmentsHtml(attachments) {
+  if (!attachments || !attachments.length) return '';
+  return '<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:16px 0 4px;">Attachments</h4>' +
+    attachments.map(function (a) {
+      return '<div style="font-size:12.5px;margin:4px 0;">' + opIcon('doc') + ' ' +
+        '<a href="/api/support/attachments/' + escapeHtml(a.id) + '/download">' + escapeHtml(a.file_name || 'attachment') + '</a></div>';
+    }).join('');
+}
+
+async function supMyShowDetail(id) {
+  var body = document.getElementById('sup-my-body');
+  document.getElementById('sup-my-back').style.display = '';
+  body.innerHTML = '<div class="sup-quiet">Loading…</div>';
+  var d = await supApi('/api/support/tickets/' + id);
+  if (!d.__ok || !d.ticket) { body.innerHTML = '<div class="sup-quiet">This ticket could not be loaded.</div>'; return; }
+  var t = d.ticket;
+  document.getElementById('sup-my-title').textContent = t.ticket_number;
+
+  var html = '<div class="m" style="font-size:11.5px;color:var(--muted);">' +
+    escapeHtml(SUP_TYPE_LABELS[t.type] || t.type) + ' · Reported ' + escapeHtml(supFmtWhen(t.created_at)) + '</div>' +
+    '<h4 style="margin:4px 0 8px;font-size:15px;overflow-wrap:anywhere;">' + escapeHtml(t.title) + '</h4>' +
+    '<div>' + supStatusChip(t.status) + ' ' + supChip('pr-' + t.reported_priority, 'Impact: ' + t.reported_priority) + '</div>' +
+    '<p style="font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 0;">' + escapeHtml(t.description) + '</p>' +
+    (t.expected_behaviour ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Expected:</strong> ' + escapeHtml(t.expected_behaviour) + '</p>' : '') +
+    (t.resolution ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Resolution:</strong> ' + escapeHtml(t.resolution) + '</p>' : '') +
+    (t.wont_fix_reason ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Reason:</strong> ' + escapeHtml(t.wont_fix_reason) + '</p>' : '');
+
+  if (t.status === 'ready_to_test') {
+    html += '<div class="sup-verify-bar"><strong>Ready for you to test.</strong> Is the issue fixed?' +
+      '<input type="text" id="sup-my-verify-comment" class="sup-inline-input" placeholder="Optional comment" style="width:100%;box-sizing:border-box;margin:8px 0;" />' +
+      '<div class="sup-actions" style="margin-top:4px;">' +
+      '<button class="btn primary" type="button" onclick="supMyVerify(\'' + escapeHtml(t.id) + '\',\'fixed\')">Fixed</button>' +
+      '<button class="btn" type="button" onclick="supMyVerify(\'' + escapeHtml(t.id) + '\',\'still_happening\')">Still happening</button>' +
+      '</div></div>';
+  }
+  if (t.status === 'resolved' || t.status === 'closed') {
+    html += '<div class="sup-actions"><button class="btn" type="button" onclick="supMyReopen(\'' + escapeHtml(t.id) + '\')">Reopen — the issue is back</button></div>';
+  }
+
+  html += supAttachmentsHtml(d.attachments);
+  html += '<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:16px 0 4px;">Comments</h4>' +
+    supCommentsHtml(d.comments) +
+    '<textarea id="sup-my-comment" class="sup-inline-input" rows="2" maxlength="3000" placeholder="Add a comment…" style="width:100%;box-sizing:border-box;margin-top:6px;"></textarea>' +
+    '<div class="sup-actions"><button class="btn" type="button" onclick="supMyComment(\'' + escapeHtml(t.id) + '\')">Add comment</button></div>';
+  html += supTimelineHtml(d.events);
+  body.innerHTML = html;
+}
+
+async function supMyVerify(id, outcome) {
+  var comment = (document.getElementById('sup-my-verify-comment') || {}).value || '';
+  var d = await supApi('/api/support/tickets/' + id + '/verify', { method: 'POST', body: { outcome: outcome, comment: comment.trim() || undefined } });
+  if (d.__ok) {
+    showToast(outcome === 'fixed' ? 'Thanks — ticket marked resolved' : 'Thanks — sent back to the team');
+    supMyShowDetail(id);
+  } else showToast(d.error || 'Could not record your verification', true);
+}
+
+async function supMyReopen(id) {
+  var d = await supApi('/api/support/tickets/' + id + '/status', { method: 'POST', body: { status: 'in_progress' } });
+  if (d.__ok) { showToast('Ticket reopened'); supMyShowDetail(id); }
+  else showToast(d.error || 'Could not reopen the ticket', true);
+}
+
+async function supMyComment(id) {
+  var box = document.getElementById('sup-my-comment');
+  var text = (box && box.value || '').trim();
+  if (!text) return;
+  var d = await supApi('/api/support/tickets/' + id + '/comments', { method: 'POST', body: { body: text } });
+  if (d.__ok) supMyShowDetail(id);
+  else showToast(d.error || 'Could not add the comment', true);
+}
+
+/* ── Support centre (admin/owner) ──────────────────────────────────────── */
+
+var __supStaff = null;
+var __supSearchTimer = null;
+function supSearchDebounced() {
+  if (__supSearchTimer) clearTimeout(__supSearchTimer);
+  __supSearchTimer = setTimeout(supLoadList, 320);
+}
+
+async function supOpenCentre() {
+  document.getElementById('sup-detail-pane').style.display = 'none';
+  document.getElementById('sup-list-pane').style.display = '';
+  supLoadStats();
+  supLoadList();
+  if (!__supStaff) {
+    var d = await supApi('/api/support/staff');
+    __supStaff = d.staff || [];
+  }
+}
+
+async function supLoadStats() {
+  var host = document.getElementById('sup-stats');
+  var d = await supApi('/api/support/analytics');
+  if (!d.__ok) { host.innerHTML = ''; return; }
+  function stat(v, l) { return '<div class="sup-stat"><div class="v">' + escapeHtml(String(v)) + '</div><div class="l">' + escapeHtml(l) + '</div></div>'; }
+  host.innerHTML =
+    stat(d.openCount, 'Open tickets') +
+    stat(d.newThisWeek, 'New this week') +
+    stat(d.p1p2OpenCount, 'P1 + P2 open') +
+    stat(d.avgHoursToTriage === null ? '—' : d.avgHoursToTriage + ' h', 'Avg time to triage');
+}
+
+async function supLoadList() {
+  var tbody = document.getElementById('sup-tbody');
+  var qs = [];
+  var st = document.getElementById('sup-f-status').value;
+  var ty = document.getElementById('sup-f-type').value;
+  var pr = document.getElementById('sup-f-priority').value;
+  var q = document.getElementById('sup-f-q').value.trim();
+  if (st) qs.push('status=' + encodeURIComponent(st));
+  if (ty) qs.push('type=' + encodeURIComponent(ty));
+  if (pr) qs.push('priority=' + encodeURIComponent(pr));
+  if (q) qs.push('q=' + encodeURIComponent(q));
+  var d = await supApi('/api/support/tickets' + (qs.length ? '?' + qs.join('&') : ''));
+  if (!d.__ok) { tbody.innerHTML = '<tr><td colspan="8" class="sup-quiet" style="padding:16px;">Could not load tickets.</td></tr>'; return; }
+  var rows = d.tickets || [];
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="sup-quiet" style="padding:16px;">' +
+      (qs.length ? 'No tickets match these filters.' : 'No tickets yet — issues reported by the team will appear here.') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function (t) {
+    var prio = t.triaged_priority
+      ? supChip('pr-' + t.triaged_priority, t.triaged_priority.toUpperCase())
+      : supChip('pr-' + t.reported_priority, 'reported: ' + t.reported_priority);
+    return '<tr tabindex="0" onclick="supOpenDetail(\'' + escapeHtml(t.id) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'){supOpenDetail(\'' + escapeHtml(t.id) + '\');}">' +
+      '<td style="white-space:nowrap;font-weight:600;">' + escapeHtml(t.ticket_number) + '</td>' +
+      '<td style="max-width:320px;overflow-wrap:anywhere;">' + escapeHtml(t.title) + '</td>' +
+      '<td>' + escapeHtml(SUP_TYPE_LABELS[t.type] || t.type) + '</td>' +
+      '<td>' + prio + '</td>' +
+      '<td>' + supStatusChip(t.status) + '</td>' +
+      '<td>' + escapeHtml(t.reporter_name || '—') + '</td>' +
+      '<td>' + escapeHtml(t.assignee_name || '—') + '</td>' +
+      '<td style="white-space:nowrap;">' + escapeHtml(supFmtWhen(t.updated_at)) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+var __supDetail = null;
+var __supDetailAction = null; // 'resolved' | 'wont_fix' | 'duplicate' pending inline input
+
+async function supOpenDetail(id) {
+  __supDetailAction = null;
+  var pane = document.getElementById('sup-detail-pane');
+  document.getElementById('sup-list-pane').style.display = 'none';
+  pane.style.display = '';
+  pane.innerHTML = '<div class="sup-quiet">Loading…</div>';
+  var d = await supApi('/api/support/tickets/' + id);
+  if (!d.__ok || !d.ticket) { pane.innerHTML = '<div class="sup-quiet">This ticket could not be loaded.</div>'; return; }
+  __supDetail = d;
+  supRenderDetail();
+}
+
+function supBackToList() {
+  document.getElementById('sup-detail-pane').style.display = 'none';
+  document.getElementById('sup-list-pane').style.display = '';
+  supLoadStats();
+  supLoadList();
+}
+
+function supRenderDetail() {
+  var d = __supDetail, t = d.ticket;
+  var pane = document.getElementById('sup-detail-pane');
+
+  var staffOpts = '<option value="">Unassigned</option>' + (__supStaff || []).map(function (s) {
+    return '<option value="' + escapeHtml(s.id) + '"' + (t.assignee_user_id === s.id ? ' selected' : '') + '>' +
+      escapeHtml(s.name || s.email) + ' (' + escapeHtml(s.role) + ')</option>';
+  }).join('');
+
+  var prioOpts = '<option value="">Not triaged</option>' + ['p1', 'p2', 'p3', 'p4'].map(function (p) {
+    return '<option value="' + p + '"' + (t.triaged_priority === p ? ' selected' : '') + '>' + p.toUpperCase() + '</option>';
+  }).join('');
+
+  var transitions = SUP_TRANSITIONS[t.status] || [];
+  var actionHtml = '';
+  if (__supDetailAction === 'resolved') {
+    actionHtml = '<input type="text" id="sup-d-resolution" class="sup-inline-input" placeholder="Resolution note (what was fixed)" style="width:60%;" />' +
+      '<button class="btn primary" type="button" onclick="supDoStatus(\'resolved\')">Confirm resolve</button>' +
+      '<button class="btn" type="button" onclick="__supDetailAction=null;supRenderDetail()">Cancel</button>';
+  } else if (__supDetailAction === 'wont_fix') {
+    actionHtml = '<input type="text" id="sup-d-reason" class="sup-inline-input" placeholder="Reason (required)" style="width:60%;" />' +
+      '<button class="btn primary" type="button" onclick="supDoStatus(\'wont_fix\')">Confirm won\'t fix</button>' +
+      '<button class="btn" type="button" onclick="__supDetailAction=null;supRenderDetail()">Cancel</button>';
+  } else if (__supDetailAction === 'duplicate') {
+    actionHtml = '<input type="text" id="sup-d-dupnum" class="sup-inline-input" placeholder="Duplicate of ticket # (e.g. OPA-0007)" style="width:60%;" />' +
+      '<button class="btn primary" type="button" onclick="supDoDuplicate()">Confirm duplicate</button>' +
+      '<button class="btn" type="button" onclick="__supDetailAction=null;supRenderDetail()">Cancel</button>';
+  } else {
+    actionHtml = transitions.map(function (to) {
+      var label = 'Move to ' + (SUP_STATUS_LABELS[to] || to);
+      if (to === 'resolved') label = 'Resolve';
+      if (to === 'closed') label = 'Close';
+      if (to === 'wont_fix') label = "Won't fix";
+      if (to === 'duplicate') label = 'Mark duplicate';
+      if (to === 'in_progress' && (t.status === 'resolved' || t.status === 'closed')) label = 'Reopen';
+      var needsInput = (to === 'resolved' || to === 'wont_fix' || to === 'duplicate');
+      return '<button class="btn' + (to === 'resolved' ? ' primary' : '') + '" type="button" onclick="' +
+        (needsInput ? '__supDetailAction=\'' + to + '\';supRenderDetail()' : 'supDoStatus(\'' + to + '\')') + '">' +
+        escapeHtml(label) + '</button>';
+    }).join('');
+    if (!transitions.length) actionHtml = '<span class="sup-quiet">This ticket is in a final state.</span>';
+  }
+
+  var html = '<div class="sup-actions" style="margin:0 0 12px;">' +
+    '<button class="btn" type="button" onclick="supBackToList()">Back to list</button></div>' +
+    '<div class="sup-detail-card"><div class="sup-detail-grid"><div>' +
+    '<div style="font-size:11.5px;color:var(--muted);">' + escapeHtml(t.ticket_number) + ' · ' +
+    escapeHtml(SUP_TYPE_LABELS[t.type] || t.type) + ' · Reported ' + escapeHtml(supFmtWhen(t.created_at)) + '</div>' +
+    '<h2 style="margin:4px 0 8px;font-size:17px;overflow-wrap:anywhere;">' + escapeHtml(t.title) + '</h2>' +
+    '<div>' + supStatusChip(t.status) +
+    (t.triaged_priority ? ' ' + supChip('pr-' + t.triaged_priority, t.triaged_priority.toUpperCase()) : '') +
+    ' ' + supChip('pr-' + t.reported_priority, 'Reporter impact: ' + t.reported_priority) + '</div>' +
+    '<p style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 0;">' + escapeHtml(t.description) + '</p>' +
+    (t.expected_behaviour ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Expected:</strong> ' + escapeHtml(t.expected_behaviour) + '</p>' : '') +
+    (t.resolution ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Resolution:</strong> ' + escapeHtml(t.resolution) + '</p>' : '') +
+    (t.wont_fix_reason ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Won\'t fix:</strong> ' + escapeHtml(t.wont_fix_reason) + '</p>' : '') +
+    (d.duplicateOf ? '<p class="sup-quiet" style="margin:8px 0 0;"><strong>Duplicate of:</strong> ' + escapeHtml(d.duplicateOf.ticket_number) + ' — ' + escapeHtml(d.duplicateOf.title) + '</p>' : '') +
+    '<div class="sup-actions">' + actionHtml + '</div>' +
+    supAttachmentsHtml(d.attachments) +
+    '<h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:16px 0 4px;">Comments</h4>' +
+    supCommentsHtml(d.comments) +
+    '<textarea id="sup-d-comment" class="sup-inline-input" rows="2" maxlength="3000" placeholder="Reply to the reporter…" style="width:100%;box-sizing:border-box;margin-top:6px;"></textarea>' +
+    '<div class="sup-actions"><button class="btn" type="button" onclick="supDetailComment()">Add comment</button></div>' +
+    '<div class="sup-privacy">Please do not include participant names, clinical information or other sensitive personal information in technical support tickets.</div>' +
+    '</div><div>' +
+    '<label style="display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin:0 0 4px;" for="sup-d-prio">Triaged priority</label>' +
+    '<select id="sup-d-prio" class="sup-inline-input" style="width:100%;" onchange="supDetailTriage({triagedPriority:this.value||null})">' + prioOpts + '</select>' +
+    '<label style="display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin:12px 0 4px;" for="sup-d-assignee">Assignee</label>' +
+    '<select id="sup-d-assignee" class="sup-inline-input" style="width:100%;" onchange="supDetailTriage({assigneeUserId:this.value||null})">' + staffOpts + '</select>' +
+    '<div style="margin-top:14px;">' +
+    supMetaRow('Reporter', t.reporter_name) +
+    supMetaRow('Module', t.source_module) +
+    supMetaRow('Route', t.source_route) +
+    supMetaRow('Environment', t.environment) +
+    supMetaRow('App version', t.app_version) +
+    supMetaRow('Browser', t.browser_context) +
+    supMetaRow('Created', supFmtWhen(t.created_at)) +
+    supMetaRow('Updated', supFmtWhen(t.updated_at)) +
+    (t.resolved_at ? supMetaRow('Resolved', supFmtWhen(t.resolved_at)) : '') +
+    (t.closed_at ? supMetaRow('Closed', supFmtWhen(t.closed_at)) : '') +
+    '</div>' + supTimelineHtml(d.events) +
+    '</div></div></div>';
+  pane.innerHTML = html;
+}
+
+function supMetaRow(k, v) {
+  if (!v) return '';
+  return '<div class="sup-meta-row"><span class="k">' + escapeHtml(k) + '</span><span class="v">' + escapeHtml(v) + '</span></div>';
+}
+
+async function supDetailTriage(patch) {
+  var t = __supDetail.ticket;
+  var d = await supApi('/api/support/tickets/' + t.id, { method: 'PATCH', body: patch });
+  if (d.__ok) { supOpenDetail(t.id); }
+  else { showToast(d.error || 'Could not update the ticket', true); supRenderDetail(); }
+}
+
+async function supDoStatus(to) {
+  var t = __supDetail.ticket;
+  var body = { status: to };
+  if (to === 'resolved') body.resolution = ((document.getElementById('sup-d-resolution') || {}).value || '').trim() || undefined;
+  if (to === 'wont_fix') {
+    body.reason = ((document.getElementById('sup-d-reason') || {}).value || '').trim();
+    if (!body.reason) { showToast('A reason is required for won\'t fix', true); return; }
+  }
+  var d = await supApi('/api/support/tickets/' + t.id + '/status', { method: 'POST', body: body });
+  if (d.__ok) { __supDetailAction = null; supOpenDetail(t.id); }
+  else showToast(d.error || 'That status change is not allowed', true);
+}
+
+async function supDoDuplicate() {
+  var t = __supDetail.ticket;
+  var num = ((document.getElementById('sup-d-dupnum') || {}).value || '').trim().toUpperCase();
+  if (!num) { showToast('Enter the ticket number this duplicates', true); return; }
+  var list = await supApi('/api/support/tickets?q=' + encodeURIComponent(num));
+  var match = (list.tickets || []).find(function (x) { return x.ticket_number === num; });
+  if (!match) { showToast('No ticket found with number ' + num, true); return; }
+  var d = await supApi('/api/support/tickets/' + t.id + '/status', { method: 'POST', body: { status: 'duplicate', duplicateOfId: match.id } });
+  if (d.__ok) { __supDetailAction = null; supOpenDetail(t.id); }
+  else showToast(d.error || 'Could not mark as duplicate', true);
+}
+
+async function supDetailComment() {
+  var t = __supDetail.ticket;
+  var box = document.getElementById('sup-d-comment');
+  var text = (box && box.value || '').trim();
+  if (!text) return;
+  var d = await supApi('/api/support/tickets/' + t.id + '/comments', { method: 'POST', body: { body: text } });
+  if (d.__ok) supOpenDetail(t.id);
+  else showToast(d.error || 'Could not add the comment', true);
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('modal-support-report').classList.contains('show')) supCloseReport();
+  else if (document.getElementById('sup-my-panel').classList.contains('open')) supCloseMyTickets();
+});
 </script>
 
 </body>
