@@ -1152,3 +1152,54 @@ describe('free-time gap overlay removed', () => {
     expect(HTML).toContain("segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: {},");
   });
 });
+
+// ── Event delete: travel-block cascade + styled confirmation (2026-08-09) ────
+// Deleting a calendar event also deletes the travel blocks that belong to it.
+// Both entry points (detail drawer + right-click menu) share one flow with a
+// styled in-app confirmation — browser confirm()/alert() are gone from it.
+describe('event delete cascade UX', () => {
+  test('styled confirmation modal exists with a danger action and cascade line', () => {
+    expect(HTML).toContain('id="modal-del-event"');
+    expect(HTML).toContain('id="del-event-cascade"');
+    expect(HTML).toContain('function openDeleteEventModal(');
+    expect(HTML).toContain('function closeDeleteEventModal(');
+    expect(HTML).toContain('background:var(--danger,#c2412e);');
+  });
+
+  test('no browser confirm()/alert() anywhere in the delete flow', () => {
+    const flow = HTML.slice(
+      HTML.indexOf('function ctxDeleteEvent('),
+      HTML.indexOf('// ── Location section builder'));
+    expect(flow.length).toBeGreaterThan(1000); // slice sanity
+    expect(flow).not.toContain('window.confirm');
+    expect(flow).not.toMatch(/\bconfirm\(/);
+    expect(flow).not.toMatch(/\balert\(/);
+  });
+
+  test('both entry points delegate to the shared flow', () => {
+    expect(HTML).toContain(`onclick="bdDeleteEvent('\${id}')"`);   // drawer footer button
+    expect(HTML).toContain(`onclick="ctxDeleteEvent('\${id}')"`);  // right-click menu item
+    const ctx = HTML.slice(HTML.indexOf('function ctxDeleteEvent('), HTML.indexOf('function ctxDeleteEvent(') + 200);
+    expect(ctx).toContain('deleteEventFlow(id)');
+    const bd = HTML.slice(HTML.indexOf('function bdDeleteEvent('), HTML.indexOf('function bdDeleteEvent(') + 300);
+    expect(bd).toContain('deleteEventFlow(id)');
+  });
+
+  test('cascade count comes from a dryRun preview and is stated before deletion', () => {
+    expect(HTML).toContain('?dryRun=1');
+    expect(HTML).toContain('will also be removed.');
+    expect(HTML).toContain('travelBlocksDeleted');
+  });
+
+  test('confirmed deletes are optimistic with a quiet toast (cascade counted)', () => {
+    expect(HTML).toContain('function performDeleteEvent(');
+    expect(HTML).toContain("'Event deleted'");
+    expect(HTML).toContain('Event deleted (with ');
+    expect(HTML).toContain('function __removeSessionTile(');
+  });
+
+  test('travel blocks pushed to Outlook carry their appointment linkage', () => {
+    expect(HTML).toContain('relatedEventId,');
+    expect(HTML).toContain('SESSIONS[seg.toSessionId] || SESSIONS[seg.fromSessionId]');
+  });
+});

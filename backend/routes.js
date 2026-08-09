@@ -20,6 +20,7 @@ const outlookApi = require('./outlook-oauth');
 const sploseApi = require('./splose-api');
 const { getPermissions, requireAuth, requireRole, requirePermission, hasPermission } = require('./permissions');
 const { classifyEventType } = require('./sync-utils');
+const { collectCascadeTravelBlocks } = require('./travel-cascade');
 
 /**
  * Staged-rollout guard (Phase 10): outlook-oauth/splose-api write functions
@@ -2509,24 +2510,85 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
  * DELETE /api/outlook/events/:dbId
  * Remove an event from Outlook AND soft-delete the local record.
  * If Outlook returns 404 (already deleted), we still soft-delete locally.
+ *
+ * CASCADE (2026-08-09): travel blocks that belong to the event go with it —
+ * explicitly linked blocks (related_event_id, migration 016) always; legacy
+ * unlinked blocks via the conservative adjacency rule in travel-cascade.js.
+ * Each cascaded block is soft-deleted locally + best-effort deleted in Graph.
+ *
+ * ?dryRun=1 — preview only: reports what WOULD be deleted (the event plus its
+ * travel-block cascade) without touching the DB or Graph. The frontend uses
+ * this to render an accurate confirmation message before deleting.
  */
 router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
   try {
     const { dbId } = req.params;
+    const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
 
     const ev = await db.pool.query(
-      'SELECT outlook_id, title FROM events WHERE id = $1 AND user_id = $2',
+      'SELECT outlook_id, title, start_time, end_time FROM events WHERE id = $1 AND user_id = $2',
       [dbId, req.session.userId]
     );
     if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
 
-    const { outlook_id: outlookId, title } = ev.rows[0];
-    let deletedFromOutlook = false;
+    const { outlook_id: outlookId, title, start_time: startTime, end_time: endTime } = ev.rows[0];
 
-    if (outlookId) {
+    // ── Collect the travel-block cascade ────────────────────────────────────
+    // Candidates: every surviving event for this user explicitly linked to the
+    // deleted event, plus everything within a ±1 day window (the adjacency
+    // rule needs the neighbouring non-travel events too). Selection itself is
+    // pure — see travel-cascade.js.
+    let cascade = [];
+    try {
+      const params = [req.session.userId, dbId];
+      let windowSql = '';
+      if (startTime && endTime) {
+        windowSql = `OR (start_time >= $3::timestamptz - interval '1 day'
+                     AND start_time <= $4::timestamptz + interval '1 day')`;
+        params.push(startTime, endTime);
+      }
+      const candidates = await db.pool.query(
+        `/* cascade-candidates */
+         SELECT id, title, event_type, outlook_id, related_event_id, start_time, end_time
+         FROM events
+         WHERE user_id = $1 AND id != $2
+           AND (is_deleted IS NULL OR is_deleted = FALSE)
+           AND (related_event_id = $2 ${windowSql})`,
+        params
+      );
+      cascade = collectCascadeTravelBlocks(
+        { id: dbId, start_time: startTime, end_time: endTime },
+        candidates.rows || []
+      );
+    } catch (cascadeErr) {
+      // Cascade collection must never block the delete itself.
+      console.warn(`⚠️ Travel-block cascade lookup failed (non-fatal): ${cascadeErr.message}`);
+      cascade = [];
+    }
+
+    const travelBlockIds    = cascade.map((b) => b.id);
+    const travelBlockTitles = cascade.map((b) => b.title);
+
+    if (dryRun) {
+      return res.json({
+        ok: true, dryRun: true, title,
+        deleted: 0,
+        travelBlocksDeleted: cascade.length,
+        travelBlockIds, travelBlockTitles,
+      });
+    }
+
+    // ── Best-effort Graph deletes (event + cascaded travel blocks) ──────────
+    let deletedFromOutlook = false;
+    const outlookTargets = [
+      ...(outlookId ? [{ outlookId, title, isMain: true }] : []),
+      ...cascade.filter((b) => b.outlook_id).map((b) => ({ outlookId: b.outlook_id, title: b.title, isMain: false })),
+    ];
+    if (outlookTargets.length) {
+      let accessToken = null;
       try {
-        const targetUser  = await db.getUser(req.session.userId);
-        const accessToken = await getValidAccessToken(targetUser).catch(async () => {
+        const targetUser = await db.getUser(req.session.userId);
+        accessToken = await getValidAccessToken(targetUser).catch(async () => {
           // Caller has no token — try org fallback (same as write path)
           const orgId = targetUser?.organisation_id;
           const fb = await db.pool.query(
@@ -2537,14 +2599,23 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
           if (!fb.rows.length) throw new Error('No connected Outlook account');
           return getValidAccessToken(await db.getUser(fb.rows[0].id));
         });
-        await outlookApi.deleteOutlookEvent(accessToken, outlookId);
-        deletedFromOutlook = true;
-        console.log(`🗑️ Deleted from Outlook: ${outlookId} — "${title}"`);
-      } catch (outlookErr) {
-        // Treat ALL Outlook errors as non-fatal for delete — the event may already
-        // be gone (ErrorItemNotFound / 404) or the token may be temporarily invalid.
-        // Always proceed with the local soft-delete so the UI stays consistent.
-        console.warn(`⚠️ Outlook delete skipped (non-fatal): ${outlookErr.message}`);
+      } catch (tokenErr) {
+        console.warn(`⚠️ Outlook delete skipped (non-fatal): ${tokenErr.message}`);
+      }
+      if (accessToken) {
+        for (const target of outlookTargets) {
+          try {
+            await outlookApi.deleteOutlookEvent(accessToken, target.outlookId);
+            if (target.isMain) deletedFromOutlook = true;
+            console.log(`🗑️ Deleted from Outlook: ${target.outlookId} — "${target.title}"`);
+          } catch (outlookErr) {
+            // Treat ALL Outlook errors as non-fatal for delete — the event may
+            // already be gone (ErrorItemNotFound / 404) or the token may be
+            // temporarily invalid. Always proceed with the local soft-delete
+            // so the UI stays consistent.
+            console.warn(`⚠️ Outlook delete skipped (non-fatal): ${outlookErr.message}`);
+          }
+        }
       }
     }
 
@@ -2555,7 +2626,28 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
       WHERE id = $1 AND user_id = $2
     `, [dbId, req.session.userId]);
 
-    res.json({ ok: true, deletedFromOutlook, title });
+    // Soft-delete the cascaded travel blocks (user-scoped, same tombstone shape)
+    if (travelBlockIds.length) {
+      await db.pool.query(`
+        UPDATE events
+        SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ANY($1) AND user_id = $2
+      `, [travelBlockIds, req.session.userId]);
+    }
+
+    // Audit (identifiers only — established pattern)
+    await db.logAuditEvent({
+      actorUserId: req.session.userId, action: 'calendar.event_deleted',
+      targetType: 'event', targetId: dbId, ipAddress: req.ip,
+      metadata: { travelBlocksDeleted: travelBlockIds.length, travelBlockIds },
+    }).catch(() => {});
+
+    res.json({
+      ok: true, deletedFromOutlook, title,
+      deleted: 1,
+      travelBlocksDeleted: travelBlockIds.length,
+      travelBlockIds, travelBlockTitles,
+    });
   } catch (err) {
     console.error('Outlook delete error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Failed to delete event', details: err.message });
@@ -2568,13 +2660,31 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
  * segments between sessions so Ann's Outlook calendar shows the driving time.
  * Also creates a local DB record (event_type='travel') so we can track/delete.
  *
- * Body: { start, end, fromLabel, toLabel, fromAddress?, toAddress?, travelMin }
+ * Body: { start, end, fromLabel, toLabel, fromAddress?, toAddress?, travelMin,
+ *         relatedEventId? }
+ *
+ * relatedEventId (migration 016) links the travel block to the appointment it
+ * serves so deleting the appointment cascades to the block. Validated against
+ * the caller's own events; silently dropped when it doesn't check out.
  */
 router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
   try {
-    const { start, end, fromLabel, toLabel, fromAddress, toAddress, travelMin } = req.body;
+    const { start, end, fromLabel, toLabel, fromAddress, toAddress, travelMin, relatedEventId } = req.body;
     if (!start || !end) {
       return res.status(400).json({ error: 'start and end are required' });
+    }
+
+    // Validate the linkage target: must be the caller's own, non-deleted event.
+    let linkedEventId = null;
+    if (relatedEventId) {
+      try {
+        const link = await db.pool.query(
+          `SELECT id FROM events WHERE id = $1 AND user_id = $2
+             AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+          [relatedEventId, req.session.userId]
+        );
+        if (link.rows.length) linkedEventId = link.rows[0].id;
+      } catch (_) { /* invalid UUID etc. — leave unlinked */ }
     }
 
     const user = await db.getUser(req.session.userId);
@@ -2606,10 +2716,13 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
       categories:  ['Travel'],
     });
 
-    // Mark as app-created and already synced
+    // Mark as app-created and already synced; stamp the appointment linkage
+    // so deleting the appointment cascades to this block (migration 016).
     await db.pool.query(
-      `UPDATE events SET source = 'app', sync_status = 'synced', last_modified_by = 'app' WHERE id = $1`,
-      [localEvent.id]
+      `UPDATE events SET source = 'app', sync_status = 'synced', last_modified_by = 'app',
+              related_event_id = $2
+       WHERE id = $1`,
+      [localEvent.id, linkedEventId]
     );
 
     // Log success
@@ -2619,7 +2732,7 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
     ).catch(() => {});
 
     console.log(`🚗 Travel block pushed to Outlook: ${result.outlookId} — ${title}`);
-    res.status(201).json({ ok: true, outlookId: result.outlookId, dbId: localEvent.id });
+    res.status(201).json({ ok: true, outlookId: result.outlookId, dbId: localEvent.id, relatedEventId: linkedEventId });
   } catch (err) {
     if (handleFeatureDisabled(err, res)) return;
     console.error('Travel block create error:', err.response?.data || err.message);
