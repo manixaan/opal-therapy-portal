@@ -209,11 +209,12 @@ describe('compact calendar week view', () => {
 // ── RBAC role-based navigation (2026-08-06) ──────────────────────────────────
 describe('role-based navigation (RBAC)', () => {
   test('explicit per-role nav config exists with default-deny allowlists', () => {
-    expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] }");
+    // Case Notes (2026-08-10) joined the primary nav for treating clinicians
+    expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] }");
     expect(HTML).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] }");
     expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
-    expect(HTML).toContain("primary: ['profile', 'calendar', 'resources']");
+    expect(HTML).toContain("primary: ['profile', 'calendar', 'casenotes', 'resources']");
     // Support Tickets (2026-08-09) joined the owner Business group
     expect(HTML).toContain("['Business', ['accounting', 'settings', 'support']]");
     // admin gets a Travel menu only — no business/practice groups
@@ -1306,5 +1307,828 @@ describe('support popup', () => {
     // mic stops on close and on submit
     expect(SP_JS).toContain('stopVoice(); // closing the window always ends dictation');
     expect(SP_JS).toContain('stopVoice(); // submitting always ends dictation; submission is manual only');
+  });
+});
+
+/**
+ * CASE NOTES (portal review surface for Opa-mobile case-note drafts).
+ *
+ * These guards pin the clinical-safety properties of the surface, not its
+ * looks. Every one of them corresponds to a rule the backend also enforces
+ * (backend/case-note-routes.js) or a promise the privacy doc makes
+ * (docs/mobile/CASE_NOTE_AI_PRIVACY.md): own rows only, drafts stay drafts,
+ * server-composed metadata is never presented as editable or AI-authored,
+ * and no note content is ever logged.
+ */
+describe('case notes review surface', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const CN_JS = fs.readFileSync(path.join(FRONTEND, 'casenotes.js'), 'utf8');
+  const CN_CSS = fs.readFileSync(path.join(FRONTEND, 'casenotes.css'), 'utf8');
+  // Comment-stripped copy: the file's header comment names the banned things
+  // in order to forbid them ("no approve", "no console.*"), so the affordance
+  // guards below read the executable code only.
+  const CN_CODE = CN_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  test('assets are linked next to the other extracted asset pairs', () => {
+    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=1" />');
+    expect(HTML).toContain('<script src="/casenotes.js?v=1" defer></script>');
+  });
+
+  test('nav tab + view mount exist and are wired the same way as other tabs', () => {
+    expect(HTML).toContain('data-tab="casenotes"');
+    expect(HTML).toContain('<section class="view" id="view-casenotes">');
+    expect(HTML).toContain('<div id="cn-root"></div>');
+    expect(HTML).toContain("if (name === 'casenotes' && window.CaseNotes && typeof window.CaseNotes.open === 'function') window.CaseNotes.open();");
+  });
+
+  test('ROLE_NAV gives Case Notes to treating clinicians only (therapist + owner)', () => {
+    const nav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
+    expect(nav).toContain("owner: {\n    primary: ['profile', 'calendar', 'casenotes', 'resources'],");
+    expect(nav).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] },");
+    // non-clinical admin and read_only must NOT get it
+    expect(nav).toContain("admin: {\n    primary: ['profile', 'calendar'],");
+    expect(nav).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] },");
+    const adminBlock = nav.slice(nav.indexOf('admin: {'), nav.indexOf('therapist: {'));
+    expect(adminBlock).not.toContain('casenotes');
+    const readOnlyBlock = nav.slice(nav.indexOf('read_only: {'));
+    expect(readOnlyBlock).not.toContain('casenotes');
+  });
+
+  test('own rows only — no cross-user, therapist-filtered or admin listing', () => {
+    // the list call carries no query string at all: there is no user filter
+    // to send, and the server 404s anything that is not yours
+    expect(CN_JS).toContain("var API_BASE = '/api/mobile/case-note-drafts';");
+    expect(CN_JS).toContain('await api(API_BASE)');
+    expect(CN_JS).not.toMatch(/case-note-drafts[^'"`\n]*\?/);
+    for (const param of ['userId', 'user_id', 'therapistId', 'therapist_id', 'therapistProfileId', 'allUsers', 'scope=']) {
+      expect(CN_JS).not.toContain(param);
+    }
+    // no admin/owner listing wording anywhere on the surface
+    for (const wording of ['all drafts', 'All drafts', 'All Drafts', 'everyone', 'team drafts', "team's drafts",
+      'other therapists', 'practice drafts', 'all clinicians']) {
+      expect(CN_JS).not.toContain(wording);
+      expect(HTML.slice(HTML.indexOf('id="view-casenotes"'), HTML.indexOf('id="view-purchases"'))).not.toContain(wording);
+    }
+    // and no new endpoint was invented — only the five documented routes
+    const paths = CN_JS.match(/\/api\/[a-z0-9/\-{}$'+ .()]*/gi) || [];
+    for (const p of paths) expect(p.startsWith('/api/mobile/case-note-drafts')).toBe(true);
+  });
+
+  test('only noteBody and plan are editable — metadata never sits in a field', () => {
+    // the PATCH body is exactly the two editable fields
+    expect(CN_JS).toContain('var sent = { noteBody: noteBody, plan: cnNormalisePlan(S.edits.plan) };');
+    expect(CN_JS).toContain("await api(draftPath(S.draft.id), { method: 'PATCH', body: sent });");
+    expect(CN_JS).toContain("S.edits = draft\n      ? { noteBody: draft.noteBody == null ? '' : String(draft.noteBody), plan: (draft.plan || []).map(String) }");
+
+    // every <textarea>/<input> built by this file is a note or a plan row
+    const fields = CN_CODE.match(/<(textarea|input)[^>]*/g) || [];
+    expect(fields.length).toBeGreaterThan(0);
+    for (const f of fields) {
+      expect(f).toMatch(/data-cn-input="(note|plan)"/);
+      for (const banned of ['clientName', 'clientAddress', 'serviceLine', 'sessionDateLabel', 'identify', 'sessionDetails', 'transcript']) {
+        expect(f).not.toContain(banned);
+      }
+    }
+    // metadata/narrative/transcript render through read-only sinks
+    expect(CN_JS).toContain('cnMetaRows(draft.header)');
+    expect(CN_JS).toContain("'<span class=\"cn-meta-value\">' + esc(r.value)");
+    expect(CN_JS).toContain("esc(draft.transcript || '')");
+    expect(CN_JS).toContain('<pre class="cn-tx-text">');
+    // ...and are labelled as appointment metadata, not AI authorship
+    expect(CN_JS).toContain('These details come from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.');
+    expect(CN_CSS).toContain('.cn-readonly-tag');
+    expect(CN_CSS).toContain('.cn-editable-tag');
+  });
+
+  test('transcript is labelled honestly and stays read-only', () => {
+    expect(CN_JS).toContain('Transcript — what was recorded');
+    expect(CN_JS).not.toMatch(/<textarea[^>]*transcript/i);
+    expect(CN_CSS).toContain('.cn-transcript.open .cn-tx-body { display: block; }'); // narrow-width collapse
+  });
+
+  test('drafts stay drafts — no approve / send / finalise affordance anywhere', () => {
+    const CN_VIEW = HTML.slice(HTML.indexOf('id="view-casenotes"'), HTML.indexOf('id="view-purchases"'));
+    for (const banned of ['Approve', 'approve', 'Send to Splose', 'send to Splose', 'Finalise', 'finalise',
+      'Finalize', 'Sign off', 'sign off', 'Mark documented', 'Publish', 'Submit note']) {
+      expect(CN_CODE).not.toContain(banned);
+      expect(CN_VIEW).not.toContain(banned);
+    }
+    // the only writes are the three review actions
+    const methods = CN_CODE.match(/method: '[A-Z]+'/g) || [];
+    expect(new Set(methods)).toEqual(new Set(["method: 'PATCH'", "method: 'POST'", "method: 'DELETE'"]));
+  });
+
+  test('honest draft-only status line is present on the surface', () => {
+    expect(CN_JS).toContain("var STATUS_LINE = 'Draft — saved in Opal only. Nothing is sent to Splose or Outlook.';");
+    expect(CN_JS).toContain('esc(STATUS_LINE)');
+  });
+
+  test('empty state points at the mobile app, not at a portal capability', () => {
+    expect(CN_JS).toContain("var EMPTY_STATE = 'No case-note drafts yet. Notes recorded in the Opa mobile app appear here for review.';");
+  });
+
+  test('fail-closed regeneration is surfaced honestly and fabricates nothing', () => {
+    expect(CN_JS).toContain("var GENERATION_OFF = 'Note generation is not enabled yet — you can still edit and save.';");
+    expect(CN_JS).toContain("if (r.code === 'generation_unavailable') text = text + ' ' + GENERATION_OFF;");
+    // the failure path only sets a message — it never writes note text
+    const regen = CN_JS.slice(CN_JS.indexOf('async function regenerate()'), CN_JS.indexOf('function archiveAsk()'));
+    const failBranch = regen.slice(regen.indexOf('if (!r.ok) {'), regen.indexOf('adoptDraft(r.caseNoteDraft)'));
+    expect(failBranch).not.toContain('S.edits.noteBody =');
+    expect(failBranch).toContain('setMsg(');
+  });
+
+  test('save surfaces 409 and 400 truthfully', () => {
+    expect(CN_JS).toContain("var NOT_EDITABLE = 'This note is no longer editable';");
+    expect(CN_JS).toContain('if (r.status === 409) {');
+    expect(CN_JS).toContain('await loadList(true);');
+    expect(CN_JS).toContain("setMsg('error', r.error);"); // 400: the server's own message
+  });
+
+  test('keystrokes made during a save are not overwritten by the server copy', () => {
+    expect(CN_JS).toContain('var typedDuringSave = cnIsDirty(sent, S.edits);');
+    expect(CN_JS).toContain('if (typedDuringSave) {\n      S.edits = pending;');
+    expect(CN_JS).toContain('Saved — but you kept typing while it saved, so those newer edits are still unsaved.');
+  });
+
+  test('archive uses the styled danger-confirm modal, never a browser confirm()', () => {
+    expect(HTML).toContain('<div class="modal-backdrop" id="modal-cn-archive"');
+    expect(HTML).toContain('id="cn-archive-confirm"');
+    expect(HTML).toContain('data-cn="archive-confirm"');
+    expect(CN_JS).toContain("var backdrop = el('modal-cn-archive');");
+    expect(CN_JS).toContain("backdrop.classList.add('show');");
+    expect(CN_JS).not.toMatch(/\bconfirm\s*\(/);
+    expect(CN_JS).not.toMatch(/\bprompt\s*\(/);
+    expect(CN_JS).not.toMatch(/\balert\s*\(/);
+  });
+
+  test('no clinical content is ever logged or put in a URL', () => {
+    expect(CN_CODE).not.toMatch(/console\s*\./);
+    expect(CN_CODE).not.toMatch(/localStorage|sessionStorage/);
+    // ids only in URLs — the note/transcript never travel in a query string
+    expect(CN_JS).toContain("function draftPath(id) { return API_BASE + '/' + encodeURIComponent(id); }");
+  });
+
+  test('unsaved-changes guard is inline, not a browser dialog', () => {
+    expect(CN_JS).toContain("S.guard = { kind: 'select', id: id };");
+    expect(CN_JS).toContain("S.guard = { kind: 'leave', tab: tab.dataset.tab };");
+    expect(CN_JS).toContain('data-cn="guard-keep"');
+    expect(CN_JS).toContain('data-cn="guard-discard"');
+    expect(CN_JS).not.toContain('beforeunload');
+    expect(CN_JS).not.toContain('onbeforeunload');
+  });
+
+  test('clinical content is deliberately kept out of the Cmd+Z undo manager', () => {
+    expect(CN_JS).not.toMatch(/pushUndo|undoStack|registerUndo/);
+    expect(CN_JS).toContain('Deliberately NOT integrated with the global Cmd+Z undo manager');
+  });
+
+  test('accessibility basics: real buttons, tied labels, headings, focus styles', () => {
+    expect(CN_JS).not.toMatch(/<a [^>]*data-cn=/);          // actions are buttons, not links
+    expect(CN_JS).toContain('<label class="cn-sr-only" for="\' + id + \'">Plan item ');
+    expect(CN_JS).toContain('<label for="cn-note">Note</label>');
+    expect(CN_JS).toContain('role="status" aria-live="polite"');
+    expect(CN_JS).toContain('aria-current="');
+    expect(CN_CSS).toContain('.cn-item:focus-visible');
+    expect(CN_CSS).toContain('.cn-note:focus-visible');
+    expect(CN_CSS).toContain('.cn-input:focus-visible');
+  });
+});
+
+describe('fca report builder', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const FCA_JS = fs.readFileSync(path.join(FRONTEND, 'fca.js'), 'utf8');
+  const FCA_CSS = fs.readFileSync(path.join(FRONTEND, 'fca.css'), 'utf8');
+  // Comment-stripped copy: the header comment names the banned things in order
+  // to forbid them ("no '|| fallback'", "no console.*"), so the affordance
+  // guards below read the executable code only.
+  const FCA_CODE = FCA_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  test('assets are linked next to the other extracted asset pairs', () => {
+    expect(HTML).toContain('<link rel="stylesheet" href="/fca.css?v=1" />');
+    expect(HTML).toContain('<script src="/fca.js?v=1" defer></script>');
+  });
+
+  test('the wizard and the hub entry point have their own mounts', () => {
+    expect(HTML).toContain('<div id="fca-hub-entry" hidden></div>');
+    expect(HTML).toContain('<div id="fca-root" hidden></div>');
+    // The entry card is a SIBLING of #rh2-root: resourcehub.js rebuilds that
+    // subtree wholesale and would otherwise wipe the card away.
+    expect(HTML.indexOf('id="fca-hub-entry"')).toBeLessThan(HTML.indexOf('id="rh2-root"'));
+    // The overlay is a direct child of <body>. Inside #view-resources it would
+    // sit under display:none whenever another tab is active, and a fixed
+    // overlay in a display:none ancestor never paints.
+    expect(HTML.indexOf('id="fca-root"')).toBeGreaterThan(HTML.lastIndexOf('</script>'));
+    expect(HTML).toMatch(/<div id="fca-root" hidden><\/div>\s*<\/body>/);
+  });
+
+  test('the Resource Hub carries a prominent "Create a new FCA report" action', () => {
+    expect(FCA_JS).toContain('Create a new FCA report');
+    expect(FCA_JS).toContain('data-fca="start"');
+    expect(FCA_JS).toContain('fca-btn-primary fca-entry-cta');
+    // …plus the resumable list of the therapist's own drafts.
+    expect(FCA_JS).toContain('Your reports in progress');
+    expect(FCA_JS).toContain("api(API + '/drafts')");
+    expect(FCA_JS).toContain('data-fca="draft-open"');
+  });
+
+  // ── The manifest is the single source of truth ──────────────────────────
+  test('the preview is built from draft.manifest, never from a local list', () => {
+    expect(FCA_JS).toContain('function fcaPreviewModel(draft)');
+    expect(FCA_JS).toContain('if (!manifest || !Array.isArray(manifest.sections)) return base;');
+    // Not ready = say so. Never reconstruct a section list locally.
+    expect(FCA_JS).toContain('The preview appears once the report has been composed on the server.');
+  });
+
+  test('no template section list is duplicated in the front end', () => {
+    // Every section tag, label and description arrives from GET /api/fca/template.
+    // A literal template tag here would be a second source of truth that could
+    // silently disagree with the document the generator produces.
+    expect(FCA_CODE).not.toContain('OPAL_SECTION_');
+    expect(FCA_CODE).not.toContain('OPAL_CLIENT_');
+    expect(FCA_CODE).not.toContain('OPAL_THERAPIST_');
+    expect(FCA_CODE).not.toContain('OPAL_REPORT_');
+    expect(FCA_JS).toContain('templateSections()');
+  });
+
+  // ── Required sections cannot be unchecked ───────────────────────────────
+  test('required sections render checked, disabled and visibly locked', () => {
+    expect(FCA_JS).toContain("(locked ? ' disabled aria-disabled=\"true\"' : '')");
+    expect(FCA_JS).toContain('Required by the Opal template — this section cannot be removed');
+    expect(FCA_JS).toContain('aria-label="Required section, cannot be removed"');
+    expect(FCA_JS).toContain('Always included');
+    expect(FCA_JS).toContain('Required report framework');
+    // The toggle refuses required tags even if the DOM is tampered with.
+    expect(FCA_JS).toContain("if (meta && meta.required === true) return; // required sections never move");
+    // Clearing optional selections keeps every required tag.
+    expect(FCA_JS).toContain("return s.required === true; })");
+    expect(FCA_CSS).toContain('.fca-secitem-locked');
+  });
+
+  // ── Source attribution: four labels, exactly ────────────────────────────
+  test('source badges use the four contract labels and nothing else', () => {
+    expect(FCA_JS).toContain("splose: 'Splose',");
+    expect(FCA_JS).toContain("client_profile: 'Opal client profile',");
+    expect(FCA_JS).toContain("report_override: 'Entered for this report',");
+    expect(FCA_JS).toContain("missing: 'Missing',");
+    // An origin the server does not name is Missing, never an assumption.
+    expect(FCA_JS).toContain("return FCA_SOURCE_LABELS[k] ? k : 'missing';");
+    // Badges are rendered from the manifest's own scalarSources.
+    expect(FCA_JS).toContain('m.scalarSources && typeof m.scalarSources === \'object\' ? m.scalarSources : {}');
+    expect(FCA_JS).toContain('fcaEsc(f.sourceLabel)');
+    FCA_CSS.match(/\.fca-badge-[a-z_]+/g).forEach((sel) => {
+      expect(['.fca-badge-splose', '.fca-badge-client_profile',
+        '.fca-badge-report_override', '.fca-badge-missing']).toContain(sel);
+    });
+  });
+
+  test('missing is an unmistakable state, never a guessed value', () => {
+    expect(FCA_JS).toContain("'<span class=\"fca-missing\">' + icn('alert') + ' No value</span>'");
+    expect(FCA_JS).toContain('value: missing ? null : String(raw),');
+    // The badge still carries the exact contract label for a missing field.
+    expect(FCA_JS).toContain("missing: 'Missing',");
+    expect(FCA_JS).toContain('Nothing here is guessed.');
+    expect(FCA_CSS).toContain('.fca-missing');
+  });
+
+  // ── Save back to the client profile ─────────────────────────────────────
+  test('the save-to-profile action exists and is worded exactly as contracted', () => {
+    expect(FCA_JS).toContain("Save eligible changes to the client\\'s report profile");
+    expect(FCA_JS).toContain("'/save-to-profile'");
+    expect(FCA_JS).toContain("method: 'POST', body: { fields: fields },");
+  });
+
+  test('saving to the profile is explicit — never automatic, never on Next', () => {
+    // The ONLY caller is the button's own click action.
+    expect(FCA_JS).toContain("if (a === 'profile-save') { saveToProfile(); return; }");
+    expect(FCA_CODE).toContain('async function saveToProfile()');
+    // Exactly one call site in the whole file (the declaration excluded).
+    expect((FCA_CODE.match(/(?<!function\s)saveToProfile\(\)/g) || []).length).toBe(1);
+    // It is not reachable from navigation, autosave or generation.
+    expect(FCA_CODE).not.toMatch(/function goStep[\s\S]{0,400}saveToProfile/);
+    expect(FCA_CODE).not.toMatch(/function flushPatch[\s\S]{0,600}saveToProfile/);
+    expect(FCA_CODE).not.toMatch(/async function generate\(\)[\s\S]{0,600}saveToProfile/);
+    // Ticking a box sends nothing on its own.
+    expect(FCA_JS).toContain('data-fca-check="profile-pick"');
+    // The button is dead until something is actually ticked.
+    expect(FCA_JS).toContain("(S.profileBusy || !picked ? ' disabled' : '')");
+  });
+
+  test('it states plainly that report-specific fields are excluded', () => {
+    expect(FCA_JS).toContain('<strong>Report-specific values are never saved:</strong>');
+    ['report date', 'document ID', 'version', 'status', 'reviewer',
+      'authorised recipients', 'referral reason', 'conclusions'].forEach((phrase) => {
+      expect(FCA_JS).toContain(phrase);
+    });
+  });
+
+  test('only server-declared eligible fields the therapist entered are offered', () => {
+    expect(FCA_JS).toContain('S.template.profileEligibleTags');
+    expect(FCA_JS).toContain("if (f.profileEligible && f.source === 'report_override' && !f.missing) out.push(f);");
+  });
+
+  test('the server\'s answer is reported honestly, including refusals', () => {
+    expect(FCA_JS).toContain('savedFields: Array.isArray(r.savedFields) ? r.savedFields : []');
+    expect(FCA_JS).toContain('rejected: Array.isArray(r.rejected) ? r.rejected : []');
+    expect(FCA_JS).toContain('<strong>Not saved:</strong>');
+    expect(FCA_JS).toContain('The server saved nothing and reported no reason.');
+  });
+
+  // ── Never fabricate, never leak ─────────────────────────────────────────
+  test('no fabricated-value fallbacks anywhere in the builder', () => {
+    // The only string-literal '||' defaults in the whole file are an HTTP verb
+    // and an empty string. A client field never falls back to invented text.
+    const fallbacks = FCA_CODE.match(/\|\|\s*['"][^'"]*['"]/g) || [];
+    expect(fallbacks.sort()).toEqual(["|| ''", "|| 'GET'"]);
+    expect(FCA_CODE).not.toMatch(/\|\|\s*['"](Unknown|N\/A|Not provided|None|TBC|-{1,2})['"]/i);
+  });
+
+  test('no client data is logged, stored or put in a URL', () => {
+    expect(FCA_CODE).not.toMatch(/console\s*\./);
+    expect(FCA_CODE).not.toMatch(/localStorage|sessionStorage/);
+    expect(FCA_CODE).not.toMatch(/analytics|gtag|dataLayer/);
+    // Only opaque ids ever travel in a path; the search term is the sole query
+    // parameter and it is encoded.
+    expect(FCA_JS).toContain("api(API + '/clients?q=' + encodeURIComponent(query))");
+    expect(FCA_JS).toContain("'/drafts/' + encodeURIComponent(S.draft.id)");
+  });
+
+  test('nothing downloads by itself — the document is offered, not fetched', () => {
+    expect(FCA_JS).toContain('Download the Word document');
+    expect(FCA_CODE).not.toMatch(/\.click\(\)/);
+    expect(FCA_CODE).not.toMatch(/window\.location\s*=/);
+  });
+
+  // ── Accessibility ───────────────────────────────────────────────────────
+  test('accessibility basics: labels, live regions, keyboard reordering', () => {
+    expect(FCA_JS).toContain('role="status" aria-live="polite"');
+    expect(FCA_JS).toContain('aria-current="step"');
+    expect(FCA_JS).toContain('<label class="fca-sr-only" for="fca-q">Search clients by name</label>');
+    // Reordering is not mouse-only: the buttons and the drag share setOrder().
+    expect(FCA_JS).toContain('data-fca="move-up"');
+    expect(FCA_JS).toContain('data-fca="move-down"');
+    expect(FCA_JS).toContain('Drag to reorder, or use the move buttons');
+    expect(FCA_CSS).toContain(':focus-visible');
+    expect(FCA_CSS).toContain('.fca-sr-only');
+  });
+
+  test('progress is saved as the therapist works, and survives a failure', () => {
+    expect(FCA_JS).toContain('patchTimer = setTimeout(flushPatch, 600);');
+    expect(FCA_JS).toContain('Your progress is saved as you go');
+    // A failed save keeps the work and offers a retry rather than rolling back.
+    expect(FCA_JS).toContain('data-fca="retry-save"');
+    expect(FCA_JS).toContain('pendingPatch = Object.assign({}, body, pendingPatch || {});');
+  });
+});
+
+describe('progress note letter builder', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const LTR_JS = fs.readFileSync(path.join(FRONTEND, 'letter.js'), 'utf8');
+  const LTR_CSS = fs.readFileSync(path.join(FRONTEND, 'letter.css'), 'utf8');
+  // Comment-stripped copy: the header comment names the banned things in order
+  // to forbid them ("no console.*", "not one '|| fallback'"), so the guards
+  // below read the executable code only.
+  const LTR_CODE = LTR_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  test('assets are linked next to the other extracted asset pairs', () => {
+    expect(HTML).toContain('<link rel="stylesheet" href="/letter.css?v=1" />');
+    expect(HTML).toContain('<script src="/letter.js?v=1" defer></script>');
+  });
+
+  test('the wizard and the hub entry point have their own mounts', () => {
+    expect(HTML).toContain('<div id="letter-hub-entry" hidden></div>');
+    expect(HTML).toContain('<div id="letter-root" hidden></div>');
+    // The entry card sits beside the FCA card and BEFORE #rh2-root, which
+    // resourcehub.js rebuilds wholesale.
+    expect(HTML.indexOf('id="fca-hub-entry"')).toBeLessThan(HTML.indexOf('id="letter-hub-entry"'));
+    expect(HTML.indexOf('id="letter-hub-entry"')).toBeLessThan(HTML.indexOf('id="rh2-root"'));
+    // The overlay is a direct child of <body>: inside #view-resources it would
+    // sit under display:none whenever another tab is active, and a fixed
+    // overlay in a display:none ancestor never paints.
+    expect(HTML.indexOf('id="letter-root"')).toBeGreaterThan(HTML.lastIndexOf('</script>'));
+  });
+
+  test('the Resource Hub carries the "Create progress note letter" action beside the FCA one', () => {
+    expect(LTR_JS).toContain('Create progress note letter');
+    expect(LTR_JS).toContain('data-ltr="start"');
+    expect(LTR_JS).toContain('ltr-btn-primary ltr-entry-cta');
+    // …plus the resumable list of the therapist's own letter drafts.
+    expect(LTR_JS).toContain('Your letters in progress');
+    expect(LTR_JS).toContain("api(API + '/drafts')");
+    expect(LTR_JS).toContain('data-ltr="draft-open"');
+    expect(LTR_JS).toContain("var API = '/api/letters';");
+  });
+
+  test('the wizard is five steps and Back never discards input', () => {
+    expect(LTR_JS).toContain("{ n: 1, label: 'Participant' }");
+    expect(LTR_JS).toContain("{ n: 2, label: 'Addressee' }");
+    expect(LTR_JS).toContain("{ n: 3, label: 'Letter details' }");
+    expect(LTR_JS).toContain("{ n: 4, label: 'Sections' }");
+    expect(LTR_JS).toContain("{ n: 5, label: 'Review' }");
+    // ONE state object; going Back only changes S.step.
+    expect(LTR_JS).toContain('Your progress is saved as you go');
+    expect(LTR_CODE).toMatch(/function goStep\(n\) \{[\s\S]{0,200}S\.step = n;/);
+  });
+
+  // ── The manifest is the single source of truth ──────────────────────────
+  test('the preview is built from draft.manifest, never from a local block list', () => {
+    expect(LTR_JS).toContain('function ltrPreviewModel(draft)');
+    expect(LTR_JS).toContain('if (!manifest || !Array.isArray(manifest.sections)) return base;');
+    expect(LTR_JS).toContain('The preview appears once the letter has been composed on the server.');
+    // renderPreview reads the model and nothing else.
+    expect(LTR_CODE).toMatch(/function renderPreview\(\) \{\s*var m = ltrPreviewModel\(S\.draft\);/);
+  });
+
+  test('no template block list or merge tag is duplicated in the front end', () => {
+    // Every block tag, label and description arrives from
+    // GET /api/letters/template; every scalar tag arrives in the manifest. A
+    // literal here would be a second source of truth that could silently
+    // disagree with the document the generator produces.
+    // (The only 'OPAL_' anywhere in the file is one worked example inside a
+    // comment explaining how labels are derived — never executable code.)
+    expect(LTR_CODE).not.toContain('OPAL_');
+    expect((LTR_JS.match(/OPAL_/g) || []).length).toBe(1);
+    expect(LTR_JS).toContain('templateSections()');
+    // Even the 'portal' source split is done by DERIVED tag group, not by a
+    // hard-coded tag prefix string.
+    expect(LTR_JS).toContain("return ltrTagGroup(tag) === 'organisation' ? 'portal_organisation' : 'portal_therapist';");
+  });
+
+  // ── Required blocks cannot be unchecked ─────────────────────────────────
+  test('the two required blocks render checked, disabled and visibly locked', () => {
+    expect(LTR_JS).toContain("(locked ? ' disabled aria-disabled=\"true\"' : '')");
+    expect(LTR_JS).toContain('Required by the Opal letter template — this section cannot be removed');
+    expect(LTR_JS).toContain('aria-label="Required section, cannot be removed"');
+    expect(LTR_JS).toContain('Always included');
+    expect(LTR_JS).toContain('These sections are the letter itself and cannot be removed.');
+    // The toggle refuses required tags even if the DOM is tampered with…
+    expect(LTR_JS).toContain('if (meta && meta.required === true) return; // required blocks never move');
+    // …and every selection that leaves this file is re-armoured first.
+    expect(LTR_JS).toContain('var safe = ltrEnforceRequired(tags, templateSections());');
+    expect(LTR_CSS).toContain('.ltr-blockitem-locked');
+  });
+
+  test('toggling a template block never drops the therapist\'s custom content', () => {
+    // Custom blocks live in customSections, not selectedSections. Reading the
+    // selection for them made ticking an unrelated template block silently
+    // remove custom content from the manifest — and therefore from the letter.
+    expect(LTR_JS).toContain("if (s.kind === 'custom') return;");
+    expect(LTR_JS).toContain('customSections, NOT by selectedSections');
+  });
+
+  // ── Source attribution: the six contract labels ─────────────────────────
+  test('source badges use the six contract labels and nothing else', () => {
+    expect(LTR_JS).toContain("splose: 'Splose',");
+    expect(LTR_JS).toContain("client_profile: 'Opal client profile',");
+    expect(LTR_JS).toContain("portal_therapist: 'Therapist profile',");
+    expect(LTR_JS).toContain("portal_organisation: 'Organisation settings',");
+    expect(LTR_JS).toContain("report_override: 'Entered for this letter',");
+    expect(LTR_JS).toContain("missing: 'Missing',");
+    // 'server' is the documented superset member and reads as Opal's own.
+    expect(LTR_JS).toContain("server: 'Generated by Opal',");
+    // An origin the server does not name is Missing, never an assumption.
+    expect(LTR_JS).toContain("return LTR_SOURCE_LABELS[k] ? k : 'missing';");
+    // Badges are rendered from the manifest's own scalarSources.
+    expect(LTR_JS).toContain("m.scalarSources && typeof m.scalarSources === 'object' ? m.scalarSources : {}");
+    expect(LTR_JS).toContain('ltrEsc(f.sourceLabel)');
+    LTR_CSS.match(/\.ltr-badge-[a-z_]+/g).forEach((sel) => {
+      expect(['.ltr-badge-splose', '.ltr-badge-client_profile', '.ltr-badge-portal_therapist',
+        '.ltr-badge-portal_organisation', '.ltr-badge-report_override',
+        '.ltr-badge-server', '.ltr-badge-missing']).toContain(sel);
+    });
+  });
+
+  test('missing is an unmistakable state, never a guessed value', () => {
+    expect(LTR_JS).toContain("'<span class=\"ltr-missing\">' + icn('alert') + ' No value</span>'");
+    expect(LTR_JS).toContain('value: missing ? null : String(raw),');
+    expect(LTR_JS).toContain('nothing here is guessed');
+    expect(LTR_CSS).toContain('.ltr-missing');
+  });
+
+  // ── Australian dates ────────────────────────────────────────────────────
+  test('dates are Australian on entry and in the letter — never US order', () => {
+    expect(LTR_JS).toContain('placeholder="dd/mm/yyyy"');
+    expect(LTR_JS).toContain('Australian order — day, then month, then year.');
+    expect(LTR_JS).toContain('for example 03/04/2026 for 3 April 2026');
+    // Day-first parse: day is capture 1, month is capture 2.
+    expect(LTR_JS).toContain('var d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);');
+    expect(LTR_JS).toContain("return ltrPad2(p.day) + '/' + ltrPad2(p.month) + '/' + p.year;");
+    // Nothing in this file may format a date through the viewer's locale — a
+    // browser set to en-US would otherwise print an Australian clinical letter
+    // in US order with nothing on screen saying which reading was meant.
+    expect(LTR_CODE).not.toMatch(/toLocaleDateString|toLocaleString|toLocaleTimeString/);
+    expect(LTR_JS).not.toContain('mm/dd/yyyy');
+    expect(LTR_JS).not.toContain("'en-US'");
+  });
+
+  // ── Saving a recipient to the profile is explicit ───────────────────────
+  test('the save-recipient action exists and is worded exactly as contracted', () => {
+    expect(LTR_JS).toContain("Save this recipient to the participant\\'s report profile");
+    expect(LTR_JS).toContain("'/save-recipient-to-profile'");
+    expect(LTR_JS).toContain("method: 'POST', body: { target: S.saveTarget },");
+  });
+
+  test('it is never automatic — the button is the only caller', () => {
+    expect(LTR_JS).toContain("if (a === 'save-recipient') { saveRecipientToProfile(); return; }");
+    expect(LTR_CODE).toContain('async function saveRecipientToProfile()');
+    // Exactly one call site in the whole file (the declaration excluded).
+    expect((LTR_CODE.match(/(?<!function\s)saveRecipientToProfile\(\)/g) || []).length).toBe(1);
+    // Not reachable from navigation, autosave or generation.
+    expect(LTR_CODE).not.toMatch(/function goStep[\s\S]{0,400}saveRecipientToProfile/);
+    expect(LTR_CODE).not.toMatch(/function flushPatch[\s\S]{0,600}saveRecipientToProfile/);
+    expect(LTR_CODE).not.toMatch(/async function generate\(\)[\s\S]{0,600}saveRecipientToProfile/);
+    // And the step says plainly that nothing else is kept.
+    expect(LTR_JS).toContain('<strong>Letter-specific edits are not saved to the participant\\\'s report profile</strong>');
+  });
+
+  test('every contact offered is labelled with the source Opal holds it under', () => {
+    expect(LTR_JS).toContain("support_coordinator: 'Support coordinator',");
+    expect(LTR_JS).toContain("nominee: 'Nominee',");
+    expect(LTR_JS).toContain("referrer: 'Referrer',");
+    expect(LTR_JS).toContain("saved_contact: 'Saved contact',");
+    expect(LTR_JS).toContain("'/clients/' + encodeURIComponent(id) + '/contacts'");
+    expect(LTR_JS).toContain('ltrContactSourceLabel(c.source)');
+    expect(LTR_JS).toContain('Enter a custom recipient');
+  });
+
+  test('the salutation is suggested but never overwrites what the therapist typed', () => {
+    expect(LTR_JS).toContain('function ltrSuggestSalutation(recipient)');
+    expect(LTR_JS).toContain('if (!S.salutationTouched && (opts && opts.suggest)) {');
+    expect(LTR_JS).toContain("if (kind === 'recip-salutation') { S.salutationTouched = true;");
+    expect(LTR_JS).toContain('The salutation is suggested from the recipient\\\'s name and stays yours to change.');
+  });
+
+  // ── Generation is blocked, confirmed, and never automatic ───────────────
+  test('required missing values block generation with a clear message', () => {
+    expect(LTR_JS).toContain('function ltrBlockingIssues(draft, template)');
+    expect(LTR_JS).toContain('<strong>This letter cannot be generated yet.</strong>');
+    expect(LTR_JS).toContain("(issues.length || S.generating ? ' disabled aria-disabled=\"true\"' : '')");
+    // The guard is enforced in the action too, not only in the markup.
+    expect(LTR_JS).toContain('if (blockingIssues().length) return;');
+    expect(LTR_CSS).toContain('.ltr-note-block');
+  });
+
+  test('generation is confirmed, and nothing downloads by itself', () => {
+    expect(LTR_JS).toContain('<strong>Generate this letter now?</strong>');
+    expect(LTR_JS).toContain("if (a === 'generate-confirm') { S.confirming = true; render(); return; }");
+    expect(LTR_JS).toContain('Download the Word document');
+    expect(LTR_CODE).not.toMatch(/\.click\(\)/);
+    expect(LTR_CODE).not.toMatch(/window\.location\s*=/);
+  });
+
+  test('the document id is server-issued and read only', () => {
+    expect(LTR_JS).toContain('readonly aria-readonly="true"');
+    expect(LTR_JS).toContain('Issued by Opal and printed in the letter footer. It is not yours to change.');
+    expect(LTR_JS).toContain("editable: key !== 'server',");
+  });
+
+  // ── Custom content stays letter-sized and reorderable by keyboard ───────
+  test('custom content is optional, capped and fully keyboard reorderable', () => {
+    expect(LTR_JS).toContain('Add custom content');
+    expect(LTR_JS).toContain('Keep it letter-sized — this is a page, not a report.');
+    expect(LTR_JS).toContain('var LTR_CUSTOM_LABEL_MAX = 120;');
+    expect(LTR_JS).toContain('var LTR_CUSTOM_GUIDANCE_MAX = 600;');
+    // Reordering is buttons only — there is no mouse-only drag path to miss.
+    expect(LTR_JS).toContain('data-ltr="custom-up"');
+    expect(LTR_JS).toContain('data-ltr="custom-down"');
+    expect(LTR_JS).toContain('data-ltr="custom-edit"');
+    expect(LTR_JS).toContain('data-ltr="custom-remove"');
+    expect(LTR_CODE).not.toMatch(/draggable="true"/);
+  });
+
+  // ── Never fabricate, never leak ─────────────────────────────────────────
+  test('no fabricated-value fallbacks anywhere in the builder', () => {
+    const fallbacks = LTR_CODE.match(/\|\|\s*['"][^'"]*['"]/g) || [];
+    fallbacks.forEach((f) => {
+      expect(f).toMatch(/\|\|\s*['"](GET|)['"]/);
+    });
+    expect(LTR_CODE).not.toMatch(/\|\|\s*['"](Unknown|N\/A|Not provided|None|TBC|-{1,2})['"]/i);
+    // A value Opal does not hold says so, in words.
+    expect(LTR_JS).toContain("' Not held</span>'");
+  });
+
+  test('no participant data is logged, stored, analysed or put in a URL', () => {
+    expect(LTR_CODE).not.toMatch(/console\s*\./);
+    expect(LTR_CODE).not.toMatch(/localStorage|sessionStorage/);
+    expect(LTR_CODE).not.toMatch(/analytics|gtag|dataLayer/);
+    // Only opaque ids ever travel in a path; the search term is the sole query
+    // parameter and it is encoded.
+    expect(LTR_JS).toContain("api(API + '/clients?q=' + encodeURIComponent(query))");
+    expect(LTR_JS).toContain("'/drafts/' + encodeURIComponent(S.draft.id)");
+  });
+
+  // ── Accessibility ───────────────────────────────────────────────────────
+  test('accessibility basics: real labels, live regions, keyboard operation', () => {
+    expect(LTR_JS).toContain('role="status" aria-live="polite"');
+    expect(LTR_JS).toContain('aria-current="step"');
+    expect(LTR_JS).toContain('<label class="ltr-sr-only" for="ltr-q">Search participants by name</label>');
+    expect(LTR_JS).toContain('class="ltr-sr-only" for="ltr-cc-n-');
+    expect(LTR_JS).toContain('role="dialog" aria-modal="true" aria-labelledby="ltr-title"');
+    expect(LTR_JS).toContain('aria-describedby="ltr-date-help"');
+    expect(LTR_CSS).toContain(':focus-visible');
+    expect(LTR_CSS).toContain('.ltr-sr-only');
+  });
+
+  test('the preview is a right-side pane on desktop and a drawer when narrow', () => {
+    expect(LTR_JS).toContain('data-ltr="preview-toggle"');
+    expect(LTR_JS).toContain('aria-controls="ltr-preview"');
+    expect(LTR_CSS).toContain('.ltr-body-split { display: grid;');
+    expect(LTR_CSS).toContain('@media (max-width: 900px)');
+    expect(LTR_CSS).toContain('.ltr-preview-open { display: block; }');
+  });
+
+  test('the preview covers every part of the letter the therapist can change', () => {
+    ['ltr-doc-letterhead', 'ltr-doc-date', 'ltr-doc-to', 'ltr-doc-subject',
+      'ltr-doc-ref', 'ltr-doc-sal', 'ltr-doc-blocks', 'ltr-doc-sign',
+      'ltr-doc-cc'].forEach((cls) => {
+      expect(LTR_JS).toContain(cls);
+      expect(LTR_CSS).toContain('.' + cls);
+    });
+    // A CC that will not appear is stated as removed, not shown greyed out.
+    expect(LTR_JS).toContain('No CC line will appear — the whole line is removed from the letter.');
+    // The multiline address becomes one preview line per typed line, matching
+    // the w:br the template writes.
+    expect(LTR_JS).toContain("m.recipient.address.split(/\\r?\\n/)");
+  });
+
+  test('progress is saved as the therapist works, and survives a failure', () => {
+    expect(LTR_JS).toContain('patchTimer = setTimeout(flushPatch, 600);');
+    expect(LTR_JS).toContain('data-ltr="retry-save"');
+    expect(LTR_JS).toContain('pendingPatch = Object.assign({}, body, pendingPatch || {});');
+    // Typing repaints the preview only — it never re-renders the field the
+    // caret is sitting in.
+    expect(LTR_JS).toContain('if (typingNow()) { paintSave(); paintPreview(); return; }');
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IN-APP BROWSER BACK / FORWARD (navigation.js)
+
+   The portal is a single-page app served from one static file. Before this
+   module, Back left the site entirely and the user lost their place. These
+   guards pin the properties that make the feature safe rather than merely
+   working — a regression in any of them is either a trapped user, an
+   infinite popstate loop, or a module that hard-fails a page it is loaded on.
+   ═══════════════════════════════════════════════════════════════════════════ */
+describe('in-app Back/Forward navigation module', () => {
+  const NAV_PATH = path.join(__dirname, '..', '..', 'frontend', 'current', 'navigation.js');
+  const NAV_JS = fs.readFileSync(NAV_PATH, 'utf8');
+  const nav = require('../../frontend/current/navigation.js');
+
+  test('the module exists and exports the pure route helpers for node', () => {
+    expect(fs.existsSync(NAV_PATH)).toBe(true);
+    for (const fn of ['encodeRoute', 'decodeRoute', 'normaliseRoute', 'routesEqual', 'pushOrReplace']) {
+      expect(typeof nav[fn]).toBe('function');
+    }
+    // Exported BEFORE the DOM is touched, like casenotes.js / supportpop.js.
+    const exportIdx = NAV_JS.indexOf('module.exports = helpers');
+    const domIdx = NAV_JS.indexOf('var doc = global.document;');
+    expect(exportIdx).toBeGreaterThan(0);
+    expect(domIdx).toBeGreaterThan(exportIdx);
+  });
+
+  test('requiring it in node is a no-op — it never touches a DOM that is not there', () => {
+    expect(() => require('../../frontend/current/navigation.js')).not.toThrow();
+    expect(NAV_JS).toContain("if (!global || !global.document || !global.history ||");
+    expect(NAV_JS).toContain("typeof global.history.pushState !== 'function') return;");
+  });
+
+  // ── ANTI-TRAP ─────────────────────────────────────────────────────────────
+  test('the user is never trapped on the page', () => {
+    // onbeforeunload would let the app veto leaving — never acceptable here.
+    expect(NAV_JS).not.toMatch(/onbeforeunload/i);
+    expect(NAV_JS).not.toMatch(/beforeunload/i);
+    // No sentinel/dummy entry pushed at boot to "absorb" the first Back.
+    expect(NAV_JS).not.toMatch(/pushState\([^)]*sentinel/i);
+    expect(NAV_JS).not.toMatch(/sentinel|__trap|dummyEntry|absorbBack/i);
+    // The classic trap is re-pushing from inside the popstate handler.
+    expect(NAV_JS).not.toMatch(/popstate[\s\S]{0,400}?history\.pushState/);
+    // history.forward() would fight the user's own Back press.
+    expect(NAV_JS).not.toContain('history.forward()');
+    // Boot writes with replaceState (adds no entry), never pushState.
+    expect(NAV_JS).toContain('never clobber the arrival hash');
+    expect(NAV_JS).toContain("if (!prev) return 'replace';");
+  });
+
+  test('pushOrReplace adds no entry at boot and no duplicate on re-render', () => {
+    expect(nav.pushOrReplace(null, { tab: 'calendar' })).toBe('replace');
+    expect(nav.pushOrReplace({ tab: 'calendar' }, { tab: 'calendar' })).toBe('replace');
+    expect(nav.pushOrReplace({ tab: 'calendar' }, { tab: 'profile' })).toBe('push');
+  });
+
+  // ── ANTI-LOOP ─────────────────────────────────────────────────────────────
+  test('re-entrancy and double-fire guards are present', () => {
+    expect(NAV_JS).toContain('NAV.restoring++');
+    expect(NAV_JS).toContain('NAV.restoring--');
+    expect(NAV_JS).toContain('} finally {');
+    expect(NAV_JS).toContain('if (NAV.restoring) return;');   // restoration never pushes
+    expect(NAV_JS).toContain('NAV.inNav');                    // switchTab's own overlay closes
+    expect(NAV_JS).toContain('NAV.lastBackAt');               // back() throttle
+    expect(NAV_JS).toContain('NAV.current = baseOf(NAV.current);'); // demote before back()
+    // The hashchange net must bail out when it agrees with popstate, or the
+    // two listeners feed each other.
+    expect(NAV_JS).toContain('if (routesEqual(next, NAV.current)) return;');
+  });
+
+  // ── HISTORY API, NOT hashchange-only ──────────────────────────────────────
+  test('it uses pushState/replaceState and popstate, not hashchange alone', () => {
+    expect(NAV_JS).toContain('hist.pushState(');
+    expect(NAV_JS).toContain('hist.replaceState(');
+    expect(NAV_JS).toContain("addEventListener('popstate'");
+    // hashchange may exist as a secondary net, but popstate must be the primary.
+    const popIdx = NAV_JS.indexOf("addEventListener('popstate'");
+    const hashIdx = NAV_JS.indexOf("addEventListener('hashchange'");
+    expect(popIdx).toBeGreaterThan(0);
+    if (hashIdx !== -1) expect(popIdx).toBeLessThan(hashIdx);
+  });
+
+  test('routing is hash-based — a refresh can never 404 on a static file', () => {
+    expect(NAV_JS).toContain("var out = '#' + s.tab;");
+    // No path-style pushState that the server would have to route.
+    expect(NAV_JS).not.toMatch(/pushState\([^)]*['"]\/(?!\*)/);
+  });
+
+  // ── SELF-INSTALLING, TYPEOF-GUARDED HOOKS ─────────────────────────────────
+  test('every global it hooks is typeof-guarded and degrades to a no-op', () => {
+    expect(NAV_JS).toContain("function isFn(v) { return typeof v === 'function'; }");
+    // Core page globals go through hookGlobalFn, which refuses a non-function.
+    expect(NAV_JS).toContain('if (!isFn(orig)) return false;');
+    // Module namespaces go through hookMethod, which refuses a missing module.
+    expect(NAV_JS).toContain("if (!ns || !isFn(ns[method])) return false;");
+    for (const g of ['switchTab', 'setCalendarMode', 'switchCalendarView',
+      'openBookingPanel', 'closeBookingPanel', 'openBlockDetail', 'closeBlockDetail']) {
+      expect(NAV_JS).toContain("hookGlobalFn('" + g + "'");
+    }
+    for (const [ns, m] of [['RH2', 'nav'], ['RH2', 'openDetail'],
+      ['CaseNotes', 'select'], ['SupportPop', 'open'], ['SupportPop', 'close']]) {
+      expect(NAV_JS).toContain("hookMethod('" + ns + "', '" + m + "'");
+    }
+    // Optional modules are existence-checked before any hook is attempted.
+    expect(NAV_JS).toContain('if (global.RH2) {');
+    expect(NAV_JS).toContain('if (global.CaseNotes) {');
+    expect(NAV_JS).toContain('if (global.SupportPop) {');
+    expect(NAV_JS).toContain("if (!global[nsName]) { done = false; return; }");
+  });
+
+  test('restoration goes through the app\'s own functions, not raw DOM writes', () => {
+    expect(NAV_JS).toContain('if (isFn(global.switchTab)) { try { global.switchTab(t.tab); } catch (e) {} }');
+    expect(NAV_JS).toContain('global.setCalendarMode(mode)');
+    expect(NAV_JS).toContain('global.RH2.nav(');
+    expect(NAV_JS).toContain('global.CaseNotes.select(t.id)');
+  });
+
+  // ── RBAC + the existing view guards ───────────────────────────────────────
+  test('RBAC is resolved through the app\'s own allow-list, quietly', () => {
+    expect(NAV_JS).toContain('global.NAV_ALLOWED_TABS');
+    expect(NAV_JS).toContain('global.navAllowedTabs(global.APP_USER.role)');
+    expect(NAV_JS).toContain('if (!tabAllowed(target.tab)) {');
+    expect(NAV_JS).toContain("target = normaliseRoute({ tab: DEFAULT_TAB });");
+    // A denied restore must not scold the user for a hash they did not type.
+    expect(NAV_JS).not.toContain('showToast');
+  });
+
+  test('a restored calendar view sets __viewManuallySet so late settings cannot stomp it', () => {
+    expect(NAV_JS).toContain('global.__viewManuallySet = true;');
+  });
+
+  test('no localStorage/sessionStorage is touched — existing state is untouched', () => {
+    expect(NAV_JS).not.toContain('localStorage');
+    expect(NAV_JS).not.toContain('sessionStorage');
+  });
+
+  // ── OVERLAYS AS HISTORY STEPS ─────────────────────────────────────────────
+  test('overlays push an entry and consume it again on a normal close', () => {
+    expect(NAV_JS).toContain("openOverlay('booking'");
+    expect(NAV_JS).toContain("openOverlay('event'");
+    expect(NAV_JS).toContain("openOverlay('support'");
+    expect(NAV_JS).toContain("openOverlay('modal'");
+    expect(NAV_JS).toContain("closeOverlay('booking')");
+    expect(NAV_JS).toContain("closeOverlay('event')");
+    expect(NAV_JS).toContain('hist.back()');
+    // Restoration closes overlays first, then applies the view.
+    expect(NAV_JS).toContain('closeOverlays(target);');
+    const closeIdx = NAV_JS.indexOf('closeOverlays(target);');
+    const applyIdx = NAV_JS.indexOf('applyBase(target);');
+    expect(closeIdx).toBeLessThan(applyIdx);
+  });
+
+  test('generic .modal-backdrop/.modal overlays are observed per element, not on body', () => {
+    expect(NAV_JS).toContain("qa('.modal-backdrop[id], .modal[id]')");
+    expect(NAV_JS).not.toMatch(/observe\(\s*doc\.body/);
+  });
+
+  // ── WIZARD ESCAPE HATCH ───────────────────────────────────────────────────
+  test('an optional pushStep hook is offered rather than hacking wizard internals', () => {
+    expect(NAV_JS).toContain('pushStep: function (name, step)');
+    expect(NAV_JS).toContain('global.OpalNav = {');
+  });
+
+  test('the route grammar covers every navigable surface', () => {
+    expect(nav.encodeRoute(nav.decodeRoute('#calendar/scheduler'))).toBe('#calendar/scheduler');
+    expect(nav.encodeRoute(nav.decodeRoute('#resources/detail/r1'))).toBe('#resources/detail/r1');
+    expect(nav.encodeRoute(nav.decodeRoute('#casenotes/d1'))).toBe('#casenotes/d1');
+    expect(nav.encodeRoute(nav.decodeRoute('#fca/step-2'))).toBe('#fca/step-2');
+    expect(nav.encodeRoute(nav.decodeRoute('#letter/step-3'))).toBe('#letter/step-3');
+    // Garbage is safe.
+    expect(nav.encodeRoute(nav.decodeRoute('#wibble'))).toBe('#calendar');
   });
 });

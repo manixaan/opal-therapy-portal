@@ -34,11 +34,12 @@ describe('migration runner', () => {
       '008_snapshot_day.sql', '009_travel_overrides.sql', '010_suburb_centroids.sql',
       '011_resource_hub_r2.sql', '012_opa_ai.sql', '013_product_thumbnails.sql',
       '014_support_tickets.sql', '015_voice_notes.sql', '016_travel_block_linkage.sql',
-      '017_case_note_drafts.sql',
+      '017_case_note_drafts.sql', '018_fca_reports.sql',
+      '020_progress_note_letters.sql',
     ]));
 
     const { rows } = await db.pool.query('SELECT id FROM schema_migrations ORDER BY id');
-    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016', '017']);
+    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016', '017', '018', '019', '020']);
   });
 
   test('is idempotent — a second run applies nothing', async () => {

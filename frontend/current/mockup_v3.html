@@ -17,9 +17,16 @@
 <link rel="stylesheet" href="/resourcehub.css?v=r2" />
 <link rel="stylesheet" href="/opa.css?v=1" />
 <link rel="stylesheet" href="/supportpop.css?v=1" />
+<link rel="stylesheet" href="/casenotes.css?v=1" />
+<link rel="stylesheet" href="/fca.css?v=1" />
+<link rel="stylesheet" href="/letter.css?v=1" />
 <script src="/resourcehub.js?v=r2" defer></script>
 <script src="/opa.js?v=1" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
+<script src="/casenotes.js?v=1" defer></script>
+<script src="/fca.js?v=1" defer></script>
+<script src="/letter.js?v=1" defer></script>
+<script src="/navigation.js?v=1" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -3866,6 +3873,12 @@ window.opIcon = function (name, size) {
   <button class="tab" data-tab="profile" data-help="tab-profile"><svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> My Profile</button>
   <button class="tab active" data-tab="book" data-help="tab-booking"><svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2"/><path d="M12 6v6l4 2"/></svg> Smart Booking</button>
   <button class="tab" data-tab="calendar" data-help="tab-calendar"><svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M13 14h.01M18 14h.01M8 18h.01M13 18h.01M18 18h.01"/></svg> Calendar</button>
+  <!-- Case Notes sits next to Calendar: it is the documentation half of the
+       same clinical loop (the appointment you just ran → the draft note for
+       it). Treating clinicians only — see ROLE_NAV (therapist + owner). -->
+  <button class="tab" data-tab="casenotes" title="Case Notes — review drafts dictated in the Opa mobile app">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Case Notes
+  </button>
   <button class="tab" data-tab="contacts">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Contacts
   </button>
@@ -4661,6 +4674,15 @@ window.opIcon = function (name, size) {
 </section>
 
 
+<!-- ============ CASE NOTES TAB ============
+     Mount only — the whole surface is rendered by /casenotes.js into
+     #cn-root. Treating clinicians only (ROLE_NAV: therapist + owner); the
+     backend independently scopes every row to the session user. Drafts are
+     drafts: nothing here finalises, approves or sends anything. -->
+<section class="view" id="view-casenotes">
+  <div id="cn-root"></div>
+</section>
+
 <!-- ============ RESOURCES TAB (Resource Hub R1) ============ -->
 <section class="view" id="view-purchases">
 <div class="acct-page">
@@ -4843,6 +4865,14 @@ window.opIcon = function (name, size) {
 
   <!-- ── Resource Hub R2 (rendered by /resourcehub.js into #rh2-root) ── -->
   <div class="rh-panel active" id="rh-panel-shared">
+    <!-- FCA report builder entry point (rendered by /fca.js). Its own sibling
+         mount: resourcehub.js owns #rh2-root and rebuilds it wholesale, so the
+         card is kept outside that subtree and shown only on the hub home. -->
+    <div id="fca-hub-entry" hidden></div>
+    <!-- Progress note letter builder entry point (rendered by /letter.js).
+         Sits beside the FCA action for the same reason: resourcehub.js rebuilds
+         #rh2-root wholesale, so document-builder cards live outside it. -->
+    <div id="letter-hub-entry" hidden></div>
     <div id="rh2-root"></div>
   </div>
 
@@ -7372,6 +7402,24 @@ window.opIcon = function (name, size) {
     <div class="modal-actions">
       <button class="btn" id="del-event-cancel" onclick="closeDeleteEventModal()">Cancel</button>
       <button class="btn" id="del-event-confirm" style="background:var(--danger,#c2412e);border-color:var(--danger,#c2412e);color:#fff;"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Case-note archive confirm — same styled danger-confirm pattern as the
+     calendar delete flow above (modal-backdrop / .modal / .modal-actions).
+     Driven by casenotes.js via data-cn; never a browser confirm(). Archiving
+     is the API's soft archive — the row stays, it just leaves your list. -->
+<div class="modal-backdrop" id="modal-cn-archive" style="z-index:1200;" onclick="if(event.target===this&&window.CaseNotes)window.CaseNotes.archiveCancel()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cn-archive-title" style="width:420px;">
+    <h3 id="cn-archive-title" style="display:flex;align-items:center;gap:8px;color:var(--danger,#c2412e);"></h3>
+    <div class="modal-body">
+      <p id="cn-archive-msg" style="margin:0 0 6px;font-size:13.5px;"></p>
+      <p style="margin:0;font-size:12px;color:var(--muted);">It is removed from your drafts list. Nothing is sent to Splose or Outlook, and no appointment is marked as documented.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cn-archive-cancel" data-cn="archive-cancel">Cancel</button>
+      <button class="btn" id="cn-archive-confirm" data-cn="archive-confirm" style="background:var(--danger,#c2412e);border-color:var(--danger,#c2412e);color:#fff;">Archive draft</button>
     </div>
   </div>
 </div>
@@ -12876,6 +12924,26 @@ function renderConfirmSummary() {
 }
 
 /* ---------- Confirm Booking and Add to Calendar ---------- */
+
+// Cmd+Z undo for a fresh booking: the inverse is the existing cascade DELETE.
+// dbId comes from the create response (additive backend field); for a booking
+// created seconds ago there are no linked travel blocks yet, so the cascade is
+// naturally empty. Reload the calendar afterwards to drop the optimistic tile.
+function __registerBookingUndo(dbId, title) {
+  if (!dbId || !window.OpalUndo) return;
+  OpalUndo.register({
+    label: title ? `Booking created — ${title}` : 'Booking created',
+    undo: async () => {
+      const dr = await fetch(`/api/outlook/events/${dbId}`, { method: 'DELETE', credentials: 'include' });
+      if (!dr.ok) {
+        const jj = await dr.json().catch(() => ({}));
+        throw new Error(jj.error || 'delete failed');
+      }
+      if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+    },
+  });
+}
+
 async function confirmBooking() {
   const cat = BOOKING_STATE.category;
   const btn = document.getElementById('create-booking-btn');
@@ -12912,6 +12980,7 @@ async function confirmBooking() {
         const oResult = await oResp.json();
         if (oResp.ok) {
           outlookId = oResult.outlookId;
+          __registerBookingUndo(oResult.dbId, outlookTitle);
           console.log('✅ Outlook event created:', outlookId);
         } else {
           console.warn('⚠️ Outlook write failed (non-fatal):', oResult.error);
@@ -13027,6 +13096,7 @@ async function confirmBooking() {
       if (oResp.ok) {
         outlookId   = oResult.outlookId;
         outlookNote = 'Added to Outlook calendar ✓';
+        __registerBookingUndo(oResult.dbId, _outlookTitle);
         console.log('✅ Outlook event created:', outlookId);
       } else {
         outlookNote = `Outlook: ${oResult.error || 'write failed — check Outlook connection'}`;
@@ -14266,8 +14336,29 @@ async function performDeleteEvent(id, cascadeIds) {
     });
     extraCols.forEach((col) => { if (typeof reflowDayOverlaps === 'function' && col) reflowDayOverlaps(col); });
 
+    // Cmd+Z undo: the backend restore un-tombstones the event + exactly the
+    // travel-block ids this delete cascaded (captured from the response).
+    if (window.OpalUndo) {
+      const restoreTravelIds = (json.travelBlockIds || []).slice();
+      OpalUndo.register({
+        label: 'Event deleted',
+        undo: async () => {
+          const rr = await fetch(`/api/outlook/events/${dbId}/restore`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ travelBlockIds: restoreTravelIds }),
+          });
+          if (!rr.ok) {
+            const jj = await rr.json().catch(() => ({}));
+            throw new Error(jj.error || 'restore failed');
+          }
+          if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+        },
+      });
+    }
+
     const n = json.travelBlocksDeleted || 0;
-    showToast(n ? `Event deleted (with ${n} travel block${n === 1 ? '' : 's'})` : 'Event deleted');
+    showToast((n ? `Event deleted (with ${n} travel block${n === 1 ? '' : 's'})` : 'Event deleted') + ' (Cmd+Z to undo)');
     console.log(`🗑️ Event deleted: ${id} (Outlook removed: ${json.deletedFromOutlook}, travel blocks: ${n})`);
   } catch (err) {
     console.error('Delete event error:', err);
@@ -20255,9 +20346,15 @@ function initMasterCalendarAccess() {
 // boundary. Legacy name kept for older callers.
 var NAV_ADMIN_ONLY_TABS = ['billing', 'ndis', 'dormant'];
 
+// Case Notes ('casenotes') is a TREATING-CLINICIAN surface: therapist and
+// owner only (the owner treats clients in this practice). Admin is
+// non-clinical and read_only cannot edit clinical content, so neither gets
+// the tab — and neither can reach the view, because switchTab denies any
+// tab outside NAV_ALLOWED_TABS. Rows are user-scoped server-side regardless:
+// no role, owner included, can see another clinician's drafts.
 var ROLE_NAV = {
   owner: {
-    primary: ['profile', 'calendar', 'resources'],
+    primary: ['profile', 'calendar', 'casenotes', 'resources'],
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
       ['Travel', ['travel', 'logbook']],
@@ -20271,7 +20368,7 @@ var ROLE_NAV = {
       ['Operations', ['purchases', 'support']],
     ] },
   },
-  therapist: { primary: ['profile', 'calendar', 'logbook', 'resources'] },
+  therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] },
   read_only: { primary: ['profile', 'calendar', 'resources'] },
 };
 
@@ -20437,6 +20534,7 @@ function applyNavRoleVisibility(role) {
       var out = _preGuardSwitchTab(name);
       if (name === 'purchases' && typeof admLoadPurchases === 'function') admLoadPurchases();
       if (name === 'support' && typeof supOpenCentre === 'function') supOpenCentre();
+      if (name === 'casenotes' && window.CaseNotes && typeof window.CaseNotes.open === 'function') window.CaseNotes.open();
       toggleNavMoreMenu(false);
       var moreBtn = document.getElementById('nav-more-btn');
       if (moreBtn) {
@@ -23916,6 +24014,89 @@ function showToast(msg, isError) {
   toast._timer = setTimeout(function() { toast.style.opacity = '0'; }, 3000);
 }
 
+// ── Global undo — Cmd+Z / Ctrl+Z (2026-08-09) ─────────────────
+// A small session-only stack of reversible app actions. Flows register an
+// entry { label, undo: async fn, ts } after a successful action; Cmd+Z pops
+// the most recent one and runs its inverse. Native text editing is never
+// intercepted (focus/selection guard below); Cmd+Shift+Z redo is deliberately
+// not built. Entries older than 10 minutes are skipped and dropped silently.
+window.OpalUndo = (function () {
+  var stack = [];
+  var MAX_ENTRIES = 20;
+  var TTL_MS = 10 * 60 * 1000; // entries expire after 10 minutes
+  var busy = false;            // one undo in flight at a time
+
+  function register(entry) {
+    if (!entry || typeof entry.undo !== 'function') return null;
+    var e = { label: String(entry.label || 'last action'), undo: entry.undo, ts: Date.now() };
+    stack.push(e);
+    if (stack.length > MAX_ENTRIES) stack.shift();
+    return e;
+  }
+
+  // Drop an entry that was already consumed elsewhere (e.g. the To-Do toast's
+  // own Undo button) so Cmd+Z can never run the same restore twice.
+  function unregister(entry) {
+    var i = stack.indexOf(entry);
+    if (i >= 0) stack.splice(i, 1);
+  }
+
+  // Native-text-editing guard: never intercept while focus is in an editable
+  // control, or while a selection lives inside one — the browser's own text
+  // undo must keep working untouched.
+  function inNativeEditSurface() {
+    var el = document.activeElement;
+    if (el) {
+      var tag = (el.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable) return true;
+    }
+    var sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && sel.anchorNode) {
+      var host = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+      if (host && host.closest && host.closest('input, textarea, select, [contenteditable]')) return true;
+    }
+    return false;
+  }
+
+  async function trigger() {
+    if (busy) return false;
+    busy = true;
+    try {
+      while (stack.length) {
+        var e = stack.pop();
+        if (Date.now() - e.ts > TTL_MS) continue; // expired — drop silently, try the next
+        try {
+          await e.undo();
+          if (typeof showToast === 'function') showToast('Undone — ' + e.label);
+        } catch (err) {
+          console.warn('OpalUndo: undo failed —', e.label, err);
+          if (typeof showToast === 'function') showToast('Could not undo — ' + e.label, true);
+        }
+        return true; // one entry per Cmd+Z, success or not (failed entries are dropped)
+      }
+      return false; // empty stack — deliberately nothing visible
+    } finally {
+      busy = false;
+    }
+  }
+
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.key || '').toLowerCase() !== 'z') return;
+    if (!(ev.metaKey || ev.ctrlKey) || ev.shiftKey || ev.altKey) return; // Cmd+Shift+Z (redo) stays native
+    if (inNativeEditSurface()) return;
+    ev.preventDefault();
+    trigger();
+  });
+
+  return {
+    register: register,
+    unregister: unregister,
+    _trigger: trigger,           // test hook — same path as the key handler
+    _stack: stack,               // introspection for QA/tests only
+    _inNativeEditSurface: inNativeEditSurface,
+  };
+})();
+
 // ── Change password ───────────────────────────────────────────
 async function saveNewPassword() {
   var cur = (document.getElementById('stg-pw-current') || {}).value || '';
@@ -25909,6 +26090,17 @@ async function swCreateTask(title) {
     var j = await r.json();
     var i = __snapTasks.findIndex(t => t.id === tempId);
     if (i >= 0) __snapTasks[i] = j.task;
+    // Cmd+Z undo: the inverse of composer-create is the existing DELETE.
+    if (j.task && j.task.id && window.OpalUndo) {
+      (function (createdId) {
+        OpalUndo.register({ label: 'Task created', undo: async function () {
+          var dr = await fetch('/api/snapshot/tasks/' + createdId, { method: 'DELETE', credentials: 'include' });
+          if (!dr.ok) throw new Error('delete failed');
+          __snapTasks = __snapTasks.filter(function (t) { return t.id !== createdId; });
+          snapRenderWork();
+        } });
+      })(j.task.id);
+    }
   } catch (_) {
     __snapTasks = __snapTasks.filter(t => t.id !== tempId);
     __swVal = title; __swErr = 'Could not save — press Enter to retry.';
@@ -25971,8 +26163,11 @@ function swCircle(kind, id) {
     swSetDone(kind, id, true);
   }, 800);
 }
-async function swSetDone(kind, id, done) {
-  var it = swFind(kind, id); if (!it) return;
+// skipUndo: internal callers (restore, and Cmd+Z itself) must not push fresh
+// undo entries — only a user-initiated completion registers one.
+// Returns true on saved, false on failure (additive — for the undo wiring).
+async function swSetDone(kind, id, done, skipUndo) {
+  var it = swFind(kind, id); if (!it) return false;
   var revert;
   if (kind === 'task') { revert = it.completed; it.completed = done; }
   else { revert = it.state; it.state = done ? 'completed' : 'upcoming'; }
@@ -25985,9 +26180,17 @@ async function swSetDone(kind, id, done) {
     var j = await r.json();
     swAbsorb(kind, j.task || j.reminder);
     snapRenderWork();
+    // Cmd+Z undo for completing a task: the inverse is the existing reopen.
+    if (!skipUndo && kind === 'task' && done && window.OpalUndo) {
+      OpalUndo.register({ label: 'Task completed', undo: async function () {
+        if (await swSetDone('task', id, false, true) === false) throw new Error('reopen failed');
+      } });
+    }
+    return true;
   } catch (_) {
     if (kind === 'task') it.completed = revert; else it.state = revert;
     snapRenderWork();
+    return false;
   }
 }
 
@@ -26103,13 +26306,23 @@ async function swDelete(kind, id) {
     var r = await fetch('/api/snapshot/' + (kind === 'task' ? 'tasks/' : 'reminders/') + id,
       { method: 'DELETE', credentials: 'include' });
     if (!r.ok) throw new Error();
-    swUndoToast((kind === 'task' ? 'Task' : 'Reminder') + ' deleted', function () { swRestore(kind, removed); });
+    // The same restore serves both undo surfaces: the toast button and Cmd+Z.
+    // Whichever runs first unregisters the Cmd+Z entry so it can't run twice.
+    var undoLabel = (kind === 'task' ? 'Task' : 'Reminder') + ' deleted';
+    var undoEntry = window.OpalUndo ? OpalUndo.register({ label: undoLabel, undo: async function () {
+      if (await swRestore(kind, removed) === false) throw new Error('restore failed');
+    } }) : null;
+    swUndoToast(undoLabel, function () {
+      if (undoEntry && window.OpalUndo) OpalUndo.unregister(undoEntry);
+      swRestore(kind, removed);
+    });
   } catch (_) {
     list.splice(Math.min(idx, list.length), 0, removed);
     snapRenderWork();
     if (typeof showToast === 'function') showToast('Delete failed — try again.', true);
   }
 }
+// Returns true on success, false on failure (additive — for the undo wiring).
 async function swRestore(kind, row) {
   var body = kind === 'task'
     ? { title: row.title, note: row.note || undefined, dueTime: row.due_time || undefined }
@@ -26124,9 +26337,11 @@ async function swRestore(kind, row) {
     (kind === 'task' ? __snapTasks : __snapReminders).push(restored);
     snapRenderWork();
     var wasDone = kind === 'task' ? !!row.completed : row.state === 'completed';
-    if (wasDone) swSetDone(kind, restored.id, true); // deleted-while-completed stays completed
+    if (wasDone) swSetDone(kind, restored.id, true, true); // deleted-while-completed stays completed (no fresh undo entry)
+    return true;
   } catch (_) {
     if (typeof showToast === 'function') showToast('Could not restore — try again.', true);
+    return false;
   }
 }
 // Undo toast — follows the live showToast pattern (the second, admin-toast
@@ -27539,6 +27754,17 @@ document.addEventListener('keydown', function (e) {
   else if (document.getElementById('sup-my-panel').classList.contains('open')) supCloseMyTickets();
 });
 </script>
+
+<!-- Progress note letter wizard overlay — rendered entirely by /letter.js.
+     Same reasoning as the FCA overlay below: a direct child of <body>, because
+     a position:fixed overlay inside a display:none tab view never paints. -->
+<div id="letter-root" hidden></div>
+
+<!-- FCA report wizard overlay — rendered entirely by /fca.js.
+     Deliberately a direct child of <body>, NOT of #view-resources: the tab
+     views are display:none when inactive, and a position:fixed overlay inside
+     a display:none ancestor never paints. -->
+<div id="fca-root" hidden></div>
 
 </body>
 </html>
