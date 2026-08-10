@@ -74,6 +74,18 @@
   function isMobile() { return vp().w < 700; }
   function el(id) { return document.getElementById(id); }
 
+  // Mirror the hidden native input's state into our styled control.
+  function supFileSync() {
+    var input = el('sp-r-shot');
+    var name = el('sp-r-shot-name');
+    var clear = el('sp-r-shot-clear');
+    if (!input || !name) return;
+    var f = input.files && input.files[0];
+    name.textContent = f ? f.name : 'No file chosen';
+    name.classList.toggle('has-file', !!f);
+    if (clear) clear.style.display = f ? '' : 'none';
+  }
+
   // ── Persistence (support.window.*) ───────────────────────────────────────
   function saveRect() {
     if (!SP.rect) return;
@@ -247,7 +259,15 @@
           '<option value="critical">Critical — I cannot work until this is fixed</option>' +
         '</select>' +
         '<label for="sp-r-shot">Screenshot (optional — PNG, JPEG or WEBP, up to 5 MB)</label>' +
-        '<input type="file" id="sp-r-shot" accept="image/png,image/jpeg,image/webp" />' +
+        // Native file inputs render in browser chrome and cannot be styled;
+        // the real input stays for behaviour/accessibility but is visually
+        // hidden behind our own button + filename line.
+        '<div class="sp-file">' +
+          '<input type="file" id="sp-r-shot" class="sp-file-native" accept="image/png,image/jpeg,image/webp" />' +
+          '<button type="button" class="sp-file-btn" id="sp-r-shot-btn">Attach a screenshot</button>' +
+          '<span class="sp-file-name" id="sp-r-shot-name">No file chosen</span>' +
+          '<button type="button" class="sp-file-clear" id="sp-r-shot-clear" style="display:none;" aria-label="Remove screenshot">Remove</button>' +
+        '</div>' +
         '<div class="sp-privacy">Please do not include participant names, clinical information or other sensitive personal information in technical support tickets.</div>' +
         '<div class="sp-form-actions">' +
           '<button class="btn primary" type="button" id="sp-r-submit">Submit ticket</button>' +
@@ -304,6 +324,12 @@
       setView('mine', SP.created ? SP.created.id : null);
     });
     el('sp-r-type').addEventListener('change', typeChanged);
+    el('sp-r-shot-btn').addEventListener('click', function () { el('sp-r-shot').click(); });
+    el('sp-r-shot').addEventListener('change', supFileSync);
+    el('sp-r-shot-clear').addEventListener('click', function () {
+      el('sp-r-shot').value = '';
+      supFileSync();
+    });
     el('sp-mine-back').addEventListener('click', function () { showMine(null); });
     if (SR) {
       el('sp-mic-title').addEventListener('click', function () { toggleVoice('title'); });
@@ -358,6 +384,7 @@
     el('sp-r-desc').value = '';
     el('sp-r-expected').value = '';
     el('sp-r-shot').value = '';
+    supFileSync();
     el('sp-r-impact').value = 'medium';
     var typeSel = el('sp-r-type');
     var validTypes = ['bug', 'feature_request', 'resource_issue', 'data_issue', 'usability', 'other'];
