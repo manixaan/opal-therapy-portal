@@ -35,17 +35,32 @@
 /* The hero is a semantic <header>; neutralise the app shell's global sticky
    header rule (header { position: sticky; z-index: 1000 }) so the hub header
    scrolls with the page and never floats over the navigation dropdown. */
-.rh2-hero { position: static; z-index: auto; top: auto; }
-.rh2-hero h1 { margin: 0 0 2px; font-size: 22px; }
-.rh2-tagline { margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
+/* Static: the app shell styles bare <header> as a sticky bar, which would
+   float this over the navigation dropdown. */
+.rh2-hero { position: static; z-index: auto; top: auto; margin-bottom: 4px; }
+.rh2-tagline {
+  margin: 0 0 12px; color: var(--ink-soft);
+  font-size: 14px; line-height: 1.5; max-width: 62ch;
+}
 .rh2-hero-search {
   display: flex; align-items: center; gap: 10px; background: var(--panel);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: 10px 14px; box-shadow: var(--shadow-sm); color: var(--muted);
+  padding: 8px 8px 8px 14px; box-shadow: var(--shadow-sm); color: var(--muted);
+  width: 100%;
 }
+/* The input must be free to shrink AND grow: without min-width:0 a long
+   placeholder forces the flex item wider than its share and is clipped. */
 .rh2-hero-search input {
-  flex: 1; border: none; background: none; font-size: 14px; font-family: inherit;
-  color: var(--ink); min-width: 0;
+  flex: 1 1 auto; min-width: 0; border: none; background: none;
+  font-size: 14px; font-family: inherit; line-height: 1.4;
+  color: var(--ink); padding: 4px 0;
+}
+.rh2-hero-search input::placeholder { color: var(--muted); }
+.rh2-hero-search .rh2-btn { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .rh2-hero-search { flex-wrap: wrap; padding: 10px 12px; }
+  .rh2-hero-search input { flex-basis: 100%; order: 2; }
+  .rh2-hero-search .rh2-btn { order: 3; margin-left: auto; }
 }
 /* the container carries the focus ring; the inner input must not add the
    app shell's global focus-visible ring on top (double-pill effect) */

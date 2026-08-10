@@ -298,7 +298,7 @@
   function renderHome() {
     var h = S.home;
     var out = '<div class="rh2-page">' +
-      '<header class="rh2-hero"><h1>Resource Hub</h1>' +
+      '<header class="rh2-hero">' +
       '<p class="rh2-tagline">Everything you need to work, learn and grow at Opal.</p>' +
       '<div class="rh2-hero-search">' + icn('search', 'search', 16) +
       '<input type="search" id="rh2-home-search" placeholder="Search resources, policies, tutorials, NDIS guidance..." ' +
