@@ -230,6 +230,11 @@
     else if (S.view === 'learning') body = renderLearning();
     else if (S.view === 'admin') body = renderAdmin();
     host.innerHTML = renderNav() + body;
+    // Publish the current surface so sibling modules (the FCA and letter
+    // builders, which mount outside #rh2-root) can show their entry cards on
+    // the right screen without parsing our markup.
+    host.dataset.view = S.view;
+    host.dataset.collection = (S.view === 'library' && S.lib && S.lib.collection) ? S.lib.collection : '';
   }
 
   function renderNav() {
@@ -704,24 +709,48 @@
     return st.data.userState;
   }
 
+  /** Cmd+Z bridge (typeof-guarded like the OpalSupport bridge): after a
+   *  successful favourite/complete toggle, register the inverse toggle with
+   *  the portal's global undo stack. The resource id and direction are
+   *  captured, so the undo stays correct even after navigating away; the UI
+   *  only re-renders when that detail view is still open. Acknowledgements
+   *  and quiz attempts are append-only by design — never registered. */
+  function registerToggleUndo(label, id, endpoint, on, field) {
+    if (typeof global.OpalUndo === 'undefined' || !global.OpalUndo.register) return;
+    global.OpalUndo.register({ label: label, undo: async function () {
+      var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/' + endpoint,
+        { method: on ? 'DELETE' : 'POST' });
+      if (!d.ok) throw new Error(d.error || 'undo failed');
+      var st = S.detail;
+      if (st && st.id === id && st.data && st.data.ok) {
+        (st.data.userState = st.data.userState || {})[field] = !on;
+        render();
+      }
+    } });
+  }
+
   async function toggleFav() {
     var us = detailUserState(); if (!us) return;
     var st = S.detail;
+    var id = st.id;
     var on = !us.favourited;
     us.favourited = on; // optimistic; reverted on failure
     render();
-    var d = await api('/api/rh2/resources/' + encodeURIComponent(st.id) + '/favourite', { method: on ? 'POST' : 'DELETE' });
-    if (!d.ok) { us.favourited = !on; render(); toast('Could not update', d.error || 'Please try again.'); }
+    var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/favourite', { method: on ? 'POST' : 'DELETE' });
+    if (!d.ok) { us.favourited = !on; render(); toast('Could not update', d.error || 'Please try again.'); return; }
+    registerToggleUndo(on ? 'Favourite added' : 'Favourite removed', id, 'favourite', on, 'favourited');
   }
 
   async function toggleComplete() {
     var us = detailUserState(); if (!us) return;
     var st = S.detail;
+    var id = st.id;
     var on = !us.completed;
     us.completed = on; // optimistic; reverted on failure
     render();
-    var d = await api('/api/rh2/resources/' + encodeURIComponent(st.id) + '/complete', { method: on ? 'POST' : 'DELETE' });
-    if (!d.ok) { us.completed = !on; render(); toast('Could not update', d.error || 'Please try again.'); }
+    var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/complete', { method: on ? 'POST' : 'DELETE' });
+    if (!d.ok) { us.completed = !on; render(); toast('Could not update', d.error || 'Please try again.'); return; }
+    registerToggleUndo(on ? 'Marked complete' : 'Marked incomplete', id, 'complete', on, 'completed');
   }
 
   function ackStart() { S.detail.ackConfirm = true; render(); }

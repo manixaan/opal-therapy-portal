@@ -20,12 +20,16 @@
 <link rel="stylesheet" href="/casenotes.css?v=1" />
 <link rel="stylesheet" href="/fca.css?v=1" />
 <link rel="stylesheet" href="/letter.css?v=1" />
+<link rel="stylesheet" href="/whodas.css?v=1" />
 <script src="/resourcehub.js?v=r2" defer></script>
 <script src="/opa.js?v=1" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=1" defer></script>
 <script src="/fca.js?v=1" defer></script>
 <script src="/letter.js?v=1" defer></script>
+<!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
+     feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
+<script src="/whodas.js?v=1" defer></script>
 <script src="/navigation.js?v=1" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -4869,9 +4873,15 @@ window.opIcon = function (name, size) {
          mount: resourcehub.js owns #rh2-root and rebuilds it wholesale, so the
          card is kept outside that subtree and shown only on the hub home. -->
     <div id="fca-hub-entry" hidden></div>
+    <!-- WHODAS 2.0 assessment library (rendered by /whodas.js into #whodas-root).
+         Mount only: the whole surface, including the document viewer overlay, is
+         built by that module. Empty and hidden until WHODAS.open(clientId) runs
+         and the server confirms the feature is enabled. -->
+    <div id="whodas-root" class="whodas-root"></div>
     <!-- Progress note letter builder entry point (rendered by /letter.js).
          Sits beside the FCA action for the same reason: resourcehub.js rebuilds
-         #rh2-root wholesale, so document-builder cards live outside it. -->
+         #rh2-root wholesale, so document-builder cards live outside it.
+         Both appear in the Templates collection. -->
     <div id="letter-hub-entry" hidden></div>
     <div id="rh2-root"></div>
   </div>

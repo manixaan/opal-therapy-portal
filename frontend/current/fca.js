@@ -674,9 +674,12 @@
     var host = el('fca-hub-entry');
     var hub = el('rh2-root');
     if (!host) return;
-    var onHome = !hub || !!hub.querySelector('.rh2-hero');
-    host.hidden = !onHome;
-    if (onHome && !S.drafts && !S.draftsLoading) loadDrafts(false);
+    // These builders live in the Templates collection — they are
+    // template-driven document workflows, so that is where staff look.
+    var onTemplates = !!hub && hub.dataset.view === 'library'
+      && hub.dataset.collection === 'templates';
+    host.hidden = !onTemplates;
+    if (onTemplates && !S.drafts && !S.draftsLoading) loadDrafts(false);
   }
 
   // ══ DRAFT LIFECYCLE ══════════════════════════════════════════════════════
@@ -1804,7 +1807,7 @@
     var hub = el('rh2-root');
     if (hub && global.MutationObserver) {
       new global.MutationObserver(function () { syncEntryVisibility(); })
-        .observe(hub, { childList: true, subtree: false });
+        .observe(hub, { childList: true, subtree: false, attributes: true, attributeFilter: ['data-view', 'data-collection'] });
     }
   }
 
