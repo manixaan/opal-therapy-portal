@@ -472,6 +472,10 @@ app.use('/', require('./scheduler-routes'));
 // only — never calls Splose/Outlook/Xero/AI; strictly caller-scoped)
 app.use('/', require('./mobile-routes'));
 
+// Case-note drafts (voice-to-case-note; clinical AI behind a fail-closed
+// server-side provider; strictly caller-scoped; drafts only)
+app.use('/', require('./case-note-routes'));
+
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));
 
