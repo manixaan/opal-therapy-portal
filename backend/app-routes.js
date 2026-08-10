@@ -836,7 +836,13 @@ router.patch('/api/settings', requireAuth, async (req, res) => {
 //  SETTINGS — PATCH (organisation, owner only)
 // ─────────────────────────────────────────────────────────────
 router.patch('/api/settings/organisation', requireAuth, requireRole('owner'), async (req, res) => {
-  const allowed = ['name','kilometreRate','featureFlags','syncSettings','dataRetention'];
+  // businessAddress/Phone/Email/website are the letterhead of generated
+  // correspondence (see fca/data-layers.js loadOrganisationSettings). They are
+  // owner-only like everything else here, and until an owner sets them the
+  // progress-note letter reports them MISSING and refuses to generate rather
+  // than inventing a business address.
+  const allowed = ['name','kilometreRate','featureFlags','syncSettings','dataRetention',
+    'businessAddress','businessPhone','businessEmail','website'];
   const payload = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
 

@@ -486,6 +486,14 @@ app.use('/', require('./support-routes'));
 // AI Resource Studio drafts (local store only — no external AI calls)
 app.use('/', require('./ai-drafts-routes'));
 
+// Functional Capacity Assessment reports (therapist-composed DOCX from the
+// Opal template; org-scoped client profiles; own-only drafts; no external AI)
+app.use('/', require('./fca-routes'));
+
+// Progress note letters — the same composition machinery as the FCA report,
+// pointed at the progress-note-letter template (own-only drafts, no external AI)
+app.use('/', require('./letter-routes'));
+
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
