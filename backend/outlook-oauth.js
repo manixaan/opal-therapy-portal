@@ -253,6 +253,13 @@ async function getOutlookCalendarEvents(accessToken, startDate, endDate) {
       return isNaN(d.getTime()) ? raw + 'Z' : d.toISOString();
     };
 
+    // NOTE (partial-payload safety, 2026-08-10): unlike the delta feed, this is
+    // the FULL list/initial-sync path — it drives Graph with an explicit $select,
+    // so every selected property is always present in the response (Graph returns
+    // null, not absence, for an unset property). Collapsing null → ''/[] is
+    // therefore lossless HERE and the historical behaviour is kept unchanged.
+    // The delta feed has the opposite contract: see mapDeltaItem() below, where
+    // absence must survive as `undefined` or good data gets overwritten.
     const mapped = allEvents.map(event => ({
       id:                  event.id,
       outlookId:           event.id,
@@ -413,6 +420,53 @@ async function deleteOutlookEvent(accessToken, outlookEventId) {
 // deleted = event IDs removed from Outlook since last token
 // deltaToken = store this and pass it next time
 
+// ── PARTIAL-PAYLOAD SAFETY (data-loss fix, 2026-08-10) ──────────────────────
+// A Graph delta response is NOT a full resource. When an event changes, Graph
+// returns the id plus only the properties that actually changed — every other
+// property is simply ABSENT from the JSON. The previous mapping collapsed
+// absence into a value (`item.subject || null`, `location?.displayName || ''`,
+// `item.categories || []`), so a delta touch that omitted `subject` looked
+// exactly like "this event now has no subject". database.upsertOutlookEvent
+// then wrote that emptiness over the real row — 517 rows lost their titles and
+// categories this way (recurring occurrences get re-emitted repeatedly, so
+// they were hit again and again).
+//
+// The contract this mapper now guarantees:
+//   • key ABSENT from the mapped object  ⇒ Graph said nothing — DO NOT WRITE.
+//   • key present with a value           ⇒ authoritative — write it.
+//   • key present with ''                ⇒ authoritative "genuinely empty".
+// `undefined` is the only representation of absence; null/''/[] are values.
+// Consumers must preserve this distinction (object spread does; `x || []`
+// does not — that is precisely how the bug travelled downstream).
+function mapDeltaItem(item, toUtcIso) {
+  const mapped = {
+    outlookId:      item.id,
+    iCalUId:        item.iCalUId || null,
+    changeKey:      item.changeKey || null,
+    lastModifiedAt: item.lastModifiedDateTime || null,
+    startTime:      toUtcIso(item.start),
+    endTime:        toUtcIso(item.end),
+    isCancelled:    !!(item.isCancelled),
+    showAs:         item.showAs || null,
+    type:           item.type || 'singleInstance',
+    seriesMasterId: item.seriesMasterId || null,
+  };
+
+  // Absence-preserving fields. Only attach the key when Graph actually carried
+  // the property. An explicit null from Graph means "no subject / no location"
+  // and is normalised to '' — a real, storable value distinct from absent.
+  if ('subject' in item) {
+    mapped.title = item.subject === null || item.subject === undefined ? '' : item.subject;
+  }
+  if ('location' in item) {
+    mapped.location = item.location?.displayName ?? '';
+  }
+  if ('categories' in item) {
+    mapped.categories = Array.isArray(item.categories) ? item.categories : [];
+  }
+  return mapped;
+}
+
 async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
   const baseUrl = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/calendarView/delta`;
 
@@ -466,21 +520,7 @@ async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
       if (item['@removed']) {
         deleted.push(item.id);
       } else {
-        changed.push({
-          outlookId:      item.id,
-          iCalUId:        item.iCalUId || null,
-          changeKey:      item.changeKey || null,
-          lastModifiedAt: item.lastModifiedDateTime || null,
-          title:          item.subject || null,
-          startTime:      toUtcIso(item.start),
-          endTime:        toUtcIso(item.end),
-          location:       item.location?.displayName || '',
-          categories:     item.categories || [],
-          isCancelled:    !!(item.isCancelled),
-          showAs:         item.showAs || null,
-          type:           item.type || 'singleInstance',
-          seriesMasterId: item.seriesMasterId || null,
-        });
+        changed.push(mapDeltaItem(item, toUtcIso));
       }
     }
 
@@ -496,6 +536,38 @@ async function getOutlookCalendarDelta(accessToken, deltaToken = null) {
   }
 
   return { changed, deleted, deltaToken: newDeltaToken };
+}
+
+// ===== FETCH A SINGLE EVENT BY ID =====
+// Authoritative single-resource read used by the title/categories repair
+// script (backend/setup/repair-outlook-titles.js). Unlike the delta feed this
+// is a full-resource GET with an explicit $select, so every selected property
+// is present (null when unset) — the values it returns can be trusted to
+// overwrite locally-damaged data.
+//
+// Returns null when Graph answers 404/410 (event genuinely gone from Outlook),
+// so callers can leave the local row untouched. Rate limiting (429/503) is
+// surfaced as an error carrying `retryAfterMs` for the caller's backoff.
+async function getOutlookEventById(accessToken, eventId, { select } = {}) {
+  const fields = select || 'id,subject,location,categories,isCancelled,lastModifiedDateTime,type';
+  const url = `${MICROSOFT_OAUTH_CONFIG.graphBaseUri}/me/events/${encodeURIComponent(eventId)}?$select=${encodeURIComponent(fields)}`;
+  try {
+    const response = await axios.get(url, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+    return response.data;
+  } catch (error) {
+    const status = error.response?.status;
+    if (status === 404 || status === 410) return null; // deleted in Outlook
+    if (status === 429 || status === 503) {
+      const retryAfter = Number(error.response?.headers?.['retry-after']);
+      const err = new Error(`Graph throttled the request (${status})`);
+      err.throttled    = true;
+      err.retryAfterMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 10000;
+      throw err;
+    }
+    throw error;
+  }
 }
 
 // ===== SUBSCRIBE TO OUTLOOK WEBHOOKS =====
@@ -543,6 +615,8 @@ module.exports = {
   getMicrosoftUser,
   getOutlookCalendarEvents,
   getOutlookCalendarDelta,
+  getOutlookEventById,
+  mapDeltaItem,          // exported for unit tests (partial-payload contract)
   createOutlookEvent,
   updateOutlookEvent,
   deleteOutlookEvent,

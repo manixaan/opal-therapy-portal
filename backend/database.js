@@ -898,10 +898,32 @@ async function upsertOutlookEvent(userId, eventData) {
     iCalUId, changeKey, lastModifiedAt, isCancelled,
     sploseId,
   } = eventData;
-  // Outlook can return events with no subject (private/declined/restricted items).
-  // Fall back to '(No title)' so the NOT NULL constraint is always satisfied.
-  const title = eventData.title || '(No title)';
-  const cats = Array.isArray(categories) ? categories : null;
+
+  // ── ABSENT vs EMPTY (data-loss fix, 2026-08-10) ───────────────────────────
+  // Graph delta payloads are PARTIAL: an updated event carries only the
+  // properties that changed. `undefined` therefore means "Graph said nothing
+  // about this field" and must NEVER reach the database — the UPDATE below
+  // passes NULL for those and lets COALESCE keep whatever is already stored.
+  // A defined value (including '' or []) is authoritative and does overwrite.
+  //
+  // Previously `title` was computed as `eventData.title || '(No title)'` and
+  // written unconditionally, so any delta touch that omitted `subject`
+  // replaced the real title with the literal '(No title)'. The same wipe hit
+  // location and categories. See mapDeltaItem() in outlook-oauth.js.
+  const titleProvided      = eventData.title      !== undefined && eventData.title      !== null;
+  const locationProvided   = location             !== undefined && location             !== null;
+  const categoriesProvided = Array.isArray(categories);
+
+  // UPDATE parameters: null = "absent, preserve existing row value".
+  const titleParam    = titleProvided      ? String(eventData.title) : null;
+  const locationParam = locationProvided   ? location                : null;
+  const cats          = categoriesProvided ? categories              : null;
+
+  // INSERT parameter: the row must satisfy the NOT NULL title constraint.
+  //   • subject present but empty  → '' (authoritative "genuinely no subject";
+  //     the frontend already renders '(No subject)' for a blank title)
+  //   • subject absent entirely    → '(No title)' (we know nothing at all)
+  const titleForInsert = titleProvided ? String(eventData.title) : '(No title)';
   // Accept eventType from caller (classifyEventType in routes/server) or default to 'meeting'
   const eventType = eventData.eventType || 'meeting';
   // created_by_source records the origin system permanently ('app' or 'outlook')
@@ -947,14 +969,19 @@ async function upsertOutlookEvent(userId, eventData) {
   if (existing.rows.length > 0) {
     const result = await pool.query(`
       UPDATE events
-      SET title                    = $1,
-          start_time               = $2,
-          end_time                 = $3,
+      SET -- COALESCE = partial-payload protection. A NULL parameter means the
+          -- Graph delta did not carry this property, so the stored value must
+          -- survive untouched. A non-NULL parameter (including '' and '{}') is
+          -- authoritative and overwrites. Graph never reports a legitimately
+          -- NULL subject/start/end for a live event, so nothing real is lost.
+          title                    = COALESCE($1, title),
+          start_time               = COALESCE($2, start_time),
+          end_time                 = COALESCE($3, end_time),
           -- Preserve manual location override: if the user has manually set the
           -- routing address in the app, don't overwrite it with whatever Outlook
           -- has stored (Outlook typically only has suburb-level location).
-          location                 = CASE WHEN is_manual_location_override = TRUE THEN location ELSE $4 END,
-          categories               = $5,
+          location                 = CASE WHEN is_manual_location_override = TRUE THEN location ELSE COALESCE($4, location) END,
+          categories               = COALESCE($5, categories),
           -- Preserve source: if this event was created by the app, keep it as 'app'.
           -- Only revert to 'outlook' if it was originally from Outlook.
           -- (Integration-test finding: the previous NULLIF/COALESCE form was
@@ -976,7 +1003,7 @@ async function upsertOutlookEvent(userId, eventData) {
           organisation_id          = COALESCE(organisation_id,      $11)
       WHERE id = $9
       RETURNING *
-    `, [title, startTime, endTime, location, cats, iCalUId, changeKey, lastModifiedAt,
+    `, [titleParam, startTime, endTime, locationParam, cats, iCalUId, changeKey, lastModifiedAt,
         existing.rows[0].id, therapistProfileId, organisationId, createdBySource]);
     return result.rows[0];
   } else {
@@ -995,7 +1022,7 @@ async function upsertOutlookEvent(userId, eventData) {
               $12, $13,
               $14)
       RETURNING *
-    `, [userId, title, startTime, endTime, location, outlookId, sploseId || null, cats,
+    `, [userId, titleForInsert, startTime, endTime, locationParam, outlookId, sploseId || null, cats,
         iCalUId, changeKey, lastModifiedAt, therapistProfileId, organisationId,
         createdBySource, eventType]);
     return result.rows[0];
