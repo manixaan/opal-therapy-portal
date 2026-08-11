@@ -187,12 +187,18 @@ beforeEach(() => {
   // switch is all that's needed here. Onshore guards are covered in
   // tests/clinical-note-provider.test.js.
   process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
+  // The gateway no longer defaults these; without them every clinical call
+  // fails closed with 503 before reaching the mock provider.
+  process.env.AWS_REGION = 'ap-southeast-2';
+  process.env.BEDROCK_MODEL_ID = 'au.anthropic.test-profile-synthetic';
   provider._setProviderForTests(async () => ({ ...SECTIONS, plan: [...SECTIONS.plan], warnings: [...SECTIONS.warnings] }));
 });
 
 afterEach(() => {
   provider._setProviderForTests(null);
   delete process.env.CLINICAL_NOTE_AI_ENABLED;
+  delete process.env.AWS_REGION;
+  delete process.env.BEDROCK_MODEL_ID;
 });
 
 async function loginAs(user) {
@@ -218,6 +224,8 @@ test('unauthenticated requests are 401', async () => {
 
 test('fail-closed: provider unconfigured → 503 generation_unavailable, provider never called, no row', async () => {
   delete process.env.CLINICAL_NOTE_AI_ENABLED;
+  delete process.env.AWS_REGION;
+  delete process.env.BEDROCK_MODEL_ID;
   const spy = jest.fn();
   provider._setProviderForTests(spy);
   // isEnabled is checked before the override is consulted, so the spy must stay uncalled.

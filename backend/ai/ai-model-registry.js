@@ -13,25 +13,26 @@
  * example, has a genuine `au.` profile that cannot be sourced from Sydney.
  * A flat "these models are Australian" list would hide that.
  *
- * Checked against the AWS Bedrock model cards on 2026-08-10. Re-check before
- * adding an entry:
+ * NO BEDROCK PROFILE ID IS WRITTEN IN THIS FILE.
+ * The two clinical entries previously carried ids taken from public model
+ * cards. Nobody with access to the practice's AWS account had confirmed those
+ * profiles existed in it, and profile availability is granted per account — so
+ * a correct-looking id can still be absent, and "provisional" is not a state a
+ * clinical system should invoke from.
+ *
+ * The id is supplied by BEDROCK_MODEL_ID and resolved in
+ * ai/aws/bedrock-config.js, which applies the same invariants an entry here
+ * would (Australian geo profile, not a Covered Model) and refuses outright if
+ * either fails. Verify before configuring:
  *   aws bedrock get-inference-profile \
  *     --inference-profile-identifier <id> --region <region>
- *
- * THE TWO CLINICAL IDS BELOW ARE PROVISIONAL.
- * They were taken from public model cards, not from the practice's own AWS
- * account, and nobody with access to that account has confirmed the profiles
- * exist in it. Profile availability is granted per account, so a correct-looking
- * id can still be absent.
- *
- * A deployment that knows better overrides them with BEDROCK_MODEL_ID, which is
- * validated against the same invariants as an entry here (Australian geo
- * profile, not a Covered Model) and refused outright if it fails either. See
- * ai-bedrock-config.js. That is the supported way to correct these without a
- * code change — and the reason the override exists at all.
  */
 
-const AU_REGIONS = Object.freeze(['ap-southeast-2', 'ap-southeast-4']);
+// Imported, not redeclared. This list existed in two files; two copies of an
+// allowlist is one copy that can be widened without the other noticing. The
+// config owner holds it, and takes the registry as a parameter rather than
+// importing it, so this direction cannot cycle.
+const { ALLOWED_REGIONS: AU_REGIONS } = require('./aws/bedrock-config');
 
 /** Provider ids. Only Bedrock is approved for anything real. */
 const PROVIDER_BEDROCK = 'aws-bedrock';
@@ -45,23 +46,39 @@ const PROVIDER_MOCK = 'mock';
  */
 const AU_GEO_PREFIX = 'au.anthropic.';
 
+/**
+ * NO BEDROCK MODEL ID IS WRITTEN HERE.
+ *
+ * `id: null` is deliberate. This registry previously carried literal
+ * `au.anthropic.*` profile strings as defaults. Which inference profiles exist
+ * is a fact about one AWS account, it cannot be read from source, and it was
+ * never verified — so those literals were guesses that looked like decisions.
+ * A wrong-but-plausible profile id is the worst kind: it passes every local
+ * check, is written into the audit row as the model in use, and only fails when
+ * a therapist is waiting.
+ *
+ * The id now comes from BEDROCK_MODEL_ID via ai/aws/bedrock-config.js, which is
+ * the only module that may resolve one. This registry keeps what it can
+ * genuinely assert from source: which logical models exist, which provider and
+ * regions they may use, and which ids are permanently forbidden.
+ */
 const APPROVED_MODELS = Object.freeze({
   /** Everyday structuring and summarisation. The default for most work. */
   clinical_standard: Object.freeze({
-    id: 'au.anthropic.claude-sonnet-4-6',
+    id: null,
     provider: PROVIDER_BEDROCK,
     regions: AU_REGIONS,
     residency: 'australia',
-    description: 'Claude Sonnet 4.6 via Australian geo inference profile.',
+    description: 'Australian geo inference profile supplied by BEDROCK_MODEL_ID.',
   }),
 
   /** Report-grade fidelity where omission risk matters most. */
   clinical_complex: Object.freeze({
-    id: 'au.anthropic.claude-opus-4-8',
+    id: null,
     provider: PROVIDER_BEDROCK,
     regions: AU_REGIONS,
     residency: 'australia',
-    description: 'Claude Opus 4.8 via Australian geo inference profile.',
+    description: 'Australian geo inference profile supplied by BEDROCK_MODEL_ID.',
   }),
 
   /** Deterministic stand-in for tests and credential-free local dev. */
@@ -107,9 +124,15 @@ function keys() {
 function validate(key, region) {
   const model = get(key);
   if (!model) return `model_not_in_registry:${key}`;
-  if (PERMANENTLY_BLOCKED[model.id]) return `model_permanently_blocked:${model.id}`;
-  if (model.provider === PROVIDER_BEDROCK && !model.id.startsWith(AU_GEO_PREFIX)) {
-    return `model_not_au_geo_profile:${model.id}`;
+  // A Bedrock entry carries no id of its own; the deployment supplies it and
+  // ai/aws/bedrock-config.js applies these same two rules to that value. The
+  // checks below therefore only run when an id is actually present, which is
+  // the mock provider and any future non-Bedrock entry.
+  if (model.id) {
+    if (PERMANENTLY_BLOCKED[model.id]) return `model_permanently_blocked:${model.id}`;
+    if (model.provider === PROVIDER_BEDROCK && !model.id.startsWith(AU_GEO_PREFIX)) {
+      return `model_not_au_geo_profile:${model.id}`;
+    }
   }
   if (region && !model.regions.includes(region)) {
     return `model_not_available_in_region:${region}`;

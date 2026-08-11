@@ -34,7 +34,7 @@
  */
 
 const { AnthropicBedrock } = require('@anthropic-ai/bedrock-sdk');
-const bedrockConfig = require('../ai-bedrock-config');
+const bedrockConfig = require('../aws/bedrock-config');
 const awsConfig = require('../aws/bedrock-config');
 const credentials = require('../aws/credential-provider');
 

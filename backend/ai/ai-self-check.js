@@ -26,7 +26,7 @@ const classification = require('./ai-classification');
 const outputTypes = require('./ai-output-type');
 const killSwitch = require('./ai-kill-switch');
 const audit = require('./ai-audit');
-const bedrockConfig = require('./ai-bedrock-config');
+const bedrockConfig = require('./aws/bedrock-config');
 
 /** Fields that must never appear in the audit allowlist. */
 const FORBIDDEN_AUDIT_FIELDS = [
@@ -68,7 +68,11 @@ function run() {
       for (const key of registry.keys()) {
         const model = registry.get(key);
         if (model.provider === registry.PROVIDER_MOCK) continue;
-        if (!model.id.startsWith(registry.AU_GEO_PREFIX)) {
+        // A Bedrock entry now carries `id: null` — the profile comes from
+        // BEDROCK_MODEL_ID, and ai/aws/bedrock-config.js applies this exact
+        // au.-prefix rule to that value before it can be used. Asserting it
+        // here as well would only re-check a literal that no longer exists.
+        if (model.id !== null && !model.id.startsWith(registry.AU_GEO_PREFIX)) {
           throw new Error(`${key} is not an au. profile`);
         }
         if (model.residency !== 'australia') throw new Error(`${key} is not resident in Australia`);
@@ -162,10 +166,15 @@ function run() {
       return 'not configured — Bedrock calls will refuse';
     }),
 
-    check('model profile override is valid if present', () => {
-      const p = bedrockConfig.resolveModelProfileOverride(registry);
-      if (!p.ok) throw new Error(p.reason);
-      return p.id ? 'deployment override in use' : 'registry default';
+    check('inference profile is valid if configured', () => {
+      // Same rule as the guardrail above: absent is informational, present but
+      // invalid is fatal. The registry no longer carries a Bedrock id, so an
+      // absent profile means Bedrock calls refuse — it does not mean the
+      // boundary is broken, and it must not disable the mock path.
+      const p = bedrockConfig.resolveModelProfile(registry);
+      if (p.ok) return 'supplied by deployment';
+      if (p.configured) throw new Error(p.reason);
+      return 'not configured — Bedrock calls will refuse';
     }),
 
     check('kill switch available', () => {

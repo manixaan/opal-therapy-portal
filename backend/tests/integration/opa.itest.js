@@ -73,6 +73,10 @@ beforeEach(async () => {
   // Opa tables are not in helpers.truncateAll yet — clear them directly.
   await db.pool.query('TRUNCATE opa_messages, opa_conversations, opa_feature_knowledge RESTART IDENTITY CASCADE');
   process.env.OPA_AI_ENABLED = 'true';
+  // Required with no default since the config consolidation — without them the
+  // gateway fails closed and every Opa call answers 'unavailable'.
+  process.env.AWS_REGION = 'ap-southeast-2';
+  process.env.BEDROCK_MODEL_ID = 'au.anthropic.test-profile-synthetic';
   process.env.ANTHROPIC_API_KEY = 'integration-test-not-real';
   provider._setProviderForTests(async () => ({ text: MODEL_JSON }));
   require('../../auth')._resetLoginRateLimit();
@@ -82,6 +86,8 @@ beforeEach(async () => {
 afterAll(async () => {
   provider._setProviderForTests(null);
   delete process.env.OPA_AI_ENABLED;
+  delete process.env.AWS_REGION;
+  delete process.env.BEDROCK_MODEL_ID;
   delete process.env.ANTHROPIC_API_KEY;
   await closePool();
 });

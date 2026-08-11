@@ -27,8 +27,10 @@ let events;
 let savedEnv;
 
 beforeEach(() => {
-  savedEnv = { region: process.env.AI_AWS_REGION, disable: process.env.AI_GLOBAL_DISABLE };
-  delete process.env.AI_AWS_REGION;
+  savedEnv = { region: process.env.AWS_REGION, disable: process.env.AI_GLOBAL_DISABLE };
+  // Required now — there is no default region to fall back on. Cases that
+  // assert the absent-region refusal delete it themselves.
+  process.env.AWS_REGION = 'ap-southeast-2';
   delete process.env.AI_GLOBAL_DISABLE;
   events = [];
   audit._setSinkForTests(async (payload) => { events.push(payload); });
@@ -38,8 +40,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (savedEnv.region === undefined) delete process.env.AI_AWS_REGION;
-  else process.env.AI_AWS_REGION = savedEnv.region;
+  if (savedEnv.region === undefined) delete process.env.AWS_REGION;
+  else process.env.AWS_REGION = savedEnv.region;
   if (savedEnv.disable === undefined) delete process.env.AI_GLOBAL_DISABLE;
   else process.env.AI_GLOBAL_DISABLE = savedEnv.disable;
   audit._setSinkForTests(null);

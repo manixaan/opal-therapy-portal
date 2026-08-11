@@ -121,7 +121,7 @@ function stringLiterals(code) {
 /**
  * Remove require() specifiers that point INTO backend/ai.
  *
- * `require('./ai/ai-bedrock-config')` is a feature module doing precisely what
+ * `require('./ai/aws/bedrock-config')` is a feature module doing precisely what
  * the boundary asks of it — going through the gateway's directory instead of
  * reaching for an SDK. The broad scan would otherwise read the word 'bedrock'
  * in that path as a vendor reference and fail the build for compliance.
@@ -224,7 +224,7 @@ test('no vendor term appears in code outside backend/ai', () => {
 test('the require exemption is narrow — only paths into backend/ai', () => {
   // The exemption above is the one place this guard was deliberately loosened,
   // so its edges are asserted directly rather than assumed.
-  const permitted = stripAiModuleRequires("const c = require('./ai/ai-bedrock-config');");
+  const permitted = stripAiModuleRequires("const c = require('./ai/aws/bedrock-config');");
   expect(stringLiterals(permitted).toLowerCase()).not.toContain('bedrock');
 
   const nested = stripAiModuleRequires("const c = require('../ai/providers/bedrock-provider');");

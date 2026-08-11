@@ -35,7 +35,7 @@
  * fallback provider, no "try the global profile", no degraded mode.
  *
  * Env:
- *   AI_AWS_REGION       default 'ap-southeast-2'; must be an approved AU region
+ *   AWS_REGION          REQUIRED; no default. Must be an approved AU region.
  *   AI_GLOBAL_DISABLE   'true' stops all AI without needing the database
  */
 
@@ -46,12 +46,12 @@ const outputTypes = require('./ai-output-type');
 const killSwitch = require('./ai-kill-switch');
 const selfCheck = require('./ai-self-check');
 const audit = require('./ai-audit');
-const bedrockConfig = require('./ai-bedrock-config');
+const bedrockConfig = require('./aws/bedrock-config');
 
 const bedrockProvider = require('./providers/bedrock-provider');
 const mockProvider = require('./providers/mock-provider');
 
-const DEFAULT_REGION = 'ap-southeast-2';
+
 const DEFAULT_MAX_TOKENS = 2048;
 const DEFAULT_TIMEOUT_MS = 60000;
 
@@ -75,8 +75,17 @@ const clampInt = (raw, fallback, min, max) => {
   return Math.min(Math.max(n, min), max);
 };
 
+/**
+ * The region to invoke from, or null when it is not configured.
+ *
+ * Delegates to the single config owner. This used to read
+ * `AI_AWS_REGION || 'ap-southeast-2'` — a deployment that forgot the setting
+ * still invoked, in Sydney, because the code chose for it. There is no default
+ * now: an absent region stops the call.
+ */
 function resolveRegion() {
-  return (process.env.AI_AWS_REGION || DEFAULT_REGION).trim();
+  const r = bedrockConfig.resolveRegion();
+  return r.ok ? r.region : null;
 }
 
 /**
@@ -140,7 +149,13 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
   }
 
   const required = classification.requirementsFor(effectiveClassification);
-  const region = resolveRegion();
+
+  // Region first, and fail closed. Everything below reasons about residency,
+  // and reasoning about residency without knowing the region is how a default
+  // slips back in.
+  const regionResult = bedrockConfig.resolveRegion();
+  if (!regionResult.ok) return { ok: false, reason: regionResult.reason, policy };
+  const region = regionResult.region;
 
   if (required.residency === 'australia') {
     if (!registry.AU_REGIONS.includes(region)) {
@@ -174,11 +189,15 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
   //
   // Bedrock only. The mock's id must stay `mock-model` or the offline path
   // (and every test that uses it) resolves to a profile that does not exist.
-  const override = bedrockConfig.resolveModelProfileOverride(registry);
-  if (!override.ok) return { ok: false, reason: override.reason, policy };
-  const model = (registryModel.provider === registry.PROVIDER_BEDROCK && override.id)
-    ? { ...registryModel, id: override.id }
-    : registryModel;
+  let model = registryModel;
+  if (registryModel.provider === registry.PROVIDER_BEDROCK) {
+    // REQUIRED, not an override. The registry carries no Bedrock id at all now
+    // (see its header), so this is the only place one can come from. No id
+    // means no call — never a fallback to something that merely parses.
+    const profile = bedrockConfig.resolveModelProfile(registry);
+    if (!profile.ok) return { ok: false, reason: profile.reason, policy };
+    model = { ...registryModel, id: profile.id };
+  }
 
   if (!policy.allowedProviders.includes(model.provider)) {
     return { ok: false, reason: `provider_not_permitted:${model.provider}`, policy };
@@ -391,5 +410,4 @@ module.exports = {
   unavailableReason,
   resolveRegion,
   AiPolicyError,
-  DEFAULT_REGION,
 };

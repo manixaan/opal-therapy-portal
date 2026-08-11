@@ -14,7 +14,7 @@
  * being told which one to use, and refuses masked content if one intervenes.
  */
 
-const config = require('../ai/ai-bedrock-config');
+const config = require('../ai/aws/bedrock-config');
 const registry = require('../ai/ai-model-registry');
 const bedrock = require('../ai/providers/bedrock-provider');
 
@@ -22,12 +22,17 @@ const ENV_KEYS = [
   'BEDROCK_GUARDRAIL_ID',
   'BEDROCK_GUARDRAIL_VERSION',
   'BEDROCK_MODEL_ID',
+  'AWS_REGION',
 ];
 let saved;
 
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   ENV_KEYS.forEach((k) => delete process.env[k]);
+  // Required with no default. The gateway refuses before it reaches any model
+  // or guardrail logic, so without this every case in this file would fail on
+  // region rather than on the thing it is testing.
+  process.env.AWS_REGION = 'ap-southeast-2';
   bedrock._resetForTests();
 });
 
@@ -107,16 +112,21 @@ describe('guardrail resolution', () => {
   });
 });
 
-// ── Model profile override ───────────────────────────────────────────────────
+// ── Inference profile ────────────────────────────────────────────────────────
 
-describe('model profile override', () => {
-  test('absent means the registry default', () => {
-    expect(config.resolveModelProfileOverride(registry)).toEqual({ ok: true, id: null });
+describe('inference profile', () => {
+  test('absent refuses — there is no registry default to fall back to', () => {
+    // This used to resolve to `{ ok: true, id: null }`, meaning "use the
+    // registry's built-in id". The registry no longer has one, so absent is a
+    // refusal. `configured: false` marks it as "nothing supplied" rather than
+    // "supplied and wrong", which is what keeps the mock path usable.
+    expect(config.resolveModelProfile(registry))
+      .toMatchObject({ ok: false, reason: 'model_profile_not_configured', configured: false });
   });
 
   test('an Australian geo profile is accepted', () => {
     process.env.BEDROCK_MODEL_ID = `${registry.AU_GEO_PREFIX}claude-sonnet-4-6`;
-    expect(config.resolveModelProfileOverride(registry).ok).toBe(true);
+    expect(config.resolveModelProfile(registry).ok).toBe(true);
   });
 
   test.each([
@@ -125,7 +135,7 @@ describe('model profile override', () => {
     ['a bare model id', 'anthropic.claude-sonnet-4-6'],
   ])('%s is refused — offshore routing cannot be introduced by configuration', (_l, id) => {
     process.env.BEDROCK_MODEL_ID = id;
-    expect(config.resolveModelProfileOverride(registry)).toMatchObject({
+    expect(config.resolveModelProfile(registry)).toMatchObject({
       ok: false, reason: 'model_profile_not_au_geo',
     });
   });
@@ -136,7 +146,7 @@ describe('model profile override', () => {
     const blocked = Object.keys(registry.PERMANENTLY_BLOCKED)
       .find((id) => id.startsWith(registry.AU_GEO_PREFIX));
     process.env.BEDROCK_MODEL_ID = blocked;
-    expect(config.resolveModelProfileOverride(registry)).toMatchObject({
+    expect(config.resolveModelProfile(registry)).toMatchObject({
       ok: false, reason: 'model_profile_permanently_blocked',
     });
   });
@@ -211,7 +221,7 @@ describe('describe() is safe for the health endpoint', () => {
 
     const described = config.describe(registry);
     expect(described.guardrail).toMatchObject({ configured: true, version: '1' });
-    expect(described.modelProfileOverride).toEqual({ configured: true });
+    expect(described.modelProfile).toEqual({ configured: true });
 
     const flat = JSON.stringify(described);
     expect(flat).not.toContain('abcd1234efgh');
@@ -244,13 +254,14 @@ describe('the model profile override is APPLIED, not merely validated', () => {
     expect(decision.model.id).toBe(pinned);
   });
 
-  test('with no override the registry default is used unchanged', () => {
+  test('with no profile configured the call is refused, not defaulted', () => {
+    delete process.env.BEDROCK_MODEL_ID;
     const decision = gateway.evaluate({ feature: FEATURE, modelKey: 'clinical_complex' });
-    expect(decision.ok).toBe(true);
-    expect(decision.model.id).toBe(registry.get('clinical_complex').id);
+    expect(decision.ok).toBe(false);
+    expect(decision.reason).toBe('model_profile_not_configured');
   });
 
-  test('an invalid override refuses the call rather than falling back', () => {
+  test('an invalid profile refuses the call rather than falling back', () => {
     // Silently invoking a different model than the one an operator named is
     // worse than not starting.
     process.env.BEDROCK_MODEL_ID = 'global.anthropic.claude-opus-4-8';
@@ -272,7 +283,7 @@ describe('the model profile override is APPLIED, not merely validated', () => {
     // model_id is VARCHAR(80). Accepting a longer value would invoke
     // successfully and fail on INSERT — after the clinical content had gone.
     process.env.BEDROCK_MODEL_ID = registry.AU_GEO_PREFIX + 'x'.repeat(80);
-    expect(config.resolveModelProfileOverride(registry)).toMatchObject({
+    expect(config.resolveModelProfile(registry)).toMatchObject({
       ok: false, reason: 'model_profile_too_long',
     });
   });

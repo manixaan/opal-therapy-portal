@@ -38,7 +38,7 @@
  *   CLINICAL_NOTE_AI_ENABLED   'true' to enable (default off — fail closed)
  *   CLINICAL_NOTE_MAX_TOKENS   default 3000 (clamped 512..8192)
  *   CLINICAL_NOTE_TIMEOUT_MS   default 60000 (clamped 5000..120000)
- * Region and model are gateway/policy concerns — see AI_AWS_REGION.
+ * Region and model are gateway/policy concerns — see AWS_REGION.
  */
 
 const gateway = require('./ai/ai-gateway');

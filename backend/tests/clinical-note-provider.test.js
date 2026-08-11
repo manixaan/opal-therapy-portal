@@ -15,12 +15,15 @@ const gateway = require('../ai/ai-gateway');
 const audit = require('../ai/ai-audit');
 const mockProvider = require('../ai/providers/mock-provider');
 
-const ENV_KEYS = ['CLINICAL_NOTE_AI_ENABLED', 'AI_AWS_REGION'];
+const ENV_KEYS = ['CLINICAL_NOTE_AI_ENABLED', 'AWS_REGION', 'BEDROCK_MODEL_ID'];
 let saved;
 
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   ENV_KEYS.forEach((k) => delete process.env[k]);
+  // Region and profile are required now — no defaults to fall back on.
+  process.env.AWS_REGION = 'ap-southeast-2';
+  process.env.BEDROCK_MODEL_ID = 'au.anthropic.test-profile-synthetic';
   provider._setProviderForTests(null);
   audit._setSinkForTests(async () => {});
   mockProvider._setHandlerForTests(null);
@@ -54,15 +57,15 @@ test('enabled with default configuration, which is onshore', () => {
 
 test('a non-Australian region disables the feature rather than routing offshore', () => {
   process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
-  process.env.AI_AWS_REGION = 'us-east-1';
+  process.env.AWS_REGION = 'us-east-1';
 
   expect(provider.isEnabled()).toBe(false);
-  expect(provider.configError()).toBe('region_not_australian:us-east-1');
+  expect(provider.configError()).toBe('region_not_permitted');
 });
 
 test('a refused configuration throws generation_disabled, keeping the transcript recoverable', async () => {
   process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
-  process.env.AI_AWS_REGION = 'eu-west-1';
+  process.env.AWS_REGION = 'eu-west-1';
 
   // The route turns this into a 503 and the therapist keeps their dictation.
   // What must NOT happen is the request going anywhere.
@@ -133,7 +136,7 @@ test('a response missing the forced tool call is treated as malformed', async ()
 
 test('provenance records the SOURCE region, and says so', () => {
   process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
-  process.env.AI_AWS_REGION = 'ap-southeast-4';
+  process.env.AWS_REGION = 'ap-southeast-4';
   const { providerId, modelId } = provider.providerIdentity();
 
   // The `src=` marker is load-bearing. A geo profile sourced from one
@@ -142,7 +145,7 @@ test('provenance records the SOURCE region, and says so', () => {
   // additionalEventData.inferenceRegion is the authoritative record.
   expect(providerId).toBe('aws-bedrock:src=ap-southeast-4');
   expect(providerId).toContain('src=');
-  expect(modelId).toBe('au.anthropic.claude-opus-4-8');
+  expect(modelId).toBe('au.anthropic.test-profile-synthetic');
 
   // provider_id VARCHAR(40) / model_id VARCHAR(80) in migration 017.
   expect(providerId.length).toBeLessThanOrEqual(40);
@@ -150,7 +153,7 @@ test('provenance records the SOURCE region, and says so', () => {
 });
 
 test('provenance reports unavailable rather than inventing a region', () => {
-  process.env.AI_AWS_REGION = 'us-east-1';
+  process.env.AWS_REGION = 'us-east-1';
   const { providerId, modelId } = provider.providerIdentity();
   expect(providerId).toBe('unavailable');
   expect(modelId).toBe('unavailable');

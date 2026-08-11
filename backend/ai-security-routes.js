@@ -27,7 +27,7 @@ const registry = require('./ai/ai-model-registry');
 const policyEngine = require('./ai/ai-policy');
 const killSwitch = require('./ai/ai-kill-switch');
 const selfCheck = require('./ai/ai-self-check');
-const bedrockConfig = require('./ai/ai-bedrock-config');
+const bedrockConfig = require('./ai/aws/bedrock-config');
 
 const log = require('./logger').createLogger('ai-security');
 

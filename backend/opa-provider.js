@@ -34,7 +34,7 @@
  *   OPA_AI_ENABLED            'true' to enable (default off)
  *   OPA_MAX_OUTPUT_TOKENS     default 1024 (clamped 64..4096)
  *   OPA_REQUEST_TIMEOUT_MS    default 25000 (clamped 5000..60000)
- * Model and region are gateway/policy concerns — see AI_AWS_REGION.
+ * Model and region are gateway/policy concerns — see AWS_REGION.
  */
 
 const gateway = require('./ai/ai-gateway');

@@ -586,4 +586,131 @@ router.delete('/api/mobile/voice-notes/:id', safe(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  AI — the Companion app's ONLY route to a model
+//
+//  The iOS app holds no AWS credential, no Anthropic key and no Bedrock
+//  endpoint. It posts a transcript here and this backend does the rest:
+//  managed identity → STS → Australian Bedrock profile → guardrail. That is the
+//  same path the Portal website uses, because this route calls the same
+//  clinical-note-provider the website's case-note route calls rather than
+//  reaching for the gateway itself. A second entry point would be a second set
+//  of policy decisions to keep in step, and they would not stay in step.
+//
+//  Everything protective here is deliberately upstream of the model: auth (the
+//  router-level requireAuth above), a per-user rate limit, a size cap, and a
+//  transcript-only payload. The response is a draft for a therapist to review —
+//  never a record, never advice.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const noteProvider = require('./clinical-note-provider');
+const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-style');
+
+/**
+ * Per-user rate limit, mirroring the website's Opa chat limiter.
+ *
+ * Keyed on the authenticated user, not the IP: a practice behind one NAT would
+ * otherwise share a bucket, and a stolen device would get a fresh one simply by
+ * changing network.
+ */
+const MOBILE_AI_WINDOW_MS = 10 * 60 * 1000;
+const MOBILE_AI_MAX = 12;
+const _mobileAiAttempts = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _mobileAiAttempts) if (v.resetAt <= now) _mobileAiAttempts.delete(k);
+}, 10 * 60 * 1000).unref();
+
+function mobileAiRateLimit(req, res, next) {
+  const key = req.user?.id || 'anonymous';
+  const now = Date.now();
+  let entry = _mobileAiAttempts.get(key);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + MOBILE_AI_WINDOW_MS };
+    _mobileAiAttempts.set(key, entry);
+  }
+  entry.count += 1;
+  if (entry.count > MOBILE_AI_MAX) {
+    res.set('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
+    return res.status(429).json({ status: 'rate_limited', error: 'Too many requests. Try again shortly.' });
+  }
+  return next();
+}
+
+router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res) => {
+  // Degrade before anything else, and say nothing about why. "Which of six
+  // settings is missing" is useful to an operator reading /ready and useless
+  // to a therapist — and it describes the deployment to anyone holding a
+  // stolen phone.
+  if (!noteProvider.isEnabled()) {
+    return res.status(503).json({ status: 'unavailable', error: 'AI drafting is unavailable.' });
+  }
+
+  const body = req.body || {};
+  const transcript = typeof body.transcript === 'string' ? body.transcript.trim() : '';
+  if (!transcript) {
+    return res.status(400).json({ status: 'invalid', error: 'A transcript is required.' });
+  }
+  // The same ceiling the voice-note upload already enforces (line ~210). A
+  // second, larger limit here would mean a transcript this endpoint accepts
+  // could never have been stored by the endpoint that produces one.
+  if (transcript.length > MAX_TRANSCRIPT_CHARS) {
+    return res.status(413).json({
+      status: 'invalid',
+      error: `Transcript exceeds ${MAX_TRANSCRIPT_CHARS} characters.`,
+    });
+  }
+
+  // Whitelisted, not free text: `instruction` selects a canned modifier, so the
+  // phone cannot append arbitrary text to the system prompt.
+  const instruction = typeof body.instruction === 'string'
+    && Object.prototype.hasOwnProperty.call(INSTRUCTION_MODIFIERS, body.instruction)
+    ? body.instruction
+    : undefined;
+
+  // Minimum context, and no identifiers. The transcript is the only clinical
+  // carrier; a date label and a service label are not names.
+  const session = {
+    dateLabel: typeof body.sessionDateLabel === 'string' ? body.sessionDateLabel.slice(0, 60) : undefined,
+    serviceLabel: typeof body.serviceLabel === 'string' ? body.serviceLabel.slice(0, 120) : undefined,
+  };
+
+  let raw;
+  try {
+    raw = await noteProvider.generateCaseNote({
+      transcript,
+      styleVersion: CURRENT_STYLE_VERSION,
+      instruction,
+      session,
+      // Attribution. Without these the ai_interactions row has a null actor and
+      // no call can be traced to a person.
+      userId: req.user.id,
+      organisationId: orgOf(req),
+    });
+  } catch (err) {
+    // One generic shape for every downstream failure — identity, STS, model,
+    // guardrail, transport. The phone learns the draft did not happen and
+    // nothing about the cloud path that failed.
+    log.warn('mobile ai generation failed', { userId: req.user.id, reason: err && err.message });
+    return res.status(502).json({ status: 'failed', error: 'Could not draft a note. Please try again.' });
+  }
+
+  await audit(req, 'mobile.ai_case_note_drafted', null);
+
+  res.json({
+    status: 'ok',
+    // Assistive drafting only. The app must present this for review and must
+    // not file it as documentation.
+    reviewRequired: true,
+    sections: raw.sections,
+    warnings: raw.warnings || [],
+    // Deliberately NOT providerIdentity(): that carries the resolved Bedrock
+    // inference profile id, which is an account internal. The app needs to know
+    // a draft was machine-generated and must be reviewed — not which profile
+    // produced it. The full identity is recorded server-side in ai_interactions.
+    generatedBy: 'ai-assistant',
+  });
+}));
+
 module.exports = router;

@@ -28,13 +28,21 @@ const mockProvider = require('../ai/providers/mock-provider');
 const CLINICAL_FEATURE = 'clinical_note_generation';
 let events;
 let savedRegion;
+let savedProfile;
+
+/** Synthetic. Not a real profile, and never invoked — the mock provider serves. */
+const SYNTHETIC_PROFILE = 'au.anthropic.test-profile-synthetic';
 
 let savedDisable;
 
 beforeEach(() => {
-  savedRegion = process.env.AI_AWS_REGION;
+  savedRegion = process.env.AWS_REGION;
+  savedProfile = process.env.BEDROCK_MODEL_ID;
   savedDisable = process.env.AI_GLOBAL_DISABLE;
-  delete process.env.AI_AWS_REGION;
+  // The gateway no longer defaults the region, so every case must state one.
+  // Cases that assert the absent-region refusal delete it explicitly.
+  process.env.AWS_REGION = 'ap-southeast-2';
+  process.env.BEDROCK_MODEL_ID = SYNTHETIC_PROFILE;
   delete process.env.AI_GLOBAL_DISABLE;
   events = [];
   audit._setSinkForTests(async (payload) => { events.push(payload); });
@@ -43,8 +51,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (savedRegion === undefined) delete process.env.AI_AWS_REGION;
-  else process.env.AI_AWS_REGION = savedRegion;
+  if (savedRegion === undefined) delete process.env.AWS_REGION;
+  else process.env.AWS_REGION = savedRegion;
+  if (savedProfile === undefined) delete process.env.BEDROCK_MODEL_ID;
+  else process.env.BEDROCK_MODEL_ID = savedProfile;
   if (savedDisable === undefined) delete process.env.AI_GLOBAL_DISABLE;
   else process.env.AI_GLOBAL_DISABLE = savedDisable;
   audit._setSinkForTests(null);
@@ -59,7 +69,10 @@ test('ALLOWED: clinical work on the approved Australian Bedrock model', () => {
 
   expect(decision.ok).toBe(true);
   expect(decision.model.provider).toBe(registry.PROVIDER_BEDROCK);
-  expect(decision.model.id).toBe('au.anthropic.claude-opus-4-8');
+  // The id is whatever the deployment configured — the registry no longer
+  // carries one. That is the point of the change: this asserts the wiring, not
+  // a literal that could drift from the AWS account.
+  expect(decision.model.id).toBe(SYNTHETIC_PROFILE);
   expect(registry.AU_REGIONS).toContain(decision.region);
   expect(decision.humanReviewRequired).toBe(true);
 });
@@ -68,8 +81,14 @@ test('BLOCKED: a global inference profile', () => {
   // `global.` routes to every commercial AWS region worldwide. It is not in
   // the registry, so it cannot even be named — which is the point of keying
   // policies to registry entries rather than raw ids.
-  const ids = Object.values(registry.APPROVED_MODELS).map((m) => m.id);
-  expect(ids.some((id) => id.startsWith('global.'))).toBe(false);
+  // The registry holds no Bedrock id at all now, so the old "no entry starts
+  // with global." assertion is vacuous. The real gate is config: a global
+  // profile supplied through BEDROCK_MODEL_ID must be refused outright.
+  const bedrockConfig = require('../ai/aws/bedrock-config');
+  process.env.BEDROCK_MODEL_ID = 'global.anthropic.claude-opus-4-8';
+  expect(bedrockConfig.resolveModelProfile(registry))
+    .toMatchObject({ ok: false, reason: 'model_profile_not_au_geo' });
+  process.env.BEDROCK_MODEL_ID = SYNTHETIC_PROFILE;
 
   const decision = gateway.evaluate({ feature: CLINICAL_FEATURE, modelKey: 'global.anthropic.claude-opus-4-8' });
   expect(decision.ok).toBe(false);
@@ -79,8 +98,11 @@ test('BLOCKED: a global inference profile', () => {
 test('BLOCKED: an apac profile — regional-looking but not Australian', () => {
   // `apac.` also reaches Tokyo, Seoul, Osaka, Mumbai, Hyderabad and
   // Singapore, with no way to choose. This is the trap that looks safe.
-  const ids = Object.values(registry.APPROVED_MODELS).map((m) => m.id);
-  expect(ids.some((id) => id.startsWith('apac.'))).toBe(false);
+  const bedrockConfig = require('../ai/aws/bedrock-config');
+  process.env.BEDROCK_MODEL_ID = 'apac.anthropic.claude-sonnet-4-6';
+  expect(bedrockConfig.resolveModelProfile(registry))
+    .toMatchObject({ ok: false, reason: 'model_profile_not_au_geo' });
+  process.env.BEDROCK_MODEL_ID = SYNTHETIC_PROFILE;
 
   const decision = gateway.evaluate({ feature: CLINICAL_FEATURE, modelKey: 'apac.anthropic.claude-sonnet-4-6' });
   expect(decision.ok).toBe(false);
@@ -115,18 +137,21 @@ test('BLOCKED: clinical data can never reach a non-approved provider', () => {
 
 test('BLOCKED: any region outside Australia, for every clinical feature', () => {
   for (const region of ['us-east-1', 'eu-west-1', 'ap-southeast-1', 'ap-northeast-1']) {
-    process.env.AI_AWS_REGION = region;
+    process.env.AWS_REGION = region;
     for (const feature of policy.features()) {
       const decision = gateway.evaluate({ feature });
       expect(decision.ok).toBe(false);
-      expect(decision.reason).toBe(`region_not_australian:${region}`);
+      // Refused by config before residency logic runs, so the reason is the
+      // config's, not the gateway's. Earlier and more general — the region is
+      // rejected for every feature, not per classification.
+      expect(decision.reason).toBe('region_not_permitted');
     }
   }
 });
 
 test('both Australian regions are accepted', () => {
   for (const region of registry.AU_REGIONS) {
-    process.env.AI_AWS_REGION = region;
+    process.env.AWS_REGION = region;
     expect(gateway.evaluate({ feature: CLINICAL_FEATURE }).ok).toBe(true);
   }
 });
@@ -225,7 +250,7 @@ test('content cannot be smuggled into an audit event through an unknown field', 
 });
 
 test('denials are audited too — a refusal must not be silent', async () => {
-  process.env.AI_AWS_REGION = 'us-east-1';
+  process.env.AWS_REGION = 'us-east-1';
 
   await expect(gateway.generate({
     feature: CLINICAL_FEATURE,
@@ -235,7 +260,7 @@ test('denials are audited too — a refusal must not be silent', async () => {
 
   expect(events).toHaveLength(1);
   expect(events[0].event.status).toBe('denied');
-  expect(events[0].event.denyReason).toBe('region_not_australian:us-east-1');
+  expect(events[0].event.denyReason).toBe('region_not_permitted');
   expect(events[0].actorUserId).toBe('therapist-1');
 });
 
