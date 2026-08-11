@@ -33,9 +33,17 @@ Thumbs.db
 .vscode/
 
 # ── Sensitive documents ───────────────────────────────────────────────────────
+# Blanket-ignored so a clinical document can never be committed by accident.
 *.docx
 *.xlsx
 *.pdf
+
+# …except the report templates, which are application assets rather than
+# documents. They contain only content controls and boilerplate — no client
+# content — and the FCA/letter features cannot run without them: the blanket
+# rule above silently excluded them when the feature was committed, which left
+# three test suites unable to load and the generator with nothing to fill in.
+!backend/fca/templates/*.docx
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
