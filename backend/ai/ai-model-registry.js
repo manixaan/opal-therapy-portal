@@ -13,10 +13,22 @@
  * example, has a genuine `au.` profile that cannot be sourced from Sydney.
  * A flat "these models are Australian" list would hide that.
  *
- * Verified against the AWS Bedrock model cards on 2026-08-10. Re-verify
- * before adding an entry:
+ * Checked against the AWS Bedrock model cards on 2026-08-10. Re-check before
+ * adding an entry:
  *   aws bedrock get-inference-profile \
  *     --inference-profile-identifier <id> --region <region>
+ *
+ * THE TWO CLINICAL IDS BELOW ARE PROVISIONAL.
+ * They were taken from public model cards, not from the practice's own AWS
+ * account, and nobody with access to that account has confirmed the profiles
+ * exist in it. Profile availability is granted per account, so a correct-looking
+ * id can still be absent.
+ *
+ * A deployment that knows better overrides them with BEDROCK_MODEL_ID, which is
+ * validated against the same invariants as an entry here (Australian geo
+ * profile, not a Covered Model) and refused outright if it fails either. See
+ * ai-bedrock-config.js. That is the supported way to correct these without a
+ * code change — and the reason the override exists at all.
  */
 
 const AU_REGIONS = Object.freeze(['ap-southeast-2', 'ap-southeast-4']);
