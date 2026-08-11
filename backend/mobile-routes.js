@@ -689,10 +689,28 @@ router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res)
       organisationId: orgOf(req),
     });
   } catch (err) {
-    // One generic shape for every downstream failure — identity, STS, model,
-    // guardrail, transport. The phone learns the draft did not happen and
-    // nothing about the cloud path that failed.
     log.warn('mobile ai generation failed', { userId: req.user.id, reason: err && err.message });
+
+    // A guardrail refusal is the ONE downstream failure that must stay
+    // distinguishable, and it is not an exception to the rule above — it
+    // reveals nothing about the cloud path. It says a safety control declined
+    // the content, which is a fact about the request, not about identity, STS,
+    // the model or the transport.
+    //
+    // It has to be separable because the phone offers a Retry button on a
+    // failure and not on a refusal. Collapsed into 'failed' with "Please try
+    // again", a therapist is invited to resubmit clinical content to a control
+    // that has already said no, over and over, with every attempt writing
+    // another denied row. The reason for the refusal still does not travel.
+    if (err && err.message === 'content_blocked') {
+      return res.status(422).json({
+        status: 'blocked',
+        error: 'This content could not be drafted. Please write this note yourself.',
+      });
+    }
+
+    // One generic shape for everything else — identity, STS, model, transport.
+    // The phone learns the draft did not happen and nothing about what failed.
     return res.status(502).json({ status: 'failed', error: 'Could not draft a note. Please try again.' });
   }
 
@@ -703,7 +721,24 @@ router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res)
     // Assistive drafting only. The app must present this for review and must
     // not file it as documentation.
     reviewRequired: true,
-    sections: raw.sections,
+    // Fields are picked EXPLICITLY, and this is load-bearing twice over.
+    //
+    // generateCaseNote() resolves to { identify, sessionDetails, plan,
+    // warnings, metadata } — flat, with no `sections` key. Reading
+    // `raw.sections` yielded undefined, JSON.stringify dropped it, and this
+    // endpoint answered 200 `status: 'ok'` carrying no note at all. A
+    // therapist would have watched it generate and received an empty draft.
+    //
+    // Spreading `raw` would fix that and introduce a worse bug: `metadata`
+    // carries the resolved Bedrock inference profile id, provider and source
+    // region. Naming the four fields keeps provenance server-side in
+    // ai_interactions where it belongs, which is what the guard test in
+    // tests/ai-single-gateway-guards.test.js is protecting.
+    sections: {
+      identify: raw.identify,
+      sessionDetails: raw.sessionDetails,
+      plan: raw.plan || [],
+    },
     warnings: raw.warnings || [],
     // Deliberately NOT providerIdentity(): that carries the resolved Bedrock
     // inference profile id, which is an account internal. The app needs to know
