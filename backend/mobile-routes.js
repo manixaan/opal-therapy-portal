@@ -709,6 +709,27 @@ router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res)
       });
     }
 
+    // The second non-retryable outcome, for the same reason as the first.
+    //
+    // `generation_disabled` is a POLICY state — the kill switch thrown, a failed
+    // boundary self-check, an unavailable audit layer, or Bedrock configuration
+    // missing. None of those change by asking again. The isEnabled() check above
+    // catches the flag being off at request time, but every one of those other
+    // states is raised from INSIDE generateCaseNote and lands here.
+    //
+    // Collapsed into 'failed' with "Please try again" the phone shows a Retry
+    // button, and a therapist retries something that cannot succeed while each
+    // attempt writes another denied row. This is exactly what
+    // case-note-routes.js:115-126 documents for the website, which answers 503
+    // `generation_unavailable`; the two clients must not disagree about whether
+    // a disabled service is a transient fault.
+    if (err && err.message === 'generation_disabled') {
+      return res.status(503).json({
+        status: 'unavailable',
+        error: 'AI drafting is unavailable. Your transcript is safe — save it as a draft note.',
+      });
+    }
+
     // One generic shape for everything else — identity, STS, model, transport.
     // The phone learns the draft did not happen and nothing about what failed.
     return res.status(502).json({ status: 'failed', error: 'Could not draft a note. Please try again.' });

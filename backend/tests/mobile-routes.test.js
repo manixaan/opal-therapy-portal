@@ -697,12 +697,24 @@ describe('mobile AI case-note drafting', () => {
     expect(res.body.status).toBe('failed');
   });
 
-  test('a policy denial does not leak which setting is missing', async () => {
+  test('a policy state is 503 unavailable, not a retryable failure, and leaks nothing', async () => {
+    // `generation_disabled` is raised from INSIDE generateCaseNote for the DB
+    // kill switch, an unhealthy self-check, an unavailable audit layer, or an
+    // unconfigured guardrail. None of them change by asking again, and the
+    // phone offers Retry on `failed` — so 502 here invites a therapist to
+    // retry something that cannot succeed, each attempt writing another denied
+    // row. The website answers 503 for the same condition
+    // (case-note-routes.js:115-126); the two clients must not disagree about
+    // whether a disabled service is a transient fault.
     noteProvider._setProviderForTests(async () => { throw new Error('generation_disabled'); });
     const agent = await loginAs(USER_A);
     const res = await draft(agent);
-    expect(res.status).toBe(502);
-    expect(JSON.stringify(res.body)).not.toMatch(/disabled|BEDROCK|GUARDRAIL|env|config/i);
+
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe('unavailable');
+    expect(res.body.error).not.toMatch(/try again/i);
+    // Which setting or control is missing must not travel to the phone.
+    expect(JSON.stringify(res.body)).not.toMatch(/disabled|BEDROCK|GUARDRAIL|env|config|kill|switch|audit|AWS/i);
   });
 
   test('the feature switched off is 503 unavailable, before any provider call', async () => {
