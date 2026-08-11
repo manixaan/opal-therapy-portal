@@ -1,30 +1,45 @@
 'use strict';
 
 /**
- * OPA AI PROVIDER — model access behind one narrow seam.
+ * OPA AI PROVIDER — the assistant's model access, behind the AI gateway.
  *
- * The only place in the backend that talks to the Anthropic API. Everything
- * upstream (routes, prompt building, knowledge retrieval) treats this as an
- * opaque `generateOpaResponse` function so tests can swap it out with
- * `_setProviderForTests` and no test ever needs the network.
+ * Everything upstream (routes, prompt building, knowledge retrieval) still
+ * treats this as an opaque `generateOpaResponse` so tests can swap it out
+ * with `_setProviderForTests` and no test ever touches a network.
  *
- * Fail-closed: isEnabled() requires BOTH the explicit OPA_AI_ENABLED='true'
- * flag AND a configured ANTHROPIC_API_KEY. Credentials live server-side only
- * and are never logged — provider failures surface as a sanitised
- * Error('provider_error') after a status-only console.warn.
+ * ── WHY OPA MOVED ONSHORE ─────────────────────────────────────────────────
+ * Opa is documented as a feature-knowledge assistant that receives no
+ * clinical content, and it previously called the Anthropic API in the US on
+ * the strength of that boundary. That reasoning was weak. A chat box inside
+ * a clinical portal will eventually be asked to "summarise what happened with
+ * Johan today", whatever the interface says, and a documented boundary is a
+ * policy rather than a control.
+ *
+ * So Opa's policy (backend/ai/ai-policy.js → opa_assistant) declares the
+ * classification the feature can *receive*, not the one it is supposed to,
+ * and routes through the same Australian Bedrock path as clinical
+ * documentation. Accidentally typing clinical content into Opa now changes
+ * nothing about where the data goes.
+ *
+ * humanReview is false — Opa answers questions rather than producing records,
+ * and nothing it returns becomes clinical documentation. If that ever
+ * changes, the policy must change with it.
+ *
+ * Fail-closed: isEnabled() requires OPA_AI_ENABLED='true' AND a gateway
+ * configuration that satisfies policy. Failures surface as a sanitised
+ * Error('provider_error') after a status-only warn — never the body, which
+ * may contain whatever the therapist typed.
  *
  * Env:
  *   OPA_AI_ENABLED            'true' to enable (default off)
- *   ANTHROPIC_API_KEY         server-side credential (never logged)
- *   OPA_MODEL                 default 'claude-sonnet-5'
  *   OPA_MAX_OUTPUT_TOKENS     default 1024 (clamped 64..4096)
- *   OPA_REQUEST_TIMEOUT_MS    default 25000 (clamped 1000..60000)
+ *   OPA_REQUEST_TIMEOUT_MS    default 25000 (clamped 5000..60000)
+ * Model and region are gateway/policy concerns — see AI_AWS_REGION.
  */
 
-const axios = require('axios');
+const gateway = require('./ai/ai-gateway');
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
+const FEATURE = 'opa_assistant';
 
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_TIMEOUT_MS = 25000;
@@ -33,7 +48,13 @@ const DEFAULT_TIMEOUT_MS = 25000;
 let _providerOverride = null;
 
 function isEnabled() {
-  return process.env.OPA_AI_ENABLED === 'true' && !!process.env.ANTHROPIC_API_KEY;
+  return process.env.OPA_AI_ENABLED === 'true' && gateway.isAvailable(FEATURE);
+}
+
+/** Why Opa is unavailable, or null. Safe to log. */
+function configError() {
+  if (process.env.OPA_AI_ENABLED !== 'true') return 'feature_disabled';
+  return gateway.unavailableReason(FEATURE);
 }
 
 const clampInt = (raw, fallback, min, max) => {
@@ -49,71 +70,58 @@ function maxOutputTokens(requested) {
 }
 
 function requestTimeoutMs(requested) {
-  const configured = clampInt(process.env.OPA_REQUEST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 1000, 60000);
+  const configured = clampInt(process.env.OPA_REQUEST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 5000, 60000);
   if (requested === undefined || requested === null) return configured;
-  return clampInt(requested, configured, 1000, 60000);
+  return clampInt(requested, configured, 5000, 60000);
 }
 
 /**
  * Call the model. Returns { text }. Throws sanitised Error('provider_error')
- * on any failure (network, timeout, non-2xx, malformed body) — callers never
- * see provider internals and nothing sensitive is ever logged.
+ * on any failure — callers never see provider internals and nothing
+ * sensitive is ever logged.
  *
  * @param {object} opts
  * @param {string} opts.system     system prompt
  * @param {Array}  opts.messages   [{ role: 'user'|'assistant', content: string }]
  * @param {number} [opts.maxTokens]
  * @param {number} [opts.timeoutMs]
+ * @param {string} [opts.userId]   audit actor
+ * @param {string} [opts.organisationId]
  */
-async function generateOpaResponse({ system, messages, maxTokens, timeoutMs } = {}) {
+async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, userId, organisationId } = {}) {
   if (_providerOverride) {
     return _providerOverride({ system, messages, maxTokens, timeoutMs });
   }
 
-  const timeout = requestTimeoutMs(timeoutMs);
-  // Belt and braces: axios `timeout` covers the response clock; the abort
-  // controller guarantees the socket is torn down even mid-stream.
-  const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), timeout + 500);
-  if (abortTimer.unref) abortTimer.unref();
-
   try {
-    const res = await axios.post(
-      ANTHROPIC_URL,
-      {
-        model: process.env.OPA_MODEL || 'claude-sonnet-5',
-        max_tokens: maxOutputTokens(maxTokens),
-        system,
-        messages,
-      },
-      {
-        headers: {
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': ANTHROPIC_VERSION,
-          'content-type': 'application/json',
-        },
-        timeout,
-        signal: controller.signal,
-      }
-    );
+    const res = await gateway.generate({
+      feature: FEATURE,
+      userId,
+      organisationId,
+      system,
+      messages,
+      maxTokens: maxOutputTokens(maxTokens),
+      timeoutMs: requestTimeoutMs(timeoutMs),
+    });
 
-    const blocks = Array.isArray(res.data?.content) ? res.data.content : [];
-    const text = blocks
-      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-
+    const text = (res.text || '').trim();
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {
-    // Status only — never the error body, headers or key.
-    const status = err?.response?.status
-      || (err?.code === 'ECONNABORTED' || err?.name === 'CanceledError' ? 'timeout' : 'network');
-    console.warn(`[opa-provider] request failed (status: ${status})`);
+    if (err instanceof gateway.AiPolicyError) {
+      // Already audited by the gateway with its reason code.
+      throw new Error('provider_error');
+    }
+    // A guardrail refusal must stay distinguishable from a transport failure.
+    // Opa's policy permits clinical_document output, so an intervention here is
+    // possible — and collapsing it into provider_error would tell the user to
+    // "try again in a moment", which invites them to resubmit content a control
+    // has already declined.
+    if (err?.message === 'guardrail_intervened') throw new Error('content_blocked');
+    if (err?.message === 'guardrail_not_configured') throw new Error('provider_error');
+    if (err?.message === 'provider_error') throw err;
+    console.warn(`[opa-provider] request failed (reason: ${err?.message || 'unknown'})`);
     throw new Error('provider_error');
-  } finally {
-    clearTimeout(abortTimer);
   }
 }
 
@@ -125,4 +133,4 @@ function _setProviderForTests(fn) {
   _providerOverride = typeof fn === 'function' ? fn : null;
 }
 
-module.exports = { generateOpaResponse, isEnabled, _setProviderForTests };
+module.exports = { FEATURE, generateOpaResponse, isEnabled, configError, _setProviderForTests };

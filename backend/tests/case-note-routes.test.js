@@ -33,6 +33,7 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('../database');
 const provider = require('../clinical-note-provider');
+const caseNoteRoutes = require('../case-note-routes');
 
 function buildApp() {
   const app = express();
@@ -170,6 +171,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The AI generation limiter is per-user and these tests reuse one therapist,
+  // so without this the later tests in the file spend a window opened by the
+  // earlier ones and start answering 429.
+  caseNoteRoutes._resetCaseNoteAiRateLimit();
   eventStore = new Map([[EVENT_A.id, EVENT_A], [EVENT_SPARSE.id, EVENT_SPARSE], [EVENT_B.id, EVENT_B]]);
   draftStore = new Map();
   draftSeq = 0;
@@ -178,15 +183,16 @@ beforeEach(() => {
   db.recordLogin.mockResolvedValue(null);
   db.getUser.mockImplementation(async (id) => (USERS[id] ? { ...USERS[id] } : null));
   // Provider enabled + deterministic by default; individual tests override.
+  // The default region/model are onshore and allowlisted, so the master
+  // switch is all that's needed here. Onshore guards are covered in
+  // tests/clinical-note-provider.test.js.
   process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
-  process.env.ANTHROPIC_API_KEY = 'test-key-not-real';
   provider._setProviderForTests(async () => ({ ...SECTIONS, plan: [...SECTIONS.plan], warnings: [...SECTIONS.warnings] }));
 });
 
 afterEach(() => {
   provider._setProviderForTests(null);
   delete process.env.CLINICAL_NOTE_AI_ENABLED;
-  delete process.env.ANTHROPIC_API_KEY;
 });
 
 async function loginAs(user) {
@@ -460,4 +466,155 @@ test('transcript length is validated (8000 cap) and required', async () => {
   const agent = await loginAs(USER_A);
   expect((await generate(agent, { transcript: '' })).status).toBe(400);
   expect((await generate(agent, { transcript: 'x'.repeat(8001) })).status).toBe(400);
+});
+
+// ═══ Failure classification (mobile API contract) ════════════════════════════
+//
+// The phone offers a Retry button on a failure and not on a refusal or an
+// unavailable service. These tests pin which server state produces which code,
+// because getting it wrong is not a cosmetic bug: a therapist told to retry
+// something that cannot succeed will retry it, and every attempt writes
+// another denied row to ai_interactions.
+
+test('policy denial mid-flight → 503 generation_unavailable, NOT 502', async () => {
+  // The regression this locks down. The kill switch being thrown between the
+  // isEnabled() pre-check and the model call is exactly the incident the
+  // switch exists for, and it used to be reported as a retryable failure.
+  provider._setProviderForTests(async () => { throw new Error('generation_disabled'); });
+  const agent = await loginAs(USER_A);
+  const res = await generate(agent);
+
+  expect(res.status).toBe(503);
+  expect(res.body.code).toBe('generation_unavailable');
+  expect(res.body.code).not.toBe('generation_failed');
+  expect(res.body.error).toContain('save it as a draft note');
+  expect(draftStore.size).toBe(0);
+});
+
+test('policy denial on regenerate → 503, and the existing draft is untouched', async () => {
+  const agent = await loginAs(USER_A);
+  const created = await generate(agent);
+  const id = created.body.caseNoteDraft.id;
+  const bodyBefore = draftStore.get(id).note_body;
+
+  provider._setProviderForTests(async () => { throw new Error('generation_disabled'); });
+  const res = await agent.post(`/api/mobile/case-note-drafts/${id}/regenerate`).send({});
+
+  expect(res.status).toBe(503);
+  expect(res.body.code).toBe('generation_unavailable');
+  expect(res.body.error).toContain('current draft is unchanged');
+  expect(draftStore.get(id).note_body).toBe(bodyBefore);
+});
+
+test('guardrail refusal → 422 content_blocked, no row, and no reason leaked', async () => {
+  provider._setProviderForTests(async () => { throw new Error('content_blocked'); });
+  const agent = await loginAs(USER_A);
+  const res = await generate(agent);
+
+  expect(res.status).toBe(422);
+  expect(res.body.code).toBe('content_blocked');
+  expect(draftStore.size).toBe(0);
+  // A refusal reason describing how clinical content tripped a filter is not
+  // something to hand to a client-facing screen.
+  expect(JSON.stringify(res.body)).not.toMatch(/guardrail|policy|filter|topic|blocked_reason/i);
+});
+
+test('the three failure states are mutually distinguishable by code', async () => {
+  const agent = await loginAs(USER_A);
+  const codeFor = async (thrown) => {
+    caseNoteRoutes._resetCaseNoteAiRateLimit();
+    provider._setProviderForTests(async () => { throw new Error(thrown); });
+    return (await generate(agent)).body.code;
+  };
+  expect(await codeFor('generation_disabled')).toBe('generation_unavailable');
+  expect(await codeFor('content_blocked')).toBe('content_blocked');
+  expect(await codeFor('provider_error')).toBe('generation_failed');
+});
+
+test('an unrecognised provider error falls back to the retryable failure code', async () => {
+  // Conservative default: an error we do not recognise is a transport-shaped
+  // problem, not a refusal. Misclassifying the other way would suppress a
+  // Retry that could have worked.
+  provider._setProviderForTests(async () => { throw new Error('something-unexpected'); });
+  const agent = await loginAs(USER_A);
+  const res = await generate(agent);
+  expect(res.status).toBe(502);
+  expect(res.body.code).toBe('generation_failed');
+});
+
+// ═══ Rate limiting ═══════════════════════════════════════════════════════════
+
+test('generation is rate limited per user with a Retry-After header', async () => {
+  const agent = await loginAs(USER_A);
+  const statuses = [];
+  for (let i = 0; i < 12; i++) statuses.push((await generate(agent)).status);
+
+  // First 10 succeed, the rest are refused.
+  expect(statuses.slice(0, 10).every((s) => s === 201)).toBe(true);
+  expect(statuses.slice(10)).toEqual([429, 429]);
+
+  const limited = await generate(agent);
+  expect(limited.status).toBe(429);
+  expect(limited.body.code).toBe('rate_limited');
+  expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+  expect(limited.body.error).toContain('transcript is safe');
+});
+
+test('the limit is per user — one therapist cannot exhaust another', async () => {
+  const a = await loginAs(USER_A);
+  for (let i = 0; i < 11; i++) await generate(a);
+  expect((await generate(a)).status).toBe(429);
+
+  // USER_B owns EVENT_B, so link that one.
+  const b = await loginAs(USER_B);
+  const res = await b.post('/api/mobile/case-note-drafts/generate')
+    .send({ transcript: TRANSCRIPT, linkedEventId: EVENT_B.id });
+  expect(res.status).toBe(201);
+});
+
+test('rate limiting applies to regenerate as well as generate', async () => {
+  const agent = await loginAs(USER_A);
+  const created = await generate(agent);
+  const id = created.body.caseNoteDraft.id;
+  for (let i = 0; i < 10; i++) {
+    await agent.post(`/api/mobile/case-note-drafts/${id}/regenerate`).send({});
+  }
+  const res = await agent.post(`/api/mobile/case-note-drafts/${id}/regenerate`).send({});
+  expect(res.status).toBe(429);
+  expect(res.body.code).toBe('rate_limited');
+});
+
+test('reads and edits are NOT rate limited — only the model calls are', async () => {
+  const agent = await loginAs(USER_A);
+  const created = await generate(agent);
+  const id = created.body.caseNoteDraft.id;
+  for (let i = 0; i < 20; i++) {
+    expect((await agent.get('/api/mobile/case-note-drafts')).status).toBe(200);
+  }
+  const patched = await agent.patch(`/api/mobile/case-note-drafts/${id}`)
+    .send({ noteBody: 'Reviewed wording.' });
+  expect(patched.status).toBe(200);
+});
+
+// ═══ Request correlation ═════════════════════════════════════════════════════
+
+test('a client requestId is echoed on success and on every failure', async () => {
+  const requestId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const agent = await loginAs(USER_A);
+
+  const ok = await generate(agent, { requestId });
+  expect(ok.body.requestId).toBe(requestId);
+
+  provider._setProviderForTests(async () => { throw new Error('generation_disabled'); });
+  const failed = await generate(agent, { requestId });
+  expect(failed.body.requestId).toBe(requestId);
+});
+
+test('a malformed requestId is dropped rather than echoed', async () => {
+  // Client-supplied and unauthenticated. It is a log field, so it is validated
+  // as a UUID and otherwise ignored — never reflected back verbatim.
+  const agent = await loginAs(USER_A);
+  const res = await generate(agent, { requestId: '<script>alert(1)</script>' });
+  expect(res.status).toBe(201);
+  expect(res.body.requestId).toBeUndefined();
 });

@@ -38,6 +38,8 @@ const orgOf = (req) => req.user?.organisation_id || null;
 
 const UNAVAILABLE_DISABLED = "Opa's AI service isn't available right now. You can still use the Portal normally.";
 const UNAVAILABLE_ERROR = "I couldn't reach my knowledge service just now. Please try again in a moment.";
+/** Deliberately does NOT suggest retrying — the refusal will not change. */
+const BLOCKED_ANSWER = "I can't help with that one. Try asking about how the Portal works, or check with your practice lead.";
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_ANSWER_CHARS = 6000;
@@ -180,9 +182,22 @@ router.post('/api/opa/chat', chatRateLimit, safe(async (req, res) => {
     const result = await provider.generateOpaResponse({
       system,
       messages: [...history, { role: 'user', content: message }],
+      // Attribution. Without these every Opa row in ai_interactions is written
+      // with a null actor, so no assistant call can be traced to a person —
+      // which is the whole point of the governance table. The case-note route
+      // has always passed them; this one was missed.
+      userId: req.user.id,
+      organisationId: orgOf(req),
     });
     modelText = result.text;
   } catch (err) {
+    // A guardrail refusal is not a provider failure. Kept at HTTP 200 because
+    // Opa's contract is a chat envelope, but with a distinct status and
+    // wording that does not invite a retry — repeating a refused question
+    // cannot succeed, and the invitation to try again is the harm.
+    if (err?.message === 'content_blocked') {
+      return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
+    }
     // Sanitised provider failure → graceful, friendly, HTTP 200.
     return res.json({ status: 'unavailable', answer: UNAVAILABLE_ERROR });
   }
