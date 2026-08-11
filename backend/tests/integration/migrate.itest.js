@@ -6,6 +6,8 @@
  * runner on top of it.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { db, closePool } = require('./helpers');
 const migrate = require('../../migrate');
 
@@ -38,8 +40,25 @@ describe('migration runner', () => {
       '020_progress_note_letters.sql',
     ]));
 
+    // Derived from the migration files on disk, not hard-coded.
+    //
+    // The list is NOT contiguous: there is no 019. The progress note letter
+    // migration was renumbered 019 -> 020 before it landed (its own header
+    // comment still says 019), so a literal range silently expected a
+    // migration that has never existed in any branch, and this test failed on
+    // every clean checkout — which is what blocked the staging deploy.
+    //
+    // Deriving the expectation also keeps this honest as migrations are added:
+    // it asserts that everything present on disk was applied and recorded,
+    // which is the property worth testing, rather than a frozen list that has
+    // to be edited by hand every time.
+    const onDisk = fs.readdirSync(path.join(__dirname, '..', '..', 'migrations'))
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => f.slice(0, f.indexOf('_')))
+      .sort();
+
     const { rows } = await db.pool.query('SELECT id FROM schema_migrations ORDER BY id');
-    expect(rows.map(r => r.id)).toEqual(['000', '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016', '017', '018', '019', '020']);
+    expect(rows.map((r) => r.id)).toEqual(onDisk);
   });
 
   test('is idempotent — a second run applies nothing', async () => {

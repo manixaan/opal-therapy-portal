@@ -640,7 +640,16 @@ describe('end to end: a real letter', () => {
 
   test('generates, and the filename follows the contract', async () => {
     const { gen } = await scenario();
-    expect(gen.filename).toBe('Progress Note Letter - Riley - 2026-08-10.docx');
+    // The date in the filename is the GENERATION date, not the letter date:
+    // reportFilename() stamps generatedAt so an immutable artefact records when
+    // it was produced. Hard-coding that date made this test pass on the day it
+    // was written and fail every day afterwards — it broke the build the
+    // morning after it landed, and blocked the staging deploy.
+    //
+    // UTC because the process is pinned to UTC (ci.yml sets TZ) and
+    // document-id.js reads ISO components in UTC for the same reason.
+    const generatedOn = new Date().toISOString().slice(0, 10);
+    expect(gen.filename).toBe(`Progress Note Letter - Riley - ${generatedOn}.docx`);
     expect(gen.missingFields).toEqual([]);
   });
 
