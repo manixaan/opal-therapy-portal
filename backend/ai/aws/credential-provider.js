@@ -87,7 +87,12 @@ async function getCredentials({ fetchImpl, now = Date.now() } = {}) {
       // Never serve a stale credential after a failed refresh.
       _cached = null;
       const reason = (err && err.reason) || 'credential_exchange_failed';
-      throw new CredentialError(reason);
+      const wrapped = new CredentialError(reason);
+      // TEMPORARY STAGING DIAGNOSTIC — remove with the rest of this patch.
+      // Re-wrapping here previously erased which federation step failed, so
+      // an Entra fault and an STS fault arrived at the provider identical.
+      if (err && typeof err.stage === 'string') wrapped.stage = err.stage;
+      throw wrapped;
     })
     .finally(() => {
       _inFlight = null;

@@ -30,6 +30,10 @@ class EntraTokenError extends Error {
     super(reason);
     this.name = 'EntraTokenError';
     this.reason = reason;
+    // TEMPORARY STAGING DIAGNOSTIC — remove with the rest of this patch.
+    // Names the federation step, so `timeout` here is distinguishable from
+    // `timeout` at STS. Carries no value, only which step was reached.
+    this.stage = 'entra_token';
   }
 }
 

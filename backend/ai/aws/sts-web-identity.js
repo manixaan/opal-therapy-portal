@@ -31,6 +31,8 @@ class StsFederationError extends Error {
     super(reason);
     this.name = 'StsFederationError';
     this.reason = reason;
+    // TEMPORARY STAGING DIAGNOSTIC — remove with the rest of this patch.
+    this.stage = 'sts_exchange';
   }
 }
 

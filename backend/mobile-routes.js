@@ -732,7 +732,20 @@ router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res)
 
     // One generic shape for everything else — identity, STS, model, transport.
     // The phone learns the draft did not happen and nothing about what failed.
-    return res.status(502).json({ status: 'failed', error: 'Could not draft a note. Please try again.' });
+    return res.status(502).json({
+      status: 'failed',
+      error: 'Could not draft a note. Please try again.',
+      // ── TEMPORARY STAGING DIAGNOSTIC — REMOVE WITH THE REST OF THIS PATCH ──
+      // A fixed four-field record: which stage was reached, a sanitised error
+      // class, an HTTP status, an AWS request id. No prompt, no response, no
+      // token, no credential, no header, no personal data — the provider
+      // builds it from an allowlist and never reads err.message.
+      //
+      // This is here rather than behind an admin endpoint because App Service
+      // filesystem logging is Off, and adding a route would mean editing
+      // server.js, which carries unrelated uncommitted work.
+      diagnostic: (err && err.diagnostic) || null,
+    });
   }
 
   await audit(req, 'mobile.ai_case_note_drafted', null);

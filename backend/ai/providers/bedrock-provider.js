@@ -92,6 +92,46 @@ function guardrailError(err) {
   return /guardrail/i.test(haystack);
 }
 
+// ── TEMPORARY STAGING DIAGNOSTIC ─────────────────────────────────────────────
+//
+// REMOVE THIS BLOCK once the failing stage is identified. It exists because the
+// catch below collapses federation faults and Bedrock rejections into one
+// `provider_error`, so hours of investigation could not establish whether the
+// request ever reached AWS.
+//
+// WHAT IT RECORDS: which stage was reached, a sanitised error class or code, an
+// HTTP status, and an AWS request id. Nothing else is read from the error.
+// Prompts, completions, tokens, credentials, headers, URLs and personal data
+// are never touched — `err.message` is deliberately NOT among the fields read,
+// because an AWS message quotes the role ARN and account id.
+const STAGES = Object.freeze({
+  MANAGED_IDENTITY: 'managed_identity',
+  ENTRA_TOKEN: 'entra_token',
+  STS_EXCHANGE: 'sts_exchange',
+  CLIENT_INIT: 'client_initialisation',
+  SIGNED_REQUEST: 'signed_bedrock_request',
+  RESPONSE: 'bedrock_response',
+});
+
+/** Fixed-shape, allowlisted failure metadata. Reads no other field of `err`. */
+function diagnose(err, stageReached) {
+  const code = (typeof err?.reason === 'string' && err.reason)
+    || (typeof err?.headers?.['x-amzn-errortype'] === 'string' && err.headers['x-amzn-errortype'])
+    || (typeof err?.error?.type === 'string' && err.error.type)
+    || (typeof err?.name === 'string' && err.name)
+    || 'unknown';
+  const status = typeof err?.status === 'number' ? err.status
+    : (typeof err?.response?.status === 'number' ? err.response.status : null);
+  return {
+    // An error thrown inside federation names its own step; anything else is
+    // attributed to the furthest stage the call actually reached.
+    stage: (typeof err?.stage === 'string' && err.stage) || stageReached,
+    code: String(code).slice(0, 120),
+    status,
+    requestId: (typeof err?.request_id === 'string' && err.request_id) || null,
+  };
+}
+
 let _client = null;
 let _clientKey = null;
 
@@ -126,13 +166,18 @@ const SILENT_LOGGER = {
  * the default chain, which on App Service finds nothing and produces a
  * confusing auth error instead of an honest "federation is broken".
  */
-async function resolveCredentials() {
+async function resolveCredentials(setStage) {
   if (!awsConfig.hasManagedIdentity()) return null;
+  // TEMPORARY STAGING DIAGNOSTIC: federation begins here. The error's own
+  // `stage` refines this to entra_token or sts_exchange.
+  if (setStage) setStage(STAGES.ENTRA_TOKEN);
   return credentials.getCredentials();
 }
 
-async function getClient(region, timeout) {
-  const creds = await resolveCredentials();
+async function getClient(region, timeout, setStage) {
+  const creds = await resolveCredentials(setStage);
+  // TEMPORARY STAGING DIAGNOSTIC
+  if (setStage) setStage(STAGES.CLIENT_INIT);
 
   // The credential's own identifier is part of the cache key, so a client
   // never outlives the credentials it was built with. STS sessions are
@@ -226,14 +271,19 @@ async function invoke({
   // look present while never firing.
   if (stream) throw new Error('streaming_not_permitted_with_guardrail');
 
+  // TEMPORARY STAGING DIAGNOSTIC — remove with the rest of this patch.
+  let stageReached = STAGES.MANAGED_IDENTITY;
+
   try {
-    const client = await getClient(region, timeoutMs);
+    const client = await getClient(region, timeoutMs, (s) => { stageReached = s; });
+    stageReached = STAGES.SIGNED_REQUEST;
     const res = await client.messages.create(body, {
       headers: {
         [GUARDRAIL_ID_HEADER]: guardrail.id,
         [GUARDRAIL_VERSION_HEADER]: guardrail.version,
       },
     });
+    stageReached = STAGES.RESPONSE;
 
     // Checked BEFORE the content is read, so masked text has no path to a
     // caller that might compose it into a note.
@@ -267,11 +317,14 @@ async function invoke({
     if (err?.message === 'guardrail_intervened') throw err;
     if (guardrailError(err)) throw new Error('guardrail_intervened');
 
-    const status = err?.status
-      || err?.response?.status
-      || (err?.name === 'APIConnectionTimeoutError' || err?.code === 'ETIMEDOUT' ? 'timeout' : 'network');
-    console.warn(`[bedrock-provider] request failed (region: ${region}, status: ${status})`);
-    throw new Error('provider_error');
+    // TEMPORARY STAGING DIAGNOSTIC — remove with the rest of this patch.
+    // Replaces a log line that reported the literal string 'network' for every
+    // federation fault, because a CredentialError has no `.status`.
+    const d = diagnose(err, stageReached);
+    console.warn(`[bedrock-diag] ${JSON.stringify({ region, ...d })}`);
+    const failure = new Error('provider_error');
+    failure.diagnostic = d;
+    throw failure;
   }
 }
 
