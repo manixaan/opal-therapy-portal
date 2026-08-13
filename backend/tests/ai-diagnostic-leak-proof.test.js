@@ -19,6 +19,12 @@ const path = require('path');
 const PROVIDER = path.join(__dirname, '..', 'ai', 'providers', 'bedrock-provider.js');
 const src = fs.readFileSync(PROVIDER, 'utf8');
 
+/** Comments explain what is NOT read, so they must not fail a leak check. */
+const stripComments = (s) => s
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')
+  .replace(/\/\/.*$/gm, '');
+
 /** The diagnose() function body, isolated from the rest of the module. */
 function diagnoseSource() {
   const start = src.indexOf('function diagnose(');
@@ -26,7 +32,7 @@ function diagnoseSource() {
   // Ends at the next top-level declaration.
   const end = src.indexOf('\nlet _client', start);
   expect(end).toBeGreaterThan(start);
-  return src.slice(start, end);
+  return stripComments(src.slice(start, end));
 }
 
 describe('the diagnostic reads only allowlisted fields', () => {
@@ -48,12 +54,26 @@ describe('the diagnostic reads only allowlisted fields', () => {
     }
   });
 
-  test('the only header it reads is the AWS error type', () => {
-    const body = diagnoseSource();
-    const headerReads = body.match(/headers\?*\.?\[?['"`]?[\w-]+/g) || [];
-    for (const read of headerReads) {
-      expect(read.toLowerCase()).toContain('x-amzn-errortype');
+  test('it requests only the two agreed headers, and cannot enumerate', () => {
+    // Every header read goes through headerValue(headers, '<literal name>'),
+    // so the set of literals IS the set of headers this can ever see.
+    const block = src.slice(src.indexOf('function headerValue('), src.indexOf('\nlet _client'));
+    const requested = [...block.matchAll(/headerValue\([^,]+,\s*'([^']+)'\)/g)].map((m) => m[1]);
+    expect(requested.length).toBeGreaterThan(0);
+    expect(new Set(requested)).toEqual(new Set(['x-amzn-errortype', 'x-amzn-requestid']));
+
+    // No iteration over the header collection — that would defeat the
+    // allowlist by pulling in authorization or cookie headers.
+    for (const forbidden of ['forEach', 'entries()', 'keys()', 'for (', 'Object.']) {
+      expect(block).not.toContain(forbidden);
     }
+  });
+
+  test('the header reader itself leaks nothing', () => {
+    const reader = src.slice(src.indexOf('function headerValue('), src.indexOf('function diagnose('));
+    expect(reader).not.toMatch(/err\??\.message/);
+    // Returns a single string or null — never the collection it was handed.
+    expect(reader).toMatch(/return typeof raw === 'string' && raw \? raw : null;/);
   });
 
   test('every emitted field is bounded and typed', () => {

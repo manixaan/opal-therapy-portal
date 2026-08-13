@@ -113,11 +113,41 @@ const STAGES = Object.freeze({
   RESPONSE: 'bedrock_response',
 });
 
+/**
+ * Read one named header. The SDK hands us a fetch `Headers` instance
+ * (sdk/client.js:612 passes `response.headers` straight through), on which
+ * bracket access silently yields undefined — which is why the first version of
+ * this diagnostic reported a bare 'Error' for a Bedrock 403.
+ *
+ * Only the two names below are ever requested; this cannot enumerate headers.
+ */
+function headerValue(headers, name) {
+  if (!headers) return null;
+  const raw = typeof headers.get === 'function'
+    ? headers.get(name)
+    : (headers[name] ?? headers[name.toLowerCase()]);
+  return typeof raw === 'string' && raw ? raw : null;
+}
+
 /** Fixed-shape, allowlisted failure metadata. Reads no other field of `err`. */
 function diagnose(err, stageReached) {
+  // AWS names the exception here. The value can carry a trailing
+  // "#namespace" or ":qualifier" suffix; keep only the exception name.
+  const awsType = (headerValue(err?.headers, 'x-amzn-errortype') || '')
+    .split(/[:#]/)[0] || null;
   const code = (typeof err?.reason === 'string' && err.reason)
-    || (typeof err?.headers?.['x-amzn-errortype'] === 'string' && err.headers['x-amzn-errortype'])
-    || (typeof err?.error?.type === 'string' && err.error.type)
+    || awsType
+    // AWS JSON error bodies name the exception in one of these. Every one is a
+    // type identifier, never prose. `err.message` is still never read, because
+    // an AWS message quotes the role ARN and the account id.
+    || (typeof err?.error?.__type === 'string' && err.error.__type.split(/[#]/).pop())
+    || (typeof err?.error?.code === 'string' && err.error.code)
+    || (typeof err?.error?.Code === 'string' && err.error.Code)
+    || (typeof err?.type === 'string' && err.type)
+    // The SDK's 403 class is PermissionDeniedError, but it never assigns
+    // `name`, so the inherited value is the useless string 'Error'. The
+    // constructor name is the informative one.
+    || (typeof err?.constructor?.name === 'string' && err.constructor.name)
     || (typeof err?.name === 'string' && err.name)
     || 'unknown';
   const status = typeof err?.status === 'number' ? err.status
@@ -128,7 +158,12 @@ function diagnose(err, stageReached) {
     stage: (typeof err?.stage === 'string' && err.stage) || stageReached,
     code: String(code).slice(0, 120),
     status,
-    requestId: (typeof err?.request_id === 'string' && err.request_id) || null,
+    // AWS puts it in x-amzn-requestid. The SDK's own `requestID` reads the
+    // Anthropic 'request-id' header, which Bedrock does not send — which is
+    // why the first version of this always reported null.
+    requestId: headerValue(err?.headers, 'x-amzn-requestid')
+      || (typeof err?.requestID === 'string' && err.requestID)
+      || null,
   };
 }
 
