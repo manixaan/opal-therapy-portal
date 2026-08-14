@@ -1457,7 +1457,14 @@ router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
       downloadUrl: `/api/rh2/files/${f.id}`,
       previewKind: kind.previewKind,
       pageCount: kind.pageCount,
-      hasFillableFields: kind.hasFillableFields,
+      // Tri-state on purpose, and only for PDFs: null is "not inspected yet",
+      // which must not read as "no fields" — migration 031's header makes that
+      // argument and this projection has to keep the promise. The per-file
+      // preview route inspects on demand and answers definitively.
+      hasFillableFields: kind.previewKind === 'pdf'
+        ? (f.has_fillable_fields === null || f.has_fillable_fields === undefined
+          ? null : f.has_fillable_fields === true)
+        : false,
       isEditableVariant: preview.isEditableVariant(siblings[i], siblings),
     };
   });

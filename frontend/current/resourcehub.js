@@ -944,9 +944,16 @@
 
   /* Said in the list when the server has already told us there is no viewer.
      It states what the app can do, not why the file is what it is — the
-     reasoning belongs to the server and is shown verbatim in the pane. */
-  function noPreviewNote() {
-    return 'No in-browser preview for this format — download it to open.';
+     reasoning belongs to the server and is shown verbatim in the pane.
+
+     An ABSENT previewKind is a different situation from 'none': the server
+     said nothing (an older response, a not-yet-migrated row), and stating "no
+     preview for this format" would present a guess as a fact. The unknown case
+     says only what is certain — download works. */
+  function noPreviewNote(f) {
+    return (f && f.previewKind !== undefined && f.previewKind !== null)
+      ? 'No in-browser preview for this format — download it to open.'
+      : 'Download to open.';
   }
 
   function fileNameOf(f) {
@@ -1040,7 +1047,7 @@
         + (restricted
           ? ' <span class="rh2-file-tier">' + esc(tierLabel(f.effectiveAccessTier)) + '</span>'
           : '')
-        + (canPv ? '' : ' <span class="rh2-file-nopv">' + esc(noPreviewNote()) + '</span>')
+        + (canPv ? '' : ' <span class="rh2-file-nopv">' + esc(noPreviewNote(f)) + '</span>')
         + '</span>'
         + '</li>';
     }
@@ -1105,7 +1112,8 @@
     if (p.ctrl) { try { p.ctrl.abort(); } catch (_) {} }
     if (p.timer) { clearTimeout(p.timer); }
     if (p.pdf && typeof p.pdf.destroy === 'function') { try { p.pdf.destroy(); } catch (_) {} }
-    p.ctrl = null; p.timer = null; p.pdf = null;
+    p.ctrl = null; p.timer = null; p.pdf = null; p.docxNode = null;
+    p.announcedReady = false;
     p.fileId = null; p.file = null;
     p.status = 'idle'; p.err = ''; p.liveMsg = '';
     p.kind = ''; p.reason = ''; p.pageCount = null;
@@ -1214,7 +1222,12 @@
       clearTimeout(p.timer); p.timer = null; p.ctrl = null;
       applyPreviewMeta(data);
       paintPreview();
-      announce(previewStatusText());
+      // Announce now only when the content is already in the markup the paint
+      // just produced (image, bundle, unavailable). A PDF or DOCX still has an
+      // async draw ahead of it: announcing "ready" here would tell a screen
+      // reader about a page that is not on screen yet, so those two announce
+      // from their draw completions instead.
+      if (p.kind !== 'pdf' && p.kind !== 'docx') announce(previewStatusText());
     } catch (err) {
       if (rev !== S.preview.rev) return;
       failPreview(rev, (err && err.name === 'AbortError') ? 'timed_out'
@@ -1384,6 +1397,16 @@
         + '<p class="rh2-pv-state-h">This file cannot be shown in the browser.</p>'
         + '<p class="rh2-quiet">' + esc(p.reason) + '</p>'
         + '<div class="rh2-pv-state-actions">' + previewDownloadHtml() + '</div>'
+        + '</div>';
+    }
+
+    // A ready PDF or DOCX still has an async draw ahead of it. The stage keeps
+    // the loading skeleton until ensurePreviewDrawn() swaps the real content in,
+    // so there is never a blank pane between "ready" and "drawn".
+    if (p.status === 'ready' && (p.kind === 'pdf' || p.kind === 'docx')) {
+      return '<div class="rh2-pv-state rh2-pv-loading">'
+        + '<span class="rh2-visually-hidden">Preparing the preview…</span>'
+        + '<div class="rh2-pv-skel" aria-hidden="true">' + skel(3, 58) + '</div>'
         + '</div>';
     }
 
@@ -1580,6 +1603,14 @@
         wrap.appendChild(canvas);
         host.appendChild(wrap);
         paintNav();
+        // The "ready" announcement was deliberately withheld at the metadata
+        // step; the first drawn page is the moment it becomes true. Page
+        // changes after that are announced by the position read-out, so this
+        // fires once per document, not once per page.
+        if (!p.announcedReady) {
+          p.announcedReady = true;
+          announce(previewStatusText());
+        }
       });
     }).catch(function () {
       if (rev !== S.preview.rev || seq !== p.drawSeq) return;
@@ -1632,6 +1663,18 @@
     var stage = pvEl('rh2-pv-stage');
     if (!stage || !p.inlineUrl) { failPreview(rev, 'render_failed'); return; }
 
+    // A rebuilt DOM is not a reason to fetch the document again. render() runs
+    // for plenty of reasons that have nothing to do with the preview — toggling
+    // a favourite, a filter change — and each rebuild empties the stage. The
+    // rendered node survives on the state object, keyed implicitly by rev
+    // (resetPreview clears it), so a redraw is a re-attach: no network request,
+    // and no duplicate disclosure row in the server's audit trail.
+    if (p.docxNode) {
+      stage.innerHTML = '';
+      stage.appendChild(p.docxNode);
+      return;
+    }
+
     var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
     p.ctrl = ctrl;
     var timer = setTimeout(function () {
@@ -1670,6 +1713,7 @@
       if (!staged || rev !== S.preview.rev) return;
       clearTimeout(timer);
       p.ctrl = null;
+      p.docxNode = staged;
       var host = pvEl('rh2-pv-stage');
       if (!host) return;
       host.innerHTML = '';

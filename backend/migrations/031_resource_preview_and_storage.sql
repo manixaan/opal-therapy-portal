@@ -119,13 +119,15 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- A page count is a count. Negative is nonsense; the ceiling is a sanity guard
--- against a parser returning something wild, not a document-size policy.
+-- A page count is a count of pages that exist, so it is at least 1: a document
+-- with no pages is not a document, and "we do not know" is what NULL is for.
+-- Zero would be a parser failure recorded as a fact. The ceiling is a sanity
+-- guard against a parser returning something wild, not a document-size policy.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'resource_file_preview_page_count_is_sane') THEN
     ALTER TABLE resource_files ADD CONSTRAINT resource_file_preview_page_count_is_sane CHECK (
       preview_page_count IS NULL
-      OR (preview_page_count >= 0 AND preview_page_count <= 100000));
+      OR (preview_page_count >= 1 AND preview_page_count <= 100000));
   END IF;
 END $$;
 

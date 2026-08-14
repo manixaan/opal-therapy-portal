@@ -203,10 +203,14 @@ function portalActionFor(scanRecord, { isPrivate, duplicateOf }) {
  * Technical facts a reviewer needs and no identity.
  *
  * Counts and signal NAMES only, never a matched value — the same rule the
- * scanner's detectors already follow. Anything that names a person (the real
- * filename behind an iCloud stub, a document author) is dropped rather than
- * carried, and the analysis error string is dropped for a private record
- * because a library message is not a field this file controls the contents of.
+ * scanner's detectors already follow. Two fields could name a person and are
+ * handled explicitly: the document author the scanner reads from OOXML
+ * properties is never carried at all (it is not in this object), and the real
+ * filename behind an iCloud stub is carried only for a record that is not
+ * private — the same boundary the importer's own redactedIdentity() draws for
+ * source_filename, which the stub name is just another spelling of. The
+ * analysis error string is dropped for a private record because a library
+ * message is not a field this file controls the contents of.
  */
 function scanEvidenceFor(scanRecord, isPrivate) {
   const evidence = {
@@ -258,6 +262,16 @@ function buildPathIndex(scanRecords) {
   for (const r of scanRecords) {
     const rel = r.relativePath;
     if (!rel || rel.endsWith(REDACTION_MARKER)) continue;
+    // A master must survive its own translation. The path being unredacted is
+    // not enough: a record this build will itself exclude — a privacy class the
+    // importer treats as private, an iCloud stub, an unreadable file — cannot
+    // anchor anyone's `duplicate_of`, or a legitimate resource would be
+    // archived against a reference that resolves to nothing. Such duplicates
+    // fall through to review instead, which is the honest place for them.
+    const privacyClass = privacyClassFor(r);
+    if (ing.PRIVATE_PRIVACY_CLASSES.includes(privacyClass)) continue;
+    if (ing.underForbiddenRoot(rel)) continue;
+    if (r.excludeReason) continue;
     if (index.has(rel)) { ambiguous.add(rel); continue; }
     index.set(rel, catalogueIdFor(r));
   }

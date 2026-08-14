@@ -245,7 +245,7 @@ describe('zip member sanitiser', () => {
   });
 
   test('absolute paths and UNC prefixes are refused', () => {
-    for (const n of ['/etc/passwd', '/Users/antonyxavier/Documents/7 Resources/x.pdf',
+    for (const n of ['/etc/passwd', '/Users/someone/Documents/anywhere/x.pdf',
       '\\\\server\\share\\x.pdf', '\\windows\\system32']) {
       expect(P.safeZipMemberName(n)).toBeNull();
     }
