@@ -416,11 +416,11 @@ const PII_STRONG = [
   { name: 'ndis-participant-number', re: /\b43\d{7}\b/g },
   { name: 'medicare-number', re: /\b[2-6]\d{3}\s?\d{5}\s?\d\b/g },
   { name: 'date-of-birth-label', re: /\b(?:d\.?o\.?b\.?|date\s+of\s+birth)\b\s*[:\-]?\s*\d{1,4}[/\-.]\d{1,2}/gi },
-  { name: 'participant-or-client-label', re: new RegExp(String.raw`\b(?:participant|client)(?:'s)?\s*(?:name|full name)?\s*[:#]${FILLED}`, 'g') },
+  { name: 'participant-or-client-label', re: new RegExp(String.raw`\b(?:[Pp]articipant|[Cc]lient)(?:'s)?\s*(?:[Nn]ame|[Ff]ull [Nn]ame)?\s*[:#]${FILLED}`, 'g') },
 ];
 
 const PII_WEAK = [
-  { name: 'guardian-or-carer-label', re: new RegExp(String.raw`\b(?:parent|guardian|carer|mother|father)\s*(?:name)?\s*[:#]${FILLED}`, 'g') },
+  { name: 'guardian-or-carer-label', re: new RegExp(String.raw`\b(?:[Pp]arent|[Gg]uardian|[Cc]arer|[Mm]other|[Ff]ather)\s*(?:[Nn]ame)?\s*[:#]${FILLED}`, 'g') },
 ];
 
 // Contact details are recorded but do NOT quarantine anything.
@@ -524,10 +524,31 @@ function decodeName(value) {
 function friendlyTitle(fileName) {
   const ext = path.extname(fileName);
   let base = decodeName(fileName.slice(0, fileName.length - ext.length));
-  base = base.replace(/[_]+/g, ' ').replace(/\s*-\s*/g, ' - ');
-  for (const p of NOISE_PATTERNS) base = base.replace(p, ' ');
-  base = base.replace(/\s{2,}/g, ' ').replace(/^[\s\-–—]+|[\s\-–—]+$/g, '').trim();
+
+  // ORDER MATTERS, and getting it wrong is silent. The vendor-code patterns
+  // (`au-s-2548656-`, `t-c-254664-`, `_ver_3`) are anchored on hyphens and
+  // underscores, so they have to run while those are still there. Expanding
+  // separators first — which an earlier version did — left every pattern
+  // unmatched and turned `au-s-2548656-an-introduction-to-adhd` into
+  // "Au - S - 2548656 - An - Introduction - To - ADHD", which is worse than the
+  // filename it replaced.
+  // Applied to a fixed point, because the patterns are mostly end-anchored and
+  // real filenames stack their clutter: `…_ver_1 (1).zip` hides `_ver_1` behind
+  // ` (1)`, so one pass strips the copy marker and leaves the version marker
+  // stranded. Bounded, so a pattern that could rewrite forever cannot hang it.
+  for (let pass = 0; pass < 5; pass++) {
+    const before = base;
+    for (const p of NOISE_PATTERNS) base = base.replace(p, '');
+    base = base.replace(/^[-_\s]+|[-_\s]+$/g, '');
+    if (base === before) break;
+  }
+
+  // Meaningless names are judged on the raw form, before separators are lost.
   if (!base || UUID_ONLY.test(base) || HASH_ONLY.test(base)) return null;
+
+  base = base.replace(/[_-]+/g, ' ');
+  base = base.replace(/\s{2,}/g, ' ').replace(/^[\s\-–—]+|[\s\-–—]+$/g, '').trim();
+  if (!base) return null;
 
   // Title case, but never touch a token that is already a known acronym or that
   // is shouting on purpose (NDIS, SDA).
@@ -883,7 +904,31 @@ async function main() {
   console.error(`\nWrote ${records.length} records to ${outAbs}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// The pure decision functions are exported so they can be tested without a
+// vault, a database or a filesystem. Everything below the line is judgement —
+// what counts as a personal identifier, which copy of a duplicate wins, what a
+// filename means — and judgement is the part worth pinning down in tests.
+module.exports = {
+  friendlyTitle,
+  canonicalSlug,
+  privacyFromEvidence,
+  redactedContainer,
+  isClientPath,
+  scanText,
+  scanFilename,
+  newPiiReport,
+  ooxmlPartText,
+  sniff,
+  PATH_KEY_SALT,
+  MIN_CHARS_PER_TEXT_PAGE,
+  MIN_DOC_CHARS_FOR_TEXT_LAYER,
+};
+
+// Only scan when invoked as a command. Requiring this file must never walk the
+// vault as a side effect.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
