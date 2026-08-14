@@ -52,8 +52,8 @@ The distribution is:
 | Extracted characters | PDFs | Reading |
 |---|---:|---|
 | 0 | 85 | genuinely image-only |
-| 1–199 | 29 | a scan carrying a title or page-number text layer |
-| ≥200 but no single page ≥50 | 10 | text so thin no page is readable |
+| 1–199 | 35 | a scan carrying a title or page-number text layer |
+| ≥200 but no single page ≥50 | 4 | text so thin no page is readable |
 | ≥200 with a readable page | 359 | a usable text layer |
 
 `textExtractable` requires both ≥200 characters overall **and** at least one page
@@ -63,7 +63,7 @@ looser threshold reproduces the baseline's ~391; the bands above are published s
 either question can be answered without rescanning.
 
 **Extraction-hostile — 124 rather than ~92.** The same boundary seen from the
-other side: 85 + 29 + 10. The 32-file difference is entirely the trace-text band.
+other side: 85 + 35 + 4. The 32-file difference is entirely the trace-text band.
 
 ## Duplicates: why the earlier pass saw 16 groups, not 30
 
@@ -95,21 +95,26 @@ content. The scanner applies both and takes the union.
 
 | Outcome | Files |
 |---|---:|
-| `client-confidential` | 40 |
-| `privacy-review` (quarantined, unresolved) | 9 |
+| `client-confidential` | 47 |
+| `privacy-review` (quarantined, unresolved) | 8 |
 | Generic duplicates resolved to a safe copy | 13 |
 
-38 of the 40 confidential files are the `CLIENTS` residue after the 13 rescues.
-The other 2, and all 9 quarantined, sit **outside** `CLIENTS` — ordinary topic
-folders holding working documents that carry a person's details. A path-only
-rule would have published them.
+38 of the 47 confidential files are the `CLIENTS` residue after the 13 rescues.
+**The other 9, and all 8 quarantined, sit outside `CLIENTS`** — ordinary topic
+folders holding working documents that carry a person's details. A path-only rule
+would have published every one of them.
+
+Those 9 are also why the case bug in the label detector mattered. While
+`Client:` matched only in lower case, 16 filled labels were visible and 9 of
+these files read as ordinary worksheets. Fixing the flag raised the label signal
+to 24 and moved them into quarantine, which is where they belonged all along.
 
 Detectors record signal names and counts only; the matched value is never
 stored, returned or logged.
 
 | Signal | Weight | Hits |
 |---|---|---:|
-| `participant-or-client-label` (with a filled value) | strong | 16 |
+| `participant-or-client-label` (with a filled value) | strong | 24 |
 | `possessive-personal-name` (filename) | weak | 6 |
 | `named-for-person` (filename) | weak | 5 |
 | `ndis-participant-number` | strong | 1 |
@@ -127,14 +132,14 @@ matter to *branding* and third-party attribution review instead.
 Likewise a label is not a disclosure: `Client: ________` is a blank worksheet,
 which is how a large share of these templates print. Every label detector
 requires a filled value after the colon. Applying that distinction cut the
-label signal from 52 to 16 and the quarantine set from 113 files to 49.
+label signal from 52 to 24 and the quarantine set from 113 files to 55.
 
 ## Every file has exactly one outcome
 
 | Primary outcome | Files |
 |---|---:|
-| `rights-review` | 568 |
-| `client-confidential` | 40 |
+| `rights-review` | 561 |
+| `client-confidential` | 47 |
 | `deduplicated` | 31 |
 | `incomplete-placeholder` | 10 |
 | `excluded-non-resource` | 2 |
@@ -149,7 +154,7 @@ confidential rather than as a duplicate of another client file.
 The 10 `.icloud` entries are stubs — the real files were never present locally,
 so nothing about them can be verified and none is treated as a resource.
 
-**568 files reaching `rights-review` is the finding, not a failure to classify.**
+**561 files reaching `rights-review` is the finding, not a failure to classify.**
 The vault is overwhelmingly third-party: Twinkl and Teachers-Pay-Teachers
 worksheets, commercial OT company material, publisher workbooks, and standardised
 instruments (the COPM booklet at 372 form fields, MOHOST at 412) that must never

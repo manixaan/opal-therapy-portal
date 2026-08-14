@@ -110,6 +110,11 @@ const MIME_BY_FORMAT = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   png: 'image/png',
   jpg: 'image/jpeg',
+  // 'jpeg' is not currently a permitted `format` value (migration 026 lists
+  // 'jpg'), but the preview policy's inline allow-list accepts both spellings.
+  // Without this key a row spelled 'jpeg' would be served inline as
+  // application/octet-stream — the two lists must not disagree about a format.
+  jpeg: 'image/jpeg',
 };
 
 function mimeForFormat(format) {

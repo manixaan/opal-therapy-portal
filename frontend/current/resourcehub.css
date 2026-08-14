@@ -395,6 +395,13 @@
 
 .rh2-file { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .rh2-file-meta { font-size: 13px; color: var(--ink-soft); }
+/* Preview and Download sit together as one action group, so a file reads as
+   "here are the two things you can do", not as two unrelated controls. */
+.rh2-file-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Said quietly and in the row itself: the absence of a Preview control is
+   explained where the missing control would have been. */
+.rh2-file-nopv { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.rh2-file-skel { margin-top: 8px; }
 .rh2-file-tier {
   display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 600; color: #6b4b16; background: #fdf3e0; border: 1px solid #ecd9b4;
@@ -676,3 +683,156 @@ button.rh2-ing-tile:hover { border-color: #2F5651; }
 button.rh2-ing-tile.active { border-color: #2F5651; background: #E4EFEB; }
 .rh2-ing-n { font-size: 22px; font-weight: 600; color: #2F5651; line-height: 1.1; }
 .rh2-ing-l { font-size: 12px; color: #566E70; }
+
+/* ── Document preview pane ──────────────────────────────────────────────────
+   A viewer inside the Files card. It borrows the FCA builder's visual grammar
+   deliberately — chrome bar, grey canvas, white page — because a therapist who
+   has read a report preview should recognise this one on sight.
+
+   Every colour is a token from the portal palette (mockup_v3.html :root) apart
+   from the canvas and the paper, which are literal on purpose: a PDF page and a
+   Word page are white paper, and inverting the surface they sit on under a dark
+   theme is what made the FCA panel read as a black rectangle. Only the chrome
+   follows the theme. */
+.rh2-pv {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+/* The pane takes focus when it opens, so it needs a ring of its own. */
+.rh2-pv:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.rh2-pv-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); background: var(--panel);
+}
+.rh2-pv-title {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rh2-pv-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.rh2-pv-btn {
+  border: 1px solid var(--border); background: var(--panel);
+  border-radius: var(--radius-sm); padding: 4px 9px;
+  font: inherit; font-size: 12px; line-height: 1.4; color: var(--ink);
+  cursor: pointer; white-space: nowrap; min-width: 30px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.rh2-pv-btn:hover:not([disabled]) { background: var(--accent-soft); border-color: var(--accent); }
+/* A visible ring on every control, not just on hover. */
+.rh2-pv-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rh2-pv-btn[disabled] { opacity: .45; cursor: default; }
+.rh2-pv-btn.is-on {
+  background: var(--accent-soft); border-color: var(--accent);
+  color: var(--accent-deep); font-weight: 600;
+}
+/* --ink-soft on --panel is 7.3:1; the read-outs clear AA comfortably. */
+.rh2-pv-pos { font-size: 12px; color: var(--ink-soft); padding: 0 4px; white-space: nowrap; }
+.rh2-pv-zoom { font-size: 12px; color: var(--ink-soft); min-width: 42px; text-align: center; }
+.rh2-pv-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+.rh2-pv-stage {
+  position: relative; overflow: auto;
+  background: #e9e9e6; padding: 18px 14px;
+  min-height: clamp(260px, 46vh, 760px);
+  max-height: 78vh;
+  overscroll-behavior: contain;
+  display: flex; justify-content: center;
+}
+
+/* One sheet of paper on the canvas. */
+.rh2-pv-page {
+  background: #fff; border: 1px solid #cfcec9; border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .10), 0 4px 14px rgba(0, 0, 0, .12);
+  align-self: flex-start; max-width: 100%;
+}
+.rh2-pv-canvas { display: block; max-width: 100%; height: auto; }
+
+.rh2-pv-imgwrap { display: flex; align-items: flex-start; justify-content: center; width: 100%; }
+.rh2-pv-img {
+  max-width: 100%; height: auto; background: #fff;
+  border: 1px solid #cfcec9; border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .10);
+}
+
+/* docx-preview prefixes its classes with the `className` option, so the wrapper
+   is .rh2-pv-docx-render-wrapper and each page is a <section>. The stage is in
+   the selector because the renderer injects its own stylesheet into the host
+   when it draws, and an equally specific rule of ours would lose on source
+   order — which is how those pages keep a default 30px margin and a heavy
+   default shadow elsewhere. */
+.rh2-pv-docx { width: 100%; }
+.rh2-pv-docx .rh2-pv-docx-render-wrapper {
+  background: transparent; padding: 0; margin: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+}
+.rh2-pv-stage .rh2-pv-docx .rh2-pv-docx-render-wrapper > section {
+  margin: 0; color: #111; background: #fff;
+  border: 1px solid #cfcec9; border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .10), 0 4px 14px rgba(0, 0, 0, .12);
+  box-sizing: border-box; flex: none;
+}
+
+/* ── The non-drawing states ─────────────────────────────────────────────────
+   Loading, unavailable and error are three different answers and are three
+   different shapes. None of them is a spinner that can hang: the loader has a
+   timeout behind it and lands on the error state, which offers a retry. */
+.rh2-pv-state {
+  align-self: center; max-width: 520px; width: 100%;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 18px 20px; text-align: left;
+}
+.rh2-pv-state-h { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--ink); }
+.rh2-pv-state-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.rh2-pv-loading { border-style: dashed; }
+.rh2-pv-skel .rh2-skel:first-child { margin-top: 0; }
+/* Warn palette, same pair the file-tier chip uses — 8.2:1 on its own ground. */
+.rh2-pv-unavailable, .rh2-pv-error {
+  background: var(--warn-soft); border-color: #ecd9b4; color: #6b4b16;
+}
+.rh2-pv-unavailable .rh2-pv-state-h, .rh2-pv-error .rh2-pv-state-h { color: #6b4b16; }
+.rh2-pv-unavailable .rh2-quiet, .rh2-pv-error .rh2-quiet { color: #6b4b16; }
+
+.rh2-pv-bundle-h { margin: 12px 0 4px; font-size: 13px; font-weight: 600; }
+.rh2-pv-members {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 240px; overflow: auto;
+  font-size: 13px; color: var(--ink-soft);
+}
+.rh2-pv-members li {
+  display: flex; gap: 12px; justify-content: space-between; align-items: baseline;
+  padding: 4px 0; border-bottom: 1px solid var(--border-soft);
+}
+.rh2-pv-members li:last-child { border-bottom: none; }
+.rh2-pv-member-n { word-break: break-word; }
+.rh2-pv-member-s { color: var(--muted); white-space: nowrap; font-size: 12px; }
+
+.rh2-pv-note {
+  margin: 0; padding: 8px 12px; font-size: 12.5px; line-height: 1.5;
+  color: var(--ink-soft); background: var(--panel); border-top: 1px solid var(--border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh2-pv-btn { transition: none; }
+}
+
+@media (max-width: 760px) {
+  .rh2-pv-bar { padding: 8px; }
+  .rh2-pv-title { width: 100%; }
+  .rh2-pv-stage { padding: 12px 8px; min-height: 240px; }
+  .rh2-file-actions { width: 100%; }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Chrome only. The canvas and the paper above stay as they are — a page is
+     white paper in every theme. */
+  .rh2-pv-unavailable, .rh2-pv-error {
+    color: #f0d9a8; background: rgba(122, 91, 26, .2); border-color: rgba(122, 91, 26, .45);
+  }
+  .rh2-pv-unavailable .rh2-pv-state-h, .rh2-pv-error .rh2-pv-state-h { color: #f0d9a8; }
+  .rh2-pv-unavailable .rh2-quiet, .rh2-pv-error .rh2-quiet { color: #f0d9a8; }
+}

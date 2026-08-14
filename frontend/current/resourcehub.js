@@ -277,6 +277,27 @@
     external_link: 'forward', video: 'forward', pd_event: 'spark',
   };
 
+  /* ── Preview renderers ────────────────────────────────────────────────────
+     Both viewers are vendored and served from this origin. Nothing here ever
+     hands a clinical document to a third-party viewer: a Google Docs or Office
+     Online preview URL would post the file — and the fact that Opal holds it —
+     to someone else's server, which is exactly what a governed library exists
+     to prevent. PDF.js is loaded the same way whodas.js loads it (dynamic ESM
+     import, worker pinned before first use); docx-preview and its JSZip peer
+     are already on the page as globals for the FCA builder. */
+  var PDFJS_SRC = '/vendor/pdfjs/pdf.min.mjs';
+  var PDFJS_WORKER = '/vendor/pdfjs/pdf.worker.min.mjs';
+
+  /* Longest a preview may sit on its skeleton before it gives up and offers
+     Try again. A spinner with no end is worse than an honest failure. */
+  var PREVIEW_TIMEOUT_MS = 30000;
+  var ZOOM_MIN = 0.4, ZOOM_MAX = 3, ZOOM_STEP = 0.15;
+
+  /* The kinds this client can actually draw. Anything else — including a kind
+     a newer server invents — is reported as "no preview" rather than rendered
+     as an empty box. */
+  var PREVIEW_KINDS = ['pdf', 'image', 'docx', 'bundle'];
+
   // ── State ─────────────────────────────────────────────────────────────────
 
   var S = {
@@ -303,6 +324,22 @@
     home: null, homeLoading: false,
     lib: { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
+    /* The open document preview. Deliberately its own branch rather than a
+       field of `detail`: the pane survives a detail re-render, owns an
+       AbortController and a PDF.js document handle, and has a lifecycle that
+       has nothing to do with the resource record it happens to sit under.
+       `rev` is the supersede guard — every reset bumps it, and every async
+       continuation drops itself when it no longer matches. */
+    preview: {
+      fileId: null, file: null,
+      rev: 0, drawSeq: 0,
+      status: 'idle',        // idle | loading | ready | unavailable | error
+      err: '', liveMsg: '',
+      kind: '', reason: '', pageCount: null, hasFillableFields: false,
+      inlineUrl: '', members: null,
+      page: 1, zoom: 1, fit: true,
+      pdf: null, ctrl: null, timer: null,
+    },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
     admin: {
       tab: 'content', status: '', q: '', list: null, loading: false,
@@ -339,6 +376,10 @@
     // the right screen without parsing our markup.
     host.dataset.view = S.view;
     host.dataset.collection = (S.view === 'library' && S.lib && S.lib.collection) ? S.lib.collection : '';
+    /* render() replaces the whole surface, so a drawn canvas or a rendered
+       Word document does not survive it. Anything the string renderer cannot
+       express is put back here, once, and only if it is actually missing. */
+    ensurePreviewDrawn();
   }
 
   function renderNav() {
@@ -370,6 +411,10 @@
       S.lib.saved = false;
       S.lib.rows = null;
     }
+    // Leaving the detail view takes the preview with it: nothing else on the
+    // hub has a pane to draw into, so a preview left running would be a fetch
+    // and a render for markup that no longer exists.
+    if (S.view === 'detail') resetPreview();
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
     if (view === 'library' && !S.lib.rows) loadLibrary();
@@ -710,6 +755,10 @@
   // ── DETAIL ────────────────────────────────────────────────────────────────
 
   async function openDetail(id, backView) {
+    // A preview belongs to the file it was opened from. Moving to another
+    // resource ends it — and, because resetPreview() bumps the supersede
+    // counter, ends any fetch or render still in flight for the old one.
+    resetPreview();
     S.detail = { id: id, data: null, loading: true, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: backView || S.view, files: null, filesLoading: false, filesErr: '' };
     S.view = 'detail';
     render();
@@ -864,10 +913,62 @@
      The status line is an aria-live region so a screen reader hears the list
      arrive, and each action is a real link so it is keyboard reachable and
      focusable without extra work. */
+  /* The label on a file's DOWNLOAD control, and nothing else.
+     It used to read "View or download PDF" on the primary file, which promised
+     a viewer the hub did not have: the control downloaded, every time, and the
+     word "view" was the app describing a capability it lacked. Viewing is now
+     a separate control that genuinely views, so this one says only what it
+     does. Every branch begins with the verb "Download". */
   function fileActionLabel(f) {
-    if (f.isPrimary && f.format === 'pdf') return 'View or download PDF';
-    if (f.format === 'docx') return 'Editable Word version';
-    return 'Download ' + esc(String(f.format || 'file').toUpperCase());
+    var fmt = String((f && f.format) || '').toLowerCase();
+    if (fmt === 'pdf') return 'Download PDF';
+    // isEditableVariant is the server's judgement — a Word file offered
+    // alongside a PDF of the same resource. The client does not infer it.
+    if (fmt === 'docx' || fmt === 'doc') {
+      return f && f.isEditableVariant ? 'Download editable Word version' : 'Download Word document';
+    }
+    if (fmt === 'zip') return 'Download pack';
+    return 'Download ' + String(f && f.format ? f.format : 'file').toUpperCase();
+  }
+
+  /* Whether to offer a Preview control at all.
+
+     The answer is the server's `previewKind`, never a guess from the file
+     extension. A projection that does not carry previewKind (an older server)
+     means "unknown", and unknown offers nothing — showing a Preview button
+     that might land on an empty viewer would repeat, in a new place, exactly
+     the mistake the old label made. */
+  function canPreviewFile(f) {
+    return !!f && PREVIEW_KINDS.indexOf(String(f.previewKind || '')) !== -1;
+  }
+
+  /* Said in the list when the server has already told us there is no viewer.
+     It states what the app can do, not why the file is what it is — the
+     reasoning belongs to the server and is shown verbatim in the pane. */
+  function noPreviewNote() {
+    return 'No in-browser preview for this format — download it to open.';
+  }
+
+  function fileNameOf(f) {
+    return String((f && (f.fileName || f.name)) || 'this file');
+  }
+
+  /**
+   * The preview-metadata URL for a file, DERIVED from the download URL the
+   * server supplied rather than composed from an id here.
+   *
+   * The hub's standing rule is that the browser never builds a files path: the
+   * id in that URL is the server's own, handed back untouched. Adding a preview
+   * pane is not a reason to start composing them, so this appends a segment to
+   * a URL the server already vouched for and nothing more. A query string is
+   * kept off the path, so a future `?v=` on the download URL cannot corrupt it.
+   */
+  function previewUrlFor(f) {
+    var base = String((f && f.downloadUrl) || '');
+    if (!base) return '';
+    var q = base.indexOf('?');
+    var path = (q === -1 ? base : base.slice(0, q)).replace(/\/+$/, '');
+    return path ? path + '/preview' : '';
   }
 
   function fileSizeLabel(bytes) {
@@ -882,8 +983,13 @@
     var out = '<section class="rh2-card rh2-files" aria-labelledby="rh2-files-h">'
       + '<h2 class="rh2-files-h" id="rh2-files-h">Files</h2>';
 
+    // A skeleton rather than a line of text: the list arrives as rows, so the
+    // waiting state is shaped like rows. The spoken form stays a sentence.
     if (st.filesLoading) {
-      out += '<p class="rh2-quiet" role="status">Loading files…</p></section>';
+      out += '<div class="rh2-file-skel" role="status">'
+        + '<span class="rh2-visually-hidden">Loading files…</span>'
+        + '<span aria-hidden="true">' + skel(2, 38) + '</span>'
+        + '</div></section>';
       return out;
     }
     if (st.filesErr) {
@@ -904,20 +1010,43 @@
       var restricted = f.effectiveAccessTier && f.effectiveAccessTier !== 'staff';
       var meta = [String(f.format || '').toUpperCase(), fileSizeLabel(f.sizeBytes)]
         .filter(Boolean).join(' · ');
+      var metaId = 'rh2-file-meta-' + esc(f.id);
+      var name = fileNameOf(f);
+      var open = String(S.preview.fileId) === String(f.id);
+      var canPv = canPreviewFile(f);
       out += '<li class="rh2-file' + (f.isPrimary ? ' rh2-file-primary' : '') + '">'
-        + '<a class="rh2-btn ' + (f.isPrimary ? 'rh2-btn-primary' : '') + '" '
+        + '<span class="rh2-file-actions">';
+      // Preview and Download are two controls that each do one thing. The
+      // emphasis sits on Preview for the primary file because looking is the
+      // common intent; downloading is one press away either way.
+      if (canPv) {
+        out += '<button type="button" class="rh2-btn'
+          + (f.isPrimary ? ' rh2-btn-primary' : '') + ' rh2-file-pv-btn" '
+          + 'data-rh2-file="' + esc(f.id) + '" '
+          + 'onclick="RH2.togglePreview(\'' + esc(f.id) + '\')" '
+          + 'aria-expanded="' + (open ? 'true' : 'false') + '" aria-controls="rh2-pv" '
+          + 'aria-label="' + esc((open ? 'Hide preview of ' : 'Preview ') + name) + '" '
+          + 'aria-describedby="' + metaId + '">'
+          + (open ? 'Hide preview' : 'Preview') + '</button>';
+      }
+      out += '<a class="rh2-btn' + (canPv || !f.isPrimary ? '' : ' rh2-btn-primary') + '" '
         + 'href="' + esc(f.downloadUrl) + '" download '
-        + 'aria-describedby="rh2-file-meta-' + esc(f.id) + '">'
+        + 'aria-label="' + esc(fileActionLabel(f) + ' — ' + name) + '" '
+        + 'aria-describedby="' + metaId + '">'
         + esc(fileActionLabel(f)) + '</a>'
-        + '<span class="rh2-file-meta" id="rh2-file-meta-' + esc(f.id) + '">'
+        + '</span>'
+        + '<span class="rh2-file-meta" id="' + metaId + '">'
         + esc(f.fileName || '') + (meta ? ' <span class="rh2-quiet">(' + esc(meta) + ')</span>' : '')
         + (restricted
           ? ' <span class="rh2-file-tier">' + esc(tierLabel(f.effectiveAccessTier)) + '</span>'
           : '')
+        + (canPv ? '' : ' <span class="rh2-file-nopv">' + esc(noPreviewNote()) + '</span>')
         + '</span>'
         + '</li>';
     }
-    out += '</ul></section>';
+    out += '</ul>';
+    out += renderPreviewPane();
+    out += '</section>';
     return out;
   }
 
@@ -925,6 +1054,635 @@
     if (tier === 'clinician') return 'Clinician access';
     if (tier === 'admin') return 'Administrator access';
     return '';
+  }
+
+  /* ══ DOCUMENT PREVIEW ═══════════════════════════════════════════════════════
+
+     A pane inside the Files card that shows a file rather than describing it.
+
+     What it will and will not do:
+       - It asks GET <downloadUrl>/preview what kind of preview is possible and
+         renders exactly that. It never sniffs the format itself, because the
+         server is the only party that has seen the bytes.
+       - It has four visible states — loading, ready, unavailable and error —
+         and they are all real. "Unavailable" is an ordinary answer, not a
+         failure: this environment has no LibreOffice, no pandoc and no
+         ghostscript, so legacy .doc/.ppt/.pptx genuinely cannot be rendered,
+         and saying so plainly beats an empty viewer.
+       - It draws with the vendored PDF.js and docx-preview only. No public
+         document viewer is ever involved — sending a clinical file to one
+         would publish it, and nothing here has that right.
+       - It never rewrites what it is given. A fillable PDF previews read-only
+         and the download stays the untouched interactive original; the pane
+         says so rather than quietly handing back something flattened.
+       - Every async continuation is fenced by `rev`. Switching file, switching
+         resource or leaving the view bumps it, so a slow response can never
+         paint over a newer one or strand the pane on its skeleton. */
+
+  var pdfjsLib = null;
+
+  function loadPdfJs() {
+    if (pdfjsLib) return Promise.resolve(pdfjsLib);
+    return import(PDFJS_SRC).then(function (lib) {
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      pdfjsLib = lib;
+      return lib;
+    });
+  }
+
+  function pvEl(id) { return doc.getElementById(id); }
+
+  /**
+   * Tear the pane down and invalidate everything running for it.
+   *
+   * The counter bump is the important half: aborting a fetch handles the
+   * network, but a PDF.js page render and a docx-preview render are promises
+   * with no abort, so their continuations have to drop themselves.
+   */
+  function resetPreview() {
+    var p = S.preview;
+    p.rev += 1;
+    if (p.ctrl) { try { p.ctrl.abort(); } catch (_) {} }
+    if (p.timer) { clearTimeout(p.timer); }
+    if (p.pdf && typeof p.pdf.destroy === 'function') { try { p.pdf.destroy(); } catch (_) {} }
+    p.ctrl = null; p.timer = null; p.pdf = null;
+    p.fileId = null; p.file = null;
+    p.status = 'idle'; p.err = ''; p.liveMsg = '';
+    p.kind = ''; p.reason = ''; p.pageCount = null;
+    p.hasFillableFields = false; p.inlineUrl = ''; p.members = null;
+    p.page = 1; p.zoom = 1; p.fit = true;
+  }
+
+  function togglePreview(fileId) {
+    if (String(S.preview.fileId) === String(fileId)) { closePreview(); return; }
+    openPreview(fileId);
+  }
+
+  function openPreview(fileId) {
+    var files = (S.detail && S.detail.files) || [];
+    var f = null;
+    for (var i = 0; i < files.length; i++) {
+      if (String(files[i].id) === String(fileId)) { f = files[i]; break; }
+    }
+    // The list is the server's authorised projection. A file it did not return
+    // is a file this user may not have, and no amount of client state changes
+    // that — so there is nothing to open.
+    if (!f || !canPreviewFile(f)) return;
+
+    resetPreview();
+    var p = S.preview;
+    p.fileId = f.id;
+    p.file = f;
+    p.status = 'loading';
+    render();
+    focusPreview();
+    announce('Preparing the preview.');
+    loadPreviewMeta(p.rev, f);
+  }
+
+  function closePreview() {
+    var wasId = S.preview.fileId;
+    resetPreview();
+    render();
+    // Focus would otherwise fall to the top of the document. Put it back on the
+    // control the user pressed, which is where they expect to be.
+    if (wasId) {
+      var back = doc.querySelector('.rh2-file-pv-btn[data-rh2-file="'
+        + String(wasId).replace(/["\\]/g, '') + '"]');
+      if (back && typeof back.focus === 'function') { try { back.focus(); } catch (_) {} }
+    }
+  }
+
+  function previewRetry() {
+    var id = S.preview.fileId;
+    if (!id) return;
+    openPreview(id);
+  }
+
+  function focusPreview() {
+    var pane = pvEl('rh2-pv');
+    if (!pane || typeof pane.focus !== 'function') return;
+    try { pane.focus({ preventScroll: true }); } catch (_) { pane.focus(); }
+  }
+
+  /** The pane's spoken status channel, separate from the page read-out. */
+  function announce(msg) {
+    S.preview.liveMsg = String(msg || '');
+    var live = pvEl('rh2-pv-live');
+    if (live) live.textContent = S.preview.liveMsg;
+  }
+
+  /**
+   * Only a root-relative, same-origin path is ever fetched or drawn.
+   *
+   * The server supplies inlineUrl, so this is not a trust boundary so much as a
+   * blast door: a viewer that will fetch and render whatever string it is
+   * handed should refuse to point at another origin. '//host/x' is a
+   * protocol-relative URL, which is why the second character is checked too.
+   */
+  function safeInlineUrl(u) {
+    var s = String(u == null ? '' : u);
+    // A backslash counts as a slash here. WHATWG URL resolution treats '/\' the
+    // same as '//', so '/\evil.example/x' passes a check that only looks for a
+    // second forward slash and then resolves to another origin.
+    return /^\/[^/\\]/.test(s) ? s : '';
+  }
+
+  async function loadPreviewMeta(rev, f) {
+    var p = S.preview;
+    var url = previewUrlFor(f);
+    if (!url) { failPreview(rev, 'no_url'); return; }
+
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    p.ctrl = ctrl;
+    p.timer = setTimeout(function () {
+      if (rev !== S.preview.rev) return;
+      if (ctrl) { try { ctrl.abort(); } catch (_) {} }
+      else failPreview(rev, 'timed_out');    // no AbortController: fail anyway
+    }, PREVIEW_TIMEOUT_MS);
+
+    try {
+      var r = await fetch(url, {
+        credentials: 'include',
+        cache: 'no-store',
+        signal: ctrl ? ctrl.signal : undefined,
+      });
+      if (rev !== S.preview.rev) return;
+      if (!r.ok) throw new Error(r.status === 404 ? 'not_found' : 'meta_failed');
+      var data = await r.json();
+      if (rev !== S.preview.rev) return;
+      clearTimeout(p.timer); p.timer = null; p.ctrl = null;
+      applyPreviewMeta(data);
+      paintPreview();
+      announce(previewStatusText());
+    } catch (err) {
+      if (rev !== S.preview.rev) return;
+      failPreview(rev, (err && err.name === 'AbortError') ? 'timed_out'
+        : ((err && err.message) || 'meta_failed'));
+    }
+  }
+
+  /* Everything shown about a preview is the server's answer, copied. The client
+     adds no judgement of its own — not the page count, not whether the form is
+     fillable, not whether it may be rendered. */
+  function applyPreviewMeta(data) {
+    var p = S.preview;
+    var kind = String((data && data.previewKind) || 'none');
+    p.reason = String((data && data.reason) || '');
+    p.pageCount = (data && typeof data.pageCount === 'number' && data.pageCount > 0)
+      ? data.pageCount : null;
+    p.hasFillableFields = !!(data && data.hasFillableFields);
+    p.members = (data && data.members && data.members.length) ? data.members : null;
+    p.inlineUrl = safeInlineUrl(data && data.inlineUrl);
+
+    // 'none' is expected. So is a kind this build cannot draw, and so is a
+    // previewable kind with no usable URL — all three end in the same honest
+    // state rather than an empty viewer.
+    var drawable = PREVIEW_KINDS.indexOf(kind) !== -1;
+    if (!drawable || (kind !== 'bundle' && !p.inlineUrl)) {
+      p.kind = 'none';
+      p.status = 'unavailable';
+      if (!p.reason) p.reason = 'This file cannot be shown in the browser.';
+      return;
+    }
+    p.kind = kind;
+    p.page = 1;
+    p.status = 'ready';
+  }
+
+  function failPreview(rev, code) {
+    if (rev !== S.preview.rev) return;
+    var p = S.preview;
+    if (p.timer) { clearTimeout(p.timer); p.timer = null; }
+    p.ctrl = null;
+    p.status = 'error';
+    p.err = String(code || 'render_failed');
+    paintPreview();
+    announce(previewErrorText(p.err));
+  }
+
+  /* Plain words, and never a claim the client cannot support. In particular a
+     404 is deliberately ambiguous on the server — it is the same answer for
+     "no such file" and "not yours" — so the text here stays equally ambiguous.
+     Saying "you do not have access" would confirm the file exists. */
+  function previewErrorText(code) {
+    if (code === 'timed_out') {
+      return 'The preview took too long to load. The file itself is fine — you can still download it.';
+    }
+    if (code === 'renderer_unavailable') {
+      return 'The document viewer did not load, so there is nothing to show here. You can still download the file.';
+    }
+    if (code === 'not_found') {
+      return 'This file could not be opened. It may have been withdrawn.';
+    }
+    return 'The preview could not be loaded.';
+  }
+
+  function previewStatusText() {
+    var p = S.preview;
+    if (p.status === 'unavailable') return 'No preview available. ' + p.reason;
+    if (p.status !== 'ready') return '';
+    if (p.kind === 'pdf') return 'Preview ready. ' + pagePositionText() + '.';
+    if (p.kind === 'bundle') return 'Pack contents listed.';
+    return 'Preview ready.';
+  }
+
+  function pagePositionText() {
+    var p = S.preview;
+    return 'Page ' + p.page + ' of ' + (p.pageCount || 1);
+  }
+
+  // ── Pane markup ───────────────────────────────────────────────────────────
+
+  function renderPreviewPane() {
+    var p = S.preview;
+    if (!p.fileId) return '';
+    var name = fileNameOf(p.file);
+    /* tabindex="-1" so opening can move focus here; the region label names the
+       document, which is also the text alternative for the drawn page. */
+    return '<section class="rh2-pv" id="rh2-pv" tabindex="-1" role="region"'
+      + ' aria-label="' + esc('Document preview: ' + name) + '"'
+      + ' onkeydown="RH2.previewKey(event)">'
+      + '<div class="rh2-pv-bar" id="rh2-pv-bar" role="toolbar" aria-label="Preview controls">'
+      + renderPreviewTools() + '</div>'
+      + '<div class="rh2-pv-stage" id="rh2-pv-stage">' + renderPreviewStage() + '</div>'
+      + '<p class="rh2-visually-hidden" id="rh2-pv-live" role="status" aria-live="polite">'
+      + esc(p.liveMsg) + '</p>'
+      + renderPreviewNote()
+      + '</section>';
+  }
+
+  /* Every control carries a real accessible name. The page read-out is the
+     live region for position: it is updated in place by paintNav() rather than
+     rebuilt, because replacing a live node is the reliable way to have an
+     announcement swallowed. */
+  function renderPreviewTools() {
+    var p = S.preview;
+    var out = '<span class="rh2-pv-title">' + esc(previewToolbarTitle()) + '</span>'
+      + '<span class="rh2-pv-tools">';
+
+    if (p.status === 'ready' && p.kind === 'pdf') {
+      var total = p.pageCount || 1;
+      out += '<button type="button" class="rh2-pv-btn" id="rh2-pv-prev"'
+        + ' onclick="RH2.previewPage(-1)" aria-label="Previous page"'
+        + (p.page <= 1 ? ' disabled' : '') + '><span aria-hidden="true">&lsaquo;</span></button>'
+        + '<span class="rh2-pv-pos" id="rh2-pv-pos" aria-live="polite">'
+        + esc(pagePositionText()) + '</span>'
+        + '<button type="button" class="rh2-pv-btn" id="rh2-pv-next"'
+        + ' onclick="RH2.previewPage(1)" aria-label="Next page"'
+        + (p.page >= total ? ' disabled' : '') + '><span aria-hidden="true">&rsaquo;</span></button>'
+        + '<span class="rh2-pv-sep" aria-hidden="true"></span>'
+        + '<button type="button" class="rh2-pv-btn" onclick="RH2.previewZoom(\'out\')"'
+        + ' aria-label="Zoom out"><span aria-hidden="true">&minus;</span></button>'
+        + '<span class="rh2-pv-zoom" id="rh2-pv-zoom">' + Math.round(p.zoom * 100) + '%</span>'
+        + '<button type="button" class="rh2-pv-btn" onclick="RH2.previewZoom(\'in\')"'
+        + ' aria-label="Zoom in"><span aria-hidden="true">+</span></button>'
+        + '<button type="button" class="rh2-pv-btn' + (p.fit ? ' is-on' : '') + '" id="rh2-pv-fit"'
+        + ' onclick="RH2.previewZoom(\'fit\')" aria-label="Fit the page to the width of the panel"'
+        + ' aria-pressed="' + (p.fit ? 'true' : 'false') + '">Fit</button>';
+    }
+
+    out += '<button type="button" class="rh2-pv-btn" onclick="RH2.closePreview()"'
+      + ' aria-label="Close the preview">Close</button>';
+    return out + '</span>';
+  }
+
+  function previewToolbarTitle() {
+    var p = S.preview;
+    var n = fileNameOf(p.file);
+    return n === 'this file' ? 'Preview' : 'Preview — ' + n;
+  }
+
+  /**
+   * The stage, by state.
+   *
+   * pdf and docx return '' here on purpose: their content is drawn by
+   * ensurePreviewDrawn() after the markup lands, because a canvas and a
+   * docx-preview tree cannot be expressed as a string.
+   */
+  function renderPreviewStage() {
+    var p = S.preview;
+
+    if (p.status === 'loading') {
+      return '<div class="rh2-pv-state rh2-pv-loading">'
+        + '<span class="rh2-visually-hidden">Preparing the preview…</span>'
+        + '<div class="rh2-pv-skel" aria-hidden="true">' + skel(3, 58) + '</div>'
+        + '</div>';
+    }
+
+    if (p.status === 'error') {
+      return '<div class="rh2-pv-state rh2-pv-error">'
+        + '<p class="rh2-pv-state-h">' + esc(previewErrorText(p.err)) + '</p>'
+        + '<div class="rh2-pv-state-actions">'
+        + '<button type="button" class="rh2-btn" onclick="RH2.previewRetry()">Try again</button>'
+        + previewDownloadHtml()
+        + '</div></div>';
+    }
+
+    if (p.status === 'unavailable') {
+      return '<div class="rh2-pv-state rh2-pv-unavailable">'
+        + '<p class="rh2-pv-state-h">This file cannot be shown in the browser.</p>'
+        + '<p class="rh2-quiet">' + esc(p.reason) + '</p>'
+        + '<div class="rh2-pv-state-actions">' + previewDownloadHtml() + '</div>'
+        + '</div>';
+    }
+
+    if (p.status === 'ready' && p.kind === 'bundle') return renderPreviewBundle();
+    if (p.status === 'ready' && p.kind === 'image') {
+      /* The only text alternative honestly available is the document's own
+         name — the client has not read the picture and will not invent a
+         description of clinical material. */
+      return '<div class="rh2-pv-imgwrap">'
+        + '<img class="rh2-pv-img" src="' + esc(p.inlineUrl) + '"'
+        + ' alt="' + esc(fileNameOf(p.file)) + '"'
+        + ' onerror="RH2.previewImgError()">'
+        + '</div>';
+    }
+    return '';
+  }
+
+  /* A pack is listed, never unpacked. Member names come from the server
+     already sanitised and are escaped again here; nothing is extracted, and no
+     member is individually fetchable, because the pack is one governed file. */
+  function renderPreviewBundle() {
+    var m = S.preview.members || [];
+    var out = '<div class="rh2-pv-state rh2-pv-bundle">'
+      + '<p class="rh2-pv-state-h">This is a downloadable pack.</p>'
+      + '<p class="rh2-quiet">Packs are not opened in the browser. Download the pack to '
+      + 'use the documents inside it.</p>';
+    if (m.length) {
+      out += '<p class="rh2-pv-bundle-h" id="rh2-pv-bundle-h">'
+        + m.length + (m.length === 1 ? ' item in this pack' : ' items in this pack') + '</p>'
+        + '<ul class="rh2-pv-members" aria-labelledby="rh2-pv-bundle-h">';
+      for (var i = 0; i < m.length; i++) {
+        out += '<li><span class="rh2-pv-member-n">' + esc(m[i] && m[i].name) + '</span>'
+          + '<span class="rh2-pv-member-s">' + esc(fileSizeLabel(m[i] && m[i].bytes)) + '</span></li>';
+      }
+      out += '</ul>';
+    }
+    return out + '<div class="rh2-pv-state-actions">' + previewDownloadHtml() + '</div></div>';
+  }
+
+  /* Every dead end offers the way out. The href is the same server-supplied
+     download URL the list uses — never rebuilt. */
+  function previewDownloadHtml() {
+    var f = S.preview.file;
+    if (!f || !f.downloadUrl) return '';
+    return '<a class="rh2-btn rh2-btn-primary" href="' + esc(f.downloadUrl) + '" download'
+      + ' aria-label="' + esc(fileActionLabel(f) + ' — ' + fileNameOf(f)) + '">'
+      + esc(fileActionLabel(f)) + '</a>';
+  }
+
+  function renderPreviewNote() {
+    var p = S.preview;
+    if (p.status !== 'ready') return '';
+    if (p.kind === 'pdf' && p.hasFillableFields) {
+      return '<p class="rh2-pv-note">This form has fillable fields. The preview is '
+        + 'read-only — download it to fill it in. The download is the original form, '
+        + 'unchanged: nothing here flattens it or regenerates it.</p>';
+    }
+    if (p.kind === 'pdf') {
+      return '<p class="rh2-pv-note">Preview only. Download the file to print or share it.</p>';
+    }
+    if (p.kind === 'docx') {
+      return '<p class="rh2-pv-note">An on-screen approximation. Download the file to see '
+        + 'it exactly as Word lays it out.</p>';
+    }
+    return '';
+  }
+
+  // ── Painting without a full render ────────────────────────────────────────
+
+  /* Toolbar and stage only. Used for state transitions inside an open pane, so
+     the surrounding detail view — and the user's scroll position in it — is
+     left alone. */
+  function paintPreview() {
+    if (!pvEl('rh2-pv')) { render(); return; }
+    var bar = pvEl('rh2-pv-bar');
+    if (bar) bar.innerHTML = renderPreviewTools();
+    var stage = pvEl('rh2-pv-stage');
+    if (stage) stage.innerHTML = renderPreviewStage();
+    var note = doc.querySelector('#rh2-pv .rh2-pv-note');
+    if (note) note.remove();
+    var pane = pvEl('rh2-pv');
+    if (pane) {
+      var extra = renderPreviewNote();
+      if (extra) pane.insertAdjacentHTML('beforeend', extra);
+    }
+    ensurePreviewDrawn();
+  }
+
+  /* Page position and the buttons that depend on it, updated IN PLACE. The
+     read-out node survives, so the polite announcement actually fires. */
+  function paintNav() {
+    var p = S.preview;
+    var total = p.pageCount || 1;
+    var prev = pvEl('rh2-pv-prev');
+    var next = pvEl('rh2-pv-next');
+    if (prev) prev.disabled = p.page <= 1;
+    if (next) next.disabled = p.page >= total;
+    var pos = pvEl('rh2-pv-pos');
+    if (pos) pos.textContent = pagePositionText();
+    var zoom = pvEl('rh2-pv-zoom');
+    if (zoom) zoom.textContent = Math.round(p.zoom * 100) + '%';
+    var fit = pvEl('rh2-pv-fit');
+    if (fit) {
+      fit.setAttribute('aria-pressed', p.fit ? 'true' : 'false');
+      if (fit.classList) fit.classList.toggle('is-on', !!p.fit);
+    }
+  }
+
+  /**
+   * Put back whatever the string renderer could not express.
+   *
+   * Called after every render(). It is idempotent by inspection — if the stage
+   * already holds the drawn thing, it does nothing — which is what stops the
+   * render/draw pair from looping.
+   */
+  function ensurePreviewDrawn() {
+    var p = S.preview;
+    if (!p.fileId || p.status !== 'ready') return;
+    var stage = pvEl('rh2-pv-stage');
+    if (!stage) return;
+    if (p.kind === 'pdf' && !stage.querySelector('canvas')) drawPdf();
+    else if (p.kind === 'docx' && !stage.querySelector('.rh2-pv-docx')) drawDocx();
+  }
+
+  // ── PDF ───────────────────────────────────────────────────────────────────
+
+  function drawPdf() {
+    var p = S.preview, rev = p.rev;
+    if (p.pdf) { drawPdfPage(); return; }
+    var url = p.inlineUrl;
+    if (!url) { failPreview(rev, 'render_failed'); return; }
+    loadPdfJs().then(function (lib) {
+      if (rev !== S.preview.rev) return null;
+      // withCredentials keeps the session cookie on the request: the byte route
+      // is governed, and an anonymous fetch would be refused — correctly.
+      return lib.getDocument({ url: url, withCredentials: true }).promise;
+    }).then(function (pdf) {
+      if (!pdf || rev !== S.preview.rev) return;
+      p.pdf = pdf;
+      // The server's page count is authoritative; this is the fallback for a
+      // response that did not carry one.
+      if (!p.pageCount) p.pageCount = pdf.numPages;
+      var bar = pvEl('rh2-pv-bar');
+      if (bar) bar.innerHTML = renderPreviewTools();
+      drawPdfPage();
+    }).catch(function (err) {
+      failPreview(rev, (err && err.name === 'AbortError') ? 'timed_out' : 'render_failed');
+    });
+  }
+
+  /* Fit-width is computed from the panel the page actually has to sit in, and
+     the result is written back to `zoom` so the read-out tells the truth about
+     the scale on screen rather than showing a stale 100%. */
+  function fitScaleFor(stage, baseWidth) {
+    var avail = Math.max(220, (stage.clientWidth || 720) - 40);
+    var s = avail / (baseWidth || 720);
+    return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(s * 100) / 100));
+  }
+
+  function drawPdfPage() {
+    var p = S.preview, rev = p.rev;
+    var stage = pvEl('rh2-pv-stage');
+    if (!stage || !p.pdf) return;
+    var seq = ++p.drawSeq;
+
+    p.pdf.getPage(p.page).then(function (page) {
+      if (rev !== S.preview.rev || seq !== p.drawSeq) return;
+      var base = page.getViewport({ scale: 1 });
+      if (p.fit) p.zoom = fitScaleFor(stage, base.width);
+      var viewport = page.getViewport({ scale: p.zoom });
+
+      var canvas = doc.createElement('canvas');
+      canvas.className = 'rh2-pv-canvas';
+      // The drawing is decorative to a screen reader: the document's text
+      // alternative is the pane's own label, which names the file. A canvas
+      // announced as an unlabelled graphic would be pure noise.
+      canvas.setAttribute('aria-hidden', 'true');
+      var ratio = global.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = viewport.width + 'px';
+      canvas.style.height = viewport.height + 'px';
+      var ctx = canvas.getContext('2d');
+      ctx.scale(ratio, ratio);
+
+      return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+        if (rev !== S.preview.rev || seq !== p.drawSeq) return;
+        var host = pvEl('rh2-pv-stage');
+        if (!host) return;
+        // Swapped in one step, so there is no blank frame between pages.
+        host.innerHTML = '';
+        var wrap = doc.createElement('div');
+        wrap.className = 'rh2-pv-page';
+        wrap.appendChild(canvas);
+        host.appendChild(wrap);
+        paintNav();
+      });
+    }).catch(function () {
+      if (rev !== S.preview.rev || seq !== p.drawSeq) return;
+      failPreview(rev, 'render_failed');
+    });
+  }
+
+  function previewPage(delta) {
+    var p = S.preview;
+    if (p.kind !== 'pdf' || !p.pdf) return;
+    var total = p.pageCount || 1;
+    var next = Math.min(total, Math.max(1, p.page + (delta > 0 ? 1 : -1)));
+    if (next === p.page) return;
+    p.page = next;
+    paintNav();
+    drawPdfPage();
+  }
+
+  function previewZoom(dir) {
+    var p = S.preview;
+    if (p.kind !== 'pdf' || !p.pdf) return;
+    if (dir === 'fit') {
+      p.fit = true;
+    } else {
+      p.fit = false;
+      var step = dir === 'in' ? ZOOM_STEP : -ZOOM_STEP;
+      p.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round((p.zoom + step) * 100) / 100));
+    }
+    paintNav();
+    drawPdfPage();
+  }
+
+  /* Keyboard equivalents for the page buttons, for a reader who has scrolled
+     into the document rather than tabbed to the toolbar. Typing keys are left
+     alone so nothing is captured from a field. */
+  function previewKey(ev) {
+    if (!ev || S.preview.kind !== 'pdf') return;
+    var k = ev.key;
+    if (k === 'PageDown' || k === 'ArrowRight') { previewPage(1); ev.preventDefault(); }
+    else if (k === 'PageUp' || k === 'ArrowLeft') { previewPage(-1); ev.preventDefault(); }
+    else if (k === 'Escape') { closePreview(); ev.preventDefault(); }
+  }
+
+  // ── DOCX ──────────────────────────────────────────────────────────────────
+
+  function drawDocx() {
+    var p = S.preview, rev = p.rev;
+    // Same vendored pair the FCA preview uses, already on the page.
+    if (!global.docx || !global.JSZip) { failPreview(rev, 'renderer_unavailable'); return; }
+    var stage = pvEl('rh2-pv-stage');
+    if (!stage || !p.inlineUrl) { failPreview(rev, 'render_failed'); return; }
+
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    p.ctrl = ctrl;
+    var timer = setTimeout(function () {
+      if (rev !== S.preview.rev) return;
+      if (ctrl) { try { ctrl.abort(); } catch (_) {} }
+      else failPreview(rev, 'timed_out');
+    }, PREVIEW_TIMEOUT_MS);
+
+    fetch(p.inlineUrl, {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: ctrl ? ctrl.signal : undefined,
+    }).then(function (r) {
+      if (!r.ok) throw new Error('fetch_failed');
+      return r.arrayBuffer();
+    }).then(function (buf) {
+      if (rev !== S.preview.rev) return null;
+      // Drawn off-screen and attached in one step, so a half-built document is
+      // never on screen.
+      var staged = doc.createElement('div');
+      staged.className = 'rh2-pv-docx';
+      return global.docx.renderAsync(buf, staged, null, {
+        className: 'rh2-pv-docx-render',
+        inWrapper: true,
+        breakPages: true,
+        ignoreLastRenderedPageBreak: false,
+        renderHeaders: true,
+        renderFooters: true,
+        renderFootnotes: true,
+        renderEndnotes: true,
+        renderChanges: false,
+        experimental: true,
+        useBase64URL: true,
+      }).then(function () { return staged; });
+    }).then(function (staged) {
+      if (!staged || rev !== S.preview.rev) return;
+      clearTimeout(timer);
+      p.ctrl = null;
+      var host = pvEl('rh2-pv-stage');
+      if (!host) return;
+      host.innerHTML = '';
+      host.appendChild(staged);
+      announce('Preview ready.');
+    }).catch(function (err) {
+      clearTimeout(timer);
+      failPreview(rev, (err && err.name === 'AbortError') ? 'timed_out' : 'render_failed');
+    });
+  }
+
+  function previewImgError() {
+    failPreview(S.preview.rev, 'render_failed');
   }
 
   function renderDetail() {
@@ -2906,6 +3664,14 @@
     libInput: libInput,
     libFilter: libFilter,
     openDetail: openDetail,
+    // Document preview (inline handlers again — the module has no delegation).
+    togglePreview: togglePreview,
+    closePreview: closePreview,
+    previewRetry: previewRetry,
+    previewPage: previewPage,
+    previewZoom: previewZoom,
+    previewKey: previewKey,
+    previewImgError: previewImgError,
     toggleFav: toggleFav,
     toggleComplete: toggleComplete,
     ackStart: ackStart,

@@ -1036,14 +1036,76 @@ router.post('/api/rh2/resources/:id/reject', safe(async (req, res) => {
  * library is itself a disclosure.
  */
 const fileStorage = require('./resource-file-storage');
+const preview = require('./resource-preview');
 
 const FILE_NOT_FOUND = { error: 'Not found' };
 
+/**
+ * Deliver the bytes.
+ *
+ * `?disposition=inline` asks the browser to render the file in place instead of
+ * saving it. It changes ONE header and nothing else: the same bytes, the same
+ * allow-list Content-Type, the same guards, the same audit row. A fillable PDF
+ * is streamed exactly as stored — never flattened, never regenerated — because
+ * a form a clinician cannot type into is not the document that was reviewed.
+ *
+ * The parameter is a request, not an instruction: it is honoured only for
+ * formats the browser can render safely (see resource-preview.INLINE_FORMATS),
+ * and every other format silently stays 'attachment'.
+ *
+ * governedFile() and storedBytes() are defined immediately below, between this
+ * route and the file-list route, because they belong to BOTH and to neither
+ * alone. A function declaration is available before the line that defines it,
+ * so calling one from above is the ordinary arrangement, not an oversight.
+ */
 router.get('/api/rh2/files/:fileId', safe(async (req, res) => {
   const notFound = () => res.status(404).json(FILE_NOT_FOUND);
 
   if (!isUuid(req.params.fileId)) return notFound();
 
+  const f = await governedFile(req, req.params.fileId);
+  if (!f) return notFound();
+
+  const buf = storedBytes(f);
+  if (!buf) return notFound();
+
+  // Response. Content-Type comes from the allow-list keyed on `format`, never
+  // from the stored file_mime, so a poisoned row cannot choose how the browser
+  // interprets the bytes — and for the same reason `format` alone, never the
+  // stored MIME, decides whether inline was earned.
+  const filename = fileStorage.safeDownloadName(f.file_name, f.format);
+  const disposition = preview.dispositionFor(f.format, req.query.disposition);
+  res.setHeader('Content-Type', fileStorage.mimeForFormat(f.format));
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Length', String(buf.length));
+  // Viewing IS downloading — the same bytes leave the building either way — so
+  // it lands in the same audit action, with the disposition recorded so the log
+  // can still tell the two apart.
+  await audit(req, 'rh2.file_downloaded', f.resource_id,
+    { fileId: f.id, format: f.format, disposition });
+  // res.end rather than res.send: send() appends "; charset=utf-8" to the
+  // Content-Type, which is meaningless on a PDF or DOCX and misdescribes the
+  // bytes. end() writes exactly the type chosen from the allow-list.
+  return res.end(buf);
+}));
+
+/**
+ * The one query every file surface uses, and the one guard sequence.
+ *
+ * Extracted so the byte route, the preview route and any later file surface
+ * cannot drift apart. That drift is not hypothetical: the file list once
+ * disclosed draft resources the detail route correctly hid, and the fix was to
+ * make both apply the same rule. Two routes that each re-implement four guards
+ * will eventually implement three and a half.
+ *
+ * @returns {object|null} the joined row, or null for EVERY refusal — the caller
+ *          turns that into the one identical 404 and never learns which guard
+ *          refused, because "not allowed" and "does not exist" must be
+ *          indistinguishable from outside.
+ */
+async function governedFile(req, fileId) {
   // One query, joined through the parent resource: a file is only ever
   // reachable via a resource the caller's organisation owns.
   const { rows } = await pool.query(
@@ -1055,70 +1117,301 @@ router.get('/api/rh2/files/:fileId', safe(async (req, res) => {
        FROM resource_files f
        JOIN resources r ON r.id = f.resource_id
       WHERE f.id = $1`,
-    [req.params.fileId]);
+    [fileId]);
 
   const f = rows[0];
-  if (!f) return notFound();
+  if (!f) return null;
 
   // 1. Organisation membership.
   const org = orgOf(req);
-  if (!org || String(f.organisation_id) !== String(org)) return notFound();
+  if (!org || String(f.organisation_id) !== String(org)) return null;
 
   // 2. Governance state of the parent. Withdrawn and quarantined records serve
   //    nothing; in-review records still serve to authorised staff, because
   //    reviewing a document means opening it.
-  if (!governance.canDownloadInState(f.publication_state)) return notFound();
-  if (f.archived_at) return notFound();
+  if (!governance.canDownloadInState(f.publication_state)) return null;
+  if (f.archived_at) return null;
 
   // 2b. The SAME visibility rule the detail route applies. Without this a
   //     therapist who is correctly 404'd from a draft resource could still
   //     enumerate and download its files — the two surfaces must agree, or the
   //     quieter one becomes the way in.
-  if (!visibleTo(req.user, { status: f.resource_status })) return notFound();
+  if (!visibleTo(req.user, { status: f.resource_status })) return null;
 
   // 3. Effective tier: the MORE restrictive of resource and file. An unknown
   //    value on either side resolves to excluded-private and is refused.
   if (!governance.canReadFile(req.user && req.user.role, f.resource_tier, f.file_tier)) {
-    return notFound();
+    return null;
   }
 
-  // 4. Bytes. A row can outlive its file; that is a 404, not a 500.
-  let buf;
+  return f;
+}
+
+/**
+ * The stored bytes, or null. A row can outlive its file; that is a 404, not a
+ * 500, so every failure — missing object, missing blob, or a key that tries to
+ * leave the governed root — comes back as the same null.
+ */
+function storedBytes(f) {
   try {
     if (f.storage_backend === 'rhub' && f.storage_key) {
-      buf = fileStorage.get(f.storage_key);          // containment + realpath
-    } else if (f.file_data) {
-      buf = Buffer.from(f.file_data, 'base64');
-    } else {
-      return notFound();
+      return fileStorage.get(f.storage_key);         // containment + realpath
     }
+    if (f.file_data) return Buffer.from(f.file_data, 'base64');
+    return null;
   } catch (err) {
     // Includes containment failures. Never echo the reason — it would describe
     // the filesystem.
     log.warn('resource file unreadable', { fileId: f.id, reason: err.message });
-    return notFound();
+    return null;
+  }
+}
+
+
+/* ── Preview capability ──────────────────────────────────────────────────────
+ *
+ * WHY THE SERVER DECIDES
+ * The browser could look at a filename and guess, and for a while it did — but
+ * then two implementations of "what can be previewed" exist and the day they
+ * disagree the UI opens a viewer the server will not feed. The server owns the
+ * decision; the client renders whatever kind it is told.
+ *
+ * Inspection is best-effort and never fatal. A page count that cannot be read
+ * comes back null, which the client shows as nothing at all — an honest absence
+ * rather than a confident zero. */
+
+/**
+ * Files above this size are not opened for inspection.
+ *
+ * Page counts and archive listings are a convenience; holding tens of megabytes
+ * in memory and parsing it on a read route to obtain one is not a trade worth
+ * making. Above the cap the answer degrades to "not inspected", and the file
+ * still previews (a PDF streams to the browser's viewer regardless of whether
+ * we counted its pages).
+ */
+const INSPECT_MAX_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Page count and AcroForm presence, read from the PDF itself.
+ *
+ * pdf-lib reads the document catalogue, which is where form fields live. It is
+ * used READ-ONLY: nothing is saved, so the stored bytes cannot be altered by
+ * having been inspected. Encrypted documents are loaded with ignoreEncryption
+ * because we are reading structure, not decrypting content, and a
+ * password-protected file that will not parse simply reports nothing.
+ */
+async function inspectPdf(buf) {
+  const out = { pageCount: null, hasFillableFields: false };
+  try {
+    const { PDFDocument } = require('pdf-lib');
+    const pdf = await PDFDocument.load(buf, {
+      ignoreEncryption: true, updateMetadata: false, throwOnInvalidObject: false,
+    });
+    out.pageCount = pdf.getPageCount();
+    out.hasFillableFields = pdf.getForm().getFields().length > 0;
+  } catch (err) {
+    log.warn('pdf preview inspection failed', { reason: err && err.message });
+  }
+  return out;
+}
+
+/**
+ * A DOCX page count, if Word recorded one.
+ *
+ * docProps/app.xml carries the count as of the last save, so it is an estimate
+ * and is treated as one — absent property, absent answer. Nothing is extracted:
+ * one named part is read as text and the rest of the archive is left alone.
+ */
+async function inspectDocx(buf) {
+  try {
+    const JSZip = require('jszip');
+    const zip = await JSZip.loadAsync(buf);
+    const app = zip.file('docProps/app.xml');
+    if (!app) return { pageCount: null };
+    const xml = await app.async('string');
+    const pages = xml.match(/<Pages>(\d+)<\/Pages>/);
+    return { pageCount: pages ? Number(pages[1]) : null };
+  } catch (err) {
+    log.warn('docx preview inspection failed', { reason: err && err.message });
+    return { pageCount: null };
+  }
+}
+
+/**
+ * List an archive's members WITHOUT extracting anything.
+ *
+ * JSZip.loadAsync parses the central directory; no member is decompressed, no
+ * path is resolved and nothing is written, so a zip bomb has nothing to expand
+ * into. Names are sanitised and the listing capped by resource-preview, so a
+ * hostile archive cannot fill a response with traversal strings either.
+ */
+async function inspectZip(buf) {
+  const JSZip = require('jszip');
+  const zip = await JSZip.loadAsync(buf);
+  const entries = Object.keys(zip.files).map((name) => {
+    const e = zip.files[name];
+    return {
+      name,
+      dir: !!e.dir,
+      // _data.uncompressedSize is JSZip's declared size; it is metadata from the
+      // archive, believed only as far as being echoed as a number.
+      bytes: (e._data && e._data.uncompressedSize) || null,
+    };
+  });
+  return preview.safeZipMembers(entries);
+}
+
+/**
+ * Stored inspection results, if migration 031 has been applied.
+ *
+ * Tolerant on purpose. These columns are populated by the scanning tooling, and
+ * a portal running ahead of its migrations should degrade to "not inspected"
+ * rather than turn a missing column into a 500 on a read route.
+ */
+async function storedPreviewFacts(fileId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT preview_page_count, has_fillable_fields
+         FROM resource_files WHERE id = $1`, [fileId]);
+    return rows[0] || {};
+  } catch (err) {
+    log.warn('preview columns unavailable', { reason: err && err.message });
+    return {};
+  }
+}
+
+/**
+ * How to preview this file — computed server-side, refused on the same terms as
+ * the bytes themselves.
+ *
+ * Every guard, and therefore every 404, is the byte route's. A caller who
+ * cannot download a file learns nothing about it here either: not its type, not
+ * its page count, not whether it exists.
+ *
+ * The response is the agreed shape: previewKind, reason, pageCount,
+ * hasFillableFields, inlineUrl, members. `reason` carries the plain-words
+ * explanation whenever there is one to give — usually why the kind is 'none',
+ * and for an archive whose listing had to be shortened, which entries are
+ * missing from it. `members` is non-null for a bundle and for nothing else.
+ */
+router.get('/api/rh2/files/:fileId/preview', safe(async (req, res) => {
+  const notFound = () => res.status(404).json(FILE_NOT_FOUND);
+
+  if (!isUuid(req.params.fileId)) return notFound();
+
+  const f = await governedFile(req, req.params.fileId);
+  if (!f) return notFound();
+
+  const stored = await storedPreviewFacts(f.id);
+  let verdict = preview.previewKindFor({
+    format: f.format,
+    mime: f.file_mime,
+    pageCount: stored.preview_page_count,
+    hasFillableFields: stored.has_fillable_fields === true,
+  });
+
+  let members = null;
+  let reason = verdict.reason;
+  let pageCount = verdict.pageCount;
+  let hasFillableFields = verdict.hasFillableFields;
+
+  const needsBytes = verdict.previewKind === 'bundle'
+    || (verdict.previewKind === 'pdf' && (pageCount === null || stored.has_fillable_fields == null))
+    || (verdict.previewKind === 'docx' && pageCount === null);
+
+  if (needsBytes) {
+    const size = Number(f.file_size_bytes);
+    const tooBig = Number.isFinite(size) && size > INSPECT_MAX_BYTES;
+    const buf = tooBig ? null : storedBytes(f);
+
+    if (tooBig || (buf && buf.length > INSPECT_MAX_BYTES)) {
+      // A bundle whose listing IS the preview cannot degrade quietly: with no
+      // members there is nothing to show, so it becomes an honest 'none'.
+      if (verdict.previewKind === 'bundle') {
+        verdict = { previewKind: 'none' };
+        reason = `This archive is too large to list here (over ${Math.round(INSPECT_MAX_BYTES / (1024 * 1024))} MB). Download it to open its contents.`;
+      }
+    } else if (!buf) {
+      // The bytes are gone. The byte route would 404, so this must too, rather
+      // than describe a file that cannot be served.
+      return notFound();
+    } else if (verdict.previewKind === 'pdf') {
+      const facts = await inspectPdf(buf);
+      if (pageCount === null) pageCount = preview.normalisePageCount(facts.pageCount);
+      if (stored.has_fillable_fields == null) hasFillableFields = facts.hasFillableFields;
+    } else if (verdict.previewKind === 'docx') {
+      const facts = await inspectDocx(buf);
+      if (pageCount === null) pageCount = preview.normalisePageCount(facts.pageCount);
+    } else if (verdict.previewKind === 'bundle') {
+      try {
+        const listing = await inspectZip(buf);
+        members = listing.members;
+        if (listing.truncated || listing.rejected) {
+          const notes = [];
+          if (listing.truncated) {
+            notes.push(`Showing the first ${listing.members.length} of ${listing.total} entries.`);
+          }
+          if (listing.rejected) {
+            notes.push(`${listing.rejected} entr${listing.rejected === 1 ? 'y' : 'ies'} had an unsafe name and ${listing.rejected === 1 ? 'is' : 'are'} not listed.`);
+          }
+          reason = notes.join(' ');
+        }
+      } catch (err) {
+        log.warn('zip preview inspection failed', { fileId: f.id, reason: err && err.message });
+        verdict = { previewKind: 'none' };
+        members = null;
+        reason = 'This archive could not be read, so its contents cannot be listed. Download it to open it.';
+      }
+    }
   }
 
-  // 5. Response. Content-Type comes from the allow-list keyed on `format`,
-  //    never from the stored file_mime, so a poisoned row cannot choose how the
-  //    browser interprets the bytes.
-  const filename = fileStorage.safeDownloadName(f.file_name, f.format);
-  res.setHeader('Content-Type', fileStorage.mimeForFormat(f.format));
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Which kinds get an inline URL: the three that need the actual bytes to
+  // render. Only PDF and images will be SERVED inline — the DOCX renderer
+  // fetches the same URL with JavaScript, where the disposition is irrelevant —
+  // and the byte route decides that for itself, so a URL here promises delivery,
+  // never a header.
+  const wantsBytes = ['pdf', 'image', 'docx'].indexOf(verdict.previewKind) !== -1;
+
   res.setHeader('Cache-Control', 'private, no-store');
-  res.setHeader('Content-Length', String(buf.length));
-  await audit(req, 'rh2.file_downloaded', f.resource_id, { fileId: f.id, format: f.format });
-  // res.end rather than res.send: send() appends "; charset=utf-8" to the
-  // Content-Type, which is meaningless on a PDF or DOCX and misdescribes the
-  // bytes. end() writes exactly the type chosen from the allow-list.
-  return res.end(buf);
+  res.json({
+    previewKind: verdict.previewKind,
+    reason: reason || null,
+    pageCount: verdict.previewKind === 'none' ? null : pageCount,
+    hasFillableFields: verdict.previewKind === 'pdf' ? hasFillableFields === true : false,
+    inlineUrl: wantsBytes ? `/api/rh2/files/${f.id}?disposition=inline` : null,
+    members,
+  });
 }));
 
 /**
  * File metadata for a resource. Deliberately projects a fixed column list:
  * storage_key, storage_backend and file_data must never reach a client.
+ *
+ * file_mime is read but NOT returned: it is consulted only to explain why an
+ * unrecorded format cannot be previewed, and returning a client-supplied type
+ * string alongside the server's own answer would invite the browser to trust
+ * the wrong one.
  */
+const FILE_LIST_COLUMNS = `id, file_name, file_mime, format, file_size_bytes,
+            checksum_sha256, access_tier, is_primary, uploaded_at`;
+
+async function resourceFileRows(resourceId) {
+  const order = `WHERE resource_id = $1 ORDER BY is_primary DESC, file_name`;
+  try {
+    const { rows } = await pool.query(
+      `SELECT ${FILE_LIST_COLUMNS}, preview_page_count, has_fillable_fields
+         FROM resource_files ${order}`, [resourceId]);
+    return rows;
+  } catch (err) {
+    // Same tolerance as storedPreviewFacts: the list must keep working on a
+    // schema that has not yet reached migration 031.
+    log.warn('preview columns unavailable', { reason: err && err.message });
+    const { rows } = await pool.query(
+      `SELECT ${FILE_LIST_COLUMNS} FROM resource_files ${order}`, [resourceId]);
+    return rows;
+  }
+}
+
 router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json(FILE_NOT_FOUND);
   const resource = await findResource(req, req.params.id);
@@ -1130,17 +1423,29 @@ router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
     return res.status(404).json(FILE_NOT_FOUND);
   }
 
-  const { rows } = await pool.query(
-    `SELECT id, file_name, format, file_size_bytes, checksum_sha256,
-            access_tier, is_primary, uploaded_at
-       FROM resource_files WHERE resource_id = $1 ORDER BY is_primary DESC, file_name`,
-    [req.params.id]);
+  const rows = await resourceFileRows(req.params.id);
 
   // Only files this caller could actually download are listed at all.
-  const visible = rows
-    .filter((f) => governance.canReadFile(
-      req.user && req.user.role, resource.access_tier, f.access_tier))
-    .map((f) => ({
+  const readable = rows.filter((f) => governance.canReadFile(
+    req.user && req.user.role, resource.access_tier, f.access_tier));
+
+  // The editable-variant hint is computed over the READABLE files only. Deriving
+  // it from rows the caller cannot see would leak, one boolean at a time, that a
+  // resource holds a PDF at a tier above them.
+  const siblings = readable.map((f) => ({ format: f.format, mime: f.file_mime }));
+
+  const visible = readable.map((f, i) => {
+    // No bytes are opened here: a list of twenty files must not become twenty
+    // file reads. Page count and fillable fields come from whatever the scanning
+    // tooling recorded, and are null until it has run. The per-file preview
+    // route is where an authoritative answer is worth the read.
+    const kind = preview.previewKindFor({
+      format: f.format,
+      mime: f.file_mime,
+      pageCount: f.preview_page_count,
+      hasFillableFields: f.has_fillable_fields === true,
+    });
+    return {
       id: f.id,
       fileName: f.file_name,
       format: f.format,
@@ -1150,7 +1455,12 @@ router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
       isPrimary: f.is_primary,
       uploadedAt: f.uploaded_at,
       downloadUrl: `/api/rh2/files/${f.id}`,
-    }));
+      previewKind: kind.previewKind,
+      pageCount: kind.pageCount,
+      hasFillableFields: kind.hasFillableFields,
+      isEditableVariant: preview.isEditableVariant(siblings[i], siblings),
+    };
+  });
 
   res.json({ files: visible });
 }));

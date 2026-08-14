@@ -18,17 +18,35 @@
  * SAFETY
  *   1. Dry run by default. --apply is required to write.
  *   2. The reconciliation total must equal the catalogue size, and the
- *      catalogue size must equal the count the audit itself recorded. A
- *      mismatch aborts before any write.
+ *      catalogue size must equal the count the catalogue itself records in its
+ *      summary. A mismatch aborts before any write.
  *   3. One transaction. A failure part-way leaves the register untouched.
  *   4. Idempotent: keyed on (organisation_id, catalogue_id), so a re-run
  *      updates in place and cannot duplicate a register row or an audit event.
  *   5. The importer never stamps itself as a reviewer. reviewer_user_id stays
  *      NULL until a human decides something.
  *
+ * WHERE THE CATALOGUE COMES FROM
+ * It is built inside this repository, by:
+ *
+ *   node backend/setup/scan-resource-source.js --out build/scan.json
+ *   node backend/setup/build-resource-catalogue.js --scan build/scan.json \
+ *     --out backend/setup/catalogue/resource-catalogue.json
+ *
+ * This script used to default to an absolute path on one particular machine,
+ * outside the repository, and to assert a hard-coded record count of 650 taken
+ * from that one file. Between them those two facts made the register
+ * unreproducible: nobody else could regenerate the input, and a regenerated
+ * catalogue of any other size could never be imported. The expected size now
+ * comes from the catalogue's own summary, with --expect available when the
+ * operator wants to state the figure independently — which is the case that
+ * actually needs a second opinion, because it is the one where a catalogue
+ * might have been rebuilt against the wrong source.
+ *
  *   node backend/setup/ingest-resource-catalogue.js
  *   node backend/setup/ingest-resource-catalogue.js --apply
  *   node backend/setup/ingest-resource-catalogue.js --apply --manifest out.json
+ *   node backend/setup/ingest-resource-catalogue.js --catalogue other.json --expect 650
  */
 
 require('dotenv').config();
@@ -38,17 +56,41 @@ const { pool } = require('../database');
 const ing = require('../resource-ingestion');
 
 const APPLY = process.argv.includes('--apply');
-const CATALOGUE = argValue('--catalogue')
-  || '/Users/antonyxavier/Documents/Codex/2026-08-10/can-you-review-this-work-structure/'
-     + 'outputs/opal-resource-hub/00_ADMIN/resource-catalog.json';
-const MANIFEST = argValue('--manifest');
 
-/** The audit's own count. A catalogue that disagrees with it is not trusted. */
-const EXPECTED_TOTAL = 650;
+/**
+ * In-repo default, written by build-resource-catalogue.js. Deliberately not a
+ * committed file — it carries vault-relative paths — so a clean checkout has to
+ * build one, which is the point.
+ */
+const DEFAULT_CATALOGUE = path.join(__dirname, 'catalogue', 'resource-catalogue.json');
+// A bare `--catalogue` with no path must not fall through to the default and
+// import a different file from the one the operator meant to name.
+const CATALOGUE = process.argv.includes('--catalogue')
+  ? (argValue('--catalogue') || '')
+  : DEFAULT_CATALOGUE;
+const MANIFEST = argValue('--manifest');
 
 function argValue(flag) {
   const i = process.argv.indexOf(flag);
   return i === -1 ? null : process.argv[i + 1];
+}
+
+/**
+ * Optional operator-supplied record count.
+ *
+ * A malformed --expect is rejected rather than ignored: silently dropping it
+ * would turn a typo into a weaker check than the operator asked for.
+ */
+function expectedOverride() {
+  if (!process.argv.includes('--expect')) return null;
+  const raw = argValue('--expect');
+  const n = Number(raw);
+  // A bare `--expect` with no value counts as malformed, not as absent. Treating
+  // it as absent would quietly downgrade the check the operator asked for.
+  if (raw === null || raw === undefined || !Number.isInteger(n) || n <= 0) {
+    throw new Error(`--expect must be a positive integer, got "${raw}".`);
+  }
+  return n;
 }
 
 async function resolveOrg() {
@@ -77,17 +119,44 @@ async function loadExisting(orgId) {
   return rows;
 }
 
-function loadCatalogue() {
+/**
+ * Read the catalogue and establish the figure everything else is checked
+ * against.
+ *
+ * The catalogue must state its own size. That is what makes the internal
+ * consistency check meaningful — a records array checked only against itself
+ * proves nothing — so a catalogue with no summary.file_count is refused unless
+ * the operator supplies --expect, which puts a human's figure in its place
+ * rather than removing the check.
+ */
+function loadCatalogue(expectOverride) {
+  if (!CATALOGUE) throw new Error('--catalogue was given with no path.');
+  if (!fs.existsSync(CATALOGUE)) {
+    throw new Error(
+      `Catalogue not found: ${CATALOGUE}\n`
+      + '  Build one first:\n'
+      + '    node backend/setup/scan-resource-source.js --out build/scan.json\n'
+      + '    node backend/setup/build-resource-catalogue.js --scan build/scan.json '
+      + `--out ${DEFAULT_CATALOGUE}`);
+  }
   const raw = JSON.parse(fs.readFileSync(CATALOGUE, 'utf8'));
   const records = raw.records || [];
   if (!records.length) throw new Error('Catalogue contains no records.');
+
   const declared = raw.summary && raw.summary.file_count;
   if (declared && declared !== records.length) {
     throw new Error(
       `Catalogue is internally inconsistent: summary says ${declared} files, `
       + `records array holds ${records.length}. Refusing to import.`);
   }
-  return { raw, records };
+  if (!declared && expectOverride === null) {
+    throw new Error(
+      'Catalogue declares no summary.file_count. Rebuild it with '
+      + 'build-resource-catalogue.js, or state the expected size with --expect N.');
+  }
+
+  const expectedTotal = expectOverride === null ? declared : expectOverride;
+  return { raw, records, expectedTotal };
 }
 
 function report(summary, results) {
@@ -223,11 +292,15 @@ async function upsertRecord(client, orgId, result) {
 }
 
 async function main() {
+  const expectOverride = expectedOverride();
+
   const { rows: [{ db }] } = await pool.query('SELECT current_database() AS db');
   console.log(`Database: ${db}`);
   console.log(`Catalogue: ${path.basename(CATALOGUE)}`);
 
-  const { raw, records } = loadCatalogue();
+  const { raw, records, expectedTotal } = loadCatalogue(expectOverride);
+  console.log(`Expected records: ${expectedTotal}`
+    + (expectOverride === null ? ' (from the catalogue summary)' : ' (from --expect)'));
   const { orgId } = await resolveOrg();
   const existing = await loadExisting(orgId);
   console.log(`Catalogue records: ${records.length}   Existing portal resources: ${existing.length}`);
@@ -237,13 +310,13 @@ async function main() {
   const total = report(summary, results);
 
   // The gate. Everything must be accounted for, and the count must match the
-  // audit's own figure, before a single row is written.
+  // catalogue's own declared figure, before a single row is written.
   if (total !== records.length) {
     throw new Error(`Treatments total ${total} but the catalogue holds ${records.length}.`);
   }
-  if (records.length !== EXPECTED_TOTAL) {
+  if (records.length !== expectedTotal) {
     throw new Error(
-      `Catalogue holds ${records.length} records, expected ${EXPECTED_TOTAL}. `
+      `Catalogue holds ${records.length} records, expected ${expectedTotal}. `
       + 'Refusing to import a catalogue of unexpected size.');
   }
   console.log(`\n✓ All ${total} records accounted for.`);
@@ -267,8 +340,8 @@ async function main() {
 
     const { rows: [check] } = await client.query(
       'SELECT COUNT(*)::int AS n FROM resource_ingestion_register WHERE organisation_id = $1', [orgId]);
-    if (check.n !== EXPECTED_TOTAL) {
-      throw new Error(`Register holds ${check.n} rows after import, expected ${EXPECTED_TOTAL}. Rolling back.`);
+    if (check.n !== expectedTotal) {
+      throw new Error(`Register holds ${check.n} rows after import, expected ${expectedTotal}. Rolling back.`);
     }
 
     await client.query('COMMIT');

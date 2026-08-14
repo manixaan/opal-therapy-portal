@@ -66,3 +66,8 @@ deploy/staging-synthetic.local.txt
 test-results/
 playwright-report/
 .playwright-mcp/
+
+# Local-only privacy blocklist. Holds real client names by definition, so it
+# must never be committed. See backend/tests/resource-privacy-leak.test.js.
+backend/tests/.privacy-blocklist
+.privacy-blocklist

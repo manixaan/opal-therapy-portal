@@ -56,11 +56,17 @@ describe('resource detail file section', () => {
     expect(CODE).not.toMatch(/\/api\/rh2\/files\/' \+/);   // ids come from downloadUrl
   });
 
-  test('the primary PDF gets the main action and the DOCX its own', () => {
+  /* This test used to pin "View or download PDF" on the primary file. That
+     label promised a viewer the hub did not have — the control downloaded,
+     every time — and it has been replaced by a real Preview control beside a
+     Download control that each do one thing. The label's job is now narrower:
+     name the download and nothing else. The preview half is pinned in
+     resource-hub-preview-guards.test.js. */
+  test('the download label names a download, and the DOCX variant its own', () => {
     const fn = CODE.slice(CODE.indexOf('function fileActionLabel'), CODE.indexOf('function fileSizeLabel'));
-    expect(fn).toMatch(/View or download PDF/);
-    expect(fn).toMatch(/Editable Word version/);
-    expect(fn).toMatch(/f\.isPrimary && f\.format === 'pdf'/);
+    expect(fn).toMatch(/Download PDF/);
+    expect(fn).toMatch(/Download editable Word version/);
+    expect(fn).not.toMatch(/View or download/);
   });
 
   test('a restricted file is labelled with its access level', () => {
