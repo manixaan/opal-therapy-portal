@@ -380,6 +380,7 @@ router.get('/api/rh2/home', safe(async (req, res) => {
                 r.mandatory, r.acknowledgement_required, r.version
            FROM resources r
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
             AND (r.mandatory OR r.acknowledgement_required)
             AND (COALESCE(r.target_roles, '[]'::jsonb) = '[]'::jsonb
               OR r.target_roles @> jsonb_build_array($3::text))
@@ -394,16 +395,25 @@ router.get('/api/rh2/home', safe(async (req, res) => {
                   WHERE p.resource_id = r.id AND p.user_id = $2))
             )
           ORDER BY r.updated_at DESC LIMIT 50`, [orgId, userId, String(req.user.role || '')]),
+      // PRIVACY_PREDICATE on both, though today it excludes nothing: legacy
+      // status='approved' predates governance, so a quarantined record could in
+      // principle still carry it, and these two lists surface TITLES — which
+      // for a client-derived record are themselves the disclosure. The
+      // module's own rule is that every aggregate naming a resource carries the
+      // predicate; these were written before the rule and missed the sweep.
       pool.query(
         `SELECT r.id, r.slug, r.title, r.content_type, COUNT(v.id) AS view_count
            FROM resources r
            JOIN resource_views v ON v.resource_id = r.id AND v.viewed_at > NOW() - INTERVAL '30 days'
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
           GROUP BY r.id ORDER BY COUNT(v.id) DESC, r.title LIMIT 10`, [orgId]),
       pool.query(
-        `SELECT id, slug, title, content_type, created_at
-           FROM resources WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'approved'
-          ORDER BY created_at DESC LIMIT 10`, [orgId]),
+        `SELECT r.id, r.slug, r.title, r.content_type, r.created_at
+           FROM resources r
+          WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
+          ORDER BY r.created_at DESC LIMIT 10`, [orgId]),
       pool.query(
         `SELECT id, title, provider, topic, starts_at, ends_at, timezone, mode, location,
                 cost_cents, cpd_hours, registration_url
@@ -644,6 +654,7 @@ router.get('/api/rh2/resources/:idOrSlug', safe(async (req, res) => {
     pool.query(
       `SELECT r2.id, r2.slug, r2.title, r2.content_type FROM resources r2
         WHERE r2.organisation_id IS NOT DISTINCT FROM $1 AND r2.status = 'approved' AND r2.id <> $2
+          AND r2.access_tier <> 'excluded-private' AND r2.publication_state <> 'excluded-private'
           AND (EXISTS (SELECT 1 FROM resource_collection_items a
                         JOIN resource_collection_items b ON b.collection_id = a.collection_id
                        WHERE a.resource_id = $2 AND b.resource_id = r2.id)

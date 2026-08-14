@@ -83,17 +83,44 @@ worksheets. There is no overlap to collapse.
 
 ## Running it
 
+The chain is now reproducible from inside the repository — the original import
+consumed a catalogue JSON produced by an external tool on one machine, which
+nothing here could regenerate. Three stages, each refusing to write anywhere
+surprising:
+
+```bash
+# 1. Recompute the inventory from the vault's bytes (read-only on the vault).
+node backend/setup/scan-resource-source.js --out /tmp/opal-scan.json
+
+# 2. Translate the scan into the importer's catalogue schema.
+node backend/setup/build-resource-catalogue.js --scan /tmp/opal-scan.json --out /tmp/opal-catalogue.json
+
+# 3. Import. Dry run first — always.
+node backend/setup/ingest-resource-catalogue.js --catalogue /tmp/opal-catalogue.json
+```
+
+Both intermediates carry vault paths and belong in `/tmp`, never in the repo —
+`resource-privacy-leak.test.js` fails the build if one is left behind.
+
 Dry run first — always. The apply step aborts if the treatment tally does not
-equal the catalogue size, and again inside the transaction if the register does
-not hold 650 rows afterwards.
+equal the catalogue's own record count (no size is hard-coded any more; pass
+`--expect N` to pin it explicitly), and again inside the transaction if the
+register row count does not match afterwards.
 
 ```bash
-node backend/setup/ingest-resource-catalogue.js
+node backend/setup/ingest-resource-catalogue.js --catalogue /tmp/opal-catalogue.json --apply --manifest backend/setup/manifests/ingestion-<date>.json
 ```
 
-```bash
-node backend/setup/ingest-resource-catalogue.js --apply --manifest backend/setup/manifests/ingestion-2026-08-11.json
-```
+Validated end-to-end against the vault on 2026-08-15: 651 scanned → 651
+catalogue records → every record accepted by `treatmentFor()` — rights-review
+518, privacy-excluded 105, duplicate-archived 18, unavailable-placeholder 10 —
+and `redactedIdentity()` stores no filename, title or checksum for any of the
+105. The 105 decompose as 47 client-confidential (path or content evidence), 8
+quarantined on weak evidence, 13 client-path copies of safe documents, and 37
+under `paediatrics resources/` excluded by this register's own conservative
+folder rule even though their bytes carry no detected identifier — the union of
+the two rules is deliberate, and lifting any of the 37 is a reviewer's decision,
+not a script's.
 
 Then apply the treatment matrix, which creates the link resources, expands the
 instrument register and records clean-room provenance:
