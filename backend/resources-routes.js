@@ -194,12 +194,25 @@ router.get('/api/resources/:id/download', safe(async (req, res) => {
   try {
     if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
-      `SELECT rf.*, r.status, r.visibility, r.title FROM resource_files rf
+      `SELECT rf.*, r.status, r.visibility, r.title, r.access_tier, r.publication_state
+         FROM resource_files rf
         JOIN resources r ON r.id = rf.resource_id
        WHERE rf.resource_id = $1 AND r.organisation_id IS NOT DISTINCT FROM $2
        ORDER BY rf.uploaded_at DESC LIMIT 1`, [req.params.id, orgOf(req)]);
     const f = rows[0];
     if (!f) return res.status(404).json({ error: 'Not found' });
+
+    // Quarantine is absolute, and it has to be enforced HERE as well as in the
+    // hub. This route predates Resource Hub governance and reaches the same
+    // `resource_files` table by a different path, so a record quarantined as
+    // `excluded-private` — client-derived material — was still downloadable
+    // through it if it carried a legacy `status = 'approved'` from before the
+    // governance model existed. 404, not 403: a distinguishable refusal would
+    // confirm that a particular client document exists.
+    if (f.access_tier === 'excluded-private' || f.publication_state === 'excluded-private') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     if (!canManage(req.user) && f.status !== 'approved') return res.status(403).json({ error: 'Resource not approved' });
     if (req.user.role === 'read_only' && f.visibility !== 'staff') return res.status(403).json({ error: 'Restricted' });
 
@@ -211,8 +224,18 @@ router.get('/api/resources/:id/download', safe(async (req, res) => {
     } catch (_) { /* missing object → 404 below */ }
     if (!base64) return res.status(404).json({ error: 'File content unavailable' });
     await audit(req, 'resource.downloaded', req.params.id, { fileName: f.file_name });
-    res.setHeader('Content-Type', f.file_mime || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(f.file_name || 'resource')}"`);
+    // Content-Type comes from the allow-list, keyed on the record's `format` —
+    // never echoed from the stored `file_mime`. A stored string is data, and
+    // echoing it lets whatever wrote the row decide how a browser interprets the
+    // bytes. Legacy rows predate the `format` column, so fall back to the
+    // filename's extension and put THAT through the same allow-list, which
+    // keeps a PDF serving as application/pdf without trusting the stored value.
+    const { mimeForFormat, safeDownloadName } = require('./resource-file-storage');
+    const formatHint = f.format
+      || String(f.file_name || '').split('.').pop().toLowerCase().replace('jpeg', 'jpg');
+    res.setHeader('Content-Type', mimeForFormat(formatHint));
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${safeDownloadName(f.file_name, formatHint)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(Buffer.from(base64, 'base64'));
   } catch (err) {
