@@ -61,22 +61,51 @@ const LIMIT = (() => {
   return i >= 0 ? parseInt(args[i + 1], 10) : (ALL ? 100000 : 20);
 })();
 
-/** Build filename -> absolute path once. 650 files, one walk. */
+/**
+ * Directories this importer must never read a byte from.
+ *
+ * Matched on the first path segment, case-insensitively, exactly as the
+ * ingestion register's own `underForbiddenRoot()` does.
+ */
+const FORBIDDEN_ROOTS = new Set(['clients']);
+
+/**
+ * Build filename -> absolute path once. 650 files, one walk.
+ *
+ * CLIENTS IS NOT WALKED, and the reason is the "first match wins" rule below.
+ * The index is keyed on the bare filename, and `readdirSync` returns `CLIENTS`
+ * before `PAEDS`, so every filename that exists in both places resolved to the
+ * client copy. Thirteen do — generic breathing and social-skills worksheets that
+ * were filed into a client folder and are byte-identical to the copies under
+ * PAEDS — so the bytes happened to be the same and nothing leaked. That is luck,
+ * not a guarantee: one register row whose filename collided with a client-only
+ * document would have copied that document into the resource store, and the
+ * register's privacy rules could not have intervened, because by then the
+ * decision had already been made by directory ordering.
+ *
+ * Excluding the root removes the possibility rather than the coincidence. The
+ * thirteen still resolve — to the safe copy, which is the one that should have
+ * been used all along.
+ */
 function indexSourceTree(root) {
   const index = new Map();
-  const walk = (dir) => {
+  let skipped = 0;
+  const walk = (dir, depth) => {
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       if (e.name === '.DS_Store') continue;
       const full = path.join(dir, e.name);
-      if (e.isDirectory()) walk(full);
+      if (e.isDirectory()) {
+        if (depth === 0 && FORBIDDEN_ROOTS.has(e.name.toLowerCase())) { skipped++; continue; }
+        walk(full, depth + 1);
       // First match wins; duplicates across folders are already resolved in the
       // register as duplicate-archived, so a collision here is not a decision.
-      else if (!index.has(e.name)) index.set(e.name, full);
+      } else if (!index.has(e.name)) index.set(e.name, full);
     }
   };
-  walk(root);
+  walk(root, 0);
+  if (skipped) console.log(`source : skipped ${skipped} forbidden root(s): ${[...FORBIDDEN_ROOTS].join(', ')}`);
   return index;
 }
 
@@ -139,6 +168,17 @@ async function main() {
   for (const row of rows) {
     const src = index.get(row.source_filename);
     if (!src) { stats.missingFile++; missing.push(row.catalogue_id); continue; }
+
+    // Independent of how the index was built, refuse to open anything under a
+    // forbidden root. The walk above already excludes them; this is the check
+    // that still holds if someone later changes the walk, and it costs nothing.
+    const rel = path.relative(SOURCE_ROOT, path.resolve(src));
+    const firstSegment = rel.split(path.sep)[0] || '';
+    if (rel.startsWith('..') || path.isAbsolute(rel) || FORBIDDEN_ROOTS.has(firstSegment.toLowerCase())) {
+      throw new Error(
+        `Refusing to read ${row.catalogue_id} from a forbidden or out-of-tree path. `
+        + 'This is a bug in the source index, not a data problem.');
+    }
 
     const client = await pool.connect();
     try {
