@@ -214,3 +214,88 @@ describe('DELETE cascade', () => {
     expect(await aliveIds(other.id)).toContain(foreignTb.id);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cmd+Z undo — POST /api/outlook/events/:dbId/restore (2026-08-09)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('POST /api/outlook/events/:dbId/restore — delete → restore round-trip', () => {
+  test('event + cascaded travel rows live again; unrelated and foreign rows untouched; restore audited', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    const s = await seedScenario(user.id);
+    const other = await seedUser();
+    await seedScenario(other.id);
+
+    // Delete with cascade — three of six rows tombstoned
+    const del = await agent.delete(`/api/outlook/events/${s.appt.id}`);
+    expect(del.status).toBe(200);
+    expect(del.body.travelBlocksDeleted).toBe(2);
+    expect((await aliveIds(user.id)).length).toBe(3);
+
+    // Restore, feeding back exactly the cascade ids the delete reported
+    const res = await agent.post(`/api/outlook/events/${s.appt.id}/restore`)
+      .send({ travelBlockIds: del.body.travelBlockIds });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, restored: 1, travelBlocksRestored: 2 });
+    expect(res.body.travelBlockIds.sort()).toEqual([s.tbBefore.id, s.tbLinked.id].sort());
+
+    // All six of the caller's rows are alive again, tombstones fully cleared
+    const alive = await aliveIds(user.id);
+    expect(alive.sort()).toEqual(
+      [s.appt.id, s.tbBefore.id, s.tbLinked.id, s.tbSandwich.id, s.apptB.id, s.tbFar.id].sort());
+    const { rows: cleared } = await db.pool.query(
+      'SELECT deleted_at FROM events WHERE id = ANY($1)', [[s.appt.id, s.tbBefore.id, s.tbLinked.id]]);
+    cleared.forEach((r) => expect(r.deleted_at).toBeNull());
+
+    // The calendar feed serves them again
+    const feedIds = (await db.getEvents(user.id)).map((e) => e.id);
+    [s.appt.id, s.tbBefore.id, s.tbLinked.id].forEach((id) => expect(feedIds).toContain(id));
+
+    // No row ever had an outlook_id → no Graph re-creates attempted
+    const outlookApi = require('../../outlook-oauth');
+    expect(outlookApi.createOutlookEvent).not.toHaveBeenCalled();
+
+    // The other user's world is untouched
+    expect((await aliveIds(other.id)).length).toBe(6);
+
+    // Audited with counts
+    const { rows } = await db.pool.query(
+      `SELECT * FROM audit_logs WHERE action = 'calendar.event_restored' AND target_id = $1`, [s.appt.id]);
+    expect(rows).toHaveLength(1);
+    const meta = typeof rows[0].metadata === 'string' ? JSON.parse(rows[0].metadata) : rows[0].metadata;
+    expect(meta.travelBlocksRestored).toBe(2);
+    expect(meta.travelBlockIds.sort()).toEqual([s.tbBefore.id, s.tbLinked.id].sort());
+  });
+
+  test('travel-id validation: foreign, non-travel, and not-deleted ids are dropped; 409 when the event is alive; 404 cross-user', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    const s = await seedScenario(user.id);
+    const other = await seedUser();
+    const foreignTb = await insertEvent(other.id, { title: 'Foreign travel', start: T(6), end: T(6, 15), type: 'travel' });
+    await db.pool.query('UPDATE events SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP WHERE id = $1', [foreignTb.id]);
+
+    // Restoring an event that is not deleted conflicts
+    const conflict = await agent.post(`/api/outlook/events/${s.appt.id}/restore`).send({});
+    expect(conflict.status).toBe(409);
+
+    // A foreign event id is invisible
+    const foreign = await agent.post(`/api/outlook/events/${foreignTb.id}/restore`).send({});
+    expect(foreign.status).toBe(404);
+
+    // Real delete, then a restore that smuggles in ids that must not check out:
+    // a foreign deleted travel row, a live sandwiched travel row, a non-travel appt
+    const del = await agent.delete(`/api/outlook/events/${s.appt.id}`);
+    const res = await agent.post(`/api/outlook/events/${s.appt.id}/restore`)
+      .send({ travelBlockIds: [...del.body.travelBlockIds, foreignTb.id, s.tbSandwich.id, s.apptB.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.travelBlocksRestored).toBe(2);
+    expect(res.body.travelBlockIds.sort()).toEqual([s.tbBefore.id, s.tbLinked.id].sort());
+
+    // The foreign tombstone is still a tombstone
+    expect(await aliveIds(other.id)).not.toContain(foreignTb.id);
+  });
+});

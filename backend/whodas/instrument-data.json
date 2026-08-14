@@ -1,0 +1,560 @@
+{
+  "generatedBy": "backend/whodas/build-instrument-data.js",
+  "methods": {
+    "interviewer": {
+      "templateKey": "whodas-36-interviewer",
+      "items": {
+        "D1.1": {
+          "id": "D1.1",
+          "page": 5,
+          "text": "Concentrating on doing something for ten minutes?"
+        },
+        "D1.2": {
+          "id": "D1.2",
+          "page": 5,
+          "text": "Remembering to do important things?"
+        },
+        "D1.3": {
+          "id": "D1.3",
+          "page": 5,
+          "text": "Analysing and finding solutions to problems in day-to-day life?"
+        },
+        "D1.4": {
+          "id": "D1.4",
+          "page": 5,
+          "text": "Learning a new task, for example, learning how to get to a new place?"
+        },
+        "D1.5": {
+          "id": "D1.5",
+          "page": 5,
+          "text": "Generally understanding what people say?"
+        },
+        "D1.6": {
+          "id": "D1.6",
+          "page": 5,
+          "text": "Starting and maintaining a conversation?"
+        },
+        "D2.1": {
+          "id": "D2.1",
+          "page": 5,
+          "text": "Standing for long periods such as 30 minutes?"
+        },
+        "D2.2": {
+          "id": "D2.2",
+          "page": 5,
+          "text": "Standing up from sitting down?"
+        },
+        "D2.3": {
+          "id": "D2.3",
+          "page": 5,
+          "text": "Moving around inside your home?"
+        },
+        "D2.4": {
+          "id": "D2.4",
+          "page": 5,
+          "text": "Getting out of your home?"
+        },
+        "D2.5": {
+          "id": "D2.5",
+          "page": 5,
+          "text": "Walking a long distance such as a kilometre [or equivalent]?"
+        },
+        "D3.1": {
+          "id": "D3.1",
+          "page": 6,
+          "text": "Washing your whole body?"
+        },
+        "D3.2": {
+          "id": "D3.2",
+          "page": 6,
+          "text": "Getting dressed?"
+        },
+        "D3.3": {
+          "id": "D3.3",
+          "page": 6,
+          "text": "Eating?"
+        },
+        "D3.4": {
+          "id": "D3.4",
+          "page": 6,
+          "text": "Staying by yourself for a few days?"
+        },
+        "D4.1": {
+          "id": "D4.1",
+          "page": 6,
+          "text": "Dealing with people you do not know?"
+        },
+        "D4.2": {
+          "id": "D4.2",
+          "page": 6,
+          "text": "Maintaining a friendship?"
+        },
+        "D4.3": {
+          "id": "D4.3",
+          "page": 6,
+          "text": "Getting along with people who are close to you?"
+        },
+        "D4.4": {
+          "id": "D4.4",
+          "page": 6,
+          "text": "Making new friends?"
+        },
+        "D4.5": {
+          "id": "D4.5",
+          "page": 6,
+          "text": "Sexual activities?"
+        },
+        "D5.1": {
+          "id": "D5.1",
+          "page": 7,
+          "text": "Taking care of your household responsibilities?"
+        },
+        "D5.2": {
+          "id": "D5.2",
+          "page": 7,
+          "text": "Doing your most important household tasks well?"
+        },
+        "D5.3": {
+          "id": "D5.3",
+          "page": 7,
+          "text": "Getting all the household work done that you needed to do?"
+        },
+        "D5.4": {
+          "id": "D5.4",
+          "page": 7,
+          "text": "Getting your household work done as quickly as needed?"
+        },
+        "D5.5": {
+          "id": "D5.5",
+          "page": 8,
+          "text": "Your day-to-day work/school?"
+        },
+        "D5.6": {
+          "id": "D5.6",
+          "page": 8,
+          "text": "Doing your most important work/school tasks well?"
+        },
+        "D5.7": {
+          "id": "D5.7",
+          "page": 8,
+          "text": "Getting all the work done that you need to do?"
+        },
+        "D5.8": {
+          "id": "D5.8",
+          "page": 8,
+          "text": "Getting your work done as quickly as needed?"
+        },
+        "D6.1": {
+          "id": "D6.1",
+          "page": 9,
+          "text": "How much of a problem did you have joining in community activities (for example, festivities, religious or other activities) in the same way as anyone else can?"
+        },
+        "D6.2": {
+          "id": "D6.2",
+          "page": 9,
+          "text": "How much of a problem did you have because of barriers or hindrances in the world around you?"
+        },
+        "D6.3": {
+          "id": "D6.3",
+          "page": 9,
+          "text": "How much of a problem did you have living with dignity because of the attitudes and actions of others?"
+        },
+        "D6.4": {
+          "id": "D6.4",
+          "page": 9,
+          "text": "How much time did you spend on your health condition or its consequences?"
+        },
+        "D6.5": {
+          "id": "D6.5",
+          "page": 9,
+          "text": "How much have you been emotionally affected by your health condition?"
+        },
+        "D6.6": {
+          "id": "D6.6",
+          "page": 9,
+          "text": "How much has your health been a drain on the financial resources of you or your family?"
+        },
+        "D6.7": {
+          "id": "D6.7",
+          "page": 9,
+          "text": "How much of a problem did your family have because of your health problems?"
+        },
+        "D6.8": {
+          "id": "D6.8",
+          "page": 9,
+          "text": "How much of a problem did you have in doing things by yourself for relaxation or pleasure?"
+        }
+      }
+    },
+    "self": {
+      "templateKey": "whodas-36-self",
+      "items": {
+        "D1.1": {
+          "id": "D1.1",
+          "page": 1,
+          "text": "Concentrating on doing something for ten minutes?"
+        },
+        "D1.2": {
+          "id": "D1.2",
+          "page": 1,
+          "text": "Remembering to do important things?"
+        },
+        "D1.3": {
+          "id": "D1.3",
+          "page": 1,
+          "text": "Analysing and finding solutions to problems in day-to-day life?"
+        },
+        "D1.4": {
+          "id": "D1.4",
+          "page": 1,
+          "text": "Learning a new task, for example, learning how to get to a new place?"
+        },
+        "D1.5": {
+          "id": "D1.5",
+          "page": 1,
+          "text": "Generally understanding what people say?"
+        },
+        "D1.6": {
+          "id": "D1.6",
+          "page": 1,
+          "text": "Starting and maintaining a conversation?"
+        },
+        "D2.1": {
+          "id": "D2.1",
+          "page": 1,
+          "text": "Standing for long periods such as 30 minutes?"
+        },
+        "D2.2": {
+          "id": "D2.2",
+          "page": 1,
+          "text": "Standing up from sitting down?"
+        },
+        "D2.3": {
+          "id": "D2.3",
+          "page": 1,
+          "text": "Moving around inside your home?"
+        },
+        "D2.4": {
+          "id": "D2.4",
+          "page": 1,
+          "text": "Getting out of your home?"
+        },
+        "D2.5": {
+          "id": "D2.5",
+          "page": 1,
+          "text": "Walking a long distance such as a kilometre [or equivalent]?"
+        },
+        "D3.1": {
+          "id": "D3.1",
+          "page": 2,
+          "text": "Washing your whole body?"
+        },
+        "D3.2": {
+          "id": "D3.2",
+          "page": 2,
+          "text": "Getting dressed?"
+        },
+        "D3.3": {
+          "id": "D3.3",
+          "page": 2,
+          "text": "Eating?"
+        },
+        "D3.4": {
+          "id": "D3.4",
+          "page": 2,
+          "text": "Staying by yourself for a few days?"
+        },
+        "D4.1": {
+          "id": "D4.1",
+          "page": 2,
+          "text": "Dealing with people you do not know?"
+        },
+        "D4.2": {
+          "id": "D4.2",
+          "page": 2,
+          "text": "Maintaining a friendship?"
+        },
+        "D4.3": {
+          "id": "D4.3",
+          "page": 2,
+          "text": "Getting along with people who are close to you?"
+        },
+        "D4.4": {
+          "id": "D4.4",
+          "page": 2,
+          "text": "Making new friends?"
+        },
+        "D4.5": {
+          "id": "D4.5",
+          "page": 2,
+          "text": "Sexual activities?"
+        },
+        "D5.1": {
+          "id": "D5.1",
+          "page": 2,
+          "text": "Taking care of your household responsibilities?"
+        },
+        "D5.2": {
+          "id": "D5.2",
+          "page": 2,
+          "text": "Doing most important household tasks well?"
+        },
+        "D5.3": {
+          "id": "D5.3",
+          "page": 2,
+          "text": "Getting all the household work done that you needed to do?"
+        },
+        "D5.4": {
+          "id": "D5.4",
+          "page": 2,
+          "text": "Getting your household work done as quickly as needed?"
+        },
+        "D5.5": {
+          "id": "D5.5",
+          "page": 3,
+          "text": "Your day-to-day work/school?"
+        },
+        "D5.6": {
+          "id": "D5.6",
+          "page": 3,
+          "text": "Doing your most important work/school tasks well?"
+        },
+        "D5.7": {
+          "id": "D5.7",
+          "page": 3,
+          "text": "Getting all the work done that you need to do?"
+        },
+        "D5.8": {
+          "id": "D5.8",
+          "page": 3,
+          "text": "Getting your work done as quickly as needed?"
+        },
+        "D6.1": {
+          "id": "D6.1",
+          "page": 3,
+          "text": "How much of a problem did you have in joining in community activities (for example, festivities, religious or other activities) in the same way as anyone else can?"
+        },
+        "D6.2": {
+          "id": "D6.2",
+          "page": 3,
+          "text": "How much of a problem did you have because of barriers or hindrances in the world around you?"
+        },
+        "D6.3": {
+          "id": "D6.3",
+          "page": 3,
+          "text": "How much of a problem did you have living with dignity because of the attitudes and actions of others?"
+        },
+        "D6.4": {
+          "id": "D6.4",
+          "page": 3,
+          "text": "How much time did you spend on your health condition, or its consequences?"
+        },
+        "D6.5": {
+          "id": "D6.5",
+          "page": 3,
+          "text": "How much have you been emotionally affected by your health condition?"
+        },
+        "D6.6": {
+          "id": "D6.6",
+          "page": 3,
+          "text": "How much has your health been a drain on the financial resources of you or your family?"
+        },
+        "D6.7": {
+          "id": "D6.7",
+          "page": 3,
+          "text": "How much of a problem did your family have because of your health problems?"
+        },
+        "D6.8": {
+          "id": "D6.8",
+          "page": 3,
+          "text": "How much of a problem did you have in doing things by yourself for relaxation or pleasure?"
+        }
+      }
+    },
+    "proxy": {
+      "templateKey": "whodas-36-proxy",
+      "items": {
+        "D1.1": {
+          "id": "D1.1",
+          "page": 2,
+          "text": "Concentrating on doing something for ten minutes?"
+        },
+        "D1.2": {
+          "id": "D1.2",
+          "page": 2,
+          "text": "Remembering to do important things?"
+        },
+        "D1.3": {
+          "id": "D1.3",
+          "page": 2,
+          "text": "Analysing and finding solutions to problems in day-to-day life?"
+        },
+        "D1.4": {
+          "id": "D1.4",
+          "page": 2,
+          "text": "Learning a new task, for example, learning how to get to a new place?"
+        },
+        "D1.5": {
+          "id": "D1.5",
+          "page": 2,
+          "text": "Generally understanding what people say?"
+        },
+        "D1.6": {
+          "id": "D1.6",
+          "page": 2,
+          "text": "Starting and maintaining a conversation?"
+        },
+        "D2.1": {
+          "id": "D2.1",
+          "page": 2,
+          "text": "Standing for long periods such as 30 minutes?"
+        },
+        "D2.2": {
+          "id": "D2.2",
+          "page": 2,
+          "text": "Standing up from sitting down?"
+        },
+        "D2.3": {
+          "id": "D2.3",
+          "page": 2,
+          "text": "Moving around inside their home?"
+        },
+        "D2.4": {
+          "id": "D2.4",
+          "page": 2,
+          "text": "Getting out of their home?"
+        },
+        "D2.5": {
+          "id": "D2.5",
+          "page": 2,
+          "text": "Walking a long distance such as a kilometre [or equivalent]?"
+        },
+        "D3.1": {
+          "id": "D3.1",
+          "page": 3,
+          "text": "Washing his or her whole body?"
+        },
+        "D3.2": {
+          "id": "D3.2",
+          "page": 3,
+          "text": "Getting dressed?"
+        },
+        "D3.3": {
+          "id": "D3.3",
+          "page": 3,
+          "text": "Eating?"
+        },
+        "D3.4": {
+          "id": "D3.4",
+          "page": 3,
+          "text": "Staying by himself or herself for a few days?"
+        },
+        "D4.1": {
+          "id": "D4.1",
+          "page": 3,
+          "text": "Dealing with people he or she does not know?"
+        },
+        "D4.2": {
+          "id": "D4.2",
+          "page": 3,
+          "text": "Maintaining a friendship?"
+        },
+        "D4.3": {
+          "id": "D4.3",
+          "page": 3,
+          "text": "Getting along with people who are close to him or her?"
+        },
+        "D4.4": {
+          "id": "D4.4",
+          "page": 3,
+          "text": "Making new friends?"
+        },
+        "D4.5": {
+          "id": "D4.5",
+          "page": 3,
+          "text": "Sexual activities?"
+        },
+        "D5.1": {
+          "id": "D5.1",
+          "page": 3,
+          "text": "Taking care of his or her household responsibilities?"
+        },
+        "D5.2": {
+          "id": "D5.2",
+          "page": 3,
+          "text": "Doing his or her most important household tasks well?"
+        },
+        "D5.3": {
+          "id": "D5.3",
+          "page": 3,
+          "text": "Getting all the household work done that is needed?"
+        },
+        "D5.4": {
+          "id": "D5.4",
+          "page": 3,
+          "text": "Getting the household work done as quickly as needed?"
+        },
+        "D5.5": {
+          "id": "D5.5",
+          "page": 4,
+          "text": "His or her day-to-day work/school?"
+        },
+        "D5.6": {
+          "id": "D5.6",
+          "page": 4,
+          "text": "Doing his or her most important work/ school tasks well?"
+        },
+        "D5.7": {
+          "id": "D5.7",
+          "page": 4,
+          "text": "Getting all the work done that is needed?"
+        },
+        "D5.8": {
+          "id": "D5.8",
+          "page": 4,
+          "text": "Getting the work done as quickly as needed?"
+        },
+        "D6.1": {
+          "id": "D6.1",
+          "page": 4,
+          "text": "How much of a problem did your relative have in joining in community activities (for example, festivities, religious or other activities) in the same way as anyone else can?"
+        },
+        "D6.2": {
+          "id": "D6.2",
+          "page": 4,
+          "text": "How much of a problem did your relative have because of barriers or hindrances in the world around him or her?"
+        },
+        "D6.3": {
+          "id": "D6.3",
+          "page": 4,
+          "text": "How much of a problem did your relative have living with dignity because of the attitudes and actions of others?"
+        },
+        "D6.4": {
+          "id": "D6.4",
+          "page": 4,
+          "text": "How much time did your relative spend on his or her health condition, or its consequences?"
+        },
+        "D6.5": {
+          "id": "D6.5",
+          "page": 4,
+          "text": "How much has your relative been emotionally affected by his or her health condition?"
+        },
+        "D6.6": {
+          "id": "D6.6",
+          "page": 4,
+          "text": "How much has his or her health been a drain on his or her financial resources or on the financial resources of other relatives?"
+        },
+        "D6.7": {
+          "id": "D6.7",
+          "page": 4,
+          "text": "How much of a problem did you or the rest of his or her family have because of his or her health problems?"
+        },
+        "D6.8": {
+          "id": "D6.8",
+          "page": 4,
+          "text": "How much of a problem did your relative have in doing things by himself or herself for relaxation or pleasure?"
+        }
+      }
+    }
+  }
+}

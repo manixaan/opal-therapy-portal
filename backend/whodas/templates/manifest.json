@@ -1,0 +1,124 @@
+{
+  "generatedBy": "backend/whodas/extract-templates.js",
+  "source": {
+    "title": "Measuring Health and Disability: Manual for WHO Disability Assessment Schedule (WHODAS 2.0). Geneva: World Health Organization; 2010. ISBN 978 92 4 154759 8.",
+    "copyright": "© World Health Organization 2010",
+    "sha256": "a78fcb2503c726c84be7e74361aa225d0e2a34de7ecd4cbecac4e4d1ec22da6d",
+    "pageCount": 152,
+    "note": "Instrument placed in the public domain by WHO (manual §5.1), subject to registration on the WHODAS 2.0 web site and to no substantive changes. See docs/whodas/03_LICENSING_COMPLIANCE.md."
+  },
+  "extraction": {
+    "method": "pdf-lib copyPages — content streams, fonts and page boxes copied verbatim",
+    "modifications": "none to page content"
+  },
+  "templates": [
+    {
+      "key": "whodas-36-interviewer",
+      "method": "interviewer",
+      "name": "WHODAS 2.0 — 36-item version, interviewer-administered",
+      "filename": "whodas-36-interviewer.pdf",
+      "version": "1.0.0",
+      "instrument": "WHODAS-2.0",
+      "itemSet": "36-item",
+      "sourcePages": "99-108",
+      "pageCount": 10,
+      "uniformGeometry": true,
+      "mediaBox": [
+        0,
+        0,
+        567,
+        780
+      ],
+      "cropBox": [
+        41.76,
+        41.76,
+        482.04,
+        693.24
+      ],
+      "byteSize": 303839,
+      "sha256": "30c0f853dc1226477c7bf3fad9d72f2d9bb6e2b7c0f7f38bcebb7b4092250582",
+      "active": true
+    },
+    {
+      "key": "whodas-36-self",
+      "method": "self",
+      "name": "WHODAS 2.0 — 36-item version, self-administered",
+      "filename": "whodas-36-self.pdf",
+      "version": "1.0.0",
+      "instrument": "WHODAS-2.0",
+      "itemSet": "36-item",
+      "sourcePages": "113-116",
+      "pageCount": 4,
+      "uniformGeometry": true,
+      "mediaBox": [
+        0,
+        0,
+        567,
+        780
+      ],
+      "cropBox": [
+        41.76,
+        41.76,
+        482.04,
+        693.24
+      ],
+      "byteSize": 150599,
+      "sha256": "6d17d34b62db3e7a9c27c92117b0eb769a8aa6e81313a436079b56f64878ba9f",
+      "active": true
+    },
+    {
+      "key": "whodas-36-proxy",
+      "method": "proxy",
+      "name": "WHODAS 2.0 — 36-item version, proxy-administered",
+      "filename": "whodas-36-proxy.pdf",
+      "version": "1.0.0",
+      "instrument": "WHODAS-2.0",
+      "itemSet": "36-item",
+      "sourcePages": "117-121",
+      "pageCount": 5,
+      "uniformGeometry": true,
+      "mediaBox": [
+        0,
+        0,
+        567,
+        780
+      ],
+      "cropBox": [
+        41.76,
+        41.76,
+        482.04,
+        693.24
+      ],
+      "byteSize": 181777,
+      "sha256": "59fe6c9550075e50f491fe294c21e3607f6cb2b5465d2ddb6799851e3e97e34b",
+      "active": true
+    },
+    {
+      "key": "whodas-36-flashcards",
+      "method": "interviewer",
+      "name": "WHODAS 2.0 — interviewer flashcards #1 and #2",
+      "filename": "whodas-36-flashcards.pdf",
+      "version": "1.0.0",
+      "instrument": "WHODAS-2.0",
+      "itemSet": "36-item",
+      "sourcePages": "109,111",
+      "pageCount": 2,
+      "uniformGeometry": true,
+      "mediaBox": [
+        0,
+        0,
+        567,
+        780
+      ],
+      "cropBox": [
+        41.76,
+        41.76,
+        482.04,
+        693.24
+      ],
+      "byteSize": 72371,
+      "sha256": "ff5325f7092837cdef9c2b8a16788dba06a14bf27f4abdbbcef5d6d48e9d52f4",
+      "active": true
+    }
+  ]
+}

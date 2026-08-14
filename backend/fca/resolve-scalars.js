@@ -56,9 +56,20 @@
  *   REPORT-SPECIFIC tags        override > missing
  *       Belong to one report. There is nowhere else they could come from.
  *
- *   SERVER tags                 server > missing
- *       Ids, dates, version and status the server mints at generate time.
- *       readOnly — a submitted override is ignored, never applied.
+ *   SERVER tags                 override > server > missing
+ *       The document id, date, version and status OPAL ISSUES — not facts it
+ *       looks up. They are minted once, when the draft is created, and stored
+ *       on it, so they are real values in the review step rather than fields a
+ *       therapist is told are "Missing" and could not possibly supply. The
+ *       issued value is a DEFAULT: a therapist genuinely issuing version 2.0,
+ *       or marking a report Final, overrides it exactly like any other field
+ *       and the source attribution then reads 'report_override'.
+ *
+ *       This is deliberately narrow. Only values Opal ITSELF ORIGINATES are
+ *       issued this way. An issue date, a reviewer's name and role, and the
+ *       authorised recipients are facts about the world; they stay 'missing'
+ *       until a human supplies them, because the alternative is a clinical
+ *       document that quietly states something nobody checked.
  *
  * ── SOURCE VOCABULARY ───────────────────────────────────────────────────────
  * 'splose' | 'client_profile' | 'report_override' | 'portal' | 'server' |
@@ -200,13 +211,15 @@ function resolveScalars({
     let value = null;
     let source = 'missing';
 
-    if (meta.layer === 'server') {
-      // readOnly: a submitted override is deliberately ignored.
-      const v = server ? present(server[meta.field]) : null;
-      if (v !== null) { value = v; source = 'server'; }
-    } else if (override !== null) {
+    if (override !== null) {
+      // An explicit therapist value wins over EVERY layer, the server-issued
+      // defaults included: a version number or a status is a claim about their
+      // own document, and Opal has no standing to overrule it.
       value = override;
       source = 'report_override';
+    } else if (meta.layer === 'server') {
+      const v = server ? present(server[meta.field]) : null;
+      if (v !== null) { value = v; source = 'server'; }
     } else if (meta.layer === 'splose') {
       // The client profile is intentionally not consulted for these tags.
       const v = splose ? present(splose[meta.field]) : null;

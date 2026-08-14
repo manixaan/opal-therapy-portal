@@ -2320,8 +2320,9 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
     // refresh without waiting for the 5-minute delta sync. The upsert is
     // idempotent — if the delta sync later re-imports the same event it will
     // just update the existing row rather than creating a duplicate.
+    let localDbId = dbEventId || null;
     try {
-      await db.upsertOutlookEvent(req.session.userId, {
+      const localRow = await db.upsertOutlookEvent(req.session.userId, {
         outlookId:       result.outlookId,
         title,
         startTime,
@@ -2334,6 +2335,7 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
         createdBySource: 'app',              // this event originated in the app, not Outlook
         eventType:       classifyEventType(categories || [], false),
       });
+      if (localRow && localRow.id) localDbId = localRow.id;
       console.log(`💾 Event saved to local DB: ${result.outlookId}`);
     } catch (dbErr) {
       // Non-fatal — the Outlook event was created; delta sync will import it
@@ -2341,7 +2343,9 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
     }
 
     console.log(`✅ Outlook event created: ${result.outlookId} — "${title}"`);
-    res.status(201).json({ ok: true, outlookId: result.outlookId });
+    // dbId (additive, 2026-08-09): the local row id, so the frontend can offer
+    // Cmd+Z undo (DELETE /api/outlook/events/:dbId) for a fresh booking.
+    res.status(201).json({ ok: true, outlookId: result.outlookId, dbId: localDbId });
   } catch (err) {
     if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook create event error:', err.response?.data || err.message);
@@ -2651,6 +2655,161 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Outlook delete error:', err.response?.data || err.message);
     res.status(500).json({ error: 'Failed to delete event', details: err.message });
+  }
+});
+
+/**
+ * POST /api/outlook/events/:dbId/restore
+ * Undo a soft-delete (Cmd+Z, 2026-08-09): un-tombstones the event row plus the
+ * specific cascaded travel-block ids the caller got back from the DELETE.
+ *
+ * Body: { travelBlockIds?: [] } — each id is validated (caller's own row,
+ * event_type='travel', currently soft-deleted); ids that don't check out are
+ * silently dropped, exactly mirroring the cascade's conservatism.
+ *
+ * LOCAL-FIRST: the rows are restored in the DB unconditionally. Outlook is
+ * best-effort — for every restored row that HAD an outlook_id we re-create the
+ * Graph event (the old one was deleted) and store the NEW outlook_id; a Graph
+ * failure leaves the row restored locally with sync_status='pending' plus a
+ * sync_log failure note (the established degradation pattern).
+ *
+ * 404 — not the caller's event; 409 — the event is not deleted.
+ */
+router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) => {
+  try {
+    const { dbId } = req.params;
+
+    // Own-event check (same shape as the delete route)
+    const ev = await db.pool.query(
+      `SELECT id, outlook_id, title, start_time, end_time, location, categories, is_deleted
+       FROM events WHERE id = $1 AND user_id = $2`,
+      [dbId, req.session.userId]
+    );
+    if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
+    if (!ev.rows[0].is_deleted) {
+      return res.status(409).json({ error: 'Event is not deleted — nothing to restore' });
+    }
+
+    // Validate the requested travel-block ids: caller's own, travel, tombstoned.
+    const requestedIds = (Array.isArray(req.body?.travelBlockIds) ? req.body.travelBlockIds : [])
+      .filter((x) => typeof x === 'string' && x);
+    let travelRows = [];
+    if (requestedIds.length) {
+      try {
+        const tb = await db.pool.query(
+          `/* restore-travel-validation */
+           SELECT id, outlook_id, title, start_time, end_time, location, categories
+           FROM events
+           WHERE id = ANY($1) AND user_id = $2
+             AND event_type = 'travel' AND is_deleted = TRUE`,
+          [requestedIds, req.session.userId]
+        );
+        travelRows = tb.rows || [];
+      } catch (valErr) {
+        // Malformed ids (bad UUID etc.) must not block restoring the event itself.
+        console.warn(`⚠️ Travel-block restore validation failed (non-fatal): ${valErr.message}`);
+        travelRows = [];
+      }
+    }
+    const travelBlockIds = travelRows.map((r) => r.id);
+
+    // Un-soft-delete locally — the authoritative action (event + validated blocks)
+    const restoreIds = [dbId, ...travelBlockIds];
+    await db.pool.query(
+      `UPDATE events
+       SET is_deleted = FALSE, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ANY($1) AND user_id = $2`,
+      [restoreIds, req.session.userId]
+    );
+
+    // ── Best-effort Graph re-creates for rows that HAD an Outlook event ─────
+    // The original Graph events were deleted with the cascade, so restoring
+    // means creating NEW ones and storing the new ids.
+    const graphTargets = [
+      ...(ev.rows[0].outlook_id ? [{ ...ev.rows[0], dbRowId: dbId }] : []),
+      ...travelRows.filter((r) => r.outlook_id).map((r) => ({ ...r, dbRowId: r.id })),
+    ];
+    let outlookRecreated = 0, outlookPending = 0;
+    if (graphTargets.length) {
+      let accessToken = null;
+      try {
+        const targetUser = await db.getUser(req.session.userId);
+        accessToken = await getValidAccessToken(targetUser).catch(async () => {
+          // Caller has no token — try org fallback (same as the delete path)
+          const orgId = targetUser?.organisation_id;
+          const fb = await db.pool.query(
+            `SELECT id FROM users WHERE access_token IS NOT NULL AND access_token != ''
+               AND is_active = true AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
+             ORDER BY created_at LIMIT 1`, [orgId]
+          );
+          if (!fb.rows.length) throw new Error('No connected Outlook account');
+          return getValidAccessToken(await db.getUser(fb.rows[0].id));
+        });
+      } catch (tokenErr) {
+        console.warn(`⚠️ Outlook restore skipped (non-fatal): ${tokenErr.message}`);
+      }
+      for (const target of graphTargets) {
+        let recreated = false;
+        if (accessToken) {
+          try {
+            const created = await outlookApi.createOutlookEvent(accessToken, {
+              title:      target.title,
+              startTime:  target.start_time,
+              endTime:    target.end_time,
+              location:   target.location || '',
+              categories: Array.isArray(target.categories) ? target.categories : [],
+              appEventId: target.dbRowId,
+              sploseId:   null,
+            });
+            await db.pool.query(
+              `UPDATE events SET outlook_id = $1, sync_status = 'synced', last_modified_by = 'app'
+               WHERE id = $2 AND user_id = $3`,
+              [created.outlookId, target.dbRowId, req.session.userId]
+            );
+            await db.pool.query(
+              `INSERT INTO sync_log (event_id, action, source, target, status) VALUES ($1, 'created', 'app', 'outlook', 'success')`,
+              [target.dbRowId]
+            ).catch(() => {});
+            outlookRecreated += 1;
+            recreated = true;
+            console.log(`♻️ Restored to Outlook: ${created.outlookId} — "${target.title}"`);
+          } catch (graphErr) {
+            console.warn(`⚠️ Outlook re-create failed (non-fatal): ${graphErr.message}`);
+            await db.pool.query(
+              `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'created', 'app', 'outlook', 'failed', $2)`,
+              [target.dbRowId, graphErr.message]
+            ).catch(() => {});
+          }
+        }
+        if (!recreated) {
+          // Local-first degradation: row stays restored, flagged for reconciliation.
+          outlookPending += 1;
+          await db.pool.query(
+            `UPDATE events SET sync_status = 'pending' WHERE id = $1 AND user_id = $2`,
+            [target.dbRowId, req.session.userId]
+          ).catch(() => {});
+        }
+      }
+    }
+
+    // Audit (identifiers + counts only — established pattern)
+    await db.logAuditEvent({
+      actorUserId: req.session.userId, action: 'calendar.event_restored',
+      targetType: 'event', targetId: dbId, ipAddress: req.ip,
+      metadata: {
+        travelBlocksRestored: travelBlockIds.length, travelBlockIds,
+        outlookRecreated, outlookPending,
+      },
+    }).catch(() => {});
+
+    res.json({
+      ok: true, restored: 1, title: ev.rows[0].title,
+      travelBlocksRestored: travelBlockIds.length, travelBlockIds,
+      outlookRecreated, outlookPending,
+    });
+  } catch (err) {
+    console.error('Outlook restore error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to restore event', details: err.message });
   }
 });
 

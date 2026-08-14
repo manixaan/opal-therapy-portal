@@ -24,6 +24,17 @@
  *   - Unknown tags are dropped rather than trusted.
  *   - Ordering falls back to the template's own default order.
  *   - Custom sections are capped, trimmed and given a server-minted tag.
+ *   - Excluded tags are validated against the template's own tag catalogue.
+ *
+ * ── EXCLUDED TAGS ───────────────────────────────────────────────────────────
+ * `excludedTags` is the therapist's explicit statement that a field should
+ * contribute NOTHING to the document. It is not the same as a missing value:
+ * a missing value keeps the template's own "[PORTAL — …]" placeholder, which is
+ * a visible prompt to finish the job in Word, whereas an excluded tag leaves an
+ * empty control (or, where the template says the tag owns a whole optional
+ * line, no line at all). It travels on the manifest so the engine and the
+ * preview act on ONE list, and so the frozen snapshot records what was
+ * deliberately omitted from a document that has already been issued.
  */
 
 const fcaMap = require('./template-map');
@@ -39,6 +50,7 @@ const DEFAULT_CATALOGUE = {
   SECTION_BY_TAG: fcaMap.SECTION_BY_TAG,
   REQUIRED_SECTION_TAGS: fcaMap.REQUIRED_SECTION_TAGS,
   OVERRIDABLE_TAGS: fcaMap.OVERRIDABLE_TAGS,
+  EXCLUDABLE_TAGS: fcaMap.EXCLUDABLE_TAGS,
   MAX_CUSTOM_SECTIONS: fcaMap.MAX_CUSTOM_SECTIONS,
   MAX_CUSTOM_TITLE_CHARS: fcaMap.MAX_CUSTOM_TITLE_CHARS,
   MAX_CUSTOM_GUIDANCE_CHARS: fcaMap.MAX_CUSTOM_GUIDANCE_CHARS,
@@ -90,6 +102,21 @@ function normaliseSelection({ selectedSections, sectionOrder } = {}, catalogue =
  * `idFactory` supplies the uuid used in the generated w:tag, so this module
  * stays pure and the caller decides where ids come from.
  */
+/**
+ * Rows the document must lose because their section was excluded.
+ * Only EXCLUDED sections contribute; an included section keeps its row.
+ */
+function dependentRowsFor(sections) {
+  const map = require('./template-map').SECTION_DEPENDENT_ROWS || {};
+  const out = [];
+  for (const s of sections) {
+    if (s.included) continue;
+    const label = map[s.tag];
+    if (label && out.indexOf(label) === -1) out.push(label);
+  }
+  return out;
+}
+
 function normaliseCustomSections(customSections, idFactory, catalogue = null) {
   const cat = catalogue || DEFAULT_CATALOGUE;
   if (!Array.isArray(customSections)) return [];
@@ -138,6 +165,30 @@ function normaliseOverrides(overrides, catalogue = null) {
 }
 
 /**
+ * Clean the therapist's exclusion list.
+ *
+ * Unknown tags are dropped, not trusted, exactly as section tags and overrides
+ * are. Order is the therapist's own toggle order, de-duplicated, because it is
+ * a set and re-sorting it would make a diff of two drafts unreadable.
+ */
+function normaliseExcludedFields(excludedFields, catalogue = null) {
+  const cat = catalogue || DEFAULT_CATALOGUE;
+  const known = new Set(cat.EXCLUDABLE_TAGS || []);
+  if (!Array.isArray(excludedFields)) return [];
+
+  const out = [];
+  const seen = new Set();
+  for (const raw of excludedFields) {
+    if (typeof raw !== 'string') continue;
+    const tag = raw.trim();
+    if (!known.has(tag) || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
+}
+
+/**
  * Compose the manifest the engine renders and the preview displays.
  *
  * @param {string[]} selectedSections
@@ -145,6 +196,7 @@ function normaliseOverrides(overrides, catalogue = null) {
  * @param {object[]} customSections  already normalised
  * @param {object}   scalarData      from resolveScalars
  * @param {object}   scalarSources   from resolveScalars
+ * @param {string[]} excludedFields  already normalised; surfaces as excludedTags
  */
 function buildManifest({
   selectedSections = [],
@@ -152,6 +204,7 @@ function buildManifest({
   customSections = [],
   scalarData = {},
   scalarSources = {},
+  excludedFields = [],
 } = {}, catalogue = null) {
   const cat = catalogue || DEFAULT_CATALOGUE;
 
@@ -187,7 +240,15 @@ function buildManifest({
   return {
     scalarData: { ...scalarData },
     scalarSources: { ...scalarSources },
+    // Re-validated here rather than trusted from the caller: the manifest is
+    // what the engine acts on, so an unknown tag must not be able to reach it
+    // through a path that skipped normalisation.
+    excludedTags: normaliseExcludedFields(excludedFields, cat),
     sections: [...sections, ...custom],
+    // Content elsewhere in the document that belongs to an excluded section.
+    // Computed here so the engine never has to reason about which sections
+    // imply which rows — it just removes what the manifest names.
+    dependentRows: dependentRowsFor(sections),
   };
 }
 
@@ -195,6 +256,7 @@ module.exports = {
   normaliseSelection,
   normaliseCustomSections,
   normaliseOverrides,
+  normaliseExcludedFields,
   buildManifest,
   DEFAULT_CATALOGUE,
 };

@@ -62,7 +62,8 @@
      GET    /api/letters/drafts/:id
      PATCH  /api/letters/drafts/:id              { recipient?, ccRecipients?,
                                                    letterDetails?, selectedSections?,
-                                                   customSections?, scalarOverrides? }
+                                                   customSections?, scalarOverrides?,
+                                                   excludedFields? }
      POST   /api/letters/drafts/:id/save-recipient-to-profile { target }
      POST   /api/letters/drafts/:id/generate
      GET    /api/letters/documents/:documentId/download
@@ -366,10 +367,53 @@
     return LTR_FIELD_GROUP_LABELS[key] ? LTR_FIELD_GROUP_LABELS[key] : ltrHumanise(key);
   }
 
+  // ── THE NOTE ─────────────────────────────────────────────────────────────
+  // One calm line at the top of the missing/exclude area. It states the two
+  // real options and neither of the two wrong ones: no field is ever filled
+  // with a guess, and no therapist is ever stuck. Worded identically in the
+  // FCA report builder, because it is the same promise about the same thing.
+  var LTR_BLANK_OR_EXCLUDE_NOTE = 'If we do not hold this information, you can '
+    + 'leave it blank and complete it in Word after downloading — or exclude it '
+    + 'so nothing is inserted.';
+
+  // Add or remove one tag from the exclusion list. Returns a NEW array, which
+  // is what the server is sent: exclusion is a set the therapist owns
+  // outright, so it is replaced wholesale rather than merged.
+  function ltrToggleExcluded(current, tag, on) {
+    var list = (Array.isArray(current) ? current : []).map(String)
+      .filter(function (t) { return t !== String(tag); });
+    if (on) list.push(String(tag));
+    return list;
+  }
+
+  // The tags the SERVER says are excluded. Read from the manifest and nowhere
+  // else: exclusion changes what the DOCX contains, so a locally computed
+  // version could disagree with the letter that is actually produced.
+  function ltrExcludedSet(manifest) {
+    var m = manifest && typeof manifest === 'object' ? manifest : {};
+    var out = {};
+    (Array.isArray(m.excludedTags) ? m.excludedTags : []).forEach(function (t) {
+      out[String(t)] = true;
+    });
+    return out;
+  }
+
+  // The SAME exclusion, restated by the server in the wizard's own field
+  // vocabulary — recipientName, subject, cc and so on. This is what lets the
+  // addressing preview honour an exclusion without this file ever naming a
+  // merge tag; the tag → field mapping is part of the template contract, and
+  // the template contract lives on the server.
+  function ltrExcludedFields(draft) {
+    var d = draft && typeof draft === 'object' ? draft : {};
+    var raw = d.excludedLetterFields;
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  }
+
   function ltrScalarModel(manifest) {
     var m = manifest && typeof manifest === 'object' ? manifest : {};
     var data = m.scalarData && typeof m.scalarData === 'object' ? m.scalarData : {};
     var sources = m.scalarSources && typeof m.scalarSources === 'object' ? m.scalarSources : {};
+    var excluded = ltrExcludedSet(m);
 
     var buckets = {}, seen = [];
     Object.keys(data).forEach(function (tag) {
@@ -377,19 +421,27 @@
       var blank = raw == null || (typeof raw === 'string' && raw.trim() === '');
       var hasOrigin = Object.prototype.hasOwnProperty.call(sources, tag);
       var key = hasOrigin ? ltrSourceKey(sources[tag], tag) : (blank ? 'missing' : 'report_override');
-      var missing = key === 'missing' || blank;
+      // `excluded` is a THIRD state, not a flavour of missing. Missing means
+      // "no layer holds this" — a gap to fill. Excluded means the therapist
+      // has said there is nothing to hold, so nothing is inserted and nothing
+      // is outstanding.
+      var isExcluded = !!excluded[tag];
+      var missing = !isExcluded && (key === 'missing' || blank);
       var g = ltrTagGroup(tag);
       if (!buckets[g]) { buckets[g] = []; seen.push(g); }
       buckets[g].push({
         tag: tag,
         label: ltrTagLabel(tag),
-        value: missing ? null : String(raw),
+        value: (missing || isExcluded) ? null : String(raw),
         source: missing ? 'missing' : key,
         sourceLabel: LTR_SOURCE_LABELS[missing ? 'missing' : key],
         missing: missing,
-        // Server-issued values are shown, never edited: the document id is
-        // Opal's to allocate, not the therapist's to type.
-        editable: key !== 'server',
+        excluded: isExcluded,
+        // Everything is editable, the issued document id included: Opal
+        // supplies a sensible default and a practice that numbers its own
+        // correspondence is not overruled. An excluded row is the exception —
+        // there is nothing to type into a field that will not be inserted.
+        editable: !isExcluded,
       });
     });
 
@@ -441,7 +493,7 @@
       custom: custom,
       blocks: [], included: [], excluded: [],
       letterhead: [], participantFields: [], signatureFields: [], letterFields: [],
-      scalarGroups: [],
+      scalarGroups: [], excludedFields: [],
     };
     if (!manifest || !Array.isArray(manifest.sections)) return base;
 
@@ -467,6 +519,43 @@
     base.participantFields = ltrScalarFields(manifest, 'client');
     base.signatureFields = ltrScalarFields(manifest, 'therapist');
     base.letterFields = ltrScalarFields(manifest, 'letter');
+    // What the therapist has excluded, so the preview can say so rather than
+    // silently showing a line that will not be there. Every list below is
+    // filtered by this, because an excluded value is not in the letter.
+    base.scalarGroups.forEach(function (g) {
+      g.fields.forEach(function (f) { if (f.excluded) base.excludedFields.push(f); });
+    });
+    var drop = function (list) { return list.filter(function (f) { return !f.excluded; }); };
+    base.letterhead = drop(base.letterhead);
+    base.participantFields = drop(base.participantFields);
+    base.signatureFields = drop(base.signatureFields);
+    base.letterFields = drop(base.letterFields);
+
+    // The addressing block is drawn from the draft's own snapshots rather than
+    // from the manifest's scalar list, so exclusion has to be applied to it
+    // explicitly — otherwise the preview would show a line the .docx will not
+    // contain, which is exactly the disagreement this design exists to stop.
+    //
+    // The SERVER says which of these fields are excluded, in the wizard's own
+    // vocabulary (draft.excludedLetterFields). This file therefore still
+    // contains no merge tag: the tag → field mapping belongs to the template
+    // contract, and the template contract lives on the server.
+    var ex = ltrExcludedFields(d);
+    if (ex.documentId) base.documentId = '';
+    if (ex.subject) base.subject = '';
+    if (ex.reportingPeriod) base.reportingPeriod = '';
+    if (ex.letterDate) { base.letterDate = ''; base.letterDateLong = ''; }
+    if (ex.recipientName) base.recipient.name = '';
+    if (ex.recipientRole) base.recipient.role = '';
+    if (ex.recipientOrganisation) base.recipient.organisation = '';
+    if (ex.recipientAddress) base.recipient.address = '';
+    if (ex.salutation) base.recipient.salutation = '';
+    if (ex.cc) {
+      base.cc = {
+        count: 0, names: [], willAppear: false,
+        text: 'No CC line will appear — the whole line is removed from the letter.',
+      };
+    }
     return base;
   }
 
@@ -490,6 +579,11 @@
   // server reports in draft.missingFields, blocks too. Nothing else does —
   // an optional blank becomes a marked placeholder in the document, which is
   // a completion prompt, not an error.
+  //
+  // NOTHING EXCLUDED EVER BLOCKS. The server accepts a generate with an
+  // excluded required field, so a UI that refused it would simply be wrong,
+  // and would leave the therapist unable to act on a decision they had
+  // already made.
   function ltrRequiredScalarTags(template) {
     var out = [];
     var list = template && Array.isArray(template.scalarTags) ? template.scalarTags : [];
@@ -504,24 +598,32 @@
     var details = d.letterDetails && typeof d.letterDetails === 'object' ? d.letterDetails : {};
     var recipient = d.recipient && typeof d.recipient === 'object' ? d.recipient : {};
     var issues = [];
+    var excluded = ltrExcludedSet(d.manifest);
+    var exField = ltrExcludedFields(d);
 
     function blank(v) { return v == null || String(v).trim() === ''; }
 
     if (blank(d.clientId) && blank(d.clientName)) {
       issues.push({ key: 'participant', step: 1, label: 'Participant', message: 'Choose the participant this letter is about.' });
     }
-    if (blank(recipient.name)) {
+    if (blank(recipient.name) && !exField.recipientName) {
       issues.push({ key: 'recipient', step: 2, label: 'Addressee', message: 'The letter needs a named recipient before it can be produced.' });
     }
-    if (blank(details.subject)) {
+    if (blank(details.subject) && !exField.subject) {
       issues.push({ key: 'subject', step: 3, label: 'Subject', message: 'Enter the subject line for this letter.' });
     }
-    if (!ltrDateParts(details.letterDate)) {
+    if (!ltrDateParts(details.letterDate) && !exField.letterDate) {
       issues.push({ key: 'letterDate', step: 3, label: 'Letter date', message: 'Enter the letter date as dd/mm/yyyy.' });
     }
 
+    // An EXCLUDED tag never blocks. The therapist has already answered the
+    // question, the engine inserts nothing for it, and the server accepts the
+    // generate — so refusing here would be the UI disagreeing with the truth.
+    var excluded = ltrExcludedSet(d.manifest);
     var missing = {};
-    (Array.isArray(d.missingFields) ? d.missingFields : []).forEach(function (t) { missing[String(t)] = true; });
+    (Array.isArray(d.missingFields) ? d.missingFields : []).forEach(function (t) {
+      if (!excluded[String(t)]) missing[String(t)] = true;
+    });
     ltrRequiredScalarTags(template).forEach(function (tag) {
       if (!missing[tag]) return;
       issues.push({
@@ -533,17 +635,21 @@
   }
 
   // Everything blank, blocking or not, grouped the way the review step reads.
-  function ltrMissingSummary(missingFields, scalarData) {
+  // An EXCLUDED tag is never listed: it is an answered question, not an
+  // outstanding one, and re-asking would turn a decision back into a nag.
+  function ltrMissingSummary(missingFields, scalarData, excludedTags) {
     var data = scalarData && typeof scalarData === 'object' ? scalarData : {};
+    var skip = {};
+    (Array.isArray(excludedTags) ? excludedTags : []).forEach(function (t) { skip[String(t)] = true; });
     var flagged = {}, tags = [];
     (Array.isArray(missingFields) ? missingFields : []).forEach(function (t) {
       var k = String(t);
-      if (!flagged[k]) { flagged[k] = true; tags.push(k); }
+      if (!flagged[k] && !skip[k]) { flagged[k] = true; tags.push(k); }
     });
     Object.keys(data).forEach(function (k) {
       var v = data[k];
       var blank = v == null || (typeof v === 'string' && v.trim() === '');
-      if (blank && !flagged[k]) { flagged[k] = true; tags.push(k); }
+      if (blank && !flagged[k] && !skip[k]) { flagged[k] = true; tags.push(k); }
     });
     var groups = {}, order = [];
     tags.forEach(function (t) {
@@ -609,6 +715,9 @@
     ltrSuggestSalutation: ltrSuggestSalutation,
     ltrCcSummary: ltrCcSummary,
     ltrFieldGroupLabel: ltrFieldGroupLabel,
+    ltrExcludedSet: ltrExcludedSet,
+    ltrExcludedFields: ltrExcludedFields,
+    ltrToggleExcluded: ltrToggleExcluded,
     ltrScalarModel: ltrScalarModel,
     ltrScalarFields: ltrScalarFields,
     ltrPreviewModel: ltrPreviewModel,
@@ -620,6 +729,7 @@
     ltrFilenamePreview: ltrFilenamePreview,
     LTR_SOURCE_LABELS: LTR_SOURCE_LABELS,
     LTR_SOURCE_ORDER: LTR_SOURCE_ORDER,
+    LTR_BLANK_OR_EXCLUDE_NOTE: LTR_BLANK_OR_EXCLUDE_NOTE,
     LTR_CONTACT_LABELS: LTR_CONTACT_LABELS,
     LTR_CONTACT_TARGETS: LTR_CONTACT_TARGETS,
     LTR_FIELD_GROUP_ORDER: LTR_FIELD_GROUP_ORDER,
@@ -1205,10 +1315,15 @@
     var r = await api(API + '/drafts/' + encodeURIComponent(S.draft.id) + '/generate', { method: 'POST' });
     S.generating = false;
     if (!r.ok) { S.genErr = r.error; S.confirming = false; render(); return; }
+    var excluded = Array.isArray(r.excludedFields) ? r.excludedFields.map(String) : [];
     S.result = {
       documentId: r.documentId,
       filename: r.filename,
-      missingFields: Array.isArray(r.missingFields) ? r.missingFields : [],
+      // Excluded fields are reported separately: one was a gap the letter
+      // shows, the other was a deliberate omission.
+      missingFields: (Array.isArray(r.missingFields) ? r.missingFields : [])
+        .filter(function (t) { return excluded.indexOf(String(t)) === -1; }),
+      excludedFields: excluded,
       warnings: Array.isArray(r.warnings) ? r.warnings : [],
     };
     S.confirming = false;
@@ -1298,7 +1413,7 @@
       '<div><h1 id="ltr-title">Progress note letter</h1>' +
       '<p class="ltr-quiet">' + ltrEsc(headSubtitle()) + '</p></div>' +
       '<div class="ltr-head-right">' + renderSaveIndicator() +
-      '<button type="button" class="ltr-iconbtn" data-ltr="close" aria-label="Close the letter builder">' + icn('ban') + '</button>' +
+      '<button type="button" class="ltr-iconbtn" data-ltr="close" aria-label="Close the letter builder">' + icn('x') + '</button>' +
       '</div></header>' +
       renderStepper() +
       '<div class="ltr-body' + (showPreview ? ' ltr-body-split' : '') + '">' +
@@ -1568,7 +1683,11 @@
       '<label class="ltr-lbl" for="ltr-docid">Document ID</label>' +
       '<input type="text" class="ltr-input" id="ltr-docid" readonly aria-readonly="true"' +
       ' aria-describedby="ltr-docid-help" value="' + ltrEsc(d.documentId) + '">' +
-      '<p class="ltr-quiet" id="ltr-docid-help">Issued by Opal and printed in the letter footer. It is not yours to change.</p>' +
+      // Shown here, changed below. One value with two editors on one screen is
+      // a way to lose an edit, so this slot displays the issued reference and
+      // the merged-values list is the single place it can be overridden.
+      '<p class="ltr-quiet" id="ltr-docid-help">Issued by Opal when this draft was created, and printed in the letter footer. ' +
+      'To use your own reference, change it under &ldquo;Details Opal will merge into this letter&rdquo; below.</p>' +
       '</section>';
 
     out += '<section class="ltr-card" aria-labelledby="ltr-ther-h"><h3 id="ltr-ther-h">Signing therapist</h3>' +
@@ -1591,20 +1710,27 @@
     var missing = groups.reduce(function (n, g) {
       return n + g.fields.filter(function (f) { return f.missing; }).length;
     }, 0);
+    var excluded = groups.reduce(function (n, g) {
+      return n + g.fields.filter(function (f) { return f.excluded; }).length;
+    }, 0);
 
     var out = '<section class="ltr-card" aria-labelledby="ltr-merge-h">' +
       '<h3 id="ltr-merge-h">Details Opal will merge into this letter</h3>';
     if (!total) {
       return out + '<p class="ltr-quiet">The letter has not been composed on the server yet.</p></section>';
     }
-    out += '<p class="ltr-quiet">' + missing + ' of ' + total + ' merged values have no source yet. ' +
-      'Each one shows where its value came from; nothing here is guessed.</p>';
+    out += '<p class="ltr-quiet">' + missing + ' of ' + total + ' merged values have no source yet' +
+      (excluded ? ', and ' + excluded + ' ' + (excluded === 1 ? 'is' : 'are') + ' excluded' : '') +
+      '. Each one shows where its value came from; nothing here is guessed.</p>';
 
     if (!S.detailsOpen) {
       return out + '<div class="ltr-row-actions">' +
         '<button type="button" class="ltr-btn" data-ltr="details-open" aria-expanded="false" aria-controls="ltr-merge-list">' +
         'Review and correct these ' + total + ' values</button></div></section>';
     }
+
+    // The calm line, at the top of the area where a therapist meets a gap.
+    out += '<p class="ltr-inline-note" id="ltr-blank-note">' + ltrEsc(LTR_BLANK_OR_EXCLUDE_NOTE) + '</p>';
 
     out += renderSourceLegend() + '<div id="ltr-merge-list">' + groups.map(function (g) {
       return '<h4 class="ltr-subh" id="ltr-mg-' + ltrEsc(g.key) + '">' + ltrEsc(g.label) + '</h4>' +
@@ -1627,22 +1753,40 @@
 
   function renderDataField(f) {
     var id = 'ltr-ov-' + f.tag;
-    var typed = S.overrides[f.tag];
+    var exId = 'ltr-ex-' + f.tag;
+    // An excluded row shows nothing typed: the server cleared the override the
+    // moment it was excluded, so showing a stale local value would be a lie.
+    var typed = f.excluded ? undefined : S.overrides[f.tag];
     var shown = typed === undefined ? (f.value === null ? '' : f.value) : typed;
-    return '<div class="ltr-field' + (f.missing ? ' ltr-field-missing' : '') + '">' +
+
+    return '<div class="ltr-field' +
+      (f.excluded ? ' ltr-field-excluded' : (f.missing ? ' ltr-field-missing' : '')) + '">' +
       '<dt><label for="' + ltrEsc(id) + '">' + ltrEsc(f.label) + '</label></dt>' +
       '<dd><span class="ltr-fieldtop">' +
-      (f.missing
-        ? '<span class="ltr-missing">' + icn('alert') + ' No value</span>'
-        : '<span class="ltr-value">' + ltrEsc(f.value) + '</span>') +
-      '<span class="ltr-badge ltr-badge-' + ltrEsc(f.source) + '">' + ltrEsc(f.sourceLabel) + '</span>' +
+      (f.excluded
+        ? '<span class="ltr-excluded-note">Excluded — nothing will be inserted</span>'
+        : (f.missing
+          ? '<span class="ltr-missing">' + icn('alert') + ' No value</span>'
+          : '<span class="ltr-value">' + ltrEsc(f.value) + '</span>')) +
+      (f.excluded
+        ? ''
+        : '<span class="ltr-badge ltr-badge-' + ltrEsc(f.source) + '">' + ltrEsc(f.sourceLabel) + '</span>') +
       '</span>' +
-      (f.editable
-        ? '<input type="text" class="ltr-input ltr-input-sm" id="' + ltrEsc(id) + '"' +
-          ' data-ltr-input="override" data-tag="' + ltrEsc(f.tag) + '" value="' + ltrEsc(shown) + '"' +
-          ' placeholder="' + (f.missing ? 'Type the real value, or leave blank' : 'Correct this value for this letter') + '"' +
-          ' aria-describedby="ltr-ov-help">'
-        : '<span class="ltr-quiet">Issued by Opal — not editable</span>') +
+      '<input type="text" class="ltr-input ltr-input-sm" id="' + ltrEsc(id) + '"' +
+      ' data-ltr-input="override" data-tag="' + ltrEsc(f.tag) + '" value="' + ltrEsc(shown) + '"' +
+      (f.editable ? '' : ' disabled') +
+      ' placeholder="' + (f.excluded
+        ? 'Excluded from this letter'
+        : (f.missing ? 'Type the real value, or leave blank' : 'Correct this value for this letter')) + '"' +
+      ' aria-describedby="ltr-ov-help">' +
+      '<span class="ltr-exclude">' +
+      '<input type="checkbox" id="' + ltrEsc(exId) + '"' +
+      ' data-ltr-check="exclude" data-tag="' + ltrEsc(f.tag) + '"' +
+      (f.excluded ? ' checked' : '') +
+      ' aria-describedby="ltr-blank-note">' +
+      '<label for="' + ltrEsc(exId) + '">Exclude<span class="ltr-sr-only">' +
+      ' ' + ltrEsc(f.label) + ' from this letter</span></label>' +
+      '</span>' +
       '</dd></div>';
   }
 
@@ -1654,6 +1798,33 @@
       payload[k] = v === '' ? null : v;
     });
     queuePatch({ scalarOverrides: payload });
+  }
+
+  function currentExcluded() {
+    if (!S.draft) return [];
+    if (S.draft.manifest && Array.isArray(S.draft.manifest.excludedTags)) {
+      return S.draft.manifest.excludedTags;
+    }
+    return Array.isArray(S.draft.excludedFields) ? S.draft.excludedFields : [];
+  }
+
+  // Exclude / un-exclude one field. The whole list is sent, because exclusion
+  // is a set the therapist owns outright and a merge could not express
+  // un-excluding. The SERVER decides what this means for the letter; the
+  // manifest it sends back is what the next render draws.
+  function setExcluded(tag, on) {
+    if (!S.draft || !tag) return;
+    var next = ltrToggleExcluded(currentExcluded(), tag, on);
+    // Excluding CLEARS any value typed for this field — the server does the
+    // same to the stored override, and leaving a local one behind would
+    // resurrect it the moment the field was un-excluded.
+    if (on) delete S.overrides[tag];
+    // Reflected locally so the row de-emphasises immediately; the server's
+    // manifest replaces this the moment the PATCH lands.
+    if (S.draft.manifest) S.draft.manifest.excludedTags = next;
+    S.draft.excludedFields = next;
+    queuePatch({ excludedFields: next });
+    render();
   }
 
   // ── Step 4: narrative blocks ──────────────────────────────────────────────
@@ -1753,8 +1924,11 @@
   function renderStepReview() {
     var counts = ltrBlockCounts(S.draft ? S.draft.manifest : null);
     var issues = blockingIssues();
+    // Excluded fields are deliberately absent from this summary: they are
+    // answered questions, not outstanding ones.
     var summary = ltrMissingSummary(S.draft ? S.draft.missingFields : [],
-      S.draft && S.draft.manifest ? S.draft.manifest.scalarData : {});
+      S.draft && S.draft.manifest ? S.draft.manifest.scalarData : {},
+      currentExcluded());
     var model = ltrPreviewModel(S.draft);
 
     var out = '<h2 class="ltr-h2" id="ltr-step-h" tabindex="-1">Review and generate</h2>';
@@ -1770,6 +1944,11 @@
           '<div><p><strong>' + S.result.missingFields.length + ' value(s) were left blank</strong> and appear as placeholders:</p>' +
           '<p class="ltr-quiet">' + S.result.missingFields.map(function (t) { return ltrEsc(ltrTagLabel(t)); }).join(', ') +
           '</p></div></div>';
+      }
+      if ((S.result.excludedFields || []).length) {
+        out += '<p class="ltr-inline-note">' + S.result.excludedFields.length +
+          ' value(s) were excluded, and nothing was inserted for them: ' +
+          S.result.excludedFields.map(function (t) { return ltrEsc(ltrTagLabel(t)); }).join(', ') + '.</p>';
       }
       if (S.result.warnings.length) {
         out += '<div class="ltr-note ltr-note-warn">' + icn('info') + '<div><p><strong>From the generator:</strong></p><ul>' +
@@ -1936,6 +2115,11 @@
         m.excluded.map(function (s) { return ltrEsc(s.title); }).join(', ') + '</p>';
     }
 
+    if (m.excludedFields.length) {
+      out += '<p class="ltr-quiet ltr-doc-out">Excluded — nothing will be inserted: ' +
+        m.excludedFields.map(function (f) { return ltrEsc(f.label); }).join(', ') + '</p>';
+    }
+
     // Signature block — the therapist values the manifest carries.
     out += '<div class="ltr-doc-sign"><p class="ltr-doc-signoff">Yours sincerely</p>' +
       (m.signatureFields.length
@@ -2014,6 +2198,10 @@
     var box = e.target && e.target.closest ? e.target.closest('[data-ltr-check]') : null;
     if (box && box.getAttribute('data-ltr-check') === 'block') {
       toggleBlock(box.getAttribute('data-tag'));
+      return;
+    }
+    if (box && box.getAttribute('data-ltr-check') === 'exclude') {
+      setExcluded(box.getAttribute('data-tag'), box.checked);
       return;
     }
     var sel = e.target && e.target.closest ? e.target.closest('[data-ltr-change]') : null;

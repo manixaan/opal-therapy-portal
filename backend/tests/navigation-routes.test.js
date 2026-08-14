@@ -28,6 +28,7 @@ const {
   baseOf,
   DEFAULT_TAB,
   KNOWN_TABS,
+  PAGE_TABS,
   MAX_ID,
 } = require('../../frontend/current/navigation.js');
 
@@ -102,10 +103,70 @@ describe('route grammar round-trips', () => {
   });
 
   test('every known tab encodes to its own hash', () => {
-    for (const tab of KNOWN_TABS) {
+    // Page tabs are excluded: they are surfaces ABOUT a record, so a bare
+    // "#assessment" names nothing openable and is asserted separately below.
+    for (const tab of KNOWN_TABS.filter((t) => !PAGE_TABS.includes(t))) {
       expect(encodeRoute({ tab })).toBe('#' + tab);
       expect(decodeRoute('#' + tab).tab).toBe(tab);
     }
+  });
+});
+
+// ── The assessment surface ─────────────────────────────────────────────────
+//
+// A full-page surface addressed by an id rather than a step. The rules that
+// matter clinically: an assessment must have a real address (so Back returns
+// to it and a colleague can be linked to it), and an address that names no
+// record must degrade to the catalogue rather than to a blank page.
+
+describe('assessment routes', () => {
+  test('both views round-trip', () => {
+    expect(encodeRoute({ tab: 'assessment', view: 'record', id: 'abc-123' }))
+      .toBe('#assessment/record/abc-123');
+    expect(encodeRoute({ tab: 'assessment', view: 'client', id: '4821' }))
+      .toBe('#assessment/client/4821');
+    for (const hash of ['#assessment/record/abc-123', '#assessment/client/4821']) {
+      expect(encodeRoute(decodeRoute(hash))).toBe(hash);
+    }
+  });
+
+  test('the short form is a record', () => {
+    expect(decodeRoute('#assessment/abc-123'))
+      .toMatchObject({ tab: 'assessment', view: 'record', id: 'abc-123' });
+  });
+
+  test('an idless assessment address is the Assessments tab, never a blank page', () => {
+    for (const hash of ['#assessment', '#assessment/record', '#assessment/record/', '#assessment/client/']) {
+      expect(decodeRoute(hash)).toMatchObject({ tab: 'resources', view: 'instruments' });
+    }
+  });
+
+  test('an unknown view degrades to the record view rather than being dropped', () => {
+    expect(normaliseRoute({ tab: 'assessment', view: 'nonsense', id: 'x' }))
+      .toMatchObject({ tab: 'assessment', view: 'record', id: 'x' });
+  });
+
+  test('a hostile id cannot smuggle extra route segments', () => {
+    const r = decodeRoute('#assessment/record/' + encodeURIComponent('a/b?c#d'));
+    expect(r.id).toBe('abcd');          // every separator stripped
+    expect(r.view).toBe('record');      // and none of them became a segment
+    expect(r.overlay).toBeNull();
+  });
+});
+
+// ── Assessment information pages ───────────────────────────────────────────
+
+describe('assessment information pages', () => {
+  test('an assessment key is addressable under the Assessments tab', () => {
+    const hash = '#resources/instruments/whodas-2.0-36';
+    expect(decodeRoute(hash)).toMatchObject({
+      tab: 'resources', view: 'instruments', id: 'whodas-2.0-36',
+    });
+    expect(encodeRoute(decodeRoute(hash))).toBe(hash);
+  });
+
+  test('the idless form is still the catalogue', () => {
+    expect(encodeRoute(decodeRoute('#resources/instruments'))).toBe('#resources/instruments');
   });
 });
 

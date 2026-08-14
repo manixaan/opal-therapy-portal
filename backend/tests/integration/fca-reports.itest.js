@@ -384,6 +384,71 @@ describe('four-layer precedence through the API', () => {
     expect(body).not.toContain('Renamed Person');
   });
 
+  test('the document-control fields are ISSUED at creation, not at generate', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+
+    // Straight off POST /drafts — before any PATCH, before any generate.
+    const draft = await createDraft(agent, CLIENT_X.id);
+    const { scalarData, scalarSources } = draft.manifest;
+
+    expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(`FCA-${draft.id.slice(0, 8).toUpperCase()}`);
+    expect(scalarData.OPAL_REPORT_DATE).toMatch(/^\d{2}\/\d{2}\/\d{4}$/); // dd/mm/yyyy
+    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
+    expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
+
+    for (const tag of tm.SERVER_TAGS) {
+      expect([tag, scalarSources[tag]]).toEqual([tag, 'server']);
+      expect(draft.missingFields).not.toContain(tag);
+    }
+
+    // Persisted, so it is a fact about the row rather than a recomputation.
+    const row = await db.pool.query(
+      'SELECT document_control FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(row.rows[0].document_control.documentReference).toBe(scalarData.OPAL_REPORT_DOCUMENT_ID);
+  });
+
+  test('Opal issues only what is Opal\'s to issue — reviewer and recipients stay missing', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, CLIENT_X.id);
+
+    for (const tag of [
+      'OPAL_REPORT_ISSUE_DATE',
+      'OPAL_REPORT_REVIEWER_NAME',
+      'OPAL_REPORT_REVIEWER_ROLE',
+      'OPAL_REPORT_AUTHORISED_RECIPIENTS',
+    ]) {
+      expect([tag, draft.manifest.scalarData[tag]]).toEqual([tag, null]);
+      expect([tag, draft.manifest.scalarSources[tag]]).toEqual([tag, 'missing']);
+      expect(draft.missingFields).toContain(tag);
+    }
+  });
+
+  test('an override beats the issued default, and the Document ID is stable', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, CLIENT_X.id);
+    const issuedId = draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID;
+
+    const patched = await agent.patch(`/api/fca/drafts/${draft.id}`).send({
+      scalarOverrides: { OPAL_REPORT_VERSION: '2.0', OPAL_REPORT_STATUS: 'Final' },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_VERSION).toBe('2.0');
+    expect(patched.body.draft.manifest.scalarSources.OPAL_REPORT_VERSION).toBe('report_override');
+    expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_STATUS).toBe('Final');
+    // The id the therapist read in review is the id that ships.
+    expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(issuedId);
+
+    const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
+    expect(gen.status).toBe(200);
+    const after = await agent.get(`/api/fca/drafts/${draft.id}`);
+    expect(after.body.draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(issuedId);
+    expect(after.body.draft.manifest.scalarData.OPAL_REPORT_VERSION).toBe('2.0');
+  });
+
   test('Splose being down is reported honestly, never fabricated', async () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
@@ -685,6 +750,101 @@ describe('composition and generation', () => {
     expect(body).not.toMatch(/>undefined</);
     // The control survives so the gap is visible to the therapist.
     expect(body).toContain('OPAL_CLIENT_PRONOUNS');
+  });
+
+  test('excludedFields round-trips through PATCH and is frozen into the snapshot', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, CLIENT_X.id);
+
+    const patched = await agent.patch(`/api/fca/drafts/${draft.id}`).send({
+      excludedFields: ['OPAL_REPORT_REVIEWER_NAME', 'NOT_A_REAL_TAG'],
+    });
+    expect(patched.status).toBe(200);
+    // Unknown tags are dropped rather than trusted.
+    expect(patched.body.draft.excludedFields).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+    expect(patched.body.draft.manifest.excludedTags).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+
+    const reread = await agent.get(`/api/fca/drafts/${draft.id}`);
+    expect(reread.body.draft.manifest.excludedTags).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+
+    const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
+    expect(gen.status).toBe(200);
+    expect(gen.body.excludedFields).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+
+    const row = await db.pool.query(
+      'SELECT excluded_fields FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(row.rows[0].excluded_fields).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+    // And it survives on the frozen read.
+    const frozen = await agent.get(`/api/fca/drafts/${draft.id}`);
+    expect(frozen.body.draft.manifest.excludedTags).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+  });
+
+  test('excluding a field CLEARS its override, and un-excluding restores the resolved value', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ pronouns: 'xe/xem' });
+    const draft = await createDraft(agent, CLIENT_X.id);
+
+    const typed = await agent.patch(`/api/fca/drafts/${draft.id}`)
+      .send({ scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'they/them' } });
+    expect(typed.body.draft.manifest.scalarData.OPAL_CLIENT_PRONOUNS).toBe('they/them');
+    expect(typed.body.draft.manifest.scalarSources.OPAL_CLIENT_PRONOUNS).toBe('report_override');
+
+    const excluded = await agent.patch(`/api/fca/drafts/${draft.id}`)
+      .send({ excludedFields: ['OPAL_CLIENT_PRONOUNS'] });
+    const stored = await db.pool.query(
+      'SELECT scalar_overrides FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(stored.rows[0].scalar_overrides).not.toHaveProperty('OPAL_CLIENT_PRONOUNS');
+    expect(excluded.body.draft.manifest.excludedTags).toEqual(['OPAL_CLIENT_PRONOUNS']);
+
+    // Un-excluding falls back to the layers — never to the value that was
+    // struck through, which the therapist has not seen since.
+    const restored = await agent.patch(`/api/fca/drafts/${draft.id}`).send({ excludedFields: [] });
+    expect(restored.body.draft.manifest.excludedTags).toEqual([]);
+    expect(restored.body.draft.manifest.scalarData.OPAL_CLIENT_PRONOUNS).toBe('xe/xem');
+    expect(restored.body.draft.manifest.scalarSources.OPAL_CLIENT_PRONOUNS).toBe('client_profile');
+  });
+
+  test('an excluded field renders EMPTY in the document, with no placeholder', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, CLIENT_X.id);
+
+    // One auto-issued field and one genuinely missing one.
+    await agent.patch(`/api/fca/drafts/${draft.id}`).send({
+      excludedFields: ['OPAL_REPORT_DOCUMENT_ID', 'OPAL_REPORT_REVIEWER_NAME'],
+    });
+    const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
+    expect(gen.status).toBe(200);
+
+    const dl = await agent.get(`/api/fca/documents/${gen.body.documentId}/download`)
+      .buffer().parse((r, cb) => {
+        const chunks = [];
+        r.on('data', (c) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const zip = await JSZip.loadAsync(dl.body);
+    const body = await zip.file('word/document.xml').async('string');
+    const footer = await zip.file('word/footer6.xml').async('string');
+
+    // Neither the value nor the template's own placeholder.
+    expect(body).not.toContain('[PORTAL — REPORT ID]');
+    expect(body).not.toContain('[PORTAL — REVIEWER NAME]');
+    expect(footer).not.toContain('[PORTAL — REPORT ID]');
+    expect(footer).not.toContain(`FCA-${draft.id.slice(0, 8).toUpperCase()}`);
+    // But the controls survive, so the therapist can still type in Word.
+    expect(body).toContain('OPAL_REPORT_REVIEWER_NAME');
+    expect(footer).toContain('OPAL_REPORT_DOCUMENT_ID');
+
+    // A field that is merely missing keeps its prompt — the distinction holds.
+    expect(body).toContain('[PORTAL — REVIEWER ROLE]');
+
+    // The generate response separates a decision from an omission.
+    expect(gen.body.missingFields).toContain('OPAL_REPORT_REVIEWER_ROLE');
+    expect(gen.body.warnings.join(' ')).toMatch(/excluded/);
   });
 
   test('the download is a real, openable docx package', async () => {

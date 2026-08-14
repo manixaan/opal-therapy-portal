@@ -1,0 +1,3740 @@
+{
+  "templateKey": "whodas-36-interviewer",
+  "templateVersion": "1.0.0",
+  "templateSha256": "30c0f853dc1226477c7bf3fad9d72f2d9bb6e2b7c0f7f38bcebb7b4092250582",
+  "method": "interviewer",
+  "pageCount": 10,
+  "mediaBox": [
+    0,
+    0,
+    567,
+    780
+  ],
+  "cropBox": [
+    41.76,
+    41.76,
+    482.04,
+    693.24
+  ],
+  "fields": [
+    {
+      "field": "D1.1",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.34,
+            "cy": 520.75,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.22,
+            "y": 514.23,
+            "w": 29.03,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.15,
+            "cy": 520.75,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.25,
+            "y": 514.23,
+            "w": 34.49,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.33,
+            "cy": 520.75,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.74,
+            "y": 514.23,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.37,
+            "cy": 520.75,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.85,
+            "y": 514.23,
+            "w": 47.61,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.55,
+            "cy": 520.75,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.46,
+            "y": 514.23,
+            "w": 38.2,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D1.2",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.34,
+            "cy": 495.26,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.22,
+            "y": 488.74,
+            "w": 29.03,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.16,
+            "cy": 495.26,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.25,
+            "y": 488.74,
+            "w": 34.5,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.34,
+            "cy": 495.26,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.75,
+            "y": 488.74,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.38,
+            "cy": 495.26,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.86,
+            "y": 488.74,
+            "w": 47.6,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.55,
+            "cy": 495.26,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.46,
+            "y": 488.74,
+            "w": 38.21,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D1.3",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.34,
+            "cy": 479.11,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.22,
+            "y": 472.59,
+            "w": 29.02,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.15,
+            "cy": 479.11,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.24,
+            "y": 472.59,
+            "w": 34.5,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.33,
+            "cy": 479.11,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.74,
+            "y": 472.59,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.37,
+            "cy": 479.11,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.85,
+            "y": 472.59,
+            "w": 47.61,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.54,
+            "cy": 479.11,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.46,
+            "y": 472.59,
+            "w": 38.2,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D1.4",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.33,
+            "cy": 453.62,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.21,
+            "y": 447.1,
+            "w": 29.03,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.15,
+            "cy": 453.62,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.24,
+            "y": 447.1,
+            "w": 34.5,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.33,
+            "cy": 453.62,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.74,
+            "y": 447.1,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.37,
+            "cy": 453.62,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.85,
+            "y": 447.1,
+            "w": 47.6,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.54,
+            "cy": 453.62,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.45,
+            "y": 447.1,
+            "w": 38.21,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D1.5",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.33,
+            "cy": 428.12,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.21,
+            "y": 421.6,
+            "w": 29.03,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.15,
+            "cy": 428.12,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.24,
+            "y": 421.6,
+            "w": 34.5,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.33,
+            "cy": 428.12,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.74,
+            "y": 421.6,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.37,
+            "cy": 428.12,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.85,
+            "y": 421.6,
+            "w": 47.6,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.54,
+            "cy": 428.12,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.45,
+            "y": 421.6,
+            "w": 38.21,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D1.6",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.34,
+            "cy": 402.61,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.22,
+            "y": 396.09,
+            "w": 29.02,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 316.15,
+            "cy": 402.61,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.24,
+            "y": 396.09,
+            "w": 34.5,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 355.33,
+            "cy": 402.61,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 335.74,
+            "y": 396.09,
+            "w": 43.11,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.37,
+            "cy": 402.61,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 378.85,
+            "y": 396.09,
+            "w": 47.61,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 450.54,
+            "cy": 402.61,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.46,
+            "y": 396.09,
+            "w": 38.2,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D2.1",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 287,
+            "cy": 265.15,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.88,
+            "y": 258.63,
+            "w": 29.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 317.72,
+            "cy": 265.15,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 302.36,
+            "y": 258.63,
+            "w": 35.58,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 358.16,
+            "cy": 265.15,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 337.94,
+            "y": 258.63,
+            "w": 42.84,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 403.4,
+            "cy": 265.15,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 380.78,
+            "y": 258.63,
+            "w": 45.9,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.96,
+            "cy": 265.15,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.68,
+            "y": 258.63,
+            "w": 37.4,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D2.2",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 287,
+            "cy": 239.66,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.88,
+            "y": 233.14,
+            "w": 29.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 317.72,
+            "cy": 239.66,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 302.36,
+            "y": 233.14,
+            "w": 35.58,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 358.16,
+            "cy": 239.66,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 337.94,
+            "y": 233.14,
+            "w": 42.84,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 403.4,
+            "cy": 239.66,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 380.78,
+            "y": 233.14,
+            "w": 45.9,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.97,
+            "cy": 239.66,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.68,
+            "y": 233.14,
+            "w": 37.4,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D2.3",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 287,
+            "cy": 223.46,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.88,
+            "y": 216.94,
+            "w": 29.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 317.72,
+            "cy": 223.46,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 302.36,
+            "y": 216.94,
+            "w": 35.58,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 358.16,
+            "cy": 223.46,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 337.94,
+            "y": 216.94,
+            "w": 42.84,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 403.4,
+            "cy": 223.46,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 380.78,
+            "y": 216.94,
+            "w": 45.9,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.96,
+            "cy": 223.46,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.68,
+            "y": 216.94,
+            "w": 37.4,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D2.4",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 287,
+            "cy": 207.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.88,
+            "y": 200.8,
+            "w": 29.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 317.72,
+            "cy": 207.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 302.36,
+            "y": 200.8,
+            "w": 35.58,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 358.16,
+            "cy": 207.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 337.94,
+            "y": 200.8,
+            "w": 42.84,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 403.4,
+            "cy": 207.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 380.78,
+            "y": 200.8,
+            "w": 45.9,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.97,
+            "cy": 207.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.68,
+            "y": 200.8,
+            "w": 37.4,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D2.5",
+      "page": 5,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 287,
+            "cy": 191.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.88,
+            "y": 184.65,
+            "w": 29.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 317.72,
+            "cy": 191.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 302.36,
+            "y": 184.65,
+            "w": 35.58,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 358.16,
+            "cy": 191.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 337.94,
+            "y": 184.65,
+            "w": 42.84,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 403.4,
+            "cy": 191.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 380.78,
+            "y": 184.65,
+            "w": 45.9,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.96,
+            "cy": 191.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.68,
+            "y": 184.65,
+            "w": 37.4,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D3.1",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.22,
+            "cy": 535.22,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.1,
+            "y": 528.7,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.4,
+            "cy": 535.22,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.31,
+            "y": 528.7,
+            "w": 38.79,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 366.8,
+            "cy": 535.22,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.1,
+            "y": 528.7,
+            "w": 41.64,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.68,
+            "cy": 535.22,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.74,
+            "y": 528.7,
+            "w": 42.36,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 451.52,
+            "cy": 535.22,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 430.1,
+            "y": 528.7,
+            "w": 35.53,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D3.2",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.22,
+            "cy": 519.08,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.1,
+            "y": 512.56,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.4,
+            "cy": 519.08,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.31,
+            "y": 512.56,
+            "w": 38.79,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 366.8,
+            "cy": 519.08,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.1,
+            "y": 512.56,
+            "w": 41.64,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.67,
+            "cy": 519.08,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.74,
+            "y": 512.56,
+            "w": 42.35,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 451.51,
+            "cy": 519.08,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 430.09,
+            "y": 512.56,
+            "w": 35.54,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D3.3",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.22,
+            "cy": 502.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.1,
+            "y": 496.36,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.4,
+            "cy": 502.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.31,
+            "y": 496.36,
+            "w": 38.79,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 366.8,
+            "cy": 502.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.1,
+            "y": 496.36,
+            "w": 41.63,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.67,
+            "cy": 502.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.73,
+            "y": 496.36,
+            "w": 42.36,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 451.51,
+            "cy": 502.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 430.09,
+            "y": 496.36,
+            "w": 35.54,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D3.4",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.22,
+            "cy": 486.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.1,
+            "y": 480.22,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.4,
+            "cy": 486.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.31,
+            "y": 480.22,
+            "w": 38.79,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 366.8,
+            "cy": 486.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.1,
+            "y": 480.22,
+            "w": 41.64,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.68,
+            "cy": 486.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.74,
+            "y": 480.22,
+            "w": 42.36,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 451.52,
+            "cy": 486.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 430.1,
+            "y": 480.22,
+            "w": 35.54,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D4.1",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 328.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 322.36,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 328.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 322.36,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 328.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 322.36,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 328.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 322.36,
+            "w": 42.57,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 452.77,
+            "cy": 328.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.72,
+            "y": 322.36,
+            "w": 35.17,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D4.2",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 312.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 306.22,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 312.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 306.22,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 312.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 306.22,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 312.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 306.22,
+            "w": 42.57,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 452.78,
+            "cy": 312.74,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.72,
+            "y": 306.22,
+            "w": 35.17,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D4.3",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 296.6,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 290.08,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 296.6,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 290.08,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 296.6,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 290.08,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 296.6,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 290.08,
+            "w": 42.57,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 452.78,
+            "cy": 296.6,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.72,
+            "y": 290.08,
+            "w": 35.18,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D4.4",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 271.1,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 264.58,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 271.1,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 264.58,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 271.1,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 264.58,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 271.1,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 264.58,
+            "w": 42.57,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 452.78,
+            "cy": 271.1,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.72,
+            "y": 264.58,
+            "w": 35.17,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D4.5",
+      "page": 6,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 254.96,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 248.44,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 254.96,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 248.44,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 254.96,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 248.44,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 254.96,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 248.44,
+            "w": 42.57,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 452.78,
+            "cy": 254.96,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.72,
+            "y": 248.44,
+            "w": 35.18,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.1",
+      "page": 7,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 499.51,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 492.99,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 499.51,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 492.99,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 499.51,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 492.99,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 499.51,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 492.99,
+            "w": 43.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 454.04,
+            "cy": 499.51,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 432.35,
+            "y": 492.99,
+            "w": 35.81,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.2",
+      "page": 7,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 474.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 467.49,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 474.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 467.49,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 474.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 467.49,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 474.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 467.49,
+            "w": 43.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 454.04,
+            "cy": 474.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 432.35,
+            "y": 467.49,
+            "w": 35.81,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.3",
+      "page": 7,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 448.52,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 442,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 448.52,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 442,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 448.52,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 442,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 448.52,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 442,
+            "w": 43.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 454.04,
+            "cy": 448.52,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 432.35,
+            "y": 442,
+            "w": 35.81,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.4",
+      "page": 7,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.52,
+            "cy": 423.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.4,
+            "y": 416.49,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.7,
+            "cy": 423.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.61,
+            "y": 416.49,
+            "w": 39.06,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 367.64,
+            "cy": 423.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 346.67,
+            "y": 416.49,
+            "w": 42.48,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 410.66,
+            "cy": 423.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 389.15,
+            "y": 416.49,
+            "w": 43.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 454.04,
+            "cy": 423.01,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 432.35,
+            "y": 416.49,
+            "w": 35.81,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.5",
+      "page": 8,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.4,
+            "cy": 542,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.28,
+            "y": 535.48,
+            "w": 32.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.57,
+            "cy": 542,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.48,
+            "y": 535.48,
+            "w": 38.19,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 365.77,
+            "cy": 542,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 345.67,
+            "y": 535.48,
+            "w": 41.55,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.67,
+            "cy": 542,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.22,
+            "y": 535.48,
+            "w": 43.95,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 453.66,
+            "cy": 542,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.17,
+            "y": 535.48,
+            "w": 36.61,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.6",
+      "page": 8,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.4,
+            "cy": 525.85,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.28,
+            "y": 519.33,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.58,
+            "cy": 525.85,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.49,
+            "y": 519.33,
+            "w": 38.18,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 365.77,
+            "cy": 525.85,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 345.67,
+            "y": 519.33,
+            "w": 41.55,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.67,
+            "cy": 525.85,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.22,
+            "y": 519.33,
+            "w": 43.95,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 453.67,
+            "cy": 525.85,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.17,
+            "y": 519.33,
+            "w": 36.62,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.7",
+      "page": 8,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.4,
+            "cy": 500.36,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.28,
+            "y": 493.84,
+            "w": 32.21,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.58,
+            "cy": 500.36,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.49,
+            "y": 493.84,
+            "w": 38.18,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 365.77,
+            "cy": 500.36,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 345.67,
+            "y": 493.84,
+            "w": 41.55,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.67,
+            "cy": 500.36,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.22,
+            "y": 493.84,
+            "w": 43.95,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 453.67,
+            "cy": 500.36,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.17,
+            "y": 493.84,
+            "w": 36.62,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.8",
+      "page": 8,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 289.4,
+            "cy": 474.86,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 275.29,
+            "y": 468.34,
+            "w": 32.2,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 325.58,
+            "cy": 474.86,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 307.49,
+            "y": 468.34,
+            "w": 38.19,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 365.78,
+            "cy": 474.86,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 345.68,
+            "y": 468.34,
+            "w": 41.55,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 408.68,
+            "cy": 474.86,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 387.23,
+            "y": 468.34,
+            "w": 43.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 453.67,
+            "cy": 474.86,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 431.17,
+            "y": 468.34,
+            "w": 36.62,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.1",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.27,
+            "cy": 513.98,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.15,
+            "y": 507.46,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.91,
+            "cy": 513.98,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.09,
+            "y": 507.46,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 513.98,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 507.46,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 513.98,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 507.46,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 513.98,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 507.46,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.2",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.27,
+            "cy": 460.4,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.15,
+            "y": 453.88,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.91,
+            "cy": 460.4,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.09,
+            "y": 453.88,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 460.4,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 453.88,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 460.4,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 453.88,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 460.4,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 453.88,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.3",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.27,
+            "cy": 425.54,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.15,
+            "y": 419.02,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.91,
+            "cy": 425.54,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.09,
+            "y": 419.02,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 425.54,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 419.02,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 425.54,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 419.02,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 425.54,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 419.02,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.4",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.28,
+            "cy": 390.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.16,
+            "y": 384.16,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.92,
+            "cy": 390.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.1,
+            "y": 384.16,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.54,
+            "cy": 390.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.23,
+            "y": 384.16,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.44,
+            "cy": 390.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.49,
+            "y": 384.16,
+            "w": 46.52,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 390.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 384.16,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.5",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.28,
+            "cy": 365.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.16,
+            "y": 358.65,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.92,
+            "cy": 365.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.1,
+            "y": 358.65,
+            "w": 35.12,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 365.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 358.65,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 365.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 358.65,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 365.17,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 358.65,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.6",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.27,
+            "cy": 339.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.15,
+            "y": 333.16,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.91,
+            "cy": 339.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.09,
+            "y": 333.16,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 339.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 333.16,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 339.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 333.16,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 339.68,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 333.16,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.7",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.27,
+            "cy": 304.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.15,
+            "y": 298.36,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.91,
+            "cy": 304.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.09,
+            "y": 298.36,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.53,
+            "cy": 304.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.22,
+            "y": 298.36,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.43,
+            "cy": 304.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.48,
+            "y": 298.36,
+            "w": 46.53,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 304.88,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 298.36,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D6.8",
+      "page": 9,
+      "type": "radio-group",
+      "scored": true,
+      "options": [
+        {
+          "value": "none",
+          "label": "None",
+          "mark": {
+            "cx": 286.28,
+            "cy": 279.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 272.16,
+            "y": 272.8,
+            "w": 28.94,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "mild",
+          "label": "Mild",
+          "mark": {
+            "cx": 315.92,
+            "cy": 279.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 301.1,
+            "y": 272.8,
+            "w": 35.13,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "moderate",
+          "label": "Moderate",
+          "mark": {
+            "cx": 356.54,
+            "cy": 279.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 336.23,
+            "y": 272.8,
+            "w": 43.26,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "severe",
+          "label": "Severe",
+          "mark": {
+            "cx": 402.44,
+            "cy": 279.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 379.49,
+            "y": 272.8,
+            "w": 46.52,
+            "h": 13.04
+          }
+        },
+        {
+          "value": "extreme",
+          "label": "Extreme or cannot do",
+          "mark": {
+            "cx": 449.59,
+            "cy": 279.32,
+            "rx": 9,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 426.01,
+            "y": 272.8,
+            "w": 37.7,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "F4#1",
+      "page": 2,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 2,
+        "x": 349.24,
+        "y": 435.64,
+        "w": 25.47,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "F4#2",
+      "page": 2,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 2,
+        "x": 401.73,
+        "y": 435.64,
+        "w": 25.47,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "F4#3",
+      "page": 2,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 2,
+        "x": 444.99,
+        "y": 435.64,
+        "w": 25.47,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "F5",
+      "page": 2,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 456.79,
+            "cy": 405.38,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 448.67,
+            "y": 398.86,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 456.69,
+            "cy": 389.24,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 448.58,
+            "y": 382.72,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 3,
+          "mark": {
+            "cx": 456.74,
+            "cy": 373.1,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 448.62,
+            "y": 366.58,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "A1",
+      "page": 3,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 458.81,
+            "cy": 497.78,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.7,
+            "y": 491.26,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 458.82,
+            "cy": 481.64,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.7,
+            "y": 475.12,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "A2",
+      "page": 3,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 3,
+        "x": 344.92,
+        "y": 463.48,
+        "w": 25.46,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "A3",
+      "page": 3,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 3,
+        "x": 344.92,
+        "y": 437.98,
+        "w": 25.46,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "A4",
+      "page": 3,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 458.85,
+            "cy": 423.86,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.73,
+            "y": 417.34,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 458.84,
+            "cy": 407.72,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 401.2,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 3,
+          "mark": {
+            "cx": 458.83,
+            "cy": 391.58,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.71,
+            "y": 385.06,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 4,
+          "mark": {
+            "cx": 458.84,
+            "cy": 375.38,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 368.86,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 5,
+          "mark": {
+            "cx": 458.82,
+            "cy": 359.24,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.71,
+            "y": 352.72,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 6,
+          "mark": {
+            "cx": 458.86,
+            "cy": 343.1,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.74,
+            "y": 336.58,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "A5",
+      "page": 3,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 458.83,
+            "cy": 326.96,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.71,
+            "y": 320.44,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 458.84,
+            "cy": 310.4,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 303.88,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 3,
+          "mark": {
+            "cx": 458.84,
+            "cy": 275.54,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 269.02,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 4,
+          "mark": {
+            "cx": 458.84,
+            "cy": 250.05,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 243.53,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 5,
+          "mark": {
+            "cx": 458.84,
+            "cy": 233.43,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 226.91,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 6,
+          "mark": {
+            "cx": 458.83,
+            "cy": 207.93,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.71,
+            "y": 201.41,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 7,
+          "mark": {
+            "cx": 458.84,
+            "cy": 191.37,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 184.85,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 8,
+          "mark": {
+            "cx": 458.84,
+            "cy": 165.87,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 159.35,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 9,
+          "mark": {
+            "cx": 458.84,
+            "cy": 140.38,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 450.72,
+            "y": 133.86,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "A5#1",
+      "page": 3,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 3,
+        "x": 344.92,
+        "y": 110.34,
+        "w": 89.17,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "D5.01",
+      "page": 7,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 7,
+        "x": 454.37,
+        "y": 348.76,
+        "w": 17.01,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "D5.9",
+      "page": 8,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 453.68,
+            "cy": 449.36,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 445.56,
+            "y": 442.84,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 453.68,
+            "cy": 428.29,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 445.56,
+            "y": 421.77,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.10",
+      "page": 8,
+      "type": "coded-radio",
+      "scored": false,
+      "options": [
+        {
+          "code": 1,
+          "mark": {
+            "cx": 453.67,
+            "cy": 407.3,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 445.55,
+            "y": 400.78,
+            "w": 16.24,
+            "h": 13.04
+          }
+        },
+        {
+          "code": 2,
+          "mark": {
+            "cx": 453.67,
+            "cy": 391.1,
+            "rx": 7,
+            "ry": 6.72
+          },
+          "hit": {
+            "x": 445.55,
+            "y": 384.58,
+            "w": 16.24,
+            "h": 13.04
+          }
+        }
+      ]
+    },
+    {
+      "field": "D5.02",
+      "page": 8,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 8,
+        "x": 443.26,
+        "y": 322.42,
+        "w": 16.95,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "H1",
+      "page": 10,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 10,
+        "x": 437.33,
+        "y": 614.8,
+        "w": 16.97,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "H2",
+      "page": 10,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 10,
+        "x": 437.32,
+        "y": 589.3,
+        "w": 16.97,
+        "h": 7.04
+      }
+    },
+    {
+      "field": "H3",
+      "page": 10,
+      "type": "text",
+      "scored": false,
+      "writeIn": {
+        "page": 10,
+        "x": 437.33,
+        "y": 554.44,
+        "w": 16.97,
+        "h": 7.04
+      }
+    }
+  ]
+}

@@ -151,7 +151,21 @@ function fullScalars(overrides = {}) {
   };
 }
 
-function manifest({ scalars = {}, excluded = [], custom = [] } = {}) {
+/** Every w:sdt whose OWN tag is `tag`. */
+function sdtsByTag(xml, tag) {
+  const doc = parse(xml);
+  return Array.from(doc.getElementsByTagName('w:sdt')).filter((s) => ownTag(s) === tag);
+}
+
+/** The visible text a control carries. */
+const sdtText = (sdt) => Array.from(sdt.getElementsByTagName('w:t'))
+  .map((t) => t.textContent || '').join('');
+
+/**
+ * `excluded` is BLOCK tags (whole sections of the letter); `excludedTags` is
+ * SCALAR tags the therapist has excluded. They are different lists on purpose.
+ */
+function manifest({ scalars = {}, excluded = [], excludedTags = [], custom = [] } = {}) {
   const sections = ltm.LETTER_SECTIONS.map((s, i) => ({
     tag: s.tag,
     kind: s.required ? 'required' : 'optional',
@@ -169,7 +183,7 @@ function manifest({ scalars = {}, excluded = [], custom = [] } = {}) {
       order: i,
     });
   }
-  return { scalarData: fullScalars(scalars), sections };
+  return { scalarData: fullScalars(scalars), excludedTags, sections };
 }
 
 const generate = (m) => generateLetterDocx({ templateBuffer, manifest: m });
@@ -496,6 +510,105 @@ describe('optional-line cleanup', () => {
       scalars: { OPAL_LETTER_CC: '   ' },
     }))))['word/document.xml'];
     expect(xml).not.toContain('CC:');
+  });
+});
+
+// ── Excluded fields ──────────────────────────────────────────────────────────
+// The letter exercises BOTH shapes, and the template decides which is which.
+
+describe('excluded scalars', () => {
+  test('an excluded OPTIONAL-LINE tag removes its whole paragraph, label and all', async () => {
+    const withCc = bodyParagraphs((await partsOf(await generate(manifest())))['word/document.xml']);
+    const buffer = await generate(manifest({ excludedTags: ['OPAL_LETTER_CC'] }));
+    const xml = (await partsOf(buffer))['word/document.xml'];
+    const without = bodyParagraphs(xml);
+
+    // The value was present and real — exclusion still removed the line.
+    expect(withCc.some((p) => p.text.startsWith('CC:'))).toBe(true);
+    expect(without.some((p) => p.text.startsWith('CC:'))).toBe(false);
+    expect(xml).not.toContain('CC:');                       // no dangling label
+    expect(xml).not.toContain('Alex Tan');                  // and no value
+    expect(xml).not.toContain('OPAL_LETTER_CC');
+    expect(without.length).toBe(withCc.length - 1);         // exactly one line fewer
+    expect(buffer.docxStats.removedParagraphs).toContain('OPAL_LETTER_CC');
+    expect(buffer.docxStats.excludedAsRemovedLine).toEqual(['OPAL_LETTER_CC']);
+    expect(buffer.docxStats.excludedAsEmptyControl).toEqual([]);
+  });
+
+  test('an excluded AHPRA number takes its "AHPRA registration:" label with it', async () => {
+    const xml = (await partsOf(await generate(manifest({
+      excludedTags: ['OPAL_THERAPIST_AHPRA_NUMBER'],
+    }))))['word/document.xml'];
+    expect(xml).not.toContain('AHPRA registration');
+    expect(xml).not.toContain('OCC0001234567');
+    expect(xml).not.toContain('OPAL_THERAPIST_AHPRA_NUMBER');
+  });
+
+  test('an excluded NON-optional-line tag renders as an EMPTY control', async () => {
+    // The subject shares its paragraph with sentence text, so its line cannot
+    // be removed — it is emptied instead, and the control stays typeable.
+    const buffer = await generate(manifest({ excludedTags: ['OPAL_LETTER_SUBJECT'] }));
+    const xml = (await partsOf(buffer))['word/document.xml'];
+
+    const controls = sdtsByTag(xml, 'OPAL_LETTER_SUBJECT');
+    expect(controls).toHaveLength(1);
+    expect(sdtText(controls[0])).toBe('');
+    expect(xml).not.toContain('Progress update and continued therapy funding');
+    expect(xml).not.toContain('[PORTAL — LETTER SUBJECT]');
+    expect(buffer.docxStats.excludedAsEmptyControl).toEqual(['OPAL_LETTER_SUBJECT']);
+    expect(buffer.docxStats.excludedAsRemovedLine).toEqual([]);
+  });
+
+  test('the excluded document id is emptied in footer6 and the PAGE field survives', async () => {
+    const buffer = await generate(manifest({ excludedTags: ['OPAL_LETTER_DOCUMENT_ID'] }));
+    const footer = (await partsOf(buffer))['word/footer6.xml'];
+
+    expect(footer).not.toContain('LTR-1A2B3C4D');
+    expect(footer).not.toContain('[PORTAL — DOCUMENT ID]');
+    expect(sdtText(sdtsByTag(footer, 'OPAL_LETTER_DOCUMENT_ID')[0])).toBe('');
+    // The package validator already refuses a changed PAGE count; assert the
+    // field is visibly still there too.
+    expect(footer).toMatch(/PAGE/);
+  });
+
+  test('an excluded field ships no "[PORTAL" placeholder anywhere', async () => {
+    // The promise the whole feature rests on, checked against the BYTES.
+    const buffer = await generate(manifest({
+      excludedTags: [
+        'OPAL_LETTER_CC',
+        'OPAL_LETTER_SUBJECT',
+        'OPAL_LETTER_REPORTING_PERIOD',
+        'OPAL_LETTER_DOCUMENT_ID',
+        'OPAL_THERAPIST_AHPRA_NUMBER',
+      ],
+    }));
+    await expect(assertNoPortalPlaceholders(buffer)).resolves.toBeUndefined();
+
+    const paras = bodyParagraphs((await partsOf(buffer))['word/document.xml']);
+    for (const p of paras) {
+      expect(p.text).not.toMatch(/^(CC|AHPRA registration)\s*:?\s*$/i);
+      expect(p.text).not.toContain('[PORTAL');
+    }
+  });
+
+  test('a non-excluded blank still keeps the template placeholder — no regression', async () => {
+    const xml = (await partsOf(await generate(manifest({
+      scalars: { OPAL_LETTER_SUBJECT: null, OPAL_LETTER_REPORTING_PERIOD: null },
+      excludedTags: ['OPAL_LETTER_REPORTING_PERIOD'],
+    }))))['word/document.xml'];
+
+    expect(xml).toContain('[PORTAL — LETTER SUBJECT]');       // blank: prompt kept
+    expect(xml).not.toContain('[PORTAL — REPORTING PERIOD]'); // excluded: nothing
+    expect(sdtText(sdtsByTag(xml, 'OPAL_LETTER_REPORTING_PERIOD')[0])).toBe('');
+  });
+
+  test('excluding changes nothing about any other value', async () => {
+    const xml = (await partsOf(await generate(manifest({
+      excludedTags: ['OPAL_LETTER_CC'],
+    }))))['word/document.xml'];
+    expect(xml).toContain('Riley Anne Thompson');
+    expect(xml).toContain('Morgan Reid');
+    expect(xml).toContain('Progress update and continued therapy funding');
   });
 });
 

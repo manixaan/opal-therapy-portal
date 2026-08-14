@@ -37,6 +37,14 @@ const ALL_TABLES = [
   // Support tickets (migration 014) — children before parents
   'support_ticket_events', 'support_ticket_attachments', 'support_ticket_comments',
   'support_tickets', 'support_ticket_counters',
+  // FCA report generation (018) and progress note letters (019 — the SAME
+  // tables, generalised by document_type; no new tables to truncate)
+  //   — children before parents
+  'fca_generated_documents', 'fca_report_drafts', 'fca_section_presets',
+  'fca_client_ndis_goals', 'fca_client_ndis_plans', 'fca_client_profiles',
+  'fca_templates',
+  // WHODAS 2.0 (migration 021) — children before parents
+  'whodas_generated_documents', 'whodas_assessments', 'whodas_templates',
   'users', 'organisations',
 ];
 

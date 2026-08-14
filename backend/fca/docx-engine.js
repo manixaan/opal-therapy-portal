@@ -44,6 +44,22 @@
  *    the template's own placeholder stays, and the string 'null'/'undefined'
  *    can never reach the page.
  *
+ * 1a. EXCLUDED TAGS (manifest.excludedTags). A therapist may say outright that
+ *    a field does not apply, which is a different statement from "we could not
+ *    find a value". A missing value keeps the template's own
+ *    "[PORTAL — …]" placeholder, because that is a visible prompt to finish
+ *    the job in Word. An EXCLUDED tag must leave nothing at all, and takes one
+ *    of exactly two shapes, chosen by the TEMPLATE'S own declaration rather
+ *    than by the caller:
+ *      - a tag listed in dropParagraphWhenEmpty owns a whole optional line, so
+ *        its entire w:p goes, exactly as an absent value already does — a
+ *        naked "CC:" is as much a failure when it was excluded as when it was
+ *        blank;
+ *      - every other tag is written as an EMPTY string. The control survives,
+ *        blank and still typeable in Word, and the placeholder text is gone.
+ *    Nothing else in the pipeline special-cases exclusion; it is one option in
+ *    one place.
+ *
  * 2. SECTIONS. An unselected optional section is removed by deleting exactly
  *    the w:sdt whose OWN w:sdtPr/w:tag carries that tag. "Own" is the whole
  *    point: optional controls are NESTED inside required parents (five
@@ -477,6 +493,49 @@ function runsWithFieldChars(p) {
  * before issue is left in place. The document is therefore never stale in its
  * entry list — only in its page numbers, and visibly so rather than wrongly.
  */
+/**
+ * Remove table rows that belonged to an excluded section.
+ *
+ * Structural: the whole <w:tr> element is detached from its parent. The row is
+ * IDENTIFIED by the exact text of its first cell, matched against labels the
+ * manifest supplies from an explicit declaration — this is a lookup, not a
+ * search-and-replace over the document body, and it can only ever remove a
+ * whole row that the map named.
+ *
+ * A label that matches nothing is reported. Silence there would mean a template
+ * edit could quietly sever the dependency and put a MoCA row back into a report
+ * that excluded MoCA.
+ */
+function removeDependentRows(doc, labels, warnings, removed) {
+  if (!labels || !labels.length) return;
+  const wanted = new Set(labels.map((l) => String(l).trim()));
+  const found = new Set();
+
+  const rows = Array.from(doc.getElementsByTagName('w:tr'));
+  for (const tr of rows) {
+    const cells = tr.getElementsByTagName('w:tc');
+    if (!cells || cells.length === 0) continue;
+    // First cell only: a tool name appearing in a later column is data, not
+    // the row's identity.
+    const texts = cells[0].getElementsByTagName('w:t');
+    let label = '';
+    for (let i = 0; i < texts.length; i++) label += texts[i].textContent || '';
+    label = label.trim();
+    if (!wanted.has(label)) continue;
+    found.add(label);
+    if (tr.parentNode) {
+      tr.parentNode.removeChild(tr);
+      removed.push(label);
+    }
+  }
+
+  for (const l of wanted) {
+    if (!found.has(l)) {
+      warnings.push(`Dependent row "${l}" was not found in the template; the section was excluded but no matching results row was removed.`);
+    }
+  }
+}
+
 function rebuildToc(doc, warnings) {
   const body = directChild(doc.documentElement, 'w:body');
   if (!body) return { entries: 0 };
@@ -707,9 +766,10 @@ const FCA_OPTIONS = {
  *
  * @param {Buffer} templateBuffer  the raw .docx bytes
  * @param {object} manifest        the frozen composition manifest:
- *   { scalarData: { TAG: value|null },
- *     sections:   [{ tag, kind: 'required'|'optional'|'custom', title,
- *                    guidance?, included, order }] }
+ *   { scalarData:   { TAG: value|null },
+ *     excludedTags: [TAG],
+ *     sections:     [{ tag, kind: 'required'|'optional'|'custom', title,
+ *                      guidance?, included, order }] }
  * @param {object} options         see the file header; defaults to FCA_OPTIONS
  * @returns {Promise<Buffer>}
  */
@@ -726,6 +786,25 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
 
   const scalarData = manifest.scalarData || {};
   const sections = Array.isArray(manifest.sections) ? manifest.sections : [];
+
+  // ── Exclusions ────────────────────────────────────────────────────────────
+  // A tag the therapist has excluded contributes NOTHING to the document. The
+  // template decides which of the two shapes that takes: a tag that owns a
+  // whole optional line loses its paragraph (handled with the absent-value
+  // cleanup below), and every other tag is written as an EMPTY string so the
+  // control survives — blank and still editable in Word — with no
+  // "[PORTAL — …]" placeholder left in it.
+  const excludedTags = new Set(
+    Array.isArray(manifest.excludedTags) ? manifest.excludedTags.map(String) : []
+  );
+  const optionalLineTags = opts.dropParagraphWhenEmpty
+    ? new Set(opts.dropParagraphWhenEmpty)
+    : new Set();
+
+  const renderedScalars = { ...scalarData };
+  for (const tag of excludedTags) {
+    if (!optionalLineTags.has(tag)) renderedScalars[tag] = '';
+  }
 
   const warnings = [];
   const removedTags = [];
@@ -776,19 +855,28 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
   const docDoc = parts.get('word/document.xml');
 
   // ── Optional-line cleanup, BEFORE anything is populated ───────────────────
-  // A tag listed here whose value is absent takes its whole paragraph with it,
-  // label and all. Done first so the scalar pass never writes into a paragraph
-  // that is about to be deleted, and never counts it as written.
+  // A tag listed here takes its whole paragraph with it, label and all, when
+  // its value is absent OR when the therapist has excluded it — a naked "CC:"
+  // reads as an unfinished letter either way. Done first so the scalar pass
+  // never writes into a paragraph that is about to be deleted, and never
+  // counts it as written.
   const dropTags = new Set();
-  if (opts.dropParagraphWhenEmpty) {
-    for (const tag of opts.dropParagraphWhenEmpty) {
-      const v = scalarData[tag];
-      if (v === null || v === undefined || String(v).trim() === '') dropTags.add(tag);
+  for (const tag of optionalLineTags) {
+    const v = scalarData[tag];
+    if (excludedTags.has(tag) || v === null || v === undefined || String(v).trim() === '') {
+      dropTags.add(tag);
     }
   }
   for (const [, doc] of parts) removeParagraphsContaining(doc, dropTags, removedParagraphTags);
 
   for (const [, doc] of parts) removeSections(doc, removeTags, removedTags);
+
+  // Dependent content travels with its section: a results row whose assessment
+  // was excluded goes with it, so the table cannot contradict the report.
+  const removedRows = [];
+  const dependentRows = Array.isArray(manifest.dependentRows) ? manifest.dependentRows : [];
+  for (const [, doc] of parts) removeDependentRows(doc, dependentRows, warnings, removedRows);
+
   applySectionOrder(docDoc, orderByTag);
 
   // ── Custom sections ───────────────────────────────────────────────────────
@@ -814,7 +902,7 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
 
   let scalarsWritten = 0;
   for (const [name, doc] of parts) {
-    scalarsWritten += populateScalars(doc, scalarData, warnings, name, multilineTags);
+    scalarsWritten += populateScalars(doc, renderedScalars, warnings, name, multilineTags);
   }
 
   // ── Table of contents (last: the body must be final) ──────────────────────
@@ -846,6 +934,14 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     scalarsWritten,
     removedSections: removedTags,
     removedParagraphs: removedParagraphTags,
+    // Results-table rows deleted because their assessment section was excluded.
+    removedDependentRows: removedRows,
+    // What the therapist excluded, split by what actually happened to it, so a
+    // test — and the generate route's warning channel — can tell an emptied
+    // control from a deleted line without re-deriving the rule.
+    excludedTags: Array.from(excludedTags),
+    excludedAsEmptyControl: Array.from(excludedTags).filter((t) => !optionalLineTags.has(t)),
+    excludedAsRemovedLine: Array.from(excludedTags).filter((t) => optionalLineTags.has(t)),
     customSections: customWritten,
     tocEntries: toc.entries,
     warnings,

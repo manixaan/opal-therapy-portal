@@ -853,9 +853,13 @@ describe('analytics and quick links', () => {
     const { agent: therapist } = await agentFor(app, 'therapist');
     const res = await therapist.get('/api/rh2/home');
     expect(res.status).toBe(200);
-    for (const key of ['collections', 'continueLearning', 'requiredForYou', 'whatsNew',
+    for (const key of ['collections', 'continueLearning', 'requiredForYou',
       'popular', 'recentlyAdded', 'upcomingPd', 'quickLinks']) {
       expect(res.body[key]).toEqual([]);
     }
+    // 'What is new' was removed from the Home page — it duplicated Recently
+    // added. The key must be gone, not merely empty, so a stale client cannot
+    // read it as "nothing new" when the section no longer exists.
+    expect(res.body).not.toHaveProperty('whatsNew');
   });
 });
