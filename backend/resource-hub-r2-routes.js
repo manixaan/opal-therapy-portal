@@ -38,6 +38,196 @@ const isOwner = (u) => u?.role === 'owner';
 const canAuthor = (u) => u?.role === 'owner' || u?.role === 'admin';
 
 const AUTHORITY_LEVELS = ['internal', 'opal_approved', 'official_regulatory', 'professional_body', 'external_reference'];
+
+/**
+ * Clinical classification vocabulary.
+ *
+ * These lists previously existed ONLY in the browser, as slugs the server had
+ * never seen and nothing ever wrote — which is why the Population and Setting
+ * filters returned nothing for every selection. They are now server-owned and
+ * validated, so an unknown value is rejected rather than silently matching zero
+ * rows and looking like "no results".
+ *
+ * UNCLASSIFIED is a real, selectable value: every existing resource is
+ * unclassified, and saying so is more truthful than offering four options that
+ * all return nothing.
+ */
+const CLINICAL_POPULATIONS = ['paediatric', 'adolescent', 'adult', 'older_adult'];
+const CLINICAL_SETTINGS = ['clinic', 'school', 'home', 'telehealth', 'community'];
+const UNCLASSIFIED = 'unclassified';
+
+/**
+ * Validate a clinical classification array on the way IN.
+ *
+ * The write path has always accepted these fields but never checked them, which
+ * is how the browser's invented slugs could have been stored and then never
+ * matched anything. Values are now validated against the same lists the filter
+ * uses, so a stored classification is always a filterable one.
+ *
+ * @returns {{ok: true, value: string[]} | {ok: false, parameter: string}}
+ */
+function validateClinicalArray(input, allowed, parameter) {
+  if (input === undefined) return { ok: true, value: undefined };
+  const arr = Array.isArray(input) ? input : [input];
+  const clean = [];
+  for (const raw of arr.slice(0, 20)) {
+    const v = String(raw == null ? '' : raw).trim();
+    if (!v) continue;
+    if (!allowed.includes(v)) return { ok: false, parameter };
+    if (!clean.includes(v)) clean.push(v);
+  }
+  return { ok: true, value: clean };
+}
+
+const governance = require('./resource-governance');
+
+/**
+ * Every aggregate that names a resource must carry this. An excluded-private
+ * record is client-derived: its TITLE alone is a disclosure, so it must never
+ * reach an analytics table, a "most viewed" list or a search index. Written
+ * once here and reused so a new aggregate cannot quietly omit it.
+ */
+const PRIVACY_PREDICATE =
+  `r.access_tier <> 'excluded-private' AND r.publication_state <> 'excluded-private'`;
+
+/**
+ * Role gates for governance. These consult resource-governance's policy rather
+ * than testing roles inline, so the rule lives in one unit-tested place and the
+ * routes cannot drift from it.
+ *
+ * Both return a sent response on denial, or undefined to continue — call as
+ * `const gate = requireApprover(req, res, 'approve'); if (gate) return gate;`
+ */
+function denyTransition(res, verdict) {
+  return res.status(403).json({ error: verdict.reason, code: 'governance_role_denied' });
+}
+
+function requireReviewer(req, res) {
+  // 'rights-review' stands in for any in-review target: they share one rule.
+  const verdict = governance.canPerformTransition(req.user && req.user.role, 'rights-review');
+  if (!verdict.allowed) return denyTransition(res, verdict);
+  return undefined;
+}
+
+function requireApprover(req, res) {
+  const verdict = governance.canPerformTransition(req.user && req.user.role, 'approved');
+  if (!verdict.allowed) return denyTransition(res, verdict);
+  return undefined;
+}
+
+/**
+ * Attach derived governance flags to a row on its way out.
+ *
+ * `approved` and `published` are DIFFERENT claims and neither may be inferred
+ * from the legacy `status` column: a record can carry status='approved' from
+ * the pre-governance era while failing every gate that word now implies.
+ */
+function withGovernanceFlags(row) {
+  const blockers = governance.approvalBlockers(row);
+  return {
+    ...row,
+    approval_ready: blockers.length === 0,
+    approval_blockers: blockers,
+    is_published: row.publication_state === 'published',
+  };
+}
+
+/**
+ * Move a resource through the governance lifecycle and record why, atomically.
+ * The state change and its audit row commit together or not at all — a
+ * transition with no recorded reviewer is exactly the gap the governance
+ * document exists to close.
+ *
+ * @returns {{ok: true, resource: object} | {ok: false, status: number, body: object}}
+ */
+async function transition(req, resourceId, {
+  toState, legacyStatus, extraSet = '', extraParams = [], reason, blockerPatch,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // FOR UPDATE: two owners approving at once must serialise, or one
+    // transition's guard runs against state the other has already changed.
+    const { rows } = await client.query(
+      `SELECT * FROM resources
+        WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2 FOR UPDATE`,
+      [resourceId, orgOf(req)]);
+    const r = rows[0];
+    if (!r) {
+      await client.query('ROLLBACK');
+      return { ok: false, status: 404, body: { error: 'Not found' } };
+    }
+
+    const from = r.publication_state;
+
+    // Authoritative role check. It lives HERE rather than in the route because
+    // policing the clinical-attestation step needs the record's current state,
+    // which only exists once the row is loaded. The route-level gates are a
+    // cheap early denial; this is the one that decides.
+    const authority = governance.canPerformTransition(
+      req.user && req.user.role, toState, from);
+    if (!authority.allowed) {
+      await client.query('ROLLBACK');
+      return {
+        ok: false,
+        status: 403,
+        body: { error: authority.reason, code: 'governance_role_denied', from, to: toState },
+      };
+    }
+
+    const check = governance.canTransition(from, toState);
+    if (!check.ok) {
+      await client.query('ROLLBACK');
+      return {
+        ok: false,
+        status: 409,
+        body: { error: check.reason, code: 'invalid_governance_transition', from, to: toState },
+      };
+    }
+
+    if (toState === 'approved') {
+      // Evaluate against the record as it will be AFTER this route's own
+      // auto-set fields land (approval stamps the review date), otherwise the
+      // guard blocks on a field the same statement is about to populate.
+      const blockers = governance.approvalBlockers({ ...r, ...(blockerPatch || {}) });
+      if (blockers.length) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          status: 422,
+          body: {
+            error: 'This resource cannot be approved yet.',
+            code: 'governance_requirements_unmet',
+            blockers,
+          },
+        };
+      }
+    }
+
+    const params = [resourceId, orgOf(req), toState, legacyStatus, ...extraParams];
+    const { rows: updated } = await client.query(
+      `UPDATE resources
+          SET publication_state = $3, status = $4, updated_at = NOW()${extraSet}
+        WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2
+        RETURNING *`, params);
+
+    await client.query(
+      `INSERT INTO resource_governance_events
+         (organisation_id, resource_id, field, from_value, to_value, reason, actor_user_id)
+       VALUES ($1, $2, 'publication_state', $3, $4, $5, $6)`,
+      [orgOf(req), resourceId, from, toState,
+       (reason || '').slice(0, 1000) || null, req.user.id]);
+
+    await client.query('COMMIT');
+    return { ok: true, resource: updated[0], from };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 const FEEDBACK_KINDS = ['helpful', 'needs_update', 'missing'];
 const PD_MODES = ['online', 'in_person', 'hybrid'];
 
@@ -121,8 +311,27 @@ async function findResource(req, idOrSlug) {
   return rows[0] || null;
 }
 
-// Visibility rule: non-authors may only see approved resources.
-const visibleTo = (user, resource) => !!resource && (canAuthor(user) || resource.status === 'approved');
+// Visibility rule: non-authors may only see approved resources AT A TIER
+// THEIR ROLE READS.
+//
+// Privacy outranks authorship. An excluded-private record is client-derived, so
+// its title alone is a disclosure — being an owner or admin does not unlock it
+// here. Such a record is managed through the governance routes, which name it
+// by id and never render its content.
+//
+// The tier check is what keeps the admin rights-review queue out of a
+// therapist's reach even by direct id: those records still carry the legacy
+// status 'approved', but their access_tier is 'admin', and a title can be as
+// much a rights problem as its bytes. Callers must therefore pass a resource
+// object that includes access_tier.
+const visibleTo = (user, resource) => {
+  if (!resource) return false;
+  if (resource.access_tier === 'excluded-private'
+      || resource.publication_state === 'excluded-private') return false;
+  if (canAuthor(user)) return true;
+  return resource.status === 'approved'
+    && governance.canReadTier(user && user.role, resource.access_tier);
+};
 
 // Aggregate zero-result search terms. NEVER records who searched. The unique
 // constraint cannot upsert NULL orgs, so update-then-insert with a race catch.
@@ -154,7 +363,7 @@ router.get('/api/rh2/home', safe(async (req, res) => {
   const userId = req.user.id;
   await markPastPdEvents(orgId);
 
-  const [collections, continueLearning, requiredForYou, whatsNew, popular, recentlyAdded, upcomingPd, quickLinks] =
+  const [collections, continueLearning, requiredForYou, popular, recentlyAdded, upcomingPd, quickLinks] =
     await Promise.all([
       pool.query(
         `SELECT c.id, c.key, c.name, c.tagline, c.icon, c.sort_order,
@@ -195,10 +404,6 @@ router.get('/api/rh2/home', safe(async (req, res) => {
             )
           ORDER BY r.updated_at DESC LIMIT 50`, [orgId, userId, String(req.user.role || '')]),
       pool.query(
-        `SELECT id, slug, title, content_type, authority_level, updated_at
-           FROM resources WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'approved'
-          ORDER BY approved_at DESC NULLS LAST, updated_at DESC LIMIT 10`, [orgId]),
-      pool.query(
         `SELECT r.id, r.slug, r.title, r.content_type, COUNT(v.id) AS view_count
            FROM resources r
            JOIN resource_views v ON v.resource_id = r.id AND v.viewed_at > NOW() - INTERVAL '30 days'
@@ -227,7 +432,6 @@ router.get('/api/rh2/home', safe(async (req, res) => {
       percent: Number(p.total) ? Math.round((Number(p.completed) / Number(p.total)) * 100) : 0,
     })),
     requiredForYou: requiredForYou.rows,
-    whatsNew: whatsNew.rows,
     popular: popular.rows,
     recentlyAdded: recentlyAdded.rows,
     upcomingPd: upcomingPd.rows,
@@ -242,11 +446,30 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
   const params = [orgId];
   let where = `r.organisation_id IS NOT DISTINCT FROM $1`;
 
+  // This route is a search index — it takes a free-text `q`. An excluded-private
+  // record must never be reachable through it, by anyone, so the predicate is
+  // applied before the role branch rather than inside the non-author arm.
+  where += ` AND ${PRIVACY_PREDICATE}`;
+
   if (canAuthor(req.user)) {
     const status = str(req.query.status, 30);
     if (status) { params.push(status); where += ` AND r.status = $${params.length}`; }
   } else {
+    // The ordinary library shows what a staff member can actually use. Both
+    // lifecycles must agree: a record can carry the legacy status 'approved'
+    // from before governance existed while still sitting in rights or clinical
+    // review, and that is not something to offer a therapist as available.
+    // BROWSABLE_STATES includes 'inventory' — the owner's decision that the
+    // catalogued imports are browsable with honest provenance badges — while
+    // every in-review state stays out (see resource-governance.js).
+    params.push(governance.BROWSABLE_STATES);
     where += ` AND r.status = 'approved'`;
+    where += ` AND r.publication_state = ANY($${params.length}::text[])`;
+    // File-tier reachability is enforced again at delivery; this predicate
+    // only keeps admin-tier records (e.g. the rights-review queue) out of the
+    // therapist's browse.
+    params.push(governance.tiersForRole(req.user && req.user.role));
+    where += ` AND r.access_tier = ANY($${params.length}::text[])`;
   }
 
   const q = str(req.query.q, 200);
@@ -254,6 +477,7 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
     params.push('%' + q + '%');
     const p = `$${params.length}`;
     where += ` AND (r.title ILIKE ${p} OR r.description ILIKE ${p} OR r.content ILIKE ${p}
+      OR r.source_publisher ILIKE ${p}
       OR EXISTS (SELECT 1 FROM resource_tag_links tl JOIN resource_tags t ON t.id = tl.tag_id
                   WHERE tl.resource_id = r.id AND (t.name ILIKE ${p}
                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(t.aliases) al WHERE al ILIKE ${p}))))`;
@@ -276,13 +500,43 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
   if (req.query.authority && AUTHORITY_LEVELS.includes(req.query.authority)) {
     params.push(req.query.authority); where += ` AND r.authority_level = $${params.length}`;
   }
-  if (req.query.population) {
-    params.push(str(req.query.population, 100));
-    where += ` AND r.clinical_population @> jsonb_build_array($${params.length}::text)`;
+  // An unrecognised filter value is a CLIENT ERROR, not a no-op.
+  //
+  // Ignoring it would return the unfiltered list, so a typo or a stale bookmark
+  // would quietly show MORE than the caller asked for while looking like a
+  // successful filtered query — the worst of the three possible failures. (The
+  // original bug was the opposite: a valid-looking value silently matching
+  // nothing.) Rejecting is the only option that cannot mislead.
+  //
+  // The error names the parameter and nothing else: no row counts, no column
+  // names, no vocabulary dump that would describe the schema.
+  if (req.query.population !== undefined && req.query.population !== '') {
+    if (req.query.population === UNCLASSIFIED) {
+      where += ` AND (r.clinical_population IS NULL OR r.clinical_population = '[]'::jsonb)`;
+    } else if (CLINICAL_POPULATIONS.includes(req.query.population)) {
+      params.push(str(req.query.population, 100));
+      where += ` AND r.clinical_population @> jsonb_build_array($${params.length}::text)`;
+    } else {
+      return res.status(400).json({
+        error: 'Unknown clinical population filter.',
+        code: 'invalid_filter_value',
+        parameter: 'population',
+      });
+    }
   }
-  if (req.query.setting) {
-    params.push(str(req.query.setting, 100));
-    where += ` AND r.clinical_setting @> jsonb_build_array($${params.length}::text)`;
+  if (req.query.setting !== undefined && req.query.setting !== '') {
+    if (req.query.setting === UNCLASSIFIED) {
+      where += ` AND (r.clinical_setting IS NULL OR r.clinical_setting = '[]'::jsonb)`;
+    } else if (CLINICAL_SETTINGS.includes(req.query.setting)) {
+      params.push(str(req.query.setting, 100));
+      where += ` AND r.clinical_setting @> jsonb_build_array($${params.length}::text)`;
+    } else {
+      return res.status(400).json({
+        error: 'Unknown clinical setting filter.',
+        code: 'invalid_filter_value',
+        parameter: 'setting',
+      });
+    }
   }
   if (req.query.mandatory === '1' || req.query.mandatory === 'true') where += ` AND r.mandatory = TRUE`;
   if (req.query.saved === '1' || req.query.saved === 'true') {
@@ -308,26 +562,84 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
                    AND c2.organisation_id IS NOT DISTINCT FROM $1) ASC, r.title ASC`;
   }
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  // Offset paging with a +1 probe row: the grid needs "is there more" without
+  // paying for an exact COUNT over the whole catalogue on every keystroke.
+  const offset = Math.min(Math.max(parseInt(req.query.offset, 10) || 0, 0), 10000);
 
   const { rows } = await pool.query(
     `SELECT r.id, r.slug, r.title, r.description, r.status, r.content_type, r.authority_level,
             r.mandatory, r.acknowledgement_required, r.cpd_eligible, r.cpd_hours,
             r.estimated_minutes, r.icon, r.version, r.external_url, r.source_publisher,
             r.updated_at, r.created_at,
+            -- Governance (migration 024). source_class is what lets the client
+            -- badge attribution honestly; without it the badge falls back to
+            -- authority_level, which conflates authorship with citation.
+            r.source_class, r.rights_status, r.access_tier, r.publication_state,
+            r.clinical_status, r.brand_review_status, r.content_version,
+            r.content_owner, r.review_due_at,
             COALESCE(json_agg(json_build_object('id', t.id, 'category', t.category, 'name', t.name))
                      FILTER (WHERE t.id IS NOT NULL), '[]') AS tags,
             EXISTS (SELECT 1 FROM resource_favourites f WHERE f.resource_id = r.id AND f.user_id = $${params.length + 1}) AS favourited,
             (SELECT COUNT(*) FROM resource_views v
-              WHERE v.resource_id = r.id AND v.viewed_at > NOW() - INTERVAL '30 days') AS view_count
+              WHERE v.resource_id = r.id AND v.viewed_at > NOW() - INTERVAL '30 days') AS view_count,
+            -- Card data: the primary hosted file, resolved here so the grid
+            -- never issues one /files call per tile. The thumbnail URL itself
+            -- is still served through the fully-gated file routes.
+            pf.id AS primary_file_id,
+            pf.format AS primary_file_format,
+            pf.file_size_bytes AS primary_file_size_bytes,
+            pf.has_thumbnail AS primary_file_has_thumbnail
        FROM resources r
        LEFT JOIN resource_tag_links tl ON tl.resource_id = r.id
        LEFT JOIN resource_tags t ON t.id = tl.tag_id
+       LEFT JOIN LATERAL (
+         SELECT f.id, f.format, f.file_size_bytes,
+                EXISTS (SELECT 1 FROM resource_file_derivatives d
+                         WHERE d.resource_file_id = f.id AND d.kind = 'thumbnail') AS has_thumbnail
+           FROM resource_files f
+          WHERE f.resource_id = r.id
+          ORDER BY f.is_primary DESC, f.uploaded_at
+          LIMIT 1
+       ) pf ON TRUE
       WHERE ${where}
-      GROUP BY r.id ORDER BY ${orderBy} LIMIT ${limit}`,
+      GROUP BY r.id, pf.id, pf.format, pf.file_size_bytes, pf.has_thumbnail
+      ORDER BY ${orderBy} LIMIT ${limit + 1} OFFSET ${offset}`,
     [...params, req.user.id]);
 
-  if (!rows.length && q) await recordSearchMiss(orgId, q);
-  res.json({ resources: rows });
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+
+  if (!page.length && !offset && q) await recordSearchMiss(orgId, q);
+  // approval_ready is computed HERE, from the same approvalBlockers() the
+  // approve route enforces, so the badge can never claim an approval the server
+  // would refuse. The client must not re-derive this policy.
+  res.json({ resources: page.map(withGovernanceFlags), hasMore, offset, limit });
+}));
+
+/**
+ * The vocabulary plus how many resources actually carry each value, so the UI
+ * can show "Unclassified (168)" instead of four options that look equally
+ * plausible and only one of which returns anything.
+ */
+router.get('/api/rh2/clinical-vocabulary', safe(async (req, res) => {
+  const org = orgOf(req);
+  const { rows } = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE clinical_population IS NULL OR clinical_population = '[]'::jsonb)::int AS pop_unclassified,
+       COUNT(*) FILTER (WHERE clinical_setting IS NULL OR clinical_setting = '[]'::jsonb)::int AS set_unclassified,
+       COUNT(*)::int AS total
+     FROM resources
+     WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'approved'`, [org]);
+  res.json({
+    populations: CLINICAL_POPULATIONS,
+    settings: CLINICAL_SETTINGS,
+    unclassifiedValue: UNCLASSIFIED,
+    counts: {
+      total: rows[0].total,
+      populationUnclassified: rows[0].pop_unclassified,
+      settingUnclassified: rows[0].set_unclassified,
+    },
+  });
 }));
 
 // ═══ 3. Detail ═══════════════════════════════════════════════════════════════
@@ -407,7 +719,10 @@ router.get('/api/rh2/resources/:idOrSlug', safe(async (req, res) => {
     [orgOf(req), userId, resource.id]).catch(() => {});
 
   res.json({
-    resource,
+    // Same computed flags as the list route, from the same approvalBlockers()
+    // the approve route enforces — so the detail view can explain WHY a draft
+    // cannot progress without reimplementing the policy in the browser.
+    resource: withGovernanceFlags(resource),
     tags: tags.rows,
     collections: collections.rows,
     versions: versions.rows,
@@ -459,6 +774,25 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
   if (externalUrl && !isHttpUrl(externalUrl)) {
     return res.status(400).json({ error: 'externalUrl must be an http(s) URL' });
   }
+  // Same vocabulary check as PATCH — a resource cannot be created carrying a
+  // classification that no filter could ever match.
+  const cPop = validateClinicalArray(b.clinicalPopulation, CLINICAL_POPULATIONS, 'clinicalPopulation');
+  if (!cPop.ok) {
+    return res.status(400).json({
+      error: 'Unknown clinical population value.', code: 'invalid_clinical_value',
+      parameter: cPop.parameter,
+    });
+  }
+  const cSet = validateClinicalArray(b.clinicalSetting, CLINICAL_SETTINGS, 'clinicalSetting');
+  if (!cSet.ok) {
+    return res.status(400).json({
+      error: 'Unknown clinical setting value.', code: 'invalid_clinical_value',
+      parameter: cSet.parameter,
+    });
+  }
+  const createPop = cPop.value || [];
+  const createSet = cSet.value || [];
+
   const orgId = orgOf(req);
   const slug = await uniqueSlug(orgId, slugify(b.slug || title));
 
@@ -476,8 +810,8 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
      Number.isFinite(+b.learningMinutes) ? Math.round(+b.learningMinutes) : null,
      b.mandatory === true, b.acknowledgementRequired === true, b.cpdEligible === true,
      Number.isFinite(+b.cpdHours) ? +b.cpdHours : null, authority, str(b.icon, 40),
-     JSON.stringify(strArr(b.targetRoles, 10, 30)), JSON.stringify(strArr(b.clinicalPopulation, 20, 100)),
-     JSON.stringify(strArr(b.clinicalSetting, 20, 100)), str(b.sourcePublisher, 200), str(b.sourceTitle, 300),
+     JSON.stringify(strArr(b.targetRoles, 10, 30)), JSON.stringify(createPop),
+     JSON.stringify(createSet), str(b.sourcePublisher, 200), str(b.sourceTitle, 300),
      b.sourceEffectiveDate || null, isUuid(b.contentOwner) ? b.contentOwner : req.user.id, req.user.id]);
 
   const resource = rows[0];
@@ -533,8 +867,25 @@ router.patch('/api/rh2/resources/:id', safe(async (req, res) => {
   if (b.authorityLevel !== undefined) set('authority_level', b.authorityLevel);
   if (b.icon !== undefined) set('icon', str(b.icon, 40));
   if (b.targetRoles !== undefined) set('target_roles', JSON.stringify(strArr(b.targetRoles, 10, 30)));
-  if (b.clinicalPopulation !== undefined) set('clinical_population', JSON.stringify(strArr(b.clinicalPopulation, 20, 100)));
-  if (b.clinicalSetting !== undefined) set('clinical_setting', JSON.stringify(strArr(b.clinicalSetting, 20, 100)));
+  // Validated against the same vocabulary the filter uses, so a stored
+  // classification is always one that can be filtered on. Previously this
+  // accepted any string, which is how unfilterable values could be written.
+  const popCheck = validateClinicalArray(b.clinicalPopulation, CLINICAL_POPULATIONS, 'clinicalPopulation');
+  if (!popCheck.ok) {
+    return res.status(400).json({
+      error: 'Unknown clinical population value.', code: 'invalid_clinical_value',
+      parameter: popCheck.parameter,
+    });
+  }
+  const setCheck = validateClinicalArray(b.clinicalSetting, CLINICAL_SETTINGS, 'clinicalSetting');
+  if (!setCheck.ok) {
+    return res.status(400).json({
+      error: 'Unknown clinical setting value.', code: 'invalid_clinical_value',
+      parameter: setCheck.parameter,
+    });
+  }
+  if (popCheck.value !== undefined) set('clinical_population', JSON.stringify(popCheck.value));
+  if (setCheck.value !== undefined) set('clinical_setting', JSON.stringify(setCheck.value));
   if (b.sourcePublisher !== undefined) set('source_publisher', str(b.sourcePublisher, 200));
   if (b.sourceTitle !== undefined) set('source_title', str(b.sourceTitle, 300));
   if (b.sourceEffectiveDate !== undefined) set('source_effective_date', b.sourceEffectiveDate || null);
@@ -588,6 +939,15 @@ router.patch('/api/rh2/resources/:id', safe(async (req, res) => {
   if (b.collections !== undefined) await syncCollections(orgOf(req), resource.id, b.collections);
   if (b.tagIds !== undefined) await syncTags(resource.id, b.tagIds);
   await audit(req, 'rh2.resource_updated', resource.id, { fields: sets.length });
+  // A clinical classification is governance metadata, so it gets its own audit
+  // entry naming the values — "fields: 7" would not tell a reviewer what was
+  // classified or to what.
+  if (popCheck.value !== undefined || setCheck.value !== undefined) {
+    await audit(req, 'rh2.resource_classified', resource.id, {
+      clinicalPopulation: popCheck.value,
+      clinicalSetting: setCheck.value,
+    });
+  }
   res.json({ resource: rows[0] });
 }));
 
@@ -605,36 +965,408 @@ router.post('/api/rh2/resources/:id/submit', safe(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Approval is now gated twice: the transition must be legal for the record's
+// current governance state, AND every provenance requirement must already be
+// satisfied. Previously this route took any resource to 'approved' regardless
+// of where it had been — archived and rejected records included.
 router.post('/api/rh2/resources/:id/approve', safe(async (req, res) => {
-  if (!isOwner(req.user)) return res.status(403).json({ error: 'Only the owner can approve resources' });
+  const gate = requireApprover(req, res);
+  if (gate) return gate;
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
-  const { rows } = await pool.query(
-    `UPDATE resources SET status = 'approved', approved_by = $3, approved_at = NOW(),
-            last_reviewed_at = CURRENT_DATE,
-            review_due_at = (CURRENT_DATE + INTERVAL '12 months')::date, updated_at = NOW()
-      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2 RETURNING *`,
-    [req.params.id, orgOf(req), req.user.id]);
-  if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  const r = rows[0];
+
+  const result = await transition(req, req.params.id, {
+    toState: 'approved',
+    legacyStatus: 'approved',
+    reason: req.body && req.body.reason,
+    extraSet: `, approved_by = $5, approved_at = NOW(), last_reviewed_at = CURRENT_DATE,
+               review_due_at = (CURRENT_DATE + INTERVAL '12 months')::date`,
+    extraParams: [req.user.id],
+    // This statement stamps the review date, so the guard must not block on it.
+    blockerPatch: { review_due_at: 'set-by-this-approval' },
+  });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  const r = result.resource;
   await pool.query(
     `INSERT INTO resource_versions (resource_id, version, title, content, change_note, change_kind, created_by)
      SELECT $1, $2, $3, $4, 'Initial approved version', 'initial', $5
       WHERE NOT EXISTS (SELECT 1 FROM resource_versions WHERE resource_id = $1)`,
     [r.id, r.version, r.title, r.content, req.user.id]);
-  await audit(req, 'rh2.resource_approved', r.id, { version: r.version });
+  await audit(req, 'rh2.resource_approved', r.id, { version: r.version, from: result.from });
   res.json({ ok: true, resource: r });
 }));
 
+// Withdraw, never destroy — the handoff requires records be retired rather than
+// hard-deleted. 'retired' is reachable from every live state and is reversible:
+// an owner can return a withdrawn record to 'inventory'.
 router.post('/api/rh2/resources/:id/archive', safe(async (req, res) => {
-  if (!isOwner(req.user)) return res.status(403).json({ error: 'Only the owner can archive resources' });
+  const gate = requireReviewer(req, res);
+  if (gate) return gate;
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
-  const { rows } = await pool.query(
-    `UPDATE resources SET status = 'archived', archived_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2 RETURNING id`,
-    [req.params.id, orgOf(req)]);
-  if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  await audit(req, 'rh2.resource_archived', req.params.id);
+
+  const result = await transition(req, req.params.id, {
+    toState: 'retired',
+    legacyStatus: 'archived',
+    reason: req.body && req.body.reason,
+    extraSet: ', archived_at = NOW()',
+  });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  await audit(req, 'rh2.resource_archived', req.params.id, { from: result.from });
   res.json({ ok: true });
+}));
+
+/**
+ * Send a record BACK for more work. This is not a rejection: the resource stays
+ * alive, returns to rights-review, and carries legacy status 'needs_update'.
+ *
+ * Naming matters here because three audiences read it — the API caller, the
+ * audit log and the reviewer in the UI. Calling this "reject" while it left the
+ * record revivable meant an audit trail that said 'rejected' about resources
+ * that were merely awaiting edits.
+ */
+router.post('/api/rh2/resources/:id/request-changes', safe(async (req, res) => {
+  const gate = requireReviewer(req, res);
+  if (gate) return gate;
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+
+  const result = await transition(req, req.params.id, {
+    toState: 'rights-review',
+    legacyStatus: 'needs_update',
+    reason: req.body && req.body.reason,
+  });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  await audit(req, 'rh2.resource_changes_requested', req.params.id, { from: result.from });
+  res.json({ ok: true, outcome: 'changes-requested', from: result.from });
+}));
+
+/**
+ * A non-approved outcome: this resource will not go into service as it stands.
+ * It lands on 'retired' with legacy status 'rejected', distinct from an
+ * archived record that simply reached end of life.
+ *
+ * 'retired' means INACTIVE / WITHDRAWN, not terminal — an owner can deliberately
+ * restore it to 'inventory' and start review again. The only genuinely terminal
+ * disposition in the hub is 'excluded-private'.
+ */
+router.post('/api/rh2/resources/:id/reject', safe(async (req, res) => {
+  const gate = requireApprover(req, res);
+  if (gate) return gate;
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+
+  const result = await transition(req, req.params.id, {
+    toState: 'retired',
+    legacyStatus: 'rejected',
+    reason: req.body && req.body.reason,
+  });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  await audit(req, 'rh2.resource_rejected', req.params.id, { from: result.from });
+  res.json({ ok: true, outcome: 'rejected', from: result.from });
+}));
+
+/* ═══ Secure file delivery ═══════════════════════════════════════════════════
+ *
+ * The browser supplies ONE thing: a database file id. It never supplies, and
+ * never receives, a path, a storage key or a storage root. Every other input to
+ * the decision — which organisation owns it, what tier it sits at, what state
+ * its resource is in — is read from the database on the server.
+ *
+ * Every refusal is a 404 with the same body. A 403 would confirm that a file
+ * exists and that the caller merely lacks rights, which for a clinical resource
+ * library is itself a disclosure.
+ */
+const fileStorage = require('./resource-file-storage');
+const previewService = require('./resource-preview-service');
+
+const FILE_NOT_FOUND = { error: 'Not found' };
+
+/**
+ * The single decision ladder for anything that serves file bytes — download,
+ * inline preview and thumbnail all climb the same rungs, so a new delivery
+ * surface cannot accidentally be the quiet way in. Returns the loaded row or
+ * null; the caller has already been answered with the uniform 404 when null.
+ */
+async function loadDeliverableFile(req, res, fileId) {
+  const notFound = () => { res.status(404).json(FILE_NOT_FOUND); return null; };
+
+  if (!isUuid(fileId)) return notFound();
+
+  // One query, joined through the parent resource: a file is only ever
+  // reachable via a resource the caller's organisation owns.
+  const { rows } = await pool.query(
+    `SELECT f.id, f.file_name, f.file_mime, f.file_size_bytes, f.file_data,
+            f.storage_backend, f.storage_key, f.access_tier AS file_tier,
+            f.format, f.checksum_sha256,
+            r.id AS resource_id, r.organisation_id, r.status AS resource_status,
+            r.access_tier AS resource_tier, r.publication_state, r.archived_at
+       FROM resource_files f
+       JOIN resources r ON r.id = f.resource_id
+      WHERE f.id = $1`,
+    [fileId]);
+
+  const f = rows[0];
+  if (!f) return notFound();
+
+  // 1. Organisation membership.
+  const org = orgOf(req);
+  if (!org || String(f.organisation_id) !== String(org)) return notFound();
+
+  // 2. Governance state of the parent. Withdrawn and quarantined records serve
+  //    nothing; in-review records still serve to authorised staff, because
+  //    reviewing a document means opening it.
+  if (!governance.canDownloadInState(f.publication_state)) return notFound();
+  if (f.archived_at) return notFound();
+
+  // 2b. The SAME visibility rule the detail route applies. Without this a
+  //     therapist who is correctly 404'd from a draft resource could still
+  //     enumerate and download its files — the two surfaces must agree, or the
+  //     quieter one becomes the way in. access_tier travels with status: the
+  //     rule reads both.
+  if (!visibleTo(req.user, {
+    status: f.resource_status,
+    access_tier: f.resource_tier,
+    publication_state: f.publication_state,
+  })) return notFound();
+
+  // 3. Effective tier: the MORE restrictive of resource and file. An unknown
+  //    value on either side resolves to excluded-private and is refused.
+  if (!governance.canReadFile(req.user && req.user.role, f.resource_tier, f.file_tier)) {
+    return notFound();
+  }
+
+  return f;
+}
+
+/** Read a deliverable file's bytes, answering the uniform 404 on any failure. */
+async function readFileBytes(res, f) {
+  try {
+    if (f.storage_backend === 'rhub' && f.storage_key) {
+      // Backend-agnostic: local store today, Azure Blob in production.
+      return await fileStorage.getBuffer(f.storage_key);
+    }
+    if (f.file_data) return Buffer.from(f.file_data, 'base64');
+  } catch (err) {
+    // Includes containment failures. Never echo the reason — it would describe
+    // the filesystem.
+    log.warn('resource file unreadable', { fileId: f.id, reason: err.message });
+  }
+  res.status(404).json(FILE_NOT_FOUND);
+  return null;
+}
+
+function sendFileBytes(res, buf, { mime, disposition, filename }) {
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Content-Length', String(buf.length));
+  // res.end rather than res.send: send() appends "; charset=utf-8" to the
+  // Content-Type, which is meaningless on a PDF or DOCX and misdescribes the
+  // bytes. end() writes exactly the type chosen from the allow-list.
+  return res.end(buf);
+}
+
+router.get('/api/rh2/files/:fileId', safe(async (req, res) => {
+  const f = await loadDeliverableFile(req, res, req.params.fileId);
+  if (!f) return undefined;
+
+  const buf = await readFileBytes(res, f);
+  if (!buf) return undefined;
+
+  // Content-Type comes from the allow-list keyed on `format`, never from the
+  // stored file_mime, so a poisoned row cannot choose how the browser
+  // interprets the bytes.
+  await audit(req, 'rh2.file_downloaded', f.resource_id, { fileId: f.id, format: f.format });
+  return sendFileBytes(res, buf, {
+    mime: fileStorage.mimeForFormat(f.format),
+    disposition: 'attachment',
+    filename: fileStorage.safeDownloadName(f.file_name, f.format),
+  });
+}));
+
+/**
+ * Inline preview bytes for the in-browser viewer.
+ *
+ * PDF and DOCX serve their ORIGINAL bytes with an inline disposition (the
+ * client renders them with the vendored pdf.js / docx-preview). A legacy .doc
+ * serves its generated preview-docx derivative. Everything else is a uniform
+ * 404 and the UI shows the file-type fallback panel.
+ *
+ * Same decision ladder as download; audited separately so preview opens do
+ * not inflate download analytics.
+ */
+router.get('/api/rh2/files/:fileId/preview', safe(async (req, res) => {
+  const f = await loadDeliverableFile(req, res, req.params.fileId);
+  if (!f) return undefined;
+
+  const format = previewService.formatOf(f);
+
+  if (previewService.INLINE_PREVIEWABLE.has(format)) {
+    const buf = await readFileBytes(res, f);
+    if (!buf) return undefined;
+    await audit(req, 'rh2.file_previewed', f.resource_id, { fileId: f.id, format });
+    return sendFileBytes(res, buf, {
+      mime: fileStorage.mimeForFormat(format),
+      disposition: 'inline',
+      filename: fileStorage.safeDownloadName(f.file_name, format),
+    });
+  }
+
+  // A derivative rendition (e.g. legacy .doc converted to .docx).
+  const { rows } = await pool.query(
+    `SELECT storage_key, format FROM resource_file_derivatives
+      WHERE resource_file_id = $1 AND kind = 'preview-docx'`, [f.id]);
+  if (!rows.length) return res.status(404).json(FILE_NOT_FOUND);
+  let buf;
+  try {
+    buf = await fileStorage.getBuffer(rows[0].storage_key);
+  } catch (err) {
+    log.warn('resource preview unreadable', { fileId: f.id, reason: err.message });
+    return res.status(404).json(FILE_NOT_FOUND);
+  }
+  await audit(req, 'rh2.file_previewed', f.resource_id, { fileId: f.id, format });
+  return sendFileBytes(res, buf, {
+    mime: fileStorage.mimeForFormat('docx'),
+    disposition: 'inline',
+    filename: fileStorage.safeDownloadName(f.file_name, 'docx'),
+  });
+}));
+
+/**
+ * Card thumbnail (generated first-page PNG). Same decision ladder as the
+ * document itself: a thumbnail IS document content — the first page of a
+ * quarantined file leaks exactly what quarantine exists to contain. Cacheable
+ * privately for a day; content-addressed keys make staleness harmless.
+ */
+router.get('/api/rh2/files/:fileId/thumbnail', safe(async (req, res) => {
+  const f = await loadDeliverableFile(req, res, req.params.fileId);
+  if (!f) return undefined;
+
+  const { rows } = await pool.query(
+    `SELECT storage_key, format FROM resource_file_derivatives
+      WHERE resource_file_id = $1 AND kind = 'thumbnail'`, [f.id]);
+  if (!rows.length) return res.status(404).json(FILE_NOT_FOUND);
+  let buf;
+  try {
+    buf = await fileStorage.getBuffer(rows[0].storage_key);
+  } catch (err) {
+    log.warn('resource thumbnail unreadable', { fileId: f.id, reason: err.message });
+    return res.status(404).json(FILE_NOT_FOUND);
+  }
+  res.setHeader('Content-Type', rows[0].format === 'jpg' ? 'image/jpeg' : 'image/png');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('Content-Length', String(buf.length));
+  return res.end(buf);
+}));
+
+/**
+ * File metadata for a resource. Deliberately projects a fixed column list:
+ * storage_key, storage_backend and file_data must never reach a client.
+ */
+router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json(FILE_NOT_FOUND);
+  const resource = await findResource(req, req.params.id);
+  if (!resource) return res.status(404).json(FILE_NOT_FOUND);
+  // Same visibility rule as the detail route — a resource you cannot open must
+  // not disclose its file list either.
+  if (!visibleTo(req.user, resource)) return res.status(404).json(FILE_NOT_FOUND);
+  if (!governance.canDownloadInState(resource.publication_state)) {
+    return res.status(404).json(FILE_NOT_FOUND);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT f.id, f.file_name, f.format, f.file_size_bytes, f.checksum_sha256,
+            f.access_tier, f.is_primary, f.uploaded_at, f.storage_key,
+            EXISTS (SELECT 1 FROM resource_file_derivatives d
+                     WHERE d.resource_file_id = f.id AND d.kind = 'thumbnail') AS has_thumbnail,
+            EXISTS (SELECT 1 FROM resource_file_derivatives d
+                     WHERE d.resource_file_id = f.id AND d.kind = 'preview-docx') AS has_preview_docx
+       FROM resource_files f WHERE f.resource_id = $1 ORDER BY f.is_primary DESC, f.file_name`,
+    [req.params.id]);
+
+  // Only files this caller could actually download are listed at all.
+  const visible = rows
+    .filter((f) => governance.canReadFile(
+      req.user && req.user.role, resource.access_tier, f.access_tier))
+    .map((f) => {
+      const format = previewService.formatOf(f);
+      // What the in-browser viewer can do with this file: 'pdf' and 'docx'
+      // render the original; a legacy .doc renders its converted derivative
+      // (also via the docx renderer); anything else gets the fallback panel.
+      const previewKind = previewService.INLINE_PREVIEWABLE.has(format)
+        ? format
+        : (f.has_preview_docx ? 'docx' : null);
+      return {
+        id: f.id,
+        fileName: f.file_name,
+        format: f.format,
+        displayFormat: format || null,
+        sizeBytes: f.file_size_bytes === null ? null : Number(f.file_size_bytes),
+        checksumSha256: f.checksum_sha256,
+        effectiveAccessTier: governance.effectiveAccessTier(resource.access_tier, f.access_tier),
+        isPrimary: f.is_primary,
+        uploadedAt: f.uploaded_at,
+        downloadUrl: `/api/rh2/files/${f.id}`,
+        previewKind,
+        previewUrl: previewKind ? `/api/rh2/files/${f.id}/preview` : null,
+        thumbnailUrl: f.has_thumbnail ? `/api/rh2/files/${f.id}/thumbnail` : null,
+      };
+    });
+
+  res.json({ files: visible });
+}));
+
+/**
+ * Walk a resource through the review lifecycle.
+ *
+ * submit/approve/archive/reject cover the legacy four-step flow, but the
+ * governance lifecycle has eight states — without this a reviewer could never
+ * move a record from rights-review to clinical review to brand review, and
+ * everything would pile up in whichever state it was seeded into. Legality is
+ * decided by canTransition(), so this endpoint cannot be used to skip a stage
+ * or to resurrect an excluded-private record.
+ *
+ * The legacy `status` deliberately stays 'draft' for every in-review state:
+ * `status = 'approved'` is what the 36 read routes serve on, so a record still
+ * under review must never hold it.
+ */
+const IN_REVIEW_STATES = ['inventory', 'rights-review', 'clinical-review', 'brand-accessibility-review'];
+
+router.post('/api/rh2/resources/:id/governance-state', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+
+  const toState = String((req.body && req.body.toState) || '');
+  // Authority is decided inside transition(), which knows the record's current
+  // state and can therefore police the clinical-attestation step. Anything
+  // checked here would be blind to where the record is coming FROM.
+  const reason = req.body && req.body.reason;
+  if (!reason || !String(reason).trim()) {
+    return res.status(400).json({ error: 'A reason is required for every governance transition.' });
+  }
+
+  const legacyStatus =
+    toState === 'approved' ? 'approved'
+      : toState === 'retired' ? 'archived'
+        : toState === 'excluded-private' ? 'rejected'
+          : IN_REVIEW_STATES.indexOf(toState) !== -1 ? 'draft'
+            : null;
+  if (legacyStatus === null) {
+    return res.status(400).json({ error: `Unknown target state "${toState}".` });
+  }
+
+  const extra = toState === 'excluded-private' ? ", access_tier = 'excluded-private'" : '';
+  const result = await transition(req, req.params.id, {
+    toState, legacyStatus, reason, extraSet: extra,
+    blockerPatch: toState === 'approved' ? { review_due_at: 'set-on-approval' } : undefined,
+  });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  await audit(req, 'rh2.resource_governance_state', req.params.id,
+    { from: result.from, to: toState });
+  res.json({ ok: true, from: result.from, to: toState });
 }));
 
 // ═══ 6. Acknowledgements ═════════════════════════════════════════════════════
@@ -1080,6 +1812,146 @@ router.get('/api/rh2/pd', safe(async (req, res) => {
   });
 }));
 
+/**
+ * Shape a pd_events row for the browser.
+ *
+ * Deliberately explicit rather than SELECT *: the row carries internal columns
+ * (created_by, external_ref, organisation_id) that a client has no use for, and
+ * an outward-facing contract should be something you can read, not whatever the
+ * table happens to hold this month.
+ *
+ * `bookingUrl` is always the PROVIDER'S page. Opal has no booking integration,
+ * so this contract has no notion of a booking, a seat or a payment — the
+ * therapist finishes the transaction on the provider's own site.
+ */
+function serialisePdEvent(r) {
+  return {
+    id: r.id,
+    title: r.title,
+    provider: r.provider || null,
+    description: r.description || null,
+    topic: r.topic || null,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
+    timezone: r.timezone,
+    mode: r.mode,
+    location: r.location || null,
+    costCents: r.cost_cents === null || r.cost_cents === undefined ? null : Number(r.cost_cents),
+    cpdHours: r.cpd_hours === null || r.cpd_hours === undefined ? null : Number(r.cpd_hours),
+    targetRoles: r.target_roles || [],
+    status: r.status,
+    // Two different links: where you book, and where the event is described.
+    bookingUrl: safeWebUrl(r.registration_url),
+    sourceUrl: safeWebUrl(r.source_url),
+    imageUrl: safeWebUrl(r.image_url, true),
+    // Provenance, so the page can say where a listing came from rather than
+    // implying Opal is the authority on someone else's course.
+    sourceName: r.source || null,
+    providerKey: r.provider_key || 'manual',
+    syncedAt: r.synced_at || null,
+    updatedAt: r.updated_at || r.created_at,
+    // Booking is never in-app. Stated in the contract so a client cannot
+    // reasonably render an in-app booking control.
+    bookingIsExternal: true,
+  };
+}
+
+/**
+ * Only http(s) survives. A stored value is data, and data that becomes an href
+ * must not be able to carry javascript:, data: or file:. The database
+ * constraint says the same thing; this is the second line, because a row could
+ * predate the constraint.
+ */
+function safeWebUrl(v, httpsOnly) {
+  const raw = String(v == null ? '' : v).trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (httpsOnly) return u.protocol === 'https:' ? raw : null;
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? raw : null;
+  } catch (e) { return null; }
+}
+
+/**
+ * The professional-development catalogue: search and filters over upcoming
+ * events, with past events available on request.
+ *
+ * Reuses pd_events — the same rows the Home preview and the admin tab already
+ * use. There is no second store and no separate sync: an event added by an
+ * administrator appears here immediately.
+ */
+router.get('/api/rh2/pd/catalogue', safe(async (req, res) => {
+  const orgId = orgOf(req);
+  await markPastPdEvents(orgId);
+
+  const params = [orgId];
+  let where = `organisation_id IS NOT DISTINCT FROM $1 AND status <> 'archived'`;
+
+  const when = req.query.when === 'past' ? 'past' : 'upcoming';
+  if (when === 'upcoming') where += ` AND status = 'upcoming'`;
+  else where += ` AND status IN ('past','cancelled')`;
+
+  if (req.query.q) {
+    params.push('%' + str(req.query.q, 120) + '%');
+    where += ` AND (title ILIKE $${params.length} OR provider ILIKE $${params.length}
+                    OR description ILIKE $${params.length} OR topic ILIKE $${params.length})`;
+  }
+  if (PD_MODES.includes(req.query.mode)) {
+    params.push(req.query.mode);
+    where += ` AND mode = $${params.length}`;
+  }
+  if (req.query.topic) {
+    params.push(str(req.query.topic, 100));
+    where += ` AND topic = $${params.length}`;
+  }
+  // "Free" means a recorded zero, not an unknown cost. An event with no price
+  // recorded is not free — it is unpriced, and saying otherwise would be a
+  // claim about someone else's course.
+  if (req.query.cost === 'free') where += ` AND cost_cents = 0`;
+  else if (req.query.cost === 'paid') where += ` AND cost_cents > 0`;
+  if (req.query.cpd === '1') where += ` AND cpd_hours IS NOT NULL AND cpd_hours > 0`;
+
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM pd_events WHERE ${where}`, params);
+
+  params.push(limit, offset);
+  const order = when === 'upcoming' ? 'starts_at ASC NULLS LAST' : 'starts_at DESC NULLS LAST';
+  const { rows } = await pool.query(
+    `SELECT * FROM pd_events WHERE ${where}
+      ORDER BY ${order} LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+
+  // Filter vocabularies come from the data actually present, so the UI cannot
+  // offer a topic that would return nothing.
+  const { rows: topics } = await pool.query(
+    `SELECT DISTINCT topic FROM pd_events
+      WHERE organisation_id IS NOT DISTINCT FROM $1 AND topic IS NOT NULL AND status <> 'archived'
+      ORDER BY topic`, [orgId]);
+
+  res.json({
+    total: countRows[0].total,
+    limit,
+    offset,
+    events: rows.map(serialisePdEvent),
+    facets: { topics: topics.map((t) => t.topic), modes: PD_MODES },
+    // Said plainly so no client implies otherwise.
+    bookingNote: 'Booking is completed on the provider\'s own website. Opal does not process registrations or payments.',
+  });
+}));
+
+/** One event, in full, for the detail view. */
+router.get('/api/rh2/pd/:id', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const { rows } = await pool.query(
+    `SELECT * FROM pd_events
+      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2 AND status <> 'archived'`,
+    [req.params.id, orgOf(req)]);
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  res.json({ event: serialisePdEvent(rows[0]) });
+}));
+
 router.post('/api/rh2/pd', safe(async (req, res) => {
   if (!canAuthor(req.user)) return res.status(403).json({ error: 'Only admins and owners can manage PD events' });
   const b = req.body || {};
@@ -1263,16 +2135,19 @@ router.get('/api/rh2/admin/analytics', safe(async (req, res) => {
         `SELECT r.id, r.title, COUNT(v.id) AS views FROM resources r
            JOIN resource_views v ON v.resource_id = r.id
           WHERE r.organisation_id IS NOT DISTINCT FROM $1
+            AND ${PRIVACY_PREDICATE}
           GROUP BY r.id ORDER BY COUNT(v.id) DESC LIMIT 10`, [orgId]),
       pool.query(
         `SELECT r.id, r.title, COUNT(f.user_id) AS saves FROM resources r
            JOIN resource_favourites f ON f.resource_id = r.id
           WHERE r.organisation_id IS NOT DISTINCT FROM $1
+            AND ${PRIVACY_PREDICATE}
           GROUP BY r.id ORDER BY COUNT(f.user_id) DESC LIMIT 10`, [orgId]),
       pool.query(
         `SELECT r.id, r.title, COUNT(p.user_id) AS completions FROM resources r
            JOIN user_learning_progress p ON p.resource_id = r.id
           WHERE r.organisation_id IS NOT DISTINCT FROM $1
+            AND ${PRIVACY_PREDICATE}
           GROUP BY r.id ORDER BY COUNT(p.user_id) DESC LIMIT 10`, [orgId]),
       pool.query(
         `SELECT term, miss_count, last_searched_at FROM search_misses
@@ -1287,6 +2162,7 @@ router.get('/api/rh2/admin/analytics', safe(async (req, res) => {
                   WHERE u.organisation_id IS NOT DISTINCT FROM $1 AND u.is_active = TRUE) AS active_users
            FROM resources r
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
             AND r.acknowledgement_required = TRUE
           ORDER BY r.title`, [orgId]),
       pool.query(
@@ -1311,6 +2187,7 @@ router.get('/api/rh2/admin/analytics', safe(async (req, res) => {
                         WHERE res.resource_id = r.id AND s.status = 'source_changed') AS source_changed
            FROM resources r
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
             AND (r.review_due_at < CURRENT_DATE
               OR EXISTS (SELECT 1 FROM resource_external_sources res
                           JOIN external_sources s ON s.id = res.source_id
@@ -1319,7 +2196,8 @@ router.get('/api/rh2/admin/analytics', safe(async (req, res) => {
       pool.query(
         `SELECT f.id, f.kind, f.comment, f.created_at, r.title AS resource_title, r.id AS resource_id
            FROM resource_feedback f JOIN resources r ON r.id = f.resource_id
-          WHERE f.organisation_id IS NOT DISTINCT FROM $1 ORDER BY f.created_at DESC LIMIT 50`, [orgId]),
+          WHERE f.organisation_id IS NOT DISTINCT FROM $1 AND ${PRIVACY_PREDICATE}
+          ORDER BY f.created_at DESC LIMIT 50`, [orgId]),
     ]);
 
   res.json({
