@@ -539,6 +539,24 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
     }
   }
   if (req.query.mandatory === '1' || req.query.mandatory === 'true') where += ` AND r.mandatory = TRUE`;
+  // Hosted document vs external link vs written guide — how a therapist gets
+  // the thing is a first-class facet.
+  if (req.query.kind !== undefined && req.query.kind !== '') {
+    if (req.query.kind === 'hosted') {
+      where += ` AND EXISTS (SELECT 1 FROM resource_files rf WHERE rf.resource_id = r.id)`;
+    } else if (req.query.kind === 'external') {
+      where += ` AND r.external_url IS NOT NULL`;
+    } else if (req.query.kind === 'guide') {
+      where += ` AND r.external_url IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM resource_files rf WHERE rf.resource_id = r.id)`;
+    } else {
+      return res.status(400).json({
+        error: 'Unknown resource kind filter.',
+        code: 'invalid_filter_value',
+        parameter: 'kind',
+      });
+    }
+  }
   if (req.query.saved === '1' || req.query.saved === 'true') {
     params.push(req.user.id);
     where += ` AND EXISTS (SELECT 1 FROM resource_favourites sf
@@ -612,8 +630,14 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
   if (!page.length && !offset && q) await recordSearchMiss(orgId, q);
   // approval_ready is computed HERE, from the same approvalBlockers() the
   // approve route enforces, so the badge can never claim an approval the server
-  // would refuse. The client must not re-derive this policy.
-  res.json({ resources: page.map(withGovernanceFlags), hasMore, offset, limit });
+  // would refuse. The client must not re-derive this policy. The thumbnail URL
+  // is likewise SERVER-supplied — the client never assembles a file URL.
+  const cardOf = (r) => ({
+    ...withGovernanceFlags(r),
+    primary_file_thumbnail_url: r.primary_file_has_thumbnail
+      ? `/api/rh2/files/${r.primary_file_id}/thumbnail` : null,
+  });
+  res.json({ resources: page.map(cardOf), hasMore, offset, limit });
 }));
 
 /**

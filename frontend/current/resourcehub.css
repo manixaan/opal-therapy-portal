@@ -351,3 +351,403 @@
   .rh2-adm-row { flex-wrap: wrap; }
   .rh2-kv { flex-direction: column; gap: 0; }
 }
+
+/* ── Governance badge ───────────────────────────────────────────────────────
+   Deliberately distinct from .rh2-auth (the source badge) in both colour and
+   position: they answer different questions — who wrote this, and has it
+   passed review — and reading as one badge is how "Opal Approved" came to
+   assert authorship it had not earned. */
+.rh2-gov {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.rh2-gov-approved {
+  color: var(--ok-ink, #1c5b3a);
+  background: var(--ok-bg, #e7f4ec);
+  border-color: var(--ok-line, #bfe0cc);
+}
+.rh2-gov-published {
+  color: #14425f;
+  background: #e4f1f9;
+  border-color: #bcd9ea;
+}
+@media (prefers-color-scheme: dark) {
+  .rh2-gov-approved { color: #9fe0bb; background: rgba(31,122,77,.18); border-color: rgba(31,122,77,.4); }
+  .rh2-gov-published { color: #a8d6f0; background: rgba(20,90,130,.2); border-color: rgba(20,90,130,.45); }
+}
+
+/* ── Files, governance, source review, instrument register ──────────────────
+   The file list and the governance panel are deliberately different shapes:
+   one is a set of actions, the other a set of statements. Reading them as the
+   same thing is how "approved" came to imply "published". */
+.rh2-files .rh2-file-list,
+.rh2-sr-list,
+.rh2-inst-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.rh2-file { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rh2-file-meta { font-size: 13px; color: var(--ink-soft); }
+.rh2-file-tier {
+  display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: #6b4b16; background: #fdf3e0; border: 1px solid #ecd9b4;
+}
+.rh2-visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.rh2-gov-panel .rh2-gov-state { font-weight: 600; margin: 4px 0 10px; }
+.rh2-gov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.rh2-gov-item {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.rh2-gov-item.is-done { border-color: #bfe0cc; background: #f3faf6; }
+.rh2-gov-item-k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.rh2-gov-item-v { font-size: 13px; font-weight: 600; }
+.rh2-gov-blocked-h { margin: 12px 0 4px; font-weight: 600; }
+.rh2-gov-blockers { margin: 0; padding-left: 20px; font-size: 13px; color: var(--ink-soft); }
+.rh2-gov-ok { margin: 12px 0 0; font-size: 13px; color: var(--ink-soft); }
+
+.rh2-sr-item, .rh2-inst { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.rh2-sr-title, .rh2-inst-name { margin: 0 0 4px; font-size: 15px; }
+.rh2-sr-evidence { margin: 8px 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13px; }
+.rh2-sr-evidence dt { color: var(--ink-soft); }
+.rh2-sr-evidence dd { margin: 0; }
+.rh2-sr-warn { font-size: 12px; color: #7a5b1a; background: #fdf6e7; border-radius: 6px; padding: 6px 8px; margin: 6px 0; }
+.rh2-sr-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.rh2-sr-form label { font-size: 12px; font-weight: 600; }
+.rh2-sr-controls { display: flex; gap: 8px; margin: 10px 0; }
+.rh2-sr-pager { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.rh2-inst-kv { margin: 6px 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13px; }
+.rh2-inst-kv dt { color: var(--ink-soft); }
+.rh2-inst-kv dd { margin: 0; }
+.rh2-inst.is-retired { opacity: .65; }
+.rh2-inst-notes, .rh2-inst-link { font-size: 12px; color: var(--ink-soft); margin: 6px 0 0; }
+.rh2-inst-unresolved {
+  font-size: 12px; margin: 8px 0 0; padding: 6px 8px; border-radius: 6px;
+  color: #7a5b1a; background: #fdf6e7;
+}
+
+/* ── Assessment availability ─────────────────────────────────────────────────
+   Five states, each said in words first. The colour only repeats what the
+   badge already reads, so the catalogue stays legible in monochrome and to
+   anyone who does not distinguish these hues — state is never colour alone. */
+.rh2-inst-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rh2-inst-top h2, .rh2-inst-top h3 { margin: 0; }
+.rh2-inst-desc { margin: 6px 0 0; font-size: 13.5px; color: var(--ink-soft); max-width: 74ch; }
+.rh2-inst-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.rh2-inst-domains { margin: 6px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.6; }
+
+.rh2-avail {
+  display: inline-block; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  font-size: 11.5px; font-weight: 600;
+  border: 1px solid var(--line); background: #f3f4f6; color: var(--ink-soft);
+}
+.rh2-avail--electronic-and-pdf, .rh2-avail--electronic {
+  color: #14582f; background: #eaf6ee; border-color: #bfe0cc;
+}
+.rh2-avail--pdf { color: #24507f; background: #eaf1fb; border-color: #c3d6f0; }
+.rh2-avail--source-required { color: #7a5b1a; background: #fdf6e7; border-color: #ecd9b4; }
+.rh2-avail--temporarily-unavailable { color: #8c2f22; background: #fdeceb; border-color: #f0c6c0; }
+
+.rh2-back {
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 4px 8px 4px 2px; margin: 0 0 8px; font: inherit; font-size: 13px;
+  color: var(--brand, #1f7a4d); cursor: pointer;
+}
+.rh2-back:hover { background: var(--line-soft, #f2f4f3); border-color: var(--line); }
+@media (prefers-color-scheme: dark) {
+  .rh2-gov-item.is-done { border-color: rgba(31,122,77,.4); background: rgba(31,122,77,.12); }
+  .rh2-sr-warn, .rh2-inst-unresolved { color: #e6c88a; background: rgba(122,91,26,.18); }
+  .rh2-avail { background: rgba(255,255,255,.06); }
+  .rh2-avail--electronic-and-pdf, .rh2-avail--electronic { color: #9fd9b5; background: rgba(31,122,77,.18); border-color: rgba(31,122,77,.42); }
+  .rh2-avail--pdf { color: #a8c6ee; background: rgba(36,80,127,.18); border-color: rgba(36,80,127,.45); }
+  .rh2-avail--source-required { color: #e6c88a; background: rgba(122,91,26,.18); border-color: rgba(122,91,26,.45); }
+  .rh2-avail--temporarily-unavailable { color: #eeb1a7; background: rgba(140,47,34,.18); border-color: rgba(140,47,34,.45); }
+  .rh2-file-tier { color: #e6c88a; background: rgba(122,91,26,.2); border-color: rgba(122,91,26,.45); }
+}
+
+/* ── Card heading that is also a link ───────────────────────────────────────
+   A real button so keyboard focus and screen-reader semantics come for free,
+   restyled to read as the heading it is. */
+.rh2-heading-btn {
+  background: none; border: 0; padding: 0; font: inherit; color: inherit;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.rh2-heading-btn:hover { text-decoration: underline; }
+.rh2-heading-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.rh2-heading-more { color: var(--ink-soft); font-weight: 400; }
+
+/* ── Professional development ───────────────────────────────────────────────
+   Home preview and catalogue share one row shape: a fixed-width date/time
+   column, then title over supporting metadata. Same alignment in both places,
+   so the eye lands where it expects when moving between them.
+
+   The date column is a fixed width rather than max-content on purpose. With
+   max-content every row sizes to its own date, so the titles start at a
+   different x-position on every line and the list will not scan.
+
+   NOTE ON TOKENS: these rules previously used var(--line), which is defined
+   nowhere in the portal. An unresolvable custom property with no fallback makes
+   the whole declaration invalid at computed-value time, so `border: 1px solid
+   var(--line)` rendered NO border — which is why the catalogue looked like a
+   plain borderless list. --border and --border-soft are real tokens. */
+
+.rh2-pd-all { margin-top: 12px; }
+.rh2-pd-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.rh2-pd-pager { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+
+/* Shared row internals. */
+.rh2-pdp-row, .rh2-pdc-row {
+  display: grid; align-items: start; width: 100%; text-align: left;
+  background: none; border: 0; font: inherit; color: inherit; cursor: pointer;
+  transition: background var(--t-fast, .12s) ease;
+}
+.rh2-pdp-when, .rh2-pdc-when { display: flex; flex-direction: column; gap: 1px; }
+.rh2-pdp-date, .rh2-pdc-date {
+  font-size: 12.5px; font-weight: 600; color: var(--accent-2-deep, var(--ink));
+  white-space: nowrap; line-height: 1.35;
+}
+.rh2-pdp-time, .rh2-pdc-time {
+  font-size: 12px; color: var(--ink-soft); white-space: nowrap; line-height: 1.35;
+}
+/* fmtDateParts keeps the raw text of an unparseable starts_at. That value has
+   no length guarantee, so the date cell must be allowed to break it. */
+.rh2-pdp-date, .rh2-pdc-date { overflow-wrap: anywhere; }
+.rh2-pdp-main, .rh2-pdc-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* min-width:0 above + overflow-wrap here: a long unbroken title must wrap
+   inside its column instead of forcing the grid wider than the card. */
+.rh2-pdp-title, .rh2-pdc-title { overflow-wrap: anywhere; }
+
+/* ── Home preview rows ── */
+/* The preview card is a container, so the row stacks when the CARD gets narrow
+   rather than when the viewport does. Those are not the same moment: the card
+   sits in .rh2-grid-2, which becomes two columns at 760px, so the card is at
+   its NARROWEST just above that breakpoint. A viewport-keyed rule made the
+   layout worse on a tablet than on a phone. */
+.rh2-pd-preview { container-type: inline-size; container-name: pdpreview; }
+.rh2-pdp-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.rh2-pdp-item + .rh2-pdp-item { border-top: 1px solid var(--border-soft); }
+.rh2-pdp-row {
+  /* em, not px: the column then grows with the user's text size instead of
+     clipping the date against the title at large zoom. */
+  grid-template-columns: 7em minmax(0, 1fr); gap: 12px;
+  padding: 10px 8px; border-radius: var(--radius-md, 8px);
+}
+.rh2-pdp-row:hover { background: var(--accent-soft); }
+.rh2-pdp-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rh2-pdp-title { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.rh2-pdp-sub { font-size: 12.5px; color: var(--ink-soft); line-height: 1.35; overflow-wrap: anywhere; }
+/* Third tier: smaller as well as quieter, so provider and CPD hours are
+   distinguishable by more than colour alone. */
+.rh2-pdp-cpd { font-size: 11.5px; color: var(--muted); }
+
+@container pdpreview (max-width: 420px) {
+  .rh2-pdp-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .rh2-pdp-when { flex-direction: row; gap: 8px; align-items: baseline; }
+}
+
+/* ── Catalogue rows ── */
+.rh2-pd-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.rh2-pdc-item {
+  border: 1px solid var(--border); border-radius: var(--radius-md, 10px);
+  background: var(--panel); overflow: hidden;
+}
+.rh2-pdc-item:hover { border-color: var(--accent); }
+.rh2-pdc-row {
+  grid-template-columns: 7.5em minmax(0, 1fr); gap: 14px; padding: 14px 16px;
+}
+.rh2-pdc-row:hover { background: var(--accent-soft); }
+.rh2-pdc-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rh2-pdc-title { font-weight: 600; font-size: 15px; line-height: 1.35; }
+.rh2-pdc-provider { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.rh2-pdc-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; overflow-wrap: anywhere; }
+
+/* ── Event detail ── */
+.rh2-pdd { display: grid; gap: 16px; }
+/* The app shell styles a bare <header> as a sticky page bar — panel background,
+   border, padding, align-items:center, z-index 1000. In a column flex that
+   align-items centres the title and meta line, and the rest paints a stray card
+   around them. The element stays a <header> because it IS the article's header;
+   the shell's bar styling is what has to go. */
+.rh2-pdd-head {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  background: none; border: 0; padding: 0;
+  position: static; top: auto; z-index: auto;
+}
+.rh2-pdd-title { margin: 0; font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
+.rh2-pdd-when { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.rh2-pdd-provider { color: var(--ink); }
+.rh2-pdd-body { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.rh2-pdd-action {
+  border: 1px solid var(--border); border-radius: var(--radius-md, 10px);
+  background: var(--accent-soft); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+}
+.rh2-pdd-action-h { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); }
+/* An <a> styled as a button: the shell underlines links, which on a filled
+   primary control reads as a mistake rather than as emphasis. */
+.rh2-pdd-cta { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; }
+.rh2-pdd-cta:hover, .rh2-pdd-cta:focus-visible { text-decoration: none; }
+.rh2-pdd-note { margin: 0; font-size: 12px; color: var(--ink-soft); }
+.rh2-pdd-alt {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12.5px; color: var(--accent-deep, var(--accent)); text-decoration: none;
+}
+/* Underline on hover only: this one IS a link, so it keeps the affordance the
+   filled button does not need. */
+.rh2-pdd-alt:hover, .rh2-pdd-alt:focus-visible { text-decoration: underline; }
+.rh2-ext-icon { flex: none; }
+
+/* The record panel used to sit inside a card. In the new grid it sits directly
+   on the page, where var(--bg) and its own surface are the same colour and the
+   panel became invisible — measured identical at rgb(250,246,240). */
+.rh2-pdd .rh2-info { background: var(--panel); border: 1px solid var(--border); }
+/* A long unbroken field value must wrap inside the panel, not paint past it. */
+.rh2-pdd .rh2-info { overflow-wrap: anywhere; }
+
+/* Wide screens lift the action panel into a right-hand column. DOM order is
+   unchanged, so reading order and tab order stay head → booking → detail at
+   every width. */
+@media (min-width: 860px) {
+  .rh2-pdd {
+    grid-template-columns: minmax(0, 1fr) 264px;
+    grid-template-areas: "head action" "body action";
+    column-gap: 24px;
+  }
+  .rh2-pdd-head { grid-area: head; }
+  .rh2-pdd-action { grid-area: action; align-self: start; }
+  .rh2-pdd-body { grid-area: body; }
+}
+
+/* Narrow screens stack the date above the title. The date column's fixed width
+   is what makes rows scan on a wide screen and what would waste a third of the
+   line on a phone. */
+@media (max-width: 560px) {
+  /* The catalogue row IS full width, so the viewport is the right signal here.
+     The home preview stacks on its own container width instead — see the
+     @container rule above. */
+  .rh2-pdc-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .rh2-pdc-when { flex-direction: row; gap: 8px; align-items: baseline; }
+}
+
+/* ── Start assessment ───────────────────────────────────────────────────────
+   The pathways are stacked full-width buttons with a subtitle, so the choice
+   and its consequence are readable in one pass rather than inferred. */
+.rh2-as-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.rh2-as-client { width: 100%; text-align: left; }
+.rh2-as-paths { display: grid; gap: 10px; margin-top: 10px; }
+.rh2-as-paths .rh2-btn {
+  display: grid; gap: 3px; text-align: left; padding: 12px 14px; width: 100%;
+}
+.rh2-as-paths .rh2-btn[disabled] { opacity: .55; cursor: not-allowed; }
+.rh2-as-sub { font-size: 12px; font-weight: 400; color: var(--ink-soft); }
+.rh2-as-paths .rh2-btn-primary .rh2-as-sub { color: inherit; opacity: .85; }
+.rh2-assess-panel { border: 2px solid var(--brand, #1f7a4d); }
+.rh2-as-actions { margin-top: 12px; }
+
+/* ── Ingestion register ─────────────────────────────────────────────────────
+   Administrative accounting for the catalogued source vault. Deliberately
+   plainer than the library: these are decisions and counts, not content to
+   browse, and the visual language should not invite browsing. */
+.rh2-ing-total { margin: 12px 0 0; font-size: 15px; }
+.rh2-ing-total-bad { color: #B3261E; font-weight: 600; }
+.rh2-ing-grid {
+  display: grid; gap: 10px; margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.rh2-ing-tile {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px;
+  border: 1px solid var(--rh2-border, #E4EFEB); border-radius: 10px;
+  background: var(--rh2-surface, #FAF7F2); text-align: left; font: inherit; cursor: default;
+}
+button.rh2-ing-tile { cursor: pointer; }
+button.rh2-ing-tile:hover { border-color: #2F5651; }
+button.rh2-ing-tile.active { border-color: #2F5651; background: #E4EFEB; }
+.rh2-ing-n { font-size: 22px; font-weight: 600; color: #2F5651; line-height: 1.1; }
+.rh2-ing-l { font-size: 12px; color: #566E70; }
+
+/* ═══ Library card grid (2026-08 document-library upgrade) ═══════════════════
+   Cards, not rows: a therapist scans first pages, not filenames. Thumbnails
+   are cached derivatives served through the authorised file routes; a card
+   never loads document bytes. */
+
+.rh2-count { color: var(--ink-soft); font-size: 12.5px; margin: -6px 0 0; }
+
+.rh2-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+}
+
+.rh2-cardtile {
+  display: flex; flex-direction: column; text-align: left;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px); padding: 0; overflow: hidden;
+  cursor: pointer; font-family: inherit; font-size: inherit; color: inherit;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.rh2-cardtile:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(15, 124, 108, .12); }
+.rh2-cardtile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.rh2-card-thumb {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  height: 150px; background: var(--accent-soft, #eaf3f1);
+  border-bottom: 1px solid var(--border-soft, var(--border)); overflow: hidden;
+}
+.rh2-card-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.rh2-card-thumb svg { width: 34px; height: 34px; color: var(--accent-deep, var(--accent)); opacity: .75; }
+
+.rh2-fmt {
+  position: absolute; right: 8px; bottom: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  padding: 2px 7px; border-radius: 6px; background: rgba(28, 42, 39, .78); color: #fff;
+}
+
+.rh2-thumb-ext { flex-direction: column; gap: 6px; }
+.rh2-thumb-domain { font-size: 11.5px; color: var(--ink-soft); max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rh2-cardtile-body { display: flex; flex-direction: column; gap: 5px; padding: 11px 13px 13px; }
+.rh2-cardtile-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.rh2-fav-star { color: var(--accent-2, #c26a4a); font-size: 12px; }
+
+.rh2-loadmore { display: flex; justify-content: center; padding: 6px 0 14px; }
+
+.rh2-skel-tile .rh2-card-thumb { animation: rh2-pulse 1.4s ease-in-out infinite; }
+
+/* ── Detail: document hero and external hero ── */
+.rh2-dochero { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.rh2-dochero-thumb {
+  display: block; padding: 0; border: 1px solid var(--border); border-radius: 8px;
+  background: none; cursor: pointer; overflow: hidden; max-width: 240px;
+}
+span.rh2-dochero-thumb { cursor: default; }
+.rh2-dochero-thumb img { display: block; width: 100%; height: auto; }
+.rh2-dochero-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rh2-dochero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.rh2-external-hero { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.rh2-ext-glyph svg { width: 26px; height: 26px; color: var(--accent-deep, var(--accent)); }
+.rh2-ext-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 180px; }
+.rh2-ext-domain { font-weight: 600; color: var(--ink); }
+
+@media (max-width: 560px) {
+  .rh2-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .rh2-card-thumb { height: 120px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .rh2-card-thumb { background: rgba(255, 255, 255, .05); }
+  .rh2-fmt { background: rgba(0, 0, 0, .72); }
+  .rh2-cardtile:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+}
+@media (prefers-reduced-motion: reduce) { .rh2-skel-tile .rh2-card-thumb { animation: none; } }

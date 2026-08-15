@@ -14,23 +14,36 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
 <script src="/scheduler.js?v=p9" defer></script>
-<link rel="stylesheet" href="/resourcehub.css?v=r2" />
+<link rel="stylesheet" href="/resourcehub.css?v=r8" />
 <link rel="stylesheet" href="/opa.css?v=1" />
 <link rel="stylesheet" href="/supportpop.css?v=1" />
 <link rel="stylesheet" href="/casenotes.css?v=1" />
-<link rel="stylesheet" href="/fca.css?v=1" />
+<link rel="stylesheet" href="/fca.css?v=5" />
 <link rel="stylesheet" href="/letter.css?v=1" />
-<link rel="stylesheet" href="/whodas.css?v=1" />
-<script src="/resourcehub.js?v=r2" defer></script>
+<link rel="stylesheet" href="/whodas.css?v=3" />
+<link rel="stylesheet" href="/assessment.css?v=3" />
+<script src="/resourcehub.js?v=r14" defer></script>
+<!-- Shared document viewer (pdf.js + docx-preview overlay). Used by the
+     Resource Hub file previews; self-contained, injects its own styles. -->
+<script src="/docpreview.js?v=1" defer></script>
 <script src="/opa.js?v=1" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=1" defer></script>
-<script src="/fca.js?v=1" defer></script>
-<script src="/letter.js?v=1" defer></script>
+<!-- Exact document preview. Vendored on our own origin: the rendered document
+     contains participant health information, so no CDN request accompanies it.
+     jszip is docx-preview's peer dependency. See vendor/DOCX_PREVIEW_VENDORED.md -->
+<script src="/vendor/jszip.min.js" defer></script>
+<script src="/vendor/docx-preview.min.js" defer></script>
+<script src="/fca.js?v=5" defer></script>
+<script src="/letter.js?v=2" defer></script>
 <!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
      feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
-<script src="/whodas.js?v=1" defer></script>
-<script src="/navigation.js?v=1" defer></script>
+<script src="/whodas.js?v=5" defer></script>
+<!-- The assessment framework: the full-page surface every standardised
+     assessment is administered and read on. It loads whichever instrument
+     module the assessment names; whodas.js above is the first of those. -->
+<script src="/assessment.js?v=3" defer></script>
+<script src="/navigation.js?v=4" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -55,6 +68,7 @@ window.OP_ICONS = {
   user:     '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   spark:    '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
   ban:      '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
+  x:        '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   plus:     '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   trash:    '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   edit:     '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
@@ -64,6 +78,7 @@ window.OP_ICONS = {
   armchair: '<path d="M5 11a2 2 0 0 1 2 2v2h10v-2a2 2 0 1 1 4 0v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z"/><path d="M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5"/>',
   forward:  '<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>',
   help:     '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  grip:     '<line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="17" x2="16" y2="17"/>',
 };
 window.opIcon = function (name, size) {
   var px = size || 14;
@@ -4869,21 +4884,22 @@ window.opIcon = function (name, size) {
 
   <!-- ── Resource Hub R2 (rendered by /resourcehub.js into #rh2-root) ── -->
   <div class="rh-panel active" id="rh-panel-shared">
-    <!-- FCA report builder entry point (rendered by /fca.js). Its own sibling
-         mount: resourcehub.js owns #rh2-root and rebuilds it wholesale, so the
-         card is kept outside that subtree and shown only on the hub home. -->
-    <div id="fca-hub-entry" hidden></div>
-    <!-- WHODAS 2.0 assessment library (rendered by /whodas.js into #whodas-root).
-         Mount only: the whole surface, including the document viewer overlay, is
-         built by that module. Empty and hidden until WHODAS.open(clientId) runs
-         and the server confirms the feature is enabled. -->
-    <div id="whodas-root" class="whodas-root"></div>
-    <!-- Progress note letter builder entry point (rendered by /letter.js).
-         Sits beside the FCA action for the same reason: resourcehub.js rebuilds
-         #rh2-root wholesale, so document-builder cards live outside it.
-         Both appear in the Templates collection. -->
-    <div id="letter-hub-entry" hidden></div>
+    <!-- #rh2-root FIRST. It renders the Resource Hub navigation (Home, Library,
+         Saved, My Learning, Assessments, Admin) followed by the selected
+         destination's content, so anything placed BEFORE it lands between the
+         top-level tabs and that navigation — which is exactly where the
+         document-builder cards used to appear.
+
+         The builder mounts stay OUTSIDE #rh2-root because resourcehub.js
+         rebuilds that subtree wholesale on every render and would erase them;
+         they now sit AFTER it, so they fall inside the content region, below
+         the navigation. Both are hidden unless the Library's Templates
+         collection is open (see syncEntryVisibility in fca.js / letter.js). -->
     <div id="rh2-root"></div>
+    <!-- FCA report builder entry point (rendered by /fca.js). -->
+    <div id="fca-hub-entry" hidden></div>
+    <!-- Progress note letter builder entry point (rendered by /letter.js). -->
+    <div id="letter-hub-entry" hidden></div>
   </div>
 
   <!-- ── AI Resource Studio ── -->
@@ -19656,12 +19672,92 @@ async function openClientProfile(patientId) {
     if (!html) html = '<div style="padding:40px;text-align:center;color:#a8a196;">No clinical data found for this client.</div>';
 
     body.innerHTML = html;
+
+    // ── Assessments ──────────────────────────────────────────────────────
+    // Standardised clinical instruments for this client. The section renders
+    // itself only if the server confirms an instrument module is enabled —
+    // WHODAS 2.0 is behind ENABLE_WHODAS_ASSESSMENT and every /api/whodas/*
+    // route 404s when it is off, so mountClientAssessments() leaves the
+    // section hidden rather than showing an empty heading.
+    body.innerHTML += sectionHead('Assessments')
+      + '<div id="cp-assessments"><div id="whodas-root" class="whodas-root"></div></div>';
+
     // Add quick-book button at bottom
     body.innerHTML += `<div style="padding:16px;"><button class="btn primary" style="width:100%" onclick="closeClientProfile();quickBook('${patientId}')">Book appointment →</button></div>`;
+
+    mountClientAssessments(patientId, clientDisplayName(patient));
 
   } catch (err) {
     body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load profile: ${err.message}</div>`;
   }
+}
+
+/**
+ * A client's display name, or null when we genuinely do not have one.
+ *
+ * The profile panel's patient lookup can return a partial cache entry whose
+ * name fields are undefined. Template-stringing that produces the literal
+ * "undefined undefined", and this value is denormalised onto the assessment
+ * record — so a clinical document could end up filed under it. Better no name
+ * than a fabricated one: the server falls back to the client id.
+ */
+function clientDisplayName(patient) {
+  if (!patient) return null;
+  const parts = [patient.firstname, patient.lastname]
+    .filter(p => typeof p === 'string' && p.trim());
+  return parts.length ? parts.join(' ') : null;
+}
+
+/**
+ * A client's name from the loaded roster, for modules outside this file.
+ *
+ * PATIENTS is a top-level `let` in this inline script, which is a lexical
+ * binding and therefore NOT reachable as window.PATIENTS. navigation.js needs
+ * it when restoring #assessment/client/:id — the address carries an id, and
+ * without this the assessment page headed itself with a bare Splose id where
+ * the client's name belongs. Returns null rather than a guess, for the same
+ * reason clientDisplayName does.
+ */
+window.clientNameById = function (id) {
+  if (id === null || id === undefined) return null;
+  return clientDisplayName((PATIENTS || []).find(p => String(p.id) === String(id))) || null;
+};
+
+/**
+ * Mount the standardised-assessment library into the open client profile.
+ *
+ * Fails quiet by design: if no assessment module is enabled for this
+ * deployment, WHODAS.open() resolves without rendering and the Assessments
+ * heading is removed, so the panel looks exactly as it did before. A
+ * clinician never sees a section advertising a feature they cannot use.
+ */
+function mountClientAssessments(patientId, clientName) {
+  const section = document.getElementById('cp-assessments');
+  if (!section || typeof WHODAS === 'undefined') { hideAssessmentsSection(); return; }
+
+  // A SUMMARY, never the form. mountSummary() renders what exists for this
+  // client plus one button through to the assessment page; the assessment
+  // itself is a full-page surface (#assessment/...) and is never opened inside
+  // this drawer, which also carries appointment history and a booking action.
+  const mount = typeof WHODAS.mountSummary === 'function'
+    ? WHODAS.mountSummary(document.getElementById('whodas-root'), String(patientId), clientName)
+    : WHODAS.open(String(patientId), clientName);
+
+  mount
+    .then(() => {
+      const root = document.getElementById('whodas-root');
+      if (!root || !root.classList.contains('is-open')) hideAssessmentsSection();
+    })
+    .catch(hideAssessmentsSection);
+}
+
+/** Remove the Assessments heading when nothing rendered underneath it. */
+function hideAssessmentsSection() {
+  const section = document.getElementById('cp-assessments');
+  if (!section) return;
+  const heading = section.previousElementSibling;
+  if (heading && /assessments/i.test(heading.textContent || '')) heading.remove();
+  section.remove();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -27775,6 +27871,18 @@ document.addEventListener('keydown', function (e) {
      views are display:none when inactive, and a position:fixed overlay inside
      a display:none ancestor never paints. -->
 <div id="fca-root" hidden></div>
+
+<!-- Assessments — the dedicated full-page surface, rendered entirely by
+     /assessment.js. A direct child of <body> for the same reason as the two
+     wizards above: a tab view is display:none when inactive, and a surface
+     inside one would never paint.
+
+     It is a PAGE, not a panel. Starting an assessment navigates here
+     (#assessment/record/:id) and the client profile drawer is never opened on
+     the way — the drawer carries appointment history and a "Book appointment"
+     action, which is how choosing a client for WHODAS used to land the
+     clinician in the appointment experience instead of the assessment. -->
+<div id="assessment-root" class="assess-root" hidden></div>
 
 </body>
 </html>

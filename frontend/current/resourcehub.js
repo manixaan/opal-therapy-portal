@@ -46,6 +46,29 @@
   function isAdminRole() { return role() === 'admin'; }
   function canAdmin() { return isOwner() || isAdminRole(); }
   function canWrite() { return role() !== 'read_only'; }
+  // Governance reviewers, matching resource-governance.js REVIEW_ROLES. The
+  // server enforces this; hiding the controls just avoids offering a therapist
+  // a button that would 403.
+  function canReview() { return isOwner() || isAdminRole(); }
+  // Mirrors CATALOGUE_ROLES in backend/assessments-routes.js — every signed-in
+  // role may READ the assessment catalogue. The comment this replaces described
+  // the old register endpoint, which read_only genuinely could not see; the
+  // catalogue that replaced it admits them, and hiding the tab invented a
+  // restriction the server does not make. Being able to look is not being able
+  // to act: canAdministerAssessment() below is what gates every button.
+  function canSeeInstruments() {
+    return isOwner() || isAdminRole() || role() === 'therapist' || role() === 'read_only';
+  }
+
+  /**
+   * Who may actually administer an assessment. CLINICAL_ROLES on the server
+   * (backend/assessments-routes.js) is therapist|owner, and /api/fca/clients
+   * refuses admin outright, so offering either of the other roles a "Start
+   * assessment" button produces a client picker that 403s on the first
+   * keystroke. Availability says whether the INSTRUMENT can be administered;
+   * it says nothing about whether THIS user may. Both have to hold.
+   */
+  function canAdministerAssessment() { return isOwner() || role() === 'therapist'; }
 
   function fmtDate(v) {
     if (!v) return '';
@@ -61,6 +84,32 @@
       ', ' + d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
   }
 
+  /**
+   * The same instant as two separately renderable parts.
+   *
+   * PD listings put the date and the time on their own lines in a fixed-width
+   * column, which only aligns if the two are separate strings — a single
+   * "Wed, 3 Sep, 9:00 am" wraps at whatever point the column width happens to
+   * fall, which is what made the rows read as one run-on block.
+   *
+   * An unparseable value keeps its raw text in `date` so nothing is lost.
+   */
+  function fmtDateParts(v) {
+    if (!v) return { date: '', time: '' };
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return { date: String(v), time: '' };
+    return {
+      date: d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }),
+      time: d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }),
+    };
+  }
+
+  /** Spoken form of a date/time, for an accessible name. */
+  function whenLabel(parts) {
+    if (!parts.date) return '';
+    return parts.date + (parts.time ? ' at ' + parts.time : '');
+  }
+
   async function api(path, opts) {
     opts = opts || {};
     var init = { method: opts.method || 'GET', credentials: 'include', headers: {} };
@@ -71,11 +120,22 @@
     try {
       var r = await fetch(path, init);
       var data = await r.json().catch(function () { return {}; });
-      if (!r.ok) return { ok: false, status: r.status, error: data.error || ('Request failed (' + r.status + ')') };
+      // `error` is the machine code ('forbidden', 'no_organisation'); `message`
+      // is the sentence the server wrote for a person to read. Preferring the
+      // code put things like "forbidden" and "not_found" on screen as if they
+      // were an explanation. The code is kept alongside so nothing is lost.
+      if (!r.ok) {
+        return {
+          ok: false,
+          status: r.status,
+          code: data.error || null,
+          error: data.message || data.error || ('Request failed (' + r.status + ')'),
+        };
+      }
       data.ok = true;
       return data;
     } catch (_) {
-      return { ok: false, status: 0, error: 'Network error — please try again.' };
+      return { ok: false, status: 0, code: null, error: 'Network error — please try again.' };
     }
   }
 
@@ -167,22 +227,72 @@
     professional_body:   { label: 'Professional Body', cls: 'profbody' },
     external_reference:  { label: 'External',          cls: 'external' },
   };
-  // Two-dimensional badge: authority x lifecycle. Internally authored content
-  // ('internal', with 'opal_approved' as a display synonym) reads 'Opal Draft'
-  // until it is approved, then 'Opal Approved'. External authorities keep
-  // their own labels regardless of workflow status.
-  function authBadge(level, status) {
-    var a = AUTHORITY[level] || AUTHORITY.internal;
-    if (a.cls === 'opal') {
-      var approved = !status || status === 'approved';
-      return '<span class="rh2-auth rh2-auth-opal">' + (approved ? 'Opal Approved' : 'Opal Draft') + '</span>';
+  /* ── Two badges, two questions ──────────────────────────────────────────────
+     WHO WROTE THIS?  and  IS IT APPROVED?  are independent, and the old single
+     "Opal Approved" badge answered them as one — which meant workflow status
+     could manufacture an authorship claim, and an unrecognised authority level
+     silently inherited the Opal badge. They are now separate functions that
+     share no inputs.
+
+     Neither may be derived from legacy `status`. A record can carry
+     status='approved' from before governance existed while failing every gate
+     the word now implies, so approval comes from the server's approval_ready
+     and publication only ever from publication_state === 'published'. */
+
+  // ── 1. Source: who authored the work ──────────────────────────────────────
+  function sourceBadge(r, opts) {
+    var cls = pick(r, 'source_class');
+    var publisher = String(pick(r, 'source_publisher') || '').trim();
+    var admin = !!(opts && opts.admin);
+
+    if (cls === 'opal-original') {
+      return '<span class="rh2-auth rh2-auth-opal">Opal Therapy</span>';
     }
-    return '<span class="rh2-auth rh2-auth-' + a.cls + '"' +
-      (a.full ? ' title="' + esc(a.full) + '"' : '') + '>' + a.label + '</span>';
+    // Unclassified: say nothing on an ordinary card rather than guess. The
+    // prompt to classify belongs in admin and detail views, not in front of
+    // someone browsing for a worksheet.
+    if (!cls || cls === 'unknown') {
+      return admin ? '<span class="rh2-auth rh2-auth-external">Source review pending</span>' : '';
+    }
+    var known = AUTHORITY[pick(r, 'authority_level')];
+    var kind = (known && known.cls !== 'opal') ? known.cls : 'external';
+    var label = publisher
+      || (cls === 'government-official' ? 'Official guidance'
+        : cls === 'standardised-instrument' ? 'Standardised instrument' : 'Third party');
+    return '<span class="rh2-auth rh2-auth-' + kind + '">' + esc(label) + '</span>';
   }
 
-  var POPULATIONS = [['paediatric', 'Paediatric'], ['adolescent', 'Adolescent'], ['adult', 'Adult'], ['older_adult', 'Older adult']];
-  var SETTINGS = [['clinic', 'Clinic'], ['school', 'School'], ['home', 'Home'], ['telehealth', 'Telehealth'], ['community', 'Community']];
+  // ── 2. Governance: has it passed the gates? ───────────────────────────────
+  function governanceBadge(r) {
+    if (pick(r, 'publication_state') === 'published') {
+      return '<span class="rh2-gov rh2-gov-published">Published</span>';
+    }
+    // approval_ready is the server's verdict from the same approvalBlockers()
+    // the approve route enforces. Absent or false means no badge at all — an
+    // unapproved resource simply carries none.
+    if (pick(r, 'publication_state') === 'approved' && pick(r, 'approval_ready') === true) {
+      return '<span class="rh2-gov rh2-gov-approved">Approved</span>';
+    }
+    return '';
+  }
+
+  function badges(r, opts) {
+    return sourceBadge(r, opts) + governanceBadge(r);
+  }
+
+  /* These lists mirror the server's controlled vocabulary
+     (resource-hub-r2-routes.js CLINICAL_POPULATIONS / CLINICAL_SETTINGS) — the
+     server validates every selection, so an option that is not in its list is
+     rejected rather than quietly matching nothing.
+
+     'Unclassified' is listed FIRST and deliberately: no resource in the
+     catalogue carries a clinical population or setting yet, so it is the only
+     selection that currently returns anything. Offering the four age bands
+     alone would be a filter that always says "no results" — the exact thing
+     these controls used to do. The counts appended at render time say plainly
+     how many records are in each state. */
+  var POPULATIONS = [['unclassified', 'Unclassified'], ['paediatric', 'Paediatric'], ['adolescent', 'Adolescent'], ['adult', 'Adult'], ['older_adult', 'Older adult']];
+  var SETTINGS = [['unclassified', 'Unclassified'], ['clinic', 'Clinic'], ['school', 'School'], ['home', 'Home'], ['telehealth', 'Telehealth'], ['community', 'Community']];
   // Sort keys match the GET /api/rh2/resources contract exactly.
   var SORTS = [['relevant', 'Most relevant'], ['updated', 'Recently updated'], ['az', 'Title A to Z'], ['popular', 'Most popular']];
 
@@ -198,23 +308,42 @@
 
   var S = {
     booted: false,
+    clinicalCounts: null,
+    assess: null,
+    sourceReview: { data: null, loading: false, err: '', q: '', offset: 0, limit: 25 },
+    // Assessments. `openKey` is the information page for one assessment —
+    // a sub-view of this one, addressable as #resources/instruments/<key>.
+    instruments: {
+      data: null, loading: false, err: '',
+      openKey: null, detail: null, detailLoading: false, detailErr: '',
+    },
+    pd: {
+      data: null, loading: false, err: '', when: 'upcoming',
+      q: '', mode: '', topic: '', cost: '', cpd: '',
+      offset: 0, limit: 50, facets: null,
+      // Detail is a sub-view of the same page: null = list, id = that event.
+      openId: null, detail: null, detailLoading: false, detailErr: '',
+    },
     view: 'home', // home | library | detail | learning | admin
     topics: null, // therapy_area tags [{id,name}]
     costs: null,  // cost tags (Free/Paid) [{id,name}]
     home: null, homeLoading: false,
-    lib: { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false },
-    detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home' },
+    lib: { q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false },
+    detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
     admin: {
       tab: 'content', status: '', q: '', list: null, loading: false,
       editing: null, // resource being edited (object) or {} for new
       formOpen: false,
       sources: null, pd: null, pdEditing: null, feedback: null, links: null, analytics: null,
+      // Ingestion register: the 650-record source-vault accounting.
+      ing: null, ingRecords: null, ingTreatment: '', ingLoading: false, ingCleanroom: null,
       err: '',
     },
   };
 
   var libDebounce = null;
+  var srDebounce = null;
 
   // ── Root render ───────────────────────────────────────────────────────────
 
@@ -223,13 +352,45 @@
   function render() {
     var host = root();
     if (!host) return;
+
+    /* Every render replaces the whole subtree, which destroys whatever the
+       user was typing into. Remember the focused field and its caret, and put
+       both back afterwards.
+
+       Without this, the client search in the Assessments panel was unusable:
+       the first keystroke tore out its own <input>, focus fell to <body>, and
+       the second keystroke went nowhere — so the two-character minimum could
+       never be reached by typing. The library, PD and source-review searches
+       lost focus the same way whenever their debounce fired. */
+    var prev = doc.activeElement;
+    var focusId = (prev && prev.id && host.contains(prev)) ? prev.id : '';
+    var selStart = null;
+    var selEnd = null;
+    if (focusId) {
+      try { selStart = prev.selectionStart; selEnd = prev.selectionEnd; } catch (e) { /* not a text field */ }
+    }
+
     var body = '';
     if (S.view === 'home') body = renderHome();
     else if (S.view === 'library') body = renderLibrary();
     else if (S.view === 'detail') body = renderDetail();
     else if (S.view === 'learning') body = renderLearning();
+    else if (S.view === 'pd') body = renderPd();
+    else if (S.view === 'instruments') body = renderInstruments();
     else if (S.view === 'admin') body = renderAdmin();
     host.innerHTML = renderNav() + body;
+
+    if (focusId) {
+      var next = doc.getElementById(focusId);
+      if (next) {
+        try { next.focus({ preventScroll: true }); } catch (e) { try { next.focus(); } catch (e2) { /* gone */ } }
+        // setSelectionRange throws on some input types (search, email, number);
+        // losing the caret position is survivable, losing focus is not.
+        if (selStart !== null && selStart !== undefined) {
+          try { next.setSelectionRange(selStart, selEnd); } catch (e3) { /* unsupported type */ }
+        }
+      }
+    }
     // Publish the current surface so sibling modules (the FCA and letter
     // builders, which mount outside #rh2-root) can show their entry cards on
     // the right screen without parsing our markup.
@@ -241,6 +402,12 @@
     var items = [
       ['home', 'Home'], ['library', 'Library'], ['saved', 'Saved'], ['learning', 'My Learning'],
     ];
+    // The instrument register is clinical reference material, so it belongs in
+    // the hub proper rather than behind Admin. It was previously only reachable
+    // from the admin area, which hid it from the therapists who actually
+    // administer these assessments.
+    items.push(['pd', 'Professional development']);
+    if (canSeeInstruments()) items.push(['instruments', 'Assessments']);
     if (canAdmin()) items.push(['admin', 'Admin']);
     var active = S.view === 'detail' ? 'library' : S.view;
     if (S.view === 'library') active = S.lib.saved ? 'saved' : 'library';
@@ -264,6 +431,14 @@
     if (view === 'home' && !S.home) loadHome();
     if (view === 'library' && !S.lib.rows) loadLibrary();
     if (view === 'learning') loadLearning();
+    if (view === 'pd') { S.pd.openId = null; if (!S.pd.data) loadPd(); }
+    if (view === 'instruments') {
+      // Navigating to the section always lands on the catalogue, never on the
+      // information page that happened to be open last time.
+      S.instruments.openKey = null;
+      S.instruments.detail = null;
+      if (!S.instruments.data) loadInstruments();
+    }
     if (view === 'admin') loadAdminTab();
     render();
   }
@@ -320,7 +495,6 @@
 
     var cont = pick(h, 'continue_learning') || pick(h, 'continueLearning') || [];
     var required = pick(h, 'required_for_you') || pick(h, 'requiredForYou') || pick(h, 'required') || [];
-    var whatsNew = pick(h, 'whats_new') || pick(h, 'whatsNew') || [];
     var collections = h.collections || [];
     var pd = pick(h, 'upcoming_pd') || pick(h, 'upcomingPd') || [];
     var links = pick(h, 'quick_links') || pick(h, 'quickLinks') || [];
@@ -353,17 +527,9 @@
     }).join('');
     out += '</section></div>';
 
-    // What's New
-    if (whatsNew.length) {
-      out += '<section class="rh2-card" aria-labelledby="rh2-h-new"><h2 id="rh2-h-new">What is new</h2>' +
-        whatsNew.map(function (r) {
-          return homeResRow(r, '<span class="rh2-row-sub">' + esc(fmtDate(pick(r, 'updated_at') || pick(r, 'created_at'))) + '</span>');
-        }).join('') + '</section>';
-    }
-
     // Collections
     out += '<section aria-labelledby="rh2-h-col"><h2 class="rh2-h2" id="rh2-h-col">Browse by collection</h2><div class="rh2-collections">';
-    if (!collections.length) out += '<p class="rh2-quiet">Collections will appear here once content is published.</p>';
+    if (!collections.length) out += '<p class="rh2-quiet">Collections will appear here once content is approved.</p>';
     else out += collections.map(function (c) {
       return '<button type="button" class="rh2-collection" onclick="RH2.openCollection(\'' + esc(pick(c, 'key') || pick(c, 'id')) + '\')">' +
         '<span class="rh2-collection-icn">' + icn(pick(c, 'icon'), 'folder', 18) + '</span>' +
@@ -375,15 +541,59 @@
 
     // Upcoming PD + Quick links + Recently added
     out += '<div class="rh2-grid-2">';
-    out += '<section class="rh2-card" aria-labelledby="rh2-h-pd"><h2 id="rh2-h-pd">Upcoming professional development</h2>';
+    /* The heading is the way into the full catalogue, and each row opens that
+       event. Both are real buttons rather than clickable divs, so they are
+       reachable by keyboard and announced as controls without extra ARIA. */
+    /* aria-labelledby points at the PLAIN heading text, not at the whole <h2>.
+       Naming the region from the h2 subtree pulled in the visually-hidden
+       button hint, so the landmark announced as "Upcoming professional
+       development — open the professional development page". The button keeps
+       the hint, because on the button it is accurate and useful. */
+    out += '<section class="rh2-card rh2-pd-preview" aria-labelledby="rh2-h-pd">'
+      + '<h2 class="rh2-h-link">'
+      + '<button type="button" class="rh2-heading-btn" onclick="RH2.nav(\'pd\')">'
+      + '<span id="rh2-h-pd">Upcoming professional development</span>'
+      + '<span class="rh2-heading-more" aria-hidden="true">&rsaquo;</span>'
+      + '<span class="rh2-visually-hidden"> — open the professional development page</span>'
+      + '</button></h2>';
     if (!pd.length) out += '<p class="rh2-quiet">No upcoming PD events listed.</p>';
-    else out += pd.slice(0, 5).map(function (e) {
+    /* One row per event: a fixed-width date/time block, then the title as the
+       primary line with provider and CPD hours beneath it. The date lives in
+       its own column so it can never wrap into the title — which is what made
+       the previous rows read as a single undifferentiated block. */
+    else out += '<ul class="rh2-pdp-list">' + pd.slice(0, 5).map(function (e) {
       var hours = pick(e, 'cpd_hours');
-      return '<div class="rh2-pd-row"><div class="rh2-pd-date">' + esc(fmtDateTime(pick(e, 'starts_at'))) + '</div>' +
-        '<div class="rh2-row-title">' + esc(pick(e, 'title')) + '</div>' +
-        '<div class="rh2-row-sub">' + esc(pick(e, 'provider') || '') +
-        (hours ? (pick(e, 'provider') ? ' · ' : '') + esc(hours) + ' CPD hours' : '') + '</div></div>';
-    }).join('');
+      var title = pick(e, 'title');
+      var provider = pick(e, 'provider') || '';
+      var when = fmtDateParts(pick(e, 'starts_at'));
+      var spoken = whenLabel(when);
+      // The accessible name carries what the visual row conveys through layout,
+      // so a screen-reader user hears the event, not "button".
+      var label = title + (provider ? ', ' + provider : '') + (spoken ? ', ' + spoken : '')
+        + (hours ? ', ' + hours + ' CPD hours' : '');
+      var sub = '';
+      if (provider) sub += '<span class="rh2-pdp-provider">' + esc(provider) + '</span>';
+      if (hours) {
+        sub += '<span class="rh2-pdp-cpd">' + (provider ? '<span aria-hidden="true"> · </span>' : '')
+          + esc(hours) + ' CPD hours</span>';
+      }
+      return '<li class="rh2-pdp-item">'
+        + '<button type="button" class="rh2-pdp-row" '
+        + 'onclick="RH2.openPd(\'' + esc(pick(e, 'id')) + '\')" '
+        + 'aria-label="' + esc(label) + '">'
+        + '<span class="rh2-pdp-when" aria-hidden="true">'
+        + '<span class="rh2-pdp-date">' + esc(when.date) + '</span>'
+        + (when.time ? '<span class="rh2-pdp-time">' + esc(when.time) + '</span>' : '')
+        + '</span>'
+        + '<span class="rh2-pdp-main">'
+        + '<span class="rh2-pdp-title">' + esc(title) + '</span>'
+        + (sub ? '<span class="rh2-pdp-sub">' + sub + '</span>' : '')
+        + '</span></button></li>';
+    }).join('') + '</ul>';
+    if (pd.length) {
+      out += '<button type="button" class="rh2-btn rh2-pd-all" onclick="RH2.nav(\'pd\')">'
+        + 'See all professional development</button>';
+    }
     out += '</section>';
 
     out += '<section class="rh2-card" aria-labelledby="rh2-h-rec"><h2 id="rh2-h-rec">Recently added</h2>';
@@ -432,16 +642,15 @@
     S.costs = all.filter(function (t) { return t.category === 'cost'; }); // Free, Paid (name order)
   }
 
-  async function loadLibrary() {
-    S.lib.loading = true;
-    render();
-    await loadTopics();
-    var f = S.lib;
+  var LIB_PAGE = 48; // divisible by 2/3/4-column grids, under the server's cap
+
+  function libQuery(f, offset) {
     // Param names match the GET /api/rh2/resources contract:
     // contentType, tagId, collectionKey, authority, population, setting,
-    // saved, sort (relevant|updated|az|popular).
+    // kind, saved, sort (relevant|updated|az|popular), limit, offset.
     var qs = [];
     if (f.q) qs.push('q=' + encodeURIComponent(f.q));
+    if (f.kind) qs.push('kind=' + encodeURIComponent(f.kind));
     if (f.type) qs.push('contentType=' + encodeURIComponent(f.type));
     if (f.topic) qs.push('tagId=' + encodeURIComponent(f.topic));
     if (f.cost) qs.push('tagId=' + encodeURIComponent(f.cost)); // repeated tagId params AND together server-side
@@ -451,11 +660,61 @@
     if (f.collection) qs.push('collectionKey=' + encodeURIComponent(f.collection));
     if (f.saved) qs.push('saved=1');
     if (f.sort) qs.push('sort=' + encodeURIComponent(f.sort));
-    var d = await api('/api/rh2/resources' + (qs.length ? '?' + qs.join('&') : ''));
+    qs.push('limit=' + LIB_PAGE);
+    if (offset) qs.push('offset=' + offset);
+    return '/api/rh2/resources?' + qs.join('&');
+  }
+
+  async function loadLibrary() {
+    S.lib.loading = true;
+    S.lib.offset = 0;
+    render();
+    await loadTopics();
+    var f = S.lib;
+    var d = await api(libQuery(f, 0));
     f.loading = false;
     f.rows = d.ok ? (d.resources || []) : [];
+    f.hasMore = !!(d.ok && d.hasMore);
     f.error = d.ok ? '' : d.error;
     render();
+  }
+
+  /** Append the next page; the earlier cards stay where the reader left them. */
+  async function libMore() {
+    var f = S.lib;
+    if (f.loadingMore || !f.hasMore) return;
+    f.loadingMore = true;
+    render();
+    var next = (f.offset || 0) + LIB_PAGE;
+    var d = await api(libQuery(f, next));
+    f.loadingMore = false;
+    if (d.ok) {
+      f.offset = next;
+      f.rows = (f.rows || []).concat(d.resources || []);
+      f.hasMore = !!d.hasMore;
+    }
+    render();
+  }
+
+  /**
+   * Annotate the Unclassified option with how many resources are actually in
+   * that state, so the control is self-describing: "Unclassified (168)" tells a
+   * staff member immediately that nothing has been classified yet.
+   */
+  function countedVocab(options, countKey) {
+    var counts = S.clinicalCounts;
+    if (!counts) return options;
+    return options.map(function (o) {
+      if (o[0] !== 'unclassified') return o;
+      return [o[0], o[1] + ' (' + counts[countKey] + ')'];
+    });
+  }
+
+  async function loadClinicalVocabulary() {
+    var d = await api('/api/rh2/clinical-vocabulary');
+    if (!d.ok) return;
+    S.clinicalCounts = d.counts || null;
+    if (S.view === 'library') render();
   }
 
   function sel(id, label, options, value, handler) {
@@ -467,6 +726,73 @@
       }).join('') + '</select>';
   }
 
+  /* ── Library cards ─────────────────────────────────────────────────────────
+     A resource is delivered one of three ways, and the card must say which at
+     a glance: a HOSTED document (thumbnail or file-type panel), an EXTERNAL
+     resource (domain + outward glyph — it is a signpost, not a broken
+     document), or a written GUIDE (in-portal content page). Thumbnails come
+     from the authorised derivative route and lazy-load; a card never fetches
+     document bytes. */
+
+  function hostname(u) {
+    var m = /^https?:\/\/([^/:?#]+)/i.exec(String(u || ''));
+    return m ? m[1].replace(/^www\./, '') : '';
+  }
+
+  function deliveryKind(r) {
+    if (pick(r, 'primary_file_id')) return 'hosted';
+    if (pick(r, 'external_url')) return 'external';
+    return 'guide';
+  }
+
+  function formatChip(fmt) {
+    if (!fmt) return '';
+    var f = String(fmt).toUpperCase();
+    return '<span class="rh2-fmt rh2-fmt-' + esc(String(fmt).toLowerCase()) + '">' + esc(f) + '</span>';
+  }
+
+  function cardMedia(r) {
+    var kind = deliveryKind(r);
+    // The thumbnail URL is server-supplied, like every file URL in this
+    // module — the client never assembles one from ids.
+    if (kind === 'hosted' && pick(r, 'primary_file_thumbnail_url')) {
+      return '<span class="rh2-card-thumb">'
+        + '<img src="' + esc(pick(r, 'primary_file_thumbnail_url')) + '" '
+        + 'alt="" loading="lazy" onerror="this.parentNode.className+=\' rh2-thumb-broken\';this.remove();">'
+        + formatChip(pick(r, 'primary_file_format')) + '</span>';
+    }
+    if (kind === 'external') {
+      return '<span class="rh2-card-thumb rh2-thumb-ext">' + icn('forward')
+        + '<span class="rh2-thumb-domain">' + esc(hostname(pick(r, 'external_url'))) + '</span></span>';
+    }
+    var glyph = TYPE_ICONS[pick(r, 'content_type')] || 'doc';
+    return '<span class="rh2-card-thumb rh2-thumb-type">' + icn(glyph)
+      + (kind === 'hosted' ? formatChip(pick(r, 'primary_file_format')) : '') + '</span>';
+  }
+
+  function resourceCard(r, backView) {
+    var mins = pick(r, 'estimated_minutes');
+    var fresh = pick(r, 'source_verified_at');
+    var kind = deliveryKind(r);
+    return '<button type="button" class="rh2-cardtile" onclick="RH2.openDetail(\'' + esc(pick(r, 'id')) + '\',\'' + backView + '\')">'
+      + cardMedia(r)
+      + '<span class="rh2-cardtile-body">'
+      + '<span class="rh2-row-title">' + esc(pick(r, 'title'))
+      + (pick(r, 'mandatory') ? ' <span class="rh2-chip rh2-chip-warn">Required</span>' : '')
+      + (pick(r, 'favourited') ? ' <span class="rh2-fav-star" title="Saved" aria-label="Saved">★</span>' : '')
+      + '</span>'
+      + (pick(r, 'description') ? '<span class="rh2-row-sub rh2-clamp">' + esc(pick(r, 'description')) + '</span>' : '')
+      + '<span class="rh2-row-meta">'
+      + esc(kind === 'external' ? 'External resource' : typeLabel(pick(r, 'content_type')))
+      + (mins ? ' · ' + esc(mins) + ' min' : '')
+      + (fresh ? ' <span class="rh2-fresh" title="Source verified ' + esc(fmtDate(fresh)) + '" aria-label="Source verified ' + esc(fmtDate(fresh)) + '"></span>' : '')
+      + '</span>'
+      + '<span class="rh2-cardtile-badges">' + badges(r) + '</span>'
+      + '</span></button>';
+  }
+
+  var KINDS = [['hosted', 'Documents'], ['external', 'External links'], ['guide', 'Guides']];
+
   function renderLibrary() {
     var f = S.lib;
     var topicOpts = (S.topics || []).map(function (t) { return [t.id, t.name]; });
@@ -476,11 +802,12 @@
       '<div class="rh2-filters">' +
       '<input type="search" id="rh2-lib-q" class="rh2-search" placeholder="Search the library..." aria-label="Search the library" value="' + esc(f.q) + '" ' +
       'oninput="RH2.libInput(this.value)">' +
+      sel('rh2-f-kind', 'All kinds', KINDS, f.kind, "RH2.libFilter('kind',this.value)") +
       sel('rh2-f-type', 'All types', CONTENT_TYPES, f.type, "RH2.libFilter('type',this.value)") +
       sel('rh2-f-topic', 'All topics', topicOpts, f.topic, "RH2.libFilter('topic',this.value)") +
       sel('rh2-f-cost', 'All costs', costOpts, f.cost, "RH2.libFilter('cost',this.value)") +
-      sel('rh2-f-pop', 'All populations', POPULATIONS, f.population, "RH2.libFilter('population',this.value)") +
-      sel('rh2-f-set', 'All settings', SETTINGS, f.setting, "RH2.libFilter('setting',this.value)") +
+      sel('rh2-f-pop', 'All populations', countedVocab(POPULATIONS, 'populationUnclassified'), f.population, "RH2.libFilter('population',this.value)") +
+      sel('rh2-f-set', 'All settings', countedVocab(SETTINGS, 'settingUnclassified'), f.setting, "RH2.libFilter('setting',this.value)") +
       sel('rh2-f-auth', 'All authorities', authOpts, f.authority, "RH2.libFilter('authority',this.value)") +
       '<label class="rh2-visually-hidden" for="rh2-f-sort">Sort</label>' +
       '<select id="rh2-f-sort" class="rh2-select" onchange="RH2.libFilter(\'sort\',this.value)">' +
@@ -491,11 +818,11 @@
       '</div>';
 
     if (f.loading || f.rows === null) {
-      out += '<div class="rh2-card">' + skel(5, 58) + '</div>';
+      out += '<div class="rh2-grid">' + skelCards(8) + '</div>';
       if (f.rows === null && !f.loading) loadLibrary();
       return out + '</div>';
     }
-    if (f.error) return out + '<div class="rh2-empty">' + esc(f.error) + '</div></div>';
+    if (f.error) return out + '<div class="rh2-empty">' + esc(f.error) + ' <button type="button" class="rh2-btn" onclick="RH2.libFilter(\'sort\',\'' + esc(f.sort) + '\')">Retry</button></div></div>';
     if (!f.rows.length) {
       if (f.saved) {
         return out + '<div class="rh2-empty">Save resources you use often and they will appear here.</div></div>';
@@ -504,23 +831,24 @@
     }
 
     var backView = f.saved ? 'saved' : 'library';
-    out += '<div class="rh2-card rh2-list">' + f.rows.map(function (r) {
-      var mins = pick(r, 'estimated_minutes');
-      var fresh = pick(r, 'source_verified_at');
-      return '<button type="button" class="rh2-row" onclick="RH2.openDetail(\'' + esc(pick(r, 'id')) + '\',\'' + backView + '\')">' +
-        '<span class="rh2-row-icn">' + icn(TYPE_ICONS[pick(r, 'content_type')] || 'doc') + '</span>' +
-        '<span class="rh2-row-main">' +
-        '<span class="rh2-row-title">' + esc(pick(r, 'title')) +
-        (pick(r, 'mandatory') ? ' <span class="rh2-chip rh2-chip-warn">Required</span>' : '') + '</span>' +
-        (pick(r, 'description') ? '<span class="rh2-row-sub rh2-clamp">' + esc(pick(r, 'description')) + '</span>' : '') +
-        '<span class="rh2-row-meta">' + esc(typeLabel(pick(r, 'content_type'))) +
-        (mins ? ' · ' + esc(mins) + ' min' : '') +
-        (fresh ? ' <span class="rh2-fresh" title="Source verified ' + esc(fmtDate(fresh)) + '" aria-label="Source verified ' + esc(fmtDate(fresh)) + '"></span>' : '') +
-        '</span></span>' +
-        authBadge(pick(r, 'authority_level'), pick(r, 'status')) +
-        '</button>';
-    }).join('') + '</div>';
+    out += '<p class="rh2-count" role="status">'
+      + f.rows.length + (f.hasMore ? '+' : '') + (f.rows.length === 1 ? ' resource' : ' resources') + '</p>';
+    out += '<div class="rh2-grid">' + f.rows.map(function (r) { return resourceCard(r, backView); }).join('') + '</div>';
+    if (f.hasMore) {
+      out += '<div class="rh2-loadmore"><button type="button" class="rh2-btn" '
+        + (f.loadingMore ? 'disabled' : '') + ' onclick="RH2.libMore()">'
+        + (f.loadingMore ? 'Loading…' : 'Load more') + '</button></div>';
+    }
     return out + '</div>';
+  }
+
+  function skelCards(n) {
+    var out = '';
+    for (var i = 0; i < n; i++) {
+      out += '<div class="rh2-cardtile rh2-skel-tile"><span class="rh2-card-thumb"></span>'
+        + '<span class="rh2-cardtile-body">' + skel(2, 16) + '</span></div>';
+    }
+    return out;
   }
 
   function libInput(v) {
@@ -536,12 +864,36 @@
   // ── DETAIL ────────────────────────────────────────────────────────────────
 
   async function openDetail(id, backView) {
-    S.detail = { id: id, data: null, loading: true, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: backView || S.view };
+    S.detail = { id: id, data: null, loading: true, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: backView || S.view, files: null, filesLoading: false, filesErr: '' };
     S.view = 'detail';
     render();
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id));
     S.detail.loading = false;
     S.detail.data = d.ok ? d : { ok: false, error: d.error };
+    render();
+    loadDetailFiles(id);
+  }
+
+  /**
+   * Files come from the authorised metadata endpoint and nowhere else. The
+   * server has already removed anything this user may not download, so the view
+   * renders exactly what it is given and never decides visibility itself — and
+   * never has a storage key or path to leak, because the endpoint does not
+   * return one.
+   *
+   * A 404 is the ordinary answer for most resources (they have no files), so it
+   * is treated as "none", not as an error.
+   */
+  async function loadDetailFiles(id) {
+    S.detail.filesLoading = true;
+    S.detail.filesErr = '';
+    render();
+    var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/files');
+    if (S.detail.id !== id) return;            // navigated away mid-flight
+    S.detail.filesLoading = false;
+    if (d.ok) S.detail.files = d.files || [];
+    else if (d.status === 404) S.detail.files = [];
+    else { S.detail.files = []; S.detail.filesErr = d.error || 'Files are unavailable right now.'; }
     render();
   }
 
@@ -552,6 +904,237 @@
 
   function kvRow(k, vHtml) {
     return vHtml ? '<div class="rh2-kv"><span class="rh2-kv-k">' + k + '</span><span class="rh2-kv-v">' + vHtml + '</span></div>' : '';
+  }
+
+  /* ── Governance readiness ─────────────────────────────────────────────────
+     Nine distinct concepts that used to blur into one "approved" chip:
+     authorship, rights review, clinical review, brand/accessibility review,
+     approval, publication, retirement and quarantine.
+
+     Every judgement here comes from the server. approval_ready and
+     approval_blockers are computed by the same approvalBlockers() the approve
+     route enforces, so this panel can never tell a reviewer a record is ready
+     when the server would refuse it — or list a blocker the server does not
+     actually apply. The browser holds no copy of the policy. */
+  var STATE_WORDS = {
+    'inventory': 'In inventory — review not started',
+    'rights-review': 'In rights review',
+    'clinical-review': 'In clinical review',
+    'brand-accessibility-review': 'In brand and accessibility review',
+    'approved': 'Approved for use',
+    'published': 'Published',
+    'retired': 'Withdrawn (inactive)',
+    'excluded-private': 'Quarantined — private, never served',
+  };
+
+  /* Raw column values are internal vocabulary, not English. A reviewer should
+     read "Not reviewed", not "unreviewed"; "Opal Therapy", not "opal-original".
+     Anything unmapped falls back to the raw value rather than being hidden, so
+     a new vocabulary entry is visible rather than silently blank. */
+  var GOV_WORDS = {
+    // source_class
+    'opal-original': 'Opal Therapy',
+    'government-official': 'Official / government',
+    'nonprofit': 'Nonprofit publisher',
+    'standardised-instrument': 'Standardised instrument',
+    'commercial': 'Commercial publisher',
+    'provider-company': 'Another provider',
+    'internal': 'Internal material',
+    'unknown': 'Not yet established',
+    // rights_status
+    'unreviewed': 'Not reviewed',
+    'opal-owned': 'Opal owns this',
+    'licensed-for-portal': 'Licensed for the portal',
+    'official-link-only': 'Link to official source only',
+    'reference-only': 'Reference only — not hostable',
+    'restricted': 'Restricted — not hostable',
+    // clinical_status
+    'draft': 'Draft',
+    'clinically-reviewed': 'Reviewed',
+    'superseded': 'Superseded',
+    // brand_review_status
+    'pending': 'Pending',
+    'approved': 'Approved',
+    'not-required': 'Not required',
+  };
+
+  function govWord(value) {
+    if (!value) return 'Not recorded';
+    return GOV_WORDS[value] || String(value);
+  }
+
+  function reviewChip(label, value, okWhen) {
+    var done = okWhen.indexOf(value) !== -1;
+    return '<div class="rh2-gov-item' + (done ? ' is-done' : '') + '">'
+      + '<span class="rh2-gov-item-k">' + esc(label) + '</span>'
+      + '<span class="rh2-gov-item-v">' + esc(govWord(value)) + '</span></div>';
+  }
+
+  function renderGovernance(r) {
+    if (!canWrite()) return '';               // reviewers only
+    var pub = pick(r, 'publication_state');
+    var ready = pick(r, 'approval_ready') === true;
+    var blockers = pick(r, 'approval_blockers') || [];
+
+    var out = '<section class="rh2-card rh2-gov-panel" aria-labelledby="rh2-gov-h">'
+      + '<h2 id="rh2-gov-h">Governance</h2>'
+      + '<p class="rh2-gov-state">' + esc(STATE_WORDS[pub] || pub || 'Unknown state') + '</p>';
+
+    // Approval and publication are separate claims and are shown separately.
+    out += '<div class="rh2-gov-grid">'
+      + reviewChip('Source', pick(r, 'source_class'), ['opal-original', 'government-official',
+        'nonprofit', 'standardised-instrument', 'commercial', 'provider-company', 'internal'])
+      + reviewChip('Rights review', pick(r, 'rights_status'),
+        ['opal-owned', 'licensed-for-portal', 'official-link-only'])
+      + reviewChip('Clinical review', pick(r, 'clinical_status'), ['clinically-reviewed'])
+      + reviewChip('Brand & accessibility', pick(r, 'brand_review_status'), ['approved', 'not-required'])
+      + '</div>';
+
+    if (pub === 'published') {
+      out += '<p class="rh2-gov-ok">Published.</p>';
+    } else if (ready) {
+      out += '<p class="rh2-gov-ok">All approval requirements are met. '
+        + 'Approving does not publish — publication is unavailable in this release.</p>';
+    } else if (blockers.length) {
+      out += '<p class="rh2-gov-blocked-h" id="rh2-gov-blockers-h">'
+        + 'This resource cannot be approved yet:</p>'
+        + '<ul class="rh2-gov-blockers" aria-labelledby="rh2-gov-blockers-h">';
+      for (var i = 0; i < blockers.length; i++) {
+        out += '<li>' + esc(blockers[i]) + '</li>';
+      }
+      out += '</ul>';
+    }
+    return out + '</section>';
+  }
+
+  /* ── Files ────────────────────────────────────────────────────────────────
+     Renders ONLY what GET /api/rh2/resources/:id/files returned. That endpoint
+     has already dropped every file the caller may not download, so a control
+     shown here is always a control that works — the view never renders an
+     action and then discovers it is forbidden. The href is the database-ID URL
+     the server supplied verbatim; storage keys and local paths are not part of
+     the contract and are never reconstructed.
+
+     The status line is an aria-live region so a screen reader hears the list
+     arrive, and each action is a real link so it is keyboard reachable and
+     focusable without extra work. */
+  function fileActionLabel(f) {
+    if (f.isPrimary && f.format === 'pdf') return 'View or download PDF';
+    if (f.format === 'docx') return 'Editable Word version';
+    return 'Download ' + esc(String(f.format || 'file').toUpperCase());
+  }
+
+  function fileSizeLabel(bytes) {
+    if (bytes === null || bytes === undefined) return '';
+    if (bytes < 1024) return bytes + ' bytes';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  /* ── Document hero ────────────────────────────────────────────────────────
+     The primary file's first page IS the resource for a hosted document, so
+     the detail view leads with it: a real thumbnail (authorised derivative
+     route), a Preview button that opens the shared DocPreview viewer, and the
+     download. Falls back silently when the file list has not arrived or the
+     file has no visual. */
+  function primaryFile() {
+    var files = S.detail.files || [];
+    for (var i = 0; i < files.length; i++) if (files[i].isPrimary) return files[i];
+    return files[0] || null;
+  }
+
+  function renderDetailHero() {
+    var f = primaryFile();
+    if (!f) return '';
+    var meta = [String(f.displayFormat || f.format || '').toUpperCase(), fileSizeLabel(f.sizeBytes)]
+      .filter(Boolean).join(' · ');
+    var out = '<section class="rh2-card rh2-dochero" aria-label="Document preview">';
+    if (f.thumbnailUrl) {
+      out += f.previewKind
+        ? '<button type="button" class="rh2-dochero-thumb" aria-label="Preview document" '
+          + 'onclick="RH2.previewFile(\'' + esc(f.id) + '\')">'
+          + '<img src="' + esc(f.thumbnailUrl) + '" alt="First page of the document" loading="lazy"></button>'
+        : '<span class="rh2-dochero-thumb"><img src="' + esc(f.thumbnailUrl) + '" alt="First page of the document" loading="lazy"></span>';
+    }
+    out += '<span class="rh2-dochero-actions">';
+    if (f.previewKind) {
+      out += '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.previewFile(\'' + esc(f.id) + '\')">Preview</button>';
+    }
+    out += '<a class="rh2-btn" href="' + esc(f.downloadUrl) + '" download>Download</a>'
+      + (meta ? '<span class="rh2-quiet">' + esc(meta) + '</span>' : '')
+      + '</span></section>';
+    return out;
+  }
+
+  /** Open the shared viewer for one of the detail view's files. */
+  function previewFile(fileId) {
+    var files = S.detail.files || [];
+    var f = null;
+    for (var i = 0; i < files.length; i++) if (files[i].id === fileId) f = files[i];
+    if (!f || !f.previewKind || !global.DocPreview) return;
+    var r = detailRes() || {};
+    global.DocPreview.open({
+      kind: f.previewKind,
+      url: f.previewUrl,
+      downloadUrl: f.downloadUrl,
+      title: pick(r, 'title') || f.fileName || 'Document',
+      meta: [String(f.displayFormat || '').toUpperCase(), fileSizeLabel(f.sizeBytes),
+        String(pick(r, 'source_publisher') || '')].filter(Boolean).join(' · '),
+    });
+  }
+
+  function renderDetailFiles() {
+    var st = S.detail;
+    var out = '<section class="rh2-card rh2-files" aria-labelledby="rh2-files-h">'
+      + '<h2 class="rh2-files-h" id="rh2-files-h">Files</h2>';
+
+    if (st.filesLoading) {
+      out += '<p class="rh2-quiet" role="status">Loading files…</p></section>';
+      return out;
+    }
+    if (st.filesErr) {
+      out += '<p class="rh2-empty" role="status">' + esc(st.filesErr) + '</p></section>';
+      return out;
+    }
+    var files = st.files || [];
+    if (!files.length) {
+      out += '<p class="rh2-quiet" role="status">No files are attached to this resource.</p></section>';
+      return out;
+    }
+
+    out += '<p class="rh2-visually-hidden" role="status">'
+      + files.length + (files.length === 1 ? ' file available' : ' files available') + '</p>';
+    out += '<ul class="rh2-file-list">';
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var restricted = f.effectiveAccessTier && f.effectiveAccessTier !== 'staff';
+      var meta = [String(f.format || '').toUpperCase(), fileSizeLabel(f.sizeBytes)]
+        .filter(Boolean).join(' · ');
+      out += '<li class="rh2-file' + (f.isPrimary ? ' rh2-file-primary' : '') + '">'
+        + (f.previewKind
+          ? '<button type="button" class="rh2-btn" onclick="RH2.previewFile(\'' + esc(f.id) + '\')" '
+            + 'aria-describedby="rh2-file-meta-' + esc(f.id) + '">Preview</button>'
+          : '')
+        + '<a class="rh2-btn ' + (f.isPrimary ? 'rh2-btn-primary' : '') + '" '
+        + 'href="' + esc(f.downloadUrl) + '" download '
+        + 'aria-describedby="rh2-file-meta-' + esc(f.id) + '">'
+        + esc(fileActionLabel(f)) + '</a>'
+        + '<span class="rh2-file-meta" id="rh2-file-meta-' + esc(f.id) + '">'
+        + esc(f.fileName || '') + (meta ? ' <span class="rh2-quiet">(' + esc(meta) + ')</span>' : '')
+        + (restricted
+          ? ' <span class="rh2-file-tier">' + esc(tierLabel(f.effectiveAccessTier)) + '</span>'
+          : '')
+        + '</span>'
+        + '</li>';
+    }
+    out += '</ul></section>';
+    return out;
+  }
+
+  function tierLabel(tier) {
+    if (tier === 'clinician') return 'Clinician access';
+    if (tier === 'admin') return 'Administrator access';
+    return '';
   }
 
   function renderDetail() {
@@ -575,7 +1158,7 @@
     var mins = pick(r, 'estimated_minutes');
 
     out += '<article class="rh2-article"><header class="rh2-article-head">' +
-      '<div class="rh2-article-titlebar"><h1>' + esc(pick(r, 'title')) + '</h1>' + authBadge(authority, pick(r, 'status')) + '</div>' +
+      '<div class="rh2-article-titlebar"><h1>' + esc(pick(r, 'title')) + '</h1>' + badges(r, { admin: true }) + '</div>' +
       '<div class="rh2-row-meta">' + esc(typeLabel(pick(r, 'content_type'))) +
       (mins ? ' · ' + esc(mins) + ' min' : '') +
       (pick(r, 'status') && pick(r, 'status') !== 'approved' ? ' · <span class="rh2-chip">' + esc(String(pick(r, 'status')).replace(/_/g, ' ')) + '</span>' : '') +
@@ -602,12 +1185,27 @@
     }
     out += '</header>';
 
+    // External resources are signposts: the destination is the resource, so
+    // the way out is the hero, not a footnote in the info panel.
+    if (external && !((st.files || []).length)) {
+      out += '<section class="rh2-card rh2-external-hero">'
+        + '<span class="rh2-ext-glyph">' + icn('forward') + '</span>'
+        + '<span class="rh2-ext-main"><span class="rh2-ext-domain">' + esc(hostname(extUrl)) + '</span>'
+        + '<span class="rh2-quiet">This resource opens on the publisher’s website.</span></span>'
+        + '<a class="rh2-btn rh2-btn-primary" href="' + esc(extUrl) + '" target="_blank" rel="noopener noreferrer">'
+        + 'Open resource</a>'
+        + '</section>';
+    }
+
+    // Hosted documents lead with the document: first-page thumbnail, preview.
+    out += renderDetailHero();
+
     // Content
     var content = pick(r, 'content');
     out += '<div class="rh2-content">';
     if (content) out += mdRender(content);
     else if (pick(r, 'description')) out += '<p>' + esc(pick(r, 'description')) + '</p>';
-    else out += '<p class="rh2-quiet">No content yet.</p>';
+    else if (!external && !(st.files || []).length) out += '<p class="rh2-quiet">No content yet.</p>';
     out += '</div>';
 
     // Info panel
@@ -623,6 +1221,9 @@
       out += '<p class="rh2-disclaimer">This summary is provided for convenience. The official source remains the authoritative version — always check it for current requirements.</p>';
     }
     out += '</aside>';
+
+    out += renderDetailFiles();
+    out += renderGovernance(r);
 
     // Quiz
     var quiz = pick(d, 'quiz');
@@ -967,6 +1568,11 @@
 
   function adminTabs() {
     var tabs = [['content', 'Content'], ['pd', 'PD Events'], ['feedback', 'Feedback'], ['analytics', 'Analytics']];
+    // Source review is a governance task: owner and admin only, like Sources.
+    if (canReview()) tabs.splice(1, 0, ['sourcereview', 'Source review']);
+    // The ingestion register accounts for the catalogued source vault. It is
+    // administrative rather than a library view, so it sits at the end.
+    if (canReview()) tabs.push(['ingestion', 'Ingestion register']);
     if (isOwner()) tabs.splice(1, 0, ['sources', 'Sources'], ['links', 'Quick Links']);
     return tabs;
   }
@@ -974,10 +1580,12 @@
   function loadAdminTab() {
     var t = S.admin.tab;
     if (t === 'content') loadAdminContent();
+    else if (t === 'sourcereview') loadSourceReview();
     else if (t === 'sources') loadAdminSources();
     else if (t === 'pd') loadAdminPd();
     else if (t === 'feedback') loadAdminFeedback();
     else if (t === 'links') loadAdminLinks();
+    else if (t === 'ingestion') loadIngestion();
     else if (t === 'analytics') loadAdminAnalytics();
   }
 
@@ -1045,12 +1653,992 @@
     if (a.err) out += '<div class="rh2-empty">' + esc(a.err) + '</div>';
 
     if (a.tab === 'content') out += renderAdminContent();
+    else if (a.tab === 'sourcereview') out += renderSourceReview();
     else if (a.tab === 'sources') out += renderAdminSources();
     else if (a.tab === 'pd') out += renderAdminPd();
     else if (a.tab === 'feedback') out += renderAdminFeedback();
     else if (a.tab === 'links') out += renderAdminLinks();
+    else if (a.tab === 'ingestion') out += renderIngestion();
     else if (a.tab === 'analytics') out += renderAdminAnalytics();
     return out + '</div>';
+  }
+
+  /* ── Ingestion register ───────────────────────────────────────────────────
+     Accounts for every catalogued source file, including the ones that must
+     never become a resource. The headline is the reconciliation figure: if the
+     register stops totalling the catalogue size, that is stated plainly rather
+     than smoothed over, because a register that has quietly lost records is
+     worse than no register.
+
+     Private records are listed with a generated label and no other detail. The
+     server sends nothing identifying for them — their filename, title, path and
+     checksum are NULL in the database — so there is nothing here to hide. */
+
+  var ING_TREATMENT_LABELS = {
+    'reconciled-existing': 'Already held',
+    'live-official-link': 'Official source',
+    'live-vendor-link': 'Vendor resource',
+    'controlled-register': 'Controlled instrument',
+    'staff-only': 'Staff-only',
+    'opal-original-draft': 'Opal original draft',
+    'rights-review': 'Licensing review required',
+    'privacy-excluded': 'Private — excluded',
+    'duplicate-archived': 'Duplicate archived',
+    'unavailable-placeholder': 'Unavailable source file',
+    'rejected-quality': 'Rejected on quality',
+    superseded: 'Superseded',
+  };
+
+  var ING_STATUS_LABELS = {
+    'needs-link-verification': 'Link verification required',
+    'needs-human-review': 'Human review required',
+    registered: 'Registered',
+    imported: 'Imported',
+    excluded: 'Excluded',
+    archived: 'Archived',
+    blocked: 'Blocked',
+    held: 'Held',
+  };
+
+  function ingLabel(t) { return ING_TREATMENT_LABELS[t] || t; }
+
+  async function loadIngestion() {
+    var a = S.admin;
+    a.ingLoading = true; a.err = ''; render();
+    try {
+      var q = a.ingTreatment ? '?treatment=' + encodeURIComponent(a.ingTreatment) + '&limit=200' : '?limit=200';
+      var res = await Promise.all([
+        api('/api/rh2/admin/ingestion/summary'),
+        api('/api/rh2/admin/ingestion/records' + q),
+        api('/api/rh2/admin/ingestion/cleanroom'),
+      ]);
+      a.ing = res[0]; a.ingRecords = res[1]; a.ingCleanroom = res[2];
+    } catch (e) {
+      a.err = 'Could not load the ingestion register.';
+    }
+    a.ingLoading = false; render();
+  }
+
+  function renderIngestion() {
+    var a = S.admin;
+    if (a.ingLoading || !a.ing) return '<div class="rh2-card">' + skel(5, 44) + '</div>';
+    var s = a.ing;
+
+    var out = '<div class="rh2-card">' +
+      '<h2 class="rh2-h2">Source catalogue accounting</h2>' +
+      '<p class="rh2-muted">Every catalogued file has one recorded outcome. Most must never become a ' +
+      'Resource Hub resource; a register entry records the decision, not an intention to publish.</p>' +
+      '<p class="rh2-ing-total' + (s.reconciles ? '' : ' rh2-ing-total-bad') + '">' +
+      '<strong>' + esc(String(s.total)) + '</strong> of <strong>' + esc(String(s.expectedTotal)) + '</strong>' +
+      ' catalogue records accounted for' +
+      (s.reconciles ? ' — reconciles.' : ' — DOES NOT RECONCILE. Investigate before relying on these figures.') +
+      '</p></div>';
+
+    // Counts by treatment. Clicking one filters the list below.
+    out += '<div class="rh2-card"><h3 class="rh2-h3">By treatment</h3><div class="rh2-ing-grid">';
+    Object.keys(s.byTreatment).forEach(function (k) {
+      var active = a.ingTreatment === k;
+      out += '<button type="button" class="rh2-ing-tile' + (active ? ' active' : '') + '" ' +
+        'onclick="RH2.ingFilter(\'' + esc(active ? '' : k) + '\')">' +
+        '<span class="rh2-ing-n">' + esc(String(s.byTreatment[k])) + '</span>' +
+        '<span class="rh2-ing-l">' + esc(ingLabel(k)) + '</span></button>';
+    });
+    out += '</div></div>';
+
+    out += '<div class="rh2-card"><h3 class="rh2-h3">Work outstanding</h3><div class="rh2-ing-grid">';
+    Object.keys(s.byIngestionStatus).forEach(function (k) {
+      out += '<div class="rh2-ing-tile"><span class="rh2-ing-n">' + esc(String(s.byIngestionStatus[k])) + '</span>' +
+        '<span class="rh2-ing-l">' + esc(ING_STATUS_LABELS[k] || k) + '</span></div>';
+    });
+    out += '</div></div>';
+
+    out += '<div class="rh2-card"><h3 class="rh2-h3">Controlled instruments and clean-room drafts</h3>' +
+      '<p class="rh2-muted">' + esc(String(s.instrumentsMapped)) + ' instruments cover ' +
+      esc(String(s.instrumentRecordsMapped)) + ' catalogue records. No instrument document is held.</p>';
+    if (a.ingCleanroom) {
+      out += '<p class="rh2-muted">' + esc(String(a.ingCleanroom.drafted)) + ' clean-room drafts written, ' +
+        esc(String(a.ingCleanroom.blocked)) + ' blocked pending clinical or legal review.</p>' +
+        '<div class="rh2-list">' + a.ingCleanroom.items.map(function (i) {
+          return '<div class="rh2-adm-row"><span class="rh2-row-main">' +
+            '<span class="rh2-row-title">' + esc(i.title || i.catalogue_id) + '</span>' +
+            '<span class="rh2-row-sub">' + esc(i.risk_tier) +
+            (i.resource_id ? ' · draft written' : ' · blocked') +
+            (i.blocker_note ? ' · ' + esc(String(i.blocker_note).slice(0, 120)) : '') +
+            '</span></span></div>';
+        }).join('') + '</div>';
+    }
+    out += '</div>';
+
+    var recs = a.ingRecords || { records: [], total: 0 };
+    out += '<div class="rh2-card"><h3 class="rh2-h3">Records' +
+      (a.ingTreatment ? ' — ' + esc(ingLabel(a.ingTreatment)) : '') +
+      ' <span class="rh2-muted">(' + esc(String(recs.total)) + ')</span></h3>';
+    if (a.ingTreatment) {
+      out += '<button type="button" class="rh2-btn" onclick="RH2.ingFilter(\'\')">Show all</button>';
+    }
+    if (!recs.records.length) {
+      out += '<div class="rh2-empty">No records match.</div>';
+    } else {
+      out += '<div class="rh2-list">' + recs.records.map(function (r) {
+        return '<div class="rh2-adm-row"><span class="rh2-row-main">' +
+          '<span class="rh2-row-title">' + esc(r.title || r.catalogueId) + '</span>' +
+          '<span class="rh2-row-sub">' + esc(r.catalogueId) + ' · ' + esc(ingLabel(r.treatment)) +
+          ' · ' + esc(ING_STATUS_LABELS[r.ingestionStatus] || r.ingestionStatus) +
+          (r.officialUrl ? ' · linked' : '') +
+          (r.duplicateOf ? ' · duplicate of ' + esc(r.duplicateOf) : '') +
+          '</span></span>' +
+          '<span class="rh2-chip">' + esc(ingLabel(r.treatment)) + '</span></div>';
+      }).join('') + '</div>';
+      if (recs.total > recs.records.length) {
+        out += '<p class="rh2-muted">Showing ' + esc(String(recs.records.length)) + ' of ' +
+          esc(String(recs.total)) + '. Filter by treatment to narrow.</p>';
+      }
+    }
+    return out + '</div>';
+  }
+
+  /* ── Unresolved source review ─────────────────────────────────────────────
+     Lists resources whose authorship nobody has established. The evidence
+     already on each record is shown so a reviewer can judge — labelled as
+     evidence, never as a suggestion. The UI proposes no answer and pre-selects
+     nothing.
+
+     The two decisions are deliberately separate controls. Recording who wrote
+     something does not touch rights: that is enforced server-side, and the
+     response says so explicitly, but the form is laid out to make it obvious
+     too. Removing a logo has never been a rights status. */
+
+  function renderSourceReview() {
+    if (!canReview()) {
+      return '<div class="rh2-empty">Source review is available to owners and administrators.</div>';
+    }
+    var q = S.sourceReview;
+    if (q.loading) return '<div class="rh2-card">' + skel(4, 40) + '</div>';
+    if (q.err) return '<div class="rh2-empty">' + esc(q.err) + '</div>';
+    if (!q.data) return '<div class="rh2-card">' + skel(3, 40) + '</div>';
+
+    var items = q.data.items || [];
+    var total = q.data.total || 0;
+    var out = '<section class="rh2-card" aria-labelledby="rh2-sr-h">'
+      + '<h2 id="rh2-sr-h">Unresolved source classifications</h2>'
+      + '<p class="rh2-quiet">' + esc(q.data.evidenceNote || '') + '</p>'
+      + '<p class="rh2-quiet" role="status">' + total + ' resource'
+      + (total === 1 ? '' : 's') + ' awaiting review.</p>';
+
+    if (!items.length) {
+      return out + '<p class="rh2-empty">Nothing is awaiting source review.</p></section>';
+    }
+
+    out += '<div class="rh2-sr-controls">'
+      + '<label class="rh2-visually-hidden" for="rh2-sr-q">Search unresolved resources</label>'
+      + '<input id="rh2-sr-q" class="rh2-input" type="search" placeholder="Search title or publisher…" '
+      + 'value="' + esc(q.q || '') + '" oninput="RH2.sourceReviewSearch(this.value)">'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.sourceReviewClear()">Clear</button>'
+      + '</div>';
+
+    out += '<ul class="rh2-sr-list">';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var ev = it.evidence || {};
+      out += '<li class="rh2-sr-item">'
+        + '<h3 class="rh2-sr-title">' + esc(it.title) + '</h3>'
+        + '<p class="rh2-quiet">' + esc(it.resourceType || '') + '</p>'
+        + '<dl class="rh2-sr-evidence">'
+        + '<dt>Publisher string on the record</dt><dd>' + esc(ev.publisherString || 'none recorded') + '</dd>'
+        + '<dt>Cited source</dt><dd>' + esc(ev.citedSourceTitle || 'none recorded') + '</dd>'
+        + '<dt>Authority level</dt><dd>' + esc(ev.authorityLevel || 'none recorded') + '</dd>'
+        + '</dl>'
+        + '<p class="rh2-sr-warn">Evidence only. This does not establish authorship or any right to redistribute.</p>'
+        + '<div class="rh2-sr-form">'
+        + '<label for="rh2-sr-class-' + esc(it.id) + '">Source class</label>'
+        + '<select id="rh2-sr-class-' + esc(it.id) + '" class="rh2-select">'
+        + '<option value="">— not decided —</option>'
+        + ['opal-original', 'government-official', 'nonprofit', 'standardised-instrument',
+           'commercial', 'provider-company', 'internal'].map(function (c) {
+             return '<option value="' + c + '">' + c + '</option>';
+           }).join('')
+        + '</select>'
+        + '<label for="rh2-sr-pub-' + esc(it.id) + '">Actual publisher (optional)</label>'
+        + '<input id="rh2-sr-pub-' + esc(it.id) + '" class="rh2-input" type="text" '
+        + 'placeholder="Who published this work">'
+        + '<label for="rh2-sr-rights-' + esc(it.id) + '">Rights status (separate decision)</label>'
+        + '<select id="rh2-sr-rights-' + esc(it.id) + '" class="rh2-select">'
+        + '<option value="">— leave unchanged —</option>'
+        + ['opal-owned', 'licensed-for-portal', 'official-link-only', 'reference-only',
+           'restricted', 'unknown'].map(function (c) {
+             return '<option value="' + c + '">' + c + '</option>';
+           }).join('')
+        + '</select>'
+        + '<p class="rh2-quiet">Leaving rights unchanged is the safe default. Classifying who wrote '
+        + 'something grants no permission to host or redistribute it.</p>'
+        + '<label for="rh2-sr-reason-' + esc(it.id) + '">Reason or evidence note (required)</label>'
+        + '<textarea id="rh2-sr-reason-' + esc(it.id) + '" class="rh2-input" rows="2"></textarea>'
+        + '<button type="button" class="rh2-btn rh2-btn-primary" '
+        + 'onclick="RH2.submitSourceReview(\'' + esc(it.id) + '\')">Record decision</button>'
+        + '</div></li>';
+    }
+    out += '</ul>';
+
+    // Pagination — the catalogue is larger than one page and the queue must not
+    // silently truncate.
+    var limit = q.data.limit || 25;
+    var offset = q.data.offset || 0;
+    var from = total ? offset + 1 : 0;
+    var to = Math.min(offset + limit, total);
+    out += '<div class="rh2-sr-pager" role="navigation" aria-label="Source review pages">'
+      + '<span class="rh2-quiet" role="status">Showing ' + from + '–' + to + ' of ' + total + '</span>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (offset <= 0 ? 'disabled' : '')
+      + ' onclick="RH2.sourceReviewPage(-1)">Previous</button>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (to >= total ? 'disabled' : '')
+      + ' onclick="RH2.sourceReviewPage(1)">Next</button>'
+      + '</div>';
+    return out + '</section>';
+  }
+
+  /* ── Controlled instrument register ───────────────────────────────────────
+     Metadata and permitted use only. No instrument content is fetched, stored
+     or rendered — the register links to an implementing module (WHODAS) rather
+     than reproducing anything. Unresolved fields are shown as unresolved, so a
+     blank licence never reads as an approved one. */
+
+  /* ── Professional development ─────────────────────────────────────────────
+     A catalogue over the SAME pd_events the Home preview and the admin tab
+     already use — no second store, no separate sync. An event an administrator
+     adds appears here immediately.
+
+     Booking always happens on the provider's site. Nothing here is styled as an
+     in-app booking control, because Opal has no booking integration and a
+     button that looked like one would be a promise the product cannot keep. */
+
+  function money(cents) {
+    if (cents === null || cents === undefined) return null;
+    if (cents === 0) return 'Free';
+    return '$' + (cents / 100).toFixed(2).replace(/\.00$/, '');
+  }
+
+  var PD_MODE_LABEL = { online: 'Online', in_person: 'In person', hybrid: 'Hybrid' };
+
+  async function loadPd() {
+    var st = S.pd;
+    st.loading = true; st.err = ''; render();
+    var qs = ['when=' + encodeURIComponent(st.when), 'limit=' + st.limit, 'offset=' + st.offset];
+    if (st.q) qs.push('q=' + encodeURIComponent(st.q));
+    if (st.mode) qs.push('mode=' + encodeURIComponent(st.mode));
+    if (st.topic) qs.push('topic=' + encodeURIComponent(st.topic));
+    if (st.cost) qs.push('cost=' + encodeURIComponent(st.cost));
+    if (st.cpd) qs.push('cpd=1');
+    var d = await api('/api/rh2/pd/catalogue?' + qs.join('&'));
+    st.loading = false;
+    if (d.ok) { st.data = d; st.facets = d.facets || null; }
+    else { st.data = null; st.err = d.error || 'Professional development is unavailable right now.'; }
+    render();
+  }
+
+  var pdDebounce = null;
+  function pdSearch(v) {
+    S.pd.q = v; S.pd.offset = 0;
+    if (pdDebounce) clearTimeout(pdDebounce);
+    pdDebounce = setTimeout(loadPd, 320);
+  }
+  function pdFilter(k, v) { S.pd[k] = v; S.pd.offset = 0; loadPd(); }
+  function pdClear() {
+    S.pd.q = ''; S.pd.mode = ''; S.pd.topic = ''; S.pd.cost = ''; S.pd.cpd = '';
+    S.pd.offset = 0; loadPd();
+  }
+  function pdPage(dir) {
+    S.pd.offset = Math.max(0, S.pd.offset + dir * S.pd.limit);
+    loadPd();
+  }
+
+  /** Open one event. Reached from the Home preview and from the catalogue. */
+  /**
+   * Move focus to the new page's heading after a full re-render.
+   *
+   * render() replaces the hub's entire DOM, which destroys whatever had focus
+   * and drops it to <body>. A keyboard user was left at the top of the document
+   * with no announcement that the page had changed, and a screen-reader user
+   * heard nothing at all. Focusing the heading both announces the new page and
+   * puts the next Tab press in the right place.
+   *
+   * tabindex="-1" makes the heading programmatically focusable without adding
+   * it to the tab sequence.
+   */
+  function focusHeading(selector) {
+    if (typeof document === 'undefined') return;
+    var el = document.querySelector(selector);
+    if (!el) return;
+    el.setAttribute('tabindex', '-1');
+    try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) { /* no-op */ } }
+  }
+
+  async function openPd(id) {
+    S.view = 'pd';
+    S.pd.openId = id;
+    S.pd.detail = null; S.pd.detailErr = ''; S.pd.detailLoading = true;
+    render();
+    var d = await api('/api/rh2/pd/' + encodeURIComponent(id));
+    if (S.pd.openId !== id) return;              // navigated on
+    S.pd.detailLoading = false;
+    if (d.ok) S.pd.detail = d.event;
+    else S.pd.detailErr = d.status === 404
+      ? 'This event is no longer listed.'
+      : (d.error || 'This event could not be loaded.');
+    render();
+    focusHeading('.rh2-pdd-title, .rh2-page > .rh2-empty');
+    // Load the catalogue behind the event so returning to it — by Back, or by
+    // the hub's own navigation — lands on a populated list.
+    if (!S.pd.data) loadPd();
+  }
+
+  function renderPd() {
+    if (S.pd.openId) return renderPdDetail();
+
+    var st = S.pd;
+    var out = '<div class="rh2-page"><h1 class="rh2-h1">Professional development</h1>'
+      + '<p class="rh2-quiet">Courses, workshops and events from external providers. '
+      + 'Booking is completed on the provider\'s own website.</p>';
+
+    // ── Controls ──
+    out += '<div class="rh2-pd-controls">'
+      + '<label class="rh2-visually-hidden" for="rh2-pd-q">Search professional development</label>'
+      + '<input id="rh2-pd-q" class="rh2-input" type="search" placeholder="Search title, provider or topic…" '
+      + 'value="' + esc(st.q) + '" oninput="RH2.pdSearch(this.value)">'
+      + sel('rh2-pd-mode', 'All delivery modes',
+          (st.facets ? st.facets.modes : ['online', 'in_person', 'hybrid'])
+            .map(function (m) { return [m, PD_MODE_LABEL[m] || m]; }),
+          st.mode, "RH2.pdFilter('mode',this.value)")
+      + sel('rh2-pd-topic', 'All topics',
+          (st.facets && st.facets.topics ? st.facets.topics : []).map(function (t) { return [t, t]; }),
+          st.topic, "RH2.pdFilter('topic',this.value)")
+      + sel('rh2-pd-cost', 'Any cost', [['free', 'Free'], ['paid', 'Paid']], st.cost,
+          "RH2.pdFilter('cost',this.value)")
+      + '<span class="rh2-check"><input type="checkbox" id="rh2-pd-cpd"' + (st.cpd ? ' checked' : '')
+      + ' onchange="RH2.pdFilter(\'cpd\', this.checked ? \'1\' : \'\')">'
+      + '<label for="rh2-pd-cpd">CPD hours only</label></span>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.pdClear()">Clear</button>'
+      + '</div>';
+
+    out += '<div class="rh2-subnav" role="tablist" aria-label="When">'
+      + ['upcoming', 'past'].map(function (w) {
+          return '<button type="button" role="tab" aria-selected="' + (st.when === w) + '" '
+            + 'class="rh2-subnav-btn' + (st.when === w ? ' active' : '') + '" '
+            + 'onclick="RH2.pdFilter(\'when\',\'' + w + '\')">'
+            + (w === 'upcoming' ? 'Upcoming' : 'Past') + '</button>';
+        }).join('') + '</div>';
+
+    if (st.loading) return out + '<div class="rh2-card">' + skel(4, 44) + '</div></div>';
+    if (st.err) {
+      return out + '<div class="rh2-empty"><p>' + esc(st.err) + '</p>'
+        + '<button type="button" class="rh2-btn" onclick="RH2.pdReload()">Try again</button></div></div>';
+    }
+    if (!st.data) return out + '<div class="rh2-card">' + skel(3, 44) + '</div></div>';
+
+    var events = st.data.events || [];
+    var total = st.data.total || 0;
+    out += '<p class="rh2-quiet" role="status">' + total + ' event' + (total === 1 ? '' : 's')
+      + (st.when === 'past' ? ' (past)' : '') + '</p>';
+
+    if (!events.length) {
+      out += '<div class="rh2-empty">No professional development matches these filters. '
+        + 'Try clearing them, or check the Past tab.</div></div>';
+      return out;
+    }
+
+    out += '<ul class="rh2-pd-list">';
+    for (var i = 0; i < events.length; i++) out += renderPdCard(events[i]);
+    out += '</ul>';
+
+    var from = total ? st.offset + 1 : 0;
+    var to = Math.min(st.offset + st.limit, total);
+    if (total > st.limit) {
+      out += '<div class="rh2-pd-pager" role="navigation" aria-label="Pages">'
+        + '<span class="rh2-quiet" role="status">Showing ' + from + '–' + to + ' of ' + total + '</span>'
+        + '<button type="button" class="rh2-btn rh2-btn-quiet"' + (st.offset <= 0 ? ' disabled' : '')
+        + ' onclick="RH2.pdPage(-1)">Previous</button>'
+        + '<button type="button" class="rh2-btn rh2-btn-quiet"' + (to >= total ? ' disabled' : '')
+        + ' onclick="RH2.pdPage(1)">Next</button></div>';
+    }
+    return out + '</div>';
+  }
+
+  /**
+   * One catalogue entry.
+   *
+   * Same column shape as the home preview — fixed-width date/time, then the
+   * content — so a therapist reads both surfaces the same way. The extra line
+   * here is the restrained metadata run; it is deliberately last and quietest,
+   * because mode, location, cost and CPD hours are what you check AFTER an
+   * event has caught your eye, not what you scan for.
+   *
+   * Missing values simply do not render. An event with no location, no price
+   * and no CPD hours produces a row with no metadata line rather than a row of
+   * empty labels.
+   */
+  function renderPdCard(e) {
+    var bits = [];
+    if (e.mode) bits.push(PD_MODE_LABEL[e.mode] || e.mode);
+    if (e.location) bits.push(e.location);
+    var cost = money(e.costCents);
+    if (cost) bits.push(cost);
+    if (e.cpdHours) bits.push(e.cpdHours + ' CPD hours');
+
+    var when = fmtDateParts(e.startsAt);
+    var spoken = whenLabel(when);
+    var label = e.title + (e.provider ? ', ' + e.provider : '')
+      + (spoken ? ', ' + spoken : '')
+      + (bits.length ? ', ' + bits.join(', ') : '');
+
+    return '<li class="rh2-pdc-item">'
+      + '<button type="button" class="rh2-pdc-row" onclick="RH2.openPd(\'' + esc(e.id) + '\')" '
+      + 'aria-label="' + esc(label) + '">'
+      + '<span class="rh2-pdc-when" aria-hidden="true">'
+      + '<span class="rh2-pdc-date">' + esc(when.date) + '</span>'
+      + (when.time ? '<span class="rh2-pdc-time">' + esc(when.time) + '</span>' : '')
+      + '</span>'
+      + '<span class="rh2-pdc-main">'
+      + '<span class="rh2-pdc-title">' + esc(e.title) + '</span>'
+      + (e.provider ? '<span class="rh2-pdc-provider">' + esc(e.provider) + '</span>' : '')
+      + (bits.length ? '<span class="rh2-pdc-meta">' + esc(bits.join(' · ')) + '</span>' : '')
+      + '</span></button></li>';
+  }
+
+  /** Small outward-pointing arrow. Decorative — the label carries the meaning. */
+  var EXTERNAL_ICON = '<svg class="rh2-ext-icon" viewBox="0 0 16 16" width="13" height="13" '
+    + 'aria-hidden="true" focusable="false">'
+    + '<path d="M6.5 3.5h-3v9h9v-3" fill="none" stroke="currentColor" stroke-width="1.4" '
+    + 'stroke-linecap="round"/>'
+    + '<path d="M9.5 2.5h4v4M13.5 2.5 8 8" fill="none" stroke="currentColor" stroke-width="1.4" '
+    + 'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  /**
+   * One event.
+   *
+   * There is no in-page "back" control: 'Professional development' is a
+   * permanent item in the hub navigation and returns here cleanly, so a second
+   * route back was redundant chrome on every event page. Browser Back works
+   * because opening an event now writes '#resources/pd/<id>' — see the openPd
+   * hook in navigation.js.
+   *
+   * The booking panel sits immediately after the heading in DOM order, so on a
+   * phone it appears with the key details rather than below the whole record.
+   * On wide screens the grid lifts it into a right-hand action column without
+   * changing that order, which keeps the reading and tab sequence identical at
+   * every width.
+   */
+  function renderPdDetail() {
+    var st = S.pd;
+    var out = '<div class="rh2-page">';
+
+    if (st.detailLoading) return out + '<div class="rh2-card">' + skel(5, 34) + '</div></div>';
+    if (st.detailErr) return out + '<div class="rh2-empty">' + esc(st.detailErr) + '</div></div>';
+    var e = st.detail;
+    if (!e) return out + '</div>';
+
+    out += '<article class="rh2-pdd">'
+      + '<header class="rh2-pdd-head">'
+      + '<h1 class="rh2-pdd-title">' + esc(e.title) + '</h1>'
+      + '<p class="rh2-pdd-when">' + esc(fmtDateTime(e.startsAt))
+      + (e.endsAt ? ' – ' + esc(fmtDateTime(e.endsAt)) : '')
+      + (e.timezone ? ' (' + esc(e.timezone) + ')' : '')
+      + (e.provider ? '<span class="rh2-pdd-provider"> · ' + esc(e.provider) + '</span>' : '')
+      + '</p></header>';
+
+    // ── One booking action ──────────────────────────────────────────────────
+    // A single primary control, an explicit new-tab label for screen readers,
+    // and one short line saying where booking actually happens. Nothing here
+    // suggests Opal takes the booking, because Opal has no booking integration.
+    out += '<aside class="rh2-pdd-action" aria-labelledby="rh2-h-book">'
+      + '<h2 id="rh2-h-book" class="rh2-pdd-action-h">Booking</h2>';
+    if (e.bookingUrl) {
+      out += '<a class="rh2-btn rh2-btn-primary rh2-pdd-cta" href="' + esc(e.bookingUrl) + '" '
+        + 'target="_blank" rel="noopener noreferrer">'
+        + '<span>View and book on provider website</span>' + EXTERNAL_ICON
+        + '<span class="rh2-visually-hidden"> (opens in a new tab)</span></a>'
+        + '<p class="rh2-pdd-note">Booking is completed on the provider\'s website.</p>';
+    } else {
+      out += '<p class="rh2-pdd-note">No booking link was recorded for this event. '
+        + 'Contact the provider directly.</p>';
+    }
+    if (e.sourceUrl && e.sourceUrl !== e.bookingUrl) {
+      out += '<a class="rh2-pdd-alt" href="' + esc(e.sourceUrl) + '" '
+        + 'target="_blank" rel="noopener noreferrer">Event listing' + EXTERNAL_ICON
+        + '<span class="rh2-visually-hidden"> (opens in a new tab)</span></a>';
+    }
+    out += '</aside>';
+
+    out += '<div class="rh2-pdd-body">';
+    if (e.description) out += '<div class="rh2-content"><p>' + esc(e.description) + '</p></div>';
+    out += '<aside class="rh2-info" aria-label="Event information">'
+      + kvRow('Provider', esc(e.provider || 'Not stated'))
+      + kvRow('Delivery', esc(PD_MODE_LABEL[e.mode] || e.mode || ''))
+      + kvRow('Location', esc(e.location || ''))
+      + kvRow('Cost', esc(money(e.costCents) || 'Not stated'))
+      + kvRow('CPD hours', e.cpdHours ? esc(String(e.cpdHours)) : '')
+      + kvRow('Topic', esc(e.topic || ''))
+      + kvRow('Listing source', esc(e.sourceName || (e.providerKey === 'manual' ? 'Added by your practice' : e.providerKey)))
+      + kvRow('Last updated', esc(fmtDate(e.updatedAt)))
+      + '</aside></div>';
+
+    return out + '</article></div>';
+  }
+
+  /* ── Assessments ──────────────────────────────────────────────────────────
+     The catalogue of standardised assessments, their information pages, and
+     the client selection that starts one.
+
+     WHAT CHANGED, AND WHY IT HAD TO
+     This tab used to decide "may this be used?" from the governance register
+     alone: rights_status had to be 'licensed-for-use' or 'official-link-only'
+     AND clinical_status had to be 'current'. Both default to 'unreviewed', so
+     every assessment in the list — including WHODAS 2.0, whose authoritative
+     WHO source documents ship with this application — rendered the same
+     sentence: "cannot be started yet: its rights and clinical review are not
+     confirmed." A clinician could not tell an instrument we hold in full from
+     one we hold nothing of, and neither could be opened.
+
+     Two different questions had been folded into one. Governance review is
+     real, and it is still shown on every information page. What decides
+     whether a button appears is now a checkable fact — does the portal hold
+     the instrument? — and the server answers it per assessment in
+     `availability.state`, one of five values rather than a single blanket no.
+
+     WHERE STARTING GOES
+     Choosing a client opens the assessment's own full page (#assessment/...).
+     It does NOT open the client profile drawer, which was the previous
+     behaviour: that drawer carries appointment history, invoices and a "Book
+     appointment" action, so selecting a client for WHODAS put the clinician in
+     the appointment experience instead of the assessment. */
+
+  var AVAILABILITY_LABELS = {
+    'electronic-and-pdf': 'Electronic and PDF',
+    electronic: 'Available electronically',
+    pdf: 'PDF available',
+    'source-required': 'Source required',
+    'temporarily-unavailable': 'Temporarily unavailable',
+  };
+
+  function availLabel(a) {
+    if (!a) return 'Unknown';
+    return AVAILABILITY_LABELS[a.state] || a.label || a.state || 'Unknown';
+  }
+
+  function assessBadge(a) {
+    var state = (a && a.state) || 'unknown';
+    return '<span class="rh2-avail rh2-avail--' + esc(state) + '">' + esc(availLabel(a)) + '</span>';
+  }
+
+  /** Can this assessment be opened for a client, by this user, right now? */
+  function assessActionable(r) {
+    if (!canAdministerAssessment()) return false;
+    var a = r && r.availability;
+    return !!(a && (a.canStart || a.canDownloadBlank));
+  }
+
+  function startAssessment(key) {
+    S.assess = { key: key, q: '', results: null, loading: false, err: '', starting: false };
+    render();
+  }
+
+  /**
+   * Client selection, rendered INLINE above the catalogue rather than in a
+   * modal — this module states at the top of the file that confirmations and
+   * forms are inline panels, and a dialog here would be the only one in the hub.
+   *
+   * Choosing a client is the LAST thing that happens here: the pathways
+   * (complete on screen, print a blank form, upload a completed one, email)
+   * all live on the assessment page, together with that client's history, so
+   * there is one place where an assessment is worked on rather than two.
+   */
+  function renderAssessPanel() {
+    var a = S.assess;
+    if (!a) return '';
+    var def = findInstrument(a.key);
+    var title = def ? (def.abbreviation || def.name) : 'assessment';
+
+    var h = '<section class="rh2-card rh2-assess-panel" aria-labelledby="rh2-as-h">'
+      + '<h2 id="rh2-as-h">Start ' + esc(title) + '</h2>'
+      + '<p>Choose the client this assessment is for. It opens on its own page, '
+      + 'with their assessment history.</p>'
+      + '<label class="rh2-visually-hidden" for="rh2-as-q">Search clients</label>'
+      + '<input id="rh2-as-q" class="rh2-input" type="search" placeholder="Search by name…" '
+      + 'value="' + esc(a.q) + '" oninput="RH2.assessSearch(this.value)" autocomplete="off">';
+
+    if (a.starting) h += '<p class="rh2-quiet" role="status">Opening the assessment…</p>';
+    else if (a.loading) h += '<p class="rh2-quiet" role="status">Searching…</p>';
+    else if (a.err) h += '<p class="rh2-empty" role="status">' + esc(a.err) + '</p>';
+    else if (a.results && !a.results.length) h += '<p class="rh2-quiet" role="status">No clients match.</p>';
+    else if (a.results) {
+      h += '<ul class="rh2-as-list">' + a.results.slice(0, 12).map(function (c) {
+        return '<li><button type="button" class="rh2-btn rh2-as-client" '
+          + 'onclick="RH2.assessPick(\'' + esc(c.id) + '\')">'
+          + esc(c.fullName || c.preferredName || 'Unnamed client') + '</button></li>';
+      }).join('') + '</ul>';
+    } else {
+      h += '<p class="rh2-quiet">Type at least two characters to search.</p>';
+    }
+
+    h += '<div class="rh2-as-actions">'
+      + '<button type="button" class="rh2-btn" onclick="RH2.assessCancel()">Cancel</button></div>';
+    return h + '</section>';
+  }
+
+  var assessDebounce = null;
+
+  function assessClearDebounce() {
+    if (assessDebounce) { clearTimeout(assessDebounce); assessDebounce = null; }
+  }
+
+  /**
+   * The panel state object is captured at schedule time and re-checked on both
+   * sides of the request. Cancelling the panel — or picking a client — inside
+   * the debounce window used to leave a timer that fired against a null
+   * S.assess and threw out of a setTimeout, where nothing could catch it.
+   * Identity, not `key`: the same key is used every time the panel reopens.
+   */
+  function assessSearch(v) {
+    if (!S.assess) return;
+    var a = S.assess;
+    a.q = v;
+    assessClearDebounce();
+    if (String(v || '').trim().length < 2) { a.results = null; a.err = ''; render(); return; }
+    var q = v;
+    assessDebounce = setTimeout(async function () {
+      assessDebounce = null;
+      if (S.assess !== a) return;                     // panel closed or replaced
+      a.loading = true; a.err = ''; render();
+      // The client search shared by the document builders — org-scoped, live
+      // from Splose, never fabricated.
+      var d = await api('/api/fca/clients?q=' + encodeURIComponent(q));
+      if (S.assess !== a) return;                     // closed while in flight
+      a.loading = false;
+      if (d.ok) a.results = d.clients || [];
+      else { a.results = []; a.err = d.error || 'Client search is unavailable.'; }
+      render();
+    }, 300);
+  }
+
+  /**
+   * Client chosen → the assessment's own page.
+   *
+   * The one function this must never call is openClientProfile(). That is the
+   * appointment-centric client drawer, and routing an assessment through it is
+   * the regression this replaces.
+   */
+  function assessPick(id) {
+    var c = (S.assess.results || []).find(function (x) { return String(x.id) === String(id); });
+    if (!c) return;
+    var key = S.assess.key;
+    S.assess.starting = true;
+    render();
+    openAssessmentPage(key, c.id, c.fullName || c.preferredName || null);
+  }
+
+  function assessCancel() { assessClearDebounce(); S.assess = null; render(); }
+
+  /** Hand off to the assessment surface. One caller, one destination. */
+  function openAssessmentPage(key, clientId, clientName) {
+    assessClearDebounce();
+    S.assess = null;
+    render();
+    if (global.Assess && typeof global.Assess.openForClient === 'function') {
+      global.Assess.openForClient(key, clientId, clientName);
+      return;
+    }
+    // The surface script has not loaded. Say so rather than silently doing
+    // something else — least of all opening an unrelated panel.
+    S.instruments.err = 'The assessment surface is not available in this browser session. '
+      + 'Reload the page and try again.';
+    render();
+  }
+
+  function findInstrument(key) {
+    return (S.instruments.data || []).find(function (r) { return r.key === key; }) || null;
+  }
+
+  // — Catalogue —
+
+  function renderInstruments() {
+    var st = S.instruments;
+    if (st.openKey) return renderInstrumentDetail();
+    if (st.loading) return '<div class="rh2-card">' + skel(4, 40) + '</div>';
+    if (st.err) return '<div class="rh2-empty">' + esc(st.err) + '</div>';
+    var rows = st.data || [];
+    var out = renderAssessPanel();
+
+    out += '<section class="rh2-card" aria-labelledby="rh2-inst-h">'
+      + '<h2 id="rh2-inst-h">Assessments</h2>'
+      + '<p class="rh2-quiet">Standardised assessments the practice uses. Each one shows what '
+      + 'can be done with it here: completed on screen, issued as a form, or — where the portal '
+      + 'does not hold the instrument — exactly which source documents are still needed. Opal is '
+      + 'never the rights holder of an assessment; every entry names whose work it is.</p>';
+
+    if (!rows.length) return out + '<p class="rh2-empty">No assessments are configured.</p></section>';
+
+    out += '<ul class="rh2-inst-list">';
+    rows.forEach(function (r) {
+      var av = r.availability || {};
+      out += '<li class="rh2-inst">'
+        + '<div class="rh2-inst-top">'
+        + '<h3 class="rh2-inst-name">' + esc(r.abbreviation) + ' <span class="rh2-quiet">'
+        + esc(r.name) + '</span></h3>'
+        + assessBadge(av)
+        + '</div>';
+
+      if (r.description) out += '<p class="rh2-inst-desc">' + esc(r.description) + '</p>';
+      else if (av.summary) out += '<p class="rh2-inst-desc">' + esc(av.summary) + '</p>';
+
+      out += '<div class="rh2-inst-actions">'
+        + '<button type="button" class="rh2-btn" onclick="RH2.openInstrument(\'' + esc(r.key) + '\')">'
+        + 'About this assessment</button>';
+      if (assessActionable(r)) {
+        out += '<button type="button" class="rh2-btn rh2-btn-primary" '
+          + 'onclick="RH2.startAssessment(\'' + esc(r.key) + '\')">'
+          + (av.canStart ? 'Start assessment' : 'Open for a client') + '</button>';
+      }
+      out += '</div>';
+
+      if (av.state === 'temporarily-unavailable' && av.reason) {
+        out += '<p class="rh2-inst-unresolved">' + esc(av.reason) + '</p>';
+      } else if (av.state === 'source-required') {
+        out += '<p class="rh2-inst-unresolved">Not held by the portal — see '
+          + '“About this assessment” for the documents required.</p>';
+      }
+      out += '</li>';
+    });
+    return out + '</ul></section>';
+  }
+
+  // — Information page —
+
+  /**
+   * Everything a clinician needs before administering it: what it measures,
+   * whose it is, what the portal can do with it, what its scoring produces,
+   * and where its governance review stands. The review is INFORMATION here,
+   * not a gate.
+   */
+  function renderInstrumentDetail() {
+    var st = S.instruments;
+    if (st.detailLoading) return '<div class="rh2-card">' + skel(5, 40) + '</div>';
+    if (st.detailErr) return '<div class="rh2-empty">' + esc(st.detailErr) + '</div>';
+    var r = st.detail;
+    if (!r) return '<div class="rh2-empty">This assessment could not be found.</div>';
+
+    var av = r.availability || {};
+    var out = renderAssessPanel();
+
+    out += '<section class="rh2-card" aria-labelledby="rh2-instd-h">';
+    out += '<button type="button" class="rh2-back" onclick="RH2.closeInstrument()">'
+      + '&larr; Back to Assessments</button>';
+    out += '<div class="rh2-inst-top">'
+      + '<h2 id="rh2-instd-h">' + esc(r.abbreviation) + ' <span class="rh2-quiet">'
+      + esc(r.name) + '</span></h2>' + assessBadge(av) + '</div>';
+
+    if (r.description) out += '<p>' + esc(r.description) + '</p>';
+    if (av.summary) out += '<p class="rh2-quiet">' + esc(av.summary) + '</p>';
+    if (av.reason) out += '<p class="rh2-inst-unresolved">' + esc(av.reason) + '</p>';
+
+    out += '<div class="rh2-inst-actions">';
+    if (assessActionable(r)) {
+      out += '<button type="button" class="rh2-btn rh2-btn-primary" '
+        + 'onclick="RH2.startAssessment(\'' + esc(r.key) + '\')">'
+        + (av.canStart ? 'Start assessment' : 'Open for a client') + '</button>';
+    }
+    out += '</div>';
+
+    // Attribution. Never omitted, never Opal's.
+    var at = r.attribution || {};
+    out += '<h3>Source and attribution</h3><dl class="rh2-inst-kv">'
+      + '<dt>Rights holder</dt><dd>' + esc(at.rightsHolder || 'not yet confirmed') + '</dd>'
+      + '<dt>Version</dt><dd>' + esc(r.edition || 'not yet confirmed') + '</dd>';
+    if (at.sourceTitle) out += '<dt>Source document</dt><dd>' + esc(at.sourceTitle) + '</dd>';
+    if (at.copyright) out += '<dt>Copyright</dt><dd>' + esc(at.copyright) + '</dd>';
+    out += '</dl>';
+    if (at.sourceNote) out += '<p class="rh2-inst-notes">' + esc(at.sourceNote) + '</p>';
+    if (r.notes) out += '<p class="rh2-inst-notes">' + esc(r.notes) + '</p>';
+
+    // Structure — counts and domain names only. No item wording ever appears
+    // outside the instrument's own document.
+    if (r.structure) {
+      out += '<h3>What it covers</h3><p class="rh2-quiet">'
+        + esc(String(r.structure.itemCount)) + ' items'
+        + (r.structure.conditionalItemIds && r.structure.conditionalItemIds.length
+          ? esc(', ' + r.structure.conditionalItemIds.length
+              + ' of which are administered only when the respondent works or studies')
+          : '')
+        + '.</p>';
+      if (r.structure.domains && r.structure.domains.length) {
+        out += '<ul class="rh2-inst-domains">' + r.structure.domains.map(function (d) {
+          return '<li><strong>' + esc(d.title) + '</strong> <span class="rh2-quiet">'
+            + esc(String(d.itemCount)) + ' items</span></li>';
+        }).join('') + '</ul>';
+      }
+    }
+    if (r.administrationMethods && r.administrationMethods.length) {
+      out += '<h3>Administration</h3><ul class="rh2-inst-domains">'
+        + r.administrationMethods.map(function (m) {
+          return '<li>' + esc(m.name) + '</li>';
+        }).join('') + '</ul>';
+    }
+
+    // Scoring and interpretation, strictly as the source states them.
+    if (r.interpretation) {
+      out += '<h3>Scoring and interpretation</h3><dl class="rh2-inst-kv">'
+        + '<dt>Scale</dt><dd>' + esc(r.interpretation.scale || '—') + '</dd>'
+        + '<dt>Interpretation</dt><dd>' + esc(r.interpretation.statement || '—') + '</dd>'
+        + '<dt>Stated in</dt><dd>' + esc(r.interpretation.source || '—') + '</dd>'
+        + '</dl>';
+      if (r.interpretation.cutPointsNote) {
+        out += '<p class="rh2-inst-notes">' + esc(r.interpretation.cutPointsNote) + '</p>';
+      }
+    }
+
+    // What is missing, named, when anything is.
+    var missing = av.missingSources || r.missingSources || [];
+    if (missing.length) {
+      out += '<h3>What is needed before this can be administered</h3>'
+        + '<ul class="rh2-inst-domains">' + missing.map(function (m) {
+          return '<li>' + esc(m) + '</li>';
+        }).join('') + '</ul>'
+        + '<p class="rh2-quiet">Supply these and the assessment becomes available here without '
+        + 'any further change to the portal.</p>';
+    }
+
+    // Governance. Shown because a clinician should see it — not as a gate.
+    var g = r.governance || {};
+    out += '<h3>Governance review</h3>';
+    if (!g.registered) {
+      out += '<p class="rh2-quiet">' + esc(g.note || 'Not in the governance register.') + '</p>';
+    } else {
+      out += '<dl class="rh2-inst-kv">'
+        + '<dt>Rights review</dt><dd>' + esc(String(g.rightsStatus || 'unreviewed')) + '</dd>'
+        + '<dt>Clinical review</dt><dd>' + esc(String(g.clinicalStatus || 'unreviewed')) + '</dd>'
+        + '<dt>Evidence checked</dt><dd>' + (g.evidenceChecked ? 'yes' : 'no') + '</dd>'
+        + '<dt>Last reviewed</dt><dd>' + esc(g.reviewedAt ? fmtDate(g.reviewedAt) : 'never') + '</dd>'
+        + '<dt>Permitted use</dt><dd>' + esc(g.permittedUse || 'not yet recorded') + '</dd>'
+        + '</dl>';
+      if (g.licensingNotes) out += '<p class="rh2-inst-notes">' + esc(g.licensingNotes) + '</p>';
+      out += '<p class="rh2-quiet">Review status is recorded for governance. It describes what a '
+        + 'person has confirmed about the licence, and is separate from whether the portal holds '
+        + 'the instrument.</p>';
+    }
+
+    return out + '</section>';
+  }
+
+  async function loadSourceReview() {
+    var q = S.sourceReview;
+    q.loading = true; q.err = ''; render();
+    var qs = ['limit=' + q.limit, 'offset=' + q.offset];
+    if (q.q) qs.push('q=' + encodeURIComponent(q.q));
+    var d = await api('/api/rh2/admin/source-review?' + qs.join('&'));
+    q.loading = false;
+    if (d.ok) q.data = d;
+    else { q.data = null; q.err = d.error || 'The review queue is unavailable.'; }
+    render();
+  }
+
+  function sourceReviewSearch(v) {
+    S.sourceReview.q = v;
+    S.sourceReview.offset = 0;
+    if (srDebounce) clearTimeout(srDebounce);
+    srDebounce = setTimeout(loadSourceReview, 320);
+  }
+
+  function sourceReviewClear() {
+    S.sourceReview.q = '';
+    S.sourceReview.offset = 0;
+    loadSourceReview();
+  }
+
+  function sourceReviewPage(dir) {
+    var q = S.sourceReview;
+    q.offset = Math.max(0, q.offset + dir * q.limit);
+    loadSourceReview();
+  }
+
+  /**
+   * Sends whichever decisions the reviewer actually made. An untouched select
+   * sends nothing at all — so leaving rights alone genuinely leaves it alone,
+   * rather than posting a default that would overwrite it.
+   */
+  async function submitSourceReview(id) {
+    var cls = (doc.getElementById('rh2-sr-class-' + id) || {}).value || '';
+    var pub = (doc.getElementById('rh2-sr-pub-' + id) || {}).value || '';
+    var rights = (doc.getElementById('rh2-sr-rights-' + id) || {}).value || '';
+    var reason = (doc.getElementById('rh2-sr-reason-' + id) || {}).value || '';
+
+    if (!reason.trim()) { toast('Reason required', 'Record why this decision was made.'); return; }
+    if (!cls && !pub && !rights) { toast('Nothing to record', 'Choose a source class, publisher or rights status.'); return; }
+
+    var body = { reason: reason };
+    if (cls) body.sourceClass = cls;
+    if (pub.trim()) body.publisher = pub.trim();
+    if (rights) body.rightsStatus = rights;
+
+    var d = await api('/api/rh2/admin/source-review/' + encodeURIComponent(id), { method: 'POST', body: body });
+    if (!d.ok) { toast('Not recorded', d.error || 'Please try again.'); return; }
+    toast('Recorded', d.note || 'Decision recorded.');
+    loadSourceReview();
+    loadClinicalVocabulary();
+  }
+
+  /** Does this user's role include the client list at all? */
+  function canReachClients() {
+    if (typeof global.navAllowedTabs !== 'function') return false;
+    try { return global.navAllowedTabs(role()).indexOf('contacts') !== -1; }
+    catch (e) { return false; }
+  }
+
+  function goToClients() {
+    if (!canReachClients()) return;
+    if (typeof global.switchTab === 'function') global.switchTab('contacts');
+  }
+
+  /**
+   * The assessment catalogue.
+   *
+   * Read from /api/assessments/catalogue, not from the governance register:
+   * the catalogue knows which assessments the portal actually holds and what
+   * each one can do here, and it answers even when an instrument's module is
+   * switched off — which is precisely the case a clinician needs told. The
+   * register's review fields travel with each entry, for the information page.
+   */
+  async function loadInstruments() {
+    var st = S.instruments;
+    st.loading = true; st.err = ''; render();
+    var d = await api('/api/assessments/catalogue');
+    st.loading = false;
+    if (d.ok) st.data = d.assessments || [];
+    else { st.data = []; st.err = d.error || 'The assessment catalogue is unavailable.'; }
+    render();
+  }
+
+  /** The information page for one assessment. A sub-view, with its own address. */
+  async function openInstrument(key) {
+    var st = S.instruments;
+    st.openKey = key;
+    st.detail = findInstrument(key);
+    st.detailErr = '';
+    st.detailLoading = !st.detail;
+    S.view = 'instruments';
+    render();
+    var d = await api('/api/assessments/catalogue/' + encodeURIComponent(key));
+    st.detailLoading = false;
+    if (d.ok && d.assessment) st.detail = d.assessment;
+    else if (!st.detail) st.detailErr = d.error || 'This assessment could not be loaded.';
+    render();
+    // Load the catalogue behind the information page. A deep link (or a
+    // browser Back into one) reaches this function without going through
+    // nav('instruments'), so without this "Back to Assessments" landed on
+    // "No assessments are configured."
+    if (!st.data && !st.loading) loadInstruments();
+  }
+
+  function closeInstrument() {
+    S.instruments.openKey = null;
+    S.instruments.detail = null;
+    S.instruments.detailErr = '';
+    render();
   }
 
   // — Content —
@@ -1077,7 +2665,7 @@
       var status = String(pick(r, 'status') || 'draft');
       return '<div class="rh2-adm-row">' +
         '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
-        '<span class="rh2-row-sub">' + esc(typeLabel(pick(r, 'content_type'))) + ' · ' + authBadge(pick(r, 'authority_level'), status) +
+        '<span class="rh2-row-sub">' + esc(typeLabel(pick(r, 'content_type'))) + ' · ' + badges(r, { admin: true }) +
         (pick(r, 'mandatory') ? ' · required' : '') + '</span></span>' +
         '<span class="rh2-chip rh2-status-' + esc(status) + '">' + esc(status.replace(/_/g, ' ')) + '</span>' +
         '<span class="rh2-adm-actions">' +
@@ -1175,8 +2763,31 @@
       '<input type="number" id="rh2-form-cpdh" class="rh2-input" style="width:90px;" step="0.25" min="0" value="' + esc(pick(r, 'cpd_hours') || '') + '"></span>' +
       '</div>';
 
+    /* Clinical classification. Until this control existed nothing in the
+       application ever wrote these columns, which is why the Population and
+       Setting filters matched nothing. Values come from the server-owned
+       vocabulary and are validated again on save, so a stored classification is
+       always one the filter can find. Leaving every box unticked is a valid
+       answer and means "unclassified". */
+    out += '<fieldset class="rh2-fieldset"><legend class="rh2-lbl">Clinical classification</legend>' +
+      '<p class="rh2-quiet">Optional. Leave blank if this resource is not specific to a '
+      + 'population or setting — it will show as Unclassified.</p>' +
+      '<div class="rh2-check-row">' + POPULATIONS.filter(function (o) { return o[0] !== 'unclassified'; })
+        .map(function (o) {
+          return '<span class="rh2-check"><input type="checkbox" class="rh2-form-pop" id="rh2-form-pop-' + o[0] + '" value="' + o[0] + '"'
+            + (clinicalHas(r, 'clinical_population', o[0]) ? ' checked' : '') + '>'
+            + '<label for="rh2-form-pop-' + o[0] + '">' + esc(o[1]) + '</label></span>';
+        }).join('') + '</div>' +
+      '<div class="rh2-check-row">' + SETTINGS.filter(function (o) { return o[0] !== 'unclassified'; })
+        .map(function (o) {
+          return '<span class="rh2-check"><input type="checkbox" class="rh2-form-set" id="rh2-form-set-' + o[0] + '" value="' + o[0] + '"'
+            + (clinicalHas(r, 'clinical_setting', o[0]) ? ' checked' : '') + '>'
+            + '<label for="rh2-form-set-' + o[0] + '">' + esc(o[1]) + '</label></span>';
+        }).join('') + '</div>' +
+      '</fieldset>';
+
     if (editing && isApproved) {
-      out += '<fieldset class="rh2-fieldset"><legend class="rh2-lbl">Change kind (this resource is published)</legend>' +
+      out += '<fieldset class="rh2-fieldset"><legend class="rh2-lbl">Change kind (this resource is approved)</legend>' +
         '<div class="rh2-check-row">' +
         '<span class="rh2-check"><input type="radio" name="rh2-form-kind" id="rh2-kind-minor" value="minor" checked><label for="rh2-kind-minor">Minor (wording, typos)</label></span>' +
         '<span class="rh2-check"><input type="radio" name="rh2-form-kind" id="rh2-kind-material" value="material"><label for="rh2-kind-material">Material (staff must re-acknowledge)</label></span>' +
@@ -1199,6 +2810,17 @@
     if (el) el.style.display = v === 'internal' ? 'none' : '';
   }
 
+  function checkedValues(sel) {
+    return Array.prototype.slice.call(doc.querySelectorAll(sel))
+      .filter(function (c) { return c.checked; })
+      .map(function (c) { return c.value; });
+  }
+
+  function clinicalHas(r, field, value) {
+    var arr = pick(r, field);
+    return Array.isArray(arr) && arr.indexOf(value) !== -1;
+  }
+
   async function adminSave(then) {
     var val = function (id) { return (doc.getElementById(id) || {}).value || ''; };
     var chk = function (id) { return !!(doc.getElementById(id) || {}).checked; };
@@ -1219,6 +2841,10 @@
       cpdHours: Number(val('rh2-form-cpdh')) || undefined,
       collections: Array.prototype.slice.call(doc.querySelectorAll('.rh2-form-col'))
         .filter(function (c) { return c.checked; }).map(function (c) { return c.value; }),
+      // Always sent, so unticking every box genuinely clears a classification
+      // rather than leaving a stale one in place.
+      clinicalPopulation: checkedValues('.rh2-form-pop'),
+      clinicalSetting: checkedValues('.rh2-form-set'),
     };
     if (body.authorityLevel !== 'internal') {
       body.sourcePublisher = val('rh2-form-srcpub').trim() || undefined;
@@ -1239,7 +2865,7 @@
     var id = pick(r, 'id') || pick(d.resource || d, 'id');
     if (then === 'submit' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/submit', { method: 'POST' });
     if (then === 'approve' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/approve', { method: 'POST' });
-    toast('Saved', then === 'approve' ? 'Approved and published.' : then === 'submit' ? 'Submitted for review.' : 'Saved.');
+    toast('Saved', then === 'approve' ? 'Resource approved. It remains unpublished.' : then === 'submit' ? 'Submitted for review.' : 'Saved.');
     S.admin.formOpen = false; S.admin.editing = null;
     loadAdminContent();
   }
@@ -1247,7 +2873,7 @@
   async function adminAction(id, action) {
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
     if (!d.ok) { toast('Could not ' + action, d.error || 'Please try again.'); return; }
-    toast('Done', action === 'approve' ? 'Approved and published.' : action === 'submit' ? 'Submitted for review.' : 'Archived.');
+    toast('Done', action === 'approve' ? 'Resource approved. It remains unpublished.' : action === 'submit' ? 'Submitted for review.' : 'Archived.');
     loadAdminContent();
   }
 
@@ -1482,6 +3108,7 @@
       render();
       loadHome();
       loadTopics();
+      loadClinicalVocabulary();
     } else {
       render();
     }
@@ -1503,11 +3130,33 @@
   global.RH2 = {
     open: open,
     nav: nav,
+    // Source review + instrument register (inline onclick handlers only work
+    // if they are exported here — the module uses no event delegation).
+    sourceReviewSearch: sourceReviewSearch,
+    sourceReviewClear: sourceReviewClear,
+    sourceReviewPage: sourceReviewPage,
+    submitSourceReview: submitSourceReview,
+    ingFilter: function (t) { S.admin.ingTreatment = t || ''; loadIngestion(); },
+    goToClients: goToClients,
+    openPd: openPd,
+    startAssessment: startAssessment,
+    assessSearch: assessSearch,
+    assessPick: assessPick,
+    assessCancel: assessCancel,
+    openInstrument: openInstrument,
+    closeInstrument: closeInstrument,
+    pdSearch: pdSearch,
+    pdFilter: pdFilter,
+    pdClear: pdClear,
+    pdPage: pdPage,
+    pdReload: function () { S.pd.data = null; loadPd(); },
     reloadHome: function () { S.home = null; loadHome(); },
     homeSearch: homeSearch,
     openCollection: openCollection,
     libInput: libInput,
     libFilter: libFilter,
+    libMore: libMore,
+    previewFile: previewFile,
     openDetail: openDetail,
     toggleFav: toggleFav,
     toggleComplete: toggleComplete,

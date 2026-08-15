@@ -3,9 +3,53 @@
   "configurations": [
     {
       "name": "opal-backend",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["backend/server.js"],
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "NODE_ENV=development RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
       "port": 5001,
+      "autoPort": false
+    },
+    {
+      "name": "opal-backend-qa-5002",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5002 node backend/server.js"
+      ],
+      "port": 5002,
+      "autoPort": false
+    },
+    {
+      "name": "opal-backend-rhub-5007",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5007 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5007,http://127.0.0.1:5007 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5007,
+      "autoPort": false
+    },
+    {
+      "name": "financeos-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:demo",
+        "--prefix",
+        "/Users/antonyxavier/Documents/Opal Finance"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "opa-metro",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd \"/Users/antonyxavier/Documents/Claude/Projects/Opa-Mobile-Companion\" && npx expo start --port 8081"
+      ],
+      "port": 8081,
       "autoPort": false
     }
   ]
