@@ -74,7 +74,7 @@
 }
 .fca-shell {
   background: var(--panel); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); width: 100%; max-width: 1180px;
+  box-shadow: var(--shadow-lg); width: 100%; max-width: 1340px;
   display: flex; flex-direction: column; max-height: calc(100vh - 48px);
 }
 .fca-head {
@@ -85,7 +85,6 @@
 .fca-head-right { display: flex; align-items: center; gap: 10px; flex: none; }
 
 .fca-body { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; }
-.fca-body-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
 .fca-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 
 .fca-foot {
@@ -257,6 +256,9 @@
 .fca-badge-splose { border-color: #a9c6d4; background: #e8f1f6; color: #1a5673; }
 .fca-badge-client_profile { border-color: #a9d4cb; background: #e6f2f0; color: #0d6153; }
 .fca-badge-report_override { border-color: #d9c9a6; background: #fdf6e6; color: #7a5d18; }
+/* Issued by Opal, not sourced from anywhere — deliberately the quietest badge
+   of the set, because it is the one that needs no attention. */
+.fca-badge-server { border-color: var(--border); background: var(--bg); color: var(--muted); }
 .fca-badge-missing { border-color: #e0a898; background: #fdeae4; color: #93331c; }
 
 .fca-fields { margin: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -277,6 +279,30 @@
 .fca-missing {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12.5px; font-weight: 600; color: #93331c;
+}
+
+/* ── Exclude ───────────────────────────────────────────────────────────── */
+/* A quiet inline note, not a callout: the therapist is being told about an
+   ordinary option, not warned about a problem. */
+.fca-inline-note {
+  color: var(--muted); font-size: 12.5px; line-height: 1.5;
+  margin: 0 0 8px; padding: 0;
+}
+
+.fca-exclude { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.fca-exclude input[type="checkbox"] {
+  width: 15px; height: 15px; margin: 0; flex: none; accent-color: var(--accent);
+}
+.fca-exclude input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fca-exclude label { font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+
+/* An excluded row recedes: it is settled, and no longer asks for attention. */
+.fca-field-excluded { background: var(--border-soft); }
+.fca-field-excluded dt label { color: var(--muted); text-decoration: line-through; }
+.fca-field-excluded .fca-input { opacity: 0.55; }
+.fca-excluded-note {
+  font-size: 12.5px; font-style: italic; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis;
 }
 
 /* ── Save back to the client profile ───────────────────────────────────── */
@@ -329,29 +355,74 @@
 }
 .fca-customlist .fca-row-actions { margin-top: 0; }
 
-/* ── Ordering ──────────────────────────────────────────────────────────── */
+/* ── Ordering ──────────────────────────────────────────────────────────────
+   Rows are moved, never rebuilt, so everything here has to read as motion
+   rather than as a refresh: a clear boundary per row, an unambiguous drag
+   handle, one grouped cluster of actions, and a brief tint on the row that
+   just landed. */
 
-.fca-orderlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.fca-orderlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .fca-orderitem {
-  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
   background: var(--panel); border: 1px solid var(--border);
   border-radius: var(--radius-sm); cursor: grab;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
 }
-.fca-orderitem:hover { border-color: var(--accent); }
+.fca-orderitem:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.fca-orderitem:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
 .fca-orderitem.fca-dragging { opacity: 0.45; cursor: grabbing; }
-.fca-grip { color: var(--muted); display: inline-flex; flex: none; }
-.fca-ordername { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.fca-orderitem .fca-row-actions { margin-top: 0; }
+.fca-grip { color: var(--muted); display: inline-flex; flex: none; cursor: grab; }
+.fca-orderitem:hover .fca-grip { color: var(--ink-soft); }
+.fca-ordername { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fca-orderitem .fca-row-actions {
+  margin-top: 0; gap: 2px; flex: none; padding-left: 6px;
+  border-left: 1px solid var(--border-soft);
+}
+.fca-iconbtn-out:hover:not([disabled]) { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
 
-/* ── Preview ───────────────────────────────────────────────────────────── */
+/* Where it landed. One row, one beat — not an animated list. */
+.fca-just-moved { background: var(--accent-soft); border-color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .fca-orderitem { transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+  .fca-just-moved { animation: fca-landed 1s ease-out 1; }
+  @keyframes fca-landed {
+    0%   { background: var(--accent-soft); }
+    70%  { background: var(--accent-soft); }
+    100% { background: var(--panel); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fca-btn { transition: none; }
+  .fca-orderitem { transition: none; }
+  .fca-just-moved { animation: none; }
+}
+
+/* A ticked section reads as included at a glance, not only by its checkbox. */
+.fca-secitem-on { background: var(--accent-soft); }
+.fca-secitem-on:hover { background: var(--accent-soft); }
+
+
+
+/* ── Step 4: sections beside the document ──────────────────────────────────
+   Two columns that both matter: the controls need room to read, and the
+   document needs room to be legible at a fitted page width. */
+
+.fca-body-split {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(420px, 1.05fr);
+  gap: 20px; align-items: start;
+}
 
 .fca-preview {
-  position: sticky; top: 0; background: var(--bg);
+  position: sticky; top: 0;
+  display: flex; flex-direction: column;
+  background: var(--panel);
   border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: 14px; max-height: calc(100vh - 210px); overflow: auto;
+  overflow: hidden;                      /* the STAGE scrolls, not the panel */
+  /* Tall enough to read a page in, short enough to leave the footer reachable. */
+  height: clamp(420px, calc(100vh - 250px), 1000px);
 }
 .fca-preview-toggle { display: none; }
-.fca-preview-inline { margin-top: 4px; }
 
 .fca-doc {
   background: var(--panel); border: 1px solid var(--border);
@@ -383,7 +454,7 @@
 .fca-doc-out li { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border); }
 .fca-tag-custom {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--accent); background: var(--accent-soft, #e6f2f0);
+  color: var(--accent); background: var(--accent-soft);
   border-radius: 3px; padding: 1px 5px;
 }
 
@@ -392,25 +463,153 @@
 .fca-summary dt { margin: 0; font-size: 12.5px; color: var(--muted); min-width: 130px; flex: none; }
 .fca-summary dd { margin: 0; font-size: 13px; }
 
-/* ── Narrow screens: the preview becomes a disclosed drawer ────────────── */
+.fca-foot-download { flex: none; }
 
-@media (max-width: 900px) {
+/* ── The document panel ─────────────────────────────────────────────────────
+   The panel renders the real composed DOCX. It is deliberately chrome-light:
+   the document should look like a document, not like a widget. */
+
+.fca-preview-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--panel); flex: none; flex-wrap: wrap;
+}
+.fca-preview-title { font-size: 13px; font-weight: 600; flex: none; }
+/* The toolbar must not wrap into a second ragged line at the panel's usual
+   width, so the controls stay on one row and the title yields first. */
+.fca-preview-tools { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.fca-preview-btn {
+  border: 1px solid var(--border); background: var(--panel); border-radius: var(--radius-sm);
+  padding: 4px 9px; font: inherit; font-size: 12px; cursor: pointer; color: var(--ink);
+  white-space: nowrap;
+}
+.fca-preview-btn:hover:not([disabled]) { background: var(--border-soft); }
+.fca-preview-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fca-preview-btn.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.fca-preview-zoom { font-size: 12px; min-width: 42px; text-align: center; color: var(--ink-soft); }
+
+/* The document canvas stays a neutral light grey in BOTH themes, and the pages
+   on it stay white. A dark-mode canvas was the black rectangle therapists were
+   seeing: a Word page is white paper, and inverting the surface it sits on
+   makes the panel read as broken rather than as a document. Only the chrome
+   follows the theme — which is why these two colours are literal and are not
+   redefined under any prefers-color-scheme rule. */
+.fca-preview-stage {
+  position: relative; overflow: auto; flex: 1 1 auto;
+  background: #e9e9e6; padding: 20px 16px;
+  min-height: clamp(320px, 58vh, 900px);
+  overscroll-behavior: contain;
+}
+
+/* The sizing box. A CSS transform is invisible to layout, so this box carries
+   the SCALED dimensions of the page stack: it is what the stage scrolls over,
+   which is how a zoomed page scrolls sideways inside the panel instead of
+   spilling out of it, and how the last page stays reachable. */
+.fca-docx-fit { margin: 0 auto; position: relative; }
+.fca-docx { transform-origin: top left; }
+
+/* docx-preview prefixes every class with the `className` option, so the wrapper
+   is .fca-docx-render-wrapper and each page is a <section>. The pages are a
+   VERTICAL STACK of separate sheets: their own white, their own edge, their own
+   shadow, and the grey canvas visible in the gap between them. Nothing here
+   collapses, stretches or flattens them — the boundaries are the renderer's
+   real pages, not lines drawn over one long sheet. */
+.fca-docx .fca-docx-render-wrapper {
+  background: transparent; padding: 0; margin: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 24px;
+}
+/* The stage is in the selector on purpose. docx-preview injects its own
+   stylesheet INTO the host when it renders, so an equally specific rule of ours
+   would lose on source order — which is how the pages kept the renderer's
+   default 30px margin and its heavy default shadow. This outranks it. */
+.fca-preview-stage .fca-docx .fca-docx-render-wrapper > section {
+  margin: 0; color: #111;
+  /* The page's own colour, when the document declares one, arrives as an inline
+     style and rightly wins — the Opal template's paper is a warm cream, and
+     repainting it white would be showing the therapist a page Word will not
+     print. This is the fallback for a document that declares nothing. */
+  background: #fff;
+  border: 1px solid #cfcec9;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10), 0 4px 14px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  /* docx-preview sets the real width and min-height from the document's own
+     page size; nothing here overrides them, so a page keeps its proportions
+     and its content stays inside the paper. */
+  box-sizing: border-box;
+  flex: none;
+}
+
+.fca-preview-overlay { position: absolute; inset: 0; pointer-events: none; }
+.fca-preview-updating {
+  position: absolute; top: 10px; right: 14px;
+  background: rgba(20, 20, 20, 0.82); color: #fff; border-radius: 999px;
+  padding: 4px 12px; font-size: 12px;
+}
+.fca-preview-error {
+  position: absolute; inset: 12px 12px auto 12px; pointer-events: auto;
+  background: var(--warn-soft); border: 1px solid #ecd9b4; color: #6b4b16;
+  border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px;
+}
+.fca-preview-error p { margin: 0 0 8px; }
+.fca-preview-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; color: var(--ink-soft); font-size: 13px; padding: 28px;
+}
+.fca-preview-note {
+  margin: 0; padding: 8px 12px; border-top: 1px solid var(--border); flex: none;
+  font-size: 11.5px; color: var(--ink-soft); background: var(--panel);
+}
+.fca-preview-fallback { padding: 10px 12px; font-size: 13px; overflow: auto; max-height: 40vh; }
+.fca-preview-fallback summary { cursor: pointer; font-weight: 600; }
+
+/* Full screen: the panel takes the viewport so a therapist can read the
+   document properly before sending it. */
+.fca-preview-full {
+  position: fixed; inset: 0; z-index: 1300; width: 100vw; max-width: 100vw;
+  height: 100vh; height: 100dvh; border-radius: 0; border: 0;
+  display: flex; flex-direction: column;
+}
+
+/* ── Narrow screens ────────────────────────────────────────────────────────
+   The columns stack, the document panel becomes a drawer over the builder,
+   and nothing gains a horizontal scrollbar at the page level: the document is
+   the only thing that scrolls sideways, and it does so inside its own stage. */
+
+@media (max-width: 980px) {
   .fca-body-split { display: block; }
+  /* The document STACKS under the controls rather than sliding over them. A
+     drawer floating above the page covered the footer's Download action, which
+     is the one control on this step that must always be reachable. */
   .fca-preview-toggle {
-    display: inline-flex; align-items: center; gap: 7px; margin-top: 14px;
+    display: inline-flex; align-items: center; gap: 7px; margin: 16px 0 0;
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 8px 14px;
+    border-radius: var(--radius-sm); padding: 9px 15px;
     font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); cursor: pointer;
   }
   .fca-preview-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .fca-preview { display: none; position: static; max-height: none; margin-top: 10px; }
-  .fca-preview-open { display: block; }
+  .fca-preview {
+    position: static; display: none; width: auto; margin-top: 10px;
+    height: 70vh; max-height: 70vh;
+    border-radius: var(--radius-md); border: 1px solid var(--border);
+  }
+  .fca-preview-open { display: flex; }
+  .fca-preview-full {
+    position: fixed; inset: 0; display: flex; z-index: 1300;
+    height: 100dvh; max-height: none; margin: 0; border-radius: 0; border: 0;
+  }
   .fca-field { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   #fca-root { padding: 0; }
-  .fca-shell { max-height: 100vh; border-radius: 0; }
-  .fca-foot { border-radius: 0; }
+  .fca-shell { max-height: 100vh; min-height: 100vh; border-radius: 0; }
+  /* …and the footer stays put at the bottom of the dialog while the columns
+     above it scroll. */
+  .fca-foot { border-radius: 0; position: sticky; bottom: 0; z-index: 1170; }
+  .fca-orderitem .fca-row-actions { padding-left: 0; border-left: 0; }
+  .fca-preview-bar { padding: 8px; }
+  .fca-preview-title { display: none; }        /* the panel's identity is obvious here */
+  .fca-preview-tools { width: 100%; justify-content: space-between; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .fca-btn { transition: none; }
-}
+/* Nothing in the builder may make the PAGE scroll sideways. */
+.fca-shell, .fca-body, .fca-main { max-width: 100%; overflow-x: hidden; }
+.fca-preview-stage { overflow: auto; }

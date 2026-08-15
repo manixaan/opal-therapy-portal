@@ -28,8 +28,64 @@ Splose ─┐
 | `backend/fca/resolve-scalars.js` | Four-layer precedence and per-tag source attribution | yes |
 | `backend/fca/manifest.js` | Composes the manifest; enforces required sections server-side | yes |
 | `backend/fca/docx-engine.js` | Renders the manifest into a validated `.docx` | yes |
+| `backend/fca/preview-pagination.js` | Restates the template's `w:pageBreakBefore` breaks as explicit break runs, for the browser preview only | yes |
+| `backend/fca/document-id.js` | Issues the document reference, date, version and status; shared with the letter | yes |
 | `backend/fca-routes.js` | API, RBAC, organisation isolation, persistence, storage, audit | no |
 | `backend/migrations/018_fca_reports.sql` | Templates, profiles, plans, goals, drafts, documents, presets | — |
+| `backend/migrations/022_document_control_and_excluded_fields.sql` | `document_control` + `excluded_fields` on the shared draft table | — |
+
+### The wizard is four steps
+
+1. **Client** — search the practice record.
+2. **Therapist** — who is preparing the report.
+3. **Review data** — every resolved value with the layer it came from.
+4. **Sections & document** — the section picker and ordering on the left, the
+   live document on the right, and one primary action at the foot of the
+   dialog: **Download Word document**.
+
+Choosing sections, previewing and generating used to be three stages. They are
+one, because they are one decision: a therapist ticks a section and watches it
+appear in the real document beside it. The frontend maps a stored step of 5 or 6
+— the old Preview and Generate stages — onto step 4 (`fcaMapStep` in
+`frontend/current/fca.js`), so no draft or bookmark saved under the old
+numbering becomes unreachable.
+
+Download composes from the therapist's LATEST intent: any debounced section edit
+and any in-flight save land first, then `POST /generate` runs, and only then is
+the finished document handed over. Nothing else in the file starts a download.
+
+### Preview pagination — a renderer limitation, corrected at the document layer
+
+The preview endpoint streams the composed `.docx` to the vendored
+[docx-preview](../../frontend/current/vendor/DOCX_PREVIEW_VENDORED.md) build in
+the browser. That renderer breaks pages on exactly two things: a
+`w:br w:type="page"` run, and a section break.
+
+The Opal template starts each major section on a new page the way Word authors
+normally do it — `w:pageBreakBefore` in the paragraph's properties, nineteen of
+them. docx-preview 0.4.0 **parses that property and never acts on it**, so the
+whole report rendered as ONE page element: a single sheet metres long, with no
+page boundaries.
+
+`fca/preview-pagination.js` restates each of those breaks as the explicit break
+run the renderer reads, for the preview stream only:
+
+- nothing is invented — every inserted break stands where the template already
+  said "new page", and no break is added between arbitrary paragraphs;
+- no break is inserted before the first element, or where the previous element
+  already ends the page (a section break, or an existing page-break run), since
+  either would render an empty page;
+- content controls are walked through, because the renderer flattens them
+  before it groups pages;
+- **the download is untouched.** Word honours `w:pageBreakBefore` natively, and
+  the file the therapist edits is the engine's own output, byte for byte.
+
+A full report renders as 22 page elements instead of 3. Three of those elements
+hold more than one Word page: docx-preview does not reflow text, so a section
+whose content exceeds one page grows its element rather than splitting it. The
+panel says so — *"final pagination and page numbering may differ slightly in
+Microsoft Word"* — and `backend/tests/fca-preview-pages.test.js` runs the real
+renderer over a real composed document to hold all of this in place.
 
 ### The manifest is the single source of truth
 
@@ -44,6 +100,7 @@ manifest = {
   scalarData:    { TAG: value | null },
   scalarSources: { TAG: 'splose' | 'client_profile' | 'report_override'
                       | 'portal' | 'server' | 'missing' },
+  excludedTags:  [TAG],
   sections: [{ tag, kind: 'required'|'optional'|'custom', group, title,
                guidance?, included, order }]
 }
@@ -96,7 +153,73 @@ Resolution order depends on which layer *owns* the tag:
 | Profile-owned | override → client_profile → missing | Backed by a profile column or the **current** NDIS plan |
 | Portal | override → portal → missing | Assessor/organisation facts from this database |
 | Report-specific | override → missing | Belongs to one report; nowhere else to come from |
-| Server-issued | server only | `readOnly` — a submitted override is ignored, never applied |
+| Opal-issued | override → **server** → missing | Issued once at draft creation and stored. The issued value is a **default, not a decree** — see below |
+
+### Document control is issued, not looked up
+
+Document ID, report date, version and status used to be minted at generate time
+and shown as **Missing** in the review step. That was a category error: a
+therapist cannot go and find the id of a document that does not exist yet.
+
+They are now **issued once, when the draft is created**, and stored in
+`fca_report_drafts.document_control`:
+
+| Tag | Issued value |
+|---|---|
+| `OPAL_REPORT_DOCUMENT_ID` | `FCA-{first 8 of the draft uuid, upper case}` |
+| `OPAL_REPORT_DATE` | the creation date, `dd/mm/yyyy` |
+| `OPAL_REPORT_VERSION` | `1.0` |
+| `OPAL_REPORT_STATUS` | `Draft` |
+
+- They resolve with source **`server`** and render with the badge
+  **"Generated by Opal"** — never "Missing".
+- **Reading, not minting.** Generate re-reads the stored row, so **regenerating
+  a draft can never renumber it**. A draft created before this behaviour existed
+  carries `{}` and is resolved from its own id and `created_at`, which yields
+  exactly the reference it would always have had.
+- **They are overridable.** A therapist genuinely issuing version 2.0, or
+  marking a report Final, is stating a fact about their own document; the
+  override wins and the badge changes to "Entered for this report". There is no
+  `readOnly` behaviour on these tags any more.
+
+**Nothing else is auto-filled.** Issue date, reviewer name, reviewer role and
+authorised recipients stay `missing` until a human supplies them. They are facts
+about the world — a date that has not happened, a second clinician, a consent
+decision only the participant can make — and a plausible-looking guess in a
+clinical document is worse than a visible gap. The same principle governs every
+client and therapist fact in the table above.
+
+### Excluding a field
+
+A therapist may say outright that a field does not apply. That is a different
+statement from "we could not find this", and produces a different document.
+
+| State | In the review step | In the .docx |
+|---|---|---|
+| Has a value | the value + its source badge | the value |
+| **Missing** | "No value" + `Missing` badge | the template's own `[PORTAL — …]` placeholder, styled for completion |
+| **Excluded** | "Excluded — nothing will be inserted", row de-emphasised, input disabled | **an empty content control** — still there to type into in Word, but blank |
+
+- Persisted as `fca_report_drafts.excluded_fields` (JSONB array, migration
+  `022`), accepted on `PATCH` as `excludedFields`, carried on the manifest as
+  `excludedTags`, and **frozen with the rest of the snapshot** at generate.
+- **Replaced, not merged.** Exclusion is a set the therapist owns outright; a
+  merge could not express un-excluding.
+- **Excluding clears any override** for that tag. Un-excluding therefore falls
+  back to whatever the layers resolve, rather than resurrecting a value the
+  therapist last saw struck through.
+- **An excluded field never blocks generation**, even one the template otherwise
+  requires. The guard that matters — no unresolved `[PORTAL — …]` placeholder in
+  the produced bytes — still holds, because the control is emptied rather than
+  left alone.
+- Unknown tags are dropped rather than trusted, exactly as section tags and
+  overrides are.
+
+The review step carries one quiet inline note above the field list, worded
+identically in both builders:
+
+> If we do not hold this information, you can leave it blank and complete it in
+> Word after downloading — or exclude it so nothing is inserted.
 
 ### Source vocabulary — a documented superset
 
@@ -148,10 +271,10 @@ strings `null` and `undefined` can never reach the page.
 | 23 | `OPAL_THERAPIST_AHPRA_NUMBER` | 2 | Portal (this DB) | portal.ahpraNumber | rejected — `not_client_data` |
 | 24 | `OPAL_THERAPIST_QUALIFICATIONS` | 2 | Report-specific | report override only | rejected — `report_specific` |
 | 25 | `OPAL_THERAPIST_PROVIDER_NUMBER` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 26 | `OPAL_REPORT_DOCUMENT_ID` | 3 | Server-issued | server.documentReference | rejected — `server_issued` |
-| 27 | `OPAL_REPORT_DATE` | 2 | Server-issued | server.reportDate | rejected — `server_issued` |
-| 28 | `OPAL_REPORT_VERSION` | 2 | Server-issued | server.reportVersion | rejected — `server_issued` |
-| 29 | `OPAL_REPORT_STATUS` | 1 | Server-issued | server.reportStatus | rejected — `server_issued` |
+| 26 | `OPAL_REPORT_DOCUMENT_ID` | 3 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
+| 27 | `OPAL_REPORT_DATE` | 2 | Opal-issued | creation date, dd/mm/yyyy | rejected — `server_issued` |
+| 28 | `OPAL_REPORT_VERSION` | 2 | Opal-issued | `1.0` | rejected — `server_issued` |
+| 29 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
 | 30 | `OPAL_REPORT_ISSUE_DATE` | 2 | Report-specific | report override only | rejected — `report_specific` |
 | 31 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
 | 32 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
@@ -170,9 +293,10 @@ plus `OPAL_ANCHOR_CUSTOM_SECTIONS`); 7 are required and 17 optional.
 - **Portal (6):** assessor name, credentials, email, phone, organisation, AHPRA.
 - **Report-specific (6):** qualifications, provider number, issue date, reviewer
   name, reviewer role, authorised recipients.
-- **Server-issued (4):** document id, report date, version, status.
-- **Missing by design:** any of the above with no data. Only the 4 server-issued
-  tags are guaranteed to resolve, because the server mints them itself.
+- **Opal-issued (4):** document id, report date, version, status — minted at
+  draft creation and stored, overridable, never renumbered.
+- **Missing by design:** any of the above with no data. Only the 4 Opal-issued
+  tags are guaranteed to resolve, because Opal originates them itself.
 
 **Therapist qualifications and provider number** are durable *therapist* facts,
 but the profile layer is **client-scoped** — there is nowhere to save them back
@@ -266,6 +390,13 @@ the bytes are what callers actually consume.
 
 Order of operations, which matters:
 
+0. **Exclusions** are resolved first, into one of two shapes chosen by the
+   template's own declaration, not by the caller. A tag listed in
+   `dropParagraphWhenEmpty` joins the optional-line cleanup and loses its whole
+   `w:p`; every other excluded tag is rewritten to an **empty string** so the
+   control survives blank rather than keeping its placeholder. This is a single
+   option through `composeDocx` (`manifest.excludedTags`) — nothing else in the
+   pipeline special-cases it.
 1. **Remove** unselected sections — delete exactly the `w:sdt` whose **own**
    `w:sdtPr/w:tag` carries the tag. Lookups are strictly direct-child, so a
    nested optional can be removed while its required ancestor is structurally
@@ -345,9 +476,10 @@ To publish `v2`:
 
 | Suite | File | Tests |
 |---|---|---|
-| Engine + template facts | `backend/tests/fca-docx-engine.test.js` | 33 |
-| Resolver + manifest | `backend/tests/fca-resolve-scalars.test.js` | 29 |
-| Routes, isolation, profiles, audit | `backend/tests/integration/fca-reports.itest.js` | 35 |
+| Engine + template facts + exclusion | `backend/tests/fca-docx-engine.test.js` | 41 |
+| Resolver, manifest, document control, exclusion | `backend/tests/fca-resolve-scalars.test.js` | 44 |
+| Frontend helpers + source guards | `backend/tests/fca-frontend-helpers.test.js` | 62 |
+| Routes, isolation, profiles, audit, exclusion | `backend/tests/integration/fca-reports.itest.js` | 41 |
 
 The engine tests run against the **real** `fca-v1.docx` and assert by unzipping
 the produced package — the only thing that matters is what Word receives.

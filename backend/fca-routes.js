@@ -22,6 +22,16 @@
  *   created it, and no role — owner included — reads another user's drafts. A
  *   draft in progress carries a therapist's unfinished clinical reasoning, and
  *   the org-wide view that owners get elsewhere is for finished, issued work.
+ * - OPAL ISSUES ONLY WHAT IS OPAL'S TO ISSUE. The document id, date, version
+ *   and status are minted once, when the draft is created, and stored — so the
+ *   review step shows real values instead of four fields marked "Missing" that
+ *   nobody could look up, and regenerating never renumbers a report. Nothing
+ *   else is auto-filled: an issue date, a reviewer and the authorised
+ *   recipients are facts about the world and stay missing until a human
+ *   supplies them.
+ * - EXCLUDING IS THE THERAPIST'S TO DECIDE. A field they say does not apply
+ *   contributes NOTHING to the document — an empty control, or no line at all
+ *   where the template says the tag owns one — and can never block generation.
  * - SAVE-BACK IS EXPLICIT. Nothing writes to a client profile implicitly:
  *   not on PATCH, not on generate. Only POST /save-to-profile writes, only the
  *   profile-eligible tags, and report-specific tags are rejected with a reason
@@ -52,8 +62,11 @@ const log = require('./logger').createLogger('fca');
 
 const templateMap = require('./fca/template-map');
 const { generateFcaDocx } = require('./fca/docx-engine');
+const { paginateForPreview } = require('./fca/preview-pagination');
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const { resolveScalars } = require('./fca/resolve-scalars');
-const { documentReference, australianDate } = require('./fca/document-id');
+const { issueDocumentControl, documentControlFor } = require('./fca/document-id');
 const { searchClients } = require('./fca/client-search');
 const {
   loadSploseClient,
@@ -64,6 +77,7 @@ const {
   normaliseSelection,
   normaliseCustomSections,
   normaliseOverrides,
+  normaliseExcludedFields,
   buildManifest,
 } = require('./fca/manifest');
 
@@ -192,18 +206,23 @@ async function activeTemplate() {
 // letter. ONE implementation means one implementation of organisation
 // isolation and one of "Splose is the system of record".
 
+const DOCUMENT_ID_PREFIX = 'FCA';
+
 /**
- * Server-issued report control values.
- * The numbering convention lives in fca/document-id.js so every Opal document
- * type issues its reference the same way; the output here is unchanged.
+ * The report-control values OPAL ISSUES for this draft.
+ *
+ * They are minted ONCE, when the draft is created, and stored in
+ * document_control — so the review step shows the real document id, date,
+ * version and status rather than four fields marked "Missing" that no
+ * therapist could possibly go and look up. Reading the stored row rather than
+ * re-minting is what makes regeneration safe: a second generate cannot produce
+ * a second document id, because it does not produce one at all.
+ *
+ * The numbering convention itself lives in fca/document-id.js, shared with the
+ * progress note letter.
  */
-function serverData(draft, generatedAt) {
-  return {
-    documentReference: documentReference('FCA', draft.id),
-    reportDate: australianDate(generatedAt),
-    reportVersion: '1.0',
-    reportStatus: 'Final',
-  };
+function serverData(row) {
+  return documentControlFor(DOCUMENT_ID_PREFIX, row);
 }
 
 // ── Draft serialisation ──────────────────────────────────────────────────────
@@ -219,6 +238,7 @@ async function composeDraft(req, row, { frozen = false } = {}) {
     sectionOrder: row.section_order || [],
   };
   const customSections = row.custom_sections || [];
+  const excludedFields = normaliseExcludedFields(row.excluded_fields || []);
 
   let scalarData;
   let scalarSources;
@@ -239,8 +259,9 @@ async function composeDraft(req, row, { frozen = false } = {}) {
       goals,
       overrides: row.scalar_overrides || {},
       portal,
-      // Not yet generated: the server-issued values do not exist until then.
-      server: null,
+      // Issued when this draft was created, so the therapist reviews the real
+      // document id, date, version and status — not four "Missing" rows.
+      server: serverData(row),
     }));
   }
 
@@ -249,6 +270,7 @@ async function composeDraft(req, row, { frozen = false } = {}) {
     customSections,
     scalarData,
     scalarSources,
+    excludedFields,
   });
 
   return {
@@ -264,6 +286,7 @@ async function composeDraft(req, row, { frozen = false } = {}) {
     selectedSections: selection.selectedSections,
     sectionOrder: selection.sectionOrder,
     customSections,
+    excludedFields,
     manifest,
     missingFields,
     createdAt: row.created_at,
@@ -493,6 +516,10 @@ router.post('/api/fca/drafts', requireClinicalWrite, safe(async (req, res) => {
 
   const portal = await loadPortalData(req.user.id, therapistProfileId);
 
+  // The document control values are ISSUED HERE, once, so they are visible in
+  // the review step and can never be renumbered by a later generate. The id is
+  // derived from the row's own uuid, which the database mints — so it is
+  // written in a second statement rather than guessed beforehand.
   const { rows } = await pool.query(
     `INSERT INTO fca_report_drafts
        (organisation_id, client_id, client_name, client_preferred_name,
@@ -506,6 +533,14 @@ router.post('/api/fca/drafts', requireClinicalWrite, safe(async (req, res) => {
       JSON.stringify(selectedSections), JSON.stringify(sectionOrder)]
   );
 
+  const issued = await pool.query(
+    'UPDATE fca_report_drafts SET document_control = $2 WHERE id = $1 RETURNING *',
+    [rows[0].id, JSON.stringify(issueDocumentControl(
+      DOCUMENT_ID_PREFIX, rows[0].id, new Date(rows[0].created_at)
+    ))]
+  );
+  rows[0] = issued.rows[0] || rows[0];
+
   const draft = await composeDraft(req, rows[0]);
   await audit(req, 'fca.draft_created', rows[0].id, { clientId, templateVersion: template.version });
   res.status(201).json({ draft });
@@ -515,7 +550,7 @@ router.get('/api/fca/drafts', requireClinicalRead, safe(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, client_id, client_name, client_preferred_name, therapist_profile_id,
             therapist_name, template_id, template_version, status, missing_fields,
-            selected_sections, custom_sections,
+            excluded_fields, selected_sections, custom_sections,
             created_at, updated_at, generated_at, generated_document_id
        FROM fca_report_drafts
       WHERE organisation_id = $1 AND created_by_user_id = $2
@@ -537,7 +572,10 @@ router.get('/api/fca/drafts', requireClinicalRead, safe(async (req, res) => {
       status: r.status,
       sectionCount: (r.selected_sections || []).length,
       customSectionCount: (r.custom_sections || []).length,
-      missingFields: r.missing_fields || [],
+      // An excluded field is a decision, not an omission — the entry list
+      // reports the two separately rather than counting one as the other.
+      missingFields: (r.missing_fields || []).filter((t) => !(r.excluded_fields || []).includes(t)),
+      excludedFields: r.excluded_fields || [],
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       generatedAt: r.generated_at,
@@ -588,16 +626,29 @@ router.patch('/api/fca/drafts/:id', requireClinicalWrite, safe(async (req, res) 
   // An explicit null clears an override rather than storing a null value.
   for (const [k, v] of Object.entries(overrides)) if (v === null || v === '') delete overrides[k];
 
+  // Replaced, not merged: exclusion is a SET the therapist owns outright, and
+  // a merge would make un-excluding impossible to express.
+  const excludedFields = Object.prototype.hasOwnProperty.call(body, 'excludedFields')
+    ? normaliseExcludedFields(body.excludedFields)
+    : normaliseExcludedFields(row.excluded_fields || []);
+
+  // Excluding a field CLEARS any value typed for it. Keeping a hidden override
+  // behind an excluded row would mean un-excluding silently resurrected a
+  // value the therapist last saw struck through — so the two states are made
+  // genuinely exclusive, and un-excluding falls back to whatever the layers
+  // resolve, which is the honest answer.
+  for (const tag of excludedFields) delete overrides[tag];
+
   // NOTHING here writes to the client profile. Editing a draft is not consent
   // to change a reusable client record; only POST /save-to-profile does that.
   const { rows } = await pool.query(
     `UPDATE fca_report_drafts
         SET selected_sections = $2, section_order = $3, custom_sections = $4,
-            scalar_overrides = $5, updated_at = NOW()
+            scalar_overrides = $5, excluded_fields = $6, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
     [row.id, JSON.stringify(selection.selectedSections), JSON.stringify(selection.sectionOrder),
-      JSON.stringify(customSections), JSON.stringify(overrides)]
+      JSON.stringify(customSections), JSON.stringify(overrides), JSON.stringify(excludedFields)]
   );
 
   try {
@@ -732,20 +783,30 @@ function reportFilename(preferredName, fullName, generatedAt) {
   return `FCA - ${safeName} - ${generatedAt.toISOString().slice(0, 10)}.docx`;
 }
 
-router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (req, res) => {
-  const row = await loadOwnDraft(req, req.params.id);
-  if (!row) return res.status(404).json({ error: 'not_found' });
-  if (row.status === 'archived') return res.status(409).json({ error: 'archived' });
-
+/**
+ * Compose the DOCX for a draft — the whole four-layer resolve, manifest build
+ * and render, with NO persistence.
+ *
+ * Extracted so the preview and the download are literally the same computation.
+ * A preview that composed independently would be a second implementation of the
+ * report, and the two would drift the first time either changed — which is the
+ * failure mode "preview the actual document" exists to prevent.
+ *
+ * @returns {{buffer, manifest, missingFields, excludedFields, template, generatedAt}}
+ * @throws  {Error} with .httpStatus/.httpBody for the caller to surface
+ */
+async function composeDraftDocx(row) {
   const template = await activeTemplate();
 
-  // ── Resolve the four layers ONCE, then freeze ─────────────────────────────
   let client;
   try {
     client = await loadSploseClient(row.client_id);
   } catch (err) {
     if (err.sploseFailure) {
-      return res.status(503).json({ error: 'splose_unavailable', message: 'Client data is temporarily unavailable. Please try again shortly.' });
+      const e = new Error('splose_unavailable');
+      e.httpStatus = 503;
+      e.httpBody = { error: 'splose_unavailable', message: 'Client data is temporarily unavailable. Please try again shortly.' };
+      throw e;
     }
     throw err;
   }
@@ -753,6 +814,7 @@ router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (re
   const { profile, currentPlan, goals } = await loadClientProfile(row.organisation_id, row.client_id);
   const portal = await loadPortalData(row.created_by_user_id, row.therapist_profile_id);
   const generatedAt = new Date();
+  const excludedFields = normaliseExcludedFields(row.excluded_fields || []);
 
   const { scalarData, scalarSources, missingFields } = resolveScalars({
     splose: client,
@@ -761,7 +823,9 @@ router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (re
     goals,
     overrides: row.scalar_overrides || {},
     portal,
-    server: serverData(row, generatedAt),
+    // The values issued when the draft was created — read, never re-minted, so
+    // regenerating a report cannot renumber it.
+    server: serverData(row),
   });
 
   const manifest = buildManifest({
@@ -770,21 +834,87 @@ router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (re
     customSections: row.custom_sections || [],
     scalarData,
     scalarSources,
+    excludedFields,
   });
 
-  // ── Render, validate, store ───────────────────────────────────────────────
   let buffer;
   try {
     buffer = await generateFcaDocx({ templateBuffer: readTemplateBuffer(), manifest });
   } catch (err) {
-    log.error('fca document generation failed', { error: err.message, draftId: row.id });
-    return res.status(500).json({ error: 'generation_failed', message: 'The report could not be generated.' });
+    log.error('fca document composition failed', { error: err.message, draftId: row.id });
+    const e = new Error('generation_failed');
+    e.httpStatus = 500;
+    e.httpBody = { error: 'generation_failed', message: 'The report could not be generated.' };
+    throw e;
   }
 
+  return { buffer, manifest, missingFields, excludedFields, template, generatedAt, scalarData, scalarSources };
+}
+
+/**
+ * Exact preview: the composed DOCX bytes, rendered in the browser by the
+ * vendored docx-preview. Nothing is stored — the bytes are composed on demand
+ * and streamed, so there is no preview artefact to expire, leak or clean up,
+ * and no clinical document leaves this origin.
+ */
+router.get('/api/fca/drafts/:id/preview.docx', requireClinicalRead, safe(async (req, res) => {
+  const row = await loadOwnDraft(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+
+  let composed;
+  try {
+    composed = await composeDraftDocx(row);
+  } catch (err) {
+    if (err.httpStatus) return res.status(err.httpStatus).json(err.httpBody);
+    throw err;
+  }
+
+  // The document's own page breaks, restated in the one form the browser
+  // renderer reads. See fca/preview-pagination.js: the Opal template starts
+  // each section with w:pageBreakBefore, which docx-preview parses and then
+  // ignores — without this the whole report renders as a single endless sheet
+  // with no page boundaries. The DOWNLOAD is deliberately not touched: Word
+  // honours the property natively.
+  const previewBuffer = await paginateForPreview(composed.buffer);
+
+  // The draft revision travels back so the client can discard a response that
+  // a newer edit has already superseded.
+  res.setHeader('X-Opal-Draft-Revision', String(req.query.rev || ''));
+  res.setHeader('Content-Type', DOCX_MIME);
+  res.setHeader('Content-Length', String(previewBuffer.length));
+  res.setHeader('Content-Disposition', 'inline; filename="preview.docx"');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  return res.end(previewBuffer);
+}));
+
+router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (req, res) => {
+  const row = await loadOwnDraft(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  if (row.status === 'archived') return res.status(409).json({ error: 'archived' });
+
+  // Identical composition to the preview — same helper, same inputs.
+  let composed;
+  try {
+    composed = await composeDraftDocx(row);
+  } catch (err) {
+    if (err.httpStatus) return res.status(err.httpStatus).json(err.httpBody);
+    throw err;
+  }
+  const { buffer, manifest, missingFields, excludedFields, template, generatedAt, scalarData, scalarSources } = composed;
+
   const warnings = (buffer.fcaStats?.warnings || []).slice();
-  if (missingFields.length) {
+  // An EXCLUDED field is not an outstanding one: the therapist has already
+  // decided it does not belong, and nothing was inserted for it. Only the
+  // genuinely unresolved fields are worth telling them about.
+  const excludedSet = new Set(excludedFields);
+  const unresolved = missingFields.filter((tag) => !excludedSet.has(tag));
+  if (unresolved.length) {
     // Flagged, never fabricated.
-    warnings.push(`${missingFields.length} field${missingFields.length === 1 ? '' : 's'} had no data and were left as template placeholders.`);
+    warnings.push(`${unresolved.length} field${unresolved.length === 1 ? '' : 's'} had no data and were left as template placeholders.`);
+  }
+  if (excludedFields.length) {
+    warnings.push(`${excludedFields.length} field${excludedFields.length === 1 ? ' was' : 's were'} excluded and left blank in the document.`);
   }
 
   const preferredName = scalarData.OPAL_CLIENT_PREFERRED_NAME || row.client_preferred_name;
@@ -814,13 +944,16 @@ router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (re
         checksum, template.version, req.user.id]
     );
     await dbClient.query(
+      // excluded_fields is written with the rest of the snapshot: what was
+      // deliberately omitted is part of explaining an issued document.
       `UPDATE fca_report_drafts
           SET status = 'generated', scalar_snapshot = $2, scalar_sources = $3,
-              missing_fields = $4, generated_document_id = $5,
-              generated_at = $6, updated_at = NOW()
+              missing_fields = $4, excluded_fields = $5, generated_document_id = $6,
+              generated_at = $7, updated_at = NOW()
         WHERE id = $1`,
       [row.id, JSON.stringify(scalarData), JSON.stringify(scalarSources),
-        JSON.stringify(missingFields), documentId, generatedAt]
+        JSON.stringify(missingFields), JSON.stringify(excludedFields),
+        documentId, generatedAt]
     );
     await dbClient.query('COMMIT');
   } catch (err) {
@@ -842,9 +975,10 @@ router.post('/api/fca/drafts/:id/generate', requireClinicalWrite, safe(async (re
     templateVersion: template.version,
     sectionCount,
     customSectionCount,
+    excludedFieldCount: excludedFields.length,
   });
 
-  res.json({ documentId, filename, missingFields, warnings });
+  res.json({ documentId, filename, missingFields, excludedFields, warnings });
 }));
 
 // ── Download (authenticated, own-draft only) ─────────────────────────────────
