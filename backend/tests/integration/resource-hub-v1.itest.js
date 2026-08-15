@@ -13,7 +13,7 @@ const bodyParser = require('body-parser');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
-const { db, truncateAll, seedUser, closePool } = require('./helpers');
+const { db, truncateAll, seedUser, seedOrganisation, closePool } = require('./helpers');
 
 const PASSWORD = 'HubV1Pass1';
 
@@ -25,19 +25,27 @@ function buildApp() {
   app.use('/', require('../../resources-routes'));
   app.use('/', require('../../purchases-routes'));
   app.use('/', require('../../ai-drafts-routes'));
+  // The AI-draft publish flow now hands off to the rh2 review chain
+  app.use('/', require('../../resource-hub-r2-routes'));
+  app.use('/', require('../../instrument-register-routes'));
   return app;
 }
 
+// Users share one organisation per test: governance events carry a NOT NULL
+// organisation_id, so an org-less user cannot complete the rh2 review walk.
+let sharedOrgId = null;
+
 async function agentFor(app, role, overrides = {}) {
   const hash = await bcrypt.hash(PASSWORD, 4);
-  const user = await seedUser({ password_hash: hash, role, ...overrides });
+  if (!sharedOrgId) sharedOrgId = (await seedOrganisation('Hub V1 Org')).id;
+  const user = await seedUser({ password_hash: hash, role, organisation_id: sharedOrgId, ...overrides });
   const agent = request.agent(app);
   const res = await agent.post('/api/auth/login').send({ email: user.email, password: PASSWORD });
   expect(res.status).toBe(200);
   return { agent, user };
 }
 
-beforeEach(async () => { await truncateAll(); require('../../auth')._resetLoginRateLimit(); });
+beforeEach(async () => { await truncateAll(); sharedOrgId = null; require('../../auth')._resetLoginRateLimit(); });
 afterAll(closePool);
 
 // ═══ Purchase requests ═══════════════════════════════════════════════════════
@@ -215,14 +223,36 @@ test('ai drafts: private → review queue → publish to hub; admin/read_only de
   // Therapist cannot run the review actions
   expect((await therapistA.post(`/api/resources/ai-drafts/${draftId}/approve`)).status).toBe(403);
 
-  // Owner approves → an APPROVED resource appears in the hub
+  // Owner approves the draft → the resource enters the standard review
+  // lifecycle (clinical review first), NOT the hub. AI-assisted content no
+  // longer skips rights/clinical/brand review.
   const pub = await owner.post(`/api/resources/ai-drafts/${draftId}/approve`);
   expect(pub.status).toBe(200);
   expect(pub.body.draft.status).toBe('published');
   expect(pub.body.draft.published_resource_id).toBe(pub.body.resource.id);
-  expect(pub.body.resource.status).toBe('approved');
+  expect(pub.body.resource.status).toBe('draft');
+  expect(pub.body.resource.publication_state).toBe('clinical-review');
   expect(pub.body.resource.source_reference).toBe('AI Resource Studio draft (manually authored)');
   expect(pub.body.resource.usage_instructions).toBe('Final wording.');
+
+  // Not visible to therapists until it clears the review chain
+  const preList = await therapistB.get('/api/resources');
+  expect(preList.body.resources.find((r) => r.id === pub.body.resource.id)).toBeUndefined();
+
+  // Approval is still blocked until a human records a rights decision
+  const early = await owner.post(`/api/rh2/resources/${pub.body.resource.id}/approve`).send({});
+  expect(early.status).toBe(422);
+  expect(early.body.code).toBe('governance_requirements_unmet');
+
+  // Owner records the rights review, then approval walks the review chain
+  const rights = await owner.post(`/api/rh2/admin/source-review/${pub.body.resource.id}`)
+    .send({ rightsStatus: 'opal-owned', reason: 'Authored in the AI Resource Studio by our therapist.' });
+  expect(rights.status).toBe(200);
+
+  const walked = await owner.post(`/api/rh2/resources/${pub.body.resource.id}/approve`).send({});
+  expect(walked.status).toBe(200);
+  expect(walked.body.resource.status).toBe('approved');
+  expect(walked.body.resource.publication_state).toBe('approved');
 
   const hubList = await therapistB.get('/api/resources');
   const published = hubList.body.resources.find((r) => r.id === pub.body.resource.id);

@@ -232,13 +232,28 @@ router.post('/api/resources/ai-drafts/:id/approve', safe(async (req, res) => {
   const description = draft.topic
     ? `Practice resource on ${draft.topic}`
     : ((draft.content || '').slice(0, 200) || null);
+  // An AI-assisted draft enters the SAME review lifecycle as anything else.
+  // This route previously inserted straight to status='approved' with an
+  // approver and a review date already stamped, which skipped rights, clinical
+  // and brand review entirely — precisely the path the governance rules forbid
+  // for AI-assisted content. It now lands as a draft awaiting review, and the
+  // owner approves it through /api/rh2/resources/:id/approve like any other
+  // resource, where canTransition() and approvalBlockers() apply.
+  // content_owner is only settable at creation (mirrors the staff-upload
+  // default of "the creator owns it"); without it approvalBlockers can never
+  // clear and the draft's resource would be unapprovable by construction.
+  // rights_status stays 'unreviewed' on purpose — a human rights review via
+  // source-review is still required before the owner's approval walk.
   const { rows: resourceRows } = await pool.query(
     `INSERT INTO resources (organisation_id, title, description, resource_type, status,
-        approved_by, approved_at, review_due_at, usage_instructions, created_by, source_reference)
-     VALUES ($1,$2,$3,$4,'approved',$5,NOW(),(CURRENT_DATE + INTERVAL '12 months')::date,$6,$7,$8)
+        publication_state, source_class, rights_status, clinical_status, access_tier,
+        usage_instructions, created_by, content_owner, source_reference)
+     VALUES ($1,$2,$3,$4,'draft',
+        'clinical-review','opal-original','unreviewed','draft','staff',
+        $5,$6,$6,$7)
      RETURNING *`,
     [draft.organisation_id, draft.title, description, draft.resource_type || 'template',
-     req.user.id, draft.content || null, draft.user_id,
+     draft.content || null, draft.user_id,
      'AI Resource Studio draft (manually authored)']);
   const resource = resourceRows[0];
   const { rows } = await pool.query(
