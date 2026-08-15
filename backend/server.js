@@ -147,6 +147,10 @@ app.use('/api/profile/documents', bodyParser.json({ limit: '8mb' }));
 // enforced in the route) — the /api/support subtree gets the larger limit.
 app.use('/api/support', bodyParser.json({ limit: '8mb' }));
 
+// Resource Hub file uploads: base64 bytes, 25 MB binary cap enforced in the
+// route (≈ 34 MB of base64). Same pattern as the two subtrees above.
+app.use('/api/rh2/resources', bodyParser.json({ limit: '36mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -458,6 +462,14 @@ app.use('/', require('./resources-routes'));
 
 // Resource Hub R2 (learning, standards, PD/CPD; separate module — R1 untouched)
 app.use('/', require('./resource-hub-r2-routes'));
+// Controlled instrument register + unresolved-source review queue. Mounted
+// after the hub router so it shares the same /api/rh2 namespace and auth.
+app.use('/', require('./instrument-register-routes'));
+// Ingestion register — administrative accounting for the catalogued source
+// vault. Owner/admin only, and deliberately not part of any staff-facing
+// listing: it records what was decided about material that mostly must NOT
+// become a resource.
+app.use('/', require('./resource-ingestion-routes'));
 app.use('/', require('./opa-routes'));
 app.use('/', require('./store-search-routes'));
 
@@ -475,6 +487,10 @@ app.use('/', require('./mobile-routes'));
 // Case-note drafts (voice-to-case-note; clinical AI behind a fail-closed
 // server-side provider; strictly caller-scoped; drafts only)
 app.use('/', require('./case-note-routes'));
+
+// AI security status (owner/admin only; configuration and boundary health —
+// never credentials, never clinical content). See docs/AI_SECURITY_ARCHITECTURE.md
+app.use('/', require('./ai-security-routes'));
 
 // Purchase requests (Resource Hub V1; admin gets a stripped operational view)
 app.use('/', require('./purchases-routes'));
@@ -494,6 +510,17 @@ app.use('/', require('./fca-routes'));
 // pointed at the progress-note-letter template (own-only drafts, no external AI)
 app.use('/', require('./letter-routes'));
 
+// WHODAS 2.0 (36-item) digital assessment. Every route 404s unless
+// ENABLE_WHODAS_ASSESSMENT === 'true' — the instrument is WHO copyright and
+// release is gated on licensing clearance (docs/whodas/03_LICENSING_COMPLIANCE.md).
+app.use('/', require('./whodas-routes'));
+
+// Assessment framework: the catalogue, per-client history across instruments,
+// and share preparation. Deliberately NOT feature-gated — it must be able to
+// say that an instrument's module is switched off. It exposes no item wording
+// and no scoring rules; administration stays in the instrument's own module.
+app.use('/', require('./assessments-routes'));
+
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
@@ -512,6 +539,35 @@ const PORT = process.env.PORT || 5000;
 // posture is visible in its logs (values only, never secrets).
 log.info('feature flags', require('./feature-flags').featureFlagState());
 log.info('finance flags', require('./finance-flags').financeFlagState());
+
+// ===== WHODAS 2.0 TEMPLATE INTEGRITY =====
+// The WHO source PDFs are the document a clinician fills in and the base of
+// every completed assessment. Their hashes are checked at boot, and the
+// registry is synced, so a modified template can never quietly enter service.
+// Only runs when the feature is enabled; a failure disables WHODAS rather than
+// taking the whole portal down, because scheduling must keep working.
+if (require('./feature-flags').isWhodasAssessmentEnabled()) {
+  const whodasRegistry = require('./whodas/template-registry');
+  const whodasLog = createLogger('whodas');
+
+  const templates = whodasRegistry.verifyTemplates();
+  const maps = whodasRegistry.verifyFieldMaps();
+
+  if (!templates.ok || !maps.ok) {
+    whodasLog.error('WHODAS templates failed integrity verification — feature will not serve', {
+      templateFailures: templates.failures,
+      fieldMapFailures: maps.failures,
+    });
+    process.env.ENABLE_WHODAS_ASSESSMENT = 'false';
+  } else {
+    whodasRegistry.syncTemplates(db.pool, { logger: whodasLog }).catch((err) => {
+      whodasLog.error('WHODAS template registry sync failed — feature will not serve', {
+        error: err.message,
+      });
+      process.env.ENABLE_WHODAS_ASSESSMENT = 'false';
+    });
+  }
+}
 
 // ===== GRACEFUL SHUTDOWN =====
 // App Service / container platforms send SIGTERM before recycling. Flip the
@@ -552,6 +608,12 @@ process.on('uncaughtException', (err) => {
   telemetry.trackException(err);
   process.exit(1);
 });
+
+// Verify the AI security boundary before accepting traffic. A failed check
+// disables AI for the life of the process — a clinical system with an
+// unverifiable safety boundary should decline to use AI rather than proceed
+// and hope. See docs/AI_SECURITY_ARCHITECTURE.md.
+require('./ai/ai-self-check').runAndReport();
 
 server.listen(PORT, () => {
   console.log(`

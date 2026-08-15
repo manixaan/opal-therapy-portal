@@ -1066,6 +1066,19 @@
     return out;
   }
 
+  /** Admin repair: rebuild a file's cached derivatives, then refresh.
+      POSTs to the server-supplied regenerateUrl — never a client-built path. */
+  async function regenPreview(fileId) {
+    var files = (S.detail && S.detail.files) || [];
+    var f = null;
+    for (var i = 0; i < files.length; i++) if (files[i].id === fileId) f = files[i];
+    if (!f || !f.regenerateUrl) return;
+    var d = await api(f.regenerateUrl, { method: 'POST' });
+    if (!d.ok) { toast('Preview rebuild failed', d.error || ''); return; }
+    toast('Preview rebuilt', (d.results || []).map(function (r) { return r.kind + ': ' + r.outcome; }).join(', '));
+    if (S.detail && S.detail.id) loadDetailFiles(S.detail.id);
+  }
+
   /** Open the shared viewer for one of the detail view's files. */
   function previewFile(fileId) {
     var files = S.detail.files || [];
@@ -1119,6 +1132,10 @@
         + 'href="' + esc(f.downloadUrl) + '" download '
         + 'aria-describedby="rh2-file-meta-' + esc(f.id) + '">'
         + esc(fileActionLabel(f)) + '</a>'
+        + (f.regenerateUrl
+          ? '<button type="button" class="rh2-btn rh2-btn-quiet" title="Regenerate the cached preview and thumbnail" '
+            + 'onclick="RH2.regenPreview(\'' + esc(f.id) + '\')">Rebuild preview</button>'
+          : '')
         + '<span class="rh2-file-meta" id="rh2-file-meta-' + esc(f.id) + '">'
         + esc(f.fileName || '') + (meta ? ' <span class="rh2-quiet">(' + esc(meta) + ')</span>' : '')
         + (restricted
@@ -2796,6 +2813,18 @@
         '<input type="text" id="rh2-form-changenote" class="rh2-input" maxlength="300"></fieldset>';
     }
 
+    if (editing) {
+      // File upload runs through the server's full gate (format allow-list,
+      // magic bytes, privacy scan, dedupe, derivatives). Metadata-first flow:
+      // create → save → attach the document here.
+      out += '<fieldset class="rh2-fieldset"><legend class="rh2-lbl">Document file</legend>' +
+        '<p class="rh2-quiet">PDF, Word, PowerPoint, Excel or image, up to 25 MB. ' +
+        'Files are checked for client-identifying content before they are stored.</p>' +
+        '<input type="file" id="rh2-form-file" class="rh2-input" ' +
+        'accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg" onchange="RH2.adminUpload(this)">' +
+        '<p class="rh2-quiet" id="rh2-upload-status" role="status"></p></fieldset>';
+    }
+
     out += '<div class="rh2-form-actions">' +
       '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.adminSave(\'draft\')">' + (editing ? 'Save changes' : 'Save draft') + '</button>' +
       (!editing || pick(r, 'status') === 'draft'
@@ -2803,6 +2832,41 @@
       (isOwner() ? '<button type="button" class="rh2-btn" onclick="RH2.adminSave(\'approve\')">Save and approve</button>' : '') +
       '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.adminFormClose()">Cancel</button></div></section>';
     return out;
+  }
+
+  var UPLOAD_FORMATS = { pdf: 'pdf', docx: 'docx', pptx: 'pptx', xlsx: 'xlsx', png: 'png', jpg: 'jpg', jpeg: 'jpg' };
+
+  /** Read the chosen file, ship it as base64, report the server's verdict. */
+  function adminUpload(input) {
+    var file = input && input.files && input.files[0];
+    var status = doc.getElementById('rh2-upload-status');
+    var resourceId = S.admin.editing && pick(S.admin.editing, 'id');
+    if (!file || !resourceId) return;
+    var ext = String(file.name.split('.').pop() || '').toLowerCase();
+    var format = UPLOAD_FORMATS[ext];
+    if (!format) { if (status) status.textContent = 'That file type is not supported.'; return; }
+    if (file.size > 25 * 1024 * 1024) { if (status) status.textContent = 'Files can be up to 25 MB.'; return; }
+    if (status) status.textContent = 'Checking and uploading…';
+    var reader = new FileReader();
+    reader.onerror = function () { if (status) status.textContent = 'Could not read that file.'; };
+    reader.onload = async function () {
+      var base64 = String(reader.result).split(',')[1] || '';
+      var d = await api('/api/rh2/resources/' + encodeURIComponent(resourceId) + '/files', {
+        method: 'POST',
+        body: { fileName: file.name, format: format, fileData: base64 },
+      });
+      if (!d.ok) {
+        if (status) status.textContent = d.error || 'Upload failed.';
+        return;
+      }
+      if (status) {
+        status.textContent = 'Uploaded ' + file.name
+          + ((d.warnings || []).length ? ' — ' + d.warnings.join(' ') : '');
+      }
+      input.value = '';
+      toast('File uploaded', file.name);
+    };
+    reader.readAsDataURL(file);
   }
 
   function adminFormAuthority(v) {
@@ -3157,6 +3221,8 @@
     libFilter: libFilter,
     libMore: libMore,
     previewFile: previewFile,
+    regenPreview: regenPreview,
+    adminUpload: adminUpload,
     openDetail: openDetail,
     toggleFav: toggleFav,
     toggleComplete: toggleComplete,
