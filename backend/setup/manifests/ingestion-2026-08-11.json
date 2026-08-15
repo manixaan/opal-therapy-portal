@@ -1,0 +1,3274 @@
+{
+  "generatedFor": "therapy_scheduler",
+  "catalogue": "/Users/antonyxavier/Documents/Codex/2026-08-10/can-you-review-this-work-structure/outputs/opal-resource-hub/00_ADMIN/resource-catalog.json",
+  "total": 650,
+  "created": 650,
+  "updated": 0,
+  "events": 650,
+  "byTreatment": {
+    "reconciled-existing": 0,
+    "live-official-link": 21,
+    "live-vendor-link": 294,
+    "controlled-register": 38,
+    "staff-only": 5,
+    "opal-original-draft": 18,
+    "rights-review": 152,
+    "privacy-excluded": 94,
+    "duplicate-archived": 18,
+    "unavailable-placeholder": 10,
+    "rejected-quality": 0,
+    "superseded": 0
+  },
+  "rows": [
+    {
+      "catalogueId": "res-0001",
+      "registerId": "40470c08-b266-4610-a213-e2b59f2a966d",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0002",
+      "registerId": "8385feed-0487-405c-9560-c1cb9eefd7a6",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0003",
+      "registerId": "42fdf8ff-9cca-472b-a5d9-319ca75b20d0",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0004",
+      "registerId": "ba89cdf8-f189-493d-8dc3-0b4131746aee",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0005",
+      "registerId": "76ca8cf9-a22b-4569-bcf6-40495cbd1ebd",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0006",
+      "registerId": "ff591fd9-689a-4036-92ec-45aff7a83f24",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0007",
+      "registerId": "289be461-1112-4108-a299-e2024d42260f",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0008",
+      "registerId": "5b22d44a-2bde-4c49-9d4e-07a59db4bb7a",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0009",
+      "registerId": "0a8cf7f1-634c-4d93-b4bf-bba8c511bb4f",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0010",
+      "registerId": "815edb94-30bf-43a2-af73-387337bff0b0",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0011",
+      "registerId": "d09acbdc-9b29-40b5-be07-8e04d1d621e8",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0012",
+      "registerId": "98ac44dc-7506-46ae-84ed-60c7f49fcacd",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0013",
+      "registerId": "64ecc75f-791b-411a-bffa-9a255266315d",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0014",
+      "registerId": "2d39745d-cf5a-4f10-8d17-daf014ea5ea4",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0015",
+      "registerId": "04a7a24e-4208-4181-bd0d-312516158f2b",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0016",
+      "registerId": "21cc1633-7286-4720-9728-6113e2fc0b0c",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0017",
+      "registerId": "ac15d79f-dc43-48ab-bc4b-6d056c53c477",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0018",
+      "registerId": "1fa43351-8d29-4253-a958-8f10872b4756",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0019",
+      "registerId": "b0eefe5c-08e2-447c-b869-5e860656303c",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0020",
+      "registerId": "c368f715-0a58-4aa7-b80b-b9b9558f464e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0021",
+      "registerId": "3b555ca7-12ef-4d82-aea5-0fc1e5b7003f",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0022",
+      "registerId": "03cff4cb-292d-4c96-9250-0158fe419e11",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0023",
+      "registerId": "128312aa-455e-409d-a313-99c397a2976c",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0024",
+      "registerId": "13b833a5-7ea2-45d2-9aba-ed5faa5d6396",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0025",
+      "registerId": "db2ffc1f-7dbe-4bef-8951-7bde2ac6ab8f",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0026",
+      "registerId": "d85bf7a4-dca8-4144-846b-a8f0307ad1f2",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0027",
+      "registerId": "be563e42-03c5-4479-a6a9-d678cfa55830",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0028",
+      "registerId": "8dacd49a-a6c4-4e86-897f-93b73c1d8180",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0029",
+      "registerId": "96a9eb9d-6d00-458b-9cb6-c3d6e194b869",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0030",
+      "registerId": "ca6d79a1-07c8-45a3-a188-bfc8b980593b",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0031",
+      "registerId": "4eb841c5-07e7-488d-b213-f4c9406092ad",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0032",
+      "registerId": "5aa7cf2d-886d-4181-8c72-24f63fcf5936",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0033",
+      "registerId": "ea04537b-b152-4ec8-a148-9630f5822e4c",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0034",
+      "registerId": "87a160ea-b8b2-473f-b6fc-617a306f98a2",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0035",
+      "registerId": "61f06d3d-990a-44af-a121-ff7a947c7634",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0036",
+      "registerId": "6fa07de9-027b-4970-87b8-7ccbe9f62707",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0037",
+      "registerId": "d324afdf-8670-4367-8eef-1f1abbead80a",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0038",
+      "registerId": "1a50031c-7585-4bef-ac84-de0ff02fb80d",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0039",
+      "registerId": "4724e26d-2c38-4c00-9a9a-92d3510d9ce4",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0040",
+      "registerId": "bc89a43e-4d7e-493a-9407-21b35ced0d65",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0041",
+      "registerId": "15b5e3fb-61e0-4e00-a219-0b08b7eabcbe",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0042",
+      "registerId": "f52d8217-fe17-4893-bbc8-ebff24a60cdb",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0043",
+      "registerId": "747b9c4e-1d2a-47cc-95db-1421ab4219e3",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0044",
+      "registerId": "95d5815a-d2ac-4166-969e-8b8d7da20f7e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0045",
+      "registerId": "c0dacf2c-ee36-4c2e-8e6f-cccd5d976c26",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0046",
+      "registerId": "81cd0be6-4a88-4e51-9edc-d666f38f0851",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0047",
+      "registerId": "90ce7417-0c7b-4e70-9cf7-1f295ae9a8e7",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0048",
+      "registerId": "2de57852-e19b-40af-b83b-cfe609a5068a",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0049",
+      "registerId": "e7e5f35d-7265-4811-bad5-7d59736db521",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0050",
+      "registerId": "6a974eef-a1c9-4175-9196-bb18f17a140b",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0051",
+      "registerId": "b41bd643-707d-49fa-bc6f-18aeb4bfb1e3",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0052",
+      "registerId": "8f7a3bac-6761-4daa-a18d-a124b088e960",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0053",
+      "registerId": "6dd67f8b-2d7c-482f-bc4c-af133674e40e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0054",
+      "registerId": "0bc70e70-58f2-4159-ab8c-251716e93dce",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0055",
+      "registerId": "0a4470b1-f55e-4fd1-b8be-093cad963040",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0056",
+      "registerId": "7f3be428-888b-44d3-865e-606832c803ff",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0057",
+      "registerId": "0b5dbd38-1a3e-4594-ab67-bbc8e7cb4df2",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0058",
+      "registerId": "879883da-adce-4032-8a86-bc0e3497c85d",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0059",
+      "registerId": "ba970db5-cfdf-4559-b3c8-6825f0b6798b",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0060",
+      "registerId": "f576eb7f-5774-4770-974a-311d6391fd55",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0061",
+      "registerId": "1548fb48-63e4-4c58-9a4c-f3459ee5f94e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0062",
+      "registerId": "3cbd2a9d-fee5-4231-ba31-86b678c5e076",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0063",
+      "registerId": "645dcea9-3352-4439-9a81-52a75b8c3746",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0064",
+      "registerId": "a465a9a3-3857-4aa2-9b3f-b45b75b1b4f6",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0065",
+      "registerId": "46102f36-01b0-4465-80d2-37c81eddb70e",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0066",
+      "registerId": "9b5facd0-c180-411c-8eae-a167d2740f18",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0067",
+      "registerId": "449b293e-35c3-4ad8-9007-09bf6158070c",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0068",
+      "registerId": "1c299ea2-2f26-454c-9c93-56247b7a3d75",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0069",
+      "registerId": "70bffc6f-a251-418e-a196-3925ca5cb1ff",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0070",
+      "registerId": "47983423-c160-4f9d-8c6b-3e1e11717d96",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0071",
+      "registerId": "f0181990-e5b2-4ba3-ab76-d936ba54fbc4",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0072",
+      "registerId": "35cdfb4c-0fcc-4d39-bd81-8c0dc9dbd3d0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0073",
+      "registerId": "43d42a40-2ddf-47c8-8327-d4e8912b2542",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0074",
+      "registerId": "b8439997-8bb3-4eca-9188-1982cfabded4",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0075",
+      "registerId": "da99265a-c603-48c7-b91c-11e67c6eb449",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0076",
+      "registerId": "eaff76df-0c90-4a6e-8fa9-c362b6d32c9e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0077",
+      "registerId": "3cefea41-bf48-4ee3-926e-1e2662c23d12",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0078",
+      "registerId": "5458ad3d-a7d0-4c5a-8944-9c92cce50ffe",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0079",
+      "registerId": "208c0bfe-f134-4ca5-9042-cbcdb403f05c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0080",
+      "registerId": "dd8a97d7-4368-47aa-89b7-b394eae76954",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0081",
+      "registerId": "40dd4554-81d2-44b9-a479-4282d30c4a4d",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0082",
+      "registerId": "e48694f3-74a3-4614-9983-6ce42ee121ed",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0083",
+      "registerId": "f9544031-fc06-4fa2-9e76-d2e2138d2d62",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0084",
+      "registerId": "f59ff58d-2046-4bcb-b9de-de3525c77557",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0085",
+      "registerId": "879eeb80-cf64-4a92-ac8d-8493ad0beede",
+      "treatment": "staff-only"
+    },
+    {
+      "catalogueId": "res-0086",
+      "registerId": "b3c677ae-d68d-43e3-a4f7-d435b723702e",
+      "treatment": "staff-only"
+    },
+    {
+      "catalogueId": "res-0087",
+      "registerId": "db52acd6-f700-4cf2-8b0b-46275bf63843",
+      "treatment": "staff-only"
+    },
+    {
+      "catalogueId": "res-0088",
+      "registerId": "37aa0d5b-bfb3-4932-a27b-9dd2e69aaa1d",
+      "treatment": "staff-only"
+    },
+    {
+      "catalogueId": "res-0089",
+      "registerId": "420d1844-919e-45dc-9ae0-9f1111aebd30",
+      "treatment": "staff-only"
+    },
+    {
+      "catalogueId": "res-0090",
+      "registerId": "fc55d169-c4a2-4434-82db-0d10c1213412",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0091",
+      "registerId": "ebf1474c-73cd-455e-b484-140a6aa94aab",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0092",
+      "registerId": "caa696a2-14d4-4376-8158-14e742c6fb87",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0093",
+      "registerId": "91d0d4bb-cdbd-4e5b-92e6-a0b90d7000e5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0094",
+      "registerId": "ac225715-8773-41c5-9c67-4cb5261976e8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0095",
+      "registerId": "8798eda1-7fc2-4707-bb00-e777ed2e6224",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0096",
+      "registerId": "3ab66143-2808-401f-9bd0-2f94566c10bb",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0097",
+      "registerId": "79aeaa8f-fd68-4618-9b43-05f236619680",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0098",
+      "registerId": "0b1b0a2e-3c38-4e7c-877d-98514d3eb40e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0099",
+      "registerId": "5d975387-7e5e-43fc-95c9-a784c5455613",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0100",
+      "registerId": "7af703d6-7ca0-4a63-b685-7d773fb5a934",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0101",
+      "registerId": "2ce31977-e3c2-4e58-b38e-7ff3b9f0c872",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0102",
+      "registerId": "ca36e17e-0e54-4ca2-987a-39f51dd70660",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0103",
+      "registerId": "64f5b955-7d7a-4287-8ecb-7aabae4d1b80",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0104",
+      "registerId": "757e31c2-6c1b-4c67-998e-a7c28b3e1f0f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0105",
+      "registerId": "2dcaf938-3b85-4808-9cc3-4dbd9c105041",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0106",
+      "registerId": "acf33b2d-343e-4224-84c0-d2bc39e86af2",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0107",
+      "registerId": "ebe78456-a550-4f95-98fc-02407b757086",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0108",
+      "registerId": "4813c92d-9dd4-44b1-8f9d-8dee16f6b509",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0109",
+      "registerId": "3a2429e6-6f9e-453c-82d9-aa3a25128c9b",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0110",
+      "registerId": "257a81c7-3fe8-46bf-86e8-e3cc45142813",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0111",
+      "registerId": "11d9d53c-3072-43fc-ab01-112bf976f3f0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0112",
+      "registerId": "99a3bfb2-792c-4f04-ac6a-a494e8b0789c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0113",
+      "registerId": "16c1df8c-1abc-441b-9c7a-abf4a0b40216",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0114",
+      "registerId": "787bdcd2-1502-4b5a-8998-e86f22604855",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0115",
+      "registerId": "86cd471f-a1d6-455e-bc34-19ae2635bebe",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0116",
+      "registerId": "eeb93cb9-8744-4222-b2fc-93a680f343d6",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0117",
+      "registerId": "fbe15df1-d574-412c-ae07-932cb3c3196a",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0118",
+      "registerId": "d4adf0f2-7d88-42ba-9ba8-cc35bb10a471",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0119",
+      "registerId": "0faabd5c-7173-41ca-983e-1978afabf18f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0120",
+      "registerId": "4a658d43-5d32-4d5f-b9f1-b8d0ae2724dc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0121",
+      "registerId": "00daa08b-440a-42c1-a70e-8cfc87692782",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0122",
+      "registerId": "719c03ed-a121-4214-952f-3514cf699806",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0123",
+      "registerId": "26a9a881-4dc4-4b17-a6ac-c9a4d378e654",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0124",
+      "registerId": "f31b5306-60da-4bc6-8ef9-517942a60c7a",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0125",
+      "registerId": "2ec430d2-c09f-4872-af35-85e4b9a29675",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0126",
+      "registerId": "a5b58921-b77e-4a47-93de-d5ead0666882",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0127",
+      "registerId": "8ff1f17e-3ff4-466e-80a4-61bf2f8ce276",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0128",
+      "registerId": "4292a889-0575-4f10-a803-b8e4fe61614a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0129",
+      "registerId": "74a473ae-5a00-4d9b-9a5a-fd54cf9887b7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0130",
+      "registerId": "5bbdcecd-2186-4933-8ec5-0a4db1c70358",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0131",
+      "registerId": "c8548cd1-7cd3-4eb3-a295-a7bfd7c2b30c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0132",
+      "registerId": "b4aecc32-93cb-4639-bbae-638f54380562",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0133",
+      "registerId": "b3332f80-e2c0-4150-b491-0b5243ddbb7b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0134",
+      "registerId": "eedef493-2ab8-4e7b-a276-16b2ab519c03",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0135",
+      "registerId": "c10c51ca-c224-4f90-9fd1-8cb8155b200d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0136",
+      "registerId": "6fb2d7f2-8efe-46b1-b59d-3bc8ed066da9",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0137",
+      "registerId": "cb6849f3-03ba-4e14-9fbe-283f58a6521e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0138",
+      "registerId": "2ac7a16d-80ae-4dde-a59d-b3db79fb6994",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0139",
+      "registerId": "7ef689ac-097f-41c6-80b7-8f8aa87777fa",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0140",
+      "registerId": "9bdab4e4-ded4-41cb-9555-6311029577a1",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0141",
+      "registerId": "7e4d803e-f083-4d82-8f3b-1c54bcae2b64",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0142",
+      "registerId": "f48c3b52-3051-4d86-a7c1-36605b6c25f8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0143",
+      "registerId": "515fc73c-814d-457c-8692-d1e86a5c0832",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0144",
+      "registerId": "604dc017-6407-43ca-9a11-6f8de809809d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0145",
+      "registerId": "4c8e0cfc-18ef-44d3-9bae-77e446240ccc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0146",
+      "registerId": "fa12c504-3226-4039-8533-e00652067596",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0147",
+      "registerId": "be470910-88d7-4df7-9e8e-0abbb9142bc5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0148",
+      "registerId": "700b4065-90e1-47e7-b4b1-222bb5eef6c9",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0149",
+      "registerId": "4b9376d3-1d90-41fd-b879-8c4df0574b50",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0150",
+      "registerId": "876814ae-1d13-494e-928b-27165b79f429",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0151",
+      "registerId": "83f4ea22-b1ce-45e3-9ed1-eae61bfb9670",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0152",
+      "registerId": "060c9812-2f37-490e-bc18-6ccc96a9fe3d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0153",
+      "registerId": "db6d9d25-9b96-4da2-a9a5-f4502c1372c7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0154",
+      "registerId": "a760fa03-d270-4a99-8208-7eff5a06286a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0155",
+      "registerId": "321fd233-5502-4cff-ab31-4067153949cc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0156",
+      "registerId": "8cec4bd2-8eba-45ab-acc8-3ff9a75aa8c4",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0157",
+      "registerId": "2a2e01e5-6843-430b-9fe6-f16f2177005e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0158",
+      "registerId": "5477b5aa-b5fe-473f-b357-e39d1a27ac86",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0159",
+      "registerId": "25724c08-02a9-46d5-ae24-e137438524df",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0160",
+      "registerId": "94606620-5f02-443a-9352-ff70198859ea",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0161",
+      "registerId": "19b043a8-89f8-4756-a77c-bb682a225650",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0162",
+      "registerId": "89f1e8be-c2c6-4712-aa83-3c3999ae68d8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0163",
+      "registerId": "46f7623c-51b9-4c65-8ae4-1ee5e2fb8cd4",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0164",
+      "registerId": "ea418e3a-a10b-441f-a297-1be144edbca2",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0165",
+      "registerId": "56edd0e3-8c6e-4a6f-852c-1eeef810476c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0166",
+      "registerId": "44adaca3-1c85-4cb8-95b2-2d222943393c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0167",
+      "registerId": "1f9388b0-6e65-4aae-9426-0fdd2951835f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0168",
+      "registerId": "020163bd-95bd-4e67-821e-71029686e56e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0169",
+      "registerId": "ac6ca18a-54ef-4a7a-a300-aaf03bbcb6e4",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0170",
+      "registerId": "7de31861-d4f5-4ff2-80c3-3299c8332956",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0171",
+      "registerId": "4707596f-ac8d-44b6-9656-8932926670ce",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0172",
+      "registerId": "0336bb2c-b09b-4c12-b5e6-5ee888d360be",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0173",
+      "registerId": "b08790bf-2a71-4194-8106-e994bb9895c0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0174",
+      "registerId": "29eb44c6-7d1d-416d-9bb0-ac243b3098da",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0175",
+      "registerId": "25bac209-ae46-4e09-abcc-ddb1af3353e5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0176",
+      "registerId": "edc9908f-a621-4042-abc7-160eb409a8bb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0177",
+      "registerId": "c93d3fdf-8b98-45f9-adae-2bbedc770f79",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0178",
+      "registerId": "63fc6606-e34d-4b9b-8032-cc71ae3467fe",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0179",
+      "registerId": "3e950c44-af5a-4b58-b004-093480772fea",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0180",
+      "registerId": "bb56cc63-6211-4217-9b80-51705a2f9b5d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0181",
+      "registerId": "5fe6b110-bddb-488a-b4e0-4c570e9e0784",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0182",
+      "registerId": "a8e7bb7e-8594-4dcd-a160-d6815a4d1a7f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0183",
+      "registerId": "13896900-0fdd-4272-b4ed-c6e068992f26",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0184",
+      "registerId": "97e04fc2-ff15-4209-b0e0-487d15dfbabb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0185",
+      "registerId": "bc89cdb2-433e-4a9c-bdda-e7b4fdb7624e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0186",
+      "registerId": "03e2a209-895d-468a-a079-93d48c61860a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0187",
+      "registerId": "98d22483-d506-4afb-aa21-23edd6e52921",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0188",
+      "registerId": "fa15e9f3-f98c-4e9d-992a-ba0d312ed99b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0189",
+      "registerId": "80962256-4d47-4918-a4ea-a534f3509b49",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0190",
+      "registerId": "87ddbeed-a930-40d6-9ba3-963ad4474b80",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0191",
+      "registerId": "7628e17e-760d-446b-bf3b-aede007cf4ec",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0192",
+      "registerId": "85b1aa47-b3b8-4279-be52-ff53c5401e69",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0193",
+      "registerId": "4cc70a97-763b-4a5f-a4b2-aa8f2bccd7c7",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0194",
+      "registerId": "3f4bd95a-9b8e-4a23-9db5-05f6bcda61b3",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0195",
+      "registerId": "79b08a89-6ebd-4ec9-8ba4-aeac2cf1b193",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0196",
+      "registerId": "9a7f12e5-8b92-4f87-bbe9-a386d6a73d56",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0197",
+      "registerId": "30dbac3a-086d-4e77-9756-3e8bf2a0e6f6",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0198",
+      "registerId": "d8ce3a6d-9783-4e45-92e6-aafb39486ace",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0199",
+      "registerId": "aaf6123a-0754-43c8-a835-98bc4d42ce3c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0200",
+      "registerId": "5fc26ee5-c55e-4c6e-8853-e1addc423b67",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0201",
+      "registerId": "5df5a14f-a2ec-482a-a204-44102ef647ec",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0202",
+      "registerId": "404e16d7-67e7-4564-9cfb-8cfb463c4a28",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0203",
+      "registerId": "f9f65917-4e5c-4a80-94da-1b687bda1d7e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0204",
+      "registerId": "9ee5bf77-9407-487a-99e3-32068aaf0247",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0205",
+      "registerId": "2a8e053c-18f1-4a92-a46a-002a9f3ed308",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0206",
+      "registerId": "9ecac56c-ee68-428f-98e8-4f0822a068a5",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0207",
+      "registerId": "cce48179-8947-4bb8-a575-d46d57655431",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0208",
+      "registerId": "76111cde-2203-43d4-a874-f7f1aa732c3d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0209",
+      "registerId": "2317a0d7-5a3c-4730-bdbe-d1cf79195753",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0210",
+      "registerId": "8ba47fe1-4dec-447e-a3e0-e71551908f8d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0211",
+      "registerId": "50eec00c-2d65-4dfd-80e7-85cc0aa55bc5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0212",
+      "registerId": "f69c3b5b-ed89-474d-84e6-e62adebd2458",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0213",
+      "registerId": "263eee23-629b-4230-9c67-2c855766a8bd",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0214",
+      "registerId": "a9b76c71-a07a-44ec-b2e2-6db0e818184a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0215",
+      "registerId": "0d82994d-c4ef-483c-a23c-e0470202e8fb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0216",
+      "registerId": "db667a86-87ca-4399-8dfe-7d5fef1dcf35",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0217",
+      "registerId": "417b3d57-b059-4e3a-ad6c-e9af5b1653fd",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0218",
+      "registerId": "5bc0a093-0584-4d59-a7c8-5b053b161535",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0219",
+      "registerId": "4cc7610c-ab9e-4284-b26d-531268434339",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0220",
+      "registerId": "1d5ad8c7-585e-4e82-9e85-c4f44222449c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0221",
+      "registerId": "2a14861f-0502-40ba-a790-d4410a4c7e2c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0222",
+      "registerId": "d587506c-a4b6-452a-9980-8e33ca6cd2bc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0223",
+      "registerId": "2cf49716-728a-446a-b79d-88f1547d4ff3",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0224",
+      "registerId": "770bf4ec-3ea8-4b54-a389-9ceb7200df32",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0225",
+      "registerId": "df88688b-a364-4382-b9b7-facc1478221a",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0226",
+      "registerId": "2a050b3a-a82a-4dcf-bd3d-6e12270ab437",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0227",
+      "registerId": "382fc9d3-c3f5-40e4-8152-570f64ab9c6c",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0228",
+      "registerId": "790268fa-bb09-4e02-a090-bcf32a820677",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0229",
+      "registerId": "3f51f50f-3373-4f55-b297-b82a30e8cc6a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0230",
+      "registerId": "12c4dab2-bcb1-4fdd-b42a-854f8866ef81",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0231",
+      "registerId": "b809568d-5888-4fac-93be-8e36016bcb32",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0232",
+      "registerId": "86526e05-6190-4eee-b302-2ae9d58401ed",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0233",
+      "registerId": "335aea70-1672-431e-b727-b4ee578dd803",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0234",
+      "registerId": "7011682a-7c7a-40c3-86c9-aced1ed62d00",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0235",
+      "registerId": "f77250a4-8ebf-498f-a40d-dec54c7e4d89",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0236",
+      "registerId": "5fb6317c-de51-4f53-998a-810e224a0021",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0237",
+      "registerId": "ea6b778f-bc7f-4efa-b955-0eeff45c002e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0238",
+      "registerId": "e3c66fff-acd6-44f4-84eb-ac9787219f52",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0239",
+      "registerId": "9ce28b97-4602-448a-bcf2-7c14fcf7ab64",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0240",
+      "registerId": "0e37e0b1-1cce-4d84-a6b2-ea129d374b9c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0241",
+      "registerId": "36a1e707-a5b9-491b-a6c0-fca03fffbb64",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0242",
+      "registerId": "4b24c53a-7a52-48c3-8273-c0bd68fd5437",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0243",
+      "registerId": "a26609ac-5536-4304-bc52-79d4ce7f800c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0244",
+      "registerId": "797c1ddd-6294-49fc-95bc-4abd946494ef",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0245",
+      "registerId": "02b4626f-ad84-421a-ae14-ff48446b65fe",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0246",
+      "registerId": "334ab359-4599-4e1d-b048-38104a8c2937",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0247",
+      "registerId": "c96a44aa-21f6-4e12-9a4b-1e4c8386d8ba",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0248",
+      "registerId": "8716ddfc-fc43-4615-9f49-b29ab0f77460",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0249",
+      "registerId": "f0d78038-4d2c-4935-bc4b-3598f03be54c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0250",
+      "registerId": "f60c17f7-ff32-4855-9057-b181423baa84",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0251",
+      "registerId": "95d8df8c-0a6e-400a-93f6-c53a65a5cc16",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0252",
+      "registerId": "98834074-e187-4c77-a905-40822b4380ea",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0253",
+      "registerId": "888884dc-65aa-448b-8e3d-f89e7ca476e1",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0254",
+      "registerId": "5adabcc9-7ab7-4516-9752-3ad72468e2fb",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0255",
+      "registerId": "9c3e9748-cbfb-4258-bfec-b924def5713e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0256",
+      "registerId": "29a93a1c-8c41-4cc6-9cf5-bb1308a568ec",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0257",
+      "registerId": "8443c78f-fe89-4a8a-8f36-aa934a471e63",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0258",
+      "registerId": "53cb389c-415c-4012-8c2b-cf9f8336aa0b",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0259",
+      "registerId": "c0794db5-6498-4084-a047-8ce6ebd8180b",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0260",
+      "registerId": "d4cd0551-6b81-41d1-9001-4d8678f7631d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0261",
+      "registerId": "e7ac5e53-57c0-4a1d-bf36-09521d55a668",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0262",
+      "registerId": "5a94314e-c8c9-4a06-af88-18c6b2777f63",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0263",
+      "registerId": "5c2d11c4-0651-44cd-b8b1-ad9aa62cefad",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0264",
+      "registerId": "5998c16c-9b1d-4c3d-838a-933c52889553",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0265",
+      "registerId": "c9c9e68f-1ba9-4617-aa70-cf103cc5c242",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0266",
+      "registerId": "bc3b1b4b-2e40-4d7e-a618-c2a8f8224aca",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0267",
+      "registerId": "5add5134-4d9b-431c-9da1-f8fa6480581f",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0268",
+      "registerId": "302a09c7-fddd-4675-a928-c39ae09b26d4",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0269",
+      "registerId": "3edd5ffe-5076-40f4-ad28-8ce390a89c3b",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0270",
+      "registerId": "52ed4ed4-997d-48d1-a390-c25517cb84ec",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0271",
+      "registerId": "c90c1a11-718e-4d3c-adf1-e93f69418ccb",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0272",
+      "registerId": "7f75d955-eeb8-4d7d-9b3a-933ba6a8a0ac",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0273",
+      "registerId": "072eaf7c-187c-4ffe-b6dc-e23d77c25e7c",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0274",
+      "registerId": "b6e4951a-46a8-45ed-a283-d65ac9dfc4f2",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0275",
+      "registerId": "034fd69e-9aef-449d-8be6-bceb98719cef",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0276",
+      "registerId": "2b3fcce2-dfe6-4ae1-9cfb-c5e7cb67e34f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0277",
+      "registerId": "eb69bb6f-e3aa-4a77-b8ae-39d6dbad57fa",
+      "treatment": "unavailable-placeholder"
+    },
+    {
+      "catalogueId": "res-0278",
+      "registerId": "b0cb895d-4f26-4aee-90b7-84a0a2493cbc",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0279",
+      "registerId": "5b3de892-4534-44f9-ac30-9f1274d63fbf",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0280",
+      "registerId": "684c97e6-2494-4dec-acb3-42eeaa3ff308",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0281",
+      "registerId": "f6f72eae-912a-4448-8621-e38f5d305215",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0282",
+      "registerId": "71e5bfec-551b-49e5-bb93-6a32840ff6ab",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0283",
+      "registerId": "9bb78ffc-3692-4e1f-b702-7d6e3f26ae83",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0284",
+      "registerId": "d342b8fc-9b3a-48d2-95c5-8b635caad17d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0285",
+      "registerId": "1177e2cb-9596-4956-9d91-98b9155d0795",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0286",
+      "registerId": "38f8be4f-131f-4357-aac9-ce896b96edaf",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0287",
+      "registerId": "4d3ca828-e307-4381-832e-61f2d8ceb702",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0288",
+      "registerId": "af53c79b-0c19-45ce-b963-929213cb47fa",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0289",
+      "registerId": "532c7d33-a0c1-4d1e-9cdb-2e14372b092a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0290",
+      "registerId": "d49f36e4-d722-4f9c-aa82-f159c9a6c07f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0291",
+      "registerId": "7e2ef992-240d-4e2f-bf15-d88aaec326f7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0292",
+      "registerId": "1d0d1efb-5794-47d8-a0e3-cfc53727c0e0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0293",
+      "registerId": "57cf80a9-1eb5-43c6-b039-284337074989",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0294",
+      "registerId": "f8a412cc-40f9-49d6-9b3d-0a37bf0de3bd",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0295",
+      "registerId": "36bc62f9-1309-4b8c-8a0d-82b844e0cefb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0296",
+      "registerId": "299e8906-e37e-49a5-b73c-49df09398bf2",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0297",
+      "registerId": "3f5d8999-b3b3-408a-af67-c14e4e0eeda1",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0298",
+      "registerId": "9afc7244-02e3-4349-8d5b-ba4a4659c64f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0299",
+      "registerId": "0fb6eacd-58a1-489a-b475-b7678df99f31",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0300",
+      "registerId": "d838866f-6fc6-4422-af4d-826e1011518c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0301",
+      "registerId": "09f7a87b-b776-49dc-9613-dd7f66ef24ec",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0302",
+      "registerId": "36aec890-f504-4c10-b682-0845bad01977",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0303",
+      "registerId": "da961ced-989f-46eb-811f-41ca2065f41b",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0304",
+      "registerId": "a72334b2-3696-472b-96b0-a2ec052a89ea",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0305",
+      "registerId": "c4489f7b-26ec-487b-a3cb-0e7c2f5cf15a",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0306",
+      "registerId": "6e23c8f9-f89e-48b5-b58a-bf2439dc3ab3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0307",
+      "registerId": "01d3d7e4-cec4-4275-bbe5-aa134440060c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0308",
+      "registerId": "e0acc5c0-ab0a-484a-a919-7496f05da554",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0309",
+      "registerId": "8461ed32-f298-4769-9f70-f931788601f6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0310",
+      "registerId": "13aa662e-33d2-4901-b19e-b707c960534c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0311",
+      "registerId": "794eb307-0d6f-43b8-bc3a-7d0b70b48893",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0312",
+      "registerId": "4e1ca907-4664-4909-83d6-6849c251ebc6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0313",
+      "registerId": "ef091c33-b16b-4605-a946-d960ea60bb27",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0314",
+      "registerId": "6c5954d9-33e7-42e4-ad49-939f8af96afb",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0315",
+      "registerId": "ca2175b5-2ab4-432c-af32-4f7e3620936d",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0316",
+      "registerId": "bdb4235f-662a-4467-a121-ad7acf97e76c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0317",
+      "registerId": "d523be7d-79f3-4683-8106-a003de14de1f",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0318",
+      "registerId": "8f07f01a-00cc-44d8-9c48-3b24b2407f48",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0319",
+      "registerId": "c204261e-f444-489b-b215-4fbfe229b4ca",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0320",
+      "registerId": "4e4ea32c-f430-43bd-9708-95e4e54d8a35",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0321",
+      "registerId": "b50cb7ad-c040-43b9-9c90-23e65f4392b3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0322",
+      "registerId": "fcf02698-805b-498c-a7dc-bc4b0b49e31b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0323",
+      "registerId": "036151bd-a295-457e-94e3-8889a0415824",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0324",
+      "registerId": "a633a5bf-2eec-4f0c-96a7-dd78bf32099c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0325",
+      "registerId": "4a83231f-4c1a-4917-aec7-26b372f71403",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0326",
+      "registerId": "597c86ad-7ed8-42b1-a357-652e853f878f",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0327",
+      "registerId": "c9da458e-22a1-411c-8f5d-b0ad964a6883",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0328",
+      "registerId": "89e2a4bb-953c-4e56-bbab-549a7c420786",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0329",
+      "registerId": "a4dfc63f-f32c-49d2-8898-c9fdf377fed8",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0330",
+      "registerId": "a8f4d8e4-2718-4726-84d6-1cefeb8e0d34",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0331",
+      "registerId": "856d0457-5590-4d11-b2df-318f225091d3",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0332",
+      "registerId": "457a3fb6-b215-412e-92c9-04208beb52f3",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0333",
+      "registerId": "1867be66-698c-49f2-9fac-88fa0bcbcedb",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0334",
+      "registerId": "af0e40e8-7c86-4709-a21e-3f161f44588e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0335",
+      "registerId": "833695a3-f0c3-47a9-b75d-b5e5d75d2ffb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0336",
+      "registerId": "7b0a97c6-8c4d-4d05-8197-e31ac7b05da1",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0337",
+      "registerId": "58e70cde-aab4-495a-9a48-e9bd521f9e7b",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0338",
+      "registerId": "7701e380-727d-44c5-a978-9f6b752b0749",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0339",
+      "registerId": "9b5a49b7-be84-453e-8166-fb363523c47d",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0340",
+      "registerId": "aa23b294-4c0d-44a2-b754-80f1e1dae0d0",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0341",
+      "registerId": "e78bff2a-ad63-4eb8-b39d-87302ac890bf",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0342",
+      "registerId": "f2cf0ab8-7942-46e1-812d-6955f5cce218",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0343",
+      "registerId": "cdf9f1e6-ead8-40e5-a4c2-9b4ec9ecec70",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0344",
+      "registerId": "7c76f4c2-cc32-4407-927e-20749b2250f0",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0345",
+      "registerId": "e56aa951-141d-4899-9125-3aa1bf5ca3cb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0346",
+      "registerId": "d57d6880-6d9f-49f1-b02e-311519b7c985",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0347",
+      "registerId": "4c9b9087-34bf-4266-a589-b602d91daba6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0348",
+      "registerId": "68943f7e-ed60-4c5b-bf8b-a7f5dae4e26e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0349",
+      "registerId": "c239eb68-5eba-4fea-a798-a6ad6e0c8db8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0350",
+      "registerId": "f53ab926-d82f-4027-9422-983c41e52bd2",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0351",
+      "registerId": "630cd256-0132-4079-b1e5-7b721f22165e",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0352",
+      "registerId": "66964da5-821f-4c05-99ba-f449848c3a12",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0353",
+      "registerId": "3cdccf1f-cf6d-411d-a43a-9f4945c6b976",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0354",
+      "registerId": "2c5d20fa-27bb-4619-9f2e-42b1434888cd",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0355",
+      "registerId": "78b72fed-f622-473e-a0d6-51e9e862dbe0",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0356",
+      "registerId": "ce8e90c9-6ade-4c54-b300-455738b1f6d0",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0357",
+      "registerId": "53f5241b-a625-4143-a16a-172af1523ca2",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0358",
+      "registerId": "3481f53f-f9e3-4d5f-ba37-970bb8ee5c98",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0359",
+      "registerId": "78ce40c7-42eb-430a-a77a-3c75c9a322ca",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0360",
+      "registerId": "2907b106-f761-475e-8e55-75d4689df7d8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0361",
+      "registerId": "b3123d50-070c-4b48-bbba-d1826089fac3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0362",
+      "registerId": "6a7b96fe-f6e2-4d5b-88c7-107970d503b6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0363",
+      "registerId": "8de58e54-925b-45b3-9c8e-eb3794487604",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0364",
+      "registerId": "1aeec689-741e-41d4-b1b5-56bc7cbebabc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0365",
+      "registerId": "775eabfd-30e8-457d-ae9f-d4692e3ef3e5",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0366",
+      "registerId": "f7ba7a16-e5e1-4ff9-986d-a1b7c8d91ab8",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0367",
+      "registerId": "b2a69547-42bb-4b15-99a5-bb087d29437e",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0368",
+      "registerId": "ee023109-b99b-4c76-984f-1e5f715c0851",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0369",
+      "registerId": "6215eb29-4663-453b-b50d-802d94ff8fef",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0370",
+      "registerId": "41049dc4-e3ab-4259-b86d-40a55149241a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0371",
+      "registerId": "2982e98e-8994-4f11-a5f9-f08146fa619a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0372",
+      "registerId": "503f936b-e39e-4be7-b609-c214de767b79",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0373",
+      "registerId": "f6496d11-1934-47a5-ba92-fbefcb148f98",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0374",
+      "registerId": "71e73f6c-9e70-4c95-a26e-a1296971b00f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0375",
+      "registerId": "25275633-2bde-426c-adb2-e775584f8fef",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0376",
+      "registerId": "7e957319-1b01-4e5f-bdd8-ad5d89b88b3f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0377",
+      "registerId": "4ca6d3e4-95ca-4346-9142-147909b091f4",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0378",
+      "registerId": "e8fc79c4-1088-4f14-a45d-54b64e570420",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0379",
+      "registerId": "ecd64314-f8df-48bb-a1cc-3dc15bee0662",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0380",
+      "registerId": "93228ab2-19cd-4fba-b6f6-321cb9bdb8f8",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0381",
+      "registerId": "a05d94f3-90fa-46de-9a9e-d57079f98c98",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0382",
+      "registerId": "aeb10b25-58cf-43db-b15f-6b3305290390",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0383",
+      "registerId": "1e611a67-292a-49cb-85c8-540301a44964",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0384",
+      "registerId": "b9ac0b64-f9c0-436b-a6d6-bfc7eb6f71c4",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0385",
+      "registerId": "515ec960-122e-4cff-a262-2873fafeca05",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0386",
+      "registerId": "e2e3afea-6401-4e2f-90f7-5b9d62f874fe",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0387",
+      "registerId": "53094883-ae25-4ad2-8572-ab275c2acf43",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0388",
+      "registerId": "7706087a-7693-4653-8c44-653fceeebfdb",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0389",
+      "registerId": "9c2d62f8-1fbe-4100-b999-6a174b2a44ce",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0390",
+      "registerId": "2a13cf1e-11de-4a75-9852-398c098fa8f7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0391",
+      "registerId": "84c2dd73-81e2-420d-8ba6-e6add5ce5405",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0392",
+      "registerId": "3105b20e-6e4b-4a0f-93d3-f2ada14204d9",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0393",
+      "registerId": "8cd65996-575f-4aa2-82c5-eb05f341166e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0394",
+      "registerId": "eeb46803-0839-4b3c-b53d-d3aa94ae32dc",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0395",
+      "registerId": "f9e3b473-18e9-40d5-a70c-71d52f3d23d1",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0396",
+      "registerId": "1a13b49b-5789-4455-95cd-e082f19b6a86",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0397",
+      "registerId": "5ef6db13-6bd5-4001-bbbb-29e4bc7c67a6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0398",
+      "registerId": "91d79245-8333-432c-a0aa-1d4f07547910",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0399",
+      "registerId": "eb0f4db5-9fb0-494b-b1e5-d9a7d2eb1348",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0400",
+      "registerId": "8ce7bdf3-9e8c-4ae2-a8f1-c6f69fd0c228",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0401",
+      "registerId": "eecd2550-42b5-4a51-9c85-2c2f2bd830f6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0402",
+      "registerId": "9957d923-7a18-4e20-81d8-f8f4eff5d382",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0403",
+      "registerId": "25e337da-02ae-473c-952e-a59ca97aad15",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0404",
+      "registerId": "89206a43-55f0-4aef-aafe-09730f877acf",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0405",
+      "registerId": "39f309c5-af56-482f-a280-b87c63a6aab7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0406",
+      "registerId": "c6d017d6-496f-475d-a41e-e75b927e70e0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0407",
+      "registerId": "65455823-6d89-4675-a2bb-233cf730a86e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0408",
+      "registerId": "76638ad1-aafe-4013-8fc9-7f7e907fd397",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0409",
+      "registerId": "00e96284-0133-4613-83ab-68916b036f77",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0410",
+      "registerId": "e0174e5c-f397-4e4a-989d-059f15b34ce5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0411",
+      "registerId": "e84aee9c-7071-429b-a938-f8791175e6a8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0412",
+      "registerId": "63b6429d-6b5a-42bf-a038-43bc7a298511",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0413",
+      "registerId": "289628d1-85f4-4709-b816-3cf91f55c68b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0414",
+      "registerId": "ed3e7385-2cda-4f53-8966-a70ab97bfaca",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0415",
+      "registerId": "e1b16715-6bdb-485b-accf-dfd3e7659bda",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0416",
+      "registerId": "7bc85a18-d12e-44ae-8ac8-14e7b9f4b9ce",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0417",
+      "registerId": "4b871e03-f66e-4e0c-8852-1c75dfc449f5",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0418",
+      "registerId": "091f0742-56bb-40e1-a51b-33a3849a511b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0419",
+      "registerId": "c1a44c80-5657-47f8-90e7-06dfeb64b74c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0420",
+      "registerId": "36e4c507-02f5-4099-86e8-368dee8b58a6",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0421",
+      "registerId": "8b2a13e2-0100-48b0-83ef-c7ee48f8e877",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0422",
+      "registerId": "9fe10d02-57d5-4bde-9f10-674d52322259",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0423",
+      "registerId": "5b62ebf6-de5c-4f46-b1fe-c4ef039e3e45",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0424",
+      "registerId": "a0a593c7-bbe3-4d03-949a-cfa1ac35d2ce",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0425",
+      "registerId": "d02ffd55-5d91-4bd8-8a63-999eb50f0cd2",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0426",
+      "registerId": "0f39fc56-c27e-4cf2-aac8-fc198fb75424",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0427",
+      "registerId": "cee612f3-8d7b-46b2-be41-4a16d906326d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0428",
+      "registerId": "6d3c3f63-710b-49cf-a6a0-7c6a6fa21dc9",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0429",
+      "registerId": "9a173104-9428-4dcc-b1a0-4eb00c089543",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0430",
+      "registerId": "4ee8c8a6-83cd-4b10-a357-857f069c6df3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0431",
+      "registerId": "64df44f8-a1e9-4ffa-847d-dc7c6d23b914",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0432",
+      "registerId": "1de7bfda-a1b7-4e5b-ae2d-b2a6ae3a63fa",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0433",
+      "registerId": "e6df2a7f-03f3-4100-a0b4-f5130b8f18b2",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0434",
+      "registerId": "8eae7caa-9849-4402-8d70-af491c563578",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0435",
+      "registerId": "e97b1fee-24d4-4ac2-9094-25400e10ce5a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0436",
+      "registerId": "a3aed7f0-f75f-4637-a591-d54b88a2377c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0437",
+      "registerId": "4f218dc6-2df5-41ed-9ba7-bf19f02d7376",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0438",
+      "registerId": "caee4733-91fa-4f6a-827d-bfac0c0fb7d1",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0439",
+      "registerId": "eef7000b-e5df-4cd7-9ef7-ff3305fd6ac3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0440",
+      "registerId": "b494d7c5-8253-4cfa-b897-10c75ee02aaf",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0441",
+      "registerId": "95d1537f-ed9c-4cec-9e4e-b3dd4b4ab658",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0442",
+      "registerId": "b8994c83-a54e-41a7-b3b6-049fa72782c2",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0443",
+      "registerId": "8473184a-6b3e-43eb-9d60-b46f1dc2a3ad",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0444",
+      "registerId": "1ffcd9d0-aab2-4d1f-af30-97880df756fb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0445",
+      "registerId": "b5b7c12e-9d06-40b6-8536-b839cde7b353",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0446",
+      "registerId": "01ff0bff-ffaf-49c7-ab91-e021d0076ada",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0447",
+      "registerId": "4e40bea1-cbc1-4137-9ed2-cfd0960766cf",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0448",
+      "registerId": "66289fbf-e9ac-4106-ba24-ae58f69324e3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0449",
+      "registerId": "884be770-a4dc-41b2-989e-a5fc35ffbbeb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0450",
+      "registerId": "b6f78d1f-209d-46fc-bb9c-1052fcaa16bd",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0451",
+      "registerId": "f9d62b3f-3bcf-43e0-864b-d0710ae65c90",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0452",
+      "registerId": "9a01ec02-b8b1-4512-8ee3-64b7fba9e3c1",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0453",
+      "registerId": "6df0d848-ee91-4a54-949a-0a49fcef6fc7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0454",
+      "registerId": "24605be9-c00b-4520-8e68-855349f85c6e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0455",
+      "registerId": "4cd7c97c-0736-407b-9587-4f497dea4cbf",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0456",
+      "registerId": "720dd9a6-a945-4c8f-92a5-8cc93983248e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0457",
+      "registerId": "95ce7f19-fed2-4b7b-a65b-ca4035b50594",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0458",
+      "registerId": "615b5c1e-e7aa-4552-af6f-bf941c95d262",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0459",
+      "registerId": "5da230fb-37fa-4a84-a44f-1d9d72ec2209",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0460",
+      "registerId": "6d22df93-4d8e-4695-b1c6-79addc0079ac",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0461",
+      "registerId": "455d3288-d330-4c1a-bbb2-35f55286fbd3",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0462",
+      "registerId": "0d9175a5-56d8-4204-804e-f24be8d58836",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0463",
+      "registerId": "9f21d1e5-501a-4af8-ae98-102d85c64db7",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0464",
+      "registerId": "0d5872e4-09ee-4465-88ec-e3dc8fb75620",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0465",
+      "registerId": "9a36e80a-3956-4978-bf62-5f3abfa7a98e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0466",
+      "registerId": "32111ffa-6be8-4933-b0a7-8c96555eecc2",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0467",
+      "registerId": "97efd962-d2bc-4d5b-9a78-4be353e69e0a",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0468",
+      "registerId": "1d213547-7686-42f0-8fbd-6ff68604a236",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0469",
+      "registerId": "dbc186e0-bc4d-4ab2-9daa-eec96440f16d",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0470",
+      "registerId": "e4a33d40-07e9-456a-96db-fb509092a739",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0471",
+      "registerId": "8c60439d-a59f-4449-b221-098f98ffcb99",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0472",
+      "registerId": "d5e5d52c-ad24-4b06-b6b1-104c4097f786",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0473",
+      "registerId": "e7f0bfad-9572-45ed-8eb5-ee71d6ad793b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0474",
+      "registerId": "05726356-1a07-46b9-bb70-911be3b69b5d",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0475",
+      "registerId": "4e680d6b-bc3a-454b-997b-fd7bc2b8066f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0476",
+      "registerId": "cc4f25af-362a-44af-97b6-3bd511ed7ff7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0477",
+      "registerId": "558a7705-2e8b-4842-8863-3fcf179ec4f7",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0478",
+      "registerId": "d89a0fa1-9553-45c7-940d-7daa1b7f0904",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0479",
+      "registerId": "2496f5e9-9779-4a21-95a7-251ed927f83f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0480",
+      "registerId": "3ce0498c-5879-4b70-8d48-2cd36a284576",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0481",
+      "registerId": "4178a64b-18e4-40a8-af80-9aa185215366",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0482",
+      "registerId": "f0ec712f-2944-483c-810c-937ccbd32e8a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0483",
+      "registerId": "9280c0a8-ca1c-48d7-903b-87b23766ee6f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0484",
+      "registerId": "b45d0a92-ac43-452e-82c5-fb59d0bffa9a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0485",
+      "registerId": "db2d0290-692a-4d7a-9f08-476ecf0fe186",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0486",
+      "registerId": "17a226ba-28df-45b9-90b5-1d4e624bc887",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0487",
+      "registerId": "f75e9a2e-8d9d-46f9-b7de-64dae18265ea",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0488",
+      "registerId": "7384f887-609f-4ecd-b5b2-0e3ac88e574f",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0489",
+      "registerId": "43ec4958-ed71-4503-ab12-521e656d2a9e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0490",
+      "registerId": "4ff44375-301e-476d-bd81-0d6238698c15",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0491",
+      "registerId": "d852c6ec-4582-44be-8401-9a4c558f0a90",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0492",
+      "registerId": "e800c137-53ab-4a3d-a711-512535a93614",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0493",
+      "registerId": "ca82ccc0-7b10-401b-b5eb-5276cb436941",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0494",
+      "registerId": "7b8050cc-6dfa-4963-ae4a-aa0e9555a488",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0495",
+      "registerId": "47e49985-3137-4037-a472-e1f5704f9861",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0496",
+      "registerId": "4d5bf91b-cb3b-485d-a287-67a76066c813",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0497",
+      "registerId": "84fe974c-f7c9-44df-b3fc-45474fdbaf71",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0498",
+      "registerId": "2347fbcb-812f-452b-878f-b76fcffe8967",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0499",
+      "registerId": "357ea425-f6f7-4f2c-94ca-64bb7cc84635",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0500",
+      "registerId": "15faf67a-8d3b-4f84-8484-fef730fd4ff5",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0501",
+      "registerId": "114d4b81-9552-400e-a4b9-f98d6f3dea6f",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0502",
+      "registerId": "2ff04593-2ad7-466f-a0a0-1658c4bb0f6b",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0503",
+      "registerId": "902f67f6-26c1-4f2b-9177-a0ff130226b6",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0504",
+      "registerId": "969b4192-30fe-455e-9acd-21955537370d",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0505",
+      "registerId": "8c9408c2-3421-4c45-8cad-3284460bdb20",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0506",
+      "registerId": "39cf6a48-820c-4e54-8ec9-72713b9b807e",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0507",
+      "registerId": "127d9aa9-7dd2-4628-ac0b-35287ac4bd8f",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0508",
+      "registerId": "59a2b53c-05d4-4d27-95fb-a47d7d681620",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0509",
+      "registerId": "40e95edf-845a-4d8e-9ab4-c1322229540d",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0510",
+      "registerId": "aa0a63cd-0289-439c-871b-3a9f6cbc6e5d",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0511",
+      "registerId": "500e4fd2-8a00-446b-81c9-3f133741434c",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0512",
+      "registerId": "9842d637-6f60-4f02-9ab5-098904ad2567",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0513",
+      "registerId": "bf6fcb4e-b316-4883-a641-8c57127923df",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0514",
+      "registerId": "052356e3-79d8-4d9d-bf77-350acc588e45",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0515",
+      "registerId": "cbd3ce8b-afb7-43fd-8709-d4705a9e1930",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0516",
+      "registerId": "0762d92c-a78a-4039-b0a0-ee3cc750aff7",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0517",
+      "registerId": "c976cbe8-c03c-4d80-a818-90318113cae9",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0518",
+      "registerId": "067ac96b-4e22-4a5b-a2b3-e77864dd9a7c",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0519",
+      "registerId": "cd3af758-82f8-4e9d-9179-54d0d35410e9",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0520",
+      "registerId": "aba259af-4d36-4807-8cfe-b10eb93f2318",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0521",
+      "registerId": "382db71e-d25e-4c4d-a81e-807ee40287ec",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0522",
+      "registerId": "6059cad1-a098-4c45-996d-380447a7e255",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0523",
+      "registerId": "e0c961b1-a909-49e3-a01e-28c849e5ed02",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0524",
+      "registerId": "63d9f9d2-b31a-4a64-abb9-82ce18c2714c",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0525",
+      "registerId": "a24124c3-d563-460a-9248-59978e4a9feb",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0526",
+      "registerId": "6007e218-bef2-4b7c-b120-6b92157ce434",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0527",
+      "registerId": "0d256620-02af-4f31-96fb-efb9785624a1",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0528",
+      "registerId": "9d00de7c-6086-4e8a-97a6-471efe6b5b9b",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0529",
+      "registerId": "2448132c-e391-4919-9193-0a23afc86992",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0530",
+      "registerId": "37866c12-6c1c-408d-9122-523e9f9e7304",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0531",
+      "registerId": "21aa85c6-e18c-4e1a-8adb-753423788fff",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0532",
+      "registerId": "8540defc-6299-44ca-84d5-1502137353cc",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0533",
+      "registerId": "f4715b03-2bef-41df-8dae-6f8b24bd1f50",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0534",
+      "registerId": "dff399ad-6d1f-48aa-898b-8608db8409bc",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0535",
+      "registerId": "5eb37b6c-39bc-41c6-96d0-861429cba1b2",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0536",
+      "registerId": "6afd2018-eb8b-4ab8-8cb0-dce7a7da5bcd",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0537",
+      "registerId": "2cb41e3b-b9cf-40ca-8e0c-40a91598252c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0538",
+      "registerId": "5473a766-4d5a-422d-863d-101778f388b0",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0539",
+      "registerId": "15aa990d-76f9-49fe-9b1e-4fccca8fc5ea",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0540",
+      "registerId": "7a8d06ea-cf0a-4c72-9851-e4b2bbe5698f",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0541",
+      "registerId": "450d65ee-c0aa-460a-8356-30bc19fdac7f",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0542",
+      "registerId": "0b1d839a-4ce3-4ece-ba3e-92e174482f9e",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0543",
+      "registerId": "0ab9d028-ca9d-4b3f-b96c-b984973c3797",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0544",
+      "registerId": "fca7d75f-35da-4739-81bd-dbc70b7f92a0",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0545",
+      "registerId": "88e153f0-35b4-4b61-9eec-7efe83ff13be",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0546",
+      "registerId": "6eedba72-3c80-4475-8e88-8919ccb89387",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0547",
+      "registerId": "dc03d099-ee2e-4b75-ae09-6de5c972c2ac",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0548",
+      "registerId": "92e1d078-8725-4360-8644-43c05bbcf992",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0549",
+      "registerId": "75f105de-cbe1-4cf7-9563-595fd9ef8ac2",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0550",
+      "registerId": "b53bdfca-5888-4116-9478-8f6c2f0864d2",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0551",
+      "registerId": "f6f35403-7ce9-4114-b3ab-882e97ecf66d",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0552",
+      "registerId": "b30be65b-74e0-4b48-9bab-2f4d3e1073f1",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0553",
+      "registerId": "45878d6a-a203-4a86-a408-d0d98eeffc0e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0554",
+      "registerId": "4ba52e45-300c-46f4-a669-b82df7a1965a",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0555",
+      "registerId": "8a3bff30-6a48-4c62-859e-a499b9eaa2f0",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0556",
+      "registerId": "99b81db8-4b52-432d-8130-86ab73c72dbd",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0557",
+      "registerId": "f6d781b7-3c79-4580-8902-c26061329638",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0558",
+      "registerId": "a7e51b70-e895-4f52-806d-87e941922457",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0559",
+      "registerId": "0f1ba47a-75eb-4ae0-82cd-ba4ebf2cdea7",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0560",
+      "registerId": "ef475a36-ef95-4656-b2a2-89fb01a6febe",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0561",
+      "registerId": "6aa81270-eacb-4f93-b3eb-3c0fbf672413",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0562",
+      "registerId": "260e966d-ff4e-47ce-bf16-5548991ed728",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0563",
+      "registerId": "ca445d10-63ea-40c2-b3dd-52d8d1ac739c",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0564",
+      "registerId": "9b2fa041-153c-48d1-afff-03aa39b3b6ec",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0565",
+      "registerId": "dcfd8a33-c16b-4831-9c80-e35619746aba",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0566",
+      "registerId": "a9de826d-8a99-4e52-ae0e-6e1f52f9ca5e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0567",
+      "registerId": "fbdc21c6-e249-4417-acef-f9fdb16b6de8",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0568",
+      "registerId": "fff7faca-b516-48e7-998e-c6bc22af2294",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0569",
+      "registerId": "ab0642cb-6ad4-4ca7-bab2-e560348364f7",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0570",
+      "registerId": "ba1c0ecb-e62a-4db5-989a-71af01183d40",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0571",
+      "registerId": "a8b30f30-77f6-4997-a139-622c50efc753",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0572",
+      "registerId": "914a5688-1beb-4ab9-b111-a6b50f9209b0",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0573",
+      "registerId": "59bbe223-10fb-4b71-b51d-29c4ac3d9795",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0574",
+      "registerId": "1af4defc-64c3-444d-9283-d17cf053dffd",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0575",
+      "registerId": "1a645bc9-b88b-4db1-aeb9-7c3573737556",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0576",
+      "registerId": "8a1de52d-2e0f-44bd-a0da-6f1f66896439",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0577",
+      "registerId": "86e56a64-7e57-4c95-aabf-c03b60cf3d89",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0578",
+      "registerId": "ccec4ced-dd16-40aa-b2dc-6b83a563ab17",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0579",
+      "registerId": "11fa1dc0-6384-4f73-9a3c-8716f9ea7356",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0580",
+      "registerId": "e87cf07d-fa34-40ea-82ff-d4c4223d8257",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0581",
+      "registerId": "5eb6ce28-ca36-4742-b4ec-cc3e896d9d2d",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0582",
+      "registerId": "94baf734-2473-434b-a072-bc855130e738",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0583",
+      "registerId": "d7d05890-ec35-4af9-942d-41652bab014f",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0584",
+      "registerId": "b93408e5-4d73-4332-8569-856c07437a6e",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0585",
+      "registerId": "eb4880ca-af39-4219-8400-f9720fff5deb",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0586",
+      "registerId": "02af8970-3022-46ef-8707-d3846b66967c",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0587",
+      "registerId": "27401737-7606-4a2f-8cfb-162c12c921c9",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0588",
+      "registerId": "4eb87d87-5235-47f6-900d-af48bb2aeed5",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0589",
+      "registerId": "4d4509ad-f619-489e-9843-16b1b76b1584",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0590",
+      "registerId": "feef180b-ec07-4aca-b013-81b8f3654411",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0591",
+      "registerId": "edd4e88d-2ea7-403d-8e90-916b4c9ab0ad",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0592",
+      "registerId": "b6aa8680-152a-4e37-bd5e-c05377e64b69",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0593",
+      "registerId": "f5f48885-bad2-4548-a132-67ea8c21112e",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0594",
+      "registerId": "4266e800-7a53-4222-a381-b225ced14641",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0595",
+      "registerId": "d94dda94-d176-41c6-85a3-2465d5d78112",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0596",
+      "registerId": "898f48f7-0d73-44ee-a03e-8e5464116ea6",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0597",
+      "registerId": "4e7608e6-0a1d-4a8b-983f-dad23501ac2a",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0598",
+      "registerId": "77fe8de6-071a-4591-9362-46483f9c98de",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0599",
+      "registerId": "89dde2ea-e226-498f-b52a-6c57f751ee4b",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0600",
+      "registerId": "1272e333-a77e-4e15-8c63-b41f856d633f",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0601",
+      "registerId": "d434e573-512b-447d-8065-a10b1bbc3fab",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0602",
+      "registerId": "992ea380-3fc7-4645-9321-48f21ad51026",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0603",
+      "registerId": "68b1e581-54c9-41cf-b467-afef91b557ad",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0604",
+      "registerId": "61b4ae39-057b-478e-a615-c632bf57041b",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0605",
+      "registerId": "9dd335d4-7707-4875-9c62-846502c2e10d",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0606",
+      "registerId": "7eb692ba-7eb3-4423-b27d-9122d53cbff0",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0607",
+      "registerId": "5adb796a-d877-44f8-88ad-4e1ab60ec9f0",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0608",
+      "registerId": "dc160091-de6e-4e08-a613-680c7798380a",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0609",
+      "registerId": "0a6ff61a-40fe-4794-af06-216b0167f246",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0610",
+      "registerId": "53e27023-2e24-461b-8db6-4d1adb0fc9f5",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0611",
+      "registerId": "7bfea06d-f61e-4d7d-b6c7-9098b1650152",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0612",
+      "registerId": "5ad4efff-eda3-45b9-9b1e-c6c09be0b487",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0613",
+      "registerId": "1d9d845b-a5b1-4ab1-87cb-b84b25152162",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0614",
+      "registerId": "ebb7628e-fb29-420f-a9a4-1781be29a343",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0615",
+      "registerId": "98c2332b-5fee-403d-bd32-64d3ddb586ee",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0616",
+      "registerId": "6761bb0d-a8fc-440c-8d0a-0330ce7a0b1b",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0617",
+      "registerId": "b9a22db5-45a3-4e89-8786-0d3e43eff863",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0618",
+      "registerId": "3a1f95f6-976f-4373-889c-8ded58b4513b",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0619",
+      "registerId": "b079b097-1ec2-49db-8d20-864b891b8edf",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0620",
+      "registerId": "d55bc84d-67af-45f4-8141-d7fa56cf6133",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0621",
+      "registerId": "7af61862-5779-49e8-97c8-31836fcdd5f3",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0622",
+      "registerId": "1023d5ff-e2fb-4977-8561-427fa8047fa7",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0623",
+      "registerId": "7b1fd607-3ee7-4f99-bcd6-43b7ae6cae32",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0624",
+      "registerId": "ce33d5b0-b333-4f77-ba9a-60b8d333fdb1",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0625",
+      "registerId": "e51b3d4a-63a8-467d-a740-fb57eee72195",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0626",
+      "registerId": "6e501f10-6c49-40a4-86a7-a8370ca43c2c",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0627",
+      "registerId": "f942004b-ae20-41d6-8a84-f3231a41061f",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0628",
+      "registerId": "2bb397ba-8802-4509-9375-2a82689a389a",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0629",
+      "registerId": "4b62df0e-151b-4e61-9ae7-309c0c4ac1d0",
+      "treatment": "live-official-link"
+    },
+    {
+      "catalogueId": "res-0630",
+      "registerId": "b62ef43a-639f-4111-9b9e-6f31aaff1bf4",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0631",
+      "registerId": "04ba7447-206a-4684-89b5-999c7adbf424",
+      "treatment": "duplicate-archived"
+    },
+    {
+      "catalogueId": "res-0632",
+      "registerId": "dd662aaa-ae66-49cf-bed3-7f49d8c30c1a",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0633",
+      "registerId": "a61c4e79-eb52-48ae-9330-46c325cf1780",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0634",
+      "registerId": "ddf4050d-90e1-4d26-9e0d-ee81ed2e69f0",
+      "treatment": "opal-original-draft"
+    },
+    {
+      "catalogueId": "res-0635",
+      "registerId": "8a855141-fdb5-466f-8442-20cdb7769523",
+      "treatment": "privacy-excluded"
+    },
+    {
+      "catalogueId": "res-0636",
+      "registerId": "be8659d7-917a-438e-8f3f-30febb61ef14",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0637",
+      "registerId": "5551b015-9ab2-4a72-a4a8-15005a686fc8",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0638",
+      "registerId": "11c99f04-e327-440f-91d1-1758113a787b",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0639",
+      "registerId": "9a876c37-7d42-4e47-beb9-9d896e870339",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0640",
+      "registerId": "fd12caf2-138d-4237-a8e8-550fd89c9bed",
+      "treatment": "rights-review"
+    },
+    {
+      "catalogueId": "res-0641",
+      "registerId": "40c27b33-381d-4019-82a3-9af531af4d7a",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0642",
+      "registerId": "5fae9f5c-c78c-454e-af42-c235d1653962",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0643",
+      "registerId": "053b50b6-35c1-48ad-b9fe-946f062f76cd",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0644",
+      "registerId": "5cd982e4-059a-47ca-af04-ef30b35e8360",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0645",
+      "registerId": "2b6c76e6-ae5e-41b1-8ef1-ea832c4f483b",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0646",
+      "registerId": "eab85b85-3993-41d4-b706-4398f9a80b67",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0647",
+      "registerId": "e1b4c48d-d089-4570-957f-d5ee25c58bbc",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0648",
+      "registerId": "fe1b428d-2af5-49df-ab55-6e48c7bf6863",
+      "treatment": "controlled-register"
+    },
+    {
+      "catalogueId": "res-0649",
+      "registerId": "a4d62aba-e3e4-4eca-a08d-7cf5d51db8a8",
+      "treatment": "live-vendor-link"
+    },
+    {
+      "catalogueId": "res-0650",
+      "registerId": "835dc3a0-8381-449b-b88e-387494fb585a",
+      "treatment": "live-vendor-link"
+    }
+  ]
+}
