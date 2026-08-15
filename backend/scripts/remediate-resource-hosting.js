@@ -325,16 +325,22 @@ async function restrictRightsReview(stats) {
   console.log(`  rights-review resources restricted to admin: ${stats.rightsRestricted}`);
 }
 
-/** Blobs on disk with no resource_files row: failed-import leftovers. */
+/**
+ * Blobs on disk with no referencing row: failed-import leftovers under
+ * resources/, and superseded v0.1 seed outputs under opal-originals/. Walks
+ * the whole governed root; a blob survives only if a resource_files or
+ * resource_file_derivatives row points at it.
+ */
 async function removeOrphanBlobs(stats) {
   const { rows } = await pool.query(
-    `SELECT storage_key FROM resource_files WHERE storage_key LIKE 'resources/%'`);
+    `SELECT storage_key FROM resource_files WHERE storage_key IS NOT NULL
+     UNION SELECT storage_key FROM resource_file_derivatives`);
   const referenced = new Set(rows.map((r) => r.storage_key));
-  const base = path.join(STORE_ROOT, 'resources');
   const walk = (dir) => {
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
+      if (e.name === '.DS_Store') continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) { walk(full); continue; }
       const rel = path.relative(STORE_ROOT, full);
@@ -346,7 +352,7 @@ async function removeOrphanBlobs(stats) {
       }
     }
   };
-  walk(base);
+  walk(STORE_ROOT);
   console.log(`  orphan blobs removed: ${stats.orphansRemoved} (${(stats.orphanBytes / 1024 / 1024).toFixed(1)} MB)`);
 }
 
