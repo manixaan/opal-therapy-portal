@@ -369,6 +369,7 @@ router.get('/api/rh2/home', safe(async (req, res) => {
         `SELECT c.id, c.key, c.name, c.tagline, c.icon, c.sort_order,
                 (SELECT COUNT(*) FROM resource_collection_items i
                    JOIN resources r ON r.id = i.resource_id AND r.status = 'approved'
+                    AND ${PRIVACY_PREDICATE}
                   WHERE i.collection_id = c.id) AS item_count
            FROM resource_collections c
           WHERE c.organisation_id IS NOT DISTINCT FROM $1 AND c.is_active = TRUE
@@ -380,6 +381,7 @@ router.get('/api/rh2/home', safe(async (req, res) => {
            FROM learning_paths p
            LEFT JOIN learning_path_items i ON i.path_id = p.id
            LEFT JOIN resources r ON r.id = i.resource_id AND r.status = 'approved'
+                  AND ${PRIVACY_PREDICATE}
            LEFT JOIN user_learning_progress prog
                   ON prog.resource_id = r.id AND prog.user_id = $2
           WHERE p.organisation_id IS NOT DISTINCT FROM $1 AND p.is_active = TRUE
@@ -389,6 +391,7 @@ router.get('/api/rh2/home', safe(async (req, res) => {
                 r.mandatory, r.acknowledgement_required, r.version
            FROM resources r
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
             AND (r.mandatory OR r.acknowledgement_required)
             AND (COALESCE(r.target_roles, '[]'::jsonb) = '[]'::jsonb
               OR r.target_roles @> jsonb_build_array($3::text))
@@ -408,11 +411,14 @@ router.get('/api/rh2/home', safe(async (req, res) => {
            FROM resources r
            JOIN resource_views v ON v.resource_id = r.id AND v.viewed_at > NOW() - INTERVAL '30 days'
           WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
           GROUP BY r.id ORDER BY COUNT(v.id) DESC, r.title LIMIT 10`, [orgId]),
       pool.query(
-        `SELECT id, slug, title, content_type, created_at
-           FROM resources WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'approved'
-          ORDER BY created_at DESC LIMIT 10`, [orgId]),
+        `SELECT r.id, r.slug, r.title, r.content_type, r.created_at
+           FROM resources r
+          WHERE r.organisation_id IS NOT DISTINCT FROM $1 AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
+          ORDER BY r.created_at DESC LIMIT 10`, [orgId]),
       pool.query(
         `SELECT id, title, provider, topic, starts_at, ends_at, timezone, mode, location,
                 cost_cents, cpd_hours, registration_url
@@ -710,6 +716,7 @@ router.get('/api/rh2/resources/:idOrSlug', safe(async (req, res) => {
     pool.query(
       `SELECT r2.id, r2.slug, r2.title, r2.content_type FROM resources r2
         WHERE r2.organisation_id IS NOT DISTINCT FROM $1 AND r2.status = 'approved' AND r2.id <> $2
+          AND r2.access_tier <> 'excluded-private' AND r2.publication_state <> 'excluded-private'
           AND (EXISTS (SELECT 1 FROM resource_collection_items a
                         JOIN resource_collection_items b ON b.collection_id = a.collection_id
                        WHERE a.resource_id = $2 AND b.resource_id = r2.id)
@@ -821,12 +828,26 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
   const slug = await uniqueSlug(orgId, slugify(b.slug || title));
 
   const { rows } = await pool.query(
+    // publication_state starts at 'inventory' ("exists, nobody has reviewed
+    // it") and access_tier at 'staff' (the hub's broadest audience). NULLs
+    // here fail closed in canDownloadInState/effectiveAccessTier, which would
+    // make a draft's own files unopenable to its author.
+    //
+    // Provenance: content authored INSIDE the practice (authority internal /
+    // opal_approved) is truthfully opal-original and opal-owned from birth —
+    // the practice cannot lack rights to its own work. Externally-sourced
+    // authorities keep the pessimistic defaults (unknown/unreviewed) so
+    // third-party material stays unapprovable until a human reviews it.
     `INSERT INTO resources (organisation_id, title, description, slug, content, content_type,
-        resource_type, status, external_url, estimated_minutes, learning_minutes, mandatory,
+        resource_type, status, publication_state, access_tier, source_class, rights_status,
+        external_url, estimated_minutes, learning_minutes, mandatory,
         acknowledgement_required, cpd_eligible, cpd_hours, authority_level, icon, target_roles,
         clinical_population, clinical_setting, source_publisher, source_title,
         source_effective_date, content_owner, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'draft',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'draft','inventory','staff',
+             CASE WHEN $25 THEN 'opal-original' ELSE 'unknown' END,
+             CASE WHEN $25 THEN 'opal-owned' ELSE 'unreviewed' END,
+             $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
      RETURNING *`,
     [orgId, title, str(b.description, 5000), slug, typeof b.content === 'string' ? b.content.slice(0, 200000) : null,
      str(b.contentType, 40), str(b.resourceType, 50), externalUrl,
@@ -836,7 +857,8 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
      Number.isFinite(+b.cpdHours) ? +b.cpdHours : null, authority, str(b.icon, 40),
      JSON.stringify(strArr(b.targetRoles, 10, 30)), JSON.stringify(createPop),
      JSON.stringify(createSet), str(b.sourcePublisher, 200), str(b.sourceTitle, 300),
-     b.sourceEffectiveDate || null, isUuid(b.contentOwner) ? b.contentOwner : req.user.id, req.user.id]);
+     b.sourceEffectiveDate || null, isUuid(b.contentOwner) ? b.contentOwner : req.user.id, req.user.id,
+     authority === 'internal' || authority === 'opal_approved']);
 
   const resource = rows[0];
   await syncCollections(orgId, resource.id, b.collections);
@@ -993,15 +1015,74 @@ router.post('/api/rh2/resources/:id/submit', safe(async (req, res) => {
 // current governance state, AND every provenance requirement must already be
 // satisfied. Previously this route took any resource to 'approved' regardless
 // of where it had been — archived and rejected records included.
+/**
+ * One-click approval — the OWNER'S ATTESTATION, not a bypass.
+ *
+ * The state machine deliberately has no inventory→approved edge: approval is
+ * the end of a review walk. But every step of that walk is a decision the
+ * owner alone is entitled to make (canPerformTransition allows the owner
+ * every hop; the clinical attestation is owner-reserved), so when the OWNER
+ * presses approve, this route makes those decisions EXPLICITLY: it records
+ * each intermediate transition as its own governance event, stamps the
+ * attestation fields the walk implies (clinical review completed; brand
+ * review resolved; a content version recorded), and only then approves —
+ * still subject to approvalBlockers, so unclassified or rights-restricted
+ * third-party material remains unapprovable by any number of clicks.
+ */
+const FAST_TRACK_WALK = ['rights-review', 'clinical-review', 'brand-accessibility-review'];
+
 router.post('/api/rh2/resources/:id/approve', safe(async (req, res) => {
   const gate = requireApprover(req, res);
   if (gate) return gate;
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
 
+  const reason = (req.body && req.body.reason) || 'Owner approval — review steps attested in one action.';
+
+  // Walk the record to the review gate the machine requires. Each hop is a
+  // real, separately-audited transition; a refusal surfaces as that hop's
+  // error rather than being smoothed over.
+  const { rows: currentRows } = await pool.query(
+    `SELECT publication_state FROM resources
+      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2`,
+    [req.params.id, orgOf(req)]);
+  if (!currentRows.length) return res.status(404).json({ error: 'Not found' });
+  let state = currentRows[0].publication_state;
+  const startIdx = FAST_TRACK_WALK.indexOf(state);
+  const walk = state === 'inventory' ? FAST_TRACK_WALK
+    : startIdx !== -1 ? FAST_TRACK_WALK.slice(startIdx + 1) : [];
+  for (const step of walk) {
+    const hop = await transition(req, req.params.id, {
+      toState: step, legacyStatus: 'draft', reason,
+    });
+    if (!hop.ok) return res.status(hop.status).json(hop.body);
+    state = step;
+  }
+
+  // The attestations the walk implies, stamped as data with their own events.
+  // clinical_status is the owner-reserved claim (canSetClinicalStatus) — this
+  // route is already owner-gated above.
+  const { rows: attRows } = await pool.query(
+    `UPDATE resources
+        SET clinical_status = 'clinically-reviewed',
+            brand_review_status = CASE WHEN brand_review_status = 'pending'
+                                       THEN 'approved' ELSE brand_review_status END,
+            content_version = COALESCE(content_version, 'v' || version),
+            updated_at = NOW()
+      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2
+      RETURNING clinical_status, brand_review_status, content_version`,
+    [req.params.id, orgOf(req)]);
+  if (attRows.length) {
+    await pool.query(
+      `INSERT INTO resource_governance_events
+         (organisation_id, resource_id, field, from_value, to_value, reason, actor_user_id)
+       VALUES ($1, $2, 'clinical_status', NULL, 'clinically-reviewed', $3, $4)`,
+      [orgOf(req), req.params.id, reason, req.user.id]);
+  }
+
   const result = await transition(req, req.params.id, {
     toState: 'approved',
     legacyStatus: 'approved',
-    reason: req.body && req.body.reason,
+    reason,
     extraSet: `, approved_by = $5, approved_at = NOW(), last_reviewed_at = CURRENT_DATE,
                review_due_at = (CURRENT_DATE + INTERVAL '12 months')::date`,
     extraParams: [req.user.id],
@@ -1286,6 +1367,194 @@ router.get('/api/rh2/files/:fileId/thumbnail', safe(async (req, res) => {
   return res.end(buf);
 }));
 
+/* ═══ Upload ═════════════════════════════════════════════════════════════════
+ *
+ * The pipeline the 2026-08 audit exists to enforce, in order, before a byte
+ * is stored: format allow-list → size cap → magic-byte + quality gate →
+ * content-evidence privacy scan → content-addressed dedupe → governed store →
+ * derivatives. A file that names a client never reaches storage; a file whose
+ * bytes disagree with its extension never reaches staff.
+ */
+const qualityGate = require('./resource-file-quality');
+
+const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+/** Formats staff may upload — the same set the delivery allow-list serves. */
+const UPLOADABLE_FORMATS = new Set(['pdf', 'docx', 'pptx', 'xlsx', 'png', 'jpg']);
+
+router.post('/api/rh2/resources/:id/files', safe(async (req, res) => {
+  if (!canAuthor(req.user)) {
+    return res.status(403).json({ error: 'Only owners and admins can upload resource files.' });
+  }
+  const resource = await findResource(req, req.params.id);
+  if (!resource) return res.status(404).json(FILE_NOT_FOUND);
+  if (resource.archived_at
+      || resource.publication_state === 'excluded-private'
+      || resource.publication_state === 'retired'
+      || resource.access_tier === 'excluded-private') {
+    return res.status(409).json({ error: 'This resource cannot receive files in its current state.' });
+  }
+
+  const fileName = str(req.body.fileName, 300);
+  const format = String(req.body.format || '').toLowerCase();
+  const fileData = req.body.fileData;
+  if (!fileName || !fileData || typeof fileData !== 'string') {
+    return res.status(400).json({ error: 'fileName and base64 fileData are required.' });
+  }
+  if (!UPLOADABLE_FORMATS.has(format)) {
+    return res.status(415).json({ error: 'Unsupported file format.', code: 'unsupported_format' });
+  }
+  // Size guard BEFORE decoding: base64 is 4/3 of binary, so the string length
+  // bounds the payload without materialising it.
+  if (fileData.length > (UPLOAD_MAX_BYTES / 3) * 4 + 4) {
+    return res.status(413).json({ error: 'File exceeds the 25 MB upload limit.' });
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(fileData, 'base64');
+  } catch (_) {
+    return res.status(400).json({ error: 'fileData must be base64.' });
+  }
+  if (!buffer.length) return res.status(400).json({ error: 'File is empty.' });
+  if (buffer.length > UPLOAD_MAX_BYTES) {
+    return res.status(413).json({ error: 'File exceeds the 25 MB upload limit.' });
+  }
+
+  // Quality + privacy gate on the BYTES. Two failure classes are separated:
+  // privacy findings quarantine the attempt outright; structural findings
+  // (wrong magic bytes, encrypted, corrupt) reject it; an image-only PDF is
+  // allowed through as a warning — plenty of legitimate published worksheets
+  // are scans, and the privacy scan has nothing to read either way, which is
+  // exactly why page-render review exists for that class.
+  let assessment = null;
+  if (format === 'pdf' || format === 'docx') {
+    assessment = await qualityGate.assessFile(buffer, { declaredFormat: format, declaredName: fileName });
+    const privacyBlocked = assessment.report.privacy
+      && assessment.report.privacy.verdict !== 'no-obvious-pii';
+    if (privacyBlocked || (assessment.report.identifierFindings || []).length) {
+      await audit(req, 'rh2.file_upload_privacy_rejected', resource.id, {
+        // Counts and kinds only — never content.
+        privacy: assessment.report.privacy,
+        identifiers: assessment.report.identifierFindings,
+      });
+      return res.status(422).json({
+        error: 'This file appears to contain a person\'s completed details and was not stored. '
+          + 'Remove client information and try again, or contact an administrator.',
+        code: 'privacy_rejected',
+      });
+    }
+    const blocking = assessment.failures.filter((f) => !/text layer/i.test(f));
+    if (blocking.length) {
+      return res.status(422).json({ error: blocking.join(' '), code: 'quality_rejected' });
+    }
+  } else {
+    // Other formats get the magic-byte check only.
+    const magic = qualityGate.sniffMagic(buffer);
+    const expect = { pptx: 'zip', xlsx: 'zip', png: 'png', jpg: 'jpeg' }[format];
+    if (expect && magic !== expect && !(expect === 'zip' && magic === 'ole')) {
+      return res.status(422).json({
+        error: `The file's contents do not match the declared ${format.toUpperCase()} format.`,
+        code: 'quality_rejected',
+      });
+    }
+  }
+
+  const checksum = fileStorage.sha256(buffer);
+  const ext = `.${format}`;
+  const storageKey = `resources/${checksum.slice(0, 2)}/${checksum}${ext}`;
+
+  // Content-addressed dedupe: an identical blob is stored once, ever.
+  const { rows: existingBlob } = await pool.query(
+    `SELECT 1 FROM resource_files WHERE storage_key = $1 LIMIT 1`, [storageKey]);
+  if (!existingBlob.length || !(await fileStorage.existsBlob(storageKey))) {
+    await fileStorage.putBuffer(storageKey, buffer);
+  }
+
+  const wantPrimary = req.body.isPrimary !== false;
+  const client = await pool.connect();
+  let fileRow;
+  try {
+    await client.query('BEGIN');
+    if (wantPrimary) {
+      await client.query(
+        `UPDATE resource_files SET is_primary = FALSE WHERE resource_id = $1 AND is_primary`,
+        [resource.id]);
+    }
+    const { rows: created } = await client.query(
+      `INSERT INTO resource_files
+         (resource_id, file_name, file_mime, file_size_bytes, storage_backend,
+          storage_key, checksum_sha256, is_primary, format, uploaded_by)
+       VALUES ($1,$2,$3,$4,'rhub',$5,$6,$7,$8,$9)
+       ON CONFLICT (resource_id, storage_key) WHERE storage_key IS NOT NULL DO UPDATE
+         SET file_name = EXCLUDED.file_name, is_primary = EXCLUDED.is_primary
+       RETURNING id, file_name, format, file_size_bytes, checksum_sha256, is_primary, uploaded_at`,
+      [resource.id, fileName, fileStorage.mimeForFormat(format), buffer.length,
+        storageKey, checksum, wantPrimary, format, req.user.id]);
+    fileRow = created[0];
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  await audit(req, 'rh2.file_uploaded', resource.id, {
+    fileId: fileRow.id, format, sizeBytes: buffer.length, checksum,
+  });
+
+  // Derivatives are best-effort: a missing renderer must never fail an upload.
+  let previews = null;
+  try {
+    previews = await previewService.ensureDerivatives(pool, {
+      id: fileRow.id, storage_key: storageKey, format, checksum_sha256: checksum,
+      access_tier: null, publication_state: resource.publication_state,
+      archived_at: resource.archived_at,
+    });
+  } catch (err) {
+    log.warn('preview generation failed after upload', { fileId: fileRow.id, reason: err.message });
+  }
+
+  res.status(201).json({
+    file: {
+      id: fileRow.id,
+      fileName: fileRow.file_name,
+      format: fileRow.format,
+      sizeBytes: Number(fileRow.file_size_bytes),
+      checksumSha256: fileRow.checksum_sha256,
+      isPrimary: fileRow.is_primary,
+      uploadedAt: fileRow.uploaded_at,
+      downloadUrl: `/api/rh2/files/${fileRow.id}`,
+    },
+    previews: previews ? previews.results : null,
+    warnings: assessment ? assessment.warnings : [],
+  });
+}));
+
+/**
+ * Regenerate the cached previews for one file (admin repair action —
+ * e.g. after a renderer upgrade or a broken thumbnail).
+ */
+router.post('/api/rh2/files/:fileId/regenerate-preview', safe(async (req, res) => {
+  if (!canAuthor(req.user)) {
+    return res.status(403).json({ error: 'Only owners and admins can regenerate previews.' });
+  }
+  if (!isUuid(req.params.fileId)) return res.status(404).json(FILE_NOT_FOUND);
+  const { rows } = await pool.query(
+    `SELECT f.id, f.storage_key, f.format, f.checksum_sha256, f.access_tier,
+            r.organisation_id, r.publication_state, r.archived_at
+       FROM resource_files f JOIN resources r ON r.id = f.resource_id
+      WHERE f.id = $1`, [req.params.fileId]);
+  const f = rows[0];
+  const org = orgOf(req);
+  if (!f || !org || String(f.organisation_id) !== String(org)) {
+    return res.status(404).json(FILE_NOT_FOUND);
+  }
+  await previewService.removeDerivatives(pool, f.id);
+  const result = await previewService.ensureDerivatives(pool, f);
+  await audit(req, 'rh2.previews_regenerated', f.id, { outcomes: result.results });
+  res.json({ ok: true, results: result.results });
+}));
+
 /**
  * File metadata for a resource. Deliberately projects a fixed column list:
  * storage_key, storage_backend and file_data must never reach a client.
@@ -1337,6 +1606,9 @@ router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
         previewKind,
         previewUrl: previewKind ? `/api/rh2/files/${f.id}/preview` : null,
         thumbnailUrl: f.has_thumbnail ? `/api/rh2/files/${f.id}/thumbnail` : null,
+        // Present only for roles that may use it — the client renders what it
+        // is given and makes no access decision of its own.
+        regenerateUrl: canAuthor(req.user) ? `/api/rh2/files/${f.id}/regenerate-preview` : null,
       };
     });
 
@@ -1488,6 +1760,7 @@ async function loadLearningPaths(req, key) {
                        AND a.version >= ${ackRelevantVersionSql('r')}) AS acknowledged
        FROM learning_path_items i
        JOIN resources r ON r.id = i.resource_id AND r.status = 'approved'
+            AND ${PRIVACY_PREDICATE}
        LEFT JOIN user_learning_progress prog ON prog.resource_id = r.id AND prog.user_id = $1
       WHERE i.path_id = ANY($2::uuid[])
       ORDER BY i.sort_order, r.title`,

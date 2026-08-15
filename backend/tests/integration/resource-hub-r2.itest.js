@@ -17,7 +17,7 @@ const bodyParser = require('body-parser');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
-const { db, truncateAll, seedUser, closePool } = require('./helpers');
+const { db, truncateAll, seedUser, seedOrganisation, closePool } = require('./helpers');
 const { computeSourceCheckUpdate, isPrivateIp, urlHopIssue } = require('../../resource-hub-r2-routes');
 
 const PASSWORD = 'HubR2Pass1';
@@ -31,9 +31,18 @@ function buildApp() {
   return app;
 }
 
+/**
+ * Users share one organisation per test. Governance events carry a NOT NULL
+ * organisation_id, so an org-less user can log in but cannot complete any
+ * transition — which is realistic (production users always belong to one) and
+ * means these tests must too.
+ */
+let sharedOrgId = null;
+
 async function agentFor(app, role, overrides = {}) {
+  if (!sharedOrgId) sharedOrgId = (await seedOrganisation()).id;
   const hash = await bcrypt.hash(PASSWORD, 4);
-  const user = await seedUser({ password_hash: hash, role, ...overrides });
+  const user = await seedUser({ password_hash: hash, role, organisation_id: sharedOrgId, ...overrides });
   const agent = request.agent(app);
   const res = await agent.post('/api/auth/login').send({ email: user.email, password: PASSWORD });
   expect(res.status).toBe(200);
@@ -49,6 +58,7 @@ async function createDraft(agent, body) {
 
 beforeEach(async () => {
   await truncateAll();
+  sharedOrgId = null;
   delete process.env.ENABLE_RESOURCE_HUB;
   require('../../auth')._resetLoginRateLimit();
 });
@@ -119,7 +129,7 @@ describe('publishing workflow and visibility', () => {
     expect((await therapist.get('/api/rh2/resources/visible-policy')).status).toBe(200);
   });
 
-  test('admin can create a draft but cannot approve or archive; owner approve snapshots v1', async () => {
+  test('admin can create and archive but cannot approve; owner approve snapshots v1', async () => {
     const app = buildApp();
     const { agent: owner } = await agentFor(app, 'owner');
     const { agent: admin } = await agentFor(app, 'admin');
@@ -128,8 +138,8 @@ describe('publishing workflow and visibility', () => {
     expect(draft.status).toBe('draft');
     expect(draft.slug).toBe('admin-draft');
 
+    // Approval is the owner's call alone (governance APPROVAL_ROLES).
     expect((await admin.post(`/api/rh2/resources/${draft.id}/approve`)).status).toBe(403);
-    expect((await admin.post(`/api/rh2/resources/${draft.id}/archive`)).status).toBe(403);
 
     const approve = await owner.post(`/api/rh2/resources/${draft.id}/approve`);
     expect(approve.status).toBe(200);
@@ -143,6 +153,11 @@ describe('publishing workflow and visibility', () => {
     expect(versions[0].version).toBe(1);
     expect(versions[0].change_kind).toBe('initial');
     expect(versions[0].content).toBe('Body v1');
+
+    // Retiring is protective housekeeping, not an approval or a clinical
+    // claim, so the governance model allows either review role to do it
+    // (resource-governance.js REVIEW_ROLES + canPerformTransition).
+    expect((await admin.post(`/api/rh2/resources/${draft.id}/archive`)).status).toBe(200);
   });
 
   test('admin can edit a draft but not an approved resource; owner edit of approved requires changeKind', async () => {
@@ -309,7 +324,8 @@ describe('policy acknowledgements across versions', () => {
 
     // The learning-path view agrees: the item still reads as acknowledged.
     const { rows: [minorPath] } = await db.pool.query(
-      `INSERT INTO learning_paths (organisation_id, key, name) VALUES (NULL, 'ack-check', 'Ack Check') RETURNING *`);
+      `INSERT INTO learning_paths (organisation_id, key, name) VALUES ($1, 'ack-check', 'Ack Check') RETURNING *`,
+      [sharedOrgId]);
     await db.pool.query(
       `INSERT INTO learning_path_items (path_id, resource_id, sort_order) VALUES ($1,$2,1)`,
       [minorPath.id, policy.id]);
@@ -434,7 +450,8 @@ describe('learning paths', () => {
     await owner.post(`/api/rh2/resources/${second.id}/approve`);
 
     const { rows: [path] } = await db.pool.query(
-      `INSERT INTO learning_paths (organisation_id, key, name) VALUES (NULL, 'new-starter', 'New Starter') RETURNING *`);
+      `INSERT INTO learning_paths (organisation_id, key, name) VALUES ($1, 'new-starter', 'New Starter') RETURNING *`,
+      [sharedOrgId]);
     await db.pool.query(
       `INSERT INTO learning_path_items (path_id, resource_id, sort_order) VALUES ($1,$2,2), ($1,$3,1)`,
       [path.id, first.id, second.id]);
@@ -853,9 +870,13 @@ describe('analytics and quick links', () => {
     const { agent: therapist } = await agentFor(app, 'therapist');
     const res = await therapist.get('/api/rh2/home');
     expect(res.status).toBe(200);
-    for (const key of ['collections', 'continueLearning', 'requiredForYou', 'whatsNew',
+    for (const key of ['collections', 'continueLearning', 'requiredForYou',
       'popular', 'recentlyAdded', 'upcomingPd', 'quickLinks']) {
       expect(res.body[key]).toEqual([]);
     }
+    // 'What is new' was removed from the Home page — it duplicated Recently
+    // added. The key must be gone, not merely empty, so a stale client cannot
+    // read it as "nothing new" when the section no longer exists.
+    expect(res.body).not.toHaveProperty('whatsNew');
   });
 });

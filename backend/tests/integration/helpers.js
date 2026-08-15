@@ -37,6 +37,14 @@ const ALL_TABLES = [
   // Support tickets (migration 014) — children before parents
   'support_ticket_events', 'support_ticket_attachments', 'support_ticket_comments',
   'support_tickets', 'support_ticket_counters',
+  // FCA report generation (018) and progress note letters (019 — the SAME
+  // tables, generalised by document_type; no new tables to truncate)
+  //   — children before parents
+  'fca_generated_documents', 'fca_report_drafts', 'fca_section_presets',
+  'fca_client_ndis_goals', 'fca_client_ndis_plans', 'fca_client_profiles',
+  'fca_templates',
+  // WHODAS 2.0 (migration 021) — children before parents
+  'whodas_generated_documents', 'whodas_assessments', 'whodas_templates',
   'users', 'organisations',
 ];
 
@@ -54,12 +62,15 @@ async function seedUser(overrides = {}) {
     account_status: 'active',
     email_verified: true,
     is_active: true,
+    // NULL by default; pass organisation_id for routes that require a real
+    // org (file delivery refuses a NULL org rather than wildcard-matching).
+    organisation_id: null,
   };
   const u = { ...defaults, ...overrides };
   const { rows } = await db.pool.query(
-    `INSERT INTO users (email, name, role, password_hash, account_status, email_verified, is_active)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [u.email, u.name, u.role, u.password_hash, u.account_status, u.email_verified, u.is_active]
+    `INSERT INTO users (email, name, role, password_hash, account_status, email_verified, is_active, organisation_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [u.email, u.name, u.role, u.password_hash, u.account_status, u.email_verified, u.is_active, u.organisation_id]
   );
   return rows[0];
 }
