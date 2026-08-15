@@ -34,8 +34,9 @@ const PALETTE = {
   ink: '1F2A28',
 };
 
-const LOGO_PNG = '/Users/antonyxavier/Documents/Codex/2026-08-10/can-you-review-this-work-structure/'
-  + 'outputs/opal-resource-hub/00_ADMIN/assets/opal-therapy-logo.png';
+// Vendored with the application so documents carry branding in every
+// environment, not only on the machine the logo was designed on.
+const LOGO_PNG = path.join(__dirname, 'assets', 'opal-therapy-logo.png');
 
 const LOGO_ALT = 'Opal Therapy logo';
 

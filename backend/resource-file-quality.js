@@ -26,31 +26,46 @@ const path = require('path');
 const JSZip = require('jszip');
 const { scanTextForClientContent } = require('./resource-privacy-scan');
 
-const { pathToFileURL } = require('url');
-
-/** Resolved from the package root so a hoisted install still works. */
-const PDFJS_ROOT = path.dirname(require.resolve('pdfjs-dist/package.json'));
+const { Worker } = require('node:worker_threads');
 
 /**
- * pdfjs fetches Foxit substitutes for the 14 standard PDF fonts. Without a
- * local path it warns on every page and falls back, which buries real findings
- * in noise. The fonts ship with the package.
+ * All pdfjs work happens in a worker_thread (resource-file-quality-pdf-worker
+ * .js). pdfjs 4 ships ESM only, and importing ESM from CommonJS inside a
+ * Jest-managed VM proved version-sensitive — Node either refuses the dynamic
+ * import outright or routes it through Jest's per-suite module registry,
+ * which fails nondeterministically when suites share a worker process. A
+ * worker_thread is a plain Node realm with no test-runner hooks, so the gate
+ * behaves identically under test, in CI and in the server.
  */
-const STANDARD_FONTS = `${path.join(PDFJS_ROOT, 'standard_fonts')}/`;
+const PDF_WORKER = path.join(__dirname, 'resource-file-quality-pdf-worker.js');
+const PDF_WORKER_TIMEOUT_MS = 120000;
 
-/**
- * pdfjs 4 ships ESM only, and Jest's CommonJS runner rewrites a bare `import()`
- * into something it cannot resolve. Going through the Function constructor with
- * an absolute file URL reaches Node's real dynamic import in both environments,
- * so the gate behaves identically under test and in the server.
- */
-const nodeImport = new Function('u', 'return import(u)');
-let pdfjsPromise = null;
-function loadPdfjs() {
-  if (!pdfjsPromise) {
-    pdfjsPromise = nodeImport(pathToFileURL(path.join(PDFJS_ROOT, 'legacy/build/pdf.mjs')).href);
-  }
-  return pdfjsPromise;
+function runPdfWorker(op, buffer) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(PDF_WORKER, {
+      workerData: { op, data: new Uint8Array(buffer) },
+    });
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      worker.terminate().catch(() => {});
+      fn(value);
+    };
+    // A pathological PDF must fail the gate, not wedge the process.
+    const timer = setTimeout(
+      () => finish(reject, new Error(`pdf inspection timed out after ${PDF_WORKER_TIMEOUT_MS}ms`)),
+      PDF_WORKER_TIMEOUT_MS);
+    worker.once('message', (msg) => {
+      if (msg && msg.ok) finish(resolve, msg.result);
+      else finish(reject, new Error((msg && msg.error) || 'pdf worker failed'));
+    });
+    worker.once('error', (err) => finish(reject, err));
+    worker.once('exit', (code) => {
+      if (code !== 0) finish(reject, new Error(`pdf worker exited with code ${code}`));
+    });
+  });
 }
 
 /** Leading bytes that identify a format regardless of what the name claims. */
@@ -106,49 +121,21 @@ function scanForIdentifiers(text) {
 }
 
 async function inspectPdf(buffer) {
-  const pdfjs = await loadPdfjs();
-  const out = {
-    pages: 0, perPage: [], textChars: 0, hasTextLayer: false,
-    encrypted: false, corrupt: false, error: null, blankPages: [],
-  };
-  let doc;
   try {
-    doc = await pdfjs.getDocument({
-      data: new Uint8Array(buffer),
-      // Server-side: no worker, no eval, no external font fetching.
-      useWorkerFetch: false, isEvalSupported: false, useSystemFonts: false,
-      standardFontDataUrl: STANDARD_FONTS,
-    }).promise;
+    return await runPdfWorker('inspect', buffer);
   } catch (err) {
-    if (err && /password/i.test(err.name + err.message)) out.encrypted = true;
-    else out.corrupt = true;
-    out.error = err ? err.message : 'unknown';
-    return out;
+    // Worker-level failures fail closed, exactly like an unparseable file.
+    return {
+      pages: 0, perPage: [], textChars: 0, hasTextLayer: false,
+      encrypted: false, corrupt: true,
+      error: err ? err.message : 'pdf inspection failed', blankPages: [],
+    };
   }
+}
 
-  out.pages = doc.numPages;
-  for (let i = 1; i <= doc.numPages; i += 1) {
-    const entry = { page: i, chars: 0, ops: 0, rendered: false, error: null };
-    try {
-      const page = await doc.getPage(i);
-      const ops = await page.getOperatorList();       // full parse of the page
-      entry.ops = ops.fnArray.length;
-      entry.rendered = true;
-      const text = await page.getTextContent();
-      const s = text.items.map((it) => it.str || '').join('');
-      entry.chars = s.length;
-      out.textChars += s.length;
-      // A page with no text AND almost no drawing operations is blank.
-      if (entry.chars === 0 && entry.ops < 5) out.blankPages.push(i);
-    } catch (err) {
-      entry.error = err ? err.message : 'render failed';
-      out.corrupt = true;
-    }
-    out.perPage.push(entry);
-  }
-  out.hasTextLayer = out.textChars > 0;
-  await doc.destroy().catch(() => {});
-  return out;
+/** Per-page plain text of a PDF (items space-joined), for fidelity checks. */
+function pdfPageTexts(buffer) {
+  return runPdfWorker('text', buffer);
 }
 
 async function inspectDocx(buffer) {
@@ -290,24 +277,13 @@ async function assessFile(buffer, opts = {}) {
 }
 
 async function pdfText(buffer) {
-  const pdfjs = await loadPdfjs();
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(buffer), useWorkerFetch: false, isEvalSupported: false,
-    useSystemFonts: false, standardFontDataUrl: STANDARD_FONTS,
-  }).promise;
-  let all = '';
-  for (let i = 1; i <= doc.numPages; i += 1) {
-    const page = await doc.getPage(i);
-    const t = await page.getTextContent();
-    all += ` ${t.items.map((it) => it.str || '').join(' ')}`;
-  }
-  await doc.destroy().catch(() => {});
-  return all;
+  const texts = await pdfPageTexts(buffer);
+  return texts.map((t) => ` ${t}`).join('');
 }
 
 module.exports = {
   MIME_BY_FORMAT,
-  loadPdfjs,
+  pdfPageTexts,
   sha256,
   sniffMagic,
   scanForIdentifiers,

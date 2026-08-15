@@ -112,13 +112,8 @@ describe('generated documents pass the gate', () => {
     const inspected = await quality.inspectPdf(pdf);
     expect(inspected.hasTextLayer).toBe(true);
     // The final word must survive; truncation would drop it.
-    const pdfjs = await quality.loadPdfjs();
-    const doc = await pdfjs.getDocument({
-      data: new Uint8Array(pdf), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: false,
-    }).promise;
-    const page = await doc.getPage(1);
-    const text = (await page.getTextContent()).items.map((i) => i.str).join(' ').replace(/\s+/g, ' ');
-    await doc.destroy();
+    const texts = await quality.pdfPageTexts(pdf);
+    const text = texts.join(' ').replace(/\s+/g, ' ');
     expect(text).toContain('word');
   });
 });

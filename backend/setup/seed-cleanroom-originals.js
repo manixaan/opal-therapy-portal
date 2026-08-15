@@ -64,18 +64,8 @@ async function verifyContentFidelity(spec, pdfBuffer) {
   const quality2 = require('../resource-file-quality');
   const inspected = await quality2.inspectPdf(pdfBuffer);
   if (!inspected.hasTextLayer) return ['PDF has no text layer to verify against.'];
-  const pdfjs = await quality2.loadPdfjs();
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(pdfBuffer), useWorkerFetch: false, isEvalSupported: false, useSystemFonts: false,
-  }).promise;
-  let text = '';
-  for (let i = 1; i <= doc.numPages; i += 1) {
-    const page = await doc.getPage(i);
-    const t = await page.getTextContent();
-    text += ` ${t.items.map((it) => it.str || '').join(' ')}`;
-  }
-  await doc.destroy().catch(() => {});
-  const haystack = flatten(text);
+  const texts = await quality2.pdfPageTexts(pdfBuffer);
+  const haystack = flatten(` ${texts.join(' ')}`);
   return collectSpecStrings(spec)
     .filter((s) => !haystack.includes(flatten(s)))
     .map((s) => `Missing or truncated in PDF: "${String(s).slice(0, 60)}"`);
