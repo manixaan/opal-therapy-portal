@@ -55,6 +55,8 @@
      #casenotes | #casenotes/:id
      #book | #profile | #logbook | #accounting | #settings | #support | …
      #fca/step-2 | #letter/step-3
+     #resources/instruments | #resources/instruments/:key
+     #assessment/record/:id | #assessment/client/:id
    Overlays hang off the base route after a "!" so Back closes the overlay
    rather than leaving the underlying view:
      #calendar/week!booking | #calendar/week!event/:id | #profile!support
@@ -77,16 +79,41 @@
     'contacts', 'activity', 'billing', 'ndis', 'dormant',
     'travel', 'logbook', 'accounting', 'settings', 'support', 'purchases',
     'fca', 'letter',
+    // The assessment surface. Like the two wizards it is a full-screen view
+    // rather than a tab, but it carries a RECORD ID rather than a step number:
+    // #assessment/record/:id is one assessment, #assessment/client/:id is one
+    // client's assessments. Both are real addresses, so Back from an
+    // assessment lands on the client's list and Back from that lands on the
+    // Assessments tab, exactly as the on-screen Back button does.
+    'assessment',
   ];
 
   var WIZARD_TABS = ['fca', 'letter'];
+
+  /** Full-screen surfaces addressed by an id rather than a step. */
+  var PAGE_TABS = ['assessment'];
+  var ASSESS_VIEWS = ['record', 'client'];
 
   // Route names for the calendar modes. The app calls the Master Scheduler
   // mode 'master' internally; the route says 'scheduler' because that is what
   // the button is labelled and what a human would type.
   var CAL_MODES = ['day', 'week', 'month', 'scheduler'];
 
-  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail'];
+  // 'pd' and 'instruments' were missing, so RH2.nav('pd') normalised to 'home'
+  // and the professional development catalogue had no address at all — Back
+  // skipped past it and a link to it landed on the hub home page.
+  //
+  // 'pd' is the one resources view that carries an id of its own: '#resources/pd'
+  // is the catalogue, '#resources/pd/<id>' is one event. That is why the id rule
+  // below tests for either view rather than for 'detail' alone.
+  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments'];
+
+  /** Resources views that may carry a record id.
+   *  'instruments' joins them because each assessment has an information page
+   *  of its own — '#resources/instruments' is the catalogue,
+   *  '#resources/instruments/<key>' is one assessment. Without an address the
+   *  page could not be linked to and Back skipped straight past it. */
+  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -144,7 +171,9 @@
       var rid = safeId(s.id);
       if (view === 'detail' && !rid) view = 'library'; // "#resources/detail/" with no id
       out.view = view;
-      if (view === 'detail') out.id = rid;
+      // An idless '#resources/pd/' is still a valid address — it is the
+      // catalogue — so unlike 'detail' it degrades to itself, not elsewhere.
+      if (inList(RH_VIEWS_WITH_ID, view)) out.id = rid || null;
 
     } else if (out.tab === 'casenotes') {
       out.id = safeId(s.id) || null;
@@ -152,6 +181,16 @@
     } else if (inList(WIZARD_TABS, out.tab)) {
       var n = parseInt(s.step, 10);
       out.step = (isFinite(n) && n >= 1 && n <= MAX_STEP) ? n : null;
+
+    } else if (inList(PAGE_TABS, out.tab)) {
+      // An assessment address without an id names nothing openable, so it
+      // degrades to the Assessments tab rather than to an empty page.
+      var av = lower(s.view);
+      var aid = safeId(s.id);
+      if (!inList(ASSESS_VIEWS, av)) av = 'record';
+      if (!aid) return normaliseRoute({ tab: 'resources', view: 'instruments' });
+      out.view = av;
+      out.id = aid;
     }
 
     var ov = lower(s.overlay);
@@ -181,11 +220,17 @@
       if (s.view) out += '/' + s.view;
     } else if (s.tab === 'resources') {
       if (s.view === 'detail') out += '/detail/' + encodeURIComponent(s.id);
+      else if (s.view === 'pd') out += '/pd' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      // Like 'pd': an idless '#resources/instruments' is the catalogue, so it
+      // degrades to itself rather than losing the segment.
+      else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
     } else if (inList(WIZARD_TABS, s.tab)) {
       if (s.step) out += '/step-' + s.step;
+    } else if (inList(PAGE_TABS, s.tab)) {
+      out += '/' + s.view + '/' + encodeURIComponent(s.id);
     }
 
     if (s.overlay) {
@@ -226,12 +271,23 @@
       st.view = parts[1];
     } else if (tab === 'resources') {
       st.view = parts[1];
-      if (lower(parts[1]) === 'detail') st.id = decodeSegment(parts[2]);
+      if (inList(RH_VIEWS_WITH_ID, lower(parts[1]))) st.id = decodeSegment(parts[2]);
     } else if (tab === 'casenotes') {
       st.id = decodeSegment(parts[1]);
     } else if (inList(WIZARD_TABS, tab)) {
       var m = /^step-(\d{1,3})$/.exec(lower(parts[1] || ''));
       if (m) st.step = parseInt(m[1], 10);
+    } else if (inList(PAGE_TABS, tab)) {
+      // '#assessment/record/<id>' and '#assessment/client/<id>' canonically;
+      // '#assessment/<id>' is accepted as a record, because that is the shorter
+      // form a human types and it addresses the same thing.
+      if (inList(ASSESS_VIEWS, lower(parts[1]))) {
+        st.view = lower(parts[1]);
+        st.id = decodeSegment(parts[2]);
+      } else {
+        st.view = 'record';
+        st.id = decodeSegment(parts[1]);
+      }
     }
 
     if (overlayRaw) {
@@ -282,6 +338,8 @@
     KNOWN_TABS: KNOWN_TABS,
     CAL_MODES: CAL_MODES,
     RH_VIEWS: RH_VIEWS,
+    PAGE_TABS: PAGE_TABS,
+    ASSESS_VIEWS: ASSESS_VIEWS,
     OVERLAYS: OVERLAYS,
     MAX_ID: MAX_ID,
     MAX_HASH: MAX_HASH,
@@ -316,6 +374,9 @@
     rhId: null,
     wizard: null,    // 'fca' | 'letter' | null
     wizardStep: null,
+    page: null,      // 'assessment' | null — full-screen surface addressed by id
+    pageView: null,  // 'record' | 'client'
+    pageId: null,
   };
 
   function q(sel) { try { return doc.querySelector(sel); } catch (e) { return null; } }
@@ -359,6 +420,9 @@
 
   /** The current base (overlay-free) route, derived from the live app. */
   function currentBase() {
+    if (NAV.page && NAV.pageId) {
+      return { tab: NAV.page, view: NAV.pageView || 'record', id: NAV.pageId };
+    }
     if (NAV.wizard) {
       return { tab: NAV.wizard, step: wizardStepOf(NAV.wizard) || NAV.wizardStep || 1 };
     }
@@ -487,6 +551,20 @@
   }
 
   function tabAllowed(tab) {
+    if (inList(PAGE_TABS, tab)) {
+      // Two conditions, not one. The module must be loaded, or restoring is a
+      // no-op — but unlike the wizards, assessment.js loads for EVERY role, so
+      // "the module exists" says nothing about permission. The surface is
+      // reached only through the Assessments tab inside Resources, and Back
+      // from it returns there, so "may reach Resources" and "may reach this
+      // surface" are the same question. Without this, a bookmark or a
+      // colleague's link opened a clinical assessment page for a role that
+      // cannot open one by clicking.
+      if (!(global.Assess && isFn(global.Assess.openRecord))) return false;
+      var allowedForPage = allowedTabs();
+      if (!allowedForPage) return true;              // not known yet — defer
+      return inList(allowedForPage, 'resources');
+    }
     if (inList(WIZARD_TABS, tab)) {
       // Wizards are full-screen surfaces owned by their own modules; if the
       // module is not loaded the restore is a no-op anyway.
@@ -507,6 +585,18 @@
      cover the view we are about to switch to), then apply the base view,
      then re-open the target overlay if the route has one (Forward). */
 
+  /** Leave the assessment surface, without letting it write a route back. */
+  function closePage() {
+    if (!NAV.page) return;
+    NAV.page = null;
+    NAV.pageView = null;
+    NAV.pageId = null;
+    stopPageWatch();
+    if (global.Assess && isFn(global.Assess.close)) {
+      try { global.Assess.close(); } catch (e) {}
+    }
+  }
+
   function closeWizards() {
     if (NAV.wizard === 'fca' && global.FCA && isFn(global.FCA.close)) {
       try { global.FCA.close(); } catch (e) {}
@@ -516,15 +606,133 @@
     }
     NAV.wizard = null;
     NAV.wizardStep = null;
+    stopWizardWatch();
+  }
+
+  /* ── Wizard lifecycle ─────────────────────────────────────────────────────
+     FCA and the letter builder are modal surfaces that own their own state and
+     emit no close event. The X, Escape, the backdrop and Cancel all call the
+     module's *internal* closeWizard() directly — never window.FCA.close() — so
+     there is nothing here to wrap and no event to listen for.
+
+     That matters because pushStep() writes the wizard into the hash as a tab
+     (#fca/step-2), replacing the base route outright. If the route is not
+     retracted when the modal closes, the hash goes on naming a wizard that is
+     no longer on screen, and the next reload deep-links straight back into it:
+     the wizard appears to open by itself over whatever view the router falls
+     back to.
+
+     So we reconcile against the module's live state instead. The poll runs
+     only while a wizard is the current route and stops the moment it is not,
+     which in practice means it is idle except during report authoring. */
+
+  function wizardModule(name) {
+    return (lower(name) === 'fca') ? global.FCA : global.LetterBuilder;
+  }
+
+  function wizardIsOpen(name) {
+    var mod = wizardModule(name);
+    return !!(mod && mod._state && mod._state.open);
+  }
+
+  /** The wizard closed itself — put the route back on the view underneath it. */
+  function exitWizard(name) {
+    if (NAV.restoring) return;               // the router is driving; it owns the route
+    if (NAV.wizard !== lower(name)) return;  // not the surface we are tracking
+    NAV.wizard = null;                       // clear first: currentBase() only reads the
+    NAV.wizardStep = null;                   // live DOM once no wizard is current
+    stopWizardWatch();
+    writeRoute(currentBase());
+  }
+
+  /* The assessment surface closes itself on Back and on Save & Exit, and emits
+     no event either time. Same reconciliation as the wizards: while the
+     surface is the current route, poll its published state and retract the
+     route the moment it is no longer open. Idle at every other time. */
+
+  var pageTimer = null;
+
+  function pageIsOpen() {
+    return !!(global.Assess && global.Assess._state && global.Assess._state.open);
+  }
+
+  function startPageWatch() {
+    if (pageTimer || !isFn(global.setInterval)) return;
+    pageTimer = global.setInterval(function () {
+      if (!NAV.page) { stopPageWatch(); return; }
+      if (NAV.restoring) return;
+      if (!pageIsOpen()) {
+        NAV.page = null; NAV.pageView = null; NAV.pageId = null;
+        stopPageWatch();
+        writeRoute(currentBase());
+      }
+    }, 250);
+  }
+
+  function stopPageWatch() {
+    if (!pageTimer) return;
+    global.clearInterval(pageTimer);
+    pageTimer = null;
+  }
+
+  var wizardTimer = null;
+
+  function startWizardWatch() {
+    if (wizardTimer || !isFn(global.setInterval)) return;
+    wizardTimer = global.setInterval(function () {
+      if (!NAV.wizard) { stopWizardWatch(); return; }
+      if (NAV.restoring) return;
+      if (!wizardIsOpen(NAV.wizard)) exitWizard(NAV.wizard);
+    }, 250);
+  }
+
+  function stopWizardWatch() {
+    if (!wizardTimer) return;
+    global.clearInterval(wizardTimer);
+    wizardTimer = null;
   }
 
   function applyBase(t) {
+    if (inList(PAGE_TABS, t.tab)) {
+      var page = global.Assess;
+      if (page) {
+        NAV.page = t.tab;
+        NAV.pageView = t.view || 'record';
+        NAV.pageId = t.id;
+        try {
+          if (t.view === 'client' && isFn(page.openForClient)) {
+            // The instrument is not in the address: one client's assessments
+            // are one instrument's, and the surface remembers which. Falling
+            // back to the only implemented instrument keeps a bookmarked
+            // client link openable rather than blank.
+            var key = (page._state && page._state.key) || 'whodas-2.0-36';
+            // The address carries an id, not a name. Resolve it here so the
+            // page header reads the client's name rather than a bare Splose
+            // id; the surface self-heals too, for the case where the roster
+            // has not finished loading at restore time.
+            var name = isFn(global.clientNameById) ? global.clientNameById(t.id) : null;
+            page.openForClient(key, t.id, name);
+          } else if (isFn(page.openRecord)) {
+            page.openRecord(t.id);
+          }
+        } catch (e) {}
+        startPageWatch();
+      }
+      return;
+    }
+    closePage();
+
     if (inList(WIZARD_TABS, t.tab)) {
       var mod = (t.tab === 'fca') ? global.FCA : global.LetterBuilder;
       if (mod && isFn(mod.open)) {
-        try { mod.open(); } catch (e) {}
+        // The step travels with the route, so a bookmarked #fca/step-3 opens
+        // where it says. Each wizard maps the number itself — the FCA builder
+        // folds a legacy 5 or 6 onto its final step — and one that takes no
+        // argument simply ignores it.
+        try { mod.open(t.step || 1); } catch (e) {}
         NAV.wizard = t.tab;
         NAV.wizardStep = t.step || 1;
+        startWizardWatch();               // a deep link can be closed like any other
       }
       return;
     }
@@ -553,12 +761,24 @@
     }
 
     if (t.tab === 'resources' && global.RH2) {
+      // #rh2-root lives inside the "shared" sub-panel. Restoring a Resources
+      // route while the AI Studio or Store sub-panel is active would otherwise
+      // render the hub into a display:none panel — a blank tab.
+      if (isFn(global.rhSwitch)) { try { global.rhSwitch('shared'); } catch (e) {} }
       // The Resources tab only boots RH2 from a real click on the nav tab, so
       // a restored route has to activate it explicitly.
       if (isFn(global.RH2.open)) { try { global.RH2.open(); } catch (e) {} }
       if (t.view === 'detail' && t.id && isFn(global.RH2.openDetail)) {
         try { global.RH2.openDetail(t.id, 'library'); } catch (e) {}
         NAV.rhView = 'detail'; NAV.rhId = t.id;
+      } else if (t.view === 'instruments' && t.id && isFn(global.RH2.openInstrument)) {
+        try { global.RH2.openInstrument(t.id); } catch (e) {}
+        NAV.rhView = 'instruments'; NAV.rhId = t.id;
+      } else if (t.view === 'pd' && t.id && isFn(global.RH2.openPd)) {
+        // openPd loads the catalogue behind the event, so Back from a deep
+        // link lands on a populated list rather than an empty one.
+        try { global.RH2.openPd(t.id); } catch (e) {}
+        NAV.rhView = 'pd'; NAV.rhId = t.id;
       } else if (isFn(global.RH2.nav)) {
         try { global.RH2.nav(t.view || 'home'); } catch (e) {}
         NAV.rhView = t.view || 'home'; NAV.rhId = null;
@@ -725,6 +945,38 @@
           return out;
         };
       });
+      // Opening a PD event is a real navigation, so it gets its own history
+      // entry. Without this the event detail had no address: Back skipped
+      // straight past it, and the page could not be linked to at all.
+      hookMethod('RH2', 'openPd', function (orig) {
+        return function (id) {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'pd';
+          NAV.rhId = safeId(id) || null;
+          syncBase();
+          return out;
+        };
+      });
+      // An assessment's information page is a real destination — it is what a
+      // clinician links a colleague to — so it gets its own history entry.
+      hookMethod('RH2', 'openInstrument', function (orig) {
+        return function (key) {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'instruments';
+          NAV.rhId = safeId(key) || null;
+          syncBase();
+          return out;
+        };
+      });
+      hookMethod('RH2', 'closeInstrument', function (orig) {
+        return function () {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'instruments';
+          NAV.rhId = null;
+          syncBase();
+          return out;
+        };
+      });
     } else { done = false; }
 
     // Case Notes — selecting a draft is a real navigation. select() bails out
@@ -772,13 +1024,19 @@
           NAV.wizard = name;
           NAV.wizardStep = wizardStepOf(name) || 1;
           syncBase();
+          startWizardWatch();
           return out;
         };
       });
+      // Only catches close() called THROUGH the namespace. The X, Escape, the
+      // backdrop and Cancel all call the module's internal closeWizard()
+      // directly, so they never reach this wrapper — startWizardWatch() above
+      // is what retracts the route for those.
       hookMethod(nsName, 'close', function (orig) {
         return function () {
           var out = orig.apply(this, arguments);
           if (NAV.wizard === name) { NAV.wizard = null; NAV.wizardStep = null; }
+          stopWizardWatch();
           syncBase();
           return out;
         };
@@ -921,6 +1179,27 @@
       NAV.wizard = tab;
       NAV.wizardStep = parseInt(step, 10) || 1;
       writeRoute({ tab: tab, step: NAV.wizardStep });
+      startWizardWatch();                 // retract the route when the modal goes
+    },
+
+    /**
+     * The assessment surface publishes its own address.
+     *
+     * assessment.js owns its state and emits no navigation event, so it calls
+     *   window.OpalNav && OpalNav.pushAssessment('record', id);
+     * on every move. Safe to call when this module is absent (the guard at the
+     * top of the runtime section), and a no-op during restore, so restoring a
+     * route never pushes a duplicate entry for the same screen.
+     */
+    pushAssessment: function (view, id) {
+      if (NAV.restoring) return;
+      var safe = safeId(id);
+      if (!safe) return;
+      NAV.page = 'assessment';
+      NAV.pageView = inList(ASSESS_VIEWS, lower(view)) ? lower(view) : 'record';
+      NAV.pageId = safe;
+      writeRoute({ tab: 'assessment', view: NAV.pageView, id: safe });
+      startPageWatch();               // retract the route when the surface closes
     },
 
     /** Programmatic navigation, e.g. OpalNav.go({ tab: 'calendar', view: 'month' }). */

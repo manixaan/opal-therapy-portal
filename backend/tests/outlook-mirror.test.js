@@ -317,7 +317,163 @@ describe('DELETE /api/outlook/events/:dbId — travel-block cascade + dryRun', (
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  2c. POST /api/outlook/travel-blocks — appointment linkage (migration 016)
+//  2c. POST /api/outlook/events/:dbId/restore — Cmd+Z undo (2026-08-09)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('POST /api/outlook/events/:dbId/restore — soft-delete undo', () => {
+  const TB_ID    = 'tb-restore-0001';
+  const TB_OL_ID = 'AAMkTravelOld==';
+
+  /** pool.query router for the restore flow. */
+  function primeRestore({ found = true, isDeleted = true, eventOutlookId = null,
+                          travelRows = [] } = {}) {
+    db.pool.query.mockImplementation((sql) => {
+      if (/categories, is_deleted/.test(sql)) {
+        if (!found) return Promise.resolve({ rows: [], rowCount: 0 });
+        return Promise.resolve({ rows: [{
+          id: DB_ID, outlook_id: eventOutlookId, title: 'Client Appointment — Test Patient',
+          start_time: '2026-08-10T02:00:00Z', end_time: '2026-08-10T03:00:00Z',
+          location: '12 Example St, Willetton', categories: ['Client Appointments'],
+          is_deleted: isDeleted,
+        }], rowCount: 1 });
+      }
+      if (/restore-travel-validation/.test(sql)) {
+        return Promise.resolve({ rows: travelRows, rowCount: travelRows.length });
+      }
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    });
+  }
+
+  test('restores own deleted event: 200, un-tombstone is user-scoped, audited with counts', async () => {
+    primeRestore(); // no outlook_id anywhere → purely local restore
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({ travelBlockIds: [] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true, restored: 1, travelBlocksRestored: 0,
+      outlookRecreated: 0, outlookPending: 0,
+    });
+
+    const unDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql));
+    expect(unDelete).toBeDefined();
+    expect(unDelete[1]).toEqual([[DB_ID], USER_ID]);
+
+    // No Outlook involvement for rows that never had an outlook_id
+    expect(outlookApi.createOutlookEvent).not.toHaveBeenCalled();
+
+    expect(db.logAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'calendar.event_restored', targetId: DB_ID,
+      metadata: expect.objectContaining({ travelBlocksRestored: 0 }),
+    }));
+  });
+
+  test('travel ids are validated (own + travel + deleted): only checked-out ids are restored', async () => {
+    primeRestore({ travelRows: [{
+      id: TB_ID, outlook_id: null, title: '🚗 Travel: Base → Client',
+      start_time: '2026-08-10T01:30:00Z', end_time: '2026-08-10T01:45:00Z',
+      location: '', categories: ['Travel'],
+    }] });
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`)
+      .send({ travelBlockIds: [TB_ID, 'tb-not-mine-or-not-travel'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, travelBlocksRestored: 1 });
+    expect(res.body.travelBlockIds).toEqual([TB_ID]);
+
+    // The validation query carries every requested id, scoped to the caller
+    const validation = db.pool.query.mock.calls.find(([sql]) => /restore-travel-validation/.test(sql));
+    expect(validation).toBeDefined();
+    expect(validation[1]).toEqual([[TB_ID, 'tb-not-mine-or-not-travel'], USER_ID]);
+
+    // Only the event + the VALIDATED block are un-tombstoned
+    const unDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql));
+    expect(unDelete[1]).toEqual([[DB_ID, TB_ID], USER_ID]);
+  });
+
+  test('rows that HAD an outlook_id are re-created in Graph and store the NEW id', async () => {
+    primeRestore({
+      eventOutlookId: OL_ID,
+      travelRows: [{
+        id: TB_ID, outlook_id: TB_OL_ID, title: '🚗 Travel: Base → Client',
+        start_time: '2026-08-10T01:30:00Z', end_time: '2026-08-10T01:45:00Z',
+        location: '', categories: ['Travel'],
+      }],
+    });
+    outlookApi.createOutlookEvent
+      .mockResolvedValueOnce({ outlookId: 'AAMkNewMain==' })
+      .mockResolvedValueOnce({ outlookId: 'AAMkNewTravel==' });
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({ travelBlockIds: [TB_ID] });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, outlookRecreated: 2, outlookPending: 0 });
+    expect(outlookApi.createOutlookEvent).toHaveBeenCalledTimes(2);
+
+    const idStores = db.pool.query.mock.calls.filter(([sql]) => /SET outlook_id = \$1/.test(sql));
+    expect(idStores.map(([, params]) => params)).toEqual([
+      ['AAMkNewMain==', DB_ID, USER_ID],
+      ['AAMkNewTravel==', TB_ID, USER_ID],
+    ]);
+
+    const syncLogs = db.pool.query.mock.calls.filter(([sql]) => /INSERT INTO sync_log/.test(sql));
+    expect(syncLogs).toHaveLength(2);
+    syncLogs.forEach(([sql]) => expect(sql).toContain("'success'"));
+  });
+
+  test('Graph re-create failure is LOCAL-FIRST: row stays restored, flagged pending, failure logged', async () => {
+    primeRestore({ eventOutlookId: OL_ID });
+    outlookApi.createOutlookEvent.mockRejectedValueOnce(new Error('Graph 503'));
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, restored: 1, outlookRecreated: 0, outlookPending: 1 });
+
+    // Restored locally regardless…
+    expect(db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql))).toBeDefined();
+    // …no new outlook_id stored, sync flagged for reconciliation, failure logged
+    expect(db.pool.query.mock.calls.find(([sql]) => /SET outlook_id = \$1/.test(sql))).toBeUndefined();
+    const pending = db.pool.query.mock.calls.find(([sql]) => /SET sync_status = 'pending'/.test(sql));
+    expect(pending).toBeDefined();
+    expect(pending[1]).toEqual([DB_ID, USER_ID]);
+    const syncLogs = db.pool.query.mock.calls.filter(([sql]) => /INSERT INTO sync_log/.test(sql));
+    expect(syncLogs).toHaveLength(1);
+    expect(syncLogs[0][0]).toContain("'failed'");
+    expect(syncLogs[0][1]).toEqual([DB_ID, 'Graph 503']);
+  });
+
+  test("cross-user (or unknown) event: 404 and nothing is touched", async () => {
+    primeRestore({ found: false });
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({ travelBlockIds: [TB_ID] });
+
+    expect(res.status).toBe(404);
+    expect(db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql))).toBeUndefined();
+    expect(db.logAuditEvent).not.toHaveBeenCalled();
+  });
+
+  test('event that is not deleted: 409 conflict, no writes', async () => {
+    primeRestore({ isDeleted: false });
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('not deleted');
+    expect(db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql))).toBeUndefined();
+    expect(outlookApi.createOutlookEvent).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  2d. POST /api/outlook/travel-blocks — appointment linkage (migration 016)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('POST /api/outlook/travel-blocks — relatedEventId linkage', () => {

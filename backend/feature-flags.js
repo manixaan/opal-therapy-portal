@@ -55,6 +55,20 @@ function isSploseCalendarSyncEnabled() {
   return process.env.ENABLE_SPLOSE_CALENDAR_SYNC === 'true';
 }
 
+/**
+ * WHODAS 2.0 digital assessment module.
+ *
+ * Fails closed in EVERY environment, development included — only the exact
+ * string 'true' enables it. This is deliberately the strict pattern rather than
+ * resolveFlag(): WHODAS 2.0 is a WHO instrument, and production release is
+ * gated on Opal Therapy completing WHO's registration and licensing checklist
+ * (docs/whodas/03_LICENSING_COMPLIANCE.md). A forgotten environment variable
+ * must never be the reason WHO-copyrighted content becomes reachable.
+ */
+function isWhodasAssessmentEnabled() {
+  return process.env.ENABLE_WHODAS_ASSESSMENT === 'true';
+}
+
 /** Sanitised snapshot for diagnostics/boot logs. */
 function featureFlagState() {
   return {
@@ -62,6 +76,7 @@ function featureFlagState() {
     sploseWrite: isSploseWriteEnabled(),
     automaticRemoteDelete: isAutomaticRemoteDeleteEnabled(),
     sploseCalendarSync: isSploseCalendarSyncEnabled(),
+    whodasAssessment: isWhodasAssessmentEnabled(),
   };
 }
 
@@ -81,6 +96,7 @@ module.exports = {
   isSploseWriteEnabled,
   isAutomaticRemoteDeleteEnabled,
   isSploseCalendarSyncEnabled,
+  isWhodasAssessmentEnabled,
   featureFlagState,
   featureDisabledError,
 };

@@ -1,0 +1,307 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   WHODAS 2.0 — assessment library, document viewer and results.
+
+   THE DOCUMENT AREA IS NOT STYLED. Everything below dresses the portal chrome
+   around the instrument: the library, the toolbar, the save indicator, the
+   results panel. Inside .whodas-page the only things drawn are the response
+   controls, and they are deliberately transparent so the WHO page shows
+   through unaltered. There is no Opal colour, border, font or logo applied to
+   the instrument itself.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.whodas-root { display: none; }
+.whodas-root.is-open { display: block; }
+
+/* ── Client-profile summary ───────────────────────────────────────────────────
+   The profile drawer shows what exists and one way through to the assessment
+   page. It never shows the form: a clinical instrument is not a drawer
+   attachment, and completing one beside a client's appointments and invoices
+   is how the assessment ended up reading as part of the booking flow. */
+
+.whodas-summary { padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.whodas-summary .whodas-actions { margin-top: 2px; }
+
+/* ── Library ──────────────────────────────────────────────────────────────── */
+
+.whodas-library { padding: 4px 0 24px; }
+
+.whodas-instrument-card {
+  border: 1px solid var(--border, #dfe3ea);
+  border-radius: 10px;
+  padding: 18px 20px;
+  background: var(--card-bg, #fff);
+}
+
+.whodas-instrument-card h3 { margin: 0 0 2px; font-size: 17px; }
+
+.whodas-instrument-sub {
+  margin: 0 0 2px;
+  color: var(--muted, #667085);
+  font-size: 13px;
+}
+
+.whodas-instrument-meta {
+  margin: 10px 0 14px;
+  font-size: 12px;
+  color: var(--muted, #667085);
+  line-height: 1.5;
+}
+
+.whodas-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.whodas-btn {
+  border: 1px solid var(--border, #dfe3ea);
+  background: #fff;
+  border-radius: 7px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.whodas-btn:hover { background: #f5f7fa; }
+.whodas-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.whodas-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.whodas-btn--primary {
+  background: var(--accent, #5b6af0);
+  border-color: var(--accent, #5b6af0);
+  color: #fff;
+}
+.whodas-btn--primary:hover { filter: brightness(1.06); background: var(--accent, #5b6af0); }
+
+/* Destructive action. Distinguished by its word first — the tint only repeats
+   what the label already says, so the button stays legible in monochrome. */
+.whodas-btn--danger {
+  background: #fdecea;
+  border-color: #f0c2bd;
+  color: #b42318;
+}
+.whodas-btn--danger:hover { background: #fbdcd7; }
+
+/* ── History ──────────────────────────────────────────────────────────────── */
+
+.whodas-history { margin-top: 22px; }
+.whodas-history h4 { margin: 0 0 8px; font-size: 14px; }
+
+.whodas-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.whodas-table th,
+.whodas-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #eceff3);
+  vertical-align: middle;
+}
+.whodas-table th { font-weight: 600; color: var(--muted, #667085); font-size: 12px; }
+.whodas-table tbody tr:hover { background: #fafbfc; }
+
+.whodas-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--muted, #667085);
+  font-size: 13px;
+  border: 1px dashed var(--border, #dfe3ea);
+  border-radius: 8px;
+}
+
+.whodas-status {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+/* Never colour alone: each state carries its own word. */
+.whodas-status--draft { background: #fff7e6; color: #92600a; border-color: #f5dca8; }
+.whodas-status--completed { background: #eaf7ee; color: #1c6b36; border-color: #b7e0c4; }
+.whodas-status--voided { background: #f3f4f6; color: #4b5563; border-color: #d7dae0; }
+.whodas-status--amended { background: #eef2ff; color: #3730a3; border-color: #c7d0f7; }
+
+.whodas-score-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
+.whodas-score-method { display: block; font-size: 11px; font-weight: 400; color: var(--muted, #667085); }
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+
+.whodas-modal {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(16, 20, 28, .48);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.whodas-modal__panel {
+  background: #fff; border-radius: 12px; padding: 22px;
+  width: min(560px, 100%); max-height: 88vh; overflow: auto;
+  box-shadow: 0 18px 48px rgba(0,0,0,.24);
+}
+.whodas-modal__panel h3 { margin: 0 0 4px; font-size: 17px; }
+.whodas-modal__panel p { font-size: 13px; color: var(--muted, #667085); margin: 0 0 14px; }
+.whodas-modal__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.whodas-choice { display: block; margin-bottom: 10px; }
+.whodas-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.whodas-choice__box {
+  display: block; border: 1px solid var(--border, #dfe3ea);
+  border-radius: 9px; padding: 11px 13px; cursor: pointer;
+}
+.whodas-choice input:checked + .whodas-choice__box {
+  border-color: var(--accent, #5b6af0);
+  box-shadow: inset 0 0 0 1px var(--accent, #5b6af0);
+}
+.whodas-choice input:focus-visible + .whodas-choice__box { outline: 2px solid #2563eb; outline-offset: 2px; }
+.whodas-choice__box strong { display: block; font-size: 14px; }
+.whodas-choice__box span { display: block; font-size: 12px; color: var(--muted, #667085); margin-top: 2px; }
+/* Checked state is announced by the radio itself and shown by the ring above;
+   this mark makes it legible without relying on the border colour. */
+.whodas-choice input:checked + .whodas-choice__box strong::after {
+  content: ' \2713';
+  color: var(--accent, #5b6af0);
+}
+
+/* ── Viewer ───────────────────────────────────────────────────────────────── */
+
+.whodas-viewer { position: fixed; inset: 0; z-index: 8900; background: #f1f3f6; display: flex; flex-direction: column; }
+
+/* PAGE MODE. Mounted inside the assessment surface, the viewer is part of the
+   page: it sits in normal flow, stacks nothing over the application and traps
+   nothing behind it. It is not a modal, and it must not look like one. */
+.whodas-viewer--page {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  background: transparent;
+  min-height: 60vh;
+}
+.whodas-viewer--page .whodas-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--border, #dfe3ea);
+}
+.whodas-viewer--page .whodas-scroll { overflow: visible; padding: 16px; }
+
+.whodas-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; background: #fff;
+  border-bottom: 1px solid var(--border, #dfe3ea);
+}
+.whodas-toolbar__title { font-weight: 600; font-size: 14px; }
+.whodas-toolbar__meta { font-size: 12px; color: var(--muted, #667085); }
+.whodas-toolbar__spacer { flex: 1 1 auto; }
+
+.whodas-save {
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.whodas-save--idle { color: var(--muted, #667085); }
+.whodas-save--saving { background: #fff7e6; color: #92600a; border-color: #f5dca8; }
+.whodas-save--saved { background: #eaf7ee; color: #1c6b36; border-color: #b7e0c4; }
+.whodas-save--failed { background: #fdecea; color: #b42318; border-color: #f5c2bd; }
+.whodas-save--conflict { background: #fdecea; color: #b42318; border-color: #f5c2bd; font-weight: 600; }
+
+.whodas-scroll { flex: 1 1 auto; overflow: auto; padding: 18px; }
+
+/* The document column. Fixed to the page's own aspect ratio; on a narrow
+   screen it scrolls horizontally rather than reflowing, because reflowing
+   would mean redrawing the instrument. */
+.whodas-pages { margin: 0 auto; width: max-content; }
+
+.whodas-page {
+  position: relative;
+  margin: 0 auto 18px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.16);
+}
+.whodas-page canvas { display: block; }
+
+.whodas-overlay { position: absolute; inset: 0; }
+
+/* One control per printed response. Transparent by default so the WHO page is
+   completely unobscured; a ring appears when chosen, mirroring the "circle
+   only one response" instruction the form itself gives. */
+.whodas-opt { position: absolute; margin: 0; }
+.whodas-opt input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+.whodas-opt__ring {
+  position: absolute; inset: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.whodas-opt input:hover + .whodas-opt__ring { border-color: rgba(37, 99, 235, .35); }
+.whodas-opt input:focus-visible + .whodas-opt__ring {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .3);
+}
+.whodas-opt input:checked + .whodas-opt__ring { border-color: #0d1f85; }
+
+/* Write-in fields sit on the printed rule. */
+.whodas-write {
+  position: absolute;
+  border: none; border-bottom: 1px solid rgba(13, 31, 133, .5);
+  background: rgba(255,255,255,.01);
+  color: #0d1f85; font: inherit; padding: 0 2px;
+}
+.whodas-write:focus { outline: 2px solid #2563eb; outline-offset: 1px; background: #fff; }
+
+/* An item flagged by completion validation. Uses a dashed outline plus a
+   marker, never colour alone. */
+.whodas-opt--missing .whodas-opt__ring { border-color: #b42318; border-style: dashed; }
+.whodas-page--flagged { box-shadow: 0 0 0 2px #b42318, 0 1px 4px rgba(0,0,0,.16); }
+
+/* ── Panels ───────────────────────────────────────────────────────────────── */
+
+.whodas-panel {
+  background: #fff; border: 1px solid var(--border, #dfe3ea);
+  border-radius: 10px; padding: 16px; margin: 0 auto 18px; max-width: 760px;
+}
+.whodas-panel h4 { margin: 0 0 10px; font-size: 14px; }
+
+.whodas-notice { font-size: 13px; line-height: 1.55; }
+.whodas-notice--warn { border-left: 3px solid #d97706; padding-left: 10px; }
+.whodas-notice--error { border-left: 3px solid #b42318; padding-left: 10px; }
+
+.whodas-missing-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.whodas-missing-list button {
+  border: 1px solid #f0c2bd; background: #fdecea; color: #b42318;
+  border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer;
+}
+
+/* ── Results ──────────────────────────────────────────────────────────────── */
+
+.whodas-result-method { border-top: 1px solid var(--border, #eceff3); padding-top: 14px; margin-top: 14px; }
+.whodas-result-method:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+
+.whodas-result-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.whodas-result-head strong { font-size: 14px; }
+.whodas-result-default {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 2px 8px;
+}
+.whodas-result-overall { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.whodas-result-overall small { font-size: 13px; font-weight: 500; color: var(--muted, #667085); }
+
+.whodas-result-source {
+  font-size: 11px; color: var(--muted, #667085); margin: 4px 0 10px; line-height: 1.5;
+}
+
+.whodas-domains { width: 100%; border-collapse: collapse; font-size: 13px; }
+.whodas-domains td { padding: 5px 8px; border-bottom: 1px solid #f1f3f6; }
+.whodas-domains td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.whodas-domains .whodas-domains__sub td:first-child { padding-left: 22px; color: var(--muted, #667085); }
+.whodas-domains .whodas-domains__na td:last-child { font-weight: 400; color: var(--muted, #667085); }
+
+.whodas-refusal {
+  font-size: 12px; line-height: 1.55; background: #f8f9fb;
+  border: 1px solid var(--border, #eceff3); border-radius: 8px; padding: 10px 12px;
+}
+
+@media print {
+  .whodas-toolbar, .whodas-panel, .whodas-overlay { display: none !important; }
+  .whodas-viewer { position: static; }
+  .whodas-scroll { overflow: visible; padding: 0; }
+  .whodas-page { box-shadow: none; margin: 0; page-break-after: always; }
+}

@@ -1,0 +1,347 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPAL — ASSESSMENTS: full-page surface (assess-* only)
+
+   Rides the portal's design tokens (mockup_v3.html :root), matching the
+   Resource Hub and the FCA builder. Two things here are load-bearing rather
+   than decorative:
+
+     - THE SURFACE IS A PAGE. .assess-root is a plain document-flow surface
+       occupying the viewport, not a floating layer: no backdrop, no scrim, no
+       drop shadow implying something behind it, nothing inert underneath. An
+       assessment that looks like a dialog invites being dismissed like one.
+
+     - AVAILABILITY BADGES CARRY MEANING, so each state is distinguished by its
+       text first and its colour second, and "Source required" is a stated
+       condition rather than a soft grey hint. State is never signalled by
+       colour alone.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#assessment-root[hidden] { display: none; }
+
+/* A PAGE INSIDE THE PORTAL SHELL, exactly like a tab view.
+
+   The shell's <body> is a flex column with overflow:hidden — the body never
+   scrolls; each .view.active is `flex:1; min-height:0; overflow-y:auto`, so
+   the active view IS the scroll container. This surface follows the same rule:
+   a flex child that fills the space below the header and scrolls internally.
+
+   It was previously `position: fixed; inset: 0` over the whole viewport,
+   which covered the portal header and navigation — the user could not leave
+   except through the surface's own Back button, and because the body never
+   scrolls, nothing scrolled the covered page either. An assessment must feel
+   like a page in the portal, not a takeover of it. */
+.assess-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg, #faf6f0);
+  color: var(--ink, #241f1a);
+}
+
+/* While the assessment page is up, the active tab view yields the flex space
+   to it. The header and navigation — which are NOT views — stay visible and
+   functional; assessment.js closes the surface when a nav tab is pressed, so
+   this rule is never what the user sees after navigating away. */
+body.assess-open .view.active { display: none; }
+
+.assess-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 20px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The card stack. #assess-body is a second flex context inside .assess-page,
+   so without its own gap the cards inside it butt up against one another. */
+.assess-body { display: flex; flex-direction: column; gap: 16px; }
+/* renderRecordView always emits an empty #assess-share-slot, which would
+   otherwise claim a 16px gap under the form until a share is prepared. */
+.assess-body > :empty, .assess-page > :empty { display: none; }
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+
+.assess-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "back back" "id context";
+  gap: 12px 24px;
+  align-items: start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border, #e9e3d9);
+}
+.assess-back { grid-area: back; justify-self: start; }
+.assess-head__id { grid-area: id; min-width: 0; }
+.assess-head > #assess-context { grid-area: context; }
+
+.assess-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 7px);
+  padding: 6px 10px 6px 4px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--accent, #0f7c6c);
+  cursor: pointer;
+}
+.assess-back:hover { background: var(--border-soft, #f4efe7); border-color: var(--border, #e9e3d9); }
+.assess-back:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 2px; }
+
+.assess-title { margin: 0; font-size: 24px; line-height: 1.2; }
+.assess-title:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 4px; }
+.assess-sub { margin: 4px 0 0; color: var(--ink-soft, #5d564e); font-size: 14px; max-width: 62ch; }
+.assess-sub[hidden] { display: none; }
+
+.assess-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+  justify-content: flex-end;
+}
+.assess-context > div { min-width: 0; }
+.assess-context dt {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted, #99928a);
+}
+.assess-context dd { margin: 2px 0 0; font-size: 13.5px; font-weight: 500; }
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+
+.assess-card {
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e9e3d9);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(36,31,26,.05));
+  padding: 18px 20px;
+}
+.assess-card--flush { padding: 0; overflow: hidden; }
+.assess-card--flush > .assess-card__head { padding: 14px 20px; border-bottom: 1px solid var(--border, #e9e3d9); }
+
+.assess-card h2 { margin: 0 0 8px; font-size: 16px; }
+.assess-card--flush h2 { margin: 0; }
+.assess-card h3 { margin: 12px 0 6px; font-size: 14px; }
+.assess-card p { margin: 0 0 10px; font-size: 14px; line-height: 1.55; max-width: 74ch; }
+
+.assess-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.assess-card--flush > .assess-card__head { margin-bottom: 0; }
+
+.assess-quiet { color: var(--ink-soft, #5d564e); font-size: 13px; }
+.assess-empty {
+  color: var(--muted, #99928a);
+  font-size: 13.5px;
+  padding: 18px;
+  text-align: center;
+  border: 1px dashed var(--border, #e9e3d9);
+  border-radius: var(--radius-md, 11px);
+}
+.assess-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ── Availability badges ──────────────────────────────────────────────────────
+   Text first. The colour repeats what the words already say, so the badge is
+   still legible in monochrome and to anyone who does not perceive the hue. */
+
+.assess-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border, #e9e3d9);
+  background: var(--border-soft, #f4efe7);
+  color: var(--ink-soft, #5d564e);
+}
+.assess-badge--electronic-and-pdf,
+.assess-badge--electronic {
+  background: var(--ok-soft, #e5f2e8);
+  border-color: var(--ok, #2f7d4f);
+  color: #1f5c39;
+}
+.assess-badge--pdf {
+  background: var(--info-soft, #e8eff9);
+  border-color: var(--info, #3d6cae);
+  color: #2c4f80;
+}
+.assess-badge--source-required {
+  background: var(--warn-soft, #faf0da);
+  border-color: var(--warn, #b06e12);
+  color: #7d4e0b;
+}
+.assess-badge--temporarily-unavailable {
+  background: var(--danger-soft, #fbe9e5);
+  border-color: var(--danger, #c2412e);
+  color: #8f2f21;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+
+.assess-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assess-actions--inline { margin: 0; }
+
+.assess-btn {
+  border: 1px solid var(--border, #e9e3d9);
+  background: var(--panel, #fff);
+  border-radius: var(--radius-sm, 7px);
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13.5px;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--t-fast, 140ms), border-color var(--t-fast, 140ms);
+}
+.assess-btn:hover { background: var(--border-soft, #f4efe7); }
+.assess-btn:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 2px; }
+.assess-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.assess-btn--primary {
+  background: var(--accent, #0f7c6c);
+  border-color: var(--accent, #0f7c6c);
+  color: #fff;
+}
+.assess-btn--primary:hover { background: var(--accent-deep, #0a5d51); }
+.assess-btn--small { padding: 5px 11px; font-size: 12.5px; }
+/* Destructive action — its word carries the meaning, the tint repeats it. */
+.assess-btn--danger {
+  background: var(--danger-soft, #fbe9e5);
+  border-color: var(--danger, #c2412e);
+  color: #8f2f21;
+}
+.assess-btn--danger:hover { background: #f7d9d2; }
+
+/* ── Key/value and notices ────────────────────────────────────────────────── */
+
+.assess-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.assess-kv dt { color: var(--muted, #99928a); }
+.assess-kv dd { margin: 0; }
+
+.assess-notice {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 11px);
+  border: 1px solid var(--border, #e9e3d9);
+  background: var(--border-soft, #f4efe7);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.assess-notice--warn { background: var(--warn-soft, #faf0da); border-color: var(--warn, #b06e12); }
+.assess-notice--error { background: var(--danger-soft, #fbe9e5); border-color: var(--danger, #c2412e); }
+
+.assess-missing {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--warn, #b06e12);
+  border-radius: var(--radius-md, 11px);
+  background: var(--warn-soft, #faf0da);
+}
+.assess-missing h3 { margin: 0 0 8px; font-size: 13.5px; }
+.assess-missing ul { margin: 0 0 8px; padding-left: 20px; font-size: 13.5px; line-height: 1.6; }
+
+/* ── History table ────────────────────────────────────────────────────────── */
+
+.assess-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.assess-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted, #99928a);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border, #e9e3d9);
+}
+.assess-table td { padding: 10px; border-bottom: 1px solid var(--border-soft, #f4efe7); vertical-align: top; }
+.assess-table tr:last-child td { border-bottom: none; }
+.assess-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.assess-note { display: block; font-size: 11.5px; color: var(--muted, #99928a); margin-top: 2px; }
+
+.assess-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border, #e9e3d9);
+  background: var(--border-soft, #f4efe7);
+}
+.assess-status--draft { border-color: var(--warn, #b06e12); background: var(--warn-soft, #faf0da); color: #7d4e0b; }
+.assess-status--completed { border-color: var(--ok, #2f7d4f); background: var(--ok-soft, #e5f2e8); color: #1f5c39; }
+.assess-status--voided,
+.assess-status--amended { color: var(--ink-soft, #5d564e); }
+
+/* ── The form host ────────────────────────────────────────────────────────────
+   The instrument's own module renders inside here. Nothing in this file styles
+   what it draws: the assessment document belongs to its rights holder and is
+   never re-dressed in Opal's colours. */
+.assess-form-host { min-height: 320px; }
+
+/* ── Share panel ──────────────────────────────────────────────────────────── */
+
+.assess-field { margin: 12px 0; }
+.assess-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft, #5d564e);
+  margin-bottom: 4px;
+}
+.assess-input {
+  width: 100%;
+  border: 1px solid var(--border, #e9e3d9);
+  border-radius: var(--radius-sm, 7px);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  background: var(--panel, #fff);
+  color: inherit;
+}
+.assess-input:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 1px; }
+.assess-textarea { resize: vertical; line-height: 1.6; font-family: inherit; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .assess-page { padding: 14px 14px 56px; gap: 12px; }
+  .assess-head { grid-template-areas: "back back" "id id" "context context"; }
+  .assess-context { justify-content: flex-start; }
+  .assess-title { font-size: 20px; }
+  .assess-card { padding: 14px; }
+  .assess-card--flush > .assess-card__head { padding: 12px 14px; }
+  /* The history table becomes a stack: a six-column clinical table on a phone
+     is unreadable at any font size. */
+  .assess-table, .assess-table tbody, .assess-table tr, .assess-table td { display: block; width: 100%; }
+  .assess-table thead { display: none; }
+  .assess-table tr {
+    border: 1px solid var(--border, #e9e3d9);
+    border-radius: var(--radius-md, 11px);
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .assess-table td { border: none; padding: 3px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assess-btn { transition: none; }
+}

@@ -55,12 +55,39 @@ describe('flag resolution matrix', () => {
     expect(f.isOutlookWriteEnabled()).toBe(false);
   });
 
-  test('featureFlagState reports all four flags', () => {
+  test('featureFlagState reports every flag', () => {
     const f = freshFlags({ NODE_ENV: 'staging', ENABLE_OUTLOOK_WRITE: 'true' });
     expect(f.featureFlagState()).toEqual({
       outlookWrite: true, sploseWrite: false, automaticRemoteDelete: false,
-      sploseCalendarSync: false,
+      sploseCalendarSync: false, whodasAssessment: false,
     });
+  });
+});
+
+describe('ENABLE_WHODAS_ASSESSMENT — WHO licensing gate (fails closed everywhere)', () => {
+  test('unset means OFF in EVERY environment, including development and test', () => {
+    for (const NODE_ENV of ['development', 'test', 'staging', 'production']) {
+      const f = freshFlags({ NODE_ENV });
+      expect(`${NODE_ENV}:${f.isWhodasAssessmentEnabled()}`).toBe(`${NODE_ENV}:false`);
+    }
+  });
+
+  test('only the exact string "true" enables it', () => {
+    for (const value of ['false', 'TRUE', 'True', '1', 'yes', 'on', '']) {
+      const f = freshFlags({ NODE_ENV: 'development', ENABLE_WHODAS_ASSESSMENT: value });
+      expect(`${JSON.stringify(value)}:${f.isWhodasAssessmentEnabled()}`)
+        .toBe(`${JSON.stringify(value)}:false`);
+    }
+    const on = freshFlags({ NODE_ENV: 'production', ENABLE_WHODAS_ASSESSMENT: 'true' });
+    expect(on.isWhodasAssessmentEnabled()).toBe(true);
+  });
+
+  test('it does not follow the permissive development default the staged flags use', () => {
+    // ENABLE_OUTLOOK_WRITE defaults ON in development; WHODAS must not, because
+    // the gate exists for WHO licensing rather than for rollout staging.
+    const f = freshFlags({ NODE_ENV: 'development' });
+    expect(f.isOutlookWriteEnabled()).toBe(true);
+    expect(f.isWhodasAssessmentEnabled()).toBe(false);
   });
 });
 
