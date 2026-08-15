@@ -244,15 +244,22 @@ describe('required vs optional values', () => {
   test('every required tag is one a therapist can actually supply', () => {
     const overridable = new Set(ltm.LETTER_OVERRIDABLE_TAGS);
     for (const tag of ltm.LETTER_REQUIRED_VALUE_TAGS) {
-      // The server-issued document id is the one exception: the server always
-      // mints it, so it can never be outstanding and needs no override path.
-      if (ltm.LETTER_SCALAR_BY_TAG.get(tag).layer === 'server') continue;
       expect([tag, overridable.has(tag)]).toEqual([tag, true]);
     }
   });
 
-  test('the read-only document id is not overridable', () => {
-    expect(ltm.LETTER_OVERRIDABLE_TAGS).not.toContain('OPAL_LETTER_DOCUMENT_ID');
+  test('the issued document id is a default, not a decree — it is overridable', () => {
+    // Opal issues the reference so a therapist is never told it is "Missing",
+    // but a practice that numbers its own correspondence is not overruled.
+    expect(ltm.LETTER_OVERRIDABLE_TAGS).toContain('OPAL_LETTER_DOCUMENT_ID');
+    expect(ltm.LETTER_SCALAR_BY_TAG.get('OPAL_LETTER_DOCUMENT_ID').layer).toBe('server');
+    expect(ltm.LETTER_SCALAR_BY_TAG.get('OPAL_LETTER_DOCUMENT_ID').readOnly).toBeUndefined();
+  });
+
+  test('every scalar tag may be excluded', () => {
+    expect(new Set(ltm.LETTER_EXCLUDABLE_TAGS)).toEqual(new Set(ltm.LETTER_SCALAR_TAG_LIST));
+    expect(ltm.letterTemplateDescriptor().excludableTags)
+      .toEqual(ltm.LETTER_SCALAR_TAG_LIST);
   });
 });
 

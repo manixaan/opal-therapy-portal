@@ -15,8 +15,14 @@ const {
   normaliseSelection,
   normaliseCustomSections,
   normaliseOverrides,
+  normaliseExcludedFields,
   buildManifest,
 } = require('../fca/manifest');
+const {
+  documentReference,
+  issueDocumentControl,
+  documentControlFor,
+} = require('../fca/document-id');
 const tm = require('../fca/template-map');
 
 const SPLOSE = {
@@ -55,11 +61,12 @@ const PORTAL = {
   ahpraNumber: 'OCC0001234567',
 };
 
+// What Opal issues when a draft is created — see fca/document-id.js.
 const SERVER = {
   documentReference: 'FCA-ABCD1234',
   reportDate: '10/08/2026',
   reportVersion: '1.0',
-  reportStatus: 'Final',
+  reportStatus: 'Draft',
 };
 
 const full = (overrides = {}) => resolveScalars({
@@ -171,14 +178,46 @@ describe('four-layer precedence', () => {
     expect(scalarSources.OPAL_THERAPIST_AHPRA_NUMBER).toBe('portal');
   });
 
-  test('server-issued tags are read-only — an override is ignored, never applied', () => {
-    const { scalarData, scalarSources } = full({
-      OPAL_REPORT_DOCUMENT_ID: 'FORGED-ID',
-      OPAL_REPORT_STATUS: 'Approved by nobody',
-    });
+  test('server-issued tags resolve to the value Opal issued', () => {
+    const { scalarData, scalarSources } = full();
     expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe('FCA-ABCD1234');
     expect(scalarSources.OPAL_REPORT_DOCUMENT_ID).toBe('server');
+    expect(scalarData.OPAL_REPORT_DATE).toBe('10/08/2026');
+    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
+    expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
+    for (const tag of tm.SERVER_TAGS) expect(scalarSources[tag]).toBe('server');
+  });
+
+  test('an override beats the issued default — the therapist owns their own document', () => {
+    // Version 2.0 of a report, or a report marked Final, is a claim about the
+    // therapist's own document. Opal issues a sensible default and gets out of
+    // the way, and the badge then says the value came from them.
+    const { scalarData, scalarSources } = full({
+      OPAL_REPORT_VERSION: '2.0',
+      OPAL_REPORT_STATUS: 'Final',
+    });
+    expect(scalarData.OPAL_REPORT_VERSION).toBe('2.0');
+    expect(scalarSources.OPAL_REPORT_VERSION).toBe('report_override');
     expect(scalarData.OPAL_REPORT_STATUS).toBe('Final');
+    expect(scalarSources.OPAL_REPORT_STATUS).toBe('report_override');
+    // Untouched fields keep the issued value and the 'server' attribution.
+    expect(scalarSources.OPAL_REPORT_DOCUMENT_ID).toBe('server');
+  });
+
+  test('the document-control fields Opal does NOT issue stay missing', () => {
+    // The line between "ours to issue" and "a fact about the world". An issue
+    // date has not happened yet, a reviewer is a second human, and only the
+    // participant knows who may receive their report.
+    const { scalarData, scalarSources } = full();
+    for (const tag of [
+      'OPAL_REPORT_ISSUE_DATE',
+      'OPAL_REPORT_REVIEWER_NAME',
+      'OPAL_REPORT_REVIEWER_ROLE',
+      'OPAL_REPORT_AUTHORISED_RECIPIENTS',
+    ]) {
+      expect(scalarData[tag]).toBeNull();
+      expect(scalarSources[tag]).toBe('missing');
+    }
   });
 
   test('report-specific tags come from the override or nowhere', () => {
@@ -365,15 +404,16 @@ describe('manifest composition', () => {
     expect(normaliseCustomSections([{ title: '   ' }], () => 'x')).toEqual([]);
   });
 
-  test('overrides for unknown or read-only tags are refused', () => {
+  test('overrides for unknown tags are refused; a document-control override is not', () => {
     const clean = normaliseOverrides({
       OPAL_CLIENT_PRONOUNS: '  they/them  ',
-      OPAL_REPORT_DOCUMENT_ID: 'FORGED',
+      OPAL_REPORT_VERSION: '2.0',
       NOT_A_TAG: 'x',
       OPAL_CLIENT_ADDRESS: { nested: 'object' },
     });
     expect(clean.OPAL_CLIENT_PRONOUNS).toBe('they/them');
-    expect(clean).not.toHaveProperty('OPAL_REPORT_DOCUMENT_ID');
+    // The four Opal issues itself are DEFAULTS, not decrees.
+    expect(clean.OPAL_REPORT_VERSION).toBe('2.0');
     expect(clean).not.toHaveProperty('NOT_A_TAG');
     expect(clean).not.toHaveProperty('OPAL_CLIENT_ADDRESS');
   });
@@ -395,5 +435,119 @@ describe('manifest composition', () => {
     // Every template section is described, included or not — the frontend never
     // has to work out what exists.
     expect(manifest.sections.filter((s) => s.kind !== 'custom')).toHaveLength(tm.SECTIONS.length);
+  });
+});
+
+// ── Document control: issued, not looked up ──────────────────────────────────
+
+describe('server-issued document control', () => {
+  const DRAFT_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+
+  test('a new draft is issued a reference, a date, version 1.0 and status Draft', () => {
+    const issued = issueDocumentControl('FCA', DRAFT_ID, new Date(Date.UTC(2026, 7, 10)));
+    expect(issued).toEqual({
+      documentReference: 'FCA-1A2B3C4D',
+      reportDate: '10/08/2026',   // Australian format, day first
+      reportVersion: '1.0',
+      reportStatus: 'Draft',
+    });
+  });
+
+  test('the letter uses the same issuer with its own prefix', () => {
+    expect(issueDocumentControl('LTR', DRAFT_ID, new Date()).documentReference)
+      .toBe('LTR-1A2B3C4D');
+    expect(documentReference('LTR', DRAFT_ID)).toBe('LTR-1A2B3C4D');
+  });
+
+  test('the stored value is read back verbatim — regenerating never renumbers', () => {
+    const stored = {
+      documentReference: 'FCA-1A2B3C4D',
+      reportDate: '01/07/2026',
+      reportVersion: '2.0',
+      reportStatus: 'Final',
+    };
+    const row = { id: DRAFT_ID, created_at: '2026-08-10T00:00:00.000Z', document_control: stored };
+    expect(documentControlFor('FCA', row)).toEqual(stored);
+    // Twice, to make the point: reading is not minting.
+    expect(documentControlFor('FCA', row)).toEqual(documentControlFor('FCA', row));
+  });
+
+  test('a draft created before this behaviour existed is not renumbered by the upgrade', () => {
+    const legacy = { id: DRAFT_ID, created_at: '2026-08-10T00:00:00.000Z', document_control: {} };
+    expect(documentControlFor('FCA', legacy)).toEqual({
+      documentReference: 'FCA-1A2B3C4D',  // derived from the id it always had
+      reportDate: '10/08/2026',           // derived from its own created_at
+      reportVersion: '1.0',
+      reportStatus: 'Draft',
+    });
+  });
+
+  test('the issued values reach the resolver as source "server"', () => {
+    const server = issueDocumentControl('FCA', DRAFT_ID, new Date(Date.UTC(2026, 7, 10)));
+    const { scalarData, scalarSources, missingFields } = resolveScalars({
+      splose: SPLOSE, portal: PORTAL, server,
+    });
+    expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe('FCA-1A2B3C4D');
+    expect(scalarData.OPAL_REPORT_DATE).toBe('10/08/2026');
+    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
+    expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
+    for (const tag of tm.SERVER_TAGS) {
+      expect(scalarSources[tag]).toBe('server');
+      expect(missingFields).not.toContain(tag);
+    }
+    // And the four real-world facts are still outstanding.
+    expect(missingFields).toContain('OPAL_REPORT_ISSUE_DATE');
+    expect(missingFields).toContain('OPAL_REPORT_REVIEWER_NAME');
+    expect(missingFields).toContain('OPAL_REPORT_REVIEWER_ROLE');
+    expect(missingFields).toContain('OPAL_REPORT_AUTHORISED_RECIPIENTS');
+  });
+});
+
+// ── Excluded fields ──────────────────────────────────────────────────────────
+
+describe('excluded fields', () => {
+  test('every scalar tag may be excluded, including the ones Opal issues', () => {
+    expect(new Set(tm.EXCLUDABLE_TAGS)).toEqual(new Set(tm.SCALAR_TAG_LIST));
+    for (const tag of tm.SERVER_TAGS) expect(tm.EXCLUDABLE_TAGS).toContain(tag);
+  });
+
+  test('unknown tags are dropped rather than trusted, and duplicates collapse', () => {
+    expect(normaliseExcludedFields([
+      'OPAL_REPORT_REVIEWER_NAME',
+      'NOT_A_TAG',
+      '  OPAL_REPORT_REVIEWER_NAME  ',
+      'OPAL_SECTION_APPENDICES', // a section tag is not a scalar tag
+      42,
+      null,
+    ])).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+
+    expect(normaliseExcludedFields(null)).toEqual([]);
+    expect(normaliseExcludedFields('OPAL_REPORT_REVIEWER_NAME')).toEqual([]);
+  });
+
+  test('the manifest carries the exclusions, re-validated on the way in', () => {
+    const { scalarData, scalarSources } = full();
+    const manifest = buildManifest({
+      selectedSections: [], sectionOrder: [], customSections: [],
+      scalarData, scalarSources,
+      // Deliberately unnormalised: the composer is the last gate before the
+      // engine, so it must not trust what it is handed.
+      excludedFields: ['OPAL_REPORT_REVIEWER_NAME', 'NOT_A_TAG'],
+    });
+    expect(manifest.excludedTags).toEqual(['OPAL_REPORT_REVIEWER_NAME']);
+  });
+
+  test('a manifest with no exclusions carries an empty list, never undefined', () => {
+    const manifest = buildManifest({ selectedSections: [], sectionOrder: [], customSections: [] });
+    expect(manifest.excludedTags).toEqual([]);
+  });
+
+  test('exclusion does not change resolution — it changes rendering', () => {
+    // The resolver stays honest about where a value came from. What happens to
+    // an excluded value is the ENGINE's business, which is what makes
+    // un-excluding restore the resolved value with no extra machinery.
+    const { scalarData, scalarSources } = full({ OPAL_REPORT_REVIEWER_NAME: 'Dr Reviewer' });
+    expect(scalarData.OPAL_REPORT_REVIEWER_NAME).toBe('Dr Reviewer');
+    expect(scalarSources.OPAL_REPORT_REVIEWER_NAME).toBe('report_override');
   });
 });

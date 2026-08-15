@@ -104,6 +104,32 @@ function paragraphTextsByStyle(xml, styleId) {
   return out;
 }
 
+/** The w:sdt whose OWN tag is `tag`, or null. */
+function sdtByTag(xml, tag) {
+  const doc = parse(xml);
+  return Array.from(doc.getElementsByTagName('w:sdt')).find((sdt) => {
+    const pr = Array.from(sdt.childNodes).find((n) => n.nodeName === 'w:sdtPr');
+    if (!pr) return false;
+    const t = Array.from(pr.childNodes).find((n) => n.nodeName === 'w:tag');
+    return t && t.getAttribute('w:val') === tag;
+  }) || null;
+}
+
+/** Every w:sdt whose OWN tag is `tag`. */
+function sdtsByTag(xml, tag) {
+  const doc = parse(xml);
+  return Array.from(doc.getElementsByTagName('w:sdt')).filter((sdt) => {
+    const pr = Array.from(sdt.childNodes).find((n) => n.nodeName === 'w:sdtPr');
+    if (!pr) return false;
+    const t = Array.from(pr.childNodes).find((n) => n.nodeName === 'w:tag');
+    return t && t.getAttribute('w:val') === tag;
+  });
+}
+
+/** The visible text a control carries. */
+const sdtText = (sdt) => Array.from(sdt.getElementsByTagName('w:t'))
+  .map((t) => t.textContent || '').join('');
+
 /** A manifest with every section included and every scalar filled. */
 function fullManifest(overrides = {}) {
   const excluded = new Set(overrides.exclude || []);
@@ -112,6 +138,7 @@ function fullManifest(overrides = {}) {
   );
   return {
     scalarData,
+    excludedTags: overrides.excludedTags || [],
     sections: [
       ...tm.SECTIONS.map((s) => ({
         tag: s.tag,
@@ -313,6 +340,129 @@ describe('scalar population', () => {
 
     // And the template on disk is untouched.
     expect(fs.readFileSync(TEMPLATE_PATH).equals(templateBuffer)).toBe(true);
+  });
+});
+
+// ── Excluded fields ──────────────────────────────────────────────────────────
+
+describe('excluded scalars', () => {
+  test('an excluded control is EMPTY — no value, and no "[PORTAL" placeholder', async () => {
+    const buffer = await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({ excludedTags: ['OPAL_REPORT_REVIEWER_NAME'] }),
+    });
+    const body = (await partsOf(buffer))['word/document.xml'];
+
+    const sdt = sdtByTag(body, 'OPAL_REPORT_REVIEWER_NAME');
+    // The control is still there — the therapist can type into it in Word.
+    expect(sdt).toBeTruthy();
+    expect(sdtText(sdt)).toBe('');
+    // And it carries neither the resolved value nor the template placeholder.
+    expect(sdtText(sdt)).not.toContain('VAL_OPAL_REPORT_REVIEWER_NAME');
+    expect(sdtText(sdt)).not.toContain('[PORTAL');
+    expect(body).not.toContain('[PORTAL — REVIEWER NAME]');
+  });
+
+  test('exclusion beats a resolved value — the therapist has the last word', async () => {
+    const body = (await partsOf(await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({
+        scalarData: { OPAL_REPORT_AUTHORISED_RECIPIENTS: 'A real value that must not ship' },
+        excludedTags: ['OPAL_REPORT_AUTHORISED_RECIPIENTS'],
+      }),
+    })))['word/document.xml'];
+
+    expect(body).not.toContain('A real value that must not ship');
+    expect(body).not.toContain('[PORTAL — AUTHORISED REPORT RECIPIENTS]');
+    expect(sdtText(sdtByTag(body, 'OPAL_REPORT_AUTHORISED_RECIPIENTS'))).toBe('');
+  });
+
+  test('EVERY occurrence of an excluded tag is emptied, in every part', async () => {
+    // OPAL_REPORT_DOCUMENT_ID has 3 occurrences, one of them in footer6.
+    const parts = await partsOf(await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({ excludedTags: ['OPAL_REPORT_DOCUMENT_ID'] }),
+    }));
+
+    for (const part of ['word/document.xml', 'word/footer6.xml']) {
+      expect(parts[part]).not.toContain('VAL_OPAL_REPORT_DOCUMENT_ID');
+      expect(parts[part]).not.toContain('[PORTAL — REPORT ID]');
+      for (const sdt of sdtsByTag(parts[part], 'OPAL_REPORT_DOCUMENT_ID')) {
+        expect(sdtText(sdt)).toBe('');
+      }
+    }
+    // The control survives in the footer, beside its untouched PAGE field.
+    expect(parts['word/footer6.xml']).toContain('OPAL_REPORT_DOCUMENT_ID');
+    expect(sdtsByTag(parts['word/footer6.xml'], 'OPAL_REPORT_DOCUMENT_ID')).toHaveLength(1);
+  });
+
+  test('excluding one field changes nothing about any other', async () => {
+    const body = (await partsOf(await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({ excludedTags: ['OPAL_REPORT_REVIEWER_NAME'] }),
+    })))['word/document.xml'];
+
+    expect(body).toContain('VAL_OPAL_REPORT_REVIEWER_ROLE');
+    expect(body).toContain('VAL_OPAL_CLIENT_FULL_NAME');
+    expect(body).toContain('VAL_OPAL_THERAPIST_FULL_NAME');
+  });
+
+  test('a NON-excluded null still leaves the template placeholder — no regression', async () => {
+    // This is the distinction the whole feature turns on: "we could not find
+    // this" is a visible prompt to finish in Word; "exclude this" is not.
+    const body = (await partsOf(await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({
+        scalarData: { OPAL_REPORT_REVIEWER_NAME: null, OPAL_REPORT_REVIEWER_ROLE: null },
+        excludedTags: ['OPAL_REPORT_REVIEWER_ROLE'],
+      }),
+    })))['word/document.xml'];
+
+    expect(body).toContain('[PORTAL — REVIEWER NAME]');       // blank: placeholder kept
+    expect(body).not.toContain('[PORTAL — REVIEWER ROLE]');   // excluded: nothing at all
+    expect(sdtText(sdtByTag(body, 'OPAL_REPORT_REVIEWER_NAME'))).toContain('[PORTAL');
+    expect(sdtText(sdtByTag(body, 'OPAL_REPORT_REVIEWER_ROLE'))).toBe('');
+  });
+
+  test('an excluded control no longer shows Word its own placeholder', async () => {
+    const body = (await partsOf(await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({ excludedTags: ['OPAL_REPORT_REVIEWER_NAME'] }),
+    })))['word/document.xml'];
+
+    const sdt = sdtByTag(body, 'OPAL_REPORT_REVIEWER_NAME');
+    const pr = Array.from(sdt.childNodes).find((n) => n.nodeName === 'w:sdtPr');
+    expect(Array.from(pr.childNodes).some((n) => n.nodeName === 'w:showingPlcHdr')).toBe(false);
+  });
+
+  test('the package stays valid and the stats say what happened', async () => {
+    const buffer = await generateFcaDocx({
+      templateBuffer,
+      manifest: fullManifest({ excludedTags: ['OPAL_REPORT_REVIEWER_NAME', 'OPAL_REPORT_STATUS'] }),
+    });
+    const parts = await partsOf(buffer);
+    assertStructurallySound(parts['word/document.xml'], 'word/document.xml');
+    expect(buffer.fcaStats.warnings).toEqual([]);
+    // The FCA template declares no optional-line tags, so every exclusion here
+    // is an emptied control and no paragraph is removed.
+    expect(buffer.fcaStats.excludedTags.sort())
+      .toEqual(['OPAL_REPORT_REVIEWER_NAME', 'OPAL_REPORT_STATUS']);
+    expect(buffer.fcaStats.excludedAsEmptyControl.sort())
+      .toEqual(['OPAL_REPORT_REVIEWER_NAME', 'OPAL_REPORT_STATUS']);
+    expect(buffer.fcaStats.excludedAsRemovedLine).toEqual([]);
+    expect(buffer.fcaStats.removedParagraphs).toEqual([]);
+  });
+
+  test('a manifest with no excludedTags behaves exactly as before', async () => {
+    const withField = await generateFcaDocx({ templateBuffer, manifest: fullManifest({ excludedTags: [] }) });
+    const noField = await generateFcaDocx({
+      templateBuffer,
+      // The field absent entirely, as an older frozen snapshot would have it.
+      manifest: (() => { const m = fullManifest(); delete m.excludedTags; return m; })(),
+    });
+    expect(withField.fcaStats.scalarsWritten).toBe(noField.fcaStats.scalarsWritten);
+    expect((await partsOf(withField))['word/document.xml'])
+      .toBe((await partsOf(noField))['word/document.xml']);
   });
 });
 

@@ -190,7 +190,12 @@ const LETTER_SCALAR_TAGS = [
   { tag: 'OPAL_ORGANISATION_WEBSITE', label: 'Website', layer: 'organisation', field: 'website', occurrences: 1, parts: ['word/header6.xml'] },
 
   // ── Document control (word/footer6.xml) ──────────────────────────────────
-  { tag: 'OPAL_LETTER_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 1, parts: ['word/footer6.xml'], readOnly: true },
+  // Issued by Opal when the draft is created, not looked up and not minted at
+  // generate time — so it is a real value in the review step rather than a
+  // field the therapist is told is "Missing" and cannot possibly supply. It is
+  // still overridable, like every other value on the page.
+  { tag: 'OPAL_LETTER_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 1, parts: ['word/footer6.xml'],
+    note: 'Issued once, when the draft is created, and persisted. Regenerating a letter never renumbers it.' },
 ];
 
 const LETTER_SCALAR_BY_TAG = new Map(LETTER_SCALAR_TAGS.map((s) => [s.tag, s]));
@@ -199,6 +204,18 @@ const LETTER_SCALAR_TAG_LIST = LETTER_SCALAR_TAGS.map((s) => s.tag);
 // ── Layer-derived sets ──────────────────────────────────────────────────────
 
 const LETTER_OVERRIDABLE_TAGS = LETTER_SCALAR_TAGS.filter((s) => !s.readOnly).map((s) => s.tag);
+
+/**
+ * Tags a therapist may EXCLUDE from the letter.
+ *
+ * Excluding is not the same as leaving blank. An excluded tag with an optional
+ * line takes its whole paragraph with it, exactly as an absent value does; any
+ * other excluded tag is written as an EMPTY control, so the letter carries no
+ * placeholder and no naked label, and the control is still there to type into
+ * in Word. Every scalar tag qualifies: the therapist, not this file, knows
+ * which details their letter is entitled to state.
+ */
+const LETTER_EXCLUDABLE_TAGS = LETTER_SCALAR_TAG_LIST.slice();
 
 /** Tags rendered with real w:br line breaks rather than one flat run. */
 const LETTER_MULTILINE_TAGS = LETTER_SCALAR_TAGS.filter((s) => s.multiline).map((s) => s.tag);
@@ -292,6 +309,7 @@ function letterTemplateDescriptor() {
     requiredValueTags: LETTER_REQUIRED_VALUE_TAGS.slice(),
     optionalLineTags: LETTER_OPTIONAL_LINE_TAGS.slice(),
     missingCapableTags: LETTER_MISSING_CAPABLE_TAGS.slice(),
+    excludableTags: LETTER_EXCLUDABLE_TAGS.slice(),
     recipientTargets: RECIPIENT_TARGETS.slice(),
   };
 }
@@ -304,6 +322,7 @@ const LETTER_MANIFEST_CATALOGUE = {
   SECTION_BY_TAG: LETTER_SECTION_BY_TAG,
   REQUIRED_SECTION_TAGS: LETTER_REQUIRED_SECTION_TAGS,
   OVERRIDABLE_TAGS: LETTER_OVERRIDABLE_TAGS,
+  EXCLUDABLE_TAGS: LETTER_EXCLUDABLE_TAGS,
   MAX_CUSTOM_SECTIONS: LETTER_MAX_CUSTOM_SECTIONS,
   MAX_CUSTOM_TITLE_CHARS: LETTER_MAX_CUSTOM_LABEL_CHARS,
   MAX_CUSTOM_GUIDANCE_CHARS: LETTER_MAX_CUSTOM_BODY_CHARS,
@@ -342,6 +361,7 @@ module.exports = {
   LETTER_SCALAR_BY_TAG,
   LETTER_SCALAR_TAG_LIST,
   LETTER_OVERRIDABLE_TAGS,
+  LETTER_EXCLUDABLE_TAGS,
   LETTER_MULTILINE_TAGS,
   LETTER_OPTIONAL_LINE_TAGS,
   LETTER_REQUIRED_VALUE_TAGS,

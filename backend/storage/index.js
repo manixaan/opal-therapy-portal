@@ -64,16 +64,52 @@ const localBackend = {
     fs.writeFileSync(full, Buffer.from(base64, 'base64'));
     return { backend: 'local', storageKey: key, inlineData: null };
   },
+  /**
+   * Resolve a storage key to an absolute path INSIDE the root, or throw.
+   *
+   * The previous check was `full.startsWith(root)`, which is a prefix test on
+   * strings rather than a containment test on paths: with a root of
+   * `/data/docs`, the path `/data/docs-evil/x` passes it. It also ignored
+   * symlinks entirely, so a link inside the root could point anywhere — at, for
+   * instance, the 1.97GB historical resource vault full of client material.
+   *
+   * This resolves both sides, compares with path.relative (the canonical
+   * containment test), and then re-checks after following symlinks.
+   */
+  _resolveWithin(storageKey) {
+    if (!storageKey || typeof storageKey !== 'string') throw new Error('Invalid storage key');
+    if (path.isAbsolute(storageKey)) throw new Error('Invalid storage key');
+
+    const root = fs.realpathSync(this._root());
+    const full = path.resolve(root, storageKey);
+
+    const rel = path.relative(root, full);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error('Invalid storage key');
+    }
+
+    // Follow symlinks and verify the REAL destination is still inside. Done
+    // only when the target exists; callers that create files check the parent.
+    if (fs.existsSync(full)) {
+      const real = fs.realpathSync(full);
+      const realRel = path.relative(root, real);
+      if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+        throw new Error('Invalid storage key');
+      }
+      return real;
+    }
+    return full;
+  },
   async get({ storageKey }) {
-    const full = path.join(this._root(), storageKey);
-    if (!full.startsWith(this._root())) throw new Error('Invalid storage key');
+    const full = this._resolveWithin(storageKey);
     const buf = fs.readFileSync(full);
     return { base64: buf.toString('base64') };
   },
   async remove({ storageKey }) {
     if (!storageKey) return;
-    const full = path.join(this._root(), storageKey);
-    if (full.startsWith(this._root()) && fs.existsSync(full)) fs.unlinkSync(full);
+    let full;
+    try { full = this._resolveWithin(storageKey); } catch (e) { return; }
+    if (fs.existsSync(full)) fs.unlinkSync(full);
   },
 };
 

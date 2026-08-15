@@ -318,6 +318,30 @@ textarea.ltr-input { resize: vertical; min-height: 62px; }
   font-size: 12.5px; font-weight: 600; color: #93331c;
 }
 
+/* ── Exclude ───────────────────────────────────────────────────────────── */
+/* A quiet inline note, not a callout: the therapist is being told about an
+   ordinary option, not warned about a problem. */
+.ltr-inline-note {
+  color: var(--muted); font-size: 12.5px; line-height: 1.5;
+  margin: 0 0 8px; padding: 0;
+}
+
+.ltr-exclude { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.ltr-exclude input[type="checkbox"] {
+  width: 15px; height: 15px; margin: 0; flex: none; accent-color: var(--accent);
+}
+.ltr-exclude input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ltr-exclude label { font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+
+/* An excluded row recedes: it is settled, and no longer asks for attention. */
+.ltr-field-excluded { background: var(--border-soft); }
+.ltr-field-excluded dt label { color: var(--muted); text-decoration: line-through; }
+.ltr-field-excluded .ltr-input { opacity: 0.55; }
+.ltr-excluded-note {
+  font-size: 12.5px; font-style: italic; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis;
+}
+
 /* ── Step 4: narrative blocks ──────────────────────────────────────────── */
 
 .ltr-blocklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }

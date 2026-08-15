@@ -342,6 +342,38 @@ describe('drafts', () => {
     expect(draft.status).toBe('draft');
   });
 
+  test('the document reference is ISSUED at creation, not at generate', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+
+    // Straight off POST /drafts — before any PATCH, before any generate.
+    const draft = await createDraft(agent, RILEY.id);
+    const expected = `LTR-${draft.id.slice(0, 8).toUpperCase()}`;
+
+    expect(draft.manifest.scalarData.OPAL_LETTER_DOCUMENT_ID).toBe(expected);
+    expect(draft.manifest.scalarSources.OPAL_LETTER_DOCUMENT_ID).toBe('server');
+    expect(draft.letterDetails.documentId).toBe(expected);
+    expect(draft.missingFields).not.toContain('OPAL_LETTER_DOCUMENT_ID');
+
+    // Persisted, so regenerating cannot renumber it.
+    const { rows } = await db.pool.query(
+      'SELECT document_control FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(rows[0].document_control.documentReference).toBe(expected);
+  });
+
+  test('the reference is overridable — Opal issues a default, not a decree', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, RILEY.id);
+
+    const res = await agent.patch(`/api/letters/drafts/${draft.id}`)
+      .send({ scalarOverrides: { OPAL_LETTER_DOCUMENT_ID: 'OPL-2026-0007' } });
+    expect(res.status).toBe(200);
+    expect(res.body.draft.manifest.scalarData.OPAL_LETTER_DOCUMENT_ID).toBe('OPL-2026-0007');
+    expect(res.body.draft.manifest.scalarSources.OPAL_LETTER_DOCUMENT_ID).toBe('report_override');
+  });
+
   test('it is stored on the SAME tables as the FCA report, tagged by document type', async () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
@@ -565,6 +597,137 @@ describe('generation guards', () => {
     const draft = await createDraft(therapist, RILEY.id);
 
     expect((await reader.post(`/api/letters/drafts/${draft.id}/generate`)).status).toBe(403);
+  });
+
+  test('an EXCLUDED required field does not block generation — 200, not 400', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent, user } = await agentFor('therapist', {
+      organisation_id: org.id, name: 'Dana Whitfield', phone: '08 9000 1111', role_title: 'Senior OT',
+    });
+    await seedCredentials(user.id, org.id);
+    await seedLetterhead(org.id);
+    const draft = await readyDraft(agent, CASEY.id);
+
+    // A real gap in a REQUIRED value: without it the letter is refused.
+    setPatients([RILEY, { ...CASEY, ndisNumber: null }]);
+    const blocked = await agent.post(`/api/letters/drafts/${draft.id}/generate`);
+    expect(blocked.status).toBe(400);
+    expect(blocked.body.missingFields).toEqual(['OPAL_CLIENT_NDIS_NUMBER']);
+
+    // Excluding it is an answer, so generation proceeds.
+    const patched = await agent.patch(`/api/letters/drafts/${draft.id}`)
+      .send({ excludedFields: ['OPAL_CLIENT_NDIS_NUMBER'] });
+    expect(patched.status).toBe(200);
+
+    const ok = await agent.post(`/api/letters/drafts/${draft.id}/generate`);
+    expect(ok.status).toBe(200);
+    expect(ok.body.excludedFields).toEqual(['OPAL_CLIENT_NDIS_NUMBER']);
+
+    // And the promise still holds against the BYTES.
+    const buffer = await docxOf(agent, ok.body.documentId);
+    const body = await partText(buffer, 'word/document.xml');
+    expect(body).not.toContain('[PORTAL');
+    expect(body).not.toContain('[PORTAL — NDIS NUMBER]');
+    expect(body).toContain('OPAL_CLIENT_NDIS_NUMBER'); // the control survives
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Excluded fields
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('excluded fields', () => {
+  test('round-trip through PATCH, and into the frozen snapshot', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent, user } = await agentFor('therapist', {
+      organisation_id: org.id, name: 'Dana Whitfield', phone: '08 9000 1111', role_title: 'Senior OT',
+    });
+    await seedCredentials(user.id, org.id);
+    await seedLetterhead(org.id);
+    const draft = await readyDraft(agent, RILEY.id);
+
+    const patched = await agent.patch(`/api/letters/drafts/${draft.id}`)
+      .send({ excludedFields: ['OPAL_LETTER_CC', 'NOT_A_REAL_TAG'] });
+    expect(patched.status).toBe(200);
+    // Unknown tags are dropped rather than trusted.
+    expect(patched.body.draft.excludedFields).toEqual(['OPAL_LETTER_CC']);
+    expect(patched.body.draft.manifest.excludedTags).toEqual(['OPAL_LETTER_CC']);
+    // The same exclusion, restated in the wizard's own field vocabulary, so
+    // the front end never has to hold a copy of the template contract.
+    expect(patched.body.draft.excludedLetterFields).toEqual({ cc: true });
+
+    const gen = await agent.post(`/api/letters/drafts/${draft.id}/generate`);
+    expect(gen.status).toBe(200);
+    expect(gen.body.excludedFields).toEqual(['OPAL_LETTER_CC']);
+
+    const { rows } = await db.pool.query(
+      'SELECT excluded_fields FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(rows[0].excluded_fields).toEqual(['OPAL_LETTER_CC']);
+    const frozen = await agent.get(`/api/letters/drafts/${draft.id}`);
+    expect(frozen.body.draft.manifest.excludedTags).toEqual(['OPAL_LETTER_CC']);
+  });
+
+  test('excluding clears the override; un-excluding restores the resolved value', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent } = await agentFor('therapist', { organisation_id: org.id });
+    const draft = await createDraft(agent, RILEY.id);
+
+    const typed = await agent.patch(`/api/letters/drafts/${draft.id}`)
+      .send({ scalarOverrides: { OPAL_THERAPIST_QUALIFICATIONS: 'BSc (Hons) OT' } });
+    expect(typed.body.draft.manifest.scalarData.OPAL_THERAPIST_QUALIFICATIONS).toBe('BSc (Hons) OT');
+
+    await agent.patch(`/api/letters/drafts/${draft.id}`)
+      .send({ excludedFields: ['OPAL_THERAPIST_QUALIFICATIONS'] });
+    const { rows } = await db.pool.query(
+      'SELECT scalar_overrides FROM fca_report_drafts WHERE id = $1', [draft.id]
+    );
+    expect(rows[0].scalar_overrides).not.toHaveProperty('OPAL_THERAPIST_QUALIFICATIONS');
+
+    const restored = await agent.patch(`/api/letters/drafts/${draft.id}`).send({ excludedFields: [] });
+    expect(restored.body.draft.manifest.excludedTags).toEqual([]);
+    // Back to what the layers actually hold — nothing — rather than the value
+    // the therapist last saw struck through.
+    expect(restored.body.draft.manifest.scalarData.OPAL_THERAPIST_QUALIFICATIONS).toBeNull();
+    expect(restored.body.draft.manifest.scalarSources.OPAL_THERAPIST_QUALIFICATIONS).toBe('missing');
+  });
+
+  test('an optional-line exclusion removes the whole line; another empties its control', async () => {
+    const org = await seedOrganisation('Org A');
+    const { agent, user } = await agentFor('therapist', {
+      organisation_id: org.id, name: 'Dana Whitfield', phone: '08 9000 1111', role_title: 'Senior OT',
+    });
+    await seedCredentials(user.id, org.id);
+    await seedLetterhead(org.id);
+    const draft = await readyDraft(agent, RILEY.id, {
+      ccRecipients: [{ name: 'Alex Tan', organisation: 'Bright Futures' }],
+    });
+
+    await agent.patch(`/api/letters/drafts/${draft.id}`).send({
+      // One auto-issued field, one the therapist supplied.
+      excludedFields: ['OPAL_LETTER_DOCUMENT_ID', 'OPAL_LETTER_CC'],
+    });
+    const gen = await agent.post(`/api/letters/drafts/${draft.id}/generate`);
+    expect(gen.status).toBe(200);
+
+    const buffer = await docxOf(agent, gen.body.documentId);
+    const body = await partText(buffer, 'word/document.xml');
+    const footer = await partText(buffer, 'word/footer6.xml');
+
+    // The CC line owns its paragraph: label and all, gone.
+    expect(body).not.toContain('CC:');
+    expect(body).not.toContain('Alex Tan');
+    expect(body).not.toContain('OPAL_LETTER_CC');
+
+    // The document id does not: the control survives, emptied.
+    expect(footer).toContain('OPAL_LETTER_DOCUMENT_ID');
+    expect(footer).not.toContain('[PORTAL — DOCUMENT ID]');
+    expect(footer).not.toContain(`LTR-${draft.id.slice(0, 8).toUpperCase()}`);
+
+    // No unresolved placeholder anywhere in the package.
+    for (const part of ['word/document.xml', 'word/header6.xml', 'word/footer6.xml']) {
+      expect(await partText(buffer, part)).not.toMatch(/\[PORTAL\s+[—–-]/);
+    }
   });
 });
 
@@ -1092,8 +1255,9 @@ describe('source attribution', () => {
     expect(s.OPAL_ORGANISATION_ADDRESS).toBe('portal');
     expect(s.OPAL_LETTER_RECIPIENT_NAME).toBe('report_override');
     expect(s.OPAL_THERAPIST_QUALIFICATIONS).toBe('missing');
-    // Not yet generated, so the server has issued nothing.
-    expect(s.OPAL_LETTER_DOCUMENT_ID).toBe('missing');
+    // Issued by Opal when the draft was created, so it is real from the review
+    // step onward — never a "Missing" row nobody could resolve.
+    expect(s.OPAL_LETTER_DOCUMENT_ID).toBe('server');
 
     // Every source is drawn from the documented vocabulary.
     const vocabulary = new Set(['splose', 'client_profile', 'report_override', 'missing', 'portal', 'server']);

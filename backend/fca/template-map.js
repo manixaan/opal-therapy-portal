@@ -177,8 +177,15 @@ const OPTIONAL_SECTION_TAGS = SECTIONS.filter((s) => !s.required).map((s) => s.t
 //   layer 'report'          REPORT-SPECIFIC. Belongs to one report only. Comes
 //                           from a therapist override or nothing at all.
 //                           save-to-profile REJECTS these.
-//   layer 'server'          Issued by the server at generate time (ids, dates,
-//                           version, status). readOnly: overrides are refused.
+//   layer 'server'          ISSUED BY OPAL when the draft is created (document
+//                           id, date, version, status). These are not facts
+//                           Opal might fail to hold — they are Opal's to mint —
+//                           so they resolve to a real value rather than to
+//                           MISSING. The issued value is a DEFAULT, not a
+//                           decree: a therapist who is genuinely issuing
+//                           version 2.0, or marking a report Final, overrides
+//                           it like any other field. save-to-profile still
+//                           rejects them: they belong to one document.
 //
 // `profileField`     column on fca_client_profiles that backs the tag.
 // `profilePlanField` field on the CURRENT fca_client_ndis_plans row (or its
@@ -228,18 +235,24 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_THERAPIST_QUALIFICATIONS', label: 'Qualifications', layer: 'report', occurrences: 2 },
   { tag: 'OPAL_THERAPIST_PROVIDER_NUMBER', label: 'NDIS provider number', layer: 'report', occurrences: 2 },
 
-  // ── Report control: server-issued ────────────────────────────────────────
-  { tag: 'OPAL_REPORT_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 3, parts: ['word/footer6.xml'], readOnly: true },
-  { tag: 'OPAL_REPORT_DATE', label: 'Report date', layer: 'server', field: 'reportDate', occurrences: 2, readOnly: true },
-  { tag: 'OPAL_REPORT_VERSION', label: 'Report version', layer: 'server', field: 'reportVersion', occurrences: 2, readOnly: true },
-  { tag: 'OPAL_REPORT_STATUS', label: 'Report status', layer: 'server', field: 'reportStatus', occurrences: 1, readOnly: true },
+  // ── Report control: issued by Opal at draft creation ─────────────────────
+  { tag: 'OPAL_REPORT_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 3, parts: ['word/footer6.xml'],
+    note: 'Issued once, when the draft is created, and persisted. Regenerating a report never renumbers it.' },
+  { tag: 'OPAL_REPORT_DATE', label: 'Report date', layer: 'server', field: 'reportDate', occurrences: 2 },
+  { tag: 'OPAL_REPORT_VERSION', label: 'Report version', layer: 'server', field: 'reportVersion', occurrences: 2 },
+  { tag: 'OPAL_REPORT_STATUS', label: 'Report status', layer: 'server', field: 'reportStatus', occurrences: 1 },
 
   // ── Report control: report-specific, therapist-supplied ──────────────────
+  // Deliberately NOT auto-issued. Each of these is a fact about the world that
+  // this portal genuinely does not hold, and a plausible-looking guess in a
+  // clinical document is worse than a visible gap.
   { tag: 'OPAL_REPORT_ISSUE_DATE', label: 'Issue date', layer: 'report', occurrences: 2,
-    note: 'The date the report is issued to the participant is not known at generation time.' },
-  { tag: 'OPAL_REPORT_REVIEWER_NAME', label: 'Reviewer name', layer: 'report', occurrences: 1 },
+    note: 'The date the report is ISSUED to the participant is a real event that has not happened yet. It is never today\'s date by default.' },
+  { tag: 'OPAL_REPORT_REVIEWER_NAME', label: 'Reviewer name', layer: 'report', occurrences: 1,
+    note: 'A second clinician who reviewed the report. Never the author, and never assumed.' },
   { tag: 'OPAL_REPORT_REVIEWER_ROLE', label: 'Reviewer role', layer: 'report', occurrences: 1 },
-  { tag: 'OPAL_REPORT_AUTHORISED_RECIPIENTS', label: 'Authorised recipients', layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_REPORT_AUTHORISED_RECIPIENTS', label: 'Authorised recipients', layer: 'report', occurrences: 1,
+    note: 'Who the participant has consented to receive this report. Only a human knows this.' },
 ];
 
 const SCALAR_BY_TAG = new Map(SCALAR_TAGS.map((s) => [s.tag, s]));
@@ -282,8 +295,28 @@ function profileRejectionReason(tag) {
  */
 const MISSING_CAPABLE_TAGS = SCALAR_TAGS.filter((s) => s.layer !== 'server').map((s) => s.tag);
 
-/** Tags a therapist may type a real value for. Server-issued ids are excluded. */
+/**
+ * Tags a therapist may type a real value for.
+ *
+ * Every scalar tag qualifies, including the four Opal issues itself. A
+ * therapist who is genuinely producing version 2.0 of a report, or marking one
+ * Final, is stating a fact about their own document — refusing them would not
+ * make the document more accurate, it would just make Opal wrong and silent
+ * about it. The issued value remains the DEFAULT, and the source badge still
+ * reads "Entered for this report" the moment they change it.
+ */
 const OVERRIDABLE_TAGS = SCALAR_TAGS.filter((s) => !s.readOnly).map((s) => s.tag);
+
+/**
+ * Tags a therapist may EXCLUDE from the document.
+ *
+ * Excluding is not the same as leaving blank. A blank tag keeps the template's
+ * own "[PORTAL — …]" placeholder so the gap is visible and completable in Word;
+ * an excluded tag renders as nothing at all, because the therapist has said
+ * there is nothing to put there. Every scalar tag can be excluded — a report
+ * that legitimately has no reviewer should not carry a reviewer prompt.
+ */
+const EXCLUDABLE_TAGS = SCALAR_TAG_LIST.slice();
 
 const MAX_OVERRIDE_CHARS = 400;
 const MAX_CUSTOM_SECTIONS = 10;
@@ -331,10 +364,38 @@ function templateDescriptor() {
     scalarTags: SCALAR_TAG_LIST.slice(),
     profileEligibleTags: PROFILE_ELIGIBLE_TAGS.slice(),
     missingCapableTags: MISSING_CAPABLE_TAGS.slice(),
+    excludableTags: EXCLUDABLE_TAGS.slice(),
+    serverIssuedTags: SERVER_TAGS.slice(),
   };
 }
 
+/**
+ * DEPENDENT CONTENT — rows elsewhere in the document that belong to a section.
+ *
+ * The Assessment Results table carries one row per assessment tool. Excluding
+ * the MoCA *section* while leaving a MoCA *row* in the results table produces a
+ * report that contradicts itself, so the row travels with the section.
+ *
+ * Declared as an explicit map rather than discovered by searching the document
+ * text: the engine removes the whole <w:tr> node whose first cell equals
+ * `resultsRowLabel`, so this is structural node removal driven by a declaration,
+ * not a text substitution. Adding an optional assessment means adding a line
+ * here — it is not something the engine can get wrong on its own.
+ *
+ * The label must match the template's first-cell text EXACTLY. A mismatch
+ * removes nothing rather than removing the wrong row, and the engine reports it
+ * as a warning so a template change cannot silently break the dependency.
+ */
+const SECTION_DEPENDENT_ROWS = {
+  OPAL_SECTION_ASSESSMENT_TOOL_WHODAS: 'WHODAS 2.0',
+  OPAL_SECTION_ASSESSMENT_TOOL_MOCA: 'MoCA',
+  OPAL_SECTION_ASSESSMENT_TOOL_MBI: 'Modified Barthel Index',
+  OPAL_SECTION_ASSESSMENT_TOOL_CANS: 'Care and Needs Scale',
+  OPAL_SECTION_ASSESSMENT_TOOL_CARER_BURDEN: 'Carer Burden Scale',
+};
+
 module.exports = {
+  SECTION_DEPENDENT_ROWS,
   EN_DASH,
   STYLE,
   TEMPLATE_ID,
@@ -358,6 +419,7 @@ module.exports = {
   profileRejectionReason,
   MISSING_CAPABLE_TAGS,
   OVERRIDABLE_TAGS,
+  EXCLUDABLE_TAGS,
   MAX_OVERRIDE_CHARS,
   MAX_CUSTOM_SECTIONS,
   MAX_CUSTOM_TITLE_CHARS,

@@ -26,6 +26,15 @@
  * - NO UNRESOLVED PLACEHOLDER SHIPS. Every tag that cannot be cleaned away is
  *   required; generation is refused until it resolves, and the finished package
  *   is re-checked for "[PORTAL — …]" before a single byte is stored.
+ * - OPAL ISSUES ONLY WHAT IS OPAL'S TO ISSUE. The document id is minted once,
+ *   when the draft is created, and stored — so the review step shows the real
+ *   reference instead of a field marked "Missing" that nobody could look up,
+ *   and regenerating never renumbers a letter. The letter date has always
+ *   defaulted to today for the same reason. Nothing else is auto-filled.
+ * - EXCLUDING IS THE THERAPIST'S TO DECIDE. A field they say does not apply
+ *   contributes NOTHING to the letter — its whole line goes where the template
+ *   marks the tag as owning one, and otherwise it renders as an empty control
+ *   — and an excluded field NEVER blocks generation, required or not.
  * - ORGANISATION ISOLATION. Every query filters organisation_id. Cross-org is
  *   404, not 403 — "you may not see this" already leaks that it exists.
  * - OWN-ONLY DRAFTS. A draft belongs to the user who created it. No role,
@@ -56,7 +65,7 @@ const log = require('./logger').createLogger('letters');
 const ltm = require('./fca/letter-template-map');
 const { generateLetterDocx, assertNoPortalPlaceholders } = require('./fca/letter-blocks');
 const { resolveScalars } = require('./fca/resolve-scalars');
-const { documentReference } = require('./fca/document-id');
+const { issueDocumentControl, documentControlFor } = require('./fca/document-id');
 const { searchClients } = require('./fca/client-search');
 const {
   loadSploseClient,
@@ -69,6 +78,7 @@ const {
   normaliseSelection,
   normaliseCustomSections,
   normaliseOverrides,
+  normaliseExcludedFields,
   buildManifest,
 } = require('./fca/manifest');
 
@@ -238,6 +248,28 @@ function normaliseLetterDetails(details) {
 }
 
 /**
+ * The scalar tag each structured letter field owns.
+ *
+ * ONE table, used for two things: composing the overrides that feed the
+ * resolver, and telling the wizard which of its own addressing fields the
+ * therapist has excluded. The wizard therefore needs no template tag of its
+ * own — the front end deliberately contains not a single merge tag, because a
+ * second copy of the template contract would drift the moment the template did.
+ */
+const LETTER_FIELD_TAGS = {
+  recipientName: 'OPAL_LETTER_RECIPIENT_NAME',
+  recipientRole: 'OPAL_LETTER_RECIPIENT_ROLE',
+  recipientOrganisation: 'OPAL_LETTER_RECIPIENT_ORGANISATION',
+  recipientAddress: 'OPAL_LETTER_RECIPIENT_ADDRESS',
+  salutation: 'OPAL_LETTER_SALUTATION',
+  letterDate: 'OPAL_LETTER_DATE',
+  subject: 'OPAL_LETTER_SUBJECT',
+  reportingPeriod: 'OPAL_LETTER_REPORTING_PERIOD',
+  cc: 'OPAL_LETTER_CC',
+  documentId: 'OPAL_LETTER_DOCUMENT_ID',
+};
+
+/**
  * The nine scalar tags the structured letter fields own.
  *
  * A structured value WINS over a raw scalarOverride for the tag it owns,
@@ -252,16 +284,48 @@ function scalarsFromLetterFields(recipient, ccRecipients, details) {
     .join('\n');
 
   return {
-    OPAL_LETTER_RECIPIENT_NAME: recipient?.name || null,
-    OPAL_LETTER_RECIPIENT_ROLE: recipient?.role || null,
-    OPAL_LETTER_RECIPIENT_ORGANISATION: recipient?.organisation || null,
-    OPAL_LETTER_RECIPIENT_ADDRESS: recipient?.address || null,
-    OPAL_LETTER_SALUTATION: recipient?.salutation || null,
-    OPAL_LETTER_DATE: details?.letterDate || null,
-    OPAL_LETTER_SUBJECT: details?.subject || null,
-    OPAL_LETTER_REPORTING_PERIOD: details?.reportingPeriod || null,
-    OPAL_LETTER_CC: cc || null,
+    [LETTER_FIELD_TAGS.recipientName]: recipient?.name || null,
+    [LETTER_FIELD_TAGS.recipientRole]: recipient?.role || null,
+    [LETTER_FIELD_TAGS.recipientOrganisation]: recipient?.organisation || null,
+    [LETTER_FIELD_TAGS.recipientAddress]: recipient?.address || null,
+    [LETTER_FIELD_TAGS.salutation]: recipient?.salutation || null,
+    [LETTER_FIELD_TAGS.letterDate]: details?.letterDate || null,
+    [LETTER_FIELD_TAGS.subject]: details?.subject || null,
+    [LETTER_FIELD_TAGS.reportingPeriod]: details?.reportingPeriod || null,
+    [LETTER_FIELD_TAGS.cc]: cc || null,
   };
+}
+
+/**
+ * Which of the wizard's own addressing fields are excluded.
+ *
+ * The addressing block of the preview is drawn from the draft's structured
+ * snapshots rather than from the manifest's scalar list, so it needs to be told
+ * — by the server, in the server's own vocabulary — which of those lines the
+ * document will not contain. Without this the preview would show a subject line
+ * that the .docx omits, which is exactly the disagreement this design exists to
+ * prevent.
+ */
+function excludedLetterFields(excludedTags) {
+  const excluded = new Set(excludedTags || []);
+  const out = {};
+  for (const [field, tag] of Object.entries(LETTER_FIELD_TAGS)) {
+    if (excluded.has(tag)) out[field] = true;
+  }
+  return out;
+}
+
+/**
+ * The document-control values OPAL ISSUES for this letter.
+ *
+ * Minted ONCE, when the draft is created, and stored on the row — so the
+ * review step shows the real reference rather than a "Missing" row nobody
+ * could fill, and a second generate cannot mint a second reference. The shared
+ * issuer also carries a version and status; this template has no control for
+ * either, so they are stored and simply never rendered.
+ */
+function serverData(row) {
+  return documentControlFor(LETTER_DOCUMENT_ID_PREFIX, row);
 }
 
 /** Structured fields on top of raw overrides, blanks not overwriting anything. */
@@ -289,6 +353,7 @@ async function composeDraft(row, { frozen = false } = {}) {
     sectionOrder: row.section_order || [],
   }, LETTER_MANIFEST_CATALOGUE);
   const customSections = row.custom_sections || [];
+  const excludedFields = normaliseExcludedFields(row.excluded_fields || [], LETTER_MANIFEST_CATALOGUE);
 
   let scalarData;
   let scalarSources;
@@ -311,8 +376,9 @@ async function composeDraft(row, { frozen = false } = {}) {
       overrides: mergedOverrides(row),
       portal,
       organisation,
-      // Not yet generated: the document id does not exist until then.
-      server: null,
+      // Issued when this draft was created, so the therapist reviews the real
+      // document reference rather than a "Missing" row they cannot resolve.
+      server: serverData(row),
       catalogue: LETTER_SCALAR_CATALOGUE,
     }));
   }
@@ -322,6 +388,7 @@ async function composeDraft(row, { frozen = false } = {}) {
     customSections,
     scalarData,
     scalarSources,
+    excludedFields,
   }, LETTER_MANIFEST_CATALOGUE);
 
   const details = row.letter_details || {};
@@ -343,12 +410,17 @@ async function composeDraft(row, { frozen = false } = {}) {
       letterDate: details.letterDate ?? null,
       subject: details.subject ?? null,
       reportingPeriod: details.reportingPeriod ?? null,
-      // Server-issued, and only after generation.
+      // Issued by Opal when the draft was created, so it is real from the
+      // review step onward rather than appearing only after generation.
       documentId: scalarData.OPAL_LETTER_DOCUMENT_ID || null,
     },
     selectedSections: selection.selectedSections,
     sectionOrder: selection.sectionOrder,
     customSections,
+    excludedFields,
+    // The same exclusion, restated in the wizard's own field vocabulary so the
+    // front end never has to know a template tag.
+    excludedLetterFields: excludedLetterFields(excludedFields),
     manifest,
     missingFields,
     createdAt: row.created_at,
@@ -509,6 +581,18 @@ router.post('/api/letters/drafts', requireClinicalWrite, safe(async (req, res) =
       JSON.stringify(selectedSections), JSON.stringify(sectionOrder), JSON.stringify(letterDetails)]
   );
 
+  // The document reference is ISSUED HERE, once, so it is visible in review and
+  // can never be renumbered by a later generate. It is derived from the row's
+  // own uuid, which the database mints — hence a second statement rather than
+  // a value guessed beforehand.
+  const issued = await pool.query(
+    'UPDATE fca_report_drafts SET document_control = $2 WHERE id = $1 RETURNING *',
+    [rows[0].id, JSON.stringify(issueDocumentControl(
+      LETTER_DOCUMENT_ID_PREFIX, rows[0].id, new Date(rows[0].created_at)
+    ))]
+  );
+  rows[0] = issued.rows[0] || rows[0];
+
   const draft = await composeDraft(rows[0]);
   await audit(req, 'letter.draft_created', rows[0].id, { clientId, templateVersion: template.version });
   res.status(201).json({ draft });
@@ -518,8 +602,8 @@ router.get('/api/letters/drafts', requireClinicalRead, safe(async (req, res) => 
   const { rows } = await pool.query(
     `SELECT id, client_id, client_name, client_preferred_name, therapist_profile_id,
             therapist_name, template_id, template_version, status, missing_fields,
-            selected_sections, custom_sections, letter_recipient, letter_details,
-            created_at, updated_at, generated_at, generated_document_id
+            excluded_fields, selected_sections, custom_sections, letter_recipient,
+            letter_details, created_at, updated_at, generated_at, generated_document_id
        FROM fca_report_drafts
       WHERE organisation_id = $1 AND created_by_user_id = $2 AND document_type = $3
       ORDER BY created_at DESC
@@ -543,7 +627,10 @@ router.get('/api/letters/drafts', requireClinicalRead, safe(async (req, res) => 
       subject: (r.letter_details || {}).subject || null,
       sectionCount: (r.selected_sections || []).length,
       customSectionCount: (r.custom_sections || []).length,
-      missingFields: r.missing_fields || [],
+      // An excluded field is a decision, not an omission — the entry list
+      // reports the two separately rather than counting one as the other.
+      missingFields: (r.missing_fields || []).filter((t) => !(r.excluded_fields || []).includes(t)),
+      excludedFields: r.excluded_fields || [],
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       generatedAt: r.generated_at,
@@ -619,6 +706,16 @@ router.patch('/api/letters/drafts/:id', requireClinicalWrite, safe(async (req, r
   // An explicit null clears an override rather than storing a null value.
   for (const [k, v] of Object.entries(overrides)) if (v === null || v === '') delete overrides[k];
 
+  // Replaced, not merged: exclusion is a SET the therapist owns outright, and
+  // a merge would make un-excluding impossible to express.
+  const excludedFields = has('excludedFields')
+    ? normaliseExcludedFields(body.excludedFields, LETTER_MANIFEST_CATALOGUE)
+    : normaliseExcludedFields(row.excluded_fields || [], LETTER_MANIFEST_CATALOGUE);
+
+  // Excluding a field CLEARS any value typed for it, so un-excluding cannot
+  // silently resurrect a value the therapist last saw struck through.
+  for (const tag of excludedFields) delete overrides[tag];
+
   // NOTHING here writes to the client profile. Choosing a recipient is not
   // consent to change a reusable client record; only the explicit
   // save-recipient-to-profile route does that.
@@ -626,12 +723,13 @@ router.patch('/api/letters/drafts/:id', requireClinicalWrite, safe(async (req, r
     `UPDATE fca_report_drafts
         SET selected_sections = $2, section_order = $3, custom_sections = $4,
             scalar_overrides = $5, letter_recipient = $6, letter_cc_recipients = $7,
-            letter_details = $8, updated_at = NOW()
+            letter_details = $8, excluded_fields = $9, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
     [row.id, JSON.stringify(selection.selectedSections), JSON.stringify(selection.sectionOrder),
       JSON.stringify(customSections), JSON.stringify(overrides),
-      JSON.stringify(recipient), JSON.stringify(ccRecipients), JSON.stringify(letterDetails)]
+      JSON.stringify(recipient), JSON.stringify(ccRecipients), JSON.stringify(letterDetails),
+      JSON.stringify(excludedFields)]
   );
 
   try {
@@ -793,6 +891,8 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
   const portal = await loadPortalData(row.created_by_user_id, row.therapist_profile_id);
   const organisation = await loadOrganisationSettings(row.organisation_id);
   const generatedAt = new Date();
+  const excludedFields = normaliseExcludedFields(row.excluded_fields || [], LETTER_MANIFEST_CATALOGUE);
+  const excludedSet = new Set(excludedFields);
 
   const { scalarData, scalarSources, missingFields } = resolveScalars({
     splose: client,
@@ -802,9 +902,9 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
     overrides: mergedOverrides(row),
     portal,
     organisation,
-    // The one server-issued value this template carries. Same numbering
-    // convention as the FCA report — see fca/document-id.js.
-    server: { documentReference: documentReference(LETTER_DOCUMENT_ID_PREFIX, row.id) },
+    // Issued when the draft was created — read, never re-minted, so
+    // regenerating a letter cannot renumber it.
+    server: serverData(row),
     catalogue: LETTER_SCALAR_CATALOGUE,
   });
 
@@ -814,7 +914,15 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
   // template's own "[PORTAL — …]" placeholder to a plan manager is not an
   // option, and neither is inventing a value, so the only honest outcome is to
   // refuse and say exactly what is outstanding.
+  //
+  // An EXCLUDED tag is never outstanding. The therapist has said there is
+  // nothing to put there, the engine writes an empty control rather than a
+  // placeholder, and the finished package is still checked for "[PORTAL — …]"
+  // afterwards — so the promise this validation exists to keep is kept by the
+  // check that is actually about the bytes, not by refusing a request the
+  // therapist has already answered.
   const outstanding = LETTER_REQUIRED_VALUE_TAGS.filter((tag) => {
+    if (excludedSet.has(tag)) return false;
     const v = scalarData[tag];
     return v === null || v === undefined || String(v).trim() === '';
   });
@@ -833,6 +941,7 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
     customSections: row.custom_sections || [],
     scalarData,
     scalarSources,
+    excludedFields,
   }, LETTER_MANIFEST_CATALOGUE);
 
   // ── Render, validate, store ──────────────────────────────────────────────
@@ -846,10 +955,16 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
   }
 
   const warnings = (buffer.docxStats?.warnings || []).slice();
-  if (missingFields.length) {
+  // An excluded field is a decision, not an omission, so the two are counted
+  // and reported separately.
+  const unresolved = missingFields.filter((tag) => !excludedSet.has(tag));
+  if (unresolved.length) {
     // Flagged, never fabricated. Only optional lines can reach here — every
     // required tag was validated above — and those lines were removed outright.
-    warnings.push(`${missingFields.length} optional field${missingFields.length === 1 ? ' was' : 's were'} not supplied; their lines were removed from the letter.`);
+    warnings.push(`${unresolved.length} optional field${unresolved.length === 1 ? ' was' : 's were'} not supplied; their lines were removed from the letter.`);
+  }
+  if (excludedFields.length) {
+    warnings.push(`${excludedFields.length} field${excludedFields.length === 1 ? ' was' : 's were'} excluded; nothing was inserted for ${excludedFields.length === 1 ? 'it' : 'them'}.`);
   }
 
   const preferredName = scalarData.OPAL_CLIENT_PREFERRED_NAME || row.client_preferred_name;
@@ -879,13 +994,16 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
         checksum, template.version, req.user.id]
     );
     await dbClient.query(
+      // excluded_fields is frozen with the rest of the snapshot: what was
+      // deliberately omitted is part of explaining an issued letter.
       `UPDATE fca_report_drafts
           SET status = 'generated', scalar_snapshot = $2, scalar_sources = $3,
-              missing_fields = $4, generated_document_id = $5,
-              generated_at = $6, updated_at = NOW()
+              missing_fields = $4, excluded_fields = $5, generated_document_id = $6,
+              generated_at = $7, updated_at = NOW()
         WHERE id = $1`,
       [row.id, JSON.stringify(scalarData), JSON.stringify(scalarSources),
-        JSON.stringify(missingFields), documentId, generatedAt]
+        JSON.stringify(missingFields), JSON.stringify(excludedFields),
+        documentId, generatedAt]
     );
     await dbClient.query('COMMIT');
   } catch (err) {
@@ -911,9 +1029,10 @@ router.post('/api/letters/drafts/:id/generate', requireClinicalWrite, safe(async
     customSectionCount,
     ccCount: (row.letter_cc_recipients || []).length,
     missingFieldCount: missingFields.length,
+    excludedFieldCount: excludedFields.length,
   });
 
-  res.json({ documentId, filename, missingFields, warnings });
+  res.json({ documentId, filename, missingFields, excludedFields, warnings });
 }));
 
 // ── Download (authenticated, own-draft only) ────────────────────────────────
