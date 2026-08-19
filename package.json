@@ -4,7 +4,9 @@
   "description": "E2E harness for the Opal Therapy Portal (staging only). Backend app lives in backend/.",
   "scripts": {
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:local": "playwright test --config playwright.local.config.js",
+    "tutorials:capture": "node scripts/capture-tutorial-screenshots.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

@@ -12,6 +12,16 @@
       "autoPort": false
     },
     {
+      "name": "opal-synthetic-5008",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5008 DB_NAME=therapy_scheduler_capture NODE_ENV=development ENABLE_OUTLOOK_WRITE=false ENABLE_SPLOSE_CALENDAR_SYNC=false ALLOWED_ORIGINS=http://localhost:5008,http://127.0.0.1:5008 node backend/server.js"
+      ],
+      "port": 5008,
+      "autoPort": false
+    },
+    {
       "name": "opal-backend-qa-5002",
       "runtimeExecutable": "sh",
       "runtimeArgs": [
