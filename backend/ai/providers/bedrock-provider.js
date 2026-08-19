@@ -68,12 +68,25 @@ const GUARDRAIL_VERSION_HEADER = 'X-Amzn-Bedrock-GuardrailVersion';
  * camelCase spelling. A false positive costs one refused generation. A false
  * negative puts guardrail-masked text into a participant's file.
  */
-function guardrailIntervened(res) {
-  if (!res || typeof res !== 'object') return false;
+/** The guardrail marker Bedrock attaches to the response body, normalised. */
+function guardrailActionOf(res) {
+  if (!res || typeof res !== 'object') return '';
   const marker = res['amazon-bedrock-guardrailAction']
     ?? res.amazonBedrockGuardrailAction
     ?? res?.amazon_bedrock_guardrailAction;
-  if (String(marker || '').toUpperCase() === 'INTERVENED') return true;
+  return String(marker || '').toUpperCase().slice(0, 40);
+}
+
+function guardrailIntervened(res) {
+  if (!res || typeof res !== 'object') return false;
+  const action = guardrailActionOf(res);
+  // Two spellings of the same fact: 'INTERVENED' is what InvokeModel documents
+  // for this marker; 'GUARDRAIL_INTERVENED' is the Converse vocabulary for it
+  // (the current AWS SDK's GuardrailAction enum). Accepting both keeps a wire
+  // vocabulary change failing CLOSED — the direction the comment above says
+  // matters. Before this, a GUARDRAIL_INTERVENED response passed through as a
+  // clean success.
+  if (action === 'INTERVENED' || action === 'GUARDRAIL_INTERVENED') return true;
   return /guardrail/i.test(String(res.stop_reason || ''));
 }
 
@@ -322,7 +335,22 @@ async function invoke({
 
     // Checked BEFORE the content is read, so masked text has no path to a
     // caller that might compose it into a note.
-    if (guardrailIntervened(res)) throw new Error('guardrail_intervened');
+    //
+    // The warn exists because an intervention is invisible everywhere else:
+    // to AWS it is a SUCCESSFUL invocation (CloudTrail records no errorCode),
+    // and the caller sees only a generic refusal. Non-blocking guardrail
+    // actions — PII anonymisation, masking — raise this SAME marker, so
+    // "every request comes back blocked" usually means a policy is acting on
+    // the fixed parts of the prompt rather than on what the user typed. The
+    // logged fields are bounded enum values; response content is never read
+    // on this path.
+    if (guardrailIntervened(res)) {
+      console.warn(
+        `[bedrock-provider] guardrail intervened on a successful invocation `
+        + `(action: ${guardrailActionOf(res) || 'none'}, `
+        + `stop_reason: ${String(res.stop_reason || '').slice(0, 40) || 'none'})`);
+      throw new Error('guardrail_intervened');
+    }
 
     const blocks = Array.isArray(res?.content) ? res.content : [];
 
