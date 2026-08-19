@@ -295,10 +295,11 @@ const tutorials = [
 - Where to go when something looks wrong`,
     before: `You need the invitation email from Opal and a modern browser (Edge, Chrome, Safari or Firefox). The portal is a web application — there is nothing to install.`,
     steps: `1. Open the invitation link and set a strong, unique password.
-2. Sign in. You land on the Snapshot page — a summary of your day with reminders and tasks.
-3. Explore the main navigation: Calendar (Day, Week, Month views), Travel Logbook, Resource Hub, Notifications and your Profile.
+2. Sign in. You land on the Calendar — your week at a glance. The daily Snapshot (reminders and tasks) opens from the report icon in the top bar.
+3. Explore the main navigation: Calendar (Day, Week, Month views), the Resource Hub and your Profile. Notifications live behind the bell in the top bar. Some tabs are role-dependent — your row may differ from a colleague's.
 4. Open Settings and review each section: personal settings, calendar settings, travel settings, notification preferences and integrations.
-5. Set your notification preferences so that schedule changes reach you the way you want.`,
+5. Set your notification preferences so that schedule changes reach you the way you want.
+6. Prefer to be shown rather than told? Start the interactive walkthrough from the button at the top of this page — it points at the real controls as you go.`,
     problems: `- **Invitation link expired** — ask the practice owner to re-send the invitation.
 - **Page looks stale after an update** — do a hard refresh (Ctrl+Shift+R or Cmd+Shift+R).
 - **Cannot see the Scheduler tab on the calendar** — the Master Scheduler is visible to admin and owner roles only; therapists see Day, Week and Month.`,
@@ -487,6 +488,27 @@ const tutorials = [
 - **Starter blocked on credentials** — Ahpra and insurance evidence gate clinical work; there is no workaround by design.`,
     tips: `- Invite a few days before the start date so day one is orientation, not administration.
 - Review the acknowledgement status of required policies after week one — gaps here are onboarding debt.`,
+  }),
+  tutorial({
+    slug: 'portal-opa-assistant',
+    title: 'Meet Opa, Your Practice Sidekick',
+    description: 'What the Opa assistant can and cannot do, and how to use it responsibly.',
+    minutes: 4,
+    learn: `- What Opa is and where to find it
+- What kinds of questions it can genuinely answer
+- The guardrails, and what to do when an answer looks wrong`,
+    before: `None. Opa is available from any screen via the round button in the bottom corner. If the button is absent, the practice owner has switched the assistant off.`,
+    steps: `1. Click the round Opa button in the bottom corner of any screen to open the chat panel.
+2. Ask about the portal and how the practice works — Opa answers from its approved practice knowledge, not from the live schedule or client records.
+3. Treat every answer as a starting point. Opa's replies are AI-generated: verify anything that matters before you act on it, and never treat an answer as clinical advice.
+4. Keep participant-identifying details out of your questions — describe the situation, not the person.
+5. If Opa declines to answer, that is a guardrail working as intended, not a fault. Rephrase without the sensitive content, or ask a colleague instead.
+6. Report incorrect or odd behaviour through Support so it can be reviewed.`,
+    problems: `- **Opa refuses a reasonable question** — the guardrail errs on the side of caution; reword it, or check the Resource Hub for the underlying policy or guide.
+- **The answer contradicts a policy** — the policy wins, every time. Report the answer via Support.
+- **The button is missing** — the assistant is disabled at practice level; ask the owner.`,
+    tips: `- Opa is fastest for "where do I find…" and "how does the practice handle…" questions.
+- The clearer and more specific the question, the better the answer.`,
   }),
 ];
 
@@ -1741,7 +1763,7 @@ const collections = [
       'portal-getting-started', 'portal-profile-documents', 'portal-connecting-outlook',
       'portal-using-calendar', 'portal-master-scheduler', 'portal-booking-appointment',
       'portal-travel-logbook', 'portal-resource-hub', 'portal-notifications',
-      'portal-inviting-therapists',
+      'portal-inviting-therapists', 'portal-opa-assistant',
     ],
   },
   {
