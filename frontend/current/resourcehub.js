@@ -336,6 +336,7 @@
       editing: null, // resource being edited (object) or {} for new
       formOpen: false,
       sources: null, pd: null, pdEditing: null, feedback: null, links: null, analytics: null,
+      induction: null, // owner/admin induction-completion overview
       // Ingestion register: the 650-record source-vault accounting.
       ing: null, ingRecords: null, ingTreatment: '', ingLoading: false, ingCleanroom: null,
       err: '',
@@ -491,6 +492,12 @@
     if (!h.ok) {
       return out + '<div class="rh2-empty">' + esc(h.error || 'The Resource Hub could not be loaded.') +
         ' <button type="button" class="rh2-btn" onclick="RH2.reloadHome()">Retry</button></div></div>';
+    }
+
+    // Induction teaser: while the user's induction is incomplete, Home leads
+    // with "continue where you left off". typeof-guarded bridge.
+    if (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.homeCardHtml) {
+      out += global.OpalInduction.homeCardHtml();
     }
 
     var cont = pick(h, 'continue_learning') || pick(h, 'continueLearning') || [];
@@ -753,6 +760,20 @@
 
   function cardMedia(r) {
     var kind = deliveryKind(r);
+    // Interactive tutorials carry code-owned thumbnails (screenshots of the
+    // feature they teach), bridged from the induction registry by slug.
+    // typeof-guarded like the OpalSupport bridge — a missing induction
+    // module leaves the ordinary type-glyph panel.
+    if (pick(r, 'content_type') === 'tutorial' &&
+        typeof window.OpalInduction !== 'undefined' && window.OpalInduction.thumbFor) {
+      var tuThumb = window.OpalInduction.thumbFor(pick(r, 'slug'));
+      if (tuThumb) {
+        return '<span class="rh2-card-thumb rh2-thumb-tutorial">'
+          + '<img src="' + esc(tuThumb) + '" alt="" loading="lazy" '
+          + 'onerror="this.parentNode.className=\'rh2-card-thumb rh2-thumb-type\';this.parentNode.innerHTML=window.opIcon?window.opIcon(\'spark\',14):\'\';">'
+          + '</span>';
+      }
+    }
     // The thumbnail URL is server-supplied, like every file URL in this
     // module — the client never assembles one from ids.
     if (kind === 'hosted' && pick(r, 'primary_file_thumbnail_url')) {
@@ -1183,6 +1204,22 @@
       (pick(r, 'last_reviewed_at') ? ' · Last reviewed ' + esc(fmtDate(pick(r, 'last_reviewed_at'))) : '') +
       '</div>';
 
+    // Tutorial resources with an interactive walkthrough lead with it: the
+    // written page below stays as reference material. typeof-guarded bridge.
+    var indMod = (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.moduleForSlug)
+      ? global.OpalInduction.moduleForSlug(pick(r, 'slug')) : null;
+    if (indMod) {
+      var indLabel = indMod.state === 'in_progress' ? 'Continue interactive walkthrough'
+        : (indMod.state === 'completed' || indMod.state === 'updated') ? 'Replay interactive walkthrough'
+        : 'Start interactive walkthrough';
+      out += '<div class="rh2-article-actions">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="OpalInduction.start(\'' + esc(indMod.key) + '\')">' +
+        indLabel + '</button>' +
+        (indMod.state === 'completed' ? '<span class="rh2-chip rh2-chip-ok">Walkthrough completed</span>' : '') +
+        (indMod.state === 'updated' ? '<span class="rh2-chip rh2-chip-warn">Walkthrough updated since you completed it</span>' : '') +
+        '</div>';
+    }
+
     if (canWrite()) {
       out += '<div class="rh2-article-actions">' +
         '<button type="button" class="rh2-btn" aria-pressed="' + fav + '" onclick="RH2.toggleFav()">' + (fav ? 'Saved' : 'Save') + '</button>' +
@@ -1462,6 +1499,14 @@
   function renderLearning() {
     var st = S.learning;
     var out = '<div class="rh2-page"><h1 class="rh2-h1">My Learning</h1>';
+
+    // The interactive induction dashboard leads My Learning. It renders from
+    // the induction engine's own state, so it appears even while the path
+    // data below is still loading. typeof-guarded bridge.
+    if (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.dashboardHtml) {
+      out += global.OpalInduction.dashboardHtml();
+    }
+
     if (st.loading || !st.data) return out + '<div class="rh2-card">' + skel(3, 64) + '</div></div>';
     if (!st.data.ok) return out + '<div class="rh2-empty">' + esc(st.data.error || 'My Learning could not be loaded.') + '</div></div>';
 
@@ -1520,7 +1565,7 @@
     var entries = pick(cpd, 'entries') || [];
     var hours = Number(pick(summary, 'totalHours') || 0);
     var interactive = Number(pick(summary, 'interactiveHours') || 0);
-    out += '<section class="rh2-card" aria-labelledby="rh2-h-cpd"><h2 id="rh2-h-cpd">CPD this registration year</h2>' +
+    out += '<section class="rh2-card" data-help="rh2-cpd" aria-labelledby="rh2-h-cpd"><h2 id="rh2-h-cpd">CPD this registration year</h2>' +
       '<div class="rh2-cpd-stats"><div class="rh2-cpd-stat"><span class="rh2-cpd-n">' + hours.toFixed(1) + '</span><span class="rh2-row-sub">hours logged</span></div>' +
       '<div class="rh2-cpd-stat"><span class="rh2-cpd-n">' + interactive.toFixed(1) + '</span><span class="rh2-row-sub">interactive hours</span></div></div>' +
       '<p class="rh2-quiet">This tracker is informational only — your professional body’s own CPD record remains the authoritative source.</p>';
@@ -1653,9 +1698,16 @@
   }
   async function loadAdminAnalytics() {
     S.admin.loading = true; render();
-    var d = await api('/api/rh2/admin/analytics');
+    // Induction completion rides along with hub analytics: same audience
+    // (owner/admin), same screen. Its failure never blanks the hub numbers.
+    var results = await Promise.all([
+      api('/api/rh2/admin/analytics'),
+      api('/api/tutorials/overview'),
+    ]);
+    var d = results[0], ind = results[1];
     S.admin.loading = false;
     S.admin.analytics = d.ok ? d : null;
+    S.admin.induction = ind.ok ? (ind.staff || []) : null;
     S.admin.err = d.ok ? '' : (d.error || '');
     render();
   }
@@ -3159,6 +3211,25 @@
         '<span class="rh2-row-sub">review due ' + esc(fmtDate(pick(r, 'review_due_at') || pick(r, 'next_review_at'))) + '</span></div>';
     }).join('');
     out += '</section>';
+
+    // Induction completion — module states only, per staff member. This is
+    // onboarding management, not behaviour tracking: no step-level detail.
+    var staff = S.admin.induction;
+    out += '<section class="rh2-card" aria-labelledby="rh2-h-ind-ana"><h2 id="rh2-h-ind-ana">Induction completion</h2>';
+    if (!staff) out += '<p class="rh2-quiet">Induction progress could not be loaded.</p>';
+    else if (!staff.length) out += '<p class="rh2-quiet">No active staff yet.</p>';
+    else out += staff.map(function (s) {
+      var pct = s.total ? Math.round(Number(s.completed) / Number(s.total) * 100) : 0;
+      var stateTxt = Number(s.completed) >= Number(s.total) && s.total
+        ? 'Complete'
+        : (Number(s.completed) + Number(s.inProgress)) > 0 ? 'In progress' : 'Not started';
+      return '<div class="rh2-ana-ack">' +
+        '<div class="rh2-row-title">' + esc(s.name) + ' <span class="rh2-chip rh2-chip-quiet">' + esc(String(s.role).replace(/_/g, ' ')) + '</span></div>' +
+        '<div class="rh2-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + esc(s.name) + ' induction progress"><span style="width:' + pct + '%"></span></div>' +
+        '<div class="rh2-row-sub">' + esc(s.completed) + ' of ' + esc(s.total) + ' modules · ' + stateTxt +
+        (s.lastActivityAt ? ' · last activity ' + esc(fmtDate(s.lastActivityAt)) : '') + '</div></div>';
+    }).join('');
+    out += '</section>';
     return out;
   }
 
@@ -3177,6 +3248,13 @@
       render();
     }
   }
+
+  // Induction progress changes (module completed, restarted, paused) should
+  // repaint the surfaces that show it without the engine reaching into our
+  // render internals.
+  doc.addEventListener('induction:progress', function () {
+    if (S.booted && (S.view === 'learning' || S.view === 'home')) render();
+  });
 
   // The Resources nav tab click predates RH2 — activate ourselves when the
   // shared panel becomes visible (R1's listener only calls resReload, which

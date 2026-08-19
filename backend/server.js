@@ -473,6 +473,10 @@ app.use('/', require('./resource-ingestion-routes'));
 app.use('/', require('./opa-routes'));
 app.use('/', require('./store-search-routes'));
 
+// Interactive induction — per-user tutorial progress (module catalogue is
+// code-owned in frontend/current/induction-modules.js, required directly)
+app.use('/', require('./tutorial-routes'));
+
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
 

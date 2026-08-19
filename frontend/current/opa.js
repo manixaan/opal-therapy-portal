@@ -175,7 +175,7 @@
           '<button type="button" data-act="new" title="New chat" aria-label="Start a new chat">+</button>' +
           '<button type="button" data-act="min" title="Minimise" aria-label="Minimise Opa">&minus;</button>' +
           '<button type="button" data-act="max" title="Maximise" aria-label="Maximise Opa">&#9633;</button>' +
-          '<button type="button" data-act="close" title="Close" aria-label="Close Opa">&times;</button>' +
+          '<button type="button" data-act="close" data-help="opa-close" title="Close" aria-label="Close Opa">&times;</button>' +
         '</span>' +
       '</header>' +
       '<div class="opa-body" id="opa-body" aria-live="polite"></div>' +

@@ -1345,10 +1345,13 @@ describe('case notes review surface', () => {
     const nav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
     expect(nav).toContain("owner: {\n    primary: ['profile', 'calendar', 'casenotes', 'resources'],");
     expect(nav).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] },");
-    // non-clinical admin and read_only must NOT get it
-    expect(nav).toContain("admin: {\n    primary: ['profile', 'calendar'],");
-    expect(nav).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] },");
+    // non-clinical admin and read_only must NOT get it. (Admin's primary
+    // list gained 'resources' for the R2 hub + induction — a deliberate
+    // change; the invariant guarded HERE is casenotes access, not the
+    // exact primary list.)
     const adminBlock = nav.slice(nav.indexOf('admin: {'), nav.indexOf('therapist: {'));
+    expect(adminBlock).toContain("primary: ['profile', 'calendar', 'resources'],");
+    expect(nav).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] },");
     expect(adminBlock).not.toContain('casenotes');
     const readOnlyBlock = nav.slice(nav.indexOf('read_only: {'));
     expect(readOnlyBlock).not.toContain('casenotes');

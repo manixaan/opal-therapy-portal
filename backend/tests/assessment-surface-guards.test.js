@@ -585,7 +585,7 @@ describe('changed assets are cache-busted', () => {
     for (const [file, version] of [
       ['assessment.js', 3], ['assessment.css', 3],
       ['whodas.js', 5], ['whodas.css', 3],
-      ['resourcehub.js', 'r14'], ['resourcehub.css', 'r9'],
+      ['resourcehub.js', 'r15'], ['resourcehub.css', 'r9'],
       ['navigation.js', 4],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';

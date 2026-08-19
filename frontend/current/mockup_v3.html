@@ -22,7 +22,12 @@
 <link rel="stylesheet" href="/letter.css?v=1" />
 <link rel="stylesheet" href="/whodas.css?v=3" />
 <link rel="stylesheet" href="/assessment.css?v=3" />
-<script src="/resourcehub.js?v=r14" defer></script>
+<link rel="stylesheet" href="/induction.css?v=1" />
+<script src="/resourcehub.js?v=r15" defer></script>
+<!-- Interactive induction: pure module definitions first (also require()d by
+     the backend for validation), then the walkthrough engine. -->
+<script src="/induction-modules.js?v=1" defer></script>
+<script src="/induction.js?v=1" defer></script>
 <!-- Shared document viewer (pdf.js + docx-preview overlay). Used by the
      Resource Hub file previews; self-contained, injects its own styles. -->
 <script src="/docpreview.js?v=1" defer></script>
@@ -6306,8 +6311,8 @@ window.opIcon = function (name, size) {
               <span>Connect links YOUR mailbox to the portal. Disconnect stops sync for your account only — nothing changes in Outlook itself.</span>
             </div>
             <div class="settings-row-control" style="display:flex;gap:8px;">
-              <button class="btn" onclick="connectOutlookFromSettings(this)" style="font-size:12px;">Connect Outlook</button>
-              <button class="btn" onclick="disconnectOutlookFromSettings(this)" style="font-size:12px;color:var(--danger);border-color:var(--danger);">Disconnect</button>
+              <button class="btn" data-help="settings-outlook-connect" onclick="connectOutlookFromSettings(this)" style="font-size:12px;">Connect Outlook</button>
+              <button class="btn" data-help="settings-outlook-disconnect" onclick="disconnectOutlookFromSettings(this)" style="font-size:12px;color:var(--danger);border-color:var(--danger);">Disconnect</button>
             </div>
           </div>
         </div>
@@ -6510,7 +6515,7 @@ window.opIcon = function (name, size) {
 
         <!-- Action bar -->
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;">
-          <button class="btn primary" onclick="showInviteModal()" style="font-size:13px;">
+          <button class="btn primary" data-help="settings-invite-user" onclick="showInviteModal()" style="font-size:13px;">
             + Invite team member
           </button>
           <button class="btn" onclick="loadUserListForOwner()" style="font-size:12px;color:var(--muted);">
@@ -6630,7 +6635,7 @@ window.opIcon = function (name, size) {
           </div>
           <div style="display:flex;gap:10px;margin-top:22px;align-items:center;">
             <button class="btn primary" onclick="submitInvite()" id="invite-submit-btn" style="font-size:13px;">Send invite</button>
-            <button class="btn" onclick="closeInviteModal()" style="font-size:13px;">Cancel</button>
+            <button class="btn" data-help="invite-modal-close" onclick="closeInviteModal()" style="font-size:13px;">Cancel</button>
             <span id="invite-modal-msg" style="font-size:12px;display:none;flex:1;text-align:right;"></span>
           </div>
         </div>
@@ -20468,7 +20473,12 @@ var ROLE_NAV = {
     ] },
   },
   admin: {
-    primary: ['profile', 'calendar'],
+    // Resources: the R2 hub explicitly admits admin (authoring, governance
+    // review, the seeded "New Starter — Admin" learning path and the
+    // induction all target the role) — hiding the tab made every one of
+    // those unreachable. The legacy R1 API still 403s admin; the R2 UI
+    // degrades gracefully there (topic/cost filter lists come back empty).
+    primary: ['profile', 'calendar', 'resources'],
     menu: { label: 'Menu', groups: [
       ['Travel', ['travel', 'logbook']],
       ['Operations', ['purchases', 'support']],
@@ -23376,6 +23386,18 @@ function renderHelpPanel(filterQ) {
   if (!content) return;
 
   var html = '';
+
+  // ── Opal induction (interactive walkthrough system) ──────────
+  if (!ql && typeof window.OpalInduction !== 'undefined' && window.OpalInduction.homeCardHtml) {
+    var indCard = window.OpalInduction.homeCardHtml();
+    if (indCard) {
+      html += '<div class="help-section">' +
+        '<div class="help-section-title">&#x1F9ED; Your induction</div>' +
+        '<div style="padding:0 4px;">' + indCard + '</div>' +
+        '<div style="padding:2px 12px 6px;"><button class="help-qa-btn" onclick="closeHelpPanel();OpalInduction.openDashboard()">Open the full induction</button></div>' +
+        '</div>';
+    }
+  }
 
   // ── Setup prompts (shown when no search active) ──────────────
   if (!ql) {

@@ -45,6 +45,8 @@ const ALL_TABLES = [
   'fca_templates',
   // WHODAS 2.0 (migration 021) — children before parents
   'whodas_generated_documents', 'whodas_assessments', 'whodas_templates',
+  // Interactive induction (migration 032)
+  'tutorial_progress',
   'users', 'organisations',
 ];
 
