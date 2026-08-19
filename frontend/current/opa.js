@@ -203,7 +203,10 @@
       input.style.height = 'auto';
       input.style.height = Math.min(120, input.scrollHeight) + 'px';
     });
-    panel.querySelector('#opa-send').addEventListener('click', sendMessage);
+    // Wrapped, never registered directly: a direct registration hands the
+    // click Event to sendMessage as retryText — truthy, serialises to {},
+    // and the backend refuses it as an empty message.
+    panel.querySelector('#opa-send').addEventListener('click', function () { sendMessage(); });
     panel.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') Opa.close();
     });
@@ -332,6 +335,11 @@
   }
 
   function sendMessage(retryText) {
+    // Only a real string is a retry. Anything else — most dangerously a DOM
+    // Event from a listener that registered this function directly — must be
+    // treated as "no retry", or it becomes the message: truthy, it skips the
+    // input read AND the push-and-clear block, then JSON-serialises to {}.
+    if (typeof retryText !== 'string') retryText = '';
     if (OPA.busy) return;
     var input = panel.querySelector('#opa-input');
     var text = retryText || input.value.trim();

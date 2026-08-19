@@ -68,3 +68,42 @@ describe('opa default position', () => {
     expect(r.h).toBeLessThanOrEqual(Math.floor(small.h * 0.85));
   });
 });
+
+/**
+ * Send wiring — regression for the 19 Aug 2026 staging incident.
+ *
+ * `#opa-send` was registered as `addEventListener('click', sendMessage)`, so
+ * the click Event arrived as `retryText`: truthy, it replaced the input text,
+ * skipped the push-and-clear block, and JSON-serialised to {} — every
+ * BUTTON-click send reached the backend as an empty message and bounced with
+ * "Please send a message between 1 and 2000 characters", while Enter-key
+ * sends (which call sendMessage() bare) worked. Invisible until the day AI
+ * was actually enabled, because every environment answered 'unavailable'
+ * before the validation ran.
+ *
+ * The DOM path is not executable in this node harness, so the wiring is
+ * pinned at the source level — the same approach the stage-3 frontend guards
+ * use.
+ */
+describe('opa send wiring', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const SRC = fs.readFileSync(
+    path.join(__dirname, '../../frontend/current/opa.js'), 'utf8');
+
+  test('sendMessage is never registered directly as an event listener', () => {
+    // A direct registration hands the Event object to the retryText
+    // parameter. Handlers must wrap: function () { sendMessage(); }
+    expect(SRC).not.toMatch(/addEventListener\(\s*'[a-z]+'\s*,\s*sendMessage\s*[,)]/);
+  });
+
+  test('sendMessage refuses a non-string retryText', () => {
+    // Belt to the wiring's braces: even a future direct registration cannot
+    // turn an Event into the message body.
+    expect(SRC).toMatch(/typeof retryText !== 'string'/);
+  });
+
+  test('the send button handler is a wrapper that passes no arguments', () => {
+    expect(SRC).toMatch(/#opa-send'\)\.addEventListener\('click',\s*function \(\) \{ sendMessage\(\); \}\)/);
+  });
+});
