@@ -48,6 +48,8 @@ const pool = new Pool({
   database: process.env.DB_NAME     || 'therapy_scheduler',
   user:     process.env.DB_USER     || 'postgres',
   password: process.env.DB_PASSWORD,
+  // Azure PG requires TLS — same convention as backend/database.js.
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : false,
 });
 
 const SEED_MARKER = 'r2-seed';
@@ -211,10 +213,13 @@ function assertUniqueSlugs() {
 }
 
 async function resolveOrgAndOwner() {
+  // Overridable for environments whose owner is not the local dev account —
+  // staging's organisation is owned by synthetic.owner@example.test.
+  const ownerEmail = process.env.SEED_OWNER_EMAIL || 'owner@opaltherapy.dev';
   const { rows } = await pool.query(
-    `SELECT id, organisation_id FROM users WHERE email = $1`, ['owner@opaltherapy.dev']);
+    `SELECT id, organisation_id FROM users WHERE email = $1`, [ownerEmail]);
   if (!rows.length || !rows[0].organisation_id) {
-    throw new Error('owner@opaltherapy.dev not found (run seed-users.js first)');
+    throw new Error(`${ownerEmail} not found (run seed-users.js first, or set SEED_OWNER_EMAIL)`);
   }
   return { orgId: rows[0].organisation_id, ownerId: rows[0].id };
 }
