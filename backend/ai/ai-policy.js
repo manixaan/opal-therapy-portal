@@ -99,22 +99,24 @@ const AI_POLICIES = {
     mayReceiveClinicalData: true,
     auditCategory: 'assistant',
     /**
-     * Guardrail INPUT evaluation is scoped to the end-user's own messages via
+     * Guardrail INPUT evaluation is scoped to the CURRENT user message via
      * Bedrock input tagging. Opa's system prompt embeds anti-injection
      * instructions — text a Prompt-attack filter exists to match — so
      * full-request evaluation had the guardrail refusing every request on the
-     * strength of our own scaffolding, whatever the user typed. Everything
-     * the user wrote (current message and replayed user turns) is still
-     * evaluated at full filter strength, and output evaluation is untouched.
-     * Absent (as on clinical_note_generation) means the default: the whole
-     * request is evaluated.
+     * strength of our own scaffolding, whatever the user typed.
+     *
+     * Each user utterance is evaluated at full filter strength exactly once,
+     * on the request that carries it; replayed history turns already passed
+     * on their original request and are not re-adjudicated. Output
+     * evaluation is untouched. Absent (as on clinical_note_generation) means
+     * the default: the whole request is evaluated.
      */
-    guardrailInputScope: 'user_messages',
+    guardrailInputScope: 'current_user_message',
   },
 };
 
 /** Recognised guardrailInputScope values; absent means 'full'. */
-const GUARDRAIL_INPUT_SCOPES = Object.freeze(['full', 'user_messages']);
+const GUARDRAIL_INPUT_SCOPES = Object.freeze(['full', 'current_user_message']);
 
 /**
  * Features that will need policies when they grow AI, listed so the omission

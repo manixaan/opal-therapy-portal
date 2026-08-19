@@ -56,14 +56,21 @@ const PROVIDER_ID = 'aws-bedrock';
  * `amazon-bedrock-guardrailConfig.tagSuffix`, the guardrail evaluates ONLY
  * the content wrapped in <amazon-bedrock-guardrails-guardContent_{suffix}>
  * tags. Bedrock consumes the tags — the model never sees them. So we tag the
- * end-user's own words and leave the app-authored scaffolding untagged.
+ * CURRENT user message and leave everything else untagged.
  *
- * What this does NOT do: weaken the filter. Every policy still runs at full
- * strength against everything the user wrote (including their earlier turns,
- * which are replayed as user-role history), and OUTPUT evaluation is
- * unaffected by input tagging — the model's reply is still assessed in full.
- * What it deliberately stops doing is asking the guardrail to adjudicate
- * text this application wrote itself.
+ * Why only the current turn: each user utterance is evaluated exactly once,
+ * at the moment it is sent. Replayed history turns already passed the filter
+ * on their original request; re-evaluating them on every subsequent turn
+ * would re-adjudicate content that was already admitted — a conversation
+ * could be refused retroactively by its own accepted past. Assistant turns
+ * are model-authored and were assessed as OUTPUT when generated; the system
+ * prompt is app-authored.
+ *
+ * What this does NOT do: weaken the filter. It runs at full strength against
+ * what the user just wrote, and OUTPUT evaluation is unaffected by input
+ * tagging — the model's reply is still assessed in full. What it
+ * deliberately stops doing is asking the guardrail to adjudicate text this
+ * application wrote itself, or text it already admitted.
  *
  * The suffix is 20 random hex characters, fresh per request. That is the
  * injection defence the tags depend on: a user who types a closing tag can
@@ -81,14 +88,23 @@ function tagGuardContent(text, suffix) {
 }
 
 /**
- * Wrap the text of every user-role message in guard tags. Assistant turns are
- * model-authored (they were already evaluated as output when generated) and
- * the system prompt is app-authored; both stay untagged, which under input
- * tagging means unevaluated on input.
+ * Wrap ONLY the current user turn — the last user-role message — in guard
+ * tags. Everything else (system prompt, assistant turns, replayed earlier
+ * user turns) stays untagged, which under input tagging means unevaluated on
+ * input; see the block comment above for why each already had its evaluation.
+ *
+ * "Last user-role message" rather than "last message" so a future assistant
+ * prefill (a trailing assistant turn) cannot silently leave the current user
+ * message untagged.
  */
-function withGuardedUserMessages(messages, suffix) {
-  return (messages || []).map((m) => {
-    if (!m || m.role !== 'user') return m;
+function withGuardedCurrentUserMessage(messages, suffix) {
+  const list = messages || [];
+  let currentIdx = -1;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i] && list[i].role === 'user') { currentIdx = i; break; }
+  }
+  return list.map((m, i) => {
+    if (i !== currentIdx) return m;
     if (typeof m.content === 'string') {
       return { ...m, content: tagGuardContent(m.content, suffix) };
     }
@@ -355,9 +371,9 @@ async function invoke({
   // gateway passes the feature policy's guardrailInputScope through; anything
   // other than the recognised value keeps the default full-request
   // evaluation, so a typo fails towards MORE scrutiny, not less.
-  if (guardInputScope === 'user_messages') {
+  if (guardInputScope === 'current_user_message') {
     const suffix = freshTagSuffix();
-    body.messages = withGuardedUserMessages(messages, suffix);
+    body.messages = withGuardedCurrentUserMessage(messages, suffix);
     body['amazon-bedrock-guardrailConfig'] = { tagSuffix: suffix };
   }
 
