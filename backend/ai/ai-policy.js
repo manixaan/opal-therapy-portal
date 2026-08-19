@@ -98,8 +98,23 @@ const AI_POLICIES = {
     region: 'australia',
     mayReceiveClinicalData: true,
     auditCategory: 'assistant',
+    /**
+     * Guardrail INPUT evaluation is scoped to the end-user's own messages via
+     * Bedrock input tagging. Opa's system prompt embeds anti-injection
+     * instructions — text a Prompt-attack filter exists to match — so
+     * full-request evaluation had the guardrail refusing every request on the
+     * strength of our own scaffolding, whatever the user typed. Everything
+     * the user wrote (current message and replayed user turns) is still
+     * evaluated at full filter strength, and output evaluation is untouched.
+     * Absent (as on clinical_note_generation) means the default: the whole
+     * request is evaluated.
+     */
+    guardrailInputScope: 'user_messages',
   },
 };
+
+/** Recognised guardrailInputScope values; absent means 'full'. */
+const GUARDRAIL_INPUT_SCOPES = Object.freeze(['full', 'user_messages']);
 
 /**
  * Features that will need policies when they grow AI, listed so the omission
@@ -188,6 +203,13 @@ function validateAll() {
     }
     if (!policy.allowedModels.includes(policy.defaultModel)) {
       throw new Error(`${where} — defaultModel '${policy.defaultModel}' is not in allowedModels`);
+    }
+
+    // A misspelt scope must fail at load, not silently narrow (or widen)
+    // guardrail coverage at request time.
+    if (policy.guardrailInputScope !== undefined
+        && !GUARDRAIL_INPUT_SCOPES.includes(policy.guardrailInputScope)) {
+      throw new Error(`${where} — guardrailInputScope '${policy.guardrailInputScope}' is not one of ${GUARDRAIL_INPUT_SCOPES.join(', ')}`);
     }
 
     // Anything above PUBLIC must stay onshore, for every classification the

@@ -218,6 +218,10 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
     classification: effectiveClassification,
     outputType,
     humanReviewRequired,
+    // How much of the request the guardrail evaluates on INPUT. A policy
+    // fact, not a caller option — see ai-policy.js. Absent means the whole
+    // request.
+    guardrailInputScope: policy.guardrailInputScope || 'full',
   };
 }
 
@@ -329,6 +333,7 @@ async function generate(opts = {}) {
       timeoutMs: clampInt(timeoutMs, DEFAULT_TIMEOUT_MS, 5000, 120000),
       tools,
       toolChoice,
+      guardInputScope: decision.guardrailInputScope,
     });
   } catch (err) {
     // A guardrail refusal, and a refusal to call an unguarded model, are
