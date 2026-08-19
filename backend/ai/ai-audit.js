@@ -174,6 +174,18 @@ async function reserve({ actorUserId, organisationId, event } = {}) {
  * UPDATE did not land would help nobody. A row left at 'pending' is itself
  * informative — it says the call was made but its outcome was never
  * confirmed.
+ *
+ * Two details exist because staging showed their absence:
+ *
+ * - deny_reason is persisted. A reserved clinical row finalised as 'denied'
+ *   used to lose WHY — the guardrail interventions in staging all read
+ *   deny_reason NULL, indistinguishable from any other refusal.
+ * - A non-outcome ('denied' / 'provider_error') takes the row OUT of the
+ *   review queue. Reservation writes review_status 'review_required' before
+ *   the model is called; when the call is then refused there is no output to
+ *   review, and leaving the flag meant every guardrail denial sat in "awaiting
+ *   review" forever, pointing at nothing. Guarded so a genuinely reviewed row
+ *   ('approved'/'rejected') is never reclassified.
  */
 async function finalise(eventId, patch = {}) {
   const safe = buildEvent(patch);
@@ -182,18 +194,28 @@ async function finalise(eventId, patch = {}) {
       await _sink({ op: 'finalise', event: { ...safe, eventId } });
       return true;
     }
+    const status = safe.status || 'generated';
+    const producedOutput = status === 'generated';
     // eslint-disable-next-line global-require
     const db = require('../database');
     await db.pool.query(
       `UPDATE ai_interactions
           SET status = $1,
-              provider_request_id = COALESCE($2, provider_request_id),
-              latency_ms = COALESCE($3, latency_ms)
-        WHERE id = $4`,
+              deny_reason = COALESCE($2, deny_reason),
+              provider_request_id = COALESCE($3, provider_request_id),
+              latency_ms = COALESCE($4, latency_ms),
+              review_status = CASE
+                WHEN $5 = FALSE AND review_status = 'review_required'
+                  THEN 'ai_generated'
+                ELSE review_status
+              END
+        WHERE id = $6`,
       [
-        safe.status || 'generated',
+        status,
+        safe.denyReason || null,
         safe.providerRequestId || null,
         typeof safe.latencyMs === 'number' ? safe.latencyMs : null,
+        producedOutput,
         eventId,
       ]
     );
