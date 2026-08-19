@@ -40,6 +40,10 @@ const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-st
 const log = require('./logger').createLogger('case-note');
 
 router.use('/api/mobile/case-note-drafts', requireAuth);
+// The legacy mobile AI endpoint lives here too now — same auth, same rate
+// limit, same governed implementation. See the alias route at the bottom of
+// the generation section.
+router.use('/api/mobile/ai/case-note', requireAuth);
 
 const safe = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
   // Message only — never request bodies (they carry clinical content).
@@ -103,6 +107,9 @@ function aiRateLimit(req, res, next) {
       // that is their actual worry when a request is refused.
       error: 'That is a lot of case notes at once. Your transcript is safe — please wait a moment and try again.',
       code: 'rate_limited',
+      // The legacy mobile endpoint labelled its states with `status`; carried
+      // on both routes so an older build maps this correctly.
+      status: 'rate_limited',
       requestId: requestIdOf(req),
     });
   }
@@ -148,12 +155,16 @@ function generationFailure(err, req, variant = 'generate') {
     ? 'Your current draft is unchanged.'
     : 'Your transcript is safe — you can save it as a draft note.';
 
+  // Each body carries BOTH vocabularies: `code` (this file's contract) and
+  // `status` (the legacy /api/mobile/ai/case-note labels). The two mobile
+  // parsers branch on different fields, and the routes share one helper.
   if (err?.message === 'generation_disabled') {
     return {
       status: 503,
       body: {
         error: `Case-note formatting is not available right now. ${safety}`,
         code: 'generation_unavailable',
+        status: 'unavailable',
         requestId,
       },
     };
@@ -168,6 +179,7 @@ function generationFailure(err, req, variant = 'generate') {
         // client-facing screen, and the phone substitutes its own wording.
         error: `This content could not be processed. ${safety}`,
         code: 'content_blocked',
+        status: 'blocked',
         requestId,
       },
     };
@@ -180,6 +192,7 @@ function generationFailure(err, req, variant = 'generate') {
         ? "We couldn't regenerate the case note right now. Your current draft is unchanged."
         : "We couldn't format your case note right now. Your transcript is safe.",
       code: 'generation_failed',
+      status: 'failed',
       requestId,
     },
   };
@@ -371,7 +384,119 @@ function validInstruction(instruction) {
     || Object.prototype.hasOwnProperty.call(INSTRUCTION_MODIFIERS, instruction);
 }
 
-// ═══ Generate ════════════════════════════════════════════════════════════════
+// ═══ Generate — one governed implementation, two routes ══════════════════════
+//
+// POST /api/mobile/case-note-drafts/generate   the canonical endpoint
+// POST /api/mobile/ai/case-note                deprecated alias (see below)
+//
+// Both produce the same thing: a PERSISTED case_note_drafts row linked to the
+// ai_interactions row that generated it, review_status 'review_required',
+// generation_source 'ai_assisted'. There is deliberately no stateless path
+// any more — a generation that stores nothing leaves the audit row dangling
+// and the saved note unattributable, which is the provenance gap this
+// convergence closed.
+
+/**
+ * The shared generation core. Validates nothing about the HTTP shape — the
+ * route wrappers own their own request vocabulary — and does everything from
+ * "an owned event and a clean transcript" to "a persisted, linked draft".
+ *
+ * @returns {{ok: true, draft: object}|{ok: false, status: number, body: object}}
+ */
+async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNoteId }) {
+  // Fail closed BEFORE anything leaves the server. Routed through the same
+  // helper as the mid-flight case so both produce one indistinguishable
+  // 'unavailable' shape: from the phone's point of view "the switch was
+  // already off" and "the switch was thrown while I was asking" are the same
+  // event, and it should not have to tell them apart.
+  if (!provider.isEnabled()) {
+    return { ok: false, ...generationFailure(new Error('generation_disabled'), req) };
+  }
+
+  const header = buildHeader(ev);
+
+  let raw;
+  try {
+    raw = await provider.generateCaseNote({
+      transcript,
+      styleVersion: CURRENT_STYLE_VERSION,
+      instruction: instruction || undefined,
+      // Minimum context: date + name-stripped service label only. No names,
+      // no address, no ids — the transcript is the only clinical carrier.
+      session: { dateLabel: header.sessionDateLabel, serviceLabel: providerServiceLabel(ev) },
+      // Attribution. Without these the ai_interactions row is written with a
+      // null actor, and no AI call can be traced to a person — which defeats
+      // the governance layer and breaks the review linkage below.
+      userId: req.user.id,
+      organisationId: orgOf(req),
+    });
+  } catch (err) {
+    return { ok: false, ...generationFailure(err, req) };
+  }
+
+  const screened = screenNarrative(raw, header);
+  const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
+  const noteBody = composeNoteBody(header, sections, buildBillingLine(ev));
+  const identity = provider.providerIdentity();
+
+  let draft;
+  try {
+    const { rows } = await pool.query(
+      // ai_interaction_id links the draft to the gateway interaction that
+      // produced it, so the practice can answer "which notes were AI-assisted,
+      // where were they processed, and who approved them" without this table
+      // ever holding the AI conversation. review_status starts at
+      // 'review_required': a clinical document is not documentation until a
+      // therapist accepts it.
+      `INSERT INTO case_note_drafts
+         (user_id, organisation_id, voice_note_id, linked_event_id, transcript, header,
+          identify, session_details, plan, warnings, note_body,
+          style_version, provider_id, model_id, generated_at,
+          ai_interaction_id, generation_source, review_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required') RETURNING *`,
+      [req.user.id, orgOf(req), voiceNoteId || null, ev.id, transcript, JSON.stringify(header),
+       sections.identify, sections.sessionDetails, JSON.stringify(sections.plan),
+       JSON.stringify(sections.warnings), noteBody,
+       CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
+       raw.metadata?.interactionId || null]);
+    draft = rows[0];
+    if (!draft) throw new Error('insert_returned_no_row');
+  } catch (err) {
+    // The model generated but the governed draft could not be stored. Without
+    // this, the interaction row sits at 'review_required' forever, pointing at
+    // nothing — an audit entry indistinguishable from real unreviewed work.
+    // Mark it orphaned (queryable as deny_reason 'draft_persist_failed'), tell
+    // the phone the generation FAILED so the transcript survives client-side,
+    // and let the therapist retry — a retry opens a fresh interaction, it
+    // cannot duplicate a draft that was never stored.
+    log.error('case-note draft persist failed after generation', { error: err.message });
+    // eslint-disable-next-line global-require
+    await require('./ai/ai-audit').markOrphaned({
+      interactionId: raw.metadata?.interactionId,
+      reason: 'draft_persist_failed',
+    });
+    return {
+      ok: false,
+      status: 502,
+      body: {
+        error: "We couldn't save the drafted note. Your transcript is safe — please try again.",
+        code: 'generation_failed',
+        status: 'failed',
+        requestId: requestIdOf(req),
+      },
+    };
+  }
+
+  await audit(req, 'mobile.case_note_generated', draft.id, {
+    linkedEventId: ev.id,
+    styleVersion: CURRENT_STYLE_VERSION,
+    modelId: identity.modelId,
+    aiInteractionId: draft.ai_interaction_id || null,
+    transcriptChars: transcript.length,
+    warningCount: sections.warnings.length,
+  });
+  return { ok: true, draft };
+}
 
 router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (req, res) => {
   const b = req.body || {};
@@ -401,72 +526,107 @@ router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (re
     }
   }
 
-  // Fail closed BEFORE anything leaves the server. Routed through the same
-  // helper as the mid-flight case so both produce one indistinguishable
-  // 'unavailable' shape: from the phone's point of view "the switch was
-  // already off" and "the switch was thrown while I was asking" are the same
-  // event, and it should not have to tell them apart.
-  if (!provider.isEnabled()) {
-    const { status, body } = generationFailure(new Error('generation_disabled'), req);
-    return res.status(status).json(body);
-  }
-
-  const header = buildHeader(ev);
-  const transcript = b.transcript.trim();
-
-  let raw;
-  try {
-    raw = await provider.generateCaseNote({
-      transcript,
-      styleVersion: CURRENT_STYLE_VERSION,
-      instruction: b.instruction || undefined,
-      // Minimum context: date + name-stripped service label only. No names,
-      // no address, no ids — the transcript is the only clinical carrier.
-      session: { dateLabel: header.sessionDateLabel, serviceLabel: providerServiceLabel(ev) },
-      // Attribution. Without these the ai_interactions row is written with a
-      // null actor, and no AI call can be traced to a person — which defeats
-      // the governance layer and breaks the review linkage below.
-      userId: req.user.id,
-      organisationId: orgOf(req),
-    });
-  } catch (err) {
-    const { status, body } = generationFailure(err, req);
-    return res.status(status).json(body);
-  }
-
-  const screened = screenNarrative(raw, header);
-  const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
-  const noteBody = composeNoteBody(header, sections, buildBillingLine(ev));
-  const identity = provider.providerIdentity();
-
-  const { rows } = await pool.query(
-    // ai_interaction_id links the draft to the gateway interaction that
-    // produced it, so the practice can answer "which notes were AI-assisted,
-    // where were they processed, and who approved them" without this table
-    // ever holding the AI conversation. review_status starts at
-    // 'review_required': a clinical document is not documentation until a
-    // therapist accepts it.
-    `INSERT INTO case_note_drafts
-       (user_id, organisation_id, voice_note_id, linked_event_id, transcript, header,
-        identify, session_details, plan, warnings, note_body,
-        style_version, provider_id, model_id, generated_at,
-        ai_interaction_id, generation_source, review_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required') RETURNING *`,
-    [req.user.id, orgOf(req), b.voiceNoteId || null, ev.id, transcript, JSON.stringify(header),
-     sections.identify, sections.sessionDetails, JSON.stringify(sections.plan),
-     JSON.stringify(sections.warnings), noteBody,
-     CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
-     sections.metadata?.interactionId || null]);
-  const draft = rows[0];
-
-  await audit(req, 'mobile.case_note_generated', draft.id, {
-    linkedEventId: ev.id,
-    styleVersion: CURRENT_STYLE_VERSION,
-    modelId: identity.modelId,
-    transcriptChars: transcript.length,
-    warningCount: sections.warnings.length,
+  const result = await generateGovernedDraft(req, {
+    ev,
+    transcript: b.transcript.trim(),
+    instruction: b.instruction,
+    voiceNoteId: b.voiceNoteId,
   });
-  res.status(201).json({ caseNoteDraft: formatDraft(draft), requestId: requestIdOf(req) });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  const draft = result.draft;
+  res.status(201).json({
+    status: 'ok',
+    caseNoteDraft: formatDraft(draft),
+    // The persisted identity, surfaced explicitly: this id is what the phone
+    // carries through review, edit, regeneration and approval.
+    draftId: draft.id,
+    reviewStatus: draft.review_status || 'review_required',
+    generationSource: draft.generation_source || 'ai_assisted',
+    reviewRequired: true,
+    requestId: requestIdOf(req),
+  });
+}));
+
+// ═══ DEPRECATED alias — POST /api/mobile/ai/case-note ════════════════════════
+//
+// The Companion app's original AI endpoint. It used to be STATELESS: it
+// drafted, returned the sections, and stored nothing — so a note the
+// therapist later saved carried no draft id, no review workflow and no link
+// to the ai_interactions row that produced it. That provenance gap is closed:
+// this route now runs the exact same governed implementation as /generate
+// (one engine, one policy surface) and persists the same linked draft.
+//
+// What changed for callers:
+//   - `linkedEventId` is now REQUIRED. The old stateless mode took free-text
+//     date/service labels from the phone; the governed draft derives both
+//     server-side from the owned appointment (name-stripped before anything
+//     reaches the model). A request without a linkable appointment is refused
+//     with `code: 'linked_event_required'` rather than silently generating an
+//     ungoverned note — fail closed, not fail quiet.
+//   - The success body now carries `draftId` (plus the full `caseNoteDraft`)
+//     alongside the legacy `sections`/`warnings` shape.
+//
+// Current app builds call /api/mobile/case-note-drafts/generate directly;
+// this alias exists so any older internal build fails loudly and safely, and
+// so the route name in the field never dangles. Remove once no pre-contract
+// build remains installed.
+
+router.post('/api/mobile/ai/case-note', aiRateLimit, safe(async (req, res) => {
+  const b = req.body || {};
+  const transcript = typeof b.transcript === 'string' ? b.transcript.trim() : '';
+  if (!transcript) {
+    return res.status(400).json({ status: 'invalid', error: 'A transcript is required.' });
+  }
+  // Legacy vocabulary: this route always answered oversize with 413.
+  if (transcript.length > MAX_TRANSCRIPT_CHARS) {
+    return res.status(413).json({
+      status: 'invalid',
+      error: `Transcript exceeds ${MAX_TRANSCRIPT_CHARS} characters.`,
+    });
+  }
+  // Whitelisted, not free text — same rule as /generate.
+  const instruction = validInstruction(b.instruction) ? b.instruction : undefined;
+
+  const ev = await loadOwnEvent(req, b.linkedEventId);
+  if (!ev) {
+    return res.status(400).json({
+      status: 'invalid',
+      code: b.linkedEventId === undefined || b.linkedEventId === null
+        ? 'linked_event_required'
+        : 'invalid_link',
+      error: 'A case note must be linked to one of your appointments. '
+        + 'Please update the Opa app, or link an appointment and try again.',
+    });
+  }
+
+  const result = await generateGovernedDraft(req, { ev, transcript, instruction });
+  if (!result.ok) return res.status(result.status).json(result.body);
+
+  const draft = result.draft;
+  const formatted = formatDraft(draft);
+  res.status(201).json({
+    status: 'ok',
+    // The governed identity — same contract as /generate.
+    draftId: draft.id,
+    caseNoteDraft: formatted,
+    reviewStatus: formatted.reviewStatus,
+    generationSource: formatted.generationSource,
+    // Assistive drafting only. The app must present this for review and must
+    // not file it as documentation.
+    reviewRequired: true,
+    // The legacy response shape, preserved so an old parser still finds the
+    // narrative. Fields are picked EXPLICITLY — formatDraft never carries the
+    // resolved model/provider identity, and neither may this.
+    sections: {
+      identify: formatted.identify,
+      sessionDetails: formatted.sessionDetails,
+      plan: formatted.plan || [],
+    },
+    warnings: formatted.warnings || [],
+    generatedBy: 'ai-assistant',
+    requestId: requestIdOf(req),
+  });
 }));
 
 // ═══ Read ════════════════════════════════════════════════════════════════════
@@ -563,35 +723,78 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
   const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
   const identity = provider.providerIdentity();
   const noteBody = composeNoteBody(header, sections, billing);
-  const { rows } = await pool.query(
-    // Regeneration replaces the narrative with fresh, never-reviewed model
-    // output, so any prior approval is void: review_status resets and the
-    // previous reviewer is cleared. Leaving them would leave a note marked
-    // "approved by <therapist> on <date>" whose text that therapist never saw
-    // — an attestation to content that did not exist when it was made.
-    //
-    // ai_interaction_id also moves to the NEW interaction; otherwise the draft
-    // points at the superseded call and the interaction that actually produced
-    // the current text is orphaned.
-    `UPDATE case_note_drafts
-        SET header = $3, identify = $4, session_details = $5, plan = $6, warnings = $7,
-            note_body = $8, style_version = $9, provider_id = $10, model_id = $11,
-            ai_interaction_id = $12,
-            review_status = 'review_required', reviewed_by = NULL, reviewed_at = NULL,
-            generated_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND user_id = $2 RETURNING *`,
-    [row.id, req.user.id, JSON.stringify(header), sections.identify, sections.sessionDetails,
-     JSON.stringify(sections.plan), JSON.stringify(sections.warnings), noteBody,
-     CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
-     raw.metadata?.interactionId || null]);
+
+  // Captured BEFORE the update: this is the interaction whose text is being
+  // replaced, and reading it afterwards would read the new linkage.
+  const supersededId = row.ai_interaction_id;
+
+  let updated;
+  try {
+    const { rows } = await pool.query(
+      // Regeneration replaces the narrative with fresh, never-reviewed model
+      // output, so any prior approval is void: review_status resets and the
+      // previous reviewer is cleared. Leaving them would leave a note marked
+      // "approved by <therapist> on <date>" whose text that therapist never saw
+      // — an attestation to content that did not exist when it was made.
+      //
+      // ai_interaction_id also moves to the NEW interaction; otherwise the draft
+      // points at the superseded call and the interaction that actually produced
+      // the current text is orphaned.
+      `UPDATE case_note_drafts
+          SET header = $3, identify = $4, session_details = $5, plan = $6, warnings = $7,
+              note_body = $8, style_version = $9, provider_id = $10, model_id = $11,
+              ai_interaction_id = $12,
+              review_status = 'review_required', reviewed_by = NULL, reviewed_at = NULL,
+              generated_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [row.id, req.user.id, JSON.stringify(header), sections.identify, sections.sessionDetails,
+       JSON.stringify(sections.plan), JSON.stringify(sections.warnings), noteBody,
+       CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
+       raw.metadata?.interactionId || null]);
+    updated = rows[0];
+    if (!updated) throw new Error('update_matched_no_row');
+  } catch (err) {
+    // Same containment as generation: the NEW interaction produced output
+    // that no governed object now carries, so it must not sit in the review
+    // queue looking like reviewable work. The existing draft (old text, old
+    // linkage) is untouched — which is exactly what the 502 message promises.
+    log.error('case-note regenerate persist failed after generation', { error: err.message });
+    // eslint-disable-next-line global-require
+    await require('./ai/ai-audit').markOrphaned({
+      interactionId: raw.metadata?.interactionId,
+      reason: 'draft_persist_failed',
+    });
+    const { status, body } = generationFailure(new Error('regenerate_persist_failed'), req, 'regenerate');
+    return res.status(status).json(body);
+  }
+
+  // The SUPERSEDED interaction. Its output has been discarded by the person
+  // accountable for it — asking for a fresh version IS declining the old one —
+  // so it is resolved as rejected by the regenerating therapist rather than
+  // left at 'review_required' forever, pointing at text that no longer exists
+  // anywhere. Best effort: the draft is already consistent, and a sync failure
+  // here is an audit-hygiene problem, not a clinical one.
+  if (supersededId && supersededId !== updated.ai_interaction_id) {
+    try {
+      // eslint-disable-next-line global-require
+      const synced = await require('./ai/ai-audit').markReviewed({
+        interactionId: supersededId, reviewedBy: req.user.id, decision: 'rejected',
+      });
+      if (!synced) log.warn(`superseded interaction ${supersededId} matched no row during regeneration of draft ${row.id}`);
+    } catch (err) {
+      log.warn(`superseded interaction not resolved on regeneration (reason: ${err?.message || 'unknown'})`);
+    }
+  }
 
   await audit(req, 'mobile.case_note_regenerated', row.id, {
     styleVersion: CURRENT_STYLE_VERSION,
     modelId: identity.modelId,
     instruction: instruction || null,
+    aiInteractionId: updated.ai_interaction_id || null,
+    supersededInteractionId: supersededId || null,
     warningCount: sections.warnings.length,
   });
-  res.json({ caseNoteDraft: formatDraft(rows[0]), requestId: requestIdOf(req) });
+  res.json({ caseNoteDraft: formatDraft(updated), requestId: requestIdOf(req) });
 }));
 
 // ═══ Archive (soft delete) ═══════════════════════════════════════════════════
@@ -600,10 +803,41 @@ router.delete('/api/mobile/case-note-drafts/:id', safe(async (req, res) => {
   const row = await loadOwnDraft(req, req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   if (row.status !== 'draft') return res.json({ ok: true }); // already archived — idempotent
-  await pool.query(
-    `UPDATE case_note_drafts SET status = 'archived', updated_at = NOW()
-      WHERE id = $1 AND user_id = $2`, [row.id, req.user.id]);
-  await audit(req, 'mobile.case_note_archived', row.id);
+
+  // Archiving a draft that was still awaiting review IS the review outcome:
+  // the accountable therapist looked at AI output and chose not to use it.
+  // Recording that as a rejection (by them, now) keeps the draft and its
+  // ai_interactions row resolved instead of leaving a 'review_required' audit
+  // entry dangling behind an archived note forever. A draft that was already
+  // approved or rejected keeps its recorded outcome — archiving is not a
+  // second review.
+  const resolvingAsRejected = row.review_status === 'review_required';
+  if (resolvingAsRejected) {
+    await pool.query(
+      `UPDATE case_note_drafts
+          SET status = 'archived', review_status = 'rejected',
+              reviewed_by = $2, reviewed_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND user_id = $2`, [row.id, req.user.id]);
+    if (row.ai_interaction_id) {
+      try {
+        // eslint-disable-next-line global-require
+        const synced = await require('./ai/ai-audit').markReviewed({
+          interactionId: row.ai_interaction_id, reviewedBy: req.user.id, decision: 'rejected',
+        });
+        if (!synced) log.warn(`archive resolved draft ${row.id} but interaction ${row.ai_interaction_id} matched no row`);
+      } catch (err) {
+        log.warn(`archive resolved draft but not its interaction (reason: ${err?.message || 'unknown'})`);
+      }
+    }
+  } else {
+    await pool.query(
+      `UPDATE case_note_drafts SET status = 'archived', updated_at = NOW()
+        WHERE id = $1 AND user_id = $2`, [row.id, req.user.id]);
+  }
+  await audit(req, 'mobile.case_note_archived', row.id, {
+    resolvedAsRejected: resolvingAsRejected,
+    aiInteractionId: row.ai_interaction_id || null,
+  });
   res.json({ ok: true });
 }));
 

@@ -123,28 +123,19 @@ describe('the caller contract is unchanged', () => {
   });
 });
 
-describe('the mobile route exposes the record and nothing more', () => {
-  const mobileSrc = fs.readFileSync(path.join(__dirname, '..', 'mobile-routes.js'), 'utf8');
-  const handler = mobileSrc.slice(mobileSrc.indexOf("router.post('/api/mobile/ai/case-note'"));
-  const body = handler.slice(0, handler.indexOf('}));'));
-
-  test('it returns the prebuilt diagnostic, never the error itself', () => {
-    expect(body).toMatch(/diagnostic:\s*\(err && err\.diagnostic\) \|\| null/);
-    expect(body).not.toMatch(/err\.message.*res\.json/);
-    expect(body).not.toMatch(/err\.reason/);
-  });
-
-  test('the success path is untouched by the diagnostic', () => {
-    // The diagnostic must appear only in the failure branch — a draft response
-    // carrying provider internals would ship them to the phone. The catch
-    // block precedes the success response, so everything from the first
-    // success field onward must be free of it.
-    const success = body.slice(body.indexOf('identify'));
-    expect(success).not.toContain('diagnostic');
-  });
-
-  test('the diagnostic sits inside the 502 branch', () => {
-    const failure = body.slice(body.indexOf('res.status(502)'));
-    expect(failure.slice(0, failure.indexOf('});'))).toContain('diagnostic:');
+describe('no route exposes the record to a client any more', () => {
+  // The record used to ride on the stateless mobile route's 502 as a
+  // temporary staging aid, marked REMOVE WITH THE REST OF THIS PATCH. The
+  // federation pathway has since been proven end-to-end (CloudTrail-confirmed
+  // inference), the stateless route is gone, and the governed replacement in
+  // case-note-routes.js must never pick the exposure back up. diagnose()
+  // itself stays: its [bedrock-diag] server log line is still how an operator
+  // names a failing federation stage without reading error messages.
+  test('neither mobile nor case-note routes hand err.diagnostic to a response', () => {
+    for (const file of ['mobile-routes.js', 'case-note-routes.js']) {
+      const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+      expect(src).not.toMatch(/\bdiagnostic\b\s*:/);
+      expect(src).not.toMatch(/err\.diagnostic/);
+    }
   });
 });

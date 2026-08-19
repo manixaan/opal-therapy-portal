@@ -149,39 +149,60 @@ describe('no Bedrock model id is written in source', () => {
 
 describe('the website and the iOS app share one path', () => {
   const mobileSrc = strip(read(path.join(BACKEND, 'mobile-routes.js')));
+  const caseNoteSrc = strip(read(path.join(BACKEND, 'case-note-routes.js')));
 
-  test('the mobile AI route delegates to the same provider the website uses', () => {
-    expect(mobileSrc).toMatch(/require\('\.\/clinical-note-provider'\)/);
-    expect(mobileSrc).toMatch(/noteProvider\.generateCaseNote\(/);
-  });
-
-  test('the mobile route never reaches the gateway, a provider or AWS directly', () => {
-    // A second entry point would be a second set of policy decisions.
+  test('mobile-routes.js carries no AI generation at all any more', () => {
+    // The stateless POST /api/mobile/ai/case-note used to live here. It moved
+    // to case-note-routes.js as a governed alias — a generation that stores
+    // nothing leaves the audit row dangling, so no route may offer one.
+    expect(mobileSrc).not.toMatch(/require\('\.\/clinical-note-provider'\)/);
+    expect(mobileSrc).not.toMatch(/generateCaseNote/);
     expect(mobileSrc).not.toMatch(/require\([^)]*ai-gateway[^)]*\)/);
     expect(mobileSrc).not.toMatch(/require\([^)]*providers\/[^)]*\)/);
     expect(mobileSrc).not.toMatch(/require\([^)]*aws\/[^)]*\)/);
     expect(mobileSrc).not.toMatch(/bedrock/i);
-  });
-
-  test('the endpoint is authenticated, rate limited and size capped', () => {
     expect(mobileSrc).toMatch(/router\.use\('\/api\/mobile', requireAuth\)/);
-    expect(mobileSrc).toMatch(/router\.post\('\/api\/mobile\/ai\/case-note', mobileAiRateLimit/);
-    expect(mobileSrc).toMatch(/MAX_TRANSCRIPT_CHARS/);
-    expect(mobileSrc).toMatch(/status\(413\)/);
   });
 
-  test('the response never carries the resolved inference profile id', () => {
-    const handler = mobileSrc.slice(mobileSrc.indexOf("router.post('/api/mobile/ai/case-note'"));
+  test('both mobile generation routes run ONE shared governed implementation', () => {
+    // A second entry point would be a second set of policy decisions, and
+    // they would not stay in step. Both routes must call the shared core —
+    // which is the only place the provider's generate is invoked for a first
+    // generation — and both must sit behind the same auth and rate limit.
+    expect(caseNoteSrc).toMatch(/require\('\.\/clinical-note-provider'\)/);
+    expect((caseNoteSrc.match(/await generateGovernedDraft\(req/g) || []).length).toBe(2);
+    expect(caseNoteSrc).toMatch(/router\.use\('\/api\/mobile\/case-note-drafts', requireAuth\)/);
+    expect(caseNoteSrc).toMatch(/router\.use\('\/api\/mobile\/ai\/case-note', requireAuth\)/);
+    expect(caseNoteSrc).toMatch(/router\.post\('\/api\/mobile\/case-note-drafts\/generate', aiRateLimit/);
+    expect(caseNoteSrc).toMatch(/router\.post\('\/api\/mobile\/ai\/case-note', aiRateLimit/);
+    expect(caseNoteSrc).toMatch(/MAX_TRANSCRIPT_CHARS/);
+    expect(caseNoteSrc).toMatch(/status\(413\)/);
+  });
+
+  test('the case-note routes never reach the gateway, a provider or AWS directly', () => {
+    expect(caseNoteSrc).not.toMatch(/require\([^)]*ai-gateway[^)]*\)/);
+    expect(caseNoteSrc).not.toMatch(/require\([^)]*providers\/[^)]*\)/);
+    expect(caseNoteSrc).not.toMatch(/require\([^)]*aws\/[^)]*\)/);
+    expect(caseNoteSrc).not.toMatch(/bedrock/i);
+  });
+
+  test('there is no stateless generation path left — the alias persists a governed draft', () => {
+    const handler = caseNoteSrc.slice(caseNoteSrc.indexOf("router.post('/api/mobile/ai/case-note'"));
+    const body = handler.slice(0, handler.indexOf('}));'));
+    expect(body).toMatch(/generateGovernedDraft\(/);
+    expect(body).toMatch(/draftId/);
+    // It must not run its own provider call or its own INSERT — one engine.
+    expect(body).not.toMatch(/provider\.generateCaseNote\(/);
+    expect(body).not.toMatch(/INSERT INTO/);
+  });
+
+  test('the alias response never carries the resolved inference profile id', () => {
+    const handler = caseNoteSrc.slice(caseNoteSrc.indexOf("router.post('/api/mobile/ai/case-note'"));
     const body = handler.slice(0, handler.indexOf('}));'));
     expect(body).not.toMatch(/providerIdentity\(\)/);
-    expect(body).not.toMatch(/modelId/);
-  });
-
-  test('every downstream failure returns one generic shape', () => {
-    const handler = mobileSrc.slice(mobileSrc.indexOf("router.post('/api/mobile/ai/case-note'"));
-    const body = handler.slice(0, handler.indexOf('}));'));
-    expect(body).toMatch(/status\(502\)/);
-    // The reason must not travel to the phone.
+    expect(body).not.toMatch(/model_id|identity\.modelId/);
+    // The failure paths route through generationFailure(); the reason must
+    // not travel to the phone.
     expect(body).not.toMatch(/err\.reason|err\.message.*res\.json/);
   });
 });

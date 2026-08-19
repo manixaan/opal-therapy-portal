@@ -297,6 +297,47 @@ async function markReviewed({ interactionId, reviewedBy, decision } = {}) {
   return rowCount > 0;
 }
 
+/**
+ * Mark an interaction ORPHANED: the model generated, but the governed draft
+ * that should carry the output could not be persisted, so no reviewable
+ * clinical object exists.
+ *
+ * Left alone, the row would sit at status 'generated' / review_status
+ * 'review_required' forever — an entry in the review queue pointing at
+ * nothing, indistinguishable from real unreviewed work. So the outcome is
+ * recorded as a pipeline failure ('provider_error' is the closest value the
+ * status vocabulary has for "the pipeline did not deliver a governed
+ * output"), the precise cause goes in deny_reason where it is queryable, and
+ * the row leaves the review queue. provider_request_id is untouched, so the
+ * CloudTrail correlation proving the invocation happened survives.
+ *
+ * Guarded on review_status so a genuinely reviewed row can never be
+ * reclassified. Never throws — by the time this is called the caller is
+ * already handling the persistence failure.
+ */
+async function markOrphaned({ interactionId, reason } = {}) {
+  if (!interactionId) return false;
+  const denyReason = String(reason || 'governed_object_persist_failed').slice(0, 120);
+  try {
+    if (_sink) {
+      await _sink({ op: 'orphan', event: { eventId: interactionId, status: 'provider_error', denyReason } });
+      return true;
+    }
+    // eslint-disable-next-line global-require
+    const db = require('../database');
+    const { rowCount } = await db.pool.query(
+      `UPDATE ai_interactions
+          SET status = 'provider_error', deny_reason = $2, review_status = 'ai_generated'
+        WHERE id = $1 AND review_status = 'review_required'`,
+      [interactionId, denyReason]
+    );
+    return rowCount > 0;
+  } catch (err) {
+    console.warn(`[ai-audit] failed to mark interaction orphaned (reason: ${err?.message || 'unknown'})`);
+    return false;
+  }
+}
+
 /** Test seam. Pass a function to capture events, or null to restore. */
 function _setSinkForTests(fn) {
   _sink = typeof fn === 'function' ? fn : null;
@@ -311,5 +352,6 @@ module.exports = {
   finalise,
   securityEvent,
   markReviewed,
+  markOrphaned,
   _setSinkForTests,
 };

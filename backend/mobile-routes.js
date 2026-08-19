@@ -587,199 +587,21 @@ router.delete('/api/mobile/voice-notes/:id', safe(async (req, res) => {
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  AI — the Companion app's ONLY route to a model
+//  AI — moved, deliberately.
 //
-//  The iOS app holds no AWS credential, no Anthropic key and no Bedrock
-//  endpoint. It posts a transcript here and this backend does the rest:
-//  managed identity → STS → Australian Bedrock profile → guardrail. That is the
-//  same path the Portal website uses, because this route calls the same
-//  clinical-note-provider the website's case-note route calls rather than
-//  reaching for the gateway itself. A second entry point would be a second set
-//  of policy decisions to keep in step, and they would not stay in step.
+//  POST /api/mobile/ai/case-note used to live here as a STATELESS drafting
+//  endpoint: it generated and returned narrative sections, stored nothing,
+//  and issued no draft id — so the note a therapist later saved carried no
+//  review workflow and no link to the ai_interactions row that produced it.
 //
-//  Everything protective here is deliberately upstream of the model: auth (the
-//  router-level requireAuth above), a per-user rate limit, a size cap, and a
-//  transcript-only payload. The response is a draft for a therapist to review —
-//  never a record, never advice.
+//  That endpoint now lives in case-note-routes.js as a deprecated alias of
+//  POST /api/mobile/case-note-drafts/generate, sharing that route's single
+//  governed implementation: every mobile AI generation persists a
+//  case_note_drafts row linked to its ai_interactions row, with
+//  review_status 'review_required' and generation_source 'ai_assisted'.
+//
+//  This file is back to what its header promises: local Postgres reads and
+//  user-scoped voice-note/task/reminder writes, with no AI provider anywhere.
 // ═══════════════════════════════════════════════════════════════════════════
-
-const noteProvider = require('./clinical-note-provider');
-const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-style');
-
-/**
- * Per-user rate limit, mirroring the website's Opa chat limiter.
- *
- * Keyed on the authenticated user, not the IP: a practice behind one NAT would
- * otherwise share a bucket, and a stolen device would get a fresh one simply by
- * changing network.
- */
-const MOBILE_AI_WINDOW_MS = 10 * 60 * 1000;
-const MOBILE_AI_MAX = 12;
-const _mobileAiAttempts = new Map();
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of _mobileAiAttempts) if (v.resetAt <= now) _mobileAiAttempts.delete(k);
-}, 10 * 60 * 1000).unref();
-
-function mobileAiRateLimit(req, res, next) {
-  const key = req.user?.id || 'anonymous';
-  const now = Date.now();
-  let entry = _mobileAiAttempts.get(key);
-  if (!entry || entry.resetAt <= now) {
-    entry = { count: 0, resetAt: now + MOBILE_AI_WINDOW_MS };
-    _mobileAiAttempts.set(key, entry);
-  }
-  entry.count += 1;
-  if (entry.count > MOBILE_AI_MAX) {
-    res.set('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
-    return res.status(429).json({ status: 'rate_limited', error: 'Too many requests. Try again shortly.' });
-  }
-  return next();
-}
-
-router.post('/api/mobile/ai/case-note', mobileAiRateLimit, safe(async (req, res) => {
-  // Degrade before anything else, and say nothing about why. "Which of six
-  // settings is missing" is useful to an operator reading /ready and useless
-  // to a therapist — and it describes the deployment to anyone holding a
-  // stolen phone.
-  if (!noteProvider.isEnabled()) {
-    return res.status(503).json({ status: 'unavailable', error: 'AI drafting is unavailable.' });
-  }
-
-  const body = req.body || {};
-  const transcript = typeof body.transcript === 'string' ? body.transcript.trim() : '';
-  if (!transcript) {
-    return res.status(400).json({ status: 'invalid', error: 'A transcript is required.' });
-  }
-  // The same ceiling the voice-note upload already enforces (line ~210). A
-  // second, larger limit here would mean a transcript this endpoint accepts
-  // could never have been stored by the endpoint that produces one.
-  if (transcript.length > MAX_TRANSCRIPT_CHARS) {
-    return res.status(413).json({
-      status: 'invalid',
-      error: `Transcript exceeds ${MAX_TRANSCRIPT_CHARS} characters.`,
-    });
-  }
-
-  // Whitelisted, not free text: `instruction` selects a canned modifier, so the
-  // phone cannot append arbitrary text to the system prompt.
-  const instruction = typeof body.instruction === 'string'
-    && Object.prototype.hasOwnProperty.call(INSTRUCTION_MODIFIERS, body.instruction)
-    ? body.instruction
-    : undefined;
-
-  // Minimum context, and no identifiers. The transcript is the only clinical
-  // carrier; a date label and a service label are not names.
-  const session = {
-    dateLabel: typeof body.sessionDateLabel === 'string' ? body.sessionDateLabel.slice(0, 60) : undefined,
-    serviceLabel: typeof body.serviceLabel === 'string' ? body.serviceLabel.slice(0, 120) : undefined,
-  };
-
-  let raw;
-  try {
-    raw = await noteProvider.generateCaseNote({
-      transcript,
-      styleVersion: CURRENT_STYLE_VERSION,
-      instruction,
-      session,
-      // Attribution. Without these the ai_interactions row has a null actor and
-      // no call can be traced to a person.
-      userId: req.user.id,
-      organisationId: orgOf(req),
-    });
-  } catch (err) {
-    log.warn('mobile ai generation failed', { userId: req.user.id, reason: err && err.message });
-
-    // A guardrail refusal is the ONE downstream failure that must stay
-    // distinguishable, and it is not an exception to the rule above — it
-    // reveals nothing about the cloud path. It says a safety control declined
-    // the content, which is a fact about the request, not about identity, STS,
-    // the model or the transport.
-    //
-    // It has to be separable because the phone offers a Retry button on a
-    // failure and not on a refusal. Collapsed into 'failed' with "Please try
-    // again", a therapist is invited to resubmit clinical content to a control
-    // that has already said no, over and over, with every attempt writing
-    // another denied row. The reason for the refusal still does not travel.
-    if (err && err.message === 'content_blocked') {
-      return res.status(422).json({
-        status: 'blocked',
-        error: 'This content could not be drafted. Please write this note yourself.',
-      });
-    }
-
-    // The second non-retryable outcome, for the same reason as the first.
-    //
-    // `generation_disabled` is a POLICY state — the kill switch thrown, a failed
-    // boundary self-check, an unavailable audit layer, or Bedrock configuration
-    // missing. None of those change by asking again. The isEnabled() check above
-    // catches the flag being off at request time, but every one of those other
-    // states is raised from INSIDE generateCaseNote and lands here.
-    //
-    // Collapsed into 'failed' with "Please try again" the phone shows a Retry
-    // button, and a therapist retries something that cannot succeed while each
-    // attempt writes another denied row. This is exactly what
-    // case-note-routes.js:115-126 documents for the website, which answers 503
-    // `generation_unavailable`; the two clients must not disagree about whether
-    // a disabled service is a transient fault.
-    if (err && err.message === 'generation_disabled') {
-      return res.status(503).json({
-        status: 'unavailable',
-        error: 'AI drafting is unavailable. Your transcript is safe — save it as a draft note.',
-      });
-    }
-
-    // One generic shape for everything else — identity, STS, model, transport.
-    // The phone learns the draft did not happen and nothing about what failed.
-    return res.status(502).json({
-      status: 'failed',
-      error: 'Could not draft a note. Please try again.',
-      // ── TEMPORARY STAGING DIAGNOSTIC — REMOVE WITH THE REST OF THIS PATCH ──
-      // A fixed four-field record: which stage was reached, a sanitised error
-      // class, an HTTP status, an AWS request id. No prompt, no response, no
-      // token, no credential, no header, no personal data — the provider
-      // builds it from an allowlist and never reads err.message.
-      //
-      // This is here rather than behind an admin endpoint because App Service
-      // filesystem logging is Off, and adding a route would mean editing
-      // server.js, which carries unrelated uncommitted work.
-      diagnostic: (err && err.diagnostic) || null,
-    });
-  }
-
-  await audit(req, 'mobile.ai_case_note_drafted', null);
-
-  res.json({
-    status: 'ok',
-    // Assistive drafting only. The app must present this for review and must
-    // not file it as documentation.
-    reviewRequired: true,
-    // Fields are picked EXPLICITLY, and this is load-bearing twice over.
-    //
-    // generateCaseNote() resolves to { identify, sessionDetails, plan,
-    // warnings, metadata } — flat, with no `sections` key. Reading
-    // `raw.sections` yielded undefined, JSON.stringify dropped it, and this
-    // endpoint answered 200 `status: 'ok'` carrying no note at all. A
-    // therapist would have watched it generate and received an empty draft.
-    //
-    // Spreading `raw` would fix that and introduce a worse bug: `metadata`
-    // carries the resolved Bedrock inference profile id, provider and source
-    // region. Naming the four fields keeps provenance server-side in
-    // ai_interactions where it belongs, which is what the guard test in
-    // tests/ai-single-gateway-guards.test.js is protecting.
-    sections: {
-      identify: raw.identify,
-      sessionDetails: raw.sessionDetails,
-      plan: raw.plan || [],
-    },
-    warnings: raw.warnings || [],
-    // Deliberately NOT providerIdentity(): that carries the resolved Bedrock
-    // inference profile id, which is an account internal. The app needs to know
-    // a draft was machine-generated and must be reviewed — not which profile
-    // produced it. The full identity is recorded server-side in ai_interactions.
-    generatedBy: 'ai-assistant',
-  });
-}));
 
 module.exports = router;
