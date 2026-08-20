@@ -216,6 +216,17 @@ re-authenticating, whereas HR ciphertext must survive. Sharing one key would
 mean an OAuth rotation permanently destroyed every stored TFN and bank detail.
 Set `ONBOARDING_ENCRYPTION_KEY_PREVIOUS` during a rotation; reads try both.
 
+**Adding the dedicated key later is non-destructive.** Until it is provisioned
+the module falls back to `TOKEN_ENCRYPTION_KEY` and warns once — which is how
+staging runs today. `previousKeys()` always keeps `TOKEN_ENCRYPTION_KEY` in the
+decrypt candidate list, so setting `ONBOARDING_ENCRYPTION_KEY` afterwards
+leaves every value written under the fallback readable while new writes use the
+dedicated key. No re-key pass is required to make the switch; run
+`scripts/onboarding-rekey.js` only if you want the old ciphertext migrated off
+the shared key. Verified end to end on 20 Aug 2026: write-under-fallback →
+provision → old value still decrypts, new value uses the new key, and with
+neither key set `encryptField()` throws `ENCRYPTION_UNAVAILABLE`.
+
 Encrypted: TFN, BSB, account numbers, SMSF bank details, identity document
 numbers. Not encrypted: names, addresses, fund names — ordinary personal
 information protected by access control, where encrypting would defeat search
@@ -384,6 +395,15 @@ Dev server: `opal-onboarding-5010` in `.claude/launch.json`.
   themselves have not been imported. Official documents seed as `link_only`
   pointing at the publisher.
 - **Opal policy content is not written** (29 slots await it, above).
+- **Source URLs are recorded, not monitored.** Every `COMPLIANCE_SOURCES`
+  entry carries `sourceUrl`, `sourceOrg`, `sourceVersionLabel` and
+  `effectiveDate`, but nothing polls them, so a publisher moving a page will
+  not be detected automatically. All 32 were re-checked on 20 Aug 2026:
+  30 returned 200. The two `workcover.wa.gov.au` URLs return **403 to
+  automated requests** — the domain root behaves identically and serves a
+  Cloudflare challenge page, so this is WAF bot protection, not link rot.
+  Both open normally in a browser. Any future link checker must treat that
+  host as expected-403 rather than flagging it as broken.
 - **Ahpra has no free API.** Structured access is the paid Practitioner
   Information Exchange, and its change-notification service is browser-only.
   Verification is a recorded human check.
