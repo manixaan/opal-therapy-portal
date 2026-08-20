@@ -383,14 +383,47 @@ const PRE_EMPLOYEE_PATHS = [
   '/api/notifications',    // their own notifications
 ];
 
-function isPreEmployeePath(originalUrl) {
+/**
+ * Match a path against a prefix allowlist, on whole SEGMENTS.
+ *
+ * Shared by both choke points below. A bare startsWith would let
+ * "/api/onboarding/members" through on the strength of ".../me", which is the
+ * bug this function exists to make impossible to reintroduce. Query strings
+ * are stripped first so "/api/contacts?x=/api/auth/me" cannot smuggle a prefix.
+ */
+function matchesPathAllowlist(originalUrl, allowlist) {
   const path = String(originalUrl || '').split('?')[0];
-  // Exact match, or a match on the next path SEGMENT. A bare startsWith would
-  // let "/api/onboarding/members" through on the strength of ".../me".
-  return PRE_EMPLOYEE_PATHS.some((p) => {
+  return allowlist.some((p) => {
     if (p.endsWith('/')) return path.startsWith(p);
     return path === p || path.startsWith(`${p}/`);
   });
+}
+
+/**
+ * The ONLY paths reachable while a temporary password is still in force.
+ *
+ * Deliberately tiny. A temporary credential is known to at least two people —
+ * whoever generated it and whoever received it — so until it is replaced the
+ * session may do exactly three things: find out who it is, change the
+ * password, and leave.
+ *
+ * Note what is absent: /api/onboarding/me. A new starter cannot begin their
+ * onboarding on a shared password, which is the whole reason the gate exists.
+ */
+const PASSWORD_CHANGE_PATHS = [
+  '/api/auth/me',
+  '/api/auth/change-password',
+  '/api/auth/logout',
+  '/auth/logout',
+  '/api/auth/sign-out-all',
+];
+
+function isPasswordChangePath(originalUrl) {
+  return matchesPathAllowlist(originalUrl, PASSWORD_CHANGE_PATHS);
+}
+
+function isPreEmployeePath(originalUrl) {
+  return matchesPathAllowlist(originalUrl, PRE_EMPLOYEE_PATHS);
 }
 
 async function requireAuth(req, res, next) {
@@ -408,6 +441,27 @@ async function requireAuth(req, res, next) {
       }
       user.permissions = getPermissions(user.role, user.permissions || []);
       req.user = user;
+    }
+
+    // ── forced password change (server-side, single choke point) ──────────
+    // A temporary password is a credential somebody else also knows. Until it
+    // is replaced, this session may reach the change-password screen and
+    // nothing else.
+    //
+    // FIRST, deliberately, and before the pre_employee check: a new starter
+    // created through the Owner's account-provisioning path holds BOTH the
+    // pre_employee role and a temporary password, and the narrower gate has to
+    // be the one that decides.
+    //
+    // A 403 with a machine-readable `code` rather than a redirect, because the
+    // caller is an API client; the portal shell reads the code and shows the
+    // change-password screen.
+    if (req.user.must_change_password === true && !isPasswordChangePath(req.originalUrl)) {
+      return res.status(403).json({
+        error: 'Password change required',
+        code: 'must_change_password',
+        message: 'Please choose your own password before continuing.',
+      });
     }
 
     // ── pre_employee enforcement (server-side, single choke point) ─────────
@@ -494,6 +548,8 @@ module.exports = {
   getPermissions,
   hasPermission,
   requireAuth,
+  isPasswordChangePath,
+  PASSWORD_CHANGE_PATHS,
   requireRole,
   requirePermission,
   requireAnyPermission,

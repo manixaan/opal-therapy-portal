@@ -153,6 +153,13 @@
     view: 'dashboard',
     dashboard: null,
     packages: null,
+    packageDocs: null,
+    journey: null,
+    review: null,
+    // The temporary password, held in memory only, only until the sign-in
+    // email carrying it has been sent. It is never written anywhere, and the
+    // server cannot produce it again — reissuing is the only remedy.
+    pendingCredential: null,
     assignments: null,
     assignmentDetail: null,
     packageDetail: null,
@@ -425,7 +432,7 @@
 
     if (actions && can('onboarding.assign')) {
       actions.innerHTML = '<button class="btn primary" onclick="Onboarding.assignDialog()">'
-        + 'Assign onboarding</button>';
+        + 'Start onboarding</button>';
     }
 
     var ob = d.onboarding || {};
@@ -500,28 +507,103 @@
 
   // ── Active onboarding ─────────────────────────────────────────────────────
 
+  /**
+   * Human labels for the assignment lifecycle.
+   *
+   * The MIRROR of STATUS_LABELS in onboarding-workflow-routes.js. Duplicated
+   * deliberately and narrowly: this table renders rows from
+   * /api/onboarding/assignments, which predates the journey endpoint and
+   * returns the raw status. Teaching that endpoint to send a label would
+   * change a response three other screens already read.
+   *
+   * `activated` says "Complete" because that IS what it means — the run is
+   * finished and the person is staff.
+   */
+  var STATUS_TEXT = {
+    created: 'Draft',
+    starter_pack_ready: 'Starter pack ready',
+    starter_pack_sent: 'Awaiting documents',
+    documents_received: 'Documents received',
+    details_extracted: 'Details ready for review',
+    ready_for_account: 'Ready for account',
+    account_created: 'Account created',
+    invite_sent: 'Invitation sent',
+    invite_accepted: 'Employee reviewing',
+    in_progress: 'Employee reviewing',
+    employee_actions_complete: 'Awaiting their submission',
+    employer_review: 'Our review',
+    corrections_required: 'Actions outstanding',
+    ready_to_activate: 'Ready to activate',
+    activated: 'Complete',
+    completed: 'Complete',
+    cancelled: 'Cancelled',
+    archived: 'Archived',
+  };
+
+  function statusText(status) {
+    return STATUS_TEXT[status] || titleCase(status);
+  }
+
+  /** The status chip, wearing its human label. */
+  function statusChip(status) {
+    return '<span class="ob-chip ' + esc(status) + '">' + esc(statusText(status)) + '</span>';
+  }
+
+  /**
+   * How far through the WHOLE journey this person is.
+   *
+   * Their requirement meter only starts once an account exists, so it reads 0%
+   * for everyone still in the paper round-trip — which is the opposite of the
+   * truth for somebody whose forms have just come back. This counts journey
+   * milestones instead, which is what an Owner scanning the list means by
+   * "how far along is Jane?".
+   */
+  function journeyPercent(a) {
+    var p = a.progress || {};
+    var milestones = [
+      !!a.starterPackGeneratedAt,
+      !!a.starterPackSentAt,
+      !!a.documentsReceivedAt,
+      !!a.extractionCompletedAt,
+      !!a.detailsReviewedAt,
+      !!a.accountCreatedAt,
+      !!a.invitationSentAt,
+      !!a.firstLoginAt,
+      ['activated', 'completed'].indexOf(a.status) !== -1,
+    ];
+    var done = milestones.filter(Boolean).length;
+    // Once they are in the portal, their own progress is the better answer.
+    if (a.firstLoginAt && p.employeeTotal) {
+      return Math.round(((done - 1) / milestones.length) * 100
+        + (p.employeeDone / p.employeeTotal) * (100 / milestones.length));
+    }
+    return Math.round((done / milestones.length) * 100);
+  }
+
   function assignmentTable(rows) {
     return '<div class="ob-table-wrap"><table class="ob-table">'
       + '<thead><tr>'
       + '<th scope="col">Employee</th><th scope="col">Role</th><th scope="col">Package</th>'
-      + '<th scope="col">Start</th><th scope="col">Their actions</th>'
-      + '<th scope="col">Employer review</th><th scope="col">Status</th>'
-      + '<th scope="col">Due</th>'
+      + '<th scope="col">Started</th><th scope="col">Status</th>'
+      + '<th scope="col">Progress</th>'
       + '</tr></thead><tbody>'
       + rows.map(function (a) {
-        var p = a.progress || {};
+        var pct = journeyPercent(a);
         return '<tr class="ob-row-click" tabindex="0" role="link"'
           + ' onclick="Onboarding.openAssignment(\'' + jsq(a.id) + '\')"'
           + ' onkeydown="if(event.key===\'Enter\'){Onboarding.openAssignment(\'' + jsq(a.id) + '\')}">'
           + '<td><span class="ob-strong">' + esc(a.applicantName) + '</span></td>'
           + '<td>' + esc(a.jobTitle || '—') + '<br><span class="ob-quiet">'
           + esc(titleCase(a.employmentType)) + '</span></td>'
-          + '<td>' + esc(a.packageTitle) + ' <span class="ob-quiet">v' + esc(a.packageVersion) + '</span></td>'
-          + '<td>' + fmtDate(a.startDate) + '</td>'
-          + '<td class="ob-num">' + (p.employeeDone || 0) + ' / ' + (p.employeeTotal || 0) + '</td>'
-          + '<td class="ob-num">' + (p.employerDone || 0) + ' / ' + (p.employerTotal || 0) + '</td>'
-          + '<td>' + chip(a.status) + '</td>'
-          + '<td>' + fmtDate(a.dueAt) + (a.overdue ? ' <span class="ob-chip expired">Overdue</span>' : '') + '</td>'
+          // No version. Which version somebody is pinned to is a real fact and
+          // it lives in their onboarding workspace, not in a list an Owner
+          // scans to find a name.
+          + '<td>' + esc(a.packageTitle) + '</td>'
+          + '<td>' + fmtDate(a.createdAt || a.startDate) + '</td>'
+          + '<td>' + statusChip(a.status)
+          + (a.overdue ? ' <span class="ob-chip expired">Overdue</span>' : '') + '</td>'
+          + '<td class="ob-num"><span class="ob-sr">'
+          + esc(statusText(a.status)) + ', </span>' + pct + '%</td>'
           + '</tr>';
       }).join('')
       + '</tbody></table></div>';
@@ -530,7 +612,7 @@
   async function viewActive(pane, actions) {
     if (actions && can('onboarding.assign')) {
       actions.innerHTML = '<button class="btn primary" onclick="Onboarding.assignDialog()">'
-        + 'Assign onboarding</button>';
+        + 'Start onboarding</button>';
     }
     var qs = [];
     if (S.filters.status) qs.push('status=' + encodeURIComponent(S.filters.status));
@@ -539,7 +621,11 @@
     S.assignments = res;
     if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
 
-    var STATUSES = ['created', 'invite_sent', 'invite_accepted', 'in_progress',
+    // The paper round-trip states are offered too, so an Owner can ask the
+    // question they actually have: "who am I waiting on documents from?"
+    var STATUSES = ['created', 'starter_pack_ready', 'starter_pack_sent',
+      'documents_received', 'details_extracted', 'ready_for_account',
+      'account_created', 'invite_sent', 'invite_accepted', 'in_progress',
       'employee_actions_complete', 'employer_review', 'corrections_required',
       'ready_to_activate', 'activated', 'completed', 'cancelled', 'archived'];
 
@@ -558,7 +644,7 @@
       + '        <option value="">All statuses</option>'
       + STATUSES.map(function (s) {
         return '<option value="' + s + '"' + (S.filters.status === s ? ' selected' : '') + '>'
-          + esc(titleCase(s)) + '</option>';
+          + esc(statusText(s)) + '</option>';
       }).join('')
       + '      </select>'
       + '      <button class="btn ob-btn-sm" onclick="Onboarding.applyFilters()">Apply</button>'
@@ -567,8 +653,8 @@
       + '  <div class="ob-section-body is-flush">'
       + ((res.assignments || []).length
         ? assignmentTable(res.assignments)
-        : empty('No onboarding runs yet',
-          'Assign a package to a new starter to begin.'))
+        : empty('No active onboarding',
+          'When you start onboarding a new employee, their progress will appear here.'))
       + '  </div>'
       + '</div>';
   }
@@ -606,10 +692,24 @@
         buttons += ' <button class="btn" onclick="Onboarding.resendInvite()">Resend invitation</button>'
           + ' <button class="btn" onclick="Onboarding.showInviteLink()">Copy link</button>';
       }
+      // The 034 shortcut, kept and made explicit: skip the paper round-trip and
+      // send a secure link on which the new starter sets their own password.
+      // That is the SAFER of the two credential models, so it stays one click
+      // away rather than being replaced.
+      if (can('onboarding.assign') && !a.userId
+          && ['created', 'starter_pack_ready', 'starter_pack_sent',
+            'documents_received', 'details_extracted', 'ready_for_account'].indexOf(a.status) !== -1) {
+        buttons += ' <button class="btn" onclick="Onboarding.releaseDialog(\'' + jsq(a.id) + '\')">'
+          + 'Invite them to the portal instead</button>';
+      }
       if (can('onboarding.audit')) {
         buttons += ' <button class="btn" onclick="Onboarding.exportArchive()">Export record</button>';
       }
-      if (can('onboarding.activate') && res.canActivate) {
+      // Activation needs an account to activate. Before one exists the server
+      // refuses with "not released yet", so offering the button was a promise
+      // the workflow could not keep — and on a Draft onboarding with no
+      // requirements yet, `canActivate` is vacuously true.
+      if (can('onboarding.activate') && res.canActivate && a.userId) {
         buttons += ' <button class="btn primary" onclick="Onboarding.activate()">Activate employee</button>';
       }
       actions.innerHTML = buttons;
@@ -627,16 +727,22 @@
       ['Provider status at assignment', titleCase(facts.provider_status)],
     ];
 
-    var blockers = act.ok
-      ? '<div class="ob-note is-ok"><strong>Ready to activate.</strong> '
-        + 'Every requirement that blocks activation is satisfied.</div>'
-      : '<div class="ob-note is-warn"><strong>' + act.blockers.length
-        + ' requirement' + (act.blockers.length === 1 ? '' : 's') + ' still blocking activation.</strong>'
-        + '<ul style="margin:8px 0 0 18px;">'
-        + act.blockers.map(function (b) {
-          return '<li>' + esc(b.title) + ' — ' + esc(b.reason) + '</li>';
-        }).join('')
-        + '</ul></div>';
+    // Nothing to say about activation until there is somebody to activate.
+    // "Ready to activate" over an empty requirement list is technically true
+    // and completely misleading.
+    var blockers = !a.userId
+      ? ''
+      : act.ok
+        ? '<div class="ob-note is-ok"><strong>Ready to activate.</strong> '
+          + 'Everything that must be done before they start is done.</div>'
+        : '<div class="ob-note is-warn"><strong>' + act.blockers.length
+          + ' item' + (act.blockers.length === 1 ? '' : 's')
+          + ' still to finish before this person can start.</strong>'
+          + '<ul style="margin:8px 0 0 18px;">'
+          + act.blockers.map(function (b) {
+            return '<li>' + esc(b.title) + ' — ' + esc(b.reason) + '</li>';
+          }).join('')
+          + '</ul></div>';
 
     var sensitive = '';
     if (can('onboarding.review')) {
@@ -654,18 +760,23 @@
       + '  <div class="ob-section-head">'
       + '    <div><h2>' + esc(a.applicantName) + '</h2>'
       + '      <p class="ob-quiet" style="margin:4px 0 0;">' + esc(a.jobTitle || '')
-      + '        · ' + esc(a.packageTitle) + ' v' + esc(a.packageVersion) + '</p></div>'
-      + '    ' + chip(a.status)
+      + '        · ' + esc(a.packageTitle) + '</p></div>'
+      + '    ' + statusChip(a.status)
       + '  </div>'
       + '  <div class="ob-section-body">'
-      + '    <div class="ob-meters ob-mb-4">'
-      + meter('Employee actions', p.employeeDone || 0, p.employeeTotal || 0, {
-        note: 'What the new starter must do themselves.',
-      })
-      + meter('Employer verification', p.employerDone || 0, p.employerTotal || 0, {
-        employer: true, note: 'Checks the practice must complete. Counted separately.',
-      })
-      + '    </div>'
+      // The requirement meters only mean something once the requirements
+      // exist, which is at account creation. Before then they read 0 of 0 at
+      // 100%, which tells the Owner the opposite of the truth.
+      + (a.userId
+        ? '    <div class="ob-meters ob-mb-4">'
+          + meter('Employee actions', p.employeeDone || 0, p.employeeTotal || 0, {
+            note: 'What the new starter must do themselves.',
+          })
+          + meter('Employer verification', p.employerDone || 0, p.employerTotal || 0, {
+            employer: true, note: 'Checks the practice must complete. Counted separately.',
+          })
+          + '    </div>'
+        : '')
       + blockers
       + (sensitive ? '<div class="ob-inline-actions ob-mb-3">' + sensitive + '</div>' : '')
       + '    <div class="ob-table-wrap"><table class="ob-table"><tbody>'
@@ -677,7 +788,13 @@
       + '    </tbody></table></div>'
       + '  </div>'
       + '</div>'
+      // The journey panel loads on its own so the details above paint
+      // immediately: it makes six queries, and an Owner staring at a spinner
+      // for all of them would be a worse trade than a panel that fills in.
+      + '<div id="ob-journey-host">' + spinner('Loading progress…') + '</div>'
       + (res.sections || []).map(renderReviewSection).join('');
+
+    await loadJourney();
   }
 
   function renderReviewSection(section) {
@@ -695,7 +812,7 @@
   function renderReviewRequirement(r) {
     var meta = [];
     meta.push(titleCase(r.classification));
-    if (r.blocksActivation) meta.push('Blocks activation');
+    if (r.blocksActivation) meta.push('Required before they start');
     if (!r.mandatory) meta.push('Optional');
     if (r.requiresEmployerVerification) meta.push('Needs verification');
     if (r.expiresAt) meta.push('Expires ' + fmtDate(r.expiresAt));
@@ -751,7 +868,8 @@
       + '<div class="ob-req' + (r.status === 'correction_required' ? ' is-action-required' : '') + '">'
       + '  <div class="ob-req-main">'
       + '    <div class="ob-req-title">' + esc(r.title) + ' ' + chip(r.status)
-      + (r.blocksActivation ? ' <span class="ob-chip is-blocking">Blocking</span>' : '')
+      + (r.blocksActivation
+        ? ' <span class="ob-chip is-blocking">Required before they start</span>' : '')
       + '    </div>'
       + (r.summary ? '<div class="ob-req-sub">' + esc(r.summary) + '</div>' : '')
       + evidence
@@ -1132,54 +1250,65 @@
     }
 
     openModal({
-      title: 'Assign onboarding',
-      subtitle: 'Nothing is sent until you release it on the next step.',
+      title: 'Start onboarding',
+      subtitle: 'Nothing is sent yet — you prepare the starter pack on the next screen.',
       wide: true,
       body: ''
         + '<div class="ob-form">'
-        + '  <div class="ob-form-row is-single"><div class="ob-field">'
-        + '    <label for="ob-a-package">Package<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '    <select id="ob-a-package" name="packageId" required>'
-        + assignable.map(function (p) {
-          return '<option value="' + esc(p.id) + '" data-type="' + esc(p.employmentType || '')
-            + '" data-role="' + esc(p.roleCategory || '') + '">' + esc(p.title) + '</option>';
-        }).join('')
-        + '    </select>'
-        + '  </div></div>'
+        // WHO, then WHAT THEY DO, then — recommended from those two — WHICH
+        // PACKAGE. The package used to be the first question, which asked the
+        // Owner to make the technical choice before the human one.
         + '  <div class="ob-form-row">'
         + '    <div class="ob-field"><label for="ob-a-name">Full name<span class="ob-req-mark" aria-hidden="true">*</span></label>'
         + '      <input type="text" id="ob-a-name" name="applicantName" required maxlength="200"></div>'
         + '    <div class="ob-field"><label for="ob-a-email">Email<span class="ob-req-mark" aria-hidden="true">*</span></label>'
         + '      <input type="email" id="ob-a-email" name="applicantEmail" required maxlength="255"'
         + '             aria-describedby="ob-a-email-hint">'
-        + '      <p class="ob-hint" id="ob-a-email-hint">The invitation goes here and becomes their sign-in.</p></div>'
+        + '      <p class="ob-hint" id="ob-a-email-hint">Where the starter pack goes. It becomes their '
+        + '        sign-in unless you give them an Opal address later.</p></div>'
         + '  </div>'
         + '  <div class="ob-form-row">'
-        + '    <div class="ob-field"><label for="ob-a-title">Job title</label>'
-        + '      <input type="text" id="ob-a-title" name="jobTitle" maxlength="150"></div>'
-        + '    <div class="ob-field"><label for="ob-a-start">Start date</label>'
-        + '      <input type="date" id="ob-a-start" name="startDate"></div>'
+        + '    <div class="ob-field"><label for="ob-a-title">Role / position</label>'
+        + '      <input type="text" id="ob-a-title" name="jobTitle" maxlength="150"'
+        + '             placeholder="e.g. Occupational Therapist"></div>'
+        + '    <div class="ob-field"><label for="ob-a-mobilenum">Mobile (optional)</label>'
+        + '      <input type="tel" id="ob-a-mobilenum" name="mobile" maxlength="40"></div>'
         + '  </div>'
         + '  <div class="ob-form-row is-thirds">'
+        + '    <div class="ob-field"><label for="ob-a-rolecat">Role category</label>'
+        + '      <select id="ob-a-rolecat" name="roleCategory" onchange="Onboarding.recommendPackage()">'
+        + '        <option value="occupational_therapist">Occupational therapist</option>'
+        + '        <option value="administration">Administration</option>'
+        + '      </select></div>'
         + '    <div class="ob-field"><label for="ob-a-emptype">Employment type<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '      <select id="ob-a-emptype" name="employmentType" required>'
+        + '      <select id="ob-a-emptype" name="employmentType" required onchange="Onboarding.recommendPackage()">'
         + '        <option value="full_time">Full-time</option>'
         + '        <option value="part_time">Part-time</option>'
         + '        <option value="casual">Casual</option>'
         + '        <option value="fixed_term">Fixed-term</option>'
         + '      </select></div>'
-        + '    <div class="ob-field"><label for="ob-a-rolecat">Role category</label>'
-        + '      <select id="ob-a-rolecat" name="roleCategory">'
-        + '        <option value="occupational_therapist">Occupational therapist</option>'
-        + '        <option value="administration">Administration</option>'
-        + '      </select></div>'
-        + '    <div class="ob-field"><label for="ob-a-role">Portal role on activation</label>'
-        + '      <select id="ob-a-role" name="proposedRole">'
-        + '        <option value="therapist">Therapist</option>'
-        + '        <option value="admin">Administrator</option>'
-        + '        <option value="read_only">Read-only</option>'
-        + '      </select></div>'
+        + '    <div class="ob-field"><label for="ob-a-start">Start date</label>'
+        + '      <input type="date" id="ob-a-start" name="startDate"></div>'
         + '  </div>'
+        + '  <div class="ob-form-row is-single"><div class="ob-field">'
+        + '    <label for="ob-a-package">Onboarding package<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+        + '    <select id="ob-a-package" name="packageId" required>'
+        + assignable.map(function (p) {
+          return '<option value="' + esc(p.id) + '" data-type="' + esc(p.employmentType || '')
+            + '" data-role="' + esc(p.roleCategory || '') + '">' + esc(p.title) + '</option>';
+        }).join('')
+        + '    </select>'
+        + '    <p class="ob-hint" id="ob-a-package-hint" aria-live="polite"></p>'
+        + '  </div></div>'
+        + '  <div class="ob-form-row is-single"><div class="ob-field">'
+        + '    <label for="ob-a-role">Portal access when they join</label>'
+        + '    <select id="ob-a-role" name="proposedRole">'
+        + '      <option value="therapist">Employee — their own calendar, clients and records</option>'
+        + '      <option value="admin">Admin — practice-wide scheduling and travel</option>'
+        + '      <option value="read_only">Read-only</option>'
+        + '    </select>'
+        + '    <p class="ob-hint">You confirm this again when you create their account.</p>'
+        + '  </div></div>'
         + '  <div class="ob-note is-info">These determinations decide which statutory requirements '
         + '    are issued. They follow the role\'s <strong>usual duties</strong>, not its job title, '
         + '    and an undecided answer deliberately issues the requirement rather than skipping it.</div>'
@@ -1216,8 +1345,40 @@
         + '</div>',
       footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
         + '<button class="btn" onclick="Onboarding.previewAssign()">Preview requirements</button>'
-        + '<button class="btn primary" onclick="Onboarding.submitAssign()">Create</button>',
+        + '<button class="btn primary" onclick="Onboarding.submitAssign()">Start onboarding</button>',
     });
+
+    recommendPackage();
+  }
+
+  /**
+   * Suggest the package that matches the role and employment type chosen.
+   *
+   * A SUGGESTION, not a selection: it moves the dropdown and says why, and the
+   * Owner can change it back. Silently pre-selecting would be the same
+   * mechanic with the check removed.
+   *
+   * The scoring lives on the server, so this and the API agree by construction
+   * rather than by two implementations happening to match.
+   */
+  async function recommendPackage() {
+    var hint = doc.getElementById('ob-a-package-hint');
+    var select = doc.getElementById('ob-a-package');
+    if (!hint || !select) return;
+
+    var v = modalValues();
+    var qs = 'roleCategory=' + encodeURIComponent(v.roleCategory || '')
+      + '&employmentType=' + encodeURIComponent(v.employmentType || '');
+    var res = await api('/api/onboarding/packages/recommend?' + qs);
+    if (!res.ok || !res.recommended) {
+      hint.textContent = 'Choose the package that matches this role.';
+      return;
+    }
+    // Only move the selection while the Owner has not overridden it.
+    if (!select.dataset.touched) select.value = res.recommended.packageId;
+    hint.textContent = 'Recommended: ' + res.recommended.title + '. '
+      + res.recommended.reason + ' You can choose a different one.';
+    select.onchange = function () { select.dataset.touched = '1'; };
   }
 
   function assignPayload() {
@@ -1227,6 +1388,7 @@
       applicantName: (v.applicantName || '').trim(),
       applicantEmail: (v.applicantEmail || '').trim(),
       jobTitle: v.jobTitle || undefined,
+      mobile: v.mobile || undefined,
       startDate: v.startDate || undefined,
       employmentType: v.employmentType,
       roleCategory: v.roleCategory,
@@ -1260,7 +1422,7 @@
     if (!res.ok) { modalError(res.error); return; }
     openModal({
       title: 'What this person will be asked for',
-      subtitle: res.appliedCount + ' requirements · ' + res.blockingCount + ' block activation',
+      subtitle: res.appliedCount + ' items · ' + res.blockingCount + ' required before they start',
       wide: true,
       body: res.sections.map(function (s) {
         return '<div class="ob-builder-section"><h3>' + esc(s.label) + '</h3>'
@@ -1273,7 +1435,8 @@
               + (r.compliance ? '<span class="ob-builder-item-cond">' + esc(r.compliance.sourceOrg || '')
                 + '</span>' : '')
               + '</span>'
-              + (r.blocksActivation ? '<span class="ob-chip is-blocking">Blocking</span>' : '')
+              + (r.blocksActivation
+                ? '<span class="ob-chip is-blocking">Required before they start</span>' : '')
               + '</div>';
           }).join('')
           + '</div>';
@@ -1300,20 +1463,25 @@
     S.busy = false;
     if (!res.ok) { modalError(res.error); return; }
     closeModal();
-    toast('Onboarding created — review it, then release');
+    toast('Onboarding started — prepare their starter pack next');
     S.view = 'active';
     S.assignmentDetail = { id: res.assignment.id };
+    // Straight into the workspace, which tells them the next step. This used
+    // to open the release dialog immediately, which sent an invitation before
+    // the new starter had received a single form — and skipped the whole paper
+    // round-trip the workflow now exists for. Releasing is still available,
+    // from the workspace, for an Owner who genuinely wants to go straight to
+    // the portal.
     await renderManage(root());
-    releaseDialog(res.assignment.id, res.preview);
   }
 
   function releaseDialog(id, preview) {
     openModal({
-      title: 'Release this onboarding?',
-      subtitle: 'This creates their account and emails a secure link.',
+      title: 'Invite them straight to the portal?',
+      subtitle: 'Skips the starter pack — they set their own password on a secure link.',
       body: '<div class="ob-note is-info">'
         + (preview ? '<strong>' + preview.willIssue + ' requirements</strong> will be issued, '
-          + '<strong>' + preview.blocking + '</strong> of which block activation.' : '')
+          + '<strong>' + preview.blocking + '</strong> of which must be done before they start.' : '')
         + '</div>'
         + '<div class="ob-note">The email contains a secure link and nothing else — no password, '
         + 'no employment terms, no personal details. Everything sensitive is collected inside the '
@@ -1354,41 +1522,73 @@
     S.packages = res;
     if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
 
-    var groups = [
-      ['Assignable packages', 'package'],
-      ['Base', 'base'],
-      ['Overlays', 'overlay'],
-    ];
+    // The Owner's list is the assignable packages. Bases and overlays are the
+    // composition machinery — real, useful, and not what somebody opens this
+    // screen to look at — so they sit behind a disclosure rather than as two
+    // more tables of equal weight.
+    var assignable = (res.packages || []).filter(function (p) { return p.kind === 'package'; });
+    var building = (res.packages || []).filter(function (p) { return p.kind !== 'package'; });
 
-    pane.innerHTML = '<div class="ob-note is-info">Packages are <strong>composed</strong>, not copied. '
-      + 'A package inherits a base plus the overlays that apply, so adding a requirement to every new '
-      + 'starter is one edit rather than six that can drift apart.</div>'
-      + groups.map(function (g) {
-        var rows = (res.packages || []).filter(function (p) { return p.kind === g[1]; });
-        if (!rows.length) return '';
-        return '<div class="ob-section-card">'
-          + '<div class="ob-section-head"><h2>' + esc(g[0]) + '</h2></div>'
-          + '<div class="ob-section-body is-flush"><div class="ob-table-wrap"><table class="ob-table">'
-          + '<thead><tr><th scope="col">Package</th><th scope="col">Applies to</th>'
-          + '<th scope="col">Version</th><th scope="col">Status</th>'
-          + '<th scope="col">In use</th></tr></thead><tbody>'
-          + rows.map(function (p) {
+    if (!assignable.length && !building.length) {
+      pane.innerHTML = '<div class="ob-section-card"><div class="ob-section-body">'
+        + empty('No packages yet',
+          'A package decides what a new starter receives and what they must complete. '
+          + 'Opal\'s standard packages are created the first time onboarding is set up.')
+        + '</div></div>';
+      return;
+    }
+
+    pane.innerHTML = ''
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Packages</h2>'
+      + '    <span class="ob-quiet">' + assignable.length + ' available to new starters</span></div>'
+      + '  <div class="ob-section-body is-flush"><div class="ob-table-wrap"><table class="ob-table">'
+      + '<thead><tr><th scope="col">Package</th><th scope="col">Applies to</th>'
+      + '<th scope="col">Status</th><th scope="col">Assigned to</th></tr></thead><tbody>'
+      + assignable.map(function (p) {
+        var people = p.assignmentCount || 0;
+        return '<tr class="ob-row-click" tabindex="0" role="link"'
+          + ' onclick="Onboarding.openPackage(\'' + jsq(p.id) + '\')"'
+          + ' onkeydown="if(event.key===\'Enter\'){Onboarding.openPackage(\'' + jsq(p.id) + '\')}">'
+          // The PKG_ code is gone. It remains the stable identifier underneath
+          // and in the API; an Owner choosing a package for Jane does not need
+          // to read it, and printing it under the name made the screen look
+          // like a database table.
+          + '<td><span class="ob-strong">' + esc(p.title) + '</span></td>'
+          + '<td>' + esc([titleCase(p.roleCategory), titleCase(p.employmentType)]
+            .filter(Boolean).join(' · ') || 'Any role') + '</td>'
+          + '<td>' + chip(p.status)
+          + (p.draftDirty && p.currentVersion
+            ? ' <span class="ob-chip in_progress">Unpublished changes</span>' : '') + '</td>'
+          // "Assigned to 3 people" rather than a bare 3 under "In use", and
+          // counting only LIVE runs — the query behind it excludes cancelled
+          // and archived, so the sentence is true.
+          + '<td>' + (people
+            ? esc(people + ' ' + (people === 1 ? 'person' : 'people'))
+            : '<span class="ob-quiet">Nobody yet</span>') + '</td>'
+          + '</tr>';
+      }).join('')
+      + '</tbody></table></div></div></div>'
+      + (building.length
+        ? '<details class="ob-details"><summary>How these are built</summary>'
+          + '<div class="ob-note is-info">Packages are <strong>composed</strong>, not copied. '
+          + 'Each one inherits a shared base plus the parts that apply to it, so adding a '
+          + 'requirement for every new starter is one edit rather than six that can drift apart.'
+          + '</div>'
+          + '<div class="ob-table-wrap"><table class="ob-table">'
+          + '<thead><tr><th scope="col">Building block</th><th scope="col">Applies to</th>'
+          + '<th scope="col">Status</th></tr></thead><tbody>'
+          + building.map(function (p) {
             return '<tr class="ob-row-click" tabindex="0" role="link"'
               + ' onclick="Onboarding.openPackage(\'' + jsq(p.id) + '\')"'
               + ' onkeydown="if(event.key===\'Enter\'){Onboarding.openPackage(\'' + jsq(p.id) + '\')}">'
-              + '<td><span class="ob-strong">' + esc(p.title) + '</span><br>'
-              + '<span class="ob-quiet">' + esc(p.code) + '</span></td>'
+              + '<td><span class="ob-strong">' + esc(p.title) + '</span></td>'
               + '<td>' + esc([titleCase(p.roleCategory), titleCase(p.employmentType)]
-                .filter(Boolean).join(' · ') || 'Any') + '</td>'
-              + '<td>' + (p.currentVersion ? 'v' + p.currentVersion : '—')
-              + (p.draftDirty && p.currentVersion
-                ? ' <span class="ob-chip in_progress">Unpublished changes</span>' : '') + '</td>'
-              + '<td>' + chip(p.status) + '</td>'
-              + '<td class="ob-num">' + (p.assignmentCount || 0) + '</td>'
-              + '</tr>';
+                .filter(Boolean).join(' · ') || 'Any role') + '</td>'
+              + '<td>' + chip(p.status) + '</td></tr>';
           }).join('')
-          + '</tbody></table></div></div></div>';
-      }).join('');
+          + '</tbody></table></div></details>'
+        : '');
   }
 
   async function openPackage(id) {
@@ -1407,8 +1607,11 @@
     if (actions) {
       var b = '<button class="btn" onclick="Onboarding.backToPackages()">Back to packages</button>';
       if (can('onboarding.manage_packages') && p.kind === 'package') {
+        // "Publish v4" told the Owner a number they never chose and cannot
+        // act on. What they are doing is making their edits live for new
+        // starters; the version is bookkeeping, and belongs in the history.
         b += ' <button class="btn primary" onclick="Onboarding.publishPackage(\'' + jsq(p.id) + '\')">'
-          + (p.currentVersion ? 'Publish v' + (p.currentVersion + 1) : 'Publish v1') + '</button>';
+          + (p.currentVersion ? 'Publish changes' : 'Publish this package') + '</button>';
       }
       actions.innerHTML = b;
     }
@@ -1421,21 +1624,25 @@
     pane.innerHTML = ''
       + '<div class="ob-section-card"><div class="ob-section-head">'
       + '  <div><h2>' + esc(p.title) + '</h2>'
-      + '  <p class="ob-quiet" style="margin:4px 0 0;">' + esc(p.code)
-      + (p.currentVersion ? ' · published v' + p.currentVersion : ' · never published') + '</p></div>'
+      + '  <p class="ob-quiet" style="margin:4px 0 0;">'
+      + esc([titleCase(p.roleCategory), titleCase(p.employmentType)]
+        .filter(Boolean).join(' · ') || 'Applies to any role') + '</p></div>'
       + chip(p.status)
       + '</div><div class="ob-section-body">'
       + (p.description ? '<p class="ob-mb-3">' + esc(p.description) + '</p>' : '')
-      + '<p class="ob-quiet">Composed from: ' + esc((res.chain || []).join(' → ')) + '</p>'
       + (res.warnings && res.warnings.length
         ? '<div class="ob-note is-warn ob-mt-3">' + res.warnings.map(esc).join('<br>') + '</div>' : '')
-      + (p.draftDirty && p.currentVersion
-        ? '<div class="ob-note is-warn ob-mt-3"><strong>Unpublished changes.</strong> '
-          + 'Anyone already onboarding stays on v' + p.currentVersion
-          + '; publishing affects new assignments only.</div>' : '')
       + '</div></div>'
-      + '<div class="ob-section-card"><div class="ob-section-head"><h2>Requirements</h2>'
-      + '<span class="ob-quiet">' + (res.resolvedRequirements || []).length + ' resolved</span></div>'
+      // The starter pack comes FIRST, because "what will this person actually
+      // receive?" is what an Owner opens a package to find out.
+      + (p.kind === 'package'
+        ? '<div class="ob-section-card"><div class="ob-section-head"><h2>Starter pack</h2>'
+          + '<span class="ob-quiet">Emailed to the new starter</span></div>'
+          + '<div class="ob-section-body" id="ob-pkg-docs">' + spinner('Loading documents…')
+          + '</div></div>'
+        : '')
+      + '<div class="ob-section-card"><div class="ob-section-head"><h2>What they must complete</h2>'
+      + '<span class="ob-quiet">' + (res.resolvedRequirements || []).length + ' items</span></div>'
       + '<div class="ob-section-body">'
       + Object.keys(bySection).map(function (label) {
         return '<div class="ob-builder-section"><h3>' + esc(label) + '</h3>'
@@ -1448,25 +1655,53 @@
               + '<span class="ob-builder-item-cond">' + esc(r.conditionText) + '</span>'
               + '</span>'
               + (r.inheritedFrom
-                ? '<span class="ob-inherited">' + esc(r.inheritedFrom.replace('PKG_', '')) + '</span>' : '')
-              + (r.blocksActivation ? '<span class="ob-chip is-blocking">Blocking</span>' : '')
+                ? '<span class="ob-inherited">' + esc(packageLabel(r.inheritedFrom)) + '</span>' : '')
+              + (r.blocksActivation
+                ? '<span class="ob-chip is-blocking">Required before they start</span>' : '')
               + '</div>';
           }).join('')
           + '</div>';
       }).join('')
       + '</div></div>'
+      // Version history exists for auditability, not for daily use, so it sits
+      // behind a disclosure. An Owner who needs to prove what somebody was
+      // issued in March can find it; an Owner adding a document does not have
+      // to read past it.
       + (res.versions && res.versions.length
-        ? '<div class="ob-section-card"><div class="ob-section-head"><h2>Version history</h2></div>'
-          + '<div class="ob-section-body is-flush"><div class="ob-table-wrap"><table class="ob-table">'
-          + '<thead><tr><th scope="col">Version</th><th scope="col">Requirements</th>'
-          + '<th scope="col">Published</th><th scope="col">Note</th><th scope="col">Status</th></tr></thead><tbody>'
+        ? '<details class="ob-details"><summary>History</summary>'
+          + '<div class="ob-note is-info">Publishing takes a permanent copy. Everyone already '
+          + 'onboarding keeps the version they were issued, so what they were asked to complete — '
+          + 'and which edition of each policy they agreed to — never changes after the fact.</div>'
+          + '<div class="ob-table-wrap"><table class="ob-table">'
+          + '<thead><tr><th scope="col">Published</th><th scope="col">Items</th>'
+          + '<th scope="col">What changed</th><th scope="col"></th></tr></thead><tbody>'
           + res.versions.map(function (v) {
-            return '<tr><td>v' + esc(v.version) + '</td><td class="ob-num">' + esc(v.requirement_count) + '</td>'
-              + '<td>' + fmtDate(v.published_at) + '</td><td>' + esc(v.change_note || '—') + '</td>'
-              + '<td>' + chip(v.status) + '</td></tr>';
+            return '<tr><td>' + fmtDate(v.published_at) + '</td>'
+              + '<td class="ob-num">' + esc(v.requirement_count) + '</td>'
+              + '<td>' + esc(v.change_note || '—') + '</td>'
+              + '<td>' + (v.status === 'published'
+                ? '<span class="ob-chip published">Current</span>'
+                : '<span class="ob-quiet">Superseded</span>') + '</td></tr>';
           }).join('')
-          + '</tbody></table></div></div></div>'
+          + '</tbody></table></div></details>'
         : '');
+
+    if (p.kind === 'package') await loadPackageDocuments();
+  }
+
+  /**
+   * A package's internal code, made readable.
+   *
+   * PKG_OVL_CHILD_RELATED is a stable identifier and stays one; what an Owner
+   * sees is "Child Related". The codes still exist everywhere they are useful —
+   * the API, imports, the seed catalogue — just not on screen.
+   */
+  function packageLabel(code) {
+    return String(code || '')
+      .replace(/^PKG_(BASE_|OVL_)?/, '')
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
   function publishPackage(id) {
@@ -2040,9 +2275,22 @@
         if (d.document.body) {
           body += '<div class="ob-doc" tabindex="0">' + esc(d.document.body) + '</div>';
         } else if (d.document.hasFile) {
+          // The portal's shared viewer, opened over the top — the same one the
+          // Resource Hub uses, so a policy looks the same wherever it is read.
+          // The iframe stays underneath as the fallback for anything the
+          // viewer does not render, and for a browser where it failed to load.
+          var kind = d.document.fileMime === 'application/pdf' ? 'pdf'
+            : String(d.document.fileMime || '').indexOf('wordprocessingml') !== -1 ? 'docx' : null;
+          var bytesUrl = '/api/onboarding/me/documents/version/'
+            + encodeURIComponent(req.documentVersionId) + '/download';
+          if (kind && global.DocPreview) {
+            body += '<div class="ob-inline-actions ob-mb-3">'
+              + '<button class="btn" onclick="Onboarding.previewMineDocument(\''
+              + jsq(req.documentVersionId) + '\',\'' + jsq(d.document.title) + '\',\''
+              + jsq(kind) + '\')">Open full screen</button></div>';
+          }
           body += '<iframe class="ob-doc-frame" title="' + esc(d.document.title) + '" src="'
-            + '/api/onboarding/me/documents/version/' + encodeURIComponent(req.documentVersionId)
-            + '/download"></iframe>';
+            + bytesUrl + '"></iframe>';
         }
         body += '<div class="ob-doc-meta">'
           + (d.document.sourceVersionLabel ? '<span>' + esc(d.document.sourceVersionLabel) + '</span>' : '')
@@ -2400,6 +2648,13 @@
       subtitle: req.summary || '',
       wide: true,
       body: (showInstructions ? '<div class="ob-note">' + esc(req.instructions) + '</div>' : '')
+        // Why this is already filled in. Without it, a form the employee has
+        // never opened carrying their date of birth reads as a mistake or a
+        // leak rather than as us saving them the typing.
+        + (r.prefill
+          ? '<div class="ob-note is-ok"><strong>We filled this in for you.</strong> '
+            + esc(r.prefill.message) + '</div>'
+          : '')
         + builder(r.values),
       footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
         + '<button class="btn primary" onclick="Onboarding.submitForm(\'' + jsq(id) + '\')">Save</button>',
@@ -2657,6 +2912,1098 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  THE ONBOARDING JOURNEY
+  //
+  //  One person, start to finish. The panel below answers the only three
+  //  questions an Owner opens an onboarding to ask — where are they, what am I
+  //  waiting for, what do I do next — and every technical mechanism behind
+  //  those answers (package versions, snapshots, extraction runs, credential
+  //  lifetimes) stays where it belongs, which is not on this screen.
+  //
+  //  The server decides what the next action IS. The browser only draws it:
+  //  duplicating that rule here would give two answers that disagree the first
+  //  time one of them changed.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Open a document in the portal's shared viewer.
+   *
+   * The same overlay the Resource Hub uses, for the same reason: an onboarding
+   * document that opened differently from every other document in the portal
+   * would read as a different product. Falls back to a plain download when the
+   * viewer is absent or the type is not one it renders.
+   */
+  function preview(opts) {
+    if (!opts || !opts.url) return;
+    if (global.DocPreview && (opts.kind === 'pdf' || opts.kind === 'docx')) {
+      global.DocPreview.open({
+        kind: opts.kind,
+        url: opts.url,
+        downloadUrl: opts.downloadUrl || opts.url,
+        title: opts.title || 'Document',
+        meta: opts.meta || '',
+      });
+      return;
+    }
+    global.open(opts.downloadUrl || opts.url, '_blank', 'noopener');
+  }
+
+  /** Preview a starter-pack or library document by its version. */
+  function previewDocument(documentId, versionId, title, kind, meta) {
+    preview({
+      kind: kind || 'pdf',
+      url: '/api/onboarding/documents/' + encodeURIComponent(documentId)
+        + '/versions/' + encodeURIComponent(versionId) + '/download',
+      title: title,
+      meta: meta,
+    });
+  }
+
+  /** Preview one of the documents an employee sent back. */
+  function previewReturned(docId, title, kind) {
+    var base = '/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/returned-documents/' + encodeURIComponent(docId);
+    preview({ kind: kind || 'pdf', url: base + '/preview', downloadUrl: base + '/download', title: title });
+  }
+
+  function bytes(n) {
+    if (!n && n !== 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  /**
+   * The progress list.
+   *
+   * A step is done, current, or still to come — never a percentage per step,
+   * because "starter pack 60% sent" means nothing. Each state carries a shape
+   * as well as a colour so it survives being printed, and being read by
+   * somebody who cannot distinguish the two.
+   */
+  function journeySteps(steps) {
+    return '<ol class="ob-journey">'
+      + steps.map(function (s) {
+        var mark = s.state === 'done' ? '✓' : (s.state === 'current' ? '→' : '○');
+        return '<li class="ob-journey-step is-' + esc(s.state) + '">'
+          + '<span class="ob-journey-mark" aria-hidden="true">' + mark + '</span>'
+          + '<span class="ob-journey-main">'
+          + '<span class="ob-journey-label">' + esc(s.label)
+          + '<span class="ob-sr"> — ' + esc(s.state === 'done' ? 'done'
+            : s.state === 'current' ? 'next to do' : 'not started yet') + '</span></span>'
+          + '<span class="ob-journey-detail">' + esc(s.detail || '')
+          + (s.at ? ' · ' + esc(fmtDate(s.at)) : '') + '</span>'
+          + '</span>'
+          + (s.state === 'current' && s.action
+            ? '<button class="btn ob-btn-sm primary" onclick="Onboarding.journeyAction(\''
+              + jsq(s.action.verb) + '\')">' + esc(s.action.label) + '</button>'
+            : (s.action
+              ? '<button class="btn ob-btn-sm" onclick="Onboarding.journeyAction(\''
+                + jsq(s.action.verb) + '\')">' + esc(s.action.label) + '</button>'
+              : ''))
+          + '</li>';
+      }).join('')
+      + '</ol>';
+  }
+
+  /** Load and draw the journey panel for the open assignment. */
+  async function loadJourney() {
+    var host = doc.getElementById('ob-journey-host');
+    if (!host) return;
+    var res = await api('/api/onboarding/assignments/'
+      + encodeURIComponent(assignmentId()) + '/journey');
+    if (!res.ok) {
+      host.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>';
+      return;
+    }
+    S.journey = res;
+
+    var pack = res.starterPack;
+    var docs = res.returnedDocuments || [];
+    var ex = res.extraction || {};
+    var sum = ex.summary || {};
+
+    host.innerHTML = ''
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head">'
+      + '    <h2>Progress</h2>'
+      + '    <span class="ob-quiet">' + res.progressPercent + '% complete</span>'
+      + '  </div>'
+      + '  <div class="ob-section-body">'
+      + (res.nextAction
+        ? '<div class="ob-note is-info"><strong>Next: ' + esc(res.nextAction.label) + '.</strong> '
+          + esc(res.nextAction.detail || '') + '</div>'
+        : '')
+      + journeySteps(res.steps || [])
+      + '  </div>'
+      + '</div>'
+
+      // ── Starter pack ──────────────────────────────────────────────────────
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Starter pack</h2>'
+      + (pack ? '<span class="ob-quiet">' + pack.documentCount + ' documents · '
+        + esc(bytes(pack.sizeBytes)) + '</span>' : '')
+      + '  </div>'
+      + '  <div class="ob-section-body">'
+      + (pack
+        ? '<div class="ob-inline-actions ob-mb-3">'
+          + '<a class="btn ob-btn-sm" href="/api/onboarding/assignments/'
+          + encodeURIComponent(assignmentId()) + '/starter-pack/download">Download</a> '
+          + '<button class="btn ob-btn-sm" onclick="Onboarding.journeyAction(\'send\')">'
+          + (res.assignment.status === 'starter_pack_ready' ? 'Send starter pack' : 'Resend starter pack')
+          + '</button> '
+          + '<button class="btn ob-btn-sm" onclick="Onboarding.regeneratePack()">Rebuild</button>'
+          + '</div>'
+          + '<ol class="ob-pack-list">'
+          + (pack.manifest || []).map(function (m) {
+            return '<li><span class="ob-pack-title">' + esc(m.title) + '</span>'
+              + '<span class="ob-quiet">' + esc(m.publisherEdition || ('Version ' + m.documentVersion))
+              + ' · ' + esc(bytes(m.sizeBytes)) + '</span></li>';
+          }).join('')
+          + '</ol>'
+          + ((pack.omissions || []).length
+            ? '<div class="ob-note is-warn ob-mt-3"><strong>Left out of the pack.</strong><ul '
+              + 'style="margin:8px 0 0 18px;">'
+              + pack.omissions.map(function (o) {
+                return '<li>' + esc(o.title || o.code || 'A document') + ' — ' + esc(o.reason) + '</li>';
+              }).join('') + '</ul></div>'
+            : '')
+        : empty('No starter pack yet',
+          'Generate one and it will be ready to email, with every document this package includes.')
+          + '<div class="ob-inline-actions ob-mt-3">'
+          + '<button class="btn primary" onclick="Onboarding.journeyAction(\'generate\')">'
+          + 'Generate starter pack</button></div>')
+      + (res.dispatches && res.dispatches.length
+        ? '<details class="ob-details ob-mt-3"><summary>Email history</summary>'
+          + '<div class="ob-table-wrap"><table class="ob-table">'
+          + '<thead><tr><th scope="col">When</th><th scope="col">What</th>'
+          + '<th scope="col">To</th><th scope="col">Result</th></tr></thead><tbody>'
+          + res.dispatches.map(function (d) {
+            return '<tr><td>' + fmtDate(d.created_at) + '</td>'
+              + '<td>' + esc(d.kind === 'starter_pack' ? 'Starter pack' : 'Sign-in details')
+              + (d.attempt > 1 ? ' (resend ' + esc(d.attempt - 1) + ')' : '') + '</td>'
+              + '<td>' + esc(d.to_email) + '</td>'
+              + '<td>' + esc(dispatchLabel(d)) + '</td></tr>';
+          }).join('')
+          + '</tbody></table></div></details>'
+        : '')
+      + '  </div>'
+      + '</div>'
+
+      // ── Returned documents ────────────────────────────────────────────────
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Returned documents</h2>'
+      + '    <button class="btn ob-btn-sm" onclick="Onboarding.journeyAction(\'upload\')">Upload</button>'
+      + '  </div>'
+      + '  <div class="ob-section-body' + (docs.length ? ' is-flush' : '') + '">'
+      + (docs.length
+        ? '<div class="ob-req-list">'
+          + docs.map(function (d) {
+            return '<div class="ob-req">'
+              + '<div class="ob-req-main"><div class="ob-req-title">' + esc(d.title || d.fileName) + '</div>'
+              + '<div class="ob-req-meta">' + esc(bytes(d.sizeBytes))
+              + (d.pageCount ? ' · ' + d.pageCount + ' page' + (d.pageCount === 1 ? '' : 's') : '')
+              + ' · ' + esc(readableLabel(d.textStatus)) + '</div></div>'
+              + '<div class="ob-req-actions">'
+              + (d.previewKind
+                ? '<button class="btn ob-btn-sm" onclick="Onboarding.previewReturned(\''
+                  + jsq(d.id) + '\',\'' + jsq(d.title || d.fileName) + '\',\'' + jsq(d.previewKind)
+                  + '\')">Preview</button> '
+                : '')
+              + '<button class="btn ob-btn-sm" onclick="Onboarding.archiveReturned(\''
+              + jsq(d.id) + '\')">Remove</button>'
+              + '</div></div>';
+          }).join('')
+          + '</div>'
+        : empty('Nothing returned yet',
+          'When the completed forms come back, upload them here and we will read the details out of them.'))
+      + '  </div>'
+      + '</div>'
+
+      // ── Details read from those documents ─────────────────────────────────
+      + (docs.length
+        ? '<div class="ob-section-card">'
+          + '  <div class="ob-section-head"><h2>Employee details</h2>'
+          + (sum.total
+            ? '<span class="ob-quiet">' + sum.confirmed + ' of ' + sum.total + ' confirmed</span>'
+            : '')
+          + '  </div>'
+          + '  <div class="ob-section-body">'
+          + (sum.total
+            ? (sum.needsReview
+              ? '<div class="ob-note is-warn"><strong>' + sum.needsReview + ' detail'
+                + (sum.needsReview === 1 ? '' : 's') + ' still to check.</strong> '
+                + 'Nothing reaches the employee record until you confirm it.</div>'
+              : '<div class="ob-note is-ok"><strong>All checked.</strong></div>')
+              + '<div class="ob-inline-actions ob-mt-3">'
+              + '<button class="btn primary" onclick="Onboarding.reviewDetails()">Review details</button> '
+              + '<button class="btn ob-btn-sm" onclick="Onboarding.journeyAction(\'extract\')">'
+              + 'Read again</button></div>'
+            : (ex.run && ex.run.status === 'failed'
+              ? '<div class="ob-note is-warn"><strong>We could not read these documents.</strong> '
+                + esc(extractionFailureText(ex.run.errorReason))
+                + '</div><div class="ob-inline-actions ob-mt-3">'
+                + '<button class="btn" onclick="Onboarding.journeyAction(\'extract\')">Try again</button></div>'
+              : '<p>We can read the details straight off the returned forms so nobody has to '
+                + 'retype them. You check everything before it is saved.</p>'
+                + '<div class="ob-inline-actions ob-mt-3">'
+                + '<button class="btn primary" onclick="Onboarding.journeyAction(\'extract\')">'
+                + 'Read the documents</button></div>'))
+          + '  </div>'
+          + '</div>'
+        : '')
+
+      // ── Portal account ────────────────────────────────────────────────────
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Portal account</h2></div>'
+      + '  <div class="ob-section-body">'
+      + (res.assignment.userId && res.assignment.status !== 'created'
+        && ['account_created', 'invite_sent', 'invite_accepted', 'in_progress',
+          'employee_actions_complete', 'employer_review', 'corrections_required',
+          'ready_to_activate', 'activated', 'completed'].indexOf(res.assignment.status) !== -1
+        ? '<p><strong>Created.</strong> They sign in as '
+          + esc(res.assignment.loginEmail || res.assignment.email) + '.</p>'
+          + '<div class="ob-inline-actions ob-mt-3">'
+          + '<button class="btn" onclick="Onboarding.journeyAction(\'invite\')">'
+          + 'Send sign-in details</button> '
+          + (res.canCreateAccount
+            ? '<button class="btn ob-btn-sm" onclick="Onboarding.reissuePassword()">'
+              + 'New temporary password</button>' : '')
+          + '</div>'
+        : (res.canCreateAccount
+          ? '<p>Create their account once you are happy with the details above. '
+            + 'They will get a temporary password and be asked to choose their own on first sign-in.</p>'
+            + '<div class="ob-inline-actions ob-mt-3">'
+            + '<button class="btn primary" onclick="Onboarding.journeyAction(\'account\')">'
+            + 'Create portal account</button></div>'
+          : '<p class="ob-quiet">Only the practice owner can create a portal account.</p>'))
+      + '  </div>'
+      + '</div>';
+  }
+
+  function dispatchLabel(d) {
+    if (d.status === 'sent') return d.attachment_included ? 'Sent with the pack attached' : 'Sent';
+    if (d.status === 'draft_created') return 'Draft prepared in Outlook';
+    if (d.status === 'skipped') return 'Not sent — email is not configured';
+    if (d.status === 'failed') return 'Failed';
+    return 'Prepared';
+  }
+
+  function readableLabel(textStatus) {
+    if (textStatus === 'extracted') return 'Readable';
+    if (textStatus === 'no_text_layer') return 'A scan — we cannot read the text';
+    if (textStatus === 'unsupported') return 'We cannot read this type';
+    if (textStatus === 'failed') return 'Could not be opened';
+    return 'Not checked yet';
+  }
+
+  function extractionFailureText(reason) {
+    if (reason === 'no_readable_text') {
+      return 'They look like scans or photographs. Enter the details yourself below — '
+        + 'the employee will be asked to check them either way.';
+    }
+    if (reason === 'encryption_unavailable') {
+      return 'Bank details cannot be stored until field encryption is configured.';
+    }
+    return 'Your documents are safe. You can try again, or enter the details yourself.';
+  }
+
+  /** One dispatcher, so the server's `verb` is the only vocabulary. */
+  function journeyAction(verb) {
+    if (verb === 'generate') return generatePack();
+    if (verb === 'send') return sendPackDialog();
+    if (verb === 'upload') return uploadReturnedDialog();
+    if (verb === 'extract') return runExtraction();
+    if (verb === 'review') return reviewDetails();
+    if (verb === 'account') return createAccountDialog();
+    if (verb === 'invite') return sendInviteDialog();
+    return undefined;
+  }
+
+  // ── Starter pack ────────────────────────────────────────────────────────────
+
+  async function generatePack(regenerate) {
+    toast('Building the starter pack…');
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/starter-pack', { method: 'POST', body: { regenerate: regenerate === true } });
+    if (!res.ok) {
+      openModal({
+        title: 'The starter pack could not be built',
+        body: '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'
+          + (res.details && res.details.message ? '<p>' + esc(res.details.message) + '</p>' : '')
+          + ((res.details && res.details.omissions || []).length
+            ? '<ul style="margin:8px 0 0 18px;">'
+              + res.details.omissions.map(function (o) {
+                return '<li>' + esc(o.title || o.code) + ' — ' + esc(o.reason) + '</li>';
+              }).join('') + '</ul>'
+            : ''),
+        footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>',
+      });
+      return;
+    }
+    toast(res.reused ? 'Starter pack ready' : 'Starter pack built');
+    await refreshAssignment();
+  }
+
+  function regeneratePack() {
+    openModal({
+      title: 'Rebuild the starter pack',
+      subtitle: 'Only affects this person.',
+      body: '<div class="ob-note is-info">This rebuilds the pack from the package version this '
+        + 'onboarding is pinned to. If you have published package changes since, they are '
+        + '<strong>not</strong> included — that is deliberate, so nobody\'s pack changes after it '
+        + 'was sent.</div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.confirmRegenerate()">Rebuild</button>',
+    });
+  }
+
+  async function confirmRegenerate() { closeModal(); await generatePack(true); }
+
+  function sendPackDialog() {
+    var j = S.journey || {};
+    var a = j.assignment || {};
+    openModal({
+      title: 'Send the starter pack',
+      subtitle: a.name || '',
+      body: '<div class="ob-note is-info">The email is already written. It explains what to complete, '
+        + 'how to send the forms back, and asks them not to email their tax file number.</div>'
+        + field('Send to', 'toEmail', 'email', a.email || '')
+        + '<div class="ob-field"><label for="ob-send-method">How</label>'
+        + '<select id="ob-send-method" name="method">'
+        + '<option value="smtp">Send it now from the practice mailbox</option>'
+        + '<option value="graph_draft">Prepare a draft in my Outlook to review first</option>'
+        + '</select>'
+        + '<p class="ob-hint">A draft needs Outlook permissions your practice may not have granted '
+        + 'yet. If it is unavailable we will tell you, and nothing is lost.</p></div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitSendPack()">Send starter pack</button>',
+    });
+  }
+
+  async function submitSendPack() {
+    var v = modalValues();
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/starter-pack/send', { method: 'POST', body: { toEmail: v.toEmail, method: v.method } });
+    if (!res.ok) { modalError(res.error || 'That did not work. Your starter pack is still saved.'); return; }
+    closeModal();
+    if (res.webLink) {
+      openModal({
+        title: 'Draft ready in Outlook',
+        body: '<div class="ob-note is-ok">' + esc(res.message) + '</div>',
+        footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>'
+          + '<a class="btn primary" href="' + esc(res.webLink) + '" target="_blank"'
+          + ' rel="noopener noreferrer">Open the draft</a>',
+      });
+    } else {
+      toast(res.message || 'Starter pack sent');
+    }
+    await refreshAssignment();
+  }
+
+  // ── Returned documents ──────────────────────────────────────────────────────
+
+  function uploadReturnedDialog() {
+    openModal({
+      title: 'Upload returned documents',
+      subtitle: 'The completed forms, as they came back',
+      body: '<div class="ob-note is-info">Upload everything they sent — one file or several. '
+        + 'We keep the originals exactly as received, and reading them never replaces them.</div>'
+        + '<div class="ob-field"><label for="ob-ret-files">Files</label>'
+        + '<input type="file" id="ob-ret-files" multiple '
+        + 'accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt">'
+        + '<p class="ob-hint">PDF, Word, or a photograph. Up to 10 MB each, 12 at a time.</p></div>'
+        + '<div id="ob-ret-progress" aria-live="polite"></div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitReturned()">Upload</button>',
+    });
+  }
+
+  /** Read one File into base64, without the data: prefix. */
+  function readFile(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new global.FileReader();
+      reader.onload = function () {
+        var out = String(reader.result || '');
+        resolve(out.slice(out.indexOf(',') + 1));
+      };
+      reader.onerror = function () { reject(new Error('read_failed')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function submitReturned() {
+    var input = doc.getElementById('ob-ret-files');
+    var progress = doc.getElementById('ob-ret-progress');
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) { modalError('Choose at least one file.'); return; }
+    if (files.length > 12) { modalError('Please upload at most 12 files at a time.'); return; }
+
+    if (progress) progress.innerHTML = spinner('Uploading…');
+    var payload = [];
+    for (var i = 0; i < files.length; i += 1) {
+      try {
+        payload.push({
+          fileName: files[i].name,
+          fileMime: files[i].type || 'application/octet-stream',
+          fileSizeBytes: files[i].size,
+          fileData: await readFile(files[i]),
+        });
+      } catch (_) {
+        if (progress) progress.innerHTML = '';
+        modalError('One of those files could not be read.');
+        return;
+      }
+    }
+
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/returned-documents', { method: 'POST', body: { files: payload } });
+    if (progress) progress.innerHTML = '';
+    if (!res.ok) { modalError(res.error); return; }
+
+    closeModal();
+    var kept = (res.stored || []).filter(function (s) { return !s.duplicate; }).length;
+    var dupes = (res.stored || []).length - kept;
+    toast(kept + ' document' + (kept === 1 ? '' : 's') + ' uploaded'
+      + (dupes ? ' · ' + dupes + ' already had' : ''));
+
+    if ((res.rejected || []).length || res.message) {
+      openModal({
+        title: 'Uploaded',
+        body: (res.message ? '<div class="ob-note is-warn">' + esc(res.message) + '</div>' : '')
+          + ((res.rejected || []).length
+            ? '<div class="ob-note is-danger"><strong>Not accepted:</strong><ul '
+              + 'style="margin:8px 0 0 18px;">'
+              + res.rejected.map(function (r) {
+                return '<li>' + esc(r.fileName) + ' — ' + esc(r.reason) + '</li>';
+              }).join('') + '</ul></div>'
+            : ''),
+        footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
+      });
+    }
+    await refreshAssignment();
+  }
+
+  async function archiveReturned(docId) {
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/returned-documents/' + encodeURIComponent(docId), { method: 'DELETE' });
+    if (!res.ok) { toast(res.error, true); return; }
+    toast('Removed from the list — the file is kept on the record');
+    await refreshAssignment();
+  }
+
+  // ── Reading the documents ───────────────────────────────────────────────────
+
+  async function runExtraction() {
+    openModal({
+      title: 'Reading the documents',
+      body: spinner('Reading the forms you uploaded…')
+        + '<p class="ob-hint ob-mt-3">This usually takes a few seconds. Nothing is saved to the '
+        + 'employee record until you have checked it.</p>',
+    });
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/extraction', { method: 'POST' });
+    if (!res.ok) {
+      openModal({
+        title: 'We could not read those documents',
+        body: '<div class="ob-note is-warn" role="alert">' + esc(res.error) + '</div>'
+          + (res.details && res.details.message ? '<p>' + esc(res.details.message) + '</p>' : ''),
+        footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>'
+          + '<button class="btn primary" onclick="Onboarding.reviewDetails()">Enter them myself</button>',
+      });
+      return;
+    }
+    closeModal();
+    toast(res.fieldsProposed + ' detail' + (res.fieldsProposed === 1 ? '' : 's') + ' found');
+    await refreshAssignment();
+    await reviewDetails();
+  }
+
+  /**
+   * Review what was read.
+   *
+   * Grouped the way a person thinks about it, not the way it is stored. Every
+   * row shows the value, where it came from, and how sure we are — and the
+   * Owner accepts, corrects or rejects each one. Nothing here writes to the
+   * employee record; that is the Save at the bottom, deliberately separate.
+   */
+  async function reviewDetails() {
+    var res = await api('/api/onboarding/assignments/'
+      + encodeURIComponent(assignmentId()) + '/extraction');
+    if (!res.ok) { toast(res.error, true); return; }
+    S.review = res;
+
+    var sum = res.summary || {};
+    openModal({
+      title: 'Review employee details',
+      subtitle: sum.needsReview
+        ? sum.needsReview + ' still to check'
+        : 'Everything has been checked',
+      wide: true,
+      body: reviewBody(res),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>'
+        + '<button class="btn primary" onclick="Onboarding.applyDetails()">'
+        + 'Save to the employee record</button>',
+    });
+  }
+
+  function reviewBody(res) {
+    var groups = res.groups || [];
+    if (!groups.length) {
+      return '<div class="ob-note is-info">Nothing has been read from the documents yet.</div>';
+    }
+    return '<div class="ob-note is-info">These came off the forms that were returned. '
+      + 'Check each one — nothing is written to the employee record until you save.</div>'
+      + groups.map(function (g) {
+        return '<div class="ob-review-group">'
+          + '<h3>' + esc(g.label) + '</h3>'
+          + g.fields.map(reviewField).join('')
+          + '</div>';
+      }).join('')
+      + (res.canSeePayroll ? '' : '<p class="ob-hint ob-mt-3">Bank and superannuation details are '
+        + 'hidden because you do not hold the payroll permission.</p>');
+  }
+
+  function reviewField(f) {
+    var value = f.visible
+      ? (f.value === null || f.value === '' ? '—' : f.value)
+      : 'Hidden';
+    var decided = f.status !== 'proposed';
+    return '<div class="ob-review-row' + (decided ? ' is-decided' : '') + '">'
+      + '<div class="ob-review-main">'
+      + '<div class="ob-review-label">' + esc(f.label)
+      + (f.sensitive ? ' <span class="ob-chip is-sensitive">Sensitive</span>' : '')
+      + '</div>'
+      + '<div class="ob-review-value' + (f.visible ? '' : ' is-hidden') + '">' + esc(value) + '</div>'
+      + '<div class="ob-review-source">'
+      + esc(reviewStatusText(f))
+      + (f.source && f.source.label
+        ? ' · from ' + esc(f.source.label)
+          + (f.source.page ? ', page ' + esc(f.source.page) : '')
+        : '')
+      + '</div>'
+      + '</div>'
+      + (f.visible
+        ? '<div class="ob-review-actions">'
+          + (decided
+            ? '<button class="btn ob-btn-sm" onclick="Onboarding.correctField(\'' + jsq(f.id)
+              + '\')">Change</button>'
+            // "Correct" was the first label here and it was ambiguous: an
+            // Owner could read it as "this is correct" or as "correct this",
+            // which are opposite instructions sitting next to each other.
+            // Every label below is unmistakably an action or an assessment.
+            : '<button class="btn ob-btn-sm primary" onclick="Onboarding.decideField(\'' + jsq(f.id)
+              + '\',\'accept\')">Looks right</button> '
+              + '<button class="btn ob-btn-sm" onclick="Onboarding.correctField(\'' + jsq(f.id)
+              + '\')">Change</button> '
+              + '<button class="btn ob-btn-sm" onclick="Onboarding.decideField(\'' + jsq(f.id)
+              + '\',\'reject\')">Discard</button>')
+          + '</div>'
+        : '')
+      + '</div>';
+  }
+
+  function reviewStatusText(f) {
+    if (f.status === 'applied') return 'Saved to the record';
+    if (f.status === 'corrected') return 'You corrected this';
+    if (f.status === 'accepted') return 'You confirmed this';
+    if (f.status === 'rejected') return 'You said this was wrong';
+    if (f.confidence === 'high') return 'Clearly written';
+    if (f.confidence === 'medium') return 'Legible, worth a look';
+    return 'Hard to read — please check';
+  }
+
+  async function decideField(fieldId, decision) {
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/extraction/fields/' + encodeURIComponent(fieldId),
+    { method: 'PATCH', body: { decision: decision } });
+    if (!res.ok) { modalError(res.error); return; }
+    await refreshReview();
+  }
+
+  function correctField(fieldId) {
+    var res = S.review || {};
+    var field = null;
+    (res.groups || []).forEach(function (g) {
+      g.fields.forEach(function (f) { if (f.id === fieldId) field = f; });
+    });
+    if (!field) return;
+
+    openModal({
+      title: 'Correct ' + field.label.toLowerCase(),
+      subtitle: field.source && field.source.label
+        ? 'Read from ' + field.source.label : '',
+      body: (field.sensitive
+        ? '<div class="ob-note is-info">Type the whole value. We only ever show you a masked '
+          + 'version afterwards.</div>' : '')
+        + field2('New value', 'value', 'text', field.sensitive ? '' : (field.value || '')),
+      footer: '<button class="btn" onclick="Onboarding.reviewDetails()">Back</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitCorrectField(\'' + jsq(fieldId)
+        + '\')">Save this value</button>',
+    });
+  }
+
+  async function submitCorrectField(fieldId) {
+    var v = modalValues();
+    if (!v.value) { modalError('Enter a value, or use Discard to leave this one out.'); return; }
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/extraction/fields/' + encodeURIComponent(fieldId),
+    { method: 'PATCH', body: { decision: 'correct', value: v.value } });
+    if (!res.ok) { modalError(res.error); return; }
+    await reviewDetails();
+  }
+
+  /** Redraw the open review dialog without closing it. */
+  async function refreshReview() {
+    var res = await api('/api/onboarding/assignments/'
+      + encodeURIComponent(assignmentId()) + '/extraction');
+    if (!res.ok) return;
+    S.review = res;
+    var body = doc.getElementById('ob-modal-body');
+    if (body) body.innerHTML = reviewBody(res);
+    var title = doc.querySelector('#ob-modal-title + p');
+    if (title) {
+      title.textContent = (res.summary && res.summary.needsReview)
+        ? res.summary.needsReview + ' still to check' : 'Everything has been checked';
+    }
+  }
+
+  async function applyDetails() {
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/extraction/apply', { method: 'POST' });
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast(res.message || 'Employee record updated');
+    await refreshAssignment();
+  }
+
+  // ── Portal account ──────────────────────────────────────────────────────────
+
+  function createAccountDialog() {
+    var j = S.journey || {};
+    var a = j.assignment || {};
+    openModal({
+      title: 'Create portal account',
+      subtitle: a.name || '',
+      body: '<div class="ob-note is-info">We will generate a temporary password and show it to you '
+        + 'once. They will be asked to choose their own the first time they sign in.</div>'
+        + '<div class="ob-field"><label>Portal access</label>'
+        + radio('portalRole', 'employee', 'Employee',
+          'Their own calendar, their own clients, their own records.', true)
+        + radio('portalRole', 'admin', 'Admin',
+          'Practice-wide scheduling and travel. No financials, no user management.', false)
+        + '</div>'
+        + field2('Sign-in email', 'loginEmail', 'email', a.loginEmail || a.email || '')
+        + '<p class="ob-hint">This is what they type to sign in. It can be their personal address '
+        + 'or an Opal Therapy one — whichever they will actually use.</p>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitCreateAccount()">'
+        + 'Create account</button>',
+    });
+  }
+
+  async function submitCreateAccount() {
+    var v = modalValues();
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/account', { method: 'POST', body: { portalRole: v.portalRole, loginEmail: v.loginEmail } });
+    if (!res.ok) { modalError(res.error); return; }
+    showCredential(res, 'Account created');
+    await refreshAssignment();
+  }
+
+  async function reissuePassword() {
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/account/reissue-password', { method: 'POST' });
+    if (!res.ok) { toast(res.error, true); return; }
+    showCredential(res, 'New temporary password');
+  }
+
+  /**
+   * Show the temporary password exactly once.
+   *
+   * It is never stored in clear and cannot be retrieved again, so the dialog
+   * says so plainly rather than letting an Owner discover it by closing the
+   * window. The only remedy afterwards is to issue a new one, which is the
+   * correct trade.
+   */
+  function showCredential(res, title) {
+    S.pendingCredential = res.temporaryPassword || null;
+    openModal({
+      title: title,
+      subtitle: res.loginEmail || '',
+      body: '<div class="ob-note is-warn"><strong>This is the only time this password is shown.</strong> '
+        + 'Send the sign-in email now, or copy it somewhere safe.</div>'
+        + '<div class="ob-cred">'
+        + '<div><span>Sign in at</span><strong>' + esc(res.loginUrl || '') + '</strong></div>'
+        + '<div><span>Email</span><strong>' + esc(res.loginEmail || '') + '</strong></div>'
+        + '<div><span>Temporary password</span><code>' + esc(res.temporaryPassword || '') + '</code></div>'
+        + '</div>'
+        + '<p class="ob-hint ob-mt-3">It expires '
+        + esc(fmtDateLong(res.temporaryPasswordExpiresAt) || 'in a week')
+        + ', and stops working the moment they choose their own.</p>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>'
+        + '<button class="btn primary" onclick="Onboarding.sendInviteDialog()">'
+        + 'Send sign-in details</button>',
+    });
+  }
+
+  function sendInviteDialog() {
+    var j = S.journey || {};
+    var a = j.assignment || {};
+    var held = !!S.pendingCredential;
+    openModal({
+      title: 'Send sign-in details',
+      subtitle: a.loginEmail || a.email || '',
+      body: '<div class="ob-note is-info">The email tells them where to sign in, that their first '
+        + 'password is temporary, and what they will be asked to do next.</div>'
+        + (held
+          ? '<div class="ob-field"><label class="ob-check">'
+            + '<input type="checkbox" name="includePassword" checked> '
+            + 'Include the temporary password in the email</label>'
+            + '<p class="ob-hint">Convenient, and the usual choice for a new starter. '
+            + 'Leave it unticked if you would rather pass the password on by phone — '
+            + 'an email is forwarded and archived in places nobody controls.</p></div>'
+          : '<div class="ob-note is-warn">The temporary password is no longer available to include '
+            + '— it is never stored. Send this email and pass the password on separately, or issue '
+            + 'a new one first.</div>'),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitInvite()">Send</button>',
+    });
+  }
+
+  async function submitInvite() {
+    var v = modalValues();
+    var body = {};
+    if (v.includePassword && S.pendingCredential) body.temporaryPassword = S.pendingCredential;
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/account/invite', { method: 'POST', body: body });
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    // The credential is dropped from memory once it has been delivered.
+    S.pendingCredential = null;
+    toast(res.message || 'Sign-in details sent');
+    await refreshAssignment();
+  }
+
+  /** Reload the open assignment and redraw its journey panel. */
+  async function refreshAssignment() {
+    if (!assignmentId()) return;
+    await renderManage(root());
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PACKAGE DOCUMENTS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Draw the starter-pack document list inside an open package. */
+  async function loadPackageDocuments() {
+    var host = doc.getElementById('ob-pkg-docs');
+    if (!host) return;
+    var id = S.packageDetail && S.packageDetail.id;
+    var res = await api('/api/onboarding/packages/' + encodeURIComponent(id) + '/documents');
+    if (!res.ok) {
+      host.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>';
+      return;
+    }
+    S.packageDocs = res;
+    var editable = can('onboarding.manage_packages');
+    var included = (res.documents || []).filter(function (d) { return !d.excluded; });
+    var removed = (res.documents || []).filter(function (d) { return d.excluded; });
+
+    host.innerHTML = ''
+      + (res.package.hasUnpublishedChanges
+        ? '<div class="ob-note is-warn"><strong>Unpublished changes.</strong> '
+          + 'Anyone already onboarding keeps the pack they were sent. Publish to use these '
+          + 'changes for new starters.</div>'
+        : '')
+      + (included.length
+        ? '<ol class="ob-pack-list is-editable">'
+          + included.map(function (d, i) { return packDocRow(d, i, included.length, editable); }).join('')
+          + '</ol>'
+        : empty('No documents yet',
+          'Add the forms and policies a new starter should receive.'))
+      + (removed.length
+        ? '<details class="ob-details ob-mt-3"><summary>'
+          + removed.length + ' left out of the pack</summary>'
+          + '<ol class="ob-pack-list">'
+          + removed.map(function (d) {
+            return '<li><span class="ob-pack-title">' + esc(d.title) + '</span>'
+              + '<span class="ob-quiet">Still required in the portal, just not emailed</span>'
+              + (editable
+                ? '<button class="btn ob-btn-sm" onclick="Onboarding.restorePackageDoc(\''
+                  + jsq(d.documentId) + '\')">Put back</button>' : '')
+              + '</li>';
+          }).join('')
+          + '</ol></details>'
+        : '')
+      + (editable
+        ? '<div class="ob-inline-actions ob-mt-3">'
+          + '<button class="btn" onclick="Onboarding.addPackageDocDialog()">Add document</button>'
+          + '</div>'
+        : '');
+  }
+
+  function packDocRow(d, index, total, editable) {
+    var actions = '';
+    if (d.available && d.previewUrl) {
+      actions += '<button class="btn ob-btn-sm" onclick="Onboarding.previewDocument(\''
+        + jsq(d.documentId) + '\',\'' + jsq(previewVersionId(d)) + '\',\'' + jsq(d.title)
+        + '\',\'' + jsq(d.previewKind || 'pdf') + '\',\''
+        + jsq(d.publisherEdition || '') + '\')">Preview</button> ';
+    }
+    if (editable) {
+      actions += '<button class="btn ob-btn-sm" onclick="Onboarding.replacePackageDoc(\''
+        + jsq(d.documentId) + '\')">Replace</button> '
+        + '<button class="btn ob-btn-sm" onclick="Onboarding.renamePackageDoc(\''
+        + jsq(d.documentId) + '\')">Rename</button> '
+        + '<button class="btn ob-btn-sm" onclick="Onboarding.removePackageDoc(\''
+        + jsq(d.documentId) + '\')">Remove</button>';
+    }
+
+    var move = editable
+      ? '<span class="ob-pack-move">'
+        + '<button class="btn ob-btn-icon" aria-label="Move up" ' + (index === 0 ? 'disabled' : '')
+        + ' onclick="Onboarding.movePackageDoc(\'' + jsq(d.documentId) + '\',-1)">↑</button>'
+        + '<button class="btn ob-btn-icon" aria-label="Move down" '
+        + (index === total - 1 ? 'disabled' : '')
+        + ' onclick="Onboarding.movePackageDoc(\'' + jsq(d.documentId) + '\',1)">↓</button>'
+        + '</span>'
+      : '';
+
+    return '<li class="ob-pack-doc' + (d.available ? '' : ' is-unavailable') + '">'
+      + move
+      + '<span class="ob-pack-main">'
+      + '<span class="ob-pack-title">' + esc(d.title)
+      + (d.renamed ? ' <span class="ob-quiet">(shown as this in this package)</span>' : '') + '</span>'
+      + '<span class="ob-pack-meta">' + esc(d.requirement)
+      + (d.publisherEdition ? ' · ' + esc(d.publisherEdition) : '')
+      + (d.sizeBytes ? ' · ' + esc(bytes(d.sizeBytes)) : '')
+      + '</span>'
+      + (d.available ? '' : '<span class="ob-pack-warn">' + esc(d.unavailableReason) + '</span>')
+      + '</span>'
+      + '<span class="ob-pack-actions">' + actions + '</span>'
+      + '</li>';
+  }
+
+  /** The version id sits inside the preview URL the server built. */
+  function previewVersionId(d) {
+    var m = String(d.previewUrl || '').match(/\/versions\/([0-9a-f-]{36})\//i);
+    return m ? m[1] : '';
+  }
+
+  function addPackageDocDialog() {
+    var res = S.packageDocs || {};
+    var options = (res.available || []).filter(function (d) { return d.ready; });
+    if (!options.length) {
+      openModal({
+        title: 'Add a document',
+        body: '<div class="ob-note is-info">Every published document is already in this package. '
+          + 'Upload a new one in the Document Library first, publish it, then come back.</div>',
+        footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
+      });
+      return;
+    }
+    openModal({
+      title: 'Add a document to this starter pack',
+      body: selectField('Document', 'documentId', '',
+        options.map(function (d) { return [d.documentId, d.title]; })),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitAddPackageDoc()">Add</button>',
+    });
+  }
+
+  async function submitAddPackageDoc() {
+    var v = modalValues();
+    if (!v.documentId) { modalError('Choose a document.'); return; }
+    var res = await api('/api/onboarding/packages/'
+      + encodeURIComponent(S.packageDetail.id) + '/documents',
+    { method: 'POST', body: { documentId: v.documentId } });
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast('Added to the starter pack');
+    await loadPackageDocuments();
+  }
+
+  function renamePackageDoc(documentId) {
+    var d = findPackageDoc(documentId);
+    if (!d) return;
+    openModal({
+      title: 'Rename in this package',
+      subtitle: d.libraryTitle,
+      body: '<div class="ob-note is-info">This changes what the document is called <strong>here</strong>. '
+        + 'Its own title, and every record of what previous employees received, stays as it is.</div>'
+        + field2('Shown as', 'displayTitle', 'text', d.title),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + (d.renamed
+          ? '<button class="btn" onclick="Onboarding.submitRenamePackageDoc(\'' + jsq(documentId)
+            + '\',true)">Use its own title</button>' : '')
+        + '<button class="btn primary" onclick="Onboarding.submitRenamePackageDoc(\'' + jsq(documentId)
+        + '\')">Rename</button>',
+    });
+  }
+
+  async function submitRenamePackageDoc(documentId, reset) {
+    var v = modalValues();
+    var res = await api('/api/onboarding/packages/' + encodeURIComponent(S.packageDetail.id)
+      + '/documents/' + encodeURIComponent(documentId),
+    { method: 'PATCH', body: { displayTitle: reset ? null : v.displayTitle } });
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast(res.message || 'Renamed');
+    await loadPackageDocuments();
+  }
+
+  function removePackageDoc(documentId) {
+    var d = findPackageDoc(documentId);
+    if (!d) return;
+    openModal({
+      title: 'Remove from the starter pack',
+      subtitle: d.title,
+      body: '<div class="ob-note is-warn">Nothing is deleted. This document stops going out in new '
+        + 'starter packs; everyone already onboarding keeps the pack they were sent, and the '
+        + 'record of what they received is untouched.'
+        + (d.fromRequirement
+          ? ' They will still be asked to read and acknowledge it in the portal.' : '')
+        + '</div>'
+        + field2('Why? (recorded)', 'reason', 'text', ''),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.submitRemovePackageDoc(\'' + jsq(documentId)
+        + '\')">Remove</button>',
+    });
+  }
+
+  async function submitRemovePackageDoc(documentId) {
+    var v = modalValues();
+    var res = await api('/api/onboarding/packages/' + encodeURIComponent(S.packageDetail.id)
+      + '/documents/' + encodeURIComponent(documentId),
+    { method: 'DELETE', body: { reason: v.reason } });
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast(res.message || 'Removed from future packs');
+    await loadPackageDocuments();
+  }
+
+  async function restorePackageDoc(documentId) {
+    var res = await api('/api/onboarding/packages/' + encodeURIComponent(S.packageDetail.id)
+      + '/documents/' + encodeURIComponent(documentId) + '/restore', { method: 'POST' });
+    if (!res.ok) { toast(res.error, true); return; }
+    toast('Back in the starter pack');
+    await loadPackageDocuments();
+  }
+
+  /**
+   * Replacing a document is publishing a new VERSION of it.
+   *
+   * Sending the Owner to the Document Library rather than duplicating the
+   * upload form here is deliberate: that screen already handles the file, the
+   * change note and the publish step, and a second one would be the copy that
+   * forgot something.
+   */
+  function replacePackageDoc(documentId) {
+    var d = findPackageDoc(documentId);
+    if (!d) return;
+    openModal({
+      title: 'Replace this document',
+      subtitle: d.title,
+      body: '<div class="ob-note is-info">A replacement is a <strong>new version</strong> of the same '
+        + 'document, not a new document. That is what lets an employment record from last year '
+        + 'still say exactly which edition that person was issued.</div>'
+        + '<p>Upload the new file in the Document Library and publish it. Every package that '
+        + 'includes this document picks it up for new starters; nobody already onboarding is '
+        + 'changed.</p>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.goToDocument(\'' + jsq(documentId)
+        + '\')">Open in the Document Library</button>',
+    });
+  }
+
+  function goToDocument(documentId) {
+    closeModal();
+    S.documentFocus = documentId;
+    S.packageDetail = null;
+    nav('documents');
+  }
+
+  async function movePackageDoc(documentId, delta) {
+    var res = S.packageDocs || {};
+    var list = (res.documents || []).filter(function (d) { return !d.excluded; });
+    var at = list.findIndex(function (d) { return d.documentId === documentId; });
+    if (at < 0) return;
+    var to = at + delta;
+    if (to < 0 || to >= list.length) return;
+    var order = list.map(function (d) { return d.documentId; });
+    order.splice(to, 0, order.splice(at, 1)[0]);
+
+    var out = await api('/api/onboarding/packages/' + encodeURIComponent(S.packageDetail.id)
+      + '/documents/reorder', { method: 'POST', body: { documentIds: order } });
+    if (!out.ok) { toast(out.error, true); return; }
+    await loadPackageDocuments();
+  }
+
+  function findPackageDoc(documentId) {
+    var res = S.packageDocs || {};
+    return (res.documents || []).find(function (d) { return d.documentId === documentId; }) || null;
+  }
+
+  async function packageDocHistory(documentId) {
+    var res = await api('/api/onboarding/packages/' + encodeURIComponent(S.packageDetail.id)
+      + '/documents/' + encodeURIComponent(documentId) + '/history');
+    if (!res.ok) { toast(res.error, true); return; }
+    openModal({
+      title: res.document.title,
+      subtitle: 'Every edition, and who received which',
+      wide: true,
+      body: '<div class="ob-table-wrap"><table class="ob-table">'
+        + '<thead><tr><th scope="col">Edition</th><th scope="col">Published</th>'
+        + '<th scope="col">Note</th><th scope="col"></th></tr></thead><tbody>'
+        + res.versions.map(function (v) {
+          return '<tr><td>' + esc(v.publisherEdition || ('Version ' + v.version))
+            + (v.current ? ' <span class="ob-chip published">Current</span>' : '') + '</td>'
+            + '<td>' + fmtDate(v.publishedAt) + '</td>'
+            + '<td>' + esc(v.changeNote || '—') + '</td>'
+            + '<td>' + (v.previewKind
+              ? '<button class="btn ob-btn-sm" onclick="Onboarding.previewDocument(\''
+                + jsq(res.document.id) + '\',\'' + jsq(v.id) + '\',\'' + jsq(v.title)
+                + '\',\'' + jsq(v.previewKind) + '\',\'' + jsq(v.publisherEdition || '')
+                + '\')">Preview</button>' : '') + '</td></tr>';
+        }).join('')
+        + '</tbody></table></div>'
+        + (res.issuedIn.length
+          ? '<h3 class="ob-mt-4">Issued to</h3><div class="ob-table-wrap"><table class="ob-table">'
+            + '<thead><tr><th scope="col">Employee</th><th scope="col">Edition</th>'
+            + '<th scope="col">Sent</th></tr></thead><tbody>'
+            + res.issuedIn.map(function (r) {
+              return '<tr><td>' + esc(r.employee) + '</td>'
+                + '<td>' + esc(r.version ? 'Version ' + r.version : '—') + '</td>'
+                + '<td>' + fmtDate(r.sentAt) + '</td></tr>';
+            }).join('')
+            + '</tbody></table></div>'
+          : '<p class="ob-quiet ob-mt-4">Not yet included in any starter pack that was sent.</p>'),
+      footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
+    });
+  }
+
+  /**
+   * A labelled input. `field` is already taken by the employee form builders
+   * further down, which take a different argument order.
+   */
+  function field2(label, name, type, value) {
+    var id = 'ob-x-' + name;
+    return '<div class="ob-field"><label for="' + id + '">' + esc(label) + '</label>'
+      + '<input type="' + esc(type || 'text') + '" id="' + id + '" name="' + esc(name) + '"'
+      + ' value="' + esc(value == null ? '' : value) + '"></div>';
+  }
+
+  /** Open one of the caller's own onboarding documents full screen. */
+  function previewMineDocument(versionId, title, kind) {
+    preview({
+      kind: kind,
+      url: '/api/onboarding/me/documents/version/' + encodeURIComponent(versionId) + '/download',
+      title: title,
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  WIRING
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2693,6 +4040,7 @@
     assignDialog: assignDialog,
     previewAssign: previewAssign,
     submitAssign: submitAssign,
+    releaseDialog: releaseDialog,
     confirmRelease: confirmRelease,
     openAssignment: openAssignment,
     backToActive: backToActive,
@@ -2717,6 +4065,43 @@
     exportArchive: exportArchive,
     openPackage: openPackage,
     backToPackages: backToPackages,
+    recommendPackage: recommendPackage,
+    // journey
+    journeyAction: journeyAction,
+    generatePack: generatePack,
+    regeneratePack: regeneratePack,
+    confirmRegenerate: confirmRegenerate,
+    sendPackDialog: sendPackDialog,
+    submitSendPack: submitSendPack,
+    uploadReturnedDialog: uploadReturnedDialog,
+    submitReturned: submitReturned,
+    archiveReturned: archiveReturned,
+    previewReturned: previewReturned,
+    runExtraction: runExtraction,
+    reviewDetails: reviewDetails,
+    decideField: decideField,
+    correctField: correctField,
+    submitCorrectField: submitCorrectField,
+    applyDetails: applyDetails,
+    createAccountDialog: createAccountDialog,
+    submitCreateAccount: submitCreateAccount,
+    reissuePassword: reissuePassword,
+    sendInviteDialog: sendInviteDialog,
+    submitInvite: submitInvite,
+    // package documents
+    previewDocument: previewDocument,
+    previewMineDocument: previewMineDocument,
+    addPackageDocDialog: addPackageDocDialog,
+    submitAddPackageDoc: submitAddPackageDoc,
+    renamePackageDoc: renamePackageDoc,
+    submitRenamePackageDoc: submitRenamePackageDoc,
+    removePackageDoc: removePackageDoc,
+    submitRemovePackageDoc: submitRemovePackageDoc,
+    restorePackageDoc: restorePackageDoc,
+    replacePackageDoc: replacePackageDoc,
+    goToDocument: goToDocument,
+    movePackageDoc: movePackageDoc,
+    packageDocHistory: packageDocHistory,
     publishPackage: publishPackage,
     confirmPublish: confirmPublish,
     importDialog: importDialog,

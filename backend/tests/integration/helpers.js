@@ -58,8 +58,14 @@ const ALL_TABLES = [
   'onboarding_requirement_events', 'onboarding_requirements',
   'employee_identity_records', 'payroll_profiles',
   'employee_personal_details', 'employment_profiles',
+  // Starter packs, returned documents and extraction (migration 038) —
+  // children before parents, and all before onboarding_assignments.
+  'onboarding_extracted_field_events', 'onboarding_extracted_fields',
+  'onboarding_extraction_runs', 'onboarding_returned_documents',
+  'onboarding_email_dispatches', 'onboarding_starter_packs',
   'onboarding_assignments',
-  'onboarding_package_versions', 'onboarding_package_requirements', 'onboarding_packages',
+  'onboarding_package_versions', 'onboarding_package_requirements',
+  'onboarding_package_documents', 'onboarding_packages',
   'onboarding_requirement_templates',
   'onboarding_document_import_items', 'onboarding_document_imports',
   'onboarding_document_versions', 'onboarding_documents',

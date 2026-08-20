@@ -182,12 +182,14 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
   const problem = inviteProblem(invite);
   if (problem) return res.status(400).json({ error: problem.message, code: problem.code });
 
-  if (!password || String(password).length < 8) {
-    return res.status(400).json({ error: 'Your password must be at least 8 characters.' });
-  }
-  if (String(password).length > 200) {
+  // The SAME policy every other password path enforces, imported rather than
+  // re-stated. A new starter's first password should not be held to a weaker
+  // standard than the one they will be asked for when they later change it.
+  if (String(password || '').length > 200) {
     return res.status(400).json({ error: 'That password is too long.' });
   }
+  const policyProblem = require('./auth').validatePassword(password);
+  if (policyProblem) return res.status(400).json({ error: policyProblem });
 
   const userId = invite.assignment_user_id;
   if (!userId) return res.status(409).json({ error: 'This onboarding is not ready yet.' });
@@ -215,6 +217,12 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
       `UPDATE users
           SET password_hash = $2, name = COALESCE($3, name),
               email_verified = TRUE, account_status = 'active', is_active = TRUE,
+              -- They chose this password themselves, so the forced-change gate
+              -- has nothing left to force. Clearing it here matters because an
+              -- Owner may have issued a temporary password first and then sent
+              -- the invitation link instead.
+              password_is_temporary = FALSE, must_change_password = FALSE,
+              temp_password_expires_at = NULL, password_changed_at = NOW(),
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $1`,
       [userId, passwordHash, str(name, 200)]
@@ -224,6 +232,7 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
       `UPDATE onboarding_assignments
           SET status = CASE WHEN status = 'invite_sent' THEN 'invite_accepted' ELSE status END,
               invite_accepted_at = COALESCE(invite_accepted_at, NOW()),
+              first_login_at = COALESCE(first_login_at, NOW()),
               last_activity_at = NOW(), updated_at = NOW()
         WHERE id = $1`, [invite.assignment_id]
     );
@@ -273,6 +282,29 @@ router.get('/api/onboarding/me', safe(async (req, res) => {
   if (!assignment) {
     return res.json({ ok: true, hasOnboarding: false });
   }
+
+  // FIRST SIGN-IN, recorded once. This is the honest place for it: reaching
+  // this endpoint is the employee actually arriving at their onboarding, which
+  // is what the Owner's progress panel claims when it says "employee
+  // reviewing". Authenticating and then closing the tab is not that.
+  //
+  // Also the point where an account created through the temporary-password
+  // path leaves the pre-account states — the run is now genuinely in the
+  // employee's hands. COALESCE keeps it a first login rather than a last one.
+  if (!assignment.first_login_at) {
+    await odb.pool.query(
+      `UPDATE onboarding_assignments
+          SET first_login_at = NOW(),
+              invite_accepted_at = COALESCE(invite_accepted_at, NOW()),
+              status = CASE WHEN status IN ('account_created', 'invite_sent')
+                            THEN 'invite_accepted' ELSE status END,
+              last_activity_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND first_login_at IS NULL`,
+      [assignment.id]
+    ).catch(() => {});
+    assignment.first_login_at = new Date();
+  }
+
   const requirements = await odb.listRequirements(assignment.id);
   const progress = engine.computeProgress(requirements);
 
@@ -345,8 +377,74 @@ router.get('/api/onboarding/me/requirements/:rid', safe(async (req, res) => {
     const creds = await odb.listCredentialsForUser(req.user.id);
     payload.credential = creds.find((c) => c.id === requirement.credential_id) || null;
   }
+
+  // PROVENANCE for anything we filled in on their behalf.
+  //
+  // The values above are already pre-populated — the Owner's review step wrote
+  // the confirmed details straight into the same tables this reads. What is
+  // missing without this block is WHY a form the employee has never opened
+  // already has their date of birth in it, and an unexplained pre-filled field
+  // reads as a mistake or a leak rather than a convenience.
+  //
+  // Deliberately plain: which fields, and which document they came off. No
+  // confidence scores, no model, no mention of AI — the employee is being
+  // asked to check their own handwriting, not to audit ours.
+  if (requirement.handler === 'form') {
+    payload.prefill = await buildPrefillNotice(assignment.id, snap.form_key);
+  }
+
   res.json(payload);
 }));
+
+/**
+ * Which of a form's fields were taken from the documents this person returned.
+ *
+ * Reads only field NAMES and source labels — never a value, so this is safe on
+ * a form the employee is about to see masked values in anyway.
+ */
+async function buildPrefillNotice(assignmentId, formKey) {
+  const FORM_GROUPS = {
+    personal_details: ['identity', 'contact'],
+    emergency_contact: ['emergency'],
+    bank_details: ['payroll'],
+    super_setup: ['super'],
+  };
+  const groups = FORM_GROUPS[formKey];
+  if (!groups) return null;
+
+  try {
+    const { rows } = await odb.pool.query(
+      `SELECT f.label, f.field_group, COALESCE(f.source_label, d.file_name) AS source
+         FROM onboarding_extracted_fields f
+         LEFT JOIN onboarding_returned_documents d ON d.id = f.source_document_id
+        WHERE f.assignment_id = $1
+          AND f.field_group = ANY($2::text[])
+          AND f.status = 'applied'
+        ORDER BY f.field_group, f.label`,
+      [assignmentId, groups]
+    );
+    if (!rows.length) return null;
+
+    const sources = [...new Set(rows.map((r) => r.source).filter(Boolean))];
+    return {
+      fieldCount: rows.length,
+      fields: rows.map((r) => r.label),
+      sources,
+      // Starts with the SOURCE, not with "we filled this in" — the interface
+      // already says that in bold immediately before this sentence, and
+      // hearing it twice reads like a stutter.
+      message: sources.length
+        ? `Taken from ${sources.length === 1 ? sources[0] : 'the forms you returned'}. `
+          + 'Please check everything is correct and change anything that is not.'
+        : 'Taken from the forms you returned. Please check everything is correct.',
+    };
+  } catch (err) {
+    // A missing prefill notice is cosmetic; a 500 on a form the employee needs
+    // is not. This is the one place in the file where swallowing is right.
+    log.warn('prefill notice unavailable', { error: err });
+    return null;
+  }
+}
 
 /**
  * Move a requirement forward for the employee.

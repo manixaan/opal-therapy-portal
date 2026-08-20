@@ -332,11 +332,22 @@ app.get('/onboarding-invite', (req, res) => {
   res.sendFile(path.join(frontendPath, 'onboarding-invite.html'));
 });
 
+// First sign-in on a temporary password. Reachable only WITH a session — the
+// page's whole job is to call /api/auth/change-password as the signed-in user
+// — but deliberately not behind the account_status ladder below, because a
+// user in this state is refused every other authenticated path by the choke
+// point in requireAuth and would otherwise have nowhere to go.
+app.get('/create-password', (req, res) => {
+  if (!req.session?.userId) return res.redirect('/login');
+  res.sendFile(path.join(frontendPath, 'create-password.html'));
+});
+
 // ── Helper: look up the logged-in user's account status ───────────────────
 async function getSessionUser(userId) {
   try {
     const { rows } = await db.pool.query(
-      'SELECT role, account_status, email_verified, profile_completed FROM users WHERE id = $1',
+      `SELECT role, account_status, email_verified, profile_completed, must_change_password
+         FROM users WHERE id = $1`,
       [userId]
     );
     return rows[0] || null;
@@ -355,6 +366,11 @@ app.get('/', async (req, res) => {
   if (status === 'pending_approval')     return res.redirect('/pending-approval');
   if (status === 'suspended')            return res.redirect('/login?reason=suspended');
   if (status === 'deactivated')          return res.redirect('/login?reason=deactivated');
+
+  // A temporary password reaches exactly one screen. Redirecting here is a
+  // courtesy so the user is not handed an application that refuses every
+  // request it makes; the enforcement is the choke point in requireAuth.
+  if (user.must_change_password === true) return res.redirect('/create-password');
 
   // A pre-employee skips the profile-setup wizard entirely: their whole
   // account exists to complete employee onboarding, and the wizard collects
@@ -378,6 +394,7 @@ app.get('/onboarding', async (req, res) => {
   if (status === 'suspended' || status === 'deactivated') {
     return res.redirect('/login?reason=' + status);
   }
+  if (user.must_change_password === true) return res.redirect('/create-password');
   res.sendFile(path.join(frontendPath, 'onboarding.html'));
 });
 
@@ -519,6 +536,14 @@ app.use('/', require('./learning-routes'));
 // requireAuth across the whole /api/onboarding prefix, and mounting one of
 // those first would 401 the invitation-acceptance page before it was reached.
 app.use('/', require('./onboarding-employee-routes'));
+// The journey router (starter packs, returned documents, extraction, account
+// provisioning) is mounted BEFORE onboarding-routes for the same reason the
+// employee router goes first: it owns the unauthenticated
+// /api/onboarding/starter-pack/download link, which a new starter follows
+// before they have an account, and onboarding-routes applies requireAuth
+// across the whole /api/onboarding prefix.
+app.use('/', require('./onboarding-workflow-routes'));
+app.use('/', require('./onboarding-package-docs-routes'));
 app.use('/', require('./onboarding-assignment-routes'));
 app.use('/', require('./onboarding-library-routes'));
 app.use('/', require('./onboarding-routes'));

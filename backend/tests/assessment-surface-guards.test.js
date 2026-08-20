@@ -594,7 +594,9 @@ describe('changed assets are cache-busted', () => {
       ['resourcehub.js', 'r16'], ['resourcehub.css', 'r10'],
       // 6: Onboarding Packages added an 'onboarding' route to the grammar
       ['navigation.js', 6],
-      ['onboarding.js', 2], ['onboarding.css', 2],
+      // 8: the onboarding journey — starter packs, returned documents,
+      // extracted-detail review, account provisioning — and its styles
+      ['onboarding.js', 8], ['onboarding.css', 8],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

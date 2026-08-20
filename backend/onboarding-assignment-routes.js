@@ -96,6 +96,21 @@ function assignmentRow(a, { includeContact = true } = {}) {
     ownerNote: a.owner_note,
     createdByName: a.created_by_name,
     createdAt: a.created_at,
+    // The paper round-trip milestones (migration 038). The Active Onboarding
+    // list reads these to answer "how far along is Jane?" — the requirement
+    // meters below only begin once an account exists, so on their own they
+    // report 0% for everybody still waiting on documents, which is the
+    // opposite of the truth.
+    starterPackGeneratedAt: a.starter_pack_generated_at || null,
+    starterPackSentAt: a.starter_pack_sent_at || null,
+    starterPackSentTo: includeContact ? (a.starter_pack_sent_to || null) : undefined,
+    documentsReceivedAt: a.documents_received_at || null,
+    extractionCompletedAt: a.extraction_completed_at || null,
+    detailsReviewedAt: a.details_reviewed_at || null,
+    accountCreatedAt: a.account_created_at || null,
+    invitationSentAt: a.invitation_sent_at || null,
+    firstLoginAt: a.first_login_at || null,
+    loginEmail: includeContact ? (a.login_email || null) : undefined,
     progress: {
       employeeDone: a.employee_done, employeeTotal: a.employee_total,
       employeePercent: pct(a.employee_done, a.employee_total),
@@ -308,13 +323,18 @@ router.post('/api/onboarding/assignments', requirePermission('onboarding.assign'
     let created;
     try {
       const { rows } = await odb.pool.query(
+        // login_email defaults to the address the starter pack goes to, and
+        // stays changeable at account creation — §54: the personal address
+        // somebody applies with and the address they eventually sign in with
+        // are not always the same, and assuming they are is how a new starter
+        // ends up locked out on the day their Opal mailbox is created.
         `INSERT INTO onboarding_assignments
            (organisation_id, package_id, package_version_id, applicant_name, applicant_email,
             job_title, proposed_role, is_treating_therapist, employment_type, role_category,
             start_date, end_date, manager_user_id, work_location, facts, due_at,
-            owner_note, created_by)
+            owner_note, created_by, mobile, work_email, login_email)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-                 NOW() + ($16 || ' days')::INTERVAL, $17, $18)
+                 NOW() + ($16 || ' days')::INTERVAL, $17, $18, $19, $20, $21)
          RETURNING *`,
         [
           org, pkg.id, version.id, str(b.applicantName, 200), applicantEmail,
@@ -323,6 +343,14 @@ router.post('/api/onboarding/assignments', requirePermission('onboarding.assign'
           odb.dateOrNull(b.startDate), odb.dateOrNull(b.endDate),
           isUuid(b.managerUserId) ? b.managerUserId : null, str(b.workLocation, 150),
           JSON.stringify(facts), String(dueDays), str(b.ownerNote, 2000), req.user.id,
+          str(b.mobile, 40),
+          b.workEmail ? String(b.workEmail).trim().toLowerCase().slice(0, 255) : null,
+          // Defaulted here rather than with COALESCE in the statement: reusing
+          // $5 inside a COALESCE made Postgres deduce two types for the same
+          // parameter and refuse the insert outright.
+          b.loginEmail
+            ? String(b.loginEmail).trim().toLowerCase().slice(0, 255)
+            : applicantEmail,
         ]
       );
       created = rows[0];
@@ -1230,6 +1258,17 @@ router.post('/api/onboarding/assignments/:id/archive-export',
   }));
 
 module.exports = router;
+
+/**
+ * Shared with onboarding-workflow-routes.js, which creates a portal account by
+ * a different route (a temporary password rather than an invitation link) but
+ * must issue EXACTLY the same requirement list from the same pinned snapshot.
+ *
+ * Exported rather than duplicated: two definitions of "what this onboarding
+ * asks for" would drift, and the one that drifted would be the one nobody was
+ * testing.
+ */
+module.exports._materialiseRequirements = materialiseRequirements;
 module.exports.assignmentRow = assignmentRow;
 module.exports.requirementRow = requirementRow;
 module.exports.groupSections = groupSections;

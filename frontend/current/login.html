@@ -366,6 +366,13 @@
       const json = await r.json().catch(() => ({}));
 
       if (r.ok && json.ok) {
+        // A temporary password gets exactly one destination. The server has
+        // already refused it every other path (the choke point in requireAuth);
+        // this only saves the user from bouncing off it.
+        if (json.mustChangePassword || json.next === 'change_password') {
+          window.location.replace('/create-password');
+          return;
+        }
         // Successful login — redirect to main app
         const redirect = new URLSearchParams(window.location.search).get('next') || '/';
         window.location.replace(redirect);
@@ -390,6 +397,10 @@
       }
       if (code === 'deactivated') {
         showError('This account is no longer active. Please contact the practice owner if you believe this is a mistake.');
+        return;
+      }
+      if (code === 'temporary_password_expired') {
+        showError('That temporary password has expired. Ask the practice to send you a new one.');
         return;
       }
 

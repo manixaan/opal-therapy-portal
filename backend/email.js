@@ -621,10 +621,225 @@ async function sendAccountApprovedEmail({ toEmail, name, role }) {
   return { sent: true, messageId: info.messageId };
 }
 
+/**
+ * Sign-in details for a new starter whose account the Owner has just created.
+ *
+ * DIFFERENT FROM sendOnboardingInviteEmail, and the difference is the point.
+ * That one carries a single-use link on which the recipient CHOOSES a
+ * password. This one is for the other path the practice uses: the Owner has
+ * created the account and the system has issued a temporary password.
+ *
+ * WHETHER THE PASSWORD TRAVELS IN THIS EMAIL IS THE OWNER'S CALL, NOT OURS.
+ * `temporaryPassword` is optional. Omit it and the email says the practice
+ * will pass the password on separately — which is the safer habit, because an
+ * email is forwarded, quoted and archived in places nobody controls. Include
+ * it and the email is self-contained, which is what a practice with one
+ * administrator and a new starter on a phone will actually want. The portal
+ * records which way it went (onboarding_email_dispatches) and neither choice
+ * is made silently.
+ *
+ * What is NOT negotiable: the password is temporary, expires, and cannot reach
+ * anything except the change-password screen until it is replaced. That is
+ * enforced server-side at requireAuth, not by this email's wording.
+ */
+async function sendEmployeeLoginInviteEmail({
+  toEmail, displayName, roleTitle, orgName, invitedBy, temporaryPassword, startDate,
+}) {
+  const loginUrl = `${BASE()}/login`;
+  const org = escapeHtml(orgName || 'Opal Therapy');
+  const greeting = displayName ? `Hi ${escapeHtml(String(displayName).split(' ')[0])},` : 'Hello,';
+  const sender = escapeHtml(invitedBy || 'The practice owner');
+  const role = roleTitle ? escapeHtml(roleTitle) : null;
+
+  const fmtDate = (d) => {
+    if (!d) return null;
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleDateString('en-AU', {
+      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+    });
+  };
+  const start = fmtDate(startDate);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+           background: #f5f5f5; margin: 0; padding: 24px; color: #241f1a; }
+    .card { background: #fff; border-radius: 10px; max-width: 560px; margin: 0 auto;
+            padding: 36px 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .logo { font-size: 20px; font-weight: 700; color: #0f7c6c; margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px; }
+    p { font-size: 15px; line-height: 1.6; color: #3a3a4a; margin: 0 0 14px; }
+    ul { font-size: 15px; line-height: 1.7; color: #3a3a4a; padding-left: 20px; margin: 0 0 18px; }
+    .creds { background: #faf6f0; border-radius: 8px; padding: 16px 18px; margin: 0 0 20px;
+             border: 1px solid #e9e3d9; }
+    .creds p { margin: 0 0 8px; font-size: 14px; }
+    .creds p:last-child { margin-bottom: 0; }
+    .creds code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px;
+                  background: #fff; padding: 3px 8px; border-radius: 4px; border: 1px solid #e9e3d9; }
+    .btn { display: inline-block; background: #0f7c6c; color: #fff !important; text-decoration: none;
+           padding: 13px 26px; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 8px 0 18px; }
+    .url { font-size: 12px; color: #99928a; word-break: break-all; }
+    .footer { font-size: 12px; color: #99928a; margin-top: 28px; border-top: 1px solid #e9e3d9;
+              padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">&#127807; ${org}</div>
+    <h2>Your ${org} account is ready</h2>
+    <p>${greeting}</p>
+    <p>Thank you for returning your forms${role ? ` for <strong>${role}</strong>` : ''}.
+       Your portal account is set up and waiting for you.</p>
+    ${start ? `<p>Your start date is <strong>${escapeHtml(start)}</strong>.</p>` : ''}
+    <div class="creds">
+      <p><strong>Sign in with</strong></p>
+      <p>Email: <code>${escapeHtml(toEmail)}</code></p>
+      ${temporaryPassword
+    ? `<p>Temporary password: <code>${escapeHtml(temporaryPassword)}</code></p>`
+    : '<p>Password: we will pass this on to you separately.</p>'}
+    </div>
+    <a href="${loginUrl}" class="btn">Sign in &rarr;</a>
+    <p class="url">${escapeHtml(loginUrl)}</p>
+    <p><strong>You will be asked to choose your own password straight away.</strong>
+       The one above is temporary and stops working as soon as you replace it.</p>
+    <p>After that you will go to <em>Complete your onboarding</em>, where the details you
+       gave us on the forms are already filled in. You will mostly be checking that we
+       have them right, and adding anything we are still missing:</p>
+    <ul>
+      <li>your personal and emergency contact details</li>
+      <li>your tax and superannuation information</li>
+      <li>your professional credentials</li>
+      <li>the policies we need you to read and acknowledge</li>
+    </ul>
+    <p>You can save as you go and come back at any time.</p>
+    <p>If anything looks wrong, or you did not expect this email, just reply and let us know.</p>
+    <div class="footer">
+      ${sender}<br>${org}
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    greeting,
+    '',
+    `Thank you for returning your forms${roleTitle ? ` for ${roleTitle}` : ''}.`,
+    'Your portal account is ready.',
+    start ? `Your start date is ${start}.` : '',
+    '',
+    'Sign in at: ' + loginUrl,
+    `Email: ${toEmail}`,
+    temporaryPassword
+      ? `Temporary password: ${temporaryPassword}`
+      : 'Password: we will pass this on to you separately.',
+    '',
+    'You will be asked to choose your own password straight away. The temporary one',
+    'stops working as soon as you replace it.',
+    '',
+    'After that you will go to "Complete your onboarding", where the details from your',
+    'forms are already filled in. You will mostly be checking them and adding anything',
+    'still missing. You can save as you go.',
+    '',
+    invitedBy || '',
+    orgName || 'Opal Therapy',
+  ].filter((l) => l !== '').join('\n');
+
+  const transport = getTransporter();
+  const subject = `Your ${orgName || 'Opal Therapy'} sign-in details`;
+  if (!transport) {
+    console.log(`\u{1F4E7}  [EMAIL SKIPPED] ${subject} -> ${toEmail}`);
+    return { skipped: true, loginUrl };
+  }
+  const info = await transport.sendMail({ from: FROM(), to: toEmail, subject, html, text });
+  console.log(`\u{1F4E7}  Login invitation sent to ${toEmail} (${info.messageId})`);
+  return { sent: true, messageId: info.messageId, loginUrl };
+}
+
+/**
+ * The largest single attachment this transport will carry, and how many.
+ *
+ * Microsoft 365 rejects a message above 25 MB and counts the BASE64 size,
+ * which is a third larger than the bytes. 18 MB raw is the last size that
+ * reliably fits once headers and MIME overhead are added. A caller should
+ * choose a download link well before this; the cap exists so that one which
+ * did not gets a clear local error rather than a silent bounce two hops away.
+ */
+const MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024;
+const MAX_ATTACHMENTS = 5;
+
+/**
+ * Send an already-composed message through the shared transport.
+ *
+ * Every other sender here owns its subject and its HTML because every other
+ * message is one fixed template. A feature whose message depends on data only
+ * it holds — a starter pack's document list, an agreement's terms — composes
+ * its own subject and body, but it MUST NOT create its own transporter: a
+ * second nodemailer instance would bypass _setTransporterForTests, and a test
+ * that thought it had stubbed email would quietly send a real one.
+ *
+ * Same three-state contract as the rest of this module: `{ skipped: true }`
+ * when SMTP is unconfigured, `{ sent: true, messageId }` on success, and a
+ * thrown error on failure.
+ */
+async function sendTemplated({ to, subject, html, text, attachments }) {
+  const transport = getTransporter();
+  if (!transport) {
+    console.log(`📧  [EMAIL SKIPPED] ${subject} → ${to}`);
+    return { skipped: true };
+  }
+  const message = { from: FROM(), to, subject, html, text };
+
+  // ATTACHMENTS. Deliberately absent from every fixed template above, and the
+  // onboarding INVITE keeps that rule: a link into the authenticated portal is
+  // safer than a document sitting in a mailbox nobody controls.
+  //
+  // A starter pack is the one genuine exception, and it is an exception on the
+  // facts rather than on convenience. It carries no personal information at
+  // all — it is the practice's own policies and BLANK forms going out to
+  // somebody who has no account yet, which is exactly why it cannot be a
+  // portal link. Refusing to attach it would make nothing safer; it would move
+  // the same files into whatever the Owner reached for instead.
+  //
+  // Buffers only, size-capped, and never more than a few, so this cannot
+  // quietly become an arbitrary file-sending API.
+  if (Array.isArray(attachments) && attachments.length) {
+    if (attachments.length > MAX_ATTACHMENTS) {
+      throw new Error('Too many attachments');
+    }
+    message.attachments = attachments.map((a) => {
+      if (!a || !Buffer.isBuffer(a.content)) {
+        throw new Error('Attachment content must be a Buffer');
+      }
+      if (a.content.length > MAX_ATTACHMENT_BYTES) {
+        throw new Error('Attachment exceeds the size limit');
+      }
+      return {
+        filename: String(a.filename || 'attachment')
+          .replace(/[/\\]/g, '_')
+          .replace(/\.{2,}/g, '.')
+          .slice(0, 200),
+        content: a.content,
+        contentType: String(a.contentType || 'application/octet-stream').slice(0, 100),
+      };
+    });
+  }
+
+  const info = await transport.sendMail(message);
+  return { sent: true, messageId: info.messageId };
+}
+
 module.exports = {
   escapeHtml,
+  sendTemplated,
   sendInviteEmail,
   sendOnboardingInviteEmail,
+  sendEmployeeLoginInviteEmail,
   buildOnboardingInviteUrl,
   sendWelcomeEmail,
   sendVerificationEmail,

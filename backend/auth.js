@@ -22,6 +22,7 @@ const router   = express.Router();
 const db      = require('./database');
 const emailSvc = require('./email');
 const { getPermissions } = require('./permissions');
+const accounts = require('./onboarding-accounts');
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
@@ -155,6 +156,33 @@ router.post('/api/auth/login', loginRateLimit, async (req, res) => {
       });
     }
 
+    // ── Temporary credential expiry ───────────────────────────────────────
+    // Checked HERE rather than in requireAuth, so an unused temporary password
+    // simply stops working instead of granting a session that is then refused
+    // on every subsequent request. Fails closed: an expired credential is
+    // never a way in, and the remedy names itself.
+    //
+    // Only ever true while password_is_temporary is set — a password somebody
+    // chose for themselves does not expire, and this portal does not do forced
+    // rotation.
+    if (accounts.temporaryPasswordExpired(user)) {
+      try {
+        await db.logAuditEvent({
+          actorUserId:    user.id,
+          action:         'login_failed',
+          targetType:     'user',
+          targetId:       user.id,
+          metadata:       { reason: 'temporary_password_expired' },
+          ipAddress:      req.ip,
+          organisationId: user.organisation_id || null,
+        });
+      } catch (_) {}
+      return res.status(403).json({
+        error: 'That temporary password has expired. Please ask the practice for a new one.',
+        code:  'temporary_password_expired',
+      });
+    }
+
     // Regenerate session to prevent session fixation
     req.session.regenerate(async (err) => {
       if (err) {
@@ -185,6 +213,11 @@ router.post('/api/auth/login', loginRateLimit, async (req, res) => {
       res.json({
         ok: true,
         user: safeProfile(user, permissions),
+        // Surfaced at the top level as well as on the profile, because the
+        // login screen acts on it before it has done anything with the user
+        // object.
+        mustChangePassword: user.must_change_password === true,
+        next: user.must_change_password === true ? 'change_password' : 'portal',
       });
     });
   } catch (err) {
@@ -330,6 +363,12 @@ function safeProfile(user, permissions) {
     phone:                 user.phone          || null,
     roleTitle:             user.role_title     || null,
     defaultWorkLocation:   user.default_work_location || null,
+    // The portal shell reads this to send a first-time user straight to
+    // "Create your password". It is a CONVENIENCE, not the control: the
+    // control is the choke point in requireAuth, which refuses every other
+    // path regardless of what any client does with this field.
+    mustChangePassword:    user.must_change_password === true,
+    passwordIsTemporary:   user.password_is_temporary === true,
     permissions,
   };
 }
@@ -564,6 +603,14 @@ router.post('/api/auth/reset-password', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * The password policy, exported so the two other places that set a password
+ * — the authenticated change-password route and the onboarding invitation —
+ * enforce the SAME rules. register-routes.js already holds a verbatim copy;
+ * a third would be the one that drifted.
+ */
+module.exports.validatePassword = validatePassword;
 
 // Test-only: clear the in-memory login rate-limit window so a test file that
 // logs in many distinct users from the same IP is not throttled. Not used in

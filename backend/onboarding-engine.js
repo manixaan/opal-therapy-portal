@@ -94,8 +94,23 @@ const REQUIREMENT_STATUSES = [
   'expired',
 ];
 
+/**
+ * The assignment lifecycle, in order.
+ *
+ * The six states between `created` and `invite_sent` are the paper round-trip
+ * added in migration 038: the starter pack goes out, the completed forms come
+ * back, their contents are read and reviewed, and only then is an account
+ * created. They are OPTIONAL — an Owner who does not need the round-trip goes
+ * straight from `created` to an invitation, which is the original flow.
+ */
 const ASSIGNMENT_STATUSES = [
   'created',
+  'starter_pack_ready',
+  'starter_pack_sent',
+  'documents_received',
+  'details_extracted',
+  'ready_for_account',
+  'account_created',
   'invite_sent',
   'invite_accepted',
   'in_progress',
@@ -108,6 +123,15 @@ const ASSIGNMENT_STATUSES = [
   'cancelled',
   'archived',
 ];
+
+/**
+ * Statuses that precede the portal account, and which recomputeAssignment must
+ * therefore leave alone. See deriveAssignmentStatus.
+ */
+const PRE_RELEASE_STATUSES = new Set([
+  'starter_pack_ready', 'starter_pack_sent', 'documents_received',
+  'details_extracted', 'ready_for_account', 'account_created',
+]);
 
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'fixed_term', 'contractor'];
 
@@ -526,6 +550,18 @@ function deriveAssignmentStatus(current, progress, flags = {}) {
   const terminal = ['activated', 'completed', 'cancelled', 'archived'];
   if (terminal.includes(current)) return current;
 
+  // PRE-RELEASE STATES ARE SET BY ACTS, NOT DERIVED FROM PROGRESS.
+  //
+  // "The starter pack has been sent" and "the returned documents are in" are
+  // facts about the paper round-trip; no requirement meter can observe them.
+  // Without this guard the fall-through below would see the requirements that
+  // already exist, decide the run is `in_progress`, and quietly erase the one
+  // piece of state the Owner's next action depends on.
+  //
+  // These statuses end when an account is created, which is a deliberate act
+  // that sets `invite_sent` itself.
+  if (PRE_RELEASE_STATUSES.has(current)) return current;
+
   if (progress.correctionsOpen > 0) return 'corrections_required';
 
   if (progress.employeeComplete && progress.employeeTotal > 0) {
@@ -734,6 +770,7 @@ module.exports = {
   HANDLERS,
   REQUIREMENT_STATUSES,
   ASSIGNMENT_STATUSES,
+  PRE_RELEASE_STATUSES,
   EMPLOYMENT_TYPES,
   FORM_KEYS,
   KNOWN_FACTS,

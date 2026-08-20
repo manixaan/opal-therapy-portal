@@ -440,8 +440,17 @@ async function listPackages(orgId, { kind, status } = {}, q = pool) {
     `SELECT p.*,
             (SELECT COUNT(*) FROM onboarding_package_requirements r WHERE r.package_id = p.id)
               AS own_requirement_count,
+            -- LIVE runs only. The Packages screen renders this as "Assigned to
+            -- N people", and a count that silently included cancelled and
+            -- archived runs would make that sentence untrue — an Owner
+            -- deciding whether a package is safe to archive would be reading a
+            -- number that describes history rather than the present.
+            (SELECT COUNT(*) FROM onboarding_assignments a
+              WHERE a.package_id = p.id
+                AND a.status NOT IN ('cancelled', 'archived'))
+              AS assignment_count,
             (SELECT COUNT(*) FROM onboarding_assignments a WHERE a.package_id = p.id)
-              AS assignment_count
+              AS assignment_count_ever
        FROM onboarding_packages p
       WHERE ${where}
       ORDER BY p.kind DESC, p.title`, params
@@ -585,10 +594,31 @@ async function buildPackageVersionContent(orgId, pkg, q = pool) {
     requirements.push(engine.snapshotRequirement(row, template, extras));
   }
 
+  // The STARTER PACK, pinned alongside the requirements.
+  //
+  // Snapshotted here rather than resolved at send time for the same reason the
+  // requirements are: an Owner who publishes a new Employee Handbook next
+  // month must not retroactively change what last month's new starter was
+  // sent. The manifest of a generated ZIP can then name exact document
+  // versions years later, whatever the library has since become.
+  //
+  // Required lazily — onboarding-starter-pack requires this module back for
+  // the pool and the sanitisers, and a top-level import would be circular.
+  const starterPack = await require('./onboarding-starter-pack')
+    .snapshot(orgId, pkg, q)
+    .catch((err) => {
+      // A pack that cannot be resolved must not stop a publish: the
+      // requirement workflow is the primary product and works without one.
+      // The version simply records an empty pack, and the Owner is told.
+      log.warn('starter pack snapshot failed at publish', { error: err, packageId: pkg.id });
+      return { documents: [], omissions: [{ reason: 'The starter pack could not be resolved' }] };
+    });
+
   return {
     content: {
       requirements,
       chain,
+      starterPack,
       resolvedAt: new Date().toISOString(),
       warnings,
     },

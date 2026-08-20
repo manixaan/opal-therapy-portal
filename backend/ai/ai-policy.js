@@ -113,6 +113,43 @@ const AI_POLICIES = {
      */
     guardrailInputScope: 'current_user_message',
   },
+
+  /**
+   * Completed onboarding forms -> a structured transcription of what they say.
+   *
+   * Declared INTERNAL, not clinical, and that is the accurate call: a returned
+   * Employee Details Form carries employment information about a person who
+   * works here, not health information about somebody we treat. Clinical
+   * classification exists to protect participants, and stretching it to cover
+   * staff paperwork would blur the one distinction the register is for.
+   *
+   * INTERNAL still pins the call to Australia — see requirementsFor() — so
+   * nothing about this is a relaxation of residency. What it does change is
+   * the audit category, which is where a reviewer looks to answer "has any
+   * participant data ever reached a model for this feature?" The honest answer
+   * has to stay "no".
+   *
+   * ASSISTANT_RESPONSE only. A transcription is not a clinical document, and
+   * declaring it as one would attach a clinical human-review obligation to the
+   * wrong thing. The review that matters here is enforced by the feature
+   * instead, and more strictly: nothing extracted reaches an employee record
+   * until a person accepts it field by field.
+   *
+   * The standard model, not the complex one: reading labelled form fields is
+   * transcription, and the harder model buys no accuracy on it.
+   */
+  onboarding_document_extraction: {
+    classification: classification.INTERNAL,
+    allowedClassifications: [classification.INTERNAL],
+    outputTypes: [outputTypes.ASSISTANT_RESPONSE],
+    defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
+    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
+    allowedModels: ['clinical_standard', 'mock'],
+    defaultModel: 'clinical_standard',
+    region: 'australia',
+    mayReceiveClinicalData: false,
+    auditCategory: 'onboarding_extraction',
+  },
 };
 
 /** Recognised guardrailInputScope values; absent means 'full'. */

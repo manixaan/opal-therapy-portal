@@ -448,6 +448,133 @@
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
+/* ── The onboarding journey ──────────────────────────────────────────────── */
+
+/* Every state carries a MARK as well as a colour. A step that read as
+   "complete" only because it was green would be invisible to a colour-blind
+   Owner and to a printed page. */
+.ob-journey { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+
+.ob-journey-step {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: 11px var(--space-3); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border);
+}
+.ob-journey-step.is-done { border-left-color: var(--ok); }
+.ob-journey-step.is-current { border-left-color: var(--accent); background: var(--accent-soft); }
+.ob-journey-step.is-todo { opacity: 0.68; }
+
+.ob-journey-mark {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  background: var(--border); color: var(--ink-soft); margin-top: 1px;
+}
+.ob-journey-step.is-done .ob-journey-mark { background: var(--ok); color: #fff; }
+.ob-journey-step.is-current .ob-journey-mark { background: var(--accent); color: #fff; }
+
+.ob-journey-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ob-journey-label { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ob-journey-step.is-todo .ob-journey-label { font-weight: 500; }
+.ob-journey-detail { font-size: 12.5px; color: var(--ink-soft); }
+
+/* ── Starter-pack document list ──────────────────────────────────────────── */
+
+.ob-pack-list { list-style: none; margin: 0; padding: 0; counter-reset: pack; }
+.ob-pack-list > li {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.ob-pack-list > li:last-child { border-bottom: 0; }
+.ob-pack-list > li::before {
+  counter-increment: pack; content: counter(pack, decimal-leading-zero);
+  flex: none; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--muted); min-width: 20px;
+}
+
+.ob-pack-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ob-pack-meta { font-size: 12.5px; color: var(--ink-soft); }
+.ob-pack-warn { font-size: 12.5px; color: var(--danger); }
+.ob-pack-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ob-pack-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ob-pack-doc.is-unavailable .ob-pack-title { color: var(--ink-soft); }
+
+.ob-pack-move { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.ob-btn-icon {
+  padding: 1px 7px !important; font-size: 11px !important; line-height: 1.5 !important;
+  min-width: 0 !important;
+}
+.ob-btn-icon[disabled] { opacity: 0.35; cursor: default; }
+
+/* The plain list (a generated pack's manifest) has no controls, so its rows
+   collapse to title + meta on one line. */
+.ob-pack-list:not(.is-editable) > li { justify-content: space-between; }
+.ob-pack-list:not(.is-editable) .ob-quiet { text-align: right; }
+
+/* ── Reviewing extracted details ─────────────────────────────────────────── */
+
+.ob-review-group { margin-bottom: var(--space-4); }
+.ob-review-group h3 {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--ink-soft); margin: 0 0 var(--space-2);
+}
+
+.ob-review-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 10px var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); margin-bottom: 6px; background: var(--panel);
+}
+/* Decided rows recede rather than disappear: an Owner scanning for what is
+   left should still be able to see what they already confirmed. */
+.ob-review-row.is-decided { background: var(--ok-soft); border-color: #bfdfc9; }
+
+.ob-review-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ob-review-label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+.ob-review-value {
+  font-size: 15px; color: var(--ink); font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.ob-review-value.is-hidden { color: var(--muted); font-style: italic; font-weight: 400; }
+.ob-review-source { font-size: 12px; color: var(--muted); }
+.ob-review-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.ob-chip.is-sensitive {
+  background: var(--accent-2-soft); color: var(--accent-2-deep); border-color: #f0cdbc;
+}
+
+/* ── The one-time credential ─────────────────────────────────────────────── */
+
+.ob-cred {
+  background: var(--panel-2, var(--bg)); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: var(--space-3); display: grid; gap: 10px;
+}
+.ob-cred > div { display: flex; flex-direction: column; gap: 2px; }
+.ob-cred span { font-size: 12px; color: var(--ink-soft); }
+.ob-cred strong { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.ob-cred code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px; letter-spacing: 0.3px; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 11px; overflow-wrap: anywhere;
+}
+
+/* ── Disclosures ─────────────────────────────────────────────────────────── */
+
+/* Version history, composition mechanics, email logs: real and occasionally
+   necessary, never the first thing on the screen. */
+.ob-details {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 0 var(--space-3); margin-bottom: var(--space-4); background: var(--panel);
+}
+.ob-details > summary {
+  cursor: pointer; padding: 11px 0; font-size: 13px; font-weight: 600;
+  color: var(--ink-soft); list-style-position: inside;
+}
+.ob-details > summary:hover { color: var(--accent-deep); }
+.ob-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ob-details[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: var(--space-3); }
+.ob-details > *:last-child { margin-bottom: var(--space-3); }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
@@ -459,4 +586,12 @@
   .ob-modal-body { padding: var(--space-4); }
   .ob-welcome { padding: var(--space-4); }
   .ob-welcome h1 { font-size: 19px; }
+
+  /* On a narrow screen the action buttons wrap under their row rather than
+     squeezing the title to two characters. */
+  .ob-journey-step { flex-wrap: wrap; }
+  .ob-pack-list > li { flex-wrap: wrap; }
+  .ob-pack-actions { width: 100%; justify-content: flex-start; }
+  .ob-review-row { flex-direction: column; align-items: stretch; }
+  .ob-review-actions { justify-content: flex-start; }
 }

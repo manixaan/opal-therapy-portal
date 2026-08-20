@@ -90,6 +90,16 @@
       ],
       "port": 5011,
       "autoPort": false
+    },
+    {
+      "name": "opal-onboarding-journey-5013",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5013 DB_NAME=therapy_scheduler_onbwf_dev NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5013,http://127.0.0.1:5013 APP_BASE_URL=http://localhost:5013 ONBOARDING_ENCRYPTION_KEY=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5013,
+      "autoPort": false
     }
   ]
 }

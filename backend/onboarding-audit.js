@@ -53,6 +53,20 @@ const ALLOWED_FIELDS = Object.freeze([
   'fileName', 'mimeType', 'sizeBytes', 'sha256', 'storageBackend',
   // booleans describing what happened
   'emailSent', 'emailSkipped', 'emailFailed', 'copyRetained', 'encrypted',
+
+  // ── Starter packs, returned documents and extraction (migration 038) ─────
+  // Identifiers, counts and vocabulary only. Note what is deliberately here
+  // and what is deliberately not: `field` names WHICH field an extraction
+  // proposed or a reviewer changed, and there is no key that could carry its
+  // VALUE. `confidence` is one of three fixed words. `tempPasswordIssued` is a
+  // boolean; the password itself has no key here and never will.
+  'starterPackId', 'dispatchId', 'runId', 'returnedDocumentId', 'fieldId',
+  'field', 'fieldGroup', 'confidence', 'fieldsProposed', 'fieldsApplied',
+  'fieldsAccepted', 'fieldsRejected', 'documentCount', 'readableCount',
+  'pageCount', 'textStatus', 'omissionCount', 'attempt', 'method', 'kind',
+  'downloadLinkUsed', 'attachmentIncluded', 'attachmentBytes',
+  'accountRole', 'portalRole', 'tempPasswordIssued', 'expiresInDays',
+  'loginEmailChanged', 'excluded', 'displayTitleChanged', 'sortOrder',
 ]);
 
 const ALLOWED = new Set(ALLOWED_FIELDS);

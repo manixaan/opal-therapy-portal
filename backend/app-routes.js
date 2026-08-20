@@ -946,16 +946,70 @@ router.get('/api/settings/integrations/status', requireAuth, async (req, res) =>
 // ─────────────────────────────────────────────────────────────
 //  AUTH — Change password
 // ─────────────────────────────────────────────────────────────
-router.post('/api/auth/change-password', requireAuth, async (req, res) => {
+/**
+ * Per-user rate limit for the password-change endpoint.
+ *
+ * The endpoint takes the CURRENT password, which makes it an oracle: without a
+ * limit, a session borrowed for ten seconds could be used to confirm a guessed
+ * password at machine speed. Hand-rolled in-memory, matching the login limiter
+ * in auth.js — the deployment is a single App Service instance and adding a
+ * store dependency for this would buy nothing.
+ */
+const PW_WINDOW_MS = 15 * 60 * 1000;
+const PW_MAX_ATTEMPTS = 8;
+const _pwAttempts = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of _pwAttempts) {
+    if (entry.resetAt <= now) _pwAttempts.delete(key);
+  }
+}, 10 * 60 * 1000).unref();
+
+function passwordChangeRateLimit(req, res, next) {
+  const key = req.user?.id || req.session?.userId || req.ip;
+  const now = Date.now();
+  const entry = _pwAttempts.get(key);
+  if (!entry || entry.resetAt <= now) {
+    _pwAttempts.set(key, { count: 1, resetAt: now + PW_WINDOW_MS });
+    return next();
+  }
+  entry.count += 1;
+  if (entry.count > PW_MAX_ATTEMPTS) {
+    const mins = Math.ceil((entry.resetAt - now) / 60000);
+    return res.status(429).json({
+      error: `Too many attempts. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+      code: 'rate_limited',
+    });
+  }
+  return next();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  AUTH — Change password
+//
+//  Also the exit from the forced-change gate. A temporary password reaches
+//  exactly this endpoint and nothing else (see requireAuth in permissions.js),
+//  and the UPDATE below is what releases it: the same statement that sets the
+//  new hash clears must_change_password and password_is_temporary, so the
+//  temporary credential cannot outlive its replacement even by one request.
+// ─────────────────────────────────────────────────────────────
+router.post('/api/auth/change-password', requireAuth, passwordChangeRateLimit, async (req, res) => {
   const userId = req.user?.id || req.session.userId;
   const { currentPassword, newPassword } = req.body || {};
 
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'Both currentPassword and newPassword are required' });
   }
-  if (newPassword.length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  }
+  // The SAME policy the registration and reset paths enforce. This route
+  // previously checked only a length of 8, so "aaaaaaaa" was accepted — which
+  // mattered little while every password came from the register form, and
+  // matters a great deal now that this is the screen a brand-new employee
+  // meets on their first sign-in.
+  const { validatePassword } = require('./auth');
+  const policyProblem = validatePassword(newPassword);
+  if (policyProblem) return res.status(400).json({ error: policyProblem });
+
   if (currentPassword === newPassword) {
     return res.status(400).json({ error: 'New password must be different from current password' });
   }
@@ -964,27 +1018,69 @@ router.post('/api/auth/change-password', requireAuth, async (req, res) => {
     // bcryptjs is the installed dependency — require('bcrypt') crashed this
     // route with MODULE_NOT_FOUND on every call (handover KNOWN_ISSUES #1).
     const bcrypt = require('bcryptjs');
-    const userRow = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
+    const userRow = await pool.query(
+      `SELECT password_hash, password_is_temporary, must_change_password
+         FROM users WHERE id = $1`, [userId]
+    );
     if (!userRow.rows[0]) return res.status(404).json({ error: 'User not found' });
+    if (!userRow.rows[0].password_hash) {
+      return res.status(400).json({ error: 'This account has no password set. Use the invitation link instead.' });
+    }
 
     const match = await bcrypt.compare(currentPassword, userRow.rows[0].password_hash);
     if (!match) return res.status(400).json({ error: 'Current password is incorrect' });
 
+    const wasTemporary = userRow.rows[0].password_is_temporary === true;
     const newHash = await bcrypt.hash(newPassword, 12);
-    await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, userId]);
+    await pool.query(
+      `UPDATE users
+          SET password_hash = $1,
+              password_is_temporary = FALSE,
+              must_change_password = FALSE,
+              temp_password_expires_at = NULL,
+              password_changed_at = NOW(),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2`,
+      [newHash, userId]
+    );
+
+    // Every OTHER session for this user ends. reset-password already does
+    // this; change-password did not, which meant a session an attacker had
+    // taken survived the very action a user takes to lock them out.
+    try {
+      await pool.query(
+        `DELETE FROM sessions WHERE sess->>'userId' = $1 AND sid <> $2`,
+        [String(userId), req.sessionID]
+      );
+    } catch (sessErr) {
+      console.warn('Session cleanup after password change failed:', sessErr.message);
+    }
 
     const dbMod = require('./database');
     await dbMod.logAuditEvent({
       actorUserId: userId, action: 'password.changed',
       targetType: 'user', targetId: userId, ipAddress: req.ip,
+      metadata: { replacedTemporary: wasTemporary },
     }).catch(() => {});
 
-    res.json({ ok: true, message: 'Password updated successfully' });
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      message: 'Password updated successfully',
+      replacedTemporary: wasTemporary,
+      // Where the caller should go now that the gate is released. A first-time
+      // employee lands on their onboarding rather than a dashboard they have
+      // no context for.
+      next: wasTemporary ? 'onboarding' : 'portal',
+    });
   } catch (err) {
     console.error('Change password error:', err.message);
     res.status(500).json({ error: 'Failed to change password' });
   }
 });
+
+/** Test seam, matching auth.js's _resetLoginRateLimit. */
+function _resetPasswordChangeRateLimit() { _pwAttempts.clear(); }
 
 // ─────────────────────────────────────────────────────────────
 //  SEARCH
@@ -1568,4 +1664,7 @@ router.patch('/api/admin/users/:id/deactivate', requireAuth, requireRole('owner'
 // ─────────────────────────────────────────────────────────────
 //  Export router
 // ─────────────────────────────────────────────────────────────
-module.exports = Object.assign(router, { storeNotification });
+module.exports = Object.assign(router, {
+  storeNotification,
+  _resetPasswordChangeRateLimit,
+});

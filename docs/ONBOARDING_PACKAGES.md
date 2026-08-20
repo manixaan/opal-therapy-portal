@@ -6,6 +6,12 @@ a **requirement workflow** rather than a folder of PDFs.
 Migration `034_onboarding_packages.sql`. Backend `backend/onboarding-*.js`.
 Frontend `frontend/current/onboarding.{js,css}` and `onboarding-invite.html`.
 
+> **See also** [ONBOARDING_JOURNEY.md](ONBOARDING_JOURNEY.md) — migration 038,
+> which adds the part that happens before the invitation: the emailed starter
+> pack, the returned forms, reading the details out of them, and creating the
+> portal account with a temporary password. This document remains the guide to
+> the requirement workflow underneath it.
+
 ---
 
 ## The one idea to hold onto
