@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="/whodas.css?v=3" />
 <link rel="stylesheet" href="/assessment.css?v=3" />
 <link rel="stylesheet" href="/induction.css?v=1" />
+<link rel="stylesheet" href="/onboarding.css?v=2" />
 <script src="/resourcehub.js?v=r16" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
@@ -48,7 +49,10 @@
      assessment is administered and read on. It loads whichever instrument
      module the assessment names; whodas.js above is the first of those. -->
 <script src="/assessment.js?v=3" defer></script>
-<script src="/navigation.js?v=5" defer></script>
+<!-- Onboarding Packages: the new-starter surface and the owner's
+     management console. Renders into #ob-root inside #view-onboarding. -->
+<script src="/onboarding.js?v=2" defer></script>
+<script src="/navigation.js?v=6" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -3946,11 +3950,23 @@ window.opIcon = function (name, size) {
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
   </button>
+  <button class="tab" data-tab="onboarding" title="Onboarding — new starter packs, credential verification and workforce compliance">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Onboarding
+  </button>
   <button class="tab" data-tab="settings">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.12 2.12l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.12-2.12l4.24-4.24M19.78 19.78l-4.24-4.24m-2.12-2.12l-4.24-4.24"/></svg> Settings
   </button>
   <!-- Auto-fit Clients tab hidden: featureFlags.autoFitClients = false (not yet ready for production) -->
 </nav>
+
+<!-- ============ ONBOARDING TAB ============ -->
+<!-- One tab, two surfaces. Whoever holds onboarding.view gets the management
+     console; everyone else gets their own onboarding. onboarding.js decides
+     which by ASKING the server (/api/onboarding/dashboard either answers or
+     403s) rather than trusting a role string in the browser. -->
+<section class="view" id="view-onboarding">
+  <div id="ob-root"></div>
+</section>
 
 <!-- ============ PROFILE TAB ============ -->
 <section class="view" id="view-profile">
@@ -17012,6 +17028,15 @@ async function refreshFreshnessNow(manual) {
   var txt = document.getElementById('hdr-sync-text');
   var dot = document.getElementById('hdr-sync-dot');
   if (!txt) return;
+  // A pre-employee has no calendar and no participants, so both endpoints 403
+  // and the pill settles on "Status unavailable" — a broken-looking widget on
+  // a new starter's very first screen, reporting on a practice they have not
+  // joined yet. Hide the whole thing rather than explain it.
+  if (window.APP_USER && window.APP_USER.role === 'pre_employee') {
+    var wrap = document.getElementById('hdr-sync-pill') || txt.parentElement;
+    if (wrap) wrap.style.display = 'none';
+    return;
+  }
   if (manual) txt.textContent = 'Refreshing…';
   try {
     var parts = [];
@@ -20463,11 +20488,19 @@ var NAV_ADMIN_ONLY_TABS = ['billing', 'ndis', 'dormant'];
 // the tab — and neither can reach the view, because switchTab denies any
 // tab outside NAV_ALLOWED_TABS. Rows are user-scoped server-side regardless:
 // no role, owner included, can see another clinician's drafts.
+// Onboarding ('onboarding') is in EVERY role's list, and deliberately so — the
+// tab shows a different thing to each of them. The owner and a delegated admin
+// get the management console; a therapist, a read_only account and a
+// pre_employee get their OWN onboarding and nothing else. onboarding.js picks
+// which by asking the server, and the server is the boundary either way: an
+// admin without a delegated onboarding.* permission gets 403 on every
+// management route and falls through to the personal surface.
 var ROLE_NAV = {
   owner: {
     primary: ['profile', 'calendar', 'casenotes', 'resources'],
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
+      ['People', ['onboarding']],
       ['Travel', ['travel', 'logbook']],
       ['Business', ['accounting', 'settings', 'support']],
     ] },
@@ -20480,12 +20513,19 @@ var ROLE_NAV = {
     // degrades gracefully there (topic/cost filter lists come back empty).
     primary: ['profile', 'calendar', 'resources'],
     menu: { label: 'Menu', groups: [
+      ['People', ['onboarding']],
       ['Travel', ['travel', 'logbook']],
       ['Operations', ['purchases', 'support']],
     ] },
   },
-  therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] },
-  read_only: { primary: ['profile', 'calendar', 'resources'] },
+  therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources', 'onboarding'] },
+  read_only: { primary: ['profile', 'calendar', 'resources', 'onboarding'] },
+  // A pre-employee sees ONE tab. Their account exists to complete onboarding
+  // and the server refuses everything else, so showing more would be a lie
+  // about what they can reach. This entry must exist: navAllowedTabs falls
+  // back to the THERAPIST config for an unknown role, which would offer them
+  // the calendar and case notes.
+  pre_employee: { primary: ['onboarding'] },
 };
 
 var ACCESS_DENIED_MESSAGE = 'You do not have access to this area. Please contact the practice owner if you believe this is incorrect.';
@@ -20651,6 +20691,11 @@ function applyNavRoleVisibility(role) {
       if (name === 'purchases' && typeof admLoadPurchases === 'function') admLoadPurchases();
       if (name === 'support' && typeof supOpenCentre === 'function') supOpenCentre();
       if (name === 'casenotes' && window.CaseNotes && typeof window.CaseNotes.open === 'function') window.CaseNotes.open();
+      // Onboarding.open() is idempotent, so calling it from both here and
+      // navigation.js's applyBase is safe — and necessary: restore() calls
+      // switchTab but no per-tab loader, so a deep link or a Back press would
+      // otherwise land on an empty section.
+      if (name === 'onboarding' && window.Onboarding && typeof window.Onboarding.open === 'function') window.Onboarding.open();
       toggleNavMoreMenu(false);
       var moreBtn = document.getElementById('nav-more-btn');
       if (moreBtn) {

@@ -86,6 +86,10 @@
     // assessment lands on the client's list and Back from that lands on the
     // Assessments tab, exactly as the on-screen Back button does.
     'assessment',
+    // Onboarding Packages. A tab like any other, but it carries a sub-view so
+    // an owner can link a colleague straight to, say, expiring credentials:
+    //   #onboarding | #onboarding/active | #onboarding/compliance
+    'onboarding',
   ];
 
   var WIZARD_TABS = ['fca', 'letter'];
@@ -116,6 +120,11 @@
    *  'assignment' is a learning-assignment player ('#resources/assignment/<id>')
    *  — id-only: without an id RH2.nav degrades it to My Learning. */
   var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment'];
+
+  /** Onboarding sub-views. Mirrors MANAGE_VIEWS in onboarding.js; an
+   *  unrecognised value normalises to the dashboard rather than 404ing. */
+  var OB_VIEWS = ['dashboard', 'packages', 'active', 'employees',
+    'compliance', 'expiring', 'documents', 'settings'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -177,6 +186,12 @@
       // catalogue — so unlike 'detail' it degrades to itself, not elsewhere.
       if (inList(RH_VIEWS_WITH_ID, view)) out.id = rid || null;
 
+    } else if (out.tab === 'onboarding') {
+      var obView = lower(s.view);
+      // An unrecognised sub-view degrades to the dashboard rather than
+      // producing an address that renders nothing.
+      out.view = inList(OB_VIEWS, obView) ? obView : 'dashboard';
+
     } else if (out.tab === 'casenotes') {
       out.id = safeId(s.id) || null;
 
@@ -228,6 +243,9 @@
       else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
+    } else if (s.tab === 'onboarding') {
+      // '#onboarding' IS the dashboard, so it needs no segment of its own.
+      if (s.view && s.view !== 'dashboard') out += '/' + s.view;
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
     } else if (inList(WIZARD_TABS, s.tab)) {
@@ -275,6 +293,8 @@
     } else if (tab === 'resources') {
       st.view = parts[1];
       if (inList(RH_VIEWS_WITH_ID, lower(parts[1]))) st.id = decodeSegment(parts[2]);
+    } else if (tab === 'onboarding') {
+      st.view = parts[1];
     } else if (tab === 'casenotes') {
       st.id = decodeSegment(parts[1]);
     } else if (inList(WIZARD_TABS, tab)) {
@@ -375,6 +395,7 @@
     booted: false,   // deep-link restore has run
     rhView: null,    // Resource Hub sub-view (RH2 exports no state object)
     rhId: null,
+    obView: null,    // Onboarding sub-view (same reason as rhView)
     wizard: null,    // 'fca' | 'letter' | null
     wizardStep: null,
     page: null,      // 'assessment' | null — full-screen surface addressed by id
@@ -433,6 +454,7 @@
     var st = { tab: tab };
     if (tab === 'calendar') st.view = calendarModeName();
     else if (tab === 'resources') { st.view = NAV.rhView || 'home'; st.id = NAV.rhId; }
+    else if (tab === 'onboarding') st.view = NAV.obView || 'dashboard';
     else if (tab === 'casenotes') st.id = caseNoteSelectedId();
     return st;
   }
@@ -763,6 +785,17 @@
       }
     }
 
+    if (t.tab === 'onboarding' && global.Onboarding) {
+      // restore() calls switchTab but no per-tab loader, so a deep link, a
+      // Back press or a Forward press would otherwise land on an empty
+      // section. open() is idempotent, so calling it here as well as from the
+      // RBAC guard's post-switch dispatch is safe.
+      if (isFn(global.Onboarding.open)) {
+        try { global.Onboarding.open(t.view || 'dashboard'); } catch (e) {}
+      }
+      NAV.obView = t.view || 'dashboard';
+    }
+
     if (t.tab === 'resources' && global.RH2) {
       // #rh2-root lives inside the "shared" sub-panel. Restoring a Resources
       // route while the AI Studio or Store sub-panel is active would otherwise
@@ -861,6 +894,7 @@
         try { out = orig.apply(this, arguments); }
         finally { NAV.inNav--; if (NAV.inNav < 0) NAV.inNav = 0; }
         if (name !== 'resources') { NAV.rhView = null; NAV.rhId = null; }
+        if (name !== 'onboarding') NAV.obView = null;
         syncBase();
         return out;
       };
@@ -929,6 +963,20 @@
 
   function installModuleHooks() {
     var done = true;
+
+    // Onboarding — each sub-view is a real destination (an owner links a
+    // colleague straight to expiring credentials), so navigating gets its own
+    // history entry and survives a reload.
+    if (global.Onboarding) {
+      hookMethod('Onboarding', 'nav', function (orig) {
+        return function (view) {
+          var out = orig.apply(this, arguments);
+          NAV.obView = lower(view) || 'dashboard';
+          syncBase();
+          return out;
+        };
+      });
+    } else { done = false; }
 
     // Resource Hub — RH2 exports no state object, so the sub-view is tracked
     // from the arguments it is navigated with.

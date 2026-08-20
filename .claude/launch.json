@@ -70,6 +70,16 @@
       ],
       "port": 8081,
       "autoPort": false
+    },
+    {
+      "name": "opal-onboarding-5010",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5010 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5010,http://127.0.0.1:5010 APP_BASE_URL=http://localhost:5010 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5010,
+      "autoPort": false
     }
   ]
 }
