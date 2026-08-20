@@ -290,7 +290,12 @@ describe('the information page', () => {
   });
 
   test('no item wording is rendered outside the instrument\'s own document', () => {
-    const detail = RH_CODE.slice(RH_CODE.indexOf('function renderInstrumentDetail'));
+    // Bounded to the detail renderer itself: the file continues with the
+    // source-review and learning modules, whose own `.items` arrays are
+    // learning content, not controlled instrument wording.
+    const detail = RH_CODE.slice(
+      RH_CODE.indexOf('function renderInstrumentDetail'),
+      RH_CODE.indexOf('async function loadSourceReview'));
     expect(detail).toMatch(/itemCount/);           // counts, not questions
     expect(detail).not.toMatch(/\.items\b/);
   });
@@ -585,8 +590,9 @@ describe('changed assets are cache-busted', () => {
     for (const [file, version] of [
       ['assessment.js', 3], ['assessment.css', 3],
       ['whodas.js', 5], ['whodas.css', 3],
-      ['resourcehub.js', 'r15'], ['resourcehub.css', 'r9'],
-      ['navigation.js', 4],
+      // r16/r10/5: owner-controlled learning (assignment player + admin console)
+      ['resourcehub.js', 'r16'], ['resourcehub.css', 'r10'],
+      ['navigation.js', 5],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

@@ -31,6 +31,7 @@ sh('node', ['migrate.js', 'up']);
 sh('node', ['setup/seed-users.js']);
 sh('node', ['setup/seed-demo-calendar.js']);
 sh('node', ['setup/seed-resource-hub-r2.js']);
+sh('node', ['setup/seed-learning-workflows.js']);
 console.log(`── synthetic E2E database "${DB}" ready; starting server on :${PORT}`);
 
 process.env.PORT = PORT;

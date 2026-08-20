@@ -151,6 +151,11 @@ app.use('/api/support', bodyParser.json({ limit: '8mb' }));
 // route (≈ 34 MB of base64). Same pattern as the two subtrees above.
 app.use('/api/rh2/resources', bodyParser.json({ limit: '36mb' }));
 
+// Learning workflow drafts carry whole-course content (learning-content.js
+// permits up to 200 items of markdown ≈ 4 MB) — the global 100kb default
+// would 413 a legitimately large draft before the route could validate it.
+app.use('/api/learning', bodyParser.json({ limit: '8mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -476,6 +481,10 @@ app.use('/', require('./store-search-routes'));
 // Interactive induction — per-user tutorial progress (module catalogue is
 // code-owned in frontend/current/induction-modules.js, required directly)
 app.use('/', require('./tutorial-routes'));
+
+// Owner-controlled learning: workflow library, versioned assignments,
+// per-employee progress (owner admin surface + employee My Learning)
+app.use('/', require('./learning-routes'));
 
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));

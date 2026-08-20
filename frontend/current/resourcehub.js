@@ -324,10 +324,33 @@
       // Detail is a sub-view of the same page: null = list, id = that event.
       openId: null, detail: null, detailLoading: false, detailErr: '',
     },
-    view: 'home', // home | library | detail | learning | admin
+    view: 'home', // home | library | detail | learning | assignment | admin
     topics: null, // therapy_area tags [{id,name}]
     costs: null,  // cost tags (Free/Paid) [{id,name}]
     home: null, homeLoading: false,
+    // Owner-assigned learning (my own assignments; every role has these).
+    myl: { rows: null, loading: false, err: '' },
+    // The assignment player. preview=true renders an Owner draft preview:
+    // nothing is posted, completion is simulated locally.
+    assignment: {
+      id: null, data: null, loading: false, err: '', backView: 'learning',
+      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      busy: false, preview: false, previewDone: {}, celebrate: false,
+    },
+    // Owner learning console (Admin → Learning). Sub-tabs: library |
+    // assignments | staff. `editor` is the workflow being edited (deep copy —
+    // Save posts it back); `assign` is the assign panel state.
+    la: {
+      tab: 'library', loading: false, err: '',
+      workflows: null, includeArchived: false, categories: null,
+      editor: null, editorErr: '', editorSaving: false,
+      preview: null,
+      assign: null, // { wfId, wfTitle, q, selected:{}, dueAt, note, mandatory, priority, busy, err, done }
+      staff: null,
+      assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '', afOverdue: false,
+      openAssignment: null, openData: null, openLoading: false,
+      resPick: null, // resource picker inside the editor: { q, rows, loading, forItem }
+    },
     lib: { q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
@@ -376,6 +399,7 @@
     else if (S.view === 'library') body = renderLibrary();
     else if (S.view === 'detail') body = renderDetail();
     else if (S.view === 'learning') body = renderLearning();
+    else if (S.view === 'assignment') body = renderAssignment();
     else if (S.view === 'pd') body = renderPd();
     else if (S.view === 'instruments') body = renderInstruments();
     else if (S.view === 'admin') body = renderAdmin();
@@ -411,6 +435,7 @@
     if (canSeeInstruments()) items.push(['instruments', 'Assessments']);
     if (canAdmin()) items.push(['admin', 'Admin']);
     var active = S.view === 'detail' ? 'library' : S.view;
+    if (S.view === 'assignment') active = 'learning';
     if (S.view === 'library') active = S.lib.saved ? 'saved' : 'library';
     return '<nav class="rh2-nav" aria-label="Resource Hub sections">' + items.map(function (it) {
       return '<button type="button" class="rh2-nav-btn' + (active === it[0] ? ' active' : '') +
@@ -428,10 +453,18 @@
       S.lib.saved = false;
       S.lib.rows = null;
     }
+    // 'assignment' is only addressable with an id: re-enter the one that is
+    // open (or the Owner preview that is open), otherwise degrade to
+    // My Learning rather than an empty player.
+    if (view === 'assignment') {
+      if (S.assignment.preview && S.assignment.previewWfId) return laPreview(S.assignment.previewWfId);
+      if (S.assignment.id) return openAssignment(S.assignment.id);
+      view = 'learning';
+    }
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
     if (view === 'library' && !S.lib.rows) loadLibrary();
-    if (view === 'learning') loadLearning();
+    if (view === 'learning') { loadLearning(); loadMyLearning(); }
     if (view === 'pd') { S.pd.openId = null; if (!S.pd.data) loadPd(); }
     if (view === 'instruments') {
       // Navigating to the section always lands on the catalogue, never on the
@@ -1500,8 +1533,12 @@
     var st = S.learning;
     var out = '<div class="rh2-page"><h1 class="rh2-h1">My Learning</h1>';
 
-    // The interactive induction dashboard leads My Learning. It renders from
-    // the induction engine's own state, so it appears even while the path
+    // Owner-assigned learning leads: it is the formal, monitored work — the
+    // walkthroughs and starter paths below are self-serve.
+    out += renderMyAssignments();
+
+    // The interactive induction dashboard follows. It renders from the
+    // induction engine's own state, so it appears even while the path
     // data below is still loading. typeof-guarded bridge.
     if (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.dashboardHtml) {
       out += global.OpalInduction.dashboardHtml();
@@ -1630,6 +1667,9 @@
 
   function adminTabs() {
     var tabs = [['content', 'Content'], ['pd', 'PD Events'], ['feedback', 'Feedback'], ['analytics', 'Analytics']];
+    // Learning administration is OWNER-ONLY (matching the server: workflow
+    // authoring and assignment are HR-style controls, not admin scheduling).
+    if (isOwner()) tabs.splice(1, 0, ['learning', 'Learning']);
     // Source review is a governance task: owner and admin only, like Sources.
     if (canReview()) tabs.splice(1, 0, ['sourcereview', 'Source review']);
     // The ingestion register accounts for the catalogued source vault. It is
@@ -1642,6 +1682,7 @@
   function loadAdminTab() {
     var t = S.admin.tab;
     if (t === 'content') loadAdminContent();
+    else if (t === 'learning') loadLa();
     else if (t === 'sourcereview') loadSourceReview();
     else if (t === 'sources') loadAdminSources();
     else if (t === 'pd') loadAdminPd();
@@ -1722,6 +1763,7 @@
     if (a.err) out += '<div class="rh2-empty">' + esc(a.err) + '</div>';
 
     if (a.tab === 'content') out += renderAdminContent();
+    else if (a.tab === 'learning') out += renderLa();
     else if (a.tab === 'sourcereview') out += renderSourceReview();
     else if (a.tab === 'sources') out += renderAdminSources();
     else if (a.tab === 'pd') out += renderAdminPd();
@@ -3269,6 +3311,1208 @@
 
   // ── Public surface ────────────────────────────────────────────────────────
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     OWNER-CONTROLLED LEARNING
+     Employee side: assigned-learning cards on My Learning + the assignment
+     player ('assignment' view, #resources/assignment/<id>). Owner side: the
+     Admin → Learning console (library / assignments / staff). All authority
+     lives server-side in backend/learning-routes.js — everything here is
+     rendering and optimistic state.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  var LA_CATEGORY_LABELS = {
+    induction: 'Induction', clinical: 'Clinical', compliance: 'Compliance',
+    safety: 'Safety', administration: 'Administration', rural_remote: 'Rural / Remote',
+    professional_development: 'Professional development', policy_update: 'Policy update',
+    other: 'Other',
+  };
+  function laCatLabel(c) { return LA_CATEGORY_LABELS[c] || (c ? String(c) : ''); }
+
+  var LA_ITEM_TYPE_LABELS = {
+    content: 'Reading', resource: 'Resource', acknowledgement: 'Acknowledgement',
+    quiz: 'Knowledge check', task: 'Task',
+  };
+
+  function laStatusChip(a) {
+    if (a.status === 'completed') return '<span class="rh2-chip rh2-chip-ok">Completed</span>';
+    if (a.status === 'cancelled') return '<span class="rh2-chip rh2-chip-quiet">Cancelled</span>';
+    if (a.overdue) return '<span class="rh2-chip rh2-chip-warn">Overdue</span>';
+    if (a.status === 'in_progress') return '<span class="rh2-chip">In progress</span>';
+    return '<span class="rh2-chip rh2-chip-quiet">Not started</span>';
+  }
+
+  function laBar(pct, label) {
+    var p = Math.max(0, Math.min(100, Number(pct) || 0));
+    return '<div class="rh2-bar" role="progressbar" aria-valuenow="' + p +
+      '" aria-valuemin="0" aria-valuemax="100" aria-label="' + esc(label || 'Progress') +
+      '"><span style="width:' + p + '%"></span></div>';
+  }
+
+  // ── Employee: my assigned learning ─────────────────────────────────────────
+
+  async function loadMyLearning() {
+    if (S.myl.loading) return;
+    S.myl.loading = true;
+    var d = await api('/api/learning/my');
+    S.myl.loading = false;
+    S.myl.err = d.ok ? '' : (d.error || 'Assigned learning could not be loaded.');
+    S.myl.rows = d.ok ? (d.assignments || []) : (S.myl.rows || []);
+    render();
+  }
+
+  function myAssignmentCard(a) {
+    var total = pick(a, 'required_total') || 0;
+    var done = pick(a, 'required_done') || 0;
+    var pct = pick(a, 'progress_percent') || 0;
+    var actionLabel = a.status === 'completed' ? 'View'
+      : (a.status === 'in_progress' ? 'Continue' : 'Start');
+    var dueTxt = pick(a, 'due_at') ? 'Due ' + fmtDate(pick(a, 'due_at')) : '';
+    return '<div class="rh2-learn-card' + (a.overdue ? ' rh2-learn-overdue' : '') + '">' +
+      '<div class="rh2-learn-card-head">' +
+        '<span class="rh2-row-title">' + esc(pick(a, 'title')) + '</span>' +
+        laStatusChip(a) +
+      '</div>' +
+      '<div class="rh2-row-sub">' +
+        esc(laCatLabel(pick(a, 'category'))) +
+        (pick(a, 'mandatory') ? ' · Mandatory' : ' · Optional') +
+        (pick(a, 'version') ? ' · v' + esc(pick(a, 'version')) : '') +
+      '</div>' +
+      laBar(pct, pick(a, 'title') + ' progress') +
+      '<div class="rh2-row-sub">' + done + ' of ' + total + ' required modules · ' + pct + '%</div>' +
+      '<div class="rh2-row-sub">Assigned ' + esc(fmtDate(pick(a, 'assigned_at'))) +
+        (dueTxt ? ' · <span class="' + (a.overdue ? 'rh2-learn-due-warn' : '') + '">' + esc(dueTxt) + '</span>' : '') +
+        (a.status === 'completed' ? ' · Completed ' + esc(fmtDate(pick(a, 'completed_at'))) : '') +
+      '</div>' +
+      (pick(a, 'owner_note') ? '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>' : '') +
+      '<div class="rh2-learn-card-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+        'onclick="RH2.openAssignment(\'' + esc(a.id) + '\')">' + actionLabel + '</button></div>' +
+    '</div>';
+  }
+
+  function renderMyAssignments() {
+    var st = S.myl;
+    if (st.loading && !st.rows) {
+      return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' + skel(2, 88) + '</section>';
+    }
+    if (st.err && !(st.rows && st.rows.length)) {
+      return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' +
+        '<div class="rh2-empty">' + esc(st.err) + ' <button type="button" class="rh2-btn" onclick="RH2.reloadMyLearning()">Retry</button></div></section>';
+    }
+    var rows = st.rows || [];
+    if (!rows.length) {
+      return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' +
+        '<div class="rh2-empty">You’re all up to date — no outstanding learning has been assigned to you.</div></section>';
+    }
+    var todo = rows.filter(function (a) { return a.status === 'assigned'; });
+    var doing = rows.filter(function (a) { return a.status === 'in_progress'; });
+    var doneRows = rows.filter(function (a) { return a.status === 'completed'; });
+    var group = function (label, list) {
+      if (!list.length) return '';
+      return '<h3 class="rh2-learn-group">' + label + '</h3>' +
+        '<div class="rh2-learn-cards">' + list.map(myAssignmentCard).join('') + '</div>';
+    };
+    return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' +
+      group('In progress', doing) + group('To do', todo) + group('Completed', doneRows) +
+    '</section>';
+  }
+
+  // ── Employee: assignment player ────────────────────────────────────────────
+
+  async function openAssignment(id) {
+    S.assignment = {
+      id: String(id || ''), data: null, loading: true, err: '', backView: 'learning',
+      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      busy: false, preview: false, previewDone: {}, celebrate: false,
+    };
+    S.view = 'assignment';
+    render();
+    var d = await api('/api/learning/my/' + encodeURIComponent(String(id || '')));
+    // Stale guard: the user may have opened a different assignment while this
+    // response was in flight — a late answer must not clobber the newer one.
+    if (S.assignment.id !== String(id || '') || S.assignment.preview) return;
+    S.assignment.loading = false;
+    if (!d.ok) {
+      S.assignment.err = d.status === 404
+        ? 'This learning assignment is no longer available.'
+        : (d.error || 'The assignment could not be loaded.');
+      return render();
+    }
+    S.assignment.data = d;
+    // Opening an untouched assignment starts it — deliberate, visible in the
+    // owner's dashboard as In progress from the first real look.
+    if (d.assignment && d.assignment.status === 'assigned') {
+      api('/api/learning/my/' + encodeURIComponent(S.assignment.id) + '/start', { method: 'POST' })
+        .then(function (r) {
+          if (r.ok && r.assignment && S.assignment.data && S.assignment.id === String(id)) {
+            S.assignment.data.assignment = r.assignment;
+            render();
+          }
+          loadMyLearning();
+        });
+    }
+    render();
+  }
+
+  /** Owner draft preview — same player, nothing persisted. */
+  async function laPreview(wfId) {
+    S.assignment = {
+      id: null, data: null, loading: true, err: '', backView: 'admin',
+      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      busy: false, preview: true, previewWfId: String(wfId || ''), previewDone: {}, celebrate: false,
+    };
+    S.view = 'assignment';
+    render();
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(String(wfId || '')) + '/preview');
+    S.assignment.loading = false;
+    if (!d.ok) { S.assignment.err = d.error || 'Preview failed.'; return render(); }
+    S.assignment.data = {
+      assignment: {
+        title: d.workflow.title, category: d.workflow.category, status: 'in_progress',
+        progress_percent: 0, required_done: 0,
+        required_total: (d.stats && d.stats.countedTotal) || 0,
+        mandatory: true,
+      },
+      content: d.content,
+      completed_items: {},
+    };
+    render();
+  }
+
+  function alBack() {
+    var back = S.assignment.backView === 'admin' ? 'admin' : 'learning';
+    S.assignment.id = null;
+    S.assignment.preview = false;
+    // Through the PUBLIC nav, not the closure-local one: navigation.js wraps
+    // RH2.nav to sync the URL/history, and leaving the player must move the
+    // address off #resources/assignment/<id>.
+    (global.RH2 && global.RH2.nav ? global.RH2.nav : nav)(back);
+  }
+
+  function alItemDone(key) {
+    var st = S.assignment;
+    if (st.preview) return !!st.previewDone[key];
+    return !!(st.data && st.data.completed_items && st.data.completed_items[key]);
+  }
+
+  function alToggle(key) {
+    var st = S.assignment;
+    st.openItem = st.openItem === key ? null : String(key);
+    st.quizResult = null;
+    st.ackArmed = false;
+    st.quizAnswers = {};
+    render();
+  }
+
+  async function alComplete(key, body) {
+    var st = S.assignment;
+    if (st.busy) return null;
+    if (st.preview) {
+      st.previewDone[key] = true;
+      st.ackArmed = false;
+      render();
+      return { ok: true, completed: true, preview: true };
+    }
+    st.busy = true;
+    render();
+    var d = await api('/api/learning/my/' + encodeURIComponent(st.id) +
+      '/items/' + encodeURIComponent(key) + '/complete', { method: 'POST', body: body || {} });
+    st.busy = false;
+    if (!d.ok) {
+      st.err = '';
+      alert(d.error || 'Saving your progress failed — please try again.');
+      render();
+      return null;
+    }
+    if (d.completed) {
+      if (st.data.completed_items) st.data.completed_items[key] = new Date().toISOString();
+      if (d.assignment) st.data.assignment = d.assignment;
+      st.ackArmed = false;
+      if (d.assignment_completed) st.celebrate = true;
+      loadMyLearning();
+    }
+    render();
+    return d;
+  }
+
+  function alMarkComplete(key) { alComplete(key, {}); }
+
+  function alAckArm(key) { S.assignment.ackArmed = String(key); render(); }
+  function alAckCancel() { S.assignment.ackArmed = false; render(); }
+  function alAckConfirm(key) { alComplete(key, { acknowledged: true }); }
+
+  function alQuizPick(key, qi, oi) {
+    var st = S.assignment;
+    if (!st.quizAnswers[key]) st.quizAnswers[key] = {};
+    st.quizAnswers[key][qi] = Number(oi);
+    // No render: the radio itself holds the visible state.
+  }
+
+  async function alQuizSubmit(key, questionCount) {
+    var st = S.assignment;
+    var picks = st.quizAnswers[key] || {};
+    var answers = [];
+    for (var i = 0; i < questionCount; i++) {
+      if (picks[i] === undefined) {
+        alert('Please answer every question before submitting.');
+        return;
+      }
+      answers.push(picks[i]);
+    }
+    if (st.preview) {
+      st.previewDone[key] = true;
+      st.quizResult = { forItem: key, passed: true, preview: true };
+      render();
+      return;
+    }
+    var d = await alComplete(key, { answers: answers });
+    if (d && d.quiz) {
+      st.quizResult = { forItem: key, passed: !!d.completed, score: d.quiz.score, total: d.quiz.total, percent: d.quiz.percent };
+      render();
+    }
+  }
+
+  function alQuizRetry(key) {
+    S.assignment.quizResult = null;
+    S.assignment.quizAnswers[key] = {};
+    render();
+  }
+
+  function alItemBody(item, done) {
+    var st = S.assignment;
+    var key = item.key;
+    var out = '<div class="rh2-learn-item-body">';
+    if (item.body) out += '<div class="rh2-learn-prose">' + mdRender(item.body) + '</div>';
+
+    if (item.type === 'resource') {
+      out += '<div class="rh2-learn-actions">' +
+        '<button type="button" class="rh2-btn" onclick="RH2.openDetail(\'' + esc(item.resource_id) + '\',\'assignment\')">' +
+          'Open resource' + (item.resource_title ? ': ' + esc(item.resource_title) : '') + '</button>' +
+        (!done ? '<button type="button" class="rh2-btn rh2-btn-primary" ' + (st.busy ? 'disabled ' : '') +
+          'onclick="RH2.alMarkComplete(\'' + esc(key) + '\')">Mark complete</button>' : '') +
+      '</div>';
+    } else if (item.type === 'acknowledgement') {
+      out += '<blockquote class="rh2-learn-ack">' + mdRender(item.ack_statement || '') + '</blockquote>';
+      if (!done) {
+        if (st.ackArmed === key) {
+          out += '<div class="rh2-learn-actions"><span class="rh2-quiet">Confirm you have read and understood the statement above.</span>' +
+            '<button type="button" class="rh2-btn rh2-btn-primary" ' + (st.busy ? 'disabled ' : '') +
+              'onclick="RH2.alAckConfirm(\'' + esc(key) + '\')">Confirm acknowledgement</button>' +
+            '<button type="button" class="rh2-btn" onclick="RH2.alAckCancel()">Cancel</button></div>';
+        } else {
+          out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+            'onclick="RH2.alAckArm(\'' + esc(key) + '\')">I acknowledge</button></div>';
+        }
+      }
+    } else if (item.type === 'quiz') {
+      var quiz = item.quiz || { questions: [] };
+      var result = st.quizResult && st.quizResult.forItem === key ? st.quizResult : null;
+      if (done) {
+        out += '<p class="rh2-quiet">Knowledge check passed.</p>';
+      } else if (result && !result.passed) {
+        out += '<div class="rh2-learn-quiz-result rh2-learn-quiz-fail">Not quite — ' +
+          result.score + ' of ' + result.total + ' correct (' + result.percent + '%). ' +
+          'Pass mark is ' + esc(quiz.passThreshold || 80) + '%.' +
+          ' <button type="button" class="rh2-btn" onclick="RH2.alQuizRetry(\'' + esc(key) + '\')">Try again</button></div>';
+      } else {
+        var picks = st.quizAnswers[key] || {};
+        out += quiz.questions.map(function (q, qi) {
+          return '<fieldset class="rh2-learn-q"><legend>' + (qi + 1) + '. ' + esc(q.question) + '</legend>' +
+            (q.options || []).map(function (opt, oi) {
+              var rid = 'la-q-' + esc(key) + '-' + qi + '-' + oi;
+              // checked renders from state so a re-render (progress save,
+              // another item completing) never visually clears a selection
+              // that S.assignment.quizAnswers still holds.
+              return '<label class="rh2-learn-opt" for="' + rid + '">' +
+                '<input type="radio" id="' + rid + '" name="la-q-' + esc(key) + '-' + qi + '" ' +
+                (picks[qi] === oi ? 'checked ' : '') +
+                'onchange="RH2.alQuizPick(\'' + esc(key) + '\',' + qi + ',' + oi + ')">' +
+                '<span>' + esc(opt) + '</span></label>';
+            }).join('') + '</fieldset>';
+        }).join('');
+        out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+          (st.busy ? 'disabled ' : '') +
+          'onclick="RH2.alQuizSubmit(\'' + esc(key) + '\',' + (quiz.questions || []).length + ')">Submit answers</button></div>';
+      }
+    } else if (!done) { // content / task
+      out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+        (st.busy ? 'disabled ' : '') +
+        'onclick="RH2.alMarkComplete(\'' + esc(key) + '\')">Mark complete</button></div>';
+    }
+    if (done && !st.preview) {
+      var when = st.data.completed_items && st.data.completed_items[key];
+      out += '<p class="rh2-quiet">Completed' + (when ? ' ' + esc(fmtDate(when)) : '') + '.</p>';
+    }
+    return out + '</div>';
+  }
+
+  function renderAssignment() {
+    var st = S.assignment;
+    var out = '<div class="rh2-page rh2-learn-player">';
+    var backBtn = '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.alBack()">← ' +
+      (st.preview ? 'Back to Learning admin' : 'Back to My Learning') + '</button>';
+    if (st.loading || (!st.data && !st.err)) return out + backBtn + '<div class="rh2-card">' + skel(4, 64) + '</div></div>';
+    if (st.err) return out + backBtn + '<div class="rh2-empty">' + esc(st.err) + '</div></div>';
+
+    var a = st.data.assignment || {};
+    var content = st.data.content || { sections: [] };
+
+    out += '<div class="rh2-learn-player-top">' + backBtn +
+      (st.preview ? '<span class="rh2-chip rh2-chip-warn">Preview — progress is not saved</span>' : laStatusChip(a)) +
+      '</div>';
+
+    out += '<section class="rh2-card">' +
+      '<h1 class="rh2-h1">' + esc(pick(a, 'title')) + '</h1>' +
+      '<div class="rh2-row-sub">' + esc(laCatLabel(pick(a, 'category'))) +
+        (pick(a, 'version') ? ' · Version ' + esc(pick(a, 'version')) : '') +
+        (pick(a, 'mandatory') === false ? ' · Optional' : ' · Mandatory') + '</div>' +
+      (st.preview ? '' :
+        laBar(pick(a, 'progress_percent') || 0, 'Overall progress') +
+        '<div class="rh2-row-sub">' + (pick(a, 'required_done') || 0) + ' of ' + (pick(a, 'required_total') || 0) +
+          ' required modules · ' + (pick(a, 'progress_percent') || 0) + '%</div>' +
+        '<div class="rh2-row-sub">Assigned ' + esc(fmtDate(pick(a, 'assigned_at'))) +
+          (pick(a, 'assigned_by_name') ? ' by ' + esc(pick(a, 'assigned_by_name')) : '') +
+          (pick(a, 'due_at') ? ' · Due ' + esc(fmtDate(pick(a, 'due_at'))) : '') + '</div>' +
+        (pick(a, 'owner_note') ? '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>' : '')) +
+      (a.status === 'completed'
+        ? '<div class="rh2-learn-done-banner">✓ Completed ' + esc(fmtDate(pick(a, 'completed_at'))) + '</div>'
+        : '') +
+    '</section>';
+
+    (content.sections || []).forEach(function (s) {
+      out += '<section class="rh2-card"><h2 class="rh2-h2">' + esc(s.title) + '</h2><ol class="rh2-modules">';
+      (s.items || []).forEach(function (it, i) {
+        var done = alItemDone(it.key);
+        var open = st.openItem === it.key;
+        var typeLabel = it.type !== 'content' ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
+        var reqLabel = it.required === false ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
+        out += '<li><button type="button" class="rh2-module" aria-expanded="' + open + '" onclick="RH2.alToggle(\'' + esc(it.key) + '\')">' +
+          '<span class="rh2-module-no">' + (i + 1) + '</span>' +
+          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
+          '<span class="rh2-row-sub">' + (it.minutes ? esc(it.minutes) + ' min' : '') + '</span></span>' +
+          (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '') +
+          '</button>' +
+          (open ? alItemBody(it, done) : '') +
+        '</li>';
+      });
+      out += '</ol></section>';
+    });
+
+    if (st.celebrate) {
+      out += '<section class="rh2-card rh2-learn-celebrate"><h2 class="rh2-h2">All done 🎉</h2>' +
+        '<p>You’ve completed every required module. This learning is now recorded as completed.</p>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.alBack()">Back to My Learning</button></section>';
+    }
+    return out + '</div>';
+  }
+
+  // ── Owner: learning console (Admin → Learning) ─────────────────────────────
+
+  async function loadLa() {
+    var la = S.la;
+    la.loading = true;
+    la.err = '';
+    render();
+    var results = await Promise.all([
+      api('/api/learning/workflows' + (la.includeArchived ? '?includeArchived=1' : '')),
+      api('/api/learning/staff'),
+    ]);
+    la.loading = false;
+    var wf = results[0], staff = results[1];
+    if (!wf.ok) la.err = wf.error || 'Learning workflows could not be loaded.';
+    la.workflows = wf.ok ? (wf.workflows || []) : la.workflows;
+    la.categories = wf.ok ? (wf.categories || null) : la.categories;
+    la.staff = staff.ok ? (staff.staff || []) : la.staff;
+    if (la.tab === 'assignments') loadLaAssignments();
+    render();
+  }
+
+  async function loadLaAssignments() {
+    var la = S.la;
+    var qs = [];
+    if (la.afStatus) qs.push('status=' + encodeURIComponent(la.afStatus));
+    if (la.afWorkflow) qs.push('workflowId=' + encodeURIComponent(la.afWorkflow));
+    if (la.afUser) qs.push('userId=' + encodeURIComponent(la.afUser));
+    if (la.afQ) qs.push('q=' + encodeURIComponent(la.afQ));
+    if (la.afOverdue) qs.push('overdue=1');
+    var d = await api('/api/learning/assignments' + (qs.length ? '?' + qs.join('&') : ''));
+    la.assignments = d.ok ? (d.assignments || []) : [];
+    if (!d.ok) la.err = d.error || 'Assignments could not be loaded.';
+    render();
+  }
+
+  function laNav(t) {
+    // The editor and assign panel render INSTEAD of tab content, so switching
+    // tabs while one is open would highlight a tab that shows nothing —
+    // close them first (the editor close warns about unsaved changes and can
+    // be declined, in which case the tab stays put).
+    if (S.la.editor) {
+      if (S.la.editor._dirty && !confirm('Discard unsaved changes to this workflow?')) return;
+      S.la.editor = null;
+      S.la.resPick = null;
+    }
+    S.la.assign = null;
+    S.la.tab = t;
+    S.la.err = '';
+    S.la.openAssignment = null;
+    S.la.openData = null;
+    if (t === 'assignments' && !S.la.assignments) loadLaAssignments();
+    render();
+  }
+
+  function renderLa() {
+    var la = S.la;
+    var subnav = [['library', 'Library'], ['assignments', 'Assignments'], ['staff', 'Staff progress']];
+    var out = '<div class="rh2-learn-admin">' +
+      '<div class="rh2-subnav" role="tablist" aria-label="Learning administration">' + subnav.map(function (t) {
+        return '<button type="button" role="tab" aria-selected="' + (la.tab === t[0]) + '" class="rh2-subnav-btn' +
+          (la.tab === t[0] ? ' active' : '') + '" onclick="RH2.laNav(\'' + t[0] + '\')">' + t[1] + '</button>';
+      }).join('') + '</div>';
+    if (la.err) out += '<div class="rh2-empty">' + esc(la.err) + '</div>';
+    if (la.editor) return out + renderLaEditor() + '</div>';
+    if (la.assign) return out + renderLaAssign() + '</div>';
+    if (la.loading && !la.workflows) return out + '<div class="rh2-card">' + skel(3, 72) + '</div></div>';
+    if (la.tab === 'library') out += renderLaLibrary();
+    else if (la.tab === 'assignments') out += renderLaAssignments();
+    else if (la.tab === 'staff') out += renderLaStaff();
+    return out + '</div>';
+  }
+
+  // ── Owner: library ──────────────────────────────────────────────────────────
+
+  function renderLaLibrary() {
+    var la = S.la;
+    var rows = la.workflows || [];
+    var out = '<div class="rh2-learn-lib-head">' +
+      '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning workflow</button>' +
+      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
+        'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+      '</div>';
+    if (!rows.length) {
+      return out + '<div class="rh2-empty">No learning workflows yet. Create your first learning workflow to begin assigning staff learning.</div>';
+    }
+    out += rows.map(function (w) {
+      var archived = w.status === 'archived';
+      return '<section class="rh2-card rh2-learn-wf' + (archived ? ' rh2-learn-wf-archived' : '') + '">' +
+        '<div class="rh2-learn-card-head"><span class="rh2-row-title">' + esc(w.title) + '</span>' +
+          (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>'
+            : (w.has_unpublished_changes ? '<span class="rh2-chip rh2-chip-warn">Draft changes</span>' : '<span class="rh2-chip rh2-chip-ok">Up to date</span>')) +
+        '</div>' +
+        '<div class="rh2-row-sub">' + esc(laCatLabel(w.category)) +
+          ' · ' + (w.module_count || 0) + ' modules' +
+          (w.current_version ? ' · Version ' + w.current_version : ' · Never assigned') +
+          ' · ' + (w.active_assignments || 0) + ' active / ' + (w.completed_assignments || 0) + ' completed' +
+          ' · Updated ' + esc(fmtDate(w.updated_at)) + '</div>' +
+        (w.description ? '<p class="rh2-quiet">' + esc(w.description) + '</p>' : '') +
+        '<div class="rh2-learn-card-actions">' +
+          (!archived ? '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laAssignOpen(\'' + esc(w.id) + '\')">Assign</button>' : '') +
+          (!archived ? '<button type="button" class="rh2-btn" onclick="RH2.laEdit(\'' + esc(w.id) + '\')">Edit</button>' : '') +
+          '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(w.id) + '\')">Preview</button>' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
+          (archived
+            ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>'
+            : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
+          (!w.active_assignments && !w.completed_assignments && !w.current_version
+            ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '') +
+        '</div></section>';
+    }).join('');
+    return out;
+  }
+
+  function laToggleArchived(on) { S.la.includeArchived = !!on; loadLa(); }
+
+  async function laDuplicate(id) {
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/duplicate', { method: 'POST' });
+    if (!d.ok) { alert(d.error || 'Duplicating failed.'); return; }
+    await loadLa();
+    laEdit(d.workflow.id);
+  }
+
+  async function laArchive(id) {
+    if (!confirm('Archive this workflow? It can no longer be assigned; existing assignments and completion history are kept.')) return;
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/archive', { method: 'POST' });
+    if (!d.ok) alert(d.error || 'Archiving failed.');
+    loadLa();
+  }
+
+  async function laUnarchive(id) {
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/unarchive', { method: 'POST' });
+    if (!d.ok) alert(d.error || 'Unarchiving failed.');
+    loadLa();
+  }
+
+  async function laDelete(id) {
+    if (!confirm('Delete this draft workflow permanently? Only drafts that were never assigned can be deleted.')) return;
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!d.ok) alert(d.error || 'Deleting failed.');
+    loadLa();
+  }
+
+  async function laCreate() {
+    var title = prompt('Name the new learning workflow (e.g. "New Graduate OT Induction"):');
+    if (!title || !title.trim()) return;
+    var d = await api('/api/learning/workflows', { method: 'POST', body: { title: title.trim() } });
+    if (!d.ok) { alert(d.error || 'The workflow could not be created.'); return; }
+    await loadLa();
+    laEdit(d.workflow.id);
+  }
+
+  async function laEdit(id) {
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
+    if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
+    var w = d.workflow;
+    S.la.editor = {
+      id: w.id,
+      title: w.title,
+      description: w.description || '',
+      category: w.category || 'induction',
+      sections: (w.draft_content && w.draft_content.sections || []).map(function (s) {
+        return {
+          key: s.key, title: s.title,
+          items: (s.items || []).map(function (it) {
+            var q = it.quiz || null;
+            return {
+              key: it.key, type: it.type, title: it.title, body: it.body || '',
+              minutes: it.minutes || '', required: it.required !== false,
+              resource_id: it.resource_id || '', resource_title: it.resource_title || '',
+              ack_statement: it.ack_statement || '',
+              quiz: q ? {
+                passThreshold: q.passThreshold || 80,
+                questions: (q.questions || []).map(function (qq) {
+                  return { question: qq.question, optionsText: (qq.options || []).join('\n'), correctIndex: qq.correctIndex || 0 };
+                }),
+              } : null,
+            };
+          }),
+        };
+      }),
+      versions: d.versions || [],
+      counts: d.assignment_counts || {},
+    };
+    S.la.editorErr = '';
+    S.la.resPick = null;
+    render();
+  }
+
+  function laEditorClose() {
+    if (S.la.editor && S.la.editor._dirty &&
+        !confirm('Discard unsaved changes to this workflow?')) return;
+    S.la.editor = null;
+    S.la.resPick = null;
+    loadLa();
+  }
+
+  function laEditorContentForApi(ed) {
+    return {
+      sections: ed.sections.map(function (s) {
+        return {
+          key: s.key, title: s.title,
+          items: s.items.map(function (it) {
+            var out = {
+              key: it.key, type: it.type, title: it.title, body: it.body,
+              required: !!it.required,
+            };
+            var mins = parseInt(it.minutes, 10);
+            if (mins > 0) out.minutes = mins;
+            if (it.type === 'resource') { out.resource_id = it.resource_id; out.resource_title = it.resource_title; }
+            if (it.type === 'acknowledgement') out.ack_statement = it.ack_statement;
+            if (it.type === 'quiz' && it.quiz) {
+              out.quiz = {
+                passThreshold: parseInt(it.quiz.passThreshold, 10) || 80,
+                questions: it.quiz.questions.map(function (q) {
+                  return {
+                    question: q.question,
+                    options: String(q.optionsText || '').split('\n').map(function (o) { return o.trim(); }).filter(Boolean),
+                    correctIndex: parseInt(q.correctIndex, 10) || 0,
+                  };
+                }),
+              };
+            }
+            return out;
+          }),
+        };
+      }),
+    };
+  }
+
+  async function laSave() {
+    var ed = S.la.editor;
+    if (!ed || S.la.editorSaving) return;
+    S.la.editorSaving = true;
+    render();
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(ed.id), {
+      method: 'PUT',
+      body: {
+        title: ed.title,
+        description: ed.description,
+        category: ed.category,
+        content: laEditorContentForApi(ed),
+      },
+    });
+    S.la.editorSaving = false;
+    if (!d.ok) { S.la.editorErr = d.error || 'Saving failed.'; return render(); }
+    S.la.editorErr = '';
+    // Re-open from the server's normalised copy (keys may have been assigned).
+    await laEdit(ed.id);
+  }
+
+  // Editor field handlers deliberately do NOT re-render on keystroke — the
+  // input already shows the value; a full re-render would fight the caret.
+  // Every mutation flags _dirty so closing the editor can warn honestly.
+  function laMeta(field, value) { if (S.la.editor) { S.la.editor[field] = value; S.la.editor._dirty = true; } }
+  function laSecField(si, value) { var ed = S.la.editor; if (ed && ed.sections[si]) { ed.sections[si].title = value; ed._dirty = true; } }
+  function laItemField(si, ii, field, value) {
+    var ed = S.la.editor;
+    if (ed && ed.sections[si] && ed.sections[si].items[ii]) { ed.sections[si].items[ii][field] = value; ed._dirty = true; }
+  }
+  function laQuizField(si, ii, field, value) {
+    var ed = S.la.editor;
+    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
+    if (it && it.quiz) { it.quiz[field] = value; ed._dirty = true; }
+  }
+  function laQField(si, ii, qi, field, value) {
+    var ed = S.la.editor;
+    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
+    if (it && it.quiz && it.quiz.questions[qi]) { it.quiz.questions[qi][field] = value; ed._dirty = true; }
+  }
+
+  function laSecAdd() {
+    var ed = S.la.editor;
+    ed.sections.push({ key: '', title: 'New section', items: [] });
+    ed._dirty = true;
+    render();
+  }
+  function laSecRemove(si) {
+    var ed = S.la.editor;
+    var s = ed.sections[si];
+    if (!s) return;
+    if (s.items.length && !confirm('Remove the section "' + s.title + '" and its ' + s.items.length + ' item(s)?')) return;
+    ed.sections.splice(si, 1);
+    ed._dirty = true;
+    render();
+  }
+  function laSecMove(si, dir) {
+    var ed = S.la.editor;
+    var to = si + dir;
+    if (to < 0 || to >= ed.sections.length) return;
+    var s = ed.sections.splice(si, 1)[0];
+    ed.sections.splice(to, 0, s);
+    ed._dirty = true;
+    render();
+  }
+  function laItemAdd(si, type) {
+    var ed = S.la.editor;
+    if (!ed.sections[si] || !type) return;
+    var it = { key: '', type: type, title: '', body: '', minutes: '', required: true, resource_id: '', resource_title: '', ack_statement: '', quiz: null };
+    if (type === 'quiz') it.quiz = { passThreshold: 80, questions: [{ question: '', optionsText: '', correctIndex: 0 }] };
+    ed.sections[si].items.push(it);
+    ed._dirty = true;
+    render();
+  }
+  function laItemRemove(si, ii) {
+    var ed = S.la.editor;
+    if (!ed.sections[si]) return;
+    ed.sections[si].items.splice(ii, 1);
+    ed._dirty = true;
+    render();
+  }
+  function laItemMove(si, ii, dir) {
+    var ed = S.la.editor;
+    var items = ed.sections[si] && ed.sections[si].items;
+    if (!items) return;
+    var to = ii + dir;
+    if (to < 0 || to >= items.length) return;
+    var it = items.splice(ii, 1)[0];
+    items.splice(to, 0, it);
+    ed._dirty = true;
+    render();
+  }
+  function laQAdd(si, ii) {
+    var it = S.la.editor.sections[si].items[ii];
+    if (it.quiz) { it.quiz.questions.push({ question: '', optionsText: '', correctIndex: 0 }); S.la.editor._dirty = true; render(); }
+  }
+  function laQRemove(si, ii, qi) {
+    var it = S.la.editor.sections[si].items[ii];
+    if (it.quiz) { it.quiz.questions.splice(qi, 1); S.la.editor._dirty = true; render(); }
+  }
+
+  // Resource picker: inline search against the hub catalogue.
+  function laResPickOpen(si, ii) {
+    S.la.resPick = { si: si, ii: ii, q: '', rows: null, loading: false };
+    render();
+  }
+  function laResPickClose() { S.la.resPick = null; render(); }
+  async function laResSearch(q) {
+    var rp = S.la.resPick;
+    if (!rp) return;
+    rp.q = q;
+    if (!q || q.trim().length < 2) { rp.rows = null; return render(); }
+    rp.loading = true;
+    var d = await api('/api/rh2/resources?q=' + encodeURIComponent(q.trim()));
+    if (!S.la.resPick || S.la.resPick.q !== q) return; // stale response
+    rp.loading = false;
+    rp.rows = d.ok ? (pick(d, 'resources') || pick(d, 'rows') || []) : [];
+    render();
+  }
+  /** Choose by ROW INDEX, not by inlined values: a title containing a
+   *  backslash or quote must reach the state verbatim, and inlining it into
+   *  an onclick string literal cannot guarantee that. */
+  function laResChoose(idx) {
+    var rp = S.la.resPick;
+    var row = rp && rp.rows && rp.rows[idx];
+    if (!row) return;
+    laItemField(rp.si, rp.ii, 'resource_id', String(pick(row, 'id') || ''));
+    laItemField(rp.si, rp.ii, 'resource_title', String(pick(row, 'title') || ''));
+    S.la.resPick = null;
+    render();
+  }
+
+  function laEditorItemHtml(it, si, ii, count) {
+    var idp = 'la-ed-' + si + '-' + ii;
+    var out = '<div class="rh2-learn-ed-item">' +
+      '<div class="rh2-learn-ed-item-head">' +
+        '<span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' +
+        '<input class="rh2-input rh2-learn-ed-title" id="' + idp + '-title" placeholder="Item title" value="' + esc(it.title) + '" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">' +
+        '<span class="rh2-learn-ed-tools">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">↑</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">↓</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove item" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">✕</button>' +
+        '</span>' +
+      '</div>' +
+      '<textarea class="rh2-input rh2-learn-ed-body" id="' + idp + '-body" rows="3" ' +
+        'placeholder="Instructions / content (markdown: ## headings, **bold**, - bullets, links)" ' +
+        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>' +
+      '<div class="rh2-learn-ed-row">' +
+        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (it.required ? 'checked ' : '') +
+          'onchange="RH2.laItemField(' + si + ',' + ii + ',\'required\',this.checked)"> Required</label>' +
+        '<label class="rh2-lbl">Minutes <input type="number" min="1" max="600" class="rh2-input rh2-learn-ed-mins" id="' + idp + '-mins" value="' + esc(it.minutes) + '" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'minutes\',this.value)"></label>' +
+      '</div>';
+
+    if (it.type === 'resource') {
+      var rp = S.la.resPick;
+      out += '<div class="rh2-learn-ed-row">' +
+        (it.resource_id
+          ? '<span class="rh2-chip rh2-chip-ok">Linked: ' + esc(it.resource_title || it.resource_id) + '</span>'
+          : '<span class="rh2-chip rh2-chip-warn">No resource linked yet</span>') +
+        '<button type="button" class="rh2-btn" onclick="RH2.laResPickOpen(' + si + ',' + ii + ')">' +
+          (it.resource_id ? 'Change resource' : 'Choose resource') + '</button></div>';
+      if (rp && rp.si === si && rp.ii === ii) {
+        out += '<div class="rh2-learn-ed-respick">' +
+          '<input class="rh2-input" id="la-respick-q" placeholder="Search the Resource Hub…" value="' + esc(rp.q) + '" ' +
+            'oninput="RH2.laResSearch(this.value)">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laResPickClose()">Close</button>';
+        if (rp.loading) out += skel(2, 34);
+        else if (rp.rows && !rp.rows.length) out += '<div class="rh2-empty">No matching resources.</div>';
+        else if (rp.rows) {
+          out += rp.rows.slice(0, 8).map(function (r, ri) {
+            return '<button type="button" class="rh2-row rh2-learn-ed-resrow" onclick="RH2.laResChoose(' + ri + ')">' +
+              '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
+              '<span class="rh2-row-sub">' + esc(pick(r, 'content_type') || pick(r, 'resource_type') || '') + '</span></span></button>';
+          }).join('');
+        }
+        out += '</div>';
+      }
+    }
+
+    if (it.type === 'acknowledgement') {
+      out += '<textarea class="rh2-input" id="' + idp + '-ack" rows="2" placeholder="The statement the employee must acknowledge" ' +
+        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>';
+    }
+
+    if (it.type === 'quiz' && it.quiz) {
+      out += '<div class="rh2-learn-ed-quiz">' +
+        '<label class="rh2-lbl">Pass mark % <input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="' + idp + '-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
+          'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)"></label>' +
+        it.quiz.questions.map(function (q, qi) {
+          var qid = idp + '-q' + qi;
+          return '<div class="rh2-learn-ed-q">' +
+            '<div class="rh2-learn-ed-item-head">' +
+              '<input class="rh2-input rh2-learn-ed-title" id="' + qid + '" placeholder="Question ' + (qi + 1) + '" value="' + esc(q.question) + '" ' +
+                'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">' +
+              '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove question" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">✕</button>' +
+            '</div>' +
+            '<textarea class="rh2-input" id="' + qid + '-opts" rows="3" placeholder="One answer option per line" ' +
+              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'optionsText\',this.value)">' + esc(q.optionsText) + '</textarea>' +
+            '<label class="rh2-lbl">Correct option # (1 = first line) ' +
+              '<input type="number" min="1" max="8" class="rh2-input rh2-learn-ed-mins" id="' + qid + '-ci" value="' + (Number(q.correctIndex) + 1) + '" ' +
+              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'correctIndex\',(parseInt(this.value,10)||1)-1)"></label>' +
+          '</div>';
+        }).join('') +
+        '<button type="button" class="rh2-btn" onclick="RH2.laQAdd(' + si + ',' + ii + ')">+ Add question</button>' +
+      '</div>';
+    }
+    return out + '</div>';
+  }
+
+  function renderLaEditor() {
+    var ed = S.la.editor;
+    var cats = S.la.categories || ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    var out = '<div class="rh2-learn-ed">' +
+      '<div class="rh2-learn-ed-bar">' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">← Library</button>' +
+        '<span class="rh2-quiet">' + (ed.counts.total ? ed.counts.total + ' assignment(s) pinned to published versions — saving edits never changes them' : 'Draft — nothing assigned yet') + '</span>' +
+        '<span class="rh2-learn-ed-bar-actions">' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(ed.id) + '\')">Preview</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') + 'onclick="RH2.laSave()">' +
+            (S.la.editorSaving ? 'Saving…' : 'Save') + '</button>' +
+        '</span>' +
+      '</div>' +
+      (S.la.editorErr ? '<div class="rh2-empty">' + esc(S.la.editorErr) + '</div>' : '') +
+      '<section class="rh2-card"><div class="rh2-form-grid">' +
+        '<label class="rh2-lbl" for="la-ed-title">Title</label>' +
+        '<input class="rh2-input" id="la-ed-title" value="' + esc(ed.title) + '" oninput="RH2.laMeta(\'title\',this.value)">' +
+        '<label class="rh2-lbl" for="la-ed-desc">Description</label>' +
+        '<textarea class="rh2-input" id="la-ed-desc" rows="2" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
+        '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
+        '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
+          cats.map(function (c) { return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>'; }).join('') +
+        '</select>' +
+      '</div></section>';
+
+    ed.sections.forEach(function (s, si) {
+      out += '<section class="rh2-card rh2-learn-ed-sec">' +
+        '<div class="rh2-learn-ed-item-head">' +
+          '<input class="rh2-input rh2-learn-ed-sectitle" id="la-ed-s' + si + '" value="' + esc(s.title) + '" ' +
+            'oninput="RH2.laSecField(' + si + ',this.value)" aria-label="Section ' + (si + 1) + ' title">' +
+          '<span class="rh2-learn-ed-tools">' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">↑</button>' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === ed.sections.length - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">↓</button>' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove section" onclick="RH2.laSecRemove(' + si + ')">✕</button>' +
+          '</span>' +
+        '</div>' +
+        s.items.map(function (it, ii) { return laEditorItemHtml(it, si, ii, s.items.length); }).join('') +
+        '<div class="rh2-learn-ed-additem">' +
+          '<select class="rh2-select" id="la-ed-addtype-' + si + '" aria-label="New item type">' +
+            '<option value="content">Reading / content</option>' +
+            '<option value="resource">Hub resource</option>' +
+            '<option value="acknowledgement">Acknowledgement</option>' +
+            '<option value="quiz">Knowledge check</option>' +
+            '<option value="task">Task</option>' +
+          '</select>' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laItemAdd(' + si + ',document.getElementById(\'la-ed-addtype-' + si + '\').value)">+ Add item</button>' +
+        '</div>' +
+      '</section>';
+    });
+
+    out += '<button type="button" class="rh2-btn" onclick="RH2.laSecAdd()">+ Add section</button>';
+
+    if (ed.versions && ed.versions.length) {
+      out += '<section class="rh2-card"><h2 class="rh2-h2">Published versions</h2>' +
+        ed.versions.map(function (v) {
+          return '<div class="rh2-row-sub">v' + esc(v.version) + ' — ' + esc(v.title) + ' · published ' + esc(fmtDate(v.published_at)) +
+            (v.published_by_name ? ' by ' + esc(v.published_by_name) : '') + ' · ' + esc(v.assignment_count) + ' assignment(s)</div>';
+        }).join('') +
+        '<p class="rh2-quiet">A new version is published automatically when you assign after making changes.</p></section>';
+    }
+    return out + '</div>';
+  }
+
+  // ── Owner: assign panel ─────────────────────────────────────────────────────
+
+  function laAssignOpen(wfId, userId) {
+    var wf = (S.la.workflows || []).find(function (w) { return w.id === wfId; }) || null;
+    var selected = {};
+    if (userId) selected[userId] = true;
+    S.la.assign = {
+      wfId: wf ? wf.id : '', wfTitle: wf ? wf.title : '',
+      q: '', selected: selected, dueAt: '', note: '',
+      mandatory: true, priority: 'normal', busy: false, err: '', done: null,
+    };
+    render();
+  }
+  function laAssignClose() { S.la.assign = null; render(); }
+  function laAssignQ(v) { S.la.assign.q = v; render(); }
+  function laAssignToggle(userId) {
+    var a = S.la.assign;
+    if (a.selected[userId]) delete a.selected[userId];
+    else a.selected[userId] = true;
+    render();
+  }
+  function laAssignField(f, v) { S.la.assign[f] = v; }
+  function laAssignWf(wfId) {
+    var a = S.la.assign;
+    a.wfId = wfId;
+    var wf = (S.la.workflows || []).find(function (w) { return w.id === wfId; });
+    a.wfTitle = wf ? wf.title : '';
+  }
+
+  async function laAssignSubmit() {
+    var a = S.la.assign;
+    if (!a || a.busy) return;
+    var userIds = Object.keys(a.selected);
+    if (!a.wfId) { a.err = 'Choose a learning workflow.'; return render(); }
+    if (!userIds.length) { a.err = 'Select at least one employee.'; return render(); }
+    a.busy = true;
+    a.err = '';
+    render();
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(a.wfId) + '/assign', {
+      method: 'POST',
+      body: {
+        userIds: userIds,
+        dueAt: a.dueAt || null,
+        note: a.note || null,
+        mandatory: a.mandatory,
+        priority: a.priority,
+      },
+    });
+    a.busy = false;
+    if (!d.ok) { a.err = d.error || 'Assigning failed.'; return render(); }
+    a.done = d;
+    render();
+    loadLa();
+  }
+
+  function renderLaAssign() {
+    var a = S.la.assign;
+    var staff = S.la.staff || [];
+    var q = (a.q || '').toLowerCase();
+    var visible = q
+      ? staff.filter(function (u) {
+          return String(u.name || '').toLowerCase().indexOf(q) !== -1 ||
+                 String(u.email || '').toLowerCase().indexOf(q) !== -1;
+        })
+      : staff;
+    var out = '<section class="rh2-card rh2-learn-assign"><div class="rh2-learn-ed-bar">' +
+      '<h2 class="rh2-h2">Assign learning</h2>' +
+      '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laAssignClose()">Close</button></div>';
+
+    if (a.done) {
+      var assignedNames = (a.done.assigned || []).map(function (r) { return r.user_name || r.user_email; });
+      out += '<div class="rh2-learn-done-banner">✓ Assigned to ' +
+        (assignedNames.length ? esc(assignedNames.join(', ')) : 'no one new') +
+        (a.done.version ? ' (version ' + esc(a.done.version) + ')' : '') + '.</div>';
+      (a.done.skipped || []).forEach(function (s) {
+        var why = ' could not be assigned.';
+        if (s.reason === 'already_active') why = ' already has this learning in progress — cancel it first to reassign.';
+        else if (s.reason === 'read_only_account') why = ' has a read-only account, which cannot complete learning.';
+        out += '<div class="rh2-empty">' + esc(s.name || 'One employee') + esc(why) + '</div>';
+      });
+      out += '<div class="rh2-learn-card-actions">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laAssignClose()">Done</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(a.wfId) + '\')">View assignments</button></div>';
+      return out + '</section>';
+    }
+
+    if (a.wfTitle) {
+      out += '<p><strong>' + esc(a.wfTitle) + '</strong></p>';
+    } else {
+      out += '<label class="rh2-lbl" for="la-as-wf">Learning workflow</label>' +
+        '<select class="rh2-select" id="la-as-wf" onchange="RH2.laAssignWf(this.value)">' +
+        '<option value="">Choose…</option>' +
+        (S.la.workflows || []).filter(function (w) { return w.status === 'active' && (w.module_count || 0) > 0; })
+          .map(function (w) { return '<option value="' + esc(w.id) + '"' + (a.wfId === w.id ? ' selected' : '') + '>' + esc(w.title) + '</option>'; }).join('') +
+        '</select>';
+    }
+
+    out += '<label class="rh2-lbl" for="la-as-q">Employee</label>' +
+      '<input class="rh2-input" id="la-as-q" placeholder="Search employee name or email…" value="' + esc(a.q) + '" oninput="RH2.laAssignQ(this.value)">' +
+      '<div class="rh2-learn-staff-pick">' +
+      (visible.length ? visible.map(function (u) {
+        var on = !!a.selected[u.id];
+        return '<label class="rh2-learn-staff-row' + (on ? ' rh2-learn-staff-on' : '') + '">' +
+          '<input type="checkbox" ' + (on ? 'checked ' : '') + 'onchange="RH2.laAssignToggle(\'' + esc(u.id) + '\')">' +
+          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(u.name || u.email) + '</span>' +
+          '<span class="rh2-row-sub">' + esc(u.email) + ' · ' + esc(u.role) + '</span></span></label>';
+      }).join('') : '<div class="rh2-empty">No matching employees.</div>') +
+      '</div>' +
+      '<div class="rh2-form-grid rh2-learn-assign-meta">' +
+        '<label class="rh2-lbl" for="la-as-due">Due date (optional)</label>' +
+        '<input type="date" class="rh2-input" id="la-as-due" value="' + esc(a.dueAt) + '" onchange="RH2.laAssignField(\'dueAt\',this.value)">' +
+        '<label class="rh2-lbl" for="la-as-note">Note to employee (optional)</label>' +
+        '<textarea class="rh2-input" id="la-as-note" rows="2" oninput="RH2.laAssignField(\'note\',this.value)">' + esc(a.note) + '</textarea>' +
+        '<label class="rh2-lbl" for="la-as-pri">Priority</label>' +
+        '<select class="rh2-select" id="la-as-pri" onchange="RH2.laAssignField(\'priority\',this.value)">' +
+          ['low', 'normal', 'high'].map(function (p) { return '<option value="' + p + '"' + (a.priority === p ? ' selected' : '') + '>' + p.charAt(0).toUpperCase() + p.slice(1) + '</option>'; }).join('') +
+        '</select>' +
+        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (a.mandatory ? 'checked ' : '') +
+          'onchange="RH2.laAssignField(\'mandatory\',this.checked)"> Mandatory</label>' +
+      '</div>' +
+      (a.err ? '<div class="rh2-empty">' + esc(a.err) + '</div>' : '') +
+      '<div class="rh2-learn-card-actions">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" ' + (a.busy ? 'disabled ' : '') + 'onclick="RH2.laAssignSubmit()">' +
+          (a.busy ? 'Assigning…' : 'Assign learning') + '</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laAssignClose()">Cancel</button>' +
+      '</div>';
+    return out + '</section>';
+  }
+
+  // ── Owner: assignments monitor ──────────────────────────────────────────────
+
+  function laViewAssignments(wfId) {
+    S.la.assign = null;
+    S.la.editor = null;
+    S.la.afWorkflow = wfId || '';
+    S.la.afUser = '';
+    S.la.tab = 'assignments';
+    loadLaAssignments();
+    render();
+  }
+
+  function laAf(field, value) {
+    S.la[field] = field === 'afOverdue' ? !!value : value;
+    loadLaAssignments();
+  }
+
+  async function laOpenAssignment(id) {
+    var la = S.la;
+    if (la.openAssignment === id) { la.openAssignment = null; la.openData = null; return render(); }
+    la.openAssignment = id;
+    la.openData = null;
+    la.openLoading = true;
+    render();
+    var d = await api('/api/learning/assignments/' + encodeURIComponent(id));
+    // Stale guard: the owner may have clicked another row while this loaded —
+    // rendering employee A's modules (and Cancel button) under employee B's
+    // row would act on the wrong assignment.
+    if (S.la.openAssignment !== id) return;
+    la.openLoading = false;
+    la.openData = d.ok ? d : { err: d.error || 'The assignment could not be loaded.' };
+    render();
+  }
+
+  async function laCancelAssignment(id) {
+    if (!confirm('Cancel this learning assignment? The employee will no longer see it. Progress is kept for the record.')) return;
+    var d = await api('/api/learning/assignments/' + encodeURIComponent(id) + '/cancel', { method: 'POST' });
+    if (!d.ok) { alert(d.error || 'Cancelling failed.'); return; }
+    S.la.openAssignment = null;
+    S.la.openData = null;
+    loadLaAssignments();
+    loadLa();
+  }
+
+  async function laPushLatest(id) {
+    if (!confirm('Update this assignment to the latest version of the workflow? Completed modules that still exist are kept.')) return;
+    var d = await api('/api/learning/assignments/' + encodeURIComponent(id) + '/push-latest', { method: 'POST' });
+    if (!d.ok) { alert(d.error || 'The update failed.'); return; }
+    laOpenAssignment(id);
+    loadLaAssignments();
+  }
+
+  function renderLaAssignments() {
+    var la = S.la;
+    var out = '<div class="rh2-learn-af">' +
+      '<select class="rh2-select" aria-label="Filter by status" onchange="RH2.laAf(\'afStatus\',this.value)">' +
+        [['', 'All statuses'], ['assigned', 'Not started'], ['in_progress', 'In progress'], ['completed', 'Completed'], ['cancelled', 'Cancelled']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (la.afStatus === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select>' +
+      '<select class="rh2-select" aria-label="Filter by workflow" onchange="RH2.laAf(\'afWorkflow\',this.value)">' +
+        '<option value="">All workflows</option>' +
+        (la.workflows || []).map(function (w) {
+          return '<option value="' + esc(w.id) + '"' + (la.afWorkflow === w.id ? ' selected' : '') + '>' + esc(w.title) + '</option>';
+        }).join('') + '</select>' +
+      '<input class="rh2-input" id="la-af-q" placeholder="Search employee or learning…" value="' + esc(la.afQ) + '" ' +
+        'oninput="RH2.laAfQ(this.value)">' +
+      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.afOverdue ? 'checked ' : '') +
+        'onchange="RH2.laAf(\'afOverdue\',this.checked)"> Overdue only</label>' +
+      '</div>';
+
+    // The employee filter arrives from Staff progress → View learning; it has
+    // to be visible and clearable or later visits silently show a subset.
+    if (la.afUser) {
+      var filteredStaff = (la.staff || []).find(function (u) { return u.id === la.afUser; });
+      out += '<div class="rh2-learn-af"><span class="rh2-chip">Showing ' +
+        esc(filteredStaff ? (filteredStaff.name || filteredStaff.email) : 'one employee') + ' only</span> ' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laAf(\'afUser\',\'\')">Show all employees</button></div>';
+    }
+
+    if (!la.assignments) return out + '<div class="rh2-card">' + skel(3, 48) + '</div>';
+    if (!la.assignments.length) return out + '<div class="rh2-empty">No assignments match these filters.</div>';
+
+    out += '<div class="rh2-learn-tablewrap"><table class="rh2-learn-table"><thead><tr>' +
+      '<th>Employee</th><th>Learning</th><th>Assigned</th><th>Progress</th><th>Status</th><th>Due</th><th>Completed</th></tr></thead><tbody>';
+    la.assignments.forEach(function (r) {
+      var open = la.openAssignment === r.id;
+      out += '<tr class="rh2-learn-tr' + (open ? ' rh2-learn-tr-open' : '') + '" onclick="RH2.laOpenAssignment(\'' + esc(r.id) + '\')" ' +
+        'tabindex="0" onkeydown="if(event.key===\'Enter\')RH2.laOpenAssignment(\'' + esc(r.id) + '\')">' +
+        '<td>' + esc(r.user_name || r.user_email) + '</td>' +
+        '<td>' + esc(r.title) + ' <span class="rh2-quiet">v' + esc(r.version) + '</span></td>' +
+        '<td>' + esc(fmtDate(r.assigned_at)) + '</td>' +
+        '<td class="rh2-learn-td-progress">' + laBar(r.progress_percent, (r.user_name || '') + ' progress') + ' ' + (r.progress_percent || 0) + '%</td>' +
+        '<td>' + laStatusChip(r) + '</td>' +
+        '<td>' + (r.due_at ? esc(fmtDate(r.due_at)) : '—') + '</td>' +
+        '<td>' + (r.completed_at ? esc(fmtDate(r.completed_at)) : '—') + '</td>' +
+      '</tr>';
+      if (open) {
+        out += '<tr class="rh2-learn-tr-detail"><td colspan="7">' + renderLaAssignmentDetail(r) + '</td></tr>';
+      }
+    });
+    return out + '</tbody></table></div>';
+  }
+
+  function renderLaAssignmentDetail(r) {
+    var la = S.la;
+    if (la.openLoading || !la.openData) return skel(2, 40);
+    if (la.openData.err) return '<div class="rh2-empty">' + esc(la.openData.err) + '</div>';
+    var d = la.openData;
+    var a = d.assignment;
+    var active = a.status === 'assigned' || a.status === 'in_progress';
+    var out = '<div class="rh2-learn-adetail">' +
+      '<div class="rh2-row-sub">Assigned ' + esc(fmtDate(a.assigned_at)) +
+        (a.assigned_by_name ? ' by ' + esc(a.assigned_by_name) : '') +
+        ' · Version ' + esc(a.version) +
+        (a.last_activity_at ? ' · Last activity ' + esc(fmtDate(a.last_activity_at)) : '') +
+        (a.cancelled_at ? ' · Cancelled ' + esc(fmtDate(a.cancelled_at)) : '') +
+        (a.owner_note ? ' · Note: ' + esc(a.owner_note) : '') + '</div>';
+    (d.sections || []).forEach(function (s) {
+      out += '<div class="rh2-learn-adetail-sec"><strong>' + esc(s.title) + '</strong><ul class="rh2-learn-adetail-items">' +
+        (s.items || []).map(function (it) {
+          var ev = it.evidence || {};
+          var evTxt = '';
+          if (ev.kind === 'quiz') evTxt = ' — scored ' + esc(ev.score) + '/' + esc(ev.total) + ' (' + esc(ev.percent) + '%)';
+          else if (ev.kind === 'acknowledgement') evTxt = ' — acknowledged';
+          return '<li class="' + (it.completed_at ? 'rh2-learn-adone' : '') + '">' +
+            (it.completed_at ? '✓ ' : '○ ') + esc(it.title) +
+            (it.required ? '' : ' <span class="rh2-quiet">(optional)</span>') +
+            (it.completed_at ? ' <span class="rh2-quiet">' + esc(fmtDate(it.completed_at)) + evTxt + '</span>' : '') +
+          '</li>';
+        }).join('') + '</ul></div>';
+    });
+    out += '<div class="rh2-learn-card-actions">';
+    if (active) {
+      out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="event.stopPropagation();RH2.laCancelAssignment(\'' + esc(a.id) + '\')">Cancel assignment</button>';
+      if (d.workflow_current_version && Number(a.version) < Number(d.workflow_current_version)) {
+        out += '<button type="button" class="rh2-btn" onclick="event.stopPropagation();RH2.laPushLatest(\'' + esc(a.id) + '\')">Update to v' + esc(d.workflow_current_version) + '</button>';
+      }
+    }
+    return out + '</div></div>';
+  }
+
+  var laAfQDebounce = null;
+  function laAfQ(v) {
+    S.la.afQ = v;
+    if (laAfQDebounce) clearTimeout(laAfQDebounce);
+    laAfQDebounce = setTimeout(function () { loadLaAssignments(); }, 300);
+  }
+
+  // ── Owner: staff progress ───────────────────────────────────────────────────
+
+  function renderLaStaff() {
+    var staff = S.la.staff || [];
+    if (!staff.length) return '<div class="rh2-empty">No active staff accounts found.</div>';
+    return '<div class="rh2-learn-cards">' + staff.map(function (u) {
+      return '<div class="rh2-learn-card">' +
+        '<div class="rh2-learn-card-head"><span class="rh2-row-title">' + esc(u.name || u.email) + '</span>' +
+          '<span class="rh2-chip rh2-chip-quiet">' + esc(u.role) + '</span></div>' +
+        '<div class="rh2-row-sub">' + esc(u.email) + '</div>' +
+        '<div class="rh2-row-sub">' + esc(u.active_assignments) + ' active · ' + esc(u.completed_assignments) + ' completed' +
+          (u.last_activity_at ? ' · Last activity ' + esc(fmtDate(u.last_activity_at)) : '') + '</div>' +
+        '<div class="rh2-learn-card-actions">' +
+          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laAssignOpen(\'\',\'' + esc(u.id) + '\')">+ Assign learning</button>' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laStaffAssignments(\'' + esc(u.id) + '\')">View learning</button>' +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function laStaffAssignments(userId) {
+    S.la.afUser = userId || '';
+    S.la.afWorkflow = '';
+    S.la.tab = 'assignments';
+    loadLaAssignments();
+    render();
+  }
+
   global.RH2 = {
     open: open,
     nav: nav,
@@ -3333,6 +4577,64 @@
     pdSave: pdSave,
     qlSave: qlSave,
     qlToggle: qlToggle,
+
+    // ── Owner-controlled learning ────────────────────────────────────────────
+    // Employee: assigned learning + player
+    openAssignment: openAssignment,
+    reloadMyLearning: function () { S.myl.rows = null; loadMyLearning(); },
+    alBack: alBack,
+    alToggle: alToggle,
+    alMarkComplete: alMarkComplete,
+    alAckArm: alAckArm,
+    alAckCancel: alAckCancel,
+    alAckConfirm: alAckConfirm,
+    alQuizPick: alQuizPick,
+    alQuizSubmit: alQuizSubmit,
+    alQuizRetry: alQuizRetry,
+    // Owner: learning console
+    laNav: laNav,
+    laCreate: laCreate,
+    laEdit: laEdit,
+    laEditorClose: laEditorClose,
+    laSave: laSave,
+    laMeta: laMeta,
+    laSecField: laSecField,
+    laItemField: laItemField,
+    laQuizField: laQuizField,
+    laQField: laQField,
+    laSecAdd: laSecAdd,
+    laSecRemove: laSecRemove,
+    laSecMove: laSecMove,
+    laItemAdd: laItemAdd,
+    laItemRemove: laItemRemove,
+    laItemMove: laItemMove,
+    laQAdd: laQAdd,
+    laQRemove: laQRemove,
+    laResPickOpen: laResPickOpen,
+    laResPickClose: laResPickClose,
+    laResSearch: laResSearch,
+    laResChoose: laResChoose,
+    laPreview: laPreview,
+    laDuplicate: laDuplicate,
+    laArchive: laArchive,
+    laUnarchive: laUnarchive,
+    laDelete: laDelete,
+    laToggleArchived: laToggleArchived,
+    laAssignOpen: laAssignOpen,
+    laAssignClose: laAssignClose,
+    laAssignQ: laAssignQ,
+    laAssignToggle: laAssignToggle,
+    laAssignField: laAssignField,
+    laAssignWf: laAssignWf,
+    laAssignSubmit: laAssignSubmit,
+    laViewAssignments: laViewAssignments,
+    laAf: laAf,
+    laAfQ: laAfQ,
+    laOpenAssignment: laOpenAssignment,
+    laCancelAssignment: laCancelAssignment,
+    laPushLatest: laPushLatest,
+    laStaffAssignments: laStaffAssignments,
+
     _md: mdRender, // exported for unit tests
     _esc: esc,
   };

@@ -42,6 +42,15 @@
       "autoPort": false
     },
     {
+      "name": "opal-e2e-5009",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/e2e-local-server.js"
+      ],
+      "port": 5009,
+      "autoPort": false
+    },
+    {
       "name": "financeos-demo",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

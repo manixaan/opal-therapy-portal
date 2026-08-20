@@ -106,14 +106,16 @@
   // 'pd' is the one resources view that carries an id of its own: '#resources/pd'
   // is the catalogue, '#resources/pd/<id>' is one event. That is why the id rule
   // below tests for either view rather than for 'detail' alone.
-  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments'];
+  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments', 'assignment'];
 
   /** Resources views that may carry a record id.
    *  'instruments' joins them because each assessment has an information page
    *  of its own — '#resources/instruments' is the catalogue,
    *  '#resources/instruments/<key>' is one assessment. Without an address the
-   *  page could not be linked to and Back skipped straight past it. */
-  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments'];
+   *  page could not be linked to and Back skipped straight past it.
+   *  'assignment' is a learning-assignment player ('#resources/assignment/<id>')
+   *  — id-only: without an id RH2.nav degrades it to My Learning. */
+  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -224,6 +226,7 @@
       // Like 'pd': an idless '#resources/instruments' is the catalogue, so it
       // degrades to itself rather than losing the segment.
       else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
@@ -779,6 +782,9 @@
         // link lands on a populated list rather than an empty one.
         try { global.RH2.openPd(t.id); } catch (e) {}
         NAV.rhView = 'pd'; NAV.rhId = t.id;
+      } else if (t.view === 'assignment' && t.id && isFn(global.RH2.openAssignment)) {
+        try { global.RH2.openAssignment(t.id); } catch (e) {}
+        NAV.rhView = 'assignment'; NAV.rhId = t.id;
       } else if (isFn(global.RH2.nav)) {
         try { global.RH2.nav(t.view || 'home'); } catch (e) {}
         NAV.rhView = t.view || 'home'; NAV.rhId = null;
@@ -952,6 +958,18 @@
         return function (id) {
           var out = orig.apply(this, arguments);
           NAV.rhView = 'pd';
+          NAV.rhId = safeId(id) || null;
+          syncBase();
+          return out;
+        };
+      });
+      // A learning assignment is a real destination — it is what "Continue"
+      // in My Learning opens and what a notification links to — so it gets
+      // its own history entry and survives a reload.
+      hookMethod('RH2', 'openAssignment', function (orig) {
+        return function (id) {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'assignment';
           NAV.rhId = safeId(id) || null;
           syncBase();
           return out;
