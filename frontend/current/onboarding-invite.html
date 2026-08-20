@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Start your onboarding — Opal Therapy</title>
+  <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#0f7c6c" />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #0f7c6c;
+      --brand-dark:  #0a5d51;
+      --brand-soft:  #e4f2ec;
+      --ink:         #241f1a;
+      --ink-soft:    #5d564e;
+      --muted:       #99928a;
+      --surface:     #ffffff;
+      --bg:          #faf6f0;
+      --border:      #e9e3d9;
+      --danger:      #c2412e;
+      --danger-bg:   #fbe9e5;
+      --success:     #2f7d4f;
+      --radius:      12px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 40px 16px 60px;
+      color: var(--ink);
+      line-height: 1.5;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 44px 40px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo-mark {
+      width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 12px;
+      background: linear-gradient(135deg, #2aa792 0%, #0f7c6c 58%, #cf7b57 108%);
+    }
+    .logo-text { font-size: 15px; font-weight: 700; color: var(--brand); letter-spacing: 0.2px; }
+
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.3px; }
+    .lede { font-size: 15px; color: var(--ink-soft); margin-bottom: 24px; }
+
+    .facts {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .facts dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+    .facts dt { color: var(--muted); font-weight: 500; }
+    .facts dd { font-weight: 600; }
+
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .field { margin-bottom: 18px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 11px 13px; font-size: 15px; font-family: inherit;
+      border: 1px solid var(--border); border-radius: 9px; background: #fff; color: var(--ink);
+    }
+    input:focus-visible {
+      outline: none; border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(15,124,108,0.15);
+    }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    .btn {
+      width: 100%; padding: 13px 18px; font-size: 15px; font-weight: 700; font-family: inherit;
+      background: var(--brand); color: #fff; border: none; border-radius: 9px; cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { background: var(--brand-dark); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(15,124,108,0.35); }
+
+    .msg {
+      border-radius: 9px; padding: 12px 14px; font-size: 14px; margin-bottom: 18px;
+      display: none;
+    }
+    .msg.show { display: block; }
+    .msg.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #f0c6bd; }
+    .msg.info { background: var(--brand-soft); color: var(--brand-dark); border: 1px solid #bfe0d4; }
+
+    .steps { font-size: 14px; color: var(--ink-soft); margin: 0 0 24px 18px; }
+    .steps li { margin-bottom: 4px; }
+
+    .footer {
+      text-align: center; font-size: 12px; color: var(--muted);
+      margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border);
+    }
+    .footer a { color: var(--brand); }
+
+    .privacy {
+      font-size: 12px; color: var(--muted); margin-top: 16px;
+      background: var(--bg); border-radius: 8px; padding: 10px 12px;
+    }
+
+    .loading { text-align: center; color: var(--muted); font-size: 14px; padding: 24px 0; }
+
+    @media (max-width: 520px) {
+      body { padding: 20px 12px 40px; }
+      .card { padding: 32px 22px; }
+      h1 { font-size: 21px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <div class="logo">
+      <div class="logo-mark" aria-hidden="true"></div>
+      <div class="logo-text">Opal Therapy</div>
+    </div>
+
+    <div id="loading" class="loading">Checking your invitation…</div>
+
+    <div id="problem" hidden>
+      <h1>This link cannot be used</h1>
+      <p class="lede" id="problem-text"></p>
+      <a class="btn" href="/login" style="display:block;text-align:center;text-decoration:none;line-height:1.4;">
+        Go to sign in
+      </a>
+    </div>
+
+    <form id="form" hidden autocomplete="on" novalidate>
+      <h1 id="heading">Welcome to Opal Therapy</h1>
+      <p class="lede" id="lede">
+        Let’s get your onboarding started. First, choose a password for your account.
+      </p>
+
+      <div class="facts" id="facts" hidden>
+        <dl id="facts-list"></dl>
+      </div>
+
+      <div class="msg error" id="error" role="alert" aria-live="assertive"></div>
+
+      <div class="field">
+        <label for="name">Your full name</label>
+        <input type="text" id="name" name="name" autocomplete="name" maxlength="200" />
+      </div>
+
+      <div class="field">
+        <label for="password">Create a password</label>
+        <input type="password" id="password" name="password"
+               autocomplete="new-password" minlength="8" maxlength="200" required />
+        <p class="hint">At least 8 characters.</p>
+      </div>
+
+      <div class="field">
+        <label for="confirm">Confirm password</label>
+        <input type="password" id="confirm" name="confirm"
+               autocomplete="new-password" minlength="8" maxlength="200" required />
+      </div>
+
+      <button type="submit" class="btn" id="submit">Start my onboarding</button>
+
+      <p class="lede" style="margin:22px 0 8px;font-weight:600;color:var(--ink);">
+        What happens next
+      </p>
+      <ol class="steps">
+        <li>Your employment documents</li>
+        <li>Payroll, tax and superannuation</li>
+        <li>Identity and work rights</li>
+        <li>Professional credentials and screening</li>
+        <li>NDIS requirements and Opal policies</li>
+        <li>Required training</li>
+      </ol>
+
+      <p class="privacy">
+        You can save your progress and come back at any time. Everything you provide is entered
+        securely in the portal — please don’t email us documents containing your tax file number
+        or bank details.
+      </p>
+    </form>
+
+    <div class="footer">
+      Trouble signing in? Contact your practice owner.
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+
+      /** Escape before any interpolation — every string here is server data. */
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function fmtDate(v) {
+        if (!v) return null;
+        var d = new Date(v);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+      }
+
+      // The token never leaves this page except in the two POST bodies below,
+      // and is stripped from the address bar once read so it does not linger
+      // in history, bookmarks or a screenshot.
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get('token') || '';
+      if (token && window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      function showProblem(message) {
+        $('loading').hidden = true;
+        $('form').hidden = true;
+        $('problem').hidden = false;
+        $('problem-text').textContent = message || 'This onboarding link is not valid.';
+      }
+
+      function showError(message) {
+        var el = $('error');
+        el.textContent = message;
+        el.classList.add('show');
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      function clearError() { $('error').classList.remove('show'); }
+
+      async function api(path, body) {
+        try {
+          var r = await fetch(path, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          var data = await r.json().catch(function () { return {}; });
+          return { status: r.status, data: data };
+        } catch (e) {
+          return { status: 0, data: { error: 'Network error — please check your connection and try again.' } };
+        }
+      }
+
+      async function boot() {
+        if (!token) return showProblem('This onboarding link is missing its access code.');
+
+        var res = await api('/api/onboarding-invite/check', { token: token });
+        if (res.status === 429) {
+          return showProblem(res.data.error || 'Too many attempts. Please try again shortly.');
+        }
+        if (res.status !== 200 || !res.data || res.data.ok !== true) {
+          return showProblem((res.data && res.data.message) || 'This onboarding link is not valid.');
+        }
+
+        var d = res.data;
+        $('loading').hidden = true;
+        $('form').hidden = false;
+
+        if (d.displayName) {
+          $('heading').textContent = 'Welcome, ' + d.displayName.split(' ')[0];
+          $('name').value = d.displayName;
+        }
+        if (d.organisationName) {
+          $('lede').textContent = 'Let’s get your onboarding at ' + d.organisationName
+            + ' started. First, choose a password for your account.';
+        }
+
+        var rows = [];
+        if (d.roleTitle) rows.push(['Role', d.roleTitle]);
+        if (d.email) rows.push(['Account', d.email]);
+        var start = fmtDate(d.startDate);
+        if (start) rows.push(['Start date', start]);
+        var due = fmtDate(d.dueAt);
+        if (due) rows.push(['Complete by', due]);
+        if (rows.length) {
+          $('facts-list').innerHTML = rows.map(function (r) {
+            return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>';
+          }).join('');
+          $('facts').hidden = false;
+        }
+
+        $('password').focus();
+      }
+
+      $('form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        clearError();
+
+        var password = $('password').value;
+        var confirm = $('confirm').value;
+        var name = $('name').value.trim();
+
+        if (password.length < 8) return showError('Your password must be at least 8 characters.');
+        if (password !== confirm) return showError('Those passwords don’t match.');
+
+        var btn = $('submit');
+        btn.disabled = true;
+        btn.textContent = 'Setting up your account…';
+
+        var res = await api('/api/onboarding-invite/accept', {
+          token: token, password: password, name: name || undefined
+        });
+
+        if (res.status === 200 && res.data.ok) {
+          window.location.href = res.data.redirect || '/#onboarding';
+          return;
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Start my onboarding';
+        if (res.data && (res.data.code === 'used' || res.data.code === 'expired'
+            || res.data.code === 'revoked' || res.data.code === 'cancelled')) {
+          return showProblem(res.data.error);
+        }
+        showError((res.data && res.data.error) || 'Something went wrong. Please try again.');
+      });
+
+      boot();
+    })();
+  </script>
+</body>
+</html>

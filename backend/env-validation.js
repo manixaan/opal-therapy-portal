@@ -27,6 +27,16 @@ const CRITICAL_IN_PRODUCTION = [
 ];
 
 const RECOMMENDED = [
+  // Not boot-critical: the portal runs perfectly well without onboarding.
+  // But onboarding itself REFUSES to collect tax or bank details when this is
+  // missing (a 503 at release), rather than storing a tax file number in
+  // clear, so a staging deploy without it has a visibly broken feature.
+  {
+    key: 'ONBOARDING_ENCRYPTION_KEY',
+    why: 'employee onboarding cannot collect tax, bank or identity details without it '
+      + '(keep it SEPARATE from TOKEN_ENCRYPTION_KEY — rotating the OAuth key would '
+      + 'otherwise destroy every stored HR value)',
+  },
   { key: 'GOOGLE_MAPS_API_KEY',  why: 'travel time / geocoding features degrade without it' },
   { key: 'EMAIL_HOST',           why: 'verification/invite/reset emails fall back to copy-link mode (surfaced in the invite UI) without it' },
   { key: 'MICROSOFT_TENANT_ID',  why: 'falls back to the development tenant' },

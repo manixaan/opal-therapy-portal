@@ -497,12 +497,17 @@ const INIT_QUERIES = `
   CREATE INDEX IF NOT EXISTS idx_credentials_expiry     ON credentials(expiry_date);
 
   -- ── Role CHECK constraint migration ───────────────────────────────────────
-  -- Add 'read_only' to the user_invites.role constraint idempotently.
-  -- The original auto-named constraint is dropped and replaced with a versioned
-  -- one so re-running on an already-migrated database is a no-op.
+  -- Keeps the user_invites.role vocabulary current, idempotently. Each revision
+  -- drops the previous versioned constraint and adds the next, so re-running on
+  -- an already-migrated database is a no-op.
+  --
+  -- v3 (2026-08-20) adds 'pre_employee' for the Onboarding Packages feature.
+  -- THIS BLOCK MUST STAY IN STEP WITH migration 034: INIT_QUERIES re-applies on
+  -- every boot, so leaving v2 here would silently re-add a constraint that
+  -- rejects every onboarding invitation the migration just enabled.
   DO $$
   BEGIN
-    -- Drop old constraint (original auto-generated name)
+    -- Drop superseded constraints (original auto-generated name, then v2)
     IF EXISTS (
       SELECT 1 FROM information_schema.table_constraints
        WHERE table_name = 'user_invites'
@@ -511,16 +516,24 @@ const INIT_QUERIES = `
     ) THEN
       ALTER TABLE user_invites DROP CONSTRAINT user_invites_role_check;
     END IF;
-    -- Add updated constraint only if it doesn't already exist
-    IF NOT EXISTS (
+    IF EXISTS (
       SELECT 1 FROM information_schema.table_constraints
        WHERE table_name = 'user_invites'
          AND constraint_type = 'CHECK'
          AND constraint_name = 'user_invites_role_check_v2'
     ) THEN
+      ALTER TABLE user_invites DROP CONSTRAINT user_invites_role_check_v2;
+    END IF;
+    -- Add the current constraint only if it doesn't already exist
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+       WHERE table_name = 'user_invites'
+         AND constraint_type = 'CHECK'
+         AND constraint_name = 'user_invites_role_check_v3'
+    ) THEN
       ALTER TABLE user_invites
-        ADD CONSTRAINT user_invites_role_check_v2
-        CHECK (role IN ('owner', 'admin', 'therapist', 'read_only'));
+        ADD CONSTRAINT user_invites_role_check_v3
+        CHECK (role IN ('owner', 'admin', 'therapist', 'read_only', 'pre_employee'));
     END IF;
   END $$;
 

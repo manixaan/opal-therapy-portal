@@ -50,6 +50,20 @@ const ALL_TABLES = [
   // Owner-controlled learning (migration 033) — children before parents
   'learning_item_progress', 'learning_assignments',
   'learning_workflow_versions', 'learning_workflows',
+  // Onboarding Packages (migration 034) — children before parents.
+  // credentials / pd_documents / user_invites are already listed above; 034
+  // only adds columns to those.
+  'compliance_expiry_notices', 'organisation_compliance_records',
+  'onboarding_statement_issuances', 'onboarding_acknowledgements',
+  'onboarding_requirement_events', 'onboarding_requirements',
+  'employee_identity_records', 'payroll_profiles',
+  'employee_personal_details', 'employment_profiles',
+  'onboarding_assignments',
+  'onboarding_package_versions', 'onboarding_package_requirements', 'onboarding_packages',
+  'onboarding_requirement_templates',
+  'onboarding_document_import_items', 'onboarding_document_imports',
+  'onboarding_document_versions', 'onboarding_documents',
+  'compliance_requirements',
   'users', 'organisations',
 ];
 

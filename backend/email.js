@@ -205,6 +205,160 @@ If you weren't expecting this, you can ignore it.
   return { sent: true, messageId: info.messageId, registerUrl };
 }
 
+// ── Email: Onboarding invitation ─────────────────────────────────────────────
+
+/** Onboarding URL for an invite token — single source of truth for the shape. */
+function buildOnboardingInviteUrl(inviteToken) {
+  return `${BASE()}/onboarding-invite?token=${encodeURIComponent(inviteToken)}`;
+}
+
+/**
+ * Invite a new starter to complete their onboarding in the portal.
+ *
+ * WHAT THIS EMAIL DELIBERATELY DOES NOT CONTAIN
+ * ─────────────────────────────────────────────
+ *  • No temporary password. The recipient sets their own through the link.
+ *  • No employment terms, salary, or personal details — an email is forwarded,
+ *    quoted and archived in places the practice does not control.
+ *  • No attachments and no completed forms. Everything sensitive is collected
+ *    inside the authenticated portal, which is the entire point of the
+ *    feature: the old model of emailing a starter pack around as a ZIP is
+ *    exactly what this replaces.
+ *
+ * The email carries one thing: a secure link, and a plain description of what
+ * the person will be asked to do when they follow it.
+ */
+async function sendOnboardingInviteEmail({
+  toEmail, inviteToken, displayName, roleTitle, startDate, dueAt, invitedBy, orgName,
+}) {
+  const onboardingUrl = buildOnboardingInviteUrl(inviteToken);
+  const org = escapeHtml(orgName || 'Opal Therapy');
+  const greeting = displayName ? `Hi ${escapeHtml(displayName)},` : 'Hello,';
+  const sender = escapeHtml(invitedBy || 'The practice owner');
+  const role = roleTitle ? escapeHtml(roleTitle) : null;
+
+  const fmtDate = (d) => {
+    if (!d) return null;
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+    });
+  };
+  const start = fmtDate(startDate);
+  const due = fmtDate(dueAt);
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+           background: #f5f5f5; margin: 0; padding: 24px; color: #241f1a; }
+    .card { background: #fff; border-radius: 10px; max-width: 560px; margin: 0 auto;
+            padding: 36px 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .logo { font-size: 20px; font-weight: 700; color: #0f7c6c; margin-bottom: 28px; }
+    h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px; }
+    p { font-size: 15px; line-height: 1.6; color: #3a3a4a; margin: 0 0 14px; }
+    .badge { display: inline-block; background: #e4f2ec; color: #0a5d51; font-size: 13px;
+             font-weight: 600; padding: 5px 12px; border-radius: 6px; margin-bottom: 16px; }
+    .facts { background: #faf6f0; border-radius: 8px; padding: 14px 18px; margin: 0 0 20px; }
+    .facts p { margin: 0 0 6px; font-size: 14px; }
+    .facts p:last-child { margin-bottom: 0; }
+    ul { font-size: 15px; line-height: 1.7; color: #3a3a4a; padding-left: 20px; margin: 0 0 18px; }
+    .btn { display: inline-block; background: #0f7c6c; color: #fff !important; text-decoration: none;
+           padding: 13px 26px; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 8px 0 18px; }
+    .url { font-size: 12px; color: #99928a; word-break: break-all; }
+    .footer { font-size: 12px; color: #99928a; margin-top: 28px; border-top: 1px solid #e9e3d9;
+              padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🌿 ${org}</div>
+    <h2>Welcome to ${org}</h2>
+    <p>${greeting}</p>
+    <p>We are pleased to begin your onboarding${role ? ` for <strong>${role}</strong>` : ''}.</p>
+    ${role ? `<span class="badge">${role}</span>` : ''}
+    ${(start || due) ? `<div class="facts">
+      ${start ? `<p><strong>Start date:</strong> ${escapeHtml(start)}</p>` : ''}
+      ${due ? `<p><strong>Please complete by:</strong> ${escapeHtml(due)}</p>` : ''}
+    </div>` : ''}
+    <p>Please use the secure link below to complete your onboarding. You will
+       create your own password on the first screen.</p>
+    <a href="${onboardingUrl}" class="btn">Start my onboarding →</a>
+    <p>The onboarding portal will guide you through:</p>
+    <ul>
+      <li>your employment documents</li>
+      <li>your payroll, tax and superannuation information</li>
+      <li>your professional credentials</li>
+      <li>NDIS requirements</li>
+      <li>Opal Therapy policies</li>
+      <li>required training</li>
+    </ul>
+    <p>You can save your progress and come back at any time. Everything you
+       provide is entered securely in the portal — please do not email us
+       documents containing your tax file number or bank details.</p>
+    <p class="url">Or copy this link: ${onboardingUrl}</p>
+    <p>This invitation is for <strong>${escapeHtml(toEmail)}</strong> only.
+       If you were not expecting it, please let ${sender} know.</p>
+    <div class="footer">
+      Sent by ${org}<br>
+      Do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `
+${displayName ? `Hi ${displayName},` : 'Hello,'}
+
+We are pleased to begin your onboarding${roleTitle ? ` for ${roleTitle}` : ''} at ${orgName || 'Opal Therapy'}.
+${start ? `\nStart date: ${start}` : ''}${due ? `\nPlease complete by: ${due}` : ''}
+
+Please use the secure link below to complete your onboarding. You will create
+your own password on the first screen.
+
+${onboardingUrl}
+
+The onboarding portal will guide you through:
+  - your employment documents
+  - your payroll, tax and superannuation information
+  - your professional credentials
+  - NDIS requirements
+  - Opal Therapy policies
+  - required training
+
+You can save your progress and come back at any time. Everything you provide is
+entered securely in the portal — please do not email us documents containing
+your tax file number or bank details.
+
+This invitation is for ${toEmail} only.
+`.trim();
+
+  const transport = getTransporter();
+  if (!transport) {
+    // Not configured — surface the link so the owner can deliver it manually.
+    // The link is logged; nothing about the person is.
+    console.log('\n📧  [ONBOARDING INVITE SKIPPED — email not configured]');
+    console.log(`    To: ${toEmail}`);
+    console.log(`    Onboarding link: ${onboardingUrl}\n`);
+    return { skipped: true, onboardingUrl };
+  }
+
+  const info = await transport.sendMail({
+    from: FROM(),
+    to: toEmail,
+    subject: `Welcome to ${orgName || 'Opal Therapy'} — start your onboarding`,
+    text,
+    html,
+  });
+  console.log(`📧  Onboarding invite sent to ${toEmail} (${info.messageId})`);
+  return { sent: true, messageId: info.messageId, onboardingUrl };
+}
+
 // ── Email: Registration Confirmation ─────────────────────────────────────────
 
 /**
@@ -470,6 +624,8 @@ async function sendAccountApprovedEmail({ toEmail, name, role }) {
 module.exports = {
   escapeHtml,
   sendInviteEmail,
+  sendOnboardingInviteEmail,
+  buildOnboardingInviteUrl,
   sendWelcomeEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,

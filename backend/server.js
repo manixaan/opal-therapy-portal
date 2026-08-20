@@ -156,6 +156,15 @@ app.use('/api/rh2/resources', bodyParser.json({ limit: '36mb' }));
 // would 413 a legitimately large draft before the route could validate it.
 app.use('/api/learning', bodyParser.json({ limit: '8mb' }));
 
+// Onboarding document-library imports: a whole ZIP of official resources,
+// 45 MB binary cap enforced in the route (≈ 60 MB of base64). Mounted BEFORE
+// the broader /api/onboarding limit so the more specific path wins.
+app.use('/api/onboarding/imports', bodyParser.json({ limit: '62mb' }));
+
+// Onboarding evidence and policy uploads: base64 bytes, 5 MB (employee) and
+// 10 MB (library) caps enforced in the routes.
+app.use('/api/onboarding', bodyParser.json({ limit: '16mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -309,12 +318,18 @@ app.get('/verify-email', (req, res) => {
 app.get('/pending-approval', (req, res) => {
   res.sendFile(path.join(frontendPath, 'pending-approval.html'));
 });
+// Onboarding invitation: a new starter follows the emailed link here to set
+// their password. Public by necessity — they have no account yet — and the
+// token is validated by /api/onboarding-invite/check, which is rate limited.
+app.get('/onboarding-invite', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'onboarding-invite.html'));
+});
 
 // ── Helper: look up the logged-in user's account status ───────────────────
 async function getSessionUser(userId) {
   try {
     const { rows } = await db.pool.query(
-      'SELECT account_status, email_verified, profile_completed FROM users WHERE id = $1',
+      'SELECT role, account_status, email_verified, profile_completed FROM users WHERE id = $1',
       [userId]
     );
     return rows[0] || null;
@@ -334,7 +349,12 @@ app.get('/', async (req, res) => {
   if (status === 'suspended')            return res.redirect('/login?reason=suspended');
   if (status === 'deactivated')          return res.redirect('/login?reason=deactivated');
 
-  if (user.profile_completed === false) return res.redirect('/onboarding');
+  // A pre-employee skips the profile-setup wizard entirely: their whole
+  // account exists to complete employee onboarding, and the wizard collects
+  // clinical/scheduling preferences they have no role for yet.
+  if (user.role !== 'pre_employee' && user.profile_completed === false) {
+    return res.redirect('/onboarding');
+  }
   res.sendFile(path.join(frontendPath, 'mockup_v3.html'));
 });
 
@@ -485,6 +505,16 @@ app.use('/', require('./tutorial-routes'));
 // Owner-controlled learning: workflow library, versioned assignments,
 // per-employee progress (owner admin surface + employee My Learning)
 app.use('/', require('./learning-routes'));
+
+// ── Onboarding Packages ───────────────────────────────────────────────────
+// The employee router is mounted FIRST because it owns the PUBLIC
+// /api/onboarding-invite/* endpoints. The management routers each apply
+// requireAuth across the whole /api/onboarding prefix, and mounting one of
+// those first would 401 the invitation-acceptance page before it was reached.
+app.use('/', require('./onboarding-employee-routes'));
+app.use('/', require('./onboarding-assignment-routes'));
+app.use('/', require('./onboarding-library-routes'));
+app.use('/', require('./onboarding-routes'));
 
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
@@ -640,6 +670,20 @@ server.listen(PORT, () => {
 ║  OAuth: Microsoft Graph API (pending setup)        ║
 ╚════════════════════════════════════════════════════╝
   `);
+
+  // ── Onboarding Packages ─────────────────────────────────────────────────
+  // Seed the compliance registry, document library, requirement templates and
+  // the six starter packages. Idempotent by code: it refreshes definitions and
+  // never touches a package the Owner has edited or an assignment in flight.
+  require('./onboarding-seed').seedOnboarding()
+    .then((r) => { if (r && !r.skipped) log.info('onboarding catalogue ready', r); })
+    .catch((err) => log.error('onboarding seed failed', { error: err }));
+
+  // Daily credential-expiry sweep: warns at 90/60/30/7 days, marks lapsed
+  // records, and schedules recurring statutory re-issues (the CEIS cadence).
+  // In-process like the existing pollers; single-instance assumption noted in
+  // onboarding-expiry.js.
+  require('./onboarding-expiry').startExpiryScheduler();
 });
 
 // ===== BACKGROUND DELTA SYNC POLLER =====

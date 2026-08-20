@@ -38,19 +38,36 @@ function jsonMode() {
 
 // ── Redaction ────────────────────────────────────────────────────────────────
 
+// Onboarding (2026-08-20) added the tax/bank/identity terms. Employee onboarding
+// puts tax file numbers, BSBs and account numbers inside the application for
+// the first time, and none of the original patterns could match a bare 9-digit
+// decimal. This regex is a BACKSTOP, not the control: call sites must still not
+// pass those values (see onboarding-audit.js, which builds audit metadata from
+// a frozen allowlist with no field for them).
 const SENSITIVE_KEY = new RegExp(
   'pass(word)?|secret|token|cookie|authorization|api[-_]?key|credential' +
-  '|refresh|access[-_]?token|client[-_]?state|session[-_]?id|connection[-_]?string',
+  '|refresh|access[-_]?token|client[-_]?state|session[-_]?id|connection[-_]?string' +
+  '|tfn|tax[-_]?file|abn|bsb|account[-_]?number|accountnumber|bank[-_]?account' +
+  '|member[-_]?number|passport|visa[-_]?grant|licence[-_]?number|license[-_]?number' +
+  '|date[-_]?of[-_]?birth|dob',
   'i'
 );
 
+// A 9-digit TFN and a 6-digit BSB are ordinary-looking numbers, so these
+// patterns are anchored on the separators and lengths those values actually
+// use. They are deliberately narrow: over-broad numeric scrubbing would strip
+// legitimate ids out of diagnostics and make incidents harder to investigate.
 function scrubString(s) {
   return String(s)
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [REDACTED]')
     .replace(/eyJ[A-Za-z0-9._-]{20,}/g, '[REDACTED_JWT]')
     .replace(/\b[a-f0-9]{32,}\b/gi, '[REDACTED_HEX]')
+    // TFN: 9 digits, optionally grouped 3-3-3 by space or hyphen.
+    .replace(/\b\d{3}[ -]\d{3}[ -]\d{3}\b/g, '[REDACTED_TFN]')
+    // BSB: 3-3 digits with a hyphen or space, the only form ever written.
+    .replace(/\b\d{3}[ -]\d{3}\b/g, '[REDACTED_BSB]')
     .replace(
-      /([?&](code|token|state|access_token|refresh_token|client_secret|api_key|apikey|password|session)=)[^&\s"']+/gi,
+      /([?&](code|token|state|access_token|refresh_token|client_secret|api_key|apikey|password|session|tfn|bsb)=)[^&\s"']+/gi,
       '$1[REDACTED]'
     );
 }
