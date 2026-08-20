@@ -1,0 +1,489 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERVIEW PREPARATION — portal styles
+
+   Every colour, radius, shadow and spacing value comes from the design tokens
+   declared in mockup_v3.html's :root. Nothing here hard-codes a hex a token
+   already names, with one deliberate exception: the interview DOCUMENT itself
+   sits on white with the template's own teal section bars, because it is a
+   digital copy of a printed Opal Therapy document and must read as one. Those
+   two values are declared once, at the top, and derived from --accent.
+
+   Class prefix is `iv-` throughout; no unprefixed selector is introduced.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.iv-root {
+  --iv-doc-bg: var(--panel);
+  --iv-bar: var(--accent);
+  --iv-bar-ink: #ffffff;
+  --iv-doc-border: var(--border);
+  max-width: 1180px;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+
+.iv-hero {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5);
+}
+.iv-hero h1 {
+  font-size: 24px; font-weight: 800; letter-spacing: -0.3px;
+  color: var(--ink); margin: 0 0 4px;
+}
+.iv-hero p { font-size: 14px; color: var(--ink-soft); margin: 0; max-width: 62ch; }
+.iv-hero-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.iv-crumbs { margin-bottom: var(--space-3); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.iv-btn {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 8px 14px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+  cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  white-space: nowrap;
+}
+.iv-btn:hover { background: var(--border-soft); }
+.iv-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.iv-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.iv-btn.is-primary {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.iv-btn.is-primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+
+.iv-btn.is-ghost { background: transparent; }
+.iv-btn.is-ghost:hover { background: var(--border-soft); }
+
+.iv-btn.is-danger-ghost { background: transparent; color: var(--danger); border-color: var(--border); }
+.iv-btn.is-danger-ghost:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+.iv-btn.is-link,
+.iv-link {
+  background: none; border: none; padding: 0; font-family: inherit;
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  cursor: pointer; text-align: left;
+}
+.iv-btn.is-link:hover, .iv-link:hover { text-decoration: underline; }
+.iv-link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+
+/* ── Blocks ──────────────────────────────────────────────────────────────── */
+
+.iv-block { margin-bottom: var(--space-6); }
+.iv-block-head { margin-bottom: var(--space-4); }
+.iv-block-head h2 {
+  font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--muted); margin: 0 0 4px;
+}
+.iv-block-head p { font-size: 13.5px; color: var(--ink-soft); margin: 0; max-width: 72ch; }
+
+/* ── Template cards ──────────────────────────────────────────────────────── */
+
+.iv-tpl-grid {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.iv-tpl-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  box-shadow: var(--shadow-sm); display: flex; flex-direction: column;
+  transition: box-shadow var(--t-fast), border-color var(--t-fast);
+}
+.iv-tpl-card:hover { box-shadow: var(--shadow-md); border-color: var(--accent-soft); }
+.iv-tpl-card.is-upcoming { opacity: 0.72; box-shadow: none; }
+.iv-tpl-card.is-upcoming:hover { box-shadow: none; border-color: var(--border); }
+
+.iv-tpl-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-2);
+}
+.iv-tpl-head h3 { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0; }
+.iv-tpl-badge {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  background: var(--accent-soft); color: var(--accent-deep);
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.iv-tpl-badge.is-muted { background: var(--border-soft); color: var(--muted); }
+
+.iv-tpl-summary { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 var(--space-3); line-height: 1.55; }
+
+.iv-tpl-meta { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--space-3); padding: 0; }
+.iv-tpl-meta li {
+  font-size: 11.5px; color: var(--ink-soft);
+  background: var(--border-soft); border-radius: 999px; padding: 3px 9px;
+}
+
+.iv-tpl-facts { font-size: 12px; color: var(--muted); margin-bottom: var(--space-4); }
+
+.iv-tpl-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
+
+/* ── Filters ─────────────────────────────────────────────────────────────── */
+
+.iv-filters {
+  display: flex; gap: var(--space-3); flex-wrap: wrap;
+  margin-bottom: var(--space-4); align-items: flex-end;
+}
+.iv-field-inline { display: flex; flex-direction: column; gap: 4px; }
+.iv-field-inline > span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted);
+}
+.iv-field-inline input, .iv-field-inline select {
+  font-family: inherit; font-size: 13.5px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--panel); color: var(--ink); min-width: 210px;
+}
+.iv-field-inline input:focus-visible, .iv-field-inline select:focus-visible {
+  outline: none; box-shadow: var(--focus-ring);
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+
+.iv-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--panel); box-shadow: var(--shadow-sm);
+}
+.iv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.iv-table thead th {
+  text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); padding: 12px var(--space-4);
+  border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--border-soft);
+}
+.iv-table tbody th, .iv-table tbody td {
+  padding: 12px var(--space-4); border-bottom: 1px solid var(--border-soft);
+  vertical-align: top; text-align: left; font-weight: 400; color: var(--ink-soft);
+}
+.iv-table tbody th { color: var(--ink); font-weight: 600; }
+.iv-table tbody tr:last-child th, .iv-table tbody tr:last-child td { border-bottom: none; }
+.iv-table tbody tr:hover { background: var(--border-soft); }
+
+.iv-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.iv-row-actions .iv-btn { padding: 5px 10px; font-size: 12px; }
+
+.iv-progress-note { display: block; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+
+.iv-flag {
+  display: inline-block; margin-top: 4px;
+  font-size: 11px; font-weight: 600; color: var(--warn);
+  background: var(--warn-soft); border-radius: 999px; padding: 2px 8px;
+}
+
+/* ── Status chips — colour AND text, never colour alone ──────────────────── */
+
+.iv-chip {
+  display: inline-block; font-size: 11.5px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  background: var(--border-soft); color: var(--ink-soft);
+}
+.iv-chip.is-draft { background: var(--border-soft); color: var(--ink-soft); }
+.iv-chip.is-in_progress { background: var(--info-soft); color: var(--info); }
+.iv-chip.is-completed { background: var(--ok-soft); color: var(--ok); }
+.iv-chip.is-archived { background: var(--border-soft); color: var(--muted); }
+
+/* ── Empty / loading / error ─────────────────────────────────────────────── */
+
+.iv-empty, .iv-loading, .iv-error {
+  border: 1px dashed var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-6); text-align: center; background: var(--panel);
+}
+.iv-empty-title, .iv-error-title {
+  font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 6px;
+}
+.iv-empty p, .iv-error p {
+  font-size: 13.5px; color: var(--ink-soft); margin: 0 auto var(--space-4);
+  max-width: 52ch; line-height: 1.55;
+}
+.iv-loading { color: var(--muted); font-size: 13.5px; border-style: solid; }
+.iv-error { border-color: var(--danger); background: var(--danger-soft); }
+.iv-error .iv-error-title { color: var(--danger); }
+
+.iv-note { font-size: 12.5px; color: var(--muted); margin: var(--space-3) 0 0; max-width: 72ch; line-height: 1.55; }
+.iv-note.is-danger {
+  color: var(--danger); background: var(--danger-soft);
+  border: 1px solid var(--danger); border-radius: var(--radius-md);
+  padding: 10px 12px; margin: 0 0 var(--space-4);
+}
+.iv-readonly-note {
+  font-size: 12.5px; color: var(--ink-soft); background: var(--info-soft);
+  border-radius: var(--radius-md); padding: 10px 12px; margin: 0 0 var(--space-4);
+}
+
+/* ── Record header ───────────────────────────────────────────────────────── */
+
+.iv-rec-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-3);
+}
+.iv-rec-title h1 {
+  font-size: 22px; font-weight: 800; letter-spacing: -0.3px;
+  color: var(--ink); margin: 0 0 6px;
+}
+.iv-rec-meta { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.iv-rec-meta > span { font-size: 12.5px; color: var(--ink-soft); }
+.iv-rec-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.iv-savebar {
+  font-size: 12.5px; color: var(--muted); margin-bottom: var(--space-4);
+  padding: 6px 12px; border-radius: var(--radius-md);
+  background: var(--border-soft); display: inline-block; min-height: 28px;
+}
+.iv-savebar.is-busy { color: var(--info); background: var(--info-soft); }
+.iv-savebar.is-dirty { color: var(--warn); background: var(--warn-soft); }
+.iv-savebar.is-saved { color: var(--ok); background: var(--ok-soft); }
+.iv-savebar.is-error { color: var(--danger); background: var(--danger-soft); font-weight: 600; }
+
+/* ── Section strip ───────────────────────────────────────────────────────── */
+
+.iv-strip {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-5); padding: 4px 0;
+}
+.iv-strip-btn {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 8px 12px; font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+}
+.iv-strip-btn:hover { color: var(--ink); }
+.iv-strip-btn.is-current { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+.iv-strip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── The document ────────────────────────────────────────────────────────── */
+
+.iv-doc {
+  background: var(--iv-doc-bg);
+  border: 1px solid var(--iv-doc-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-6) clamp(var(--space-4), 5vw, 56px);
+  max-width: 900px;
+}
+
+.iv-details {
+  background: var(--border-soft); border-radius: var(--radius-md);
+  padding: var(--space-4); margin-bottom: var(--space-6);
+}
+.iv-details-grid {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.iv-field { display: flex; flex-direction: column; gap: 5px; }
+.iv-field > span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted);
+}
+
+.iv-input {
+  font-family: inherit; font-size: 14px; color: var(--ink);
+  padding: 9px 11px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--panel); width: 100%;
+}
+.iv-input:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--accent); }
+.iv-input[readonly] { background: var(--border-soft); color: var(--ink-soft); }
+
+.iv-section { margin-bottom: var(--space-6); scroll-margin-top: 64px; }
+.iv-section:last-child { margin-bottom: 0; }
+
+.iv-section-bar {
+  background: var(--iv-bar); color: var(--iv-bar-ink);
+  font-size: 15px; font-weight: 600; letter-spacing: 0.1px;
+  padding: 11px 16px; border-radius: var(--radius-md);
+  margin: 0 0 var(--space-5);
+}
+
+/* ── Questions ───────────────────────────────────────────────────────────── */
+
+.iv-q { margin-bottom: var(--space-5); border: none; padding: 0; }
+.iv-q:last-child { margin-bottom: 0; }
+
+.iv-q-label {
+  display: block; font-size: 14px; font-weight: 500; line-height: 1.5;
+  color: var(--ink); margin: 0 0 6px; padding: 0;
+}
+.iv-q-sublabel {
+  display: block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted); margin: 0 0 4px;
+}
+.iv-q-guide {
+  font-size: 12.5px; font-style: italic; color: var(--muted);
+  margin: 0 0 8px; line-height: 1.5; max-width: 72ch;
+}
+
+/* The answer box. No maxlength anywhere; the height is driven by content
+   (interview.js autoGrow), so a three-paragraph answer is three paragraphs
+   tall and everything below simply moves down. */
+.iv-answer {
+  font-family: inherit; font-size: 14px; line-height: 1.6; color: var(--ink);
+  width: 100%; min-height: 56px; padding: 11px 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel); resize: vertical; overflow: hidden;
+  transition: border-color var(--t-fast);
+}
+.iv-answer:hover { border-color: var(--muted); }
+.iv-answer:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--accent); }
+
+.iv-q.is-inline { max-width: 420px; }
+
+.iv-fieldset { border: none; margin: 0 0 var(--space-5); padding: 0; }
+.iv-fieldset > legend { padding: 0; }
+.iv-fieldset.is-emphasis {
+  background: var(--accent-soft); border-radius: var(--radius-md);
+  padding: var(--space-4); margin-bottom: var(--space-5);
+}
+.iv-fieldset.is-emphasis > legend { font-weight: 700; font-size: 15px; color: var(--accent-deep); }
+
+.iv-options { display: flex; flex-direction: column; gap: 10px; }
+.iv-options.is-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px var(--space-5);
+}
+
+.iv-option { display: flex; align-items: flex-start; gap: 10px; }
+.iv-option input[type="checkbox"], .iv-option input[type="radio"] {
+  width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); flex-shrink: 0;
+}
+.iv-option label { font-size: 14px; color: var(--ink); line-height: 1.4; cursor: pointer; }
+.iv-option input:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 3px; }
+
+.iv-detail { display: none; margin-top: var(--space-3); max-width: 420px; }
+.iv-detail.is-open { display: block; }
+
+/* ── Ratings ─────────────────────────────────────────────────────────────── */
+
+.iv-ratings-grid {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  overflow: hidden; margin-top: var(--space-2);
+}
+.iv-ratings-head, .iv-ratings-row {
+  display: grid; grid-template-columns: minmax(140px, 1.6fr) repeat(5, 1fr) auto;
+  align-items: center; gap: var(--space-2);
+  padding: 9px var(--space-4);
+}
+.iv-ratings-head {
+  background: var(--border-soft); border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 700; color: var(--muted); text-align: center;
+}
+.iv-ratings-head > span:first-child { text-align: left; }
+.iv-ratings-row { border: none; margin: 0; border-bottom: 1px solid var(--border-soft); }
+.iv-ratings-row:last-child { border-bottom: none; }
+.iv-ratings-label { font-size: 13.5px; color: var(--ink); }
+
+.iv-ratings-cell { display: flex; justify-content: center; }
+.iv-ratings-cell input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.iv-ratings-cell label {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--panel);
+  font-size: 13px; font-weight: 700; color: var(--ink-soft);
+  cursor: pointer; transition: all var(--t-fast);
+}
+.iv-ratings-cell label:hover { border-color: var(--accent); color: var(--accent); }
+/* The selected score is filled AND bold AND high-contrast — never colour alone. */
+.iv-ratings-cell input:checked + label {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.iv-ratings-cell input:focus-visible + label { box-shadow: var(--focus-ring); }
+
+.iv-rate-clear { font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.iv-rate-clear:hover { color: var(--danger); }
+
+.iv-signoff {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border-top: 1px solid var(--border); padding-top: var(--space-5); margin-top: var(--space-5);
+}
+.iv-signoff .iv-q { margin-bottom: 0; }
+
+/* ── Preview ─────────────────────────────────────────────────────────────── */
+
+.iv-doc-preview .iv-preview-list { list-style: none; margin: 0; padding: 0; }
+.iv-preview-q {
+  border-left: 3px solid var(--border); padding: 0 0 0 var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.iv-preview-label { font-size: 14px; font-weight: 500; color: var(--ink); margin: 0 0 4px; line-height: 1.5; }
+.iv-preview-guide { font-size: 12.5px; font-style: italic; color: var(--muted); margin: 0 0 4px; }
+.iv-preview-options { list-style: disc; margin: 4px 0 0 18px; padding: 0; }
+.iv-preview-options li { font-size: 13px; color: var(--ink-soft); margin-bottom: 2px; }
+
+/* ── Access table ────────────────────────────────────────────────────────── */
+
+.iv-perm-table td, .iv-perm-table th { vertical-align: middle; }
+.iv-perm-cell { text-align: center; }
+.iv-perm-cell .iv-option { justify-content: center; }
+.iv-perm-sub { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.iv-perm-implicit { font-size: 12px; color: var(--muted); font-style: italic; }
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+
+.iv-modal-host {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(36, 31, 26, 0.45);
+  display: none; align-items: center; justify-content: center;
+  padding: var(--space-4);
+}
+.iv-modal-host.open { display: flex; }
+.iv-modal {
+  background: var(--panel); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); width: min(560px, 100%);
+  max-height: 88vh; display: flex; flex-direction: column;
+}
+.iv-modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-3); padding: var(--space-5) var(--space-5) var(--space-3);
+}
+.iv-modal-head h2 { font-size: 18px; font-weight: 700; color: var(--ink); margin: 0; }
+.iv-modal-head p { font-size: 13px; color: var(--ink-soft); margin: 4px 0 0; }
+.iv-modal-close {
+  background: none; border: none; font-size: 24px; line-height: 1;
+  color: var(--muted); cursor: pointer; padding: 0 4px;
+}
+.iv-modal-close:hover { color: var(--ink); }
+.iv-modal-close:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+.iv-modal-body { padding: 0 var(--space-5) var(--space-4); overflow-y: auto; }
+.iv-modal-foot {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border);
+}
+.iv-modal-grid {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+
+.iv-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────
+   Desktop is the interview surface; tablet and phone stay usable rather
+   than being optimised at the desktop's expense. */
+
+@media (max-width: 860px) {
+  .iv-doc { padding: var(--space-5) var(--space-4); }
+  .iv-ratings-head { display: none; }
+  .iv-ratings-row {
+    grid-template-columns: 1fr; gap: 6px; padding: var(--space-3) var(--space-4);
+  }
+  .iv-ratings-row .iv-ratings-label { font-weight: 600; }
+  .iv-ratings-cell { justify-content: flex-start; }
+  .iv-ratings-cell label { width: 40px; }
+  .iv-ratings-row { display: flex; flex-wrap: wrap; align-items: center; }
+  .iv-ratings-row .iv-ratings-label { flex: 1 0 100%; }
+}
+
+@media (max-width: 640px) {
+  .iv-rec-actions, .iv-hero-actions { width: 100%; }
+  .iv-tpl-actions .iv-btn { flex: 1 1 auto; }
+}
+
+/* Reduced motion: the section strip's smooth scroll is the only animation
+   that moves the page under the reader. */
+@media (prefers-reduced-motion: reduce) {
+  .iv-doc, .iv-btn, .iv-answer, .iv-ratings-cell label { transition: none; }
+}

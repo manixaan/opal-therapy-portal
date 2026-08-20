@@ -15,6 +15,12 @@
  * administrator: those are two different things, and the Owner grants the
  * second one permission by permission. See ONBOARDING_PERMISSIONS below.
  *
+ * INTERVIEW DELEGATION. The interviews.* permissions follow the same rule for
+ * the same reason: recruitment interviews carry employment information about
+ * people who are not yet employees, and "this person schedules appointments"
+ * says nothing about whether they should read a candidate's salary
+ * expectations. See INTERVIEW_PERMISSIONS below.
+ *
  * IMPORTANT: Frontend role checks are UI-only conveniences.
  * These backend helpers are the authoritative enforcement layer.
  */
@@ -161,25 +167,75 @@ const ONBOARDING_PERMISSION_GROUPS = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Interview Preparation delegation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The permissions the Owner may delegate for Interview Preparation.
+ *
+ * Absent from every role's defaults except owner. Recruitment interviews hold
+ * employment information — salary expectations, reference-check decisions,
+ * an interviewer's written concerns — about people who are not employees and
+ * never may be. An Admin holds this only because the Owner decided that
+ * person conducts interviews, and the Owner can take it back.
+ *
+ * `access` is the capability itself. `view_all` is separate and additive:
+ * conducting interviews does not imply reading everybody else's, so an
+ * authorised Admin sees the interviews they conducted unless the Owner
+ * deliberately widens that. Neither implies the other; each is checked at the
+ * route. The Owner holds both implicitly and cannot be locked out of the
+ * practice's own recruitment records.
+ *
+ * Nothing here delegates the power to delegate: granting is owner-only, by
+ * role, so a delegate can never widen their own reach or a colleague's.
+ */
+const INTERVIEW_PERMISSIONS = [
+  'interviews.access',    // see the module, run interviews, save, complete, export
+  'interviews.view_all',  // read and export every interview in the practice
+];
+
+/** Grouped for the Owner's delegation UI; the grouping carries the warning. */
+const INTERVIEW_PERMISSION_GROUPS = [
+  {
+    key: 'interviews',
+    label: 'Interview Preparation',
+    description: 'Conduct structured recruitment interviews on the practice\'s behalf. '
+      + 'Interview records hold employment information about job applicants — grant only to '
+      + 'people who genuinely interview candidates.',
+    permissions: INTERVIEW_PERMISSIONS,
+  },
+];
+
+/** Human labels for the delegation UI and for audit readability. */
+const INTERVIEW_PERMISSION_LABELS = {
+  'interviews.access': 'Interview Preparation access',
+  'interviews.view_all': 'See all interviews in the practice',
+};
+
 /** Every permission string this file recognises — the grant allowlist. */
 const KNOWN_PERMISSIONS = new Set([
   ...Object.values(ROLE_PERMISSIONS).flat(),
   ...ONBOARDING_PERMISSIONS,
+  ...INTERVIEW_PERMISSIONS,
 ]);
 
 /**
  * Return the permissions array for a given role.
  * Also merges any custom per-user permissions stored in the DB.
  *
- * The owner holds every onboarding permission implicitly — the practice owner
- * is the data controller and cannot lock themselves out of their own records.
+ * The owner holds every onboarding and interview permission implicitly — the
+ * practice owner is the data controller and cannot lock themselves out of
+ * their own records.
  *
  * @param {string}   role        - 'owner' | 'admin' | 'therapist' | 'read_only' | 'pre_employee'
  * @param {string[]} [extraPerms] - additional permissions from user.permissions column
  */
 function getPermissions(role, extraPerms = []) {
   const base = ROLE_PERMISSIONS[role] || [];
-  const merged = role === 'owner' ? [...base, ...ONBOARDING_PERMISSIONS] : base;
+  const merged = role === 'owner'
+    ? [...base, ...ONBOARDING_PERMISSIONS, ...INTERVIEW_PERMISSIONS]
+    : base;
   if (!extraPerms || !extraPerms.length) return [...new Set(merged)];
   // Per-user grants must name a permission this file actually defines. An
   // unrecognised string in the column is ignored rather than silently becoming
@@ -429,6 +485,9 @@ module.exports = {
   ROLE_PERMISSIONS,
   ONBOARDING_PERMISSIONS,
   ONBOARDING_PERMISSION_GROUPS,
+  INTERVIEW_PERMISSIONS,
+  INTERVIEW_PERMISSION_GROUPS,
+  INTERVIEW_PERMISSION_LABELS,
   KNOWN_PERMISSIONS,
   PRE_EMPLOYEE_PATHS,
   isPreEmployeePath,

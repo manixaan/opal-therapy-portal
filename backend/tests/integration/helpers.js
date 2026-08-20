@@ -64,6 +64,8 @@ const ALL_TABLES = [
   'onboarding_document_import_items', 'onboarding_document_imports',
   'onboarding_document_versions', 'onboarding_documents',
   'compliance_requirements',
+  // Interview Preparation (migration 036) — one table, no children.
+  'interview_records',
   'users', 'organisations',
 ];
 

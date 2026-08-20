@@ -165,6 +165,13 @@ app.use('/api/onboarding/imports', bodyParser.json({ limit: '62mb' }));
 // 10 MB (library) caps enforced in the routes.
 app.use('/api/onboarding', bodyParser.json({ limit: '16mb' }));
 
+// Interview answers are long-form narrative typed live during an interview.
+// The per-answer ceiling (interview-templates.js MAX_ANSWER_CHARS, 200k chars)
+// is a storage-sanity limit rather than a UX one, so a full interview can
+// legitimately exceed the 100kb default and must not 413 mid-save. 4 MB is
+// several times the largest interview anyone could type.
+app.use('/api/interviews', bodyParser.json({ limit: '4mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -563,6 +570,13 @@ app.use('/', require('./whodas-routes'));
 // say that an instrument's module is switched off. It exposes no item wording
 // and no scoring rules; administration stays in the instrument's own module.
 app.use('/', require('./assessments-routes'));
+
+// Interview Preparation — structured recruitment interviews (owner-owned;
+// delegable to an authorised admin one permission at a time). Every route
+// requires `interviews.access`, which no role but owner holds by default, so
+// the whole namespace 403s for anyone the Owner has not authorised.
+// Recruitment data: deliberately unrelated to any clinical surface.
+app.use('/', require('./interview-routes'));
 
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');

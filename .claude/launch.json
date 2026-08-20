@@ -80,6 +80,16 @@
       ],
       "port": 5010,
       "autoPort": false
+    },
+    {
+      "name": "opal-interviews-5011",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5011 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5011,http://127.0.0.1:5011 APP_BASE_URL=http://localhost:5011 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5011,
+      "autoPort": false
     }
   ]
 }

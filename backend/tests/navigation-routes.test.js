@@ -47,6 +47,8 @@ const ROUND_TRIP = [
   '#resources/admin',
   '#resources/detail/res-123',
   '#casenotes',
+  '#interviews',
+  '#interviews/record/iv-abc-123',
   '#casenotes/draft-77',
   '#book',
   '#profile',
@@ -399,5 +401,43 @@ describe('pushOrReplace — the anti-trap / anti-duplicate rule', () => {
   test('a garbage next-route still resolves to a decision, never a throw', () => {
     expect(() => pushOrReplace(decodeRoute('#calendar'), decodeRoute('#!!!'))).not.toThrow();
     expect(pushOrReplace(decodeRoute('#calendar'), decodeRoute('#!!!'))).toBe('replace');
+  });
+});
+
+
+// ── Interview Preparation ──────────────────────────────────────────────────
+//
+// A normal tab that may carry a record id, the same shape as casenotes. What
+// separates it from the assessment surface: '#interviews' names a REAL screen
+// (the template library and the record list), so an idless address must
+// degrade to itself rather than being redirected somewhere else.
+
+describe('interview routes', () => {
+  test('the library is an address of its own', () => {
+    expect(encodeRoute({ tab: 'interviews' })).toBe('#interviews');
+    expect(decodeRoute('#interviews')).toMatchObject({ tab: 'interviews', id: null });
+  });
+
+  test('one interview round-trips through the canonical form', () => {
+    expect(encodeRoute({ tab: 'interviews', id: 'iv-abc-123' })).toBe('#interviews/record/iv-abc-123');
+    expect(encodeRoute(decodeRoute('#interviews/record/iv-abc-123'))).toBe('#interviews/record/iv-abc-123');
+  });
+
+  test('the short form a human would type is accepted and canonicalised', () => {
+    expect(decodeRoute('#interviews/iv-abc-123')).toMatchObject({ tab: 'interviews', id: 'iv-abc-123' });
+    expect(encodeRoute(decodeRoute('#interviews/iv-abc-123'))).toBe('#interviews/record/iv-abc-123');
+  });
+
+  test('an idless or malformed record address degrades to the library, not a blank page', () => {
+    for (const hash of ['#interviews/record/', '#interviews/record', '#interviews/', '#interviews//']) {
+      expect(`${hash} -> ${encodeRoute(decodeRoute(hash))}`).toBe(`${hash} -> #interviews`);
+    }
+  });
+
+  test('a hostile id is stripped of route separators and length-capped', () => {
+    const nasty = decodeRoute('#interviews/record/' + encodeURIComponent('../../settings!modal/x'));
+    expect(nasty.tab).toBe('interviews');
+    expect(nasty.id).not.toMatch(/[#!/?\s]/);
+    expect(decodeRoute('#interviews/record/' + 'z'.repeat(500)).id.length).toBeLessThanOrEqual(MAX_ID);
   });
 });

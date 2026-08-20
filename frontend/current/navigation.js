@@ -78,6 +78,12 @@
     'calendar', 'profile', 'casenotes', 'resources', 'book',
     'contacts', 'activity', 'billing', 'ndis', 'dormant',
     'travel', 'logbook', 'accounting', 'settings', 'support', 'purchases',
+    // Interview Preparation. A normal tab that may carry a record id, the same
+    // shape as 'casenotes': '#interviews' is the library, and
+    // '#interviews/record/<id>' is one interview. It is NOT a PAGE_TAB — an
+    // idless address here names the library, which is a real screen, so it
+    // must degrade to itself rather than elsewhere.
+    'interviews',
     'fca', 'letter',
     // The assessment surface. Like the two wizards it is a full-screen view
     // rather than a tab, but it carries a RECORD ID rather than a step number:
@@ -195,6 +201,9 @@
     } else if (out.tab === 'casenotes') {
       out.id = safeId(s.id) || null;
 
+    } else if (out.tab === 'interviews') {
+      out.id = safeId(s.id) || null;
+
     } else if (inList(WIZARD_TABS, out.tab)) {
       var n = parseInt(s.step, 10);
       out.step = (isFinite(n) && n >= 1 && n <= MAX_STEP) ? n : null;
@@ -248,6 +257,11 @@
       if (s.view && s.view !== 'dashboard') out += '/' + s.view;
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
+    } else if (s.tab === 'interviews') {
+      // The 'record' segment is canonical so the address says what the id is,
+      // matching '#assessment/record/<id>'. decodeRoute also accepts the
+      // shorter '#interviews/<id>' a human would type.
+      if (s.id) out += '/record/' + encodeURIComponent(s.id);
     } else if (inList(WIZARD_TABS, s.tab)) {
       if (s.step) out += '/step-' + s.step;
     } else if (inList(PAGE_TABS, s.tab)) {
@@ -297,6 +311,8 @@
       st.view = parts[1];
     } else if (tab === 'casenotes') {
       st.id = decodeSegment(parts[1]);
+    } else if (tab === 'interviews') {
+      st.id = decodeSegment(lower(parts[1]) === 'record' ? parts[2] : parts[1]);
     } else if (inList(WIZARD_TABS, tab)) {
       var m = /^step-(\d{1,3})$/.exec(lower(parts[1] || ''));
       if (m) st.step = parseInt(m[1], 10);
@@ -429,6 +445,12 @@
     return inList(CAL_MODES, mode) ? mode : null;
   }
 
+  function interviewRecordId() {
+    var iv = global.Interviews;
+    if (!iv || !isFn(iv.currentRecordId)) return null;
+    try { return safeId(iv.currentRecordId()) || null; } catch (e) { return null; }
+  }
+
   function caseNoteSelectedId() {
     var cn = global.CaseNotes;
     if (!cn || !cn._state) return null;
@@ -456,6 +478,7 @@
     else if (tab === 'resources') { st.view = NAV.rhView || 'home'; st.id = NAV.rhId; }
     else if (tab === 'onboarding') st.view = NAV.obView || 'dashboard';
     else if (tab === 'casenotes') st.id = caseNoteSelectedId();
+    else if (tab === 'interviews') st.id = interviewRecordId();
     return st;
   }
 
@@ -782,6 +805,17 @@
       if (calendarModeName() !== t.view && isFn(global.setCalendarMode)) {
         var mode = (t.view === 'scheduler') ? 'master' : t.view;
         try { global.setCalendarMode(mode); } catch (e) {}
+      }
+    }
+
+    if (t.tab === 'interviews' && global.Interviews) {
+      // switchTab's post-dispatch already calls Interviews.open(); a restored
+      // address that names a record has to go one step further and open it.
+      // Both entry points are idempotent, so calling either twice is safe.
+      if (t.id && isFn(global.Interviews.openRecord)) {
+        try { global.Interviews.openRecord(t.id); } catch (e) {}
+      } else if (isFn(global.Interviews.open)) {
+        try { global.Interviews.open(); } catch (e) {}
       }
     }
 
@@ -1266,6 +1300,22 @@
       NAV.pageId = safe;
       writeRoute({ tab: 'assessment', view: NAV.pageView, id: safe });
       startPageWatch();               // retract the route when the surface closes
+    },
+
+    /**
+     * Interview Preparation publishes its own address.
+     *
+     * The library and one interview are two screens inside one tab, and the
+     * module emits no navigation event, so it calls
+     *   window.OpalNav && OpalNav.pushInterview(idOrNull);
+     * whenever it opens or closes a record. Passing null writes the library
+     * address, which is what makes Back out of an interview land on the list
+     * instead of leaving a stale record id in the bar. A no-op during restore,
+     * so restoring never pushes a duplicate entry for the same screen.
+     */
+    pushInterview: function (id) {
+      if (NAV.restoring) return;
+      writeRoute({ tab: 'interviews', id: safeId(id) || null });
     },
 
     /** Programmatic navigation, e.g. OpalNav.go({ tab: 'calendar', view: 'month' }). */
