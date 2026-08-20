@@ -92,6 +92,15 @@ setsecret() { az keyvault secret set --vault-name "$KV" --name "$1" --value "$2"
 [ -n "$PG_PASS" ] && setsecret db-password "$PG_PASS"
 setsecret session-secret "$(openssl rand -base64 48)"
 setsecret token-encryption-key "$(openssl rand -hex 32)"
+# Onboarding field encryption. DELIBERATELY A SEPARATE KEY from
+# token-encryption-key: OAuth tokens are rotated routinely and can be
+# re-obtained by re-authenticating, whereas the tax file numbers, bank
+# details and identity document numbers this key protects cannot. Sharing
+# one key would mean an OAuth key rotation permanently destroyed every
+# stored HR value. Never rotate this without running the re-encryption
+# pass first (see docs/ONBOARDING_PACKAGES.md).
+az keyvault secret show --vault-name "$KV" --name onboarding-encryption-key -o none 2>/dev/null || \
+  setsecret onboarding-encryption-key "$(openssl rand -hex 32)"
 setsecret webhook-client-state "$(openssl rand -hex 24)"
 # Labelled placeholders — replaced in Stages 11 (Entra), 13 (Splose), SMTP/Maps when available
 for s in microsoft-client-secret splose-api-key email-pass google-maps-api-key; do
@@ -123,6 +132,7 @@ az webapp config appsettings set -g "$RG" -n "$APP" -o none --settings \
   "DB_PASSWORD=@Microsoft.KeyVault(SecretUri=$KVURI/secrets/db-password/)" \
   "SESSION_SECRET=@Microsoft.KeyVault(SecretUri=$KVURI/secrets/session-secret/)" \
   "TOKEN_ENCRYPTION_KEY=@Microsoft.KeyVault(SecretUri=$KVURI/secrets/token-encryption-key/)" \
+  "ONBOARDING_ENCRYPTION_KEY=@Microsoft.KeyVault(SecretUri=$KVURI/secrets/onboarding-encryption-key/)" \
   MICROSOFT_CLIENT_ID=staging-placeholder-not-configured \
   MICROSOFT_TENANT_ID=common \
   "MICROSOFT_CLIENT_SECRET=@Microsoft.KeyVault(SecretUri=$KVURI/secrets/microsoft-client-secret/)" \
