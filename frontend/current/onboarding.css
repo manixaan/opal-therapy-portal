@@ -323,8 +323,11 @@
 .ob-builder-item .ob-tick { color: var(--ok); font-weight: 700; flex: none; width: 14px; }
 .ob-builder-item .ob-tick.is-optional { color: var(--muted); }
 .ob-builder-item-main { flex: 1; min-width: 0; }
-.ob-builder-item-title { color: var(--ink); }
-.ob-builder-item-cond { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+/* Both are <span> so they sit inside one flex child; block display is what
+   puts the condition on its own line under the title rather than running the
+   two together. */
+.ob-builder-item-title { display: block; color: var(--ink); }
+.ob-builder-item-cond { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .ob-inherited {
   font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
   color: var(--muted); background: var(--border-soft);

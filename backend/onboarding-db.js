@@ -753,11 +753,15 @@ async function recomputeAssignment(client, assignmentId) {
   const progress = engine.computeProgress(reqs);
 
   const { rows: aRows } = await client.query(
-    'SELECT status, invite_accepted_at FROM onboarding_assignments WHERE id = $1', [assignmentId]
+    `SELECT status, invite_accepted_at, submitted_at
+       FROM onboarding_assignments WHERE id = $1`, [assignmentId]
   );
   const current = aRows[0]?.status || 'created';
   const next = engine.deriveAssignmentStatus(current, progress, {
     inviteAccepted: !!aRows[0]?.invite_accepted_at,
+    // Handing the pack over is the employee's own act; the run does not
+    // advance into employer review until they make it.
+    submitted: !!aRows[0]?.submitted_at,
   });
 
   // $8 is cast explicitly: without it Postgres deduces varchar from the
@@ -768,10 +772,7 @@ async function recomputeAssignment(client, assignmentId) {
         SET employee_total = $2, employee_done = $3,
             employer_total = $4, employer_done = $5,
             blocking_total = $6, blocking_done = $7,
-            status = $8::text, last_activity_at = NOW(), updated_at = NOW(),
-            submitted_at = CASE WHEN $8::text IN ('employee_actions_complete','employer_review',
-                                                  'ready_to_activate')
-                                 AND submitted_at IS NULL THEN NOW() ELSE submitted_at END
+            status = $8::text, last_activity_at = NOW(), updated_at = NOW()
       WHERE id = $1 RETURNING *`,
     [
       assignmentId, progress.employeeTotal, progress.employeeDone,

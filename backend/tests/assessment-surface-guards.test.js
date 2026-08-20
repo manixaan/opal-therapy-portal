@@ -590,9 +590,11 @@ describe('changed assets are cache-busted', () => {
     for (const [file, version] of [
       ['assessment.js', 3], ['assessment.css', 3],
       ['whodas.js', 5], ['whodas.css', 3],
-      // r16/r10/5: owner-controlled learning (assignment player + admin console)
+      // r16/r10: owner-controlled learning (assignment player + admin console)
       ['resourcehub.js', 'r16'], ['resourcehub.css', 'r10'],
-      ['navigation.js', 5],
+      // 6: Onboarding Packages added an 'onboarding' route to the grammar
+      ['navigation.js', 6],
+      ['onboarding.js', 2], ['onboarding.css', 2],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

@@ -289,20 +289,29 @@ describe('derived assignment status', () => {
 
   test('terminal statuses are never re-derived', () => {
     for (const status of ['activated', 'completed', 'cancelled', 'archived']) {
-      expect(engine.deriveAssignmentStatus(status, progress({ employeeDone: 5 }))).toBe(status);
+      expect(engine.deriveAssignmentStatus(status, progress({ employeeDone: 5 }),
+        { submitted: true })).toBe(status);
     }
   });
 
   test('an open correction wins over everything else', () => {
     expect(engine.deriveAssignmentStatus('in_progress', progress({
       correctionsOpen: 1, employeeDone: 5, employeeComplete: true,
-    }))).toBe('corrections_required');
+    }), { submitted: true })).toBe('corrections_required');
   });
 
-  test('employee done but employer outstanding is employer_review', () => {
+  test('finishing the last item stops at employee_actions_complete', () => {
+    // Submission is the EMPLOYEE'S act. Deriving straight into employer review
+    // would make the Submit button vanish the moment it became relevant.
     expect(engine.deriveAssignmentStatus('in_progress', progress({
       employeeDone: 5, employeeComplete: true, employerDone: 1,
-    }))).toBe('employer_review');
+    }))).toBe('employee_actions_complete');
+  });
+
+  test('employee done AND submitted, employer outstanding, is employer_review', () => {
+    expect(engine.deriveAssignmentStatus('in_progress', progress({
+      employeeDone: 5, employeeComplete: true, employerDone: 1,
+    }), { submitted: true })).toBe('employer_review');
   });
 
   test('everything satisfied is ready_to_activate', () => {
@@ -310,7 +319,7 @@ describe('derived assignment status', () => {
       employeeDone: 5, employeeComplete: true,
       employerDone: 2, employerComplete: true,
       blockingDone: 3,
-    }))).toBe('ready_to_activate');
+    }), { submitted: true })).toBe('ready_to_activate');
   });
 });
 

@@ -519,9 +519,17 @@ describe('the complete workflow', () => {
     // …while employer verification is still outstanding and shown separately.
     expect(beforeSubmit.body.employerReview.remaining).toBeGreaterThan(0);
 
+    // Before submitting, the run waits at employee_actions_complete — handing
+    // it over is the employee's own act, not a side effect of finishing.
+    expect(beforeSubmit.body.status).toBe('employee_actions_complete');
+
     const submitted = await applicant.post('/api/onboarding/me/submit').send({});
     expect(submitted.status).toBe(200);
-    expect(['employer_review', 'employee_actions_complete']).toContain(submitted.body.status);
+    expect(submitted.body.status).toBe('employer_review');
+
+    // …and the Submit button does not come back on a run already handed over.
+    const afterSubmit = await applicant.get('/api/onboarding/me');
+    expect(afterSubmit.body.canSubmit).toBe(false);
 
     // ── Activation is refused while verification is outstanding ───────────
     const tooEarly = await owner.post(`/api/onboarding/assignments/${assignmentId}/activate`).send({});

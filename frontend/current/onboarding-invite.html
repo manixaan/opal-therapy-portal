@@ -293,7 +293,10 @@
           $('facts').hidden = false;
         }
 
-        $('password').focus();
+        // preventScroll: the top half of this page is the greeting and the
+        // employment facts the person should actually read. A plain focus()
+        // scrolls it out of view the moment the page loads.
+        $('password').focus({ preventScroll: true });
       }
 
       $('form').addEventListener('submit', async function (e) {

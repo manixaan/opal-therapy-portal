@@ -310,8 +310,13 @@ router.get('/api/onboarding/me', safe(async (req, res) => {
     },
     actionRequired: progress.correctionsOpen,
     sections: groupSections(requirements, { forEmployee: true }),
+    // `employee_actions_complete` is deliberately NOT excluded — that is
+    // exactly the state where submitting is the next thing to do. What is
+    // excluded is everything from employer_review onward: a run already handed
+    // over must not offer the Submit button again.
     canSubmit: progress.employeeComplete && progress.correctionsOpen === 0
-      && !['activated', 'completed', 'cancelled', 'archived'].includes(assignment.status),
+      && !['employer_review', 'ready_to_activate',
+        'activated', 'completed', 'cancelled', 'archived'].includes(assignment.status),
   });
 }));
 
@@ -1064,9 +1069,16 @@ router.post('/api/onboarding/me/submit', safe(async (req, res) => {
     });
   }
 
-  const { assignment: updated } = await odb.withTransaction(
-    (q) => odb.recomputeAssignment(q, assignment.id)
-  );
+  // Stamp the submission FIRST, then recompute: submitted_at is what moves the
+  // run into employer review, so the recompute has to see it already set.
+  const { assignment: updated } = await odb.withTransaction(async (q) => {
+    await q.query(
+      `UPDATE onboarding_assignments
+          SET submitted_at = COALESCE(submitted_at, NOW()), updated_at = NOW()
+        WHERE id = $1`, [assignment.id]
+    );
+    return odb.recomputeAssignment(q, assignment.id);
+  });
 
   await auditOnboarding(req, 'employee_submitted', {
     targetType: 'onboarding_assignment', targetId: assignment.id,

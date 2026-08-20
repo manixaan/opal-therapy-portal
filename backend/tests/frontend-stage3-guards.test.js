@@ -209,9 +209,16 @@ describe('compact calendar week view', () => {
 // ── RBAC role-based navigation (2026-08-06) ──────────────────────────────────
 describe('role-based navigation (RBAC)', () => {
   test('explicit per-role nav config exists with default-deny allowlists', () => {
-    // Case Notes (2026-08-10) joined the primary nav for treating clinicians
-    expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] }");
-    expect(HTML).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] }");
+    // Case Notes (2026-08-10) joined the primary nav for treating clinicians.
+    // Onboarding (2026-08-20) joined EVERY role's list — the tab shows the
+    // management console to whoever holds onboarding.view and the person's own
+    // onboarding to everyone else, so hiding it from a therapist would hide
+    // their own paperwork from them.
+    expect(HTML).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources', 'onboarding'] }");
+    expect(HTML).toContain("read_only: { primary: ['profile', 'calendar', 'resources', 'onboarding'] }");
+    // A pre-employee gets exactly one tab, and the entry must exist:
+    // navAllowedTabs falls back to the THERAPIST config for an unknown role.
+    expect(HTML).toContain("pre_employee: { primary: ['onboarding'] }");
     expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
     expect(HTML).toContain("primary: ['profile', 'calendar', 'casenotes', 'resources']");
@@ -1344,14 +1351,14 @@ describe('case notes review surface', () => {
   test('ROLE_NAV gives Case Notes to treating clinicians only (therapist + owner)', () => {
     const nav = HTML.slice(HTML.indexOf('var ROLE_NAV = {'), HTML.indexOf('var ACCESS_DENIED_MESSAGE'));
     expect(nav).toContain("owner: {\n    primary: ['profile', 'calendar', 'casenotes', 'resources'],");
-    expect(nav).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources'] },");
+    expect(nav).toContain("therapist: { primary: ['profile', 'calendar', 'casenotes', 'logbook', 'resources', 'onboarding'] },");
     // non-clinical admin and read_only must NOT get it. (Admin's primary
     // list gained 'resources' for the R2 hub + induction — a deliberate
     // change; the invariant guarded HERE is casenotes access, not the
     // exact primary list.)
     const adminBlock = nav.slice(nav.indexOf('admin: {'), nav.indexOf('therapist: {'));
     expect(adminBlock).toContain("primary: ['profile', 'calendar', 'resources'],");
-    expect(nav).toContain("read_only: { primary: ['profile', 'calendar', 'resources'] },");
+    expect(nav).toContain("read_only: { primary: ['profile', 'calendar', 'resources', 'onboarding'] },");
     expect(adminBlock).not.toContain('casenotes');
     const readOnlyBlock = nav.slice(nav.indexOf('read_only: {'));
     expect(readOnlyBlock).not.toContain('casenotes');

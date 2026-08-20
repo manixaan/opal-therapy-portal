@@ -513,6 +513,14 @@ function computeProgress(requirements) {
  *
  * Terminal statuses are never re-derived: once activated / completed /
  * cancelled / archived, an assignment's status is a historical fact.
+ *
+ * SUBMISSION IS AN ACT, NOT A SIDE EFFECT. Finishing the last item moves the
+ * run to `employee_actions_complete` and stops there. It becomes
+ * `employer_review` only once the employee has actually pressed Submit
+ * (flags.submitted). Deriving straight past that would make the Submit button
+ * vanish the moment it became relevant, and would take the decision to hand
+ * the pack over out of the employee's hands — they may well want to re-read
+ * what they entered first.
  */
 function deriveAssignmentStatus(current, progress, flags = {}) {
   const terminal = ['activated', 'completed', 'cancelled', 'archived'];
@@ -521,6 +529,7 @@ function deriveAssignmentStatus(current, progress, flags = {}) {
   if (progress.correctionsOpen > 0) return 'corrections_required';
 
   if (progress.employeeComplete && progress.employeeTotal > 0) {
+    if (!flags.submitted) return 'employee_actions_complete';
     if (progress.blockingTotal > 0 && progress.blockingDone >= progress.blockingTotal
         && progress.employerComplete) {
       return 'ready_to_activate';

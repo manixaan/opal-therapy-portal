@@ -271,6 +271,21 @@ router.post('/api/auth/sign-out-all', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get('/api/auth/me', async (req, res) => {
+  // WHO IS SIGNED IN MUST NEVER BE SERVED FROM CACHE.
+  //
+  // Express adds an ETag to every JSON response, and without Cache-Control the
+  // browser applies heuristic freshness — so after a user switch it can render
+  // the PREVIOUS person's name, role and permissions from disk cache without
+  // revalidating. Found while testing onboarding activation: an employee whose
+  // role had just changed from pre_employee to therapist kept the pre-employee
+  // shell (one tab, no calendar) until the cache expired, and on a shared
+  // machine one person's identity could appear in another's session.
+  //
+  // The frontend's entire role-gating layer is built from this response, so it
+  // is exactly the response that must always come from the server.
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+
   if (!req.session?.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
