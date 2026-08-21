@@ -511,6 +511,7 @@ app.use('/', require('./resources-routes'));
 
 // Resource Hub R2 (learning, standards, PD/CPD; separate module — R1 untouched)
 app.use('/', require('./resource-hub-r2-routes'));
+app.use('/', require('./resource-library-routes'));
 // Controlled instrument register + unresolved-source review queue. Mounted
 // after the hub router so it shares the same /api/rh2 namespace and auth.
 app.use('/', require('./instrument-register-routes'));

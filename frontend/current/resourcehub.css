@@ -855,3 +855,175 @@ span.rh2-dochero-thumb { cursor: default; }
 .rh2-learn-adetail-sec { font-size: 13px; }
 .rh2-learn-adetail-items { list-style: none; margin: 4px 0 0; padding: 0 0 0 6px; display: flex; flex-direction: column; gap: 3px; }
 .rh2-learn-adone { color: var(--ink-soft); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIBRARY FOLDERS
+
+   The folder list is a LIST, not a card grid. Six or ten shelves scan faster
+   in a single column of rows than they do as tiles a reader's eye has to
+   traverse in two dimensions — and the row layout stays readable on a tablet
+   without a breakpoint doing the work (§53). The document grid below is
+   untouched; only the first screen changed.
+
+   Nothing here signals state through colour alone (§54): the review folder is
+   marked by its name and its border, and every icon is decorative next to a
+   text label.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.rh2-folders { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.rh2-folders-sub { margin: 4px 0 18px; }
+
+.rh2-folder {
+  display: flex; align-items: stretch;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px); overflow: hidden;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.rh2-folder:hover { border-color: var(--accent); }
+.rh2-folder:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+.rh2-folder-open {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 12px;
+  background: none; border: 0; text-align: left; cursor: pointer;
+  padding: 12px 14px; color: inherit; font: inherit; min-width: 0;
+}
+.rh2-folder-open:focus-visible { outline: none; }
+
+.rh2-folder-glyph {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.rh2-folder-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rh2-folder-name { font-weight: 600; font-size: 14px; }
+.rh2-folder-desc {
+  font-size: 12.5px; color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rh2-folder-count { font-size: 12px; color: var(--ink-soft); }
+
+/* The review queue is a job to do, not a subject area. A dashed edge says so
+   without relying on a colour a reader may not distinguish. */
+.rh2-folder-review { border-style: dashed; }
+
+.rh2-folder-tools {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 2px;
+  padding-right: 8px; opacity: 0; transition: opacity .12s ease;
+}
+.rh2-folder:hover .rh2-folder-tools,
+.rh2-folder:focus-within .rh2-folder-tools { opacity: 1; }
+/* Keyboard and touch users get no hover, so the controls must never be
+   hover-only in practice. */
+@media (hover: none) { .rh2-folder-tools { opacity: 1; } }
+
+.rh2-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  background: none; border: 1px solid transparent; color: var(--ink-soft); cursor: pointer;
+}
+.rh2-iconbtn:hover { background: var(--border-soft); color: var(--ink); }
+.rh2-iconbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── All Resources: the way back to the flat list (§49) ── */
+.rh2-allrow { margin: 4px 0 16px; }
+.rh2-allrow-btn {
+  display: flex; align-items: baseline; gap: 10px; width: 100%;
+  background: none; border: 1px dashed var(--border); border-radius: var(--radius-lg, 12px);
+  padding: 11px 14px; cursor: pointer; color: inherit; font: inherit; text-align: left;
+}
+.rh2-allrow-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rh2-allrow-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-allrow-name { font-weight: 600; font-size: 14px; }
+
+/* ── Breadcrumbs (§20) ── */
+.rh2-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -4px 0 10px; font-size: 12.5px; }
+.rh2-crumb-link {
+  background: none; border: 0; padding: 2px 4px; border-radius: 6px;
+  color: var(--accent); cursor: pointer; font: inherit;
+}
+.rh2-crumb-link:hover { text-decoration: underline; }
+.rh2-crumb-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-crumb-sep { color: var(--ink-soft); }
+.rh2-crumb-here { color: var(--ink-soft); padding: 2px 4px; }
+.rh2-folder-lede { margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); }
+
+/* ── Owner controls and run progress ── */
+.rh2-libtools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.rh2-libnote { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--ink-soft); }
+.rh2-libnote-warn { color: var(--ink); background: var(--accent-soft); padding: 8px 10px; border-radius: 8px; }
+.rh2-linkbtn {
+  background: none; border: 0; padding: 0; color: var(--accent);
+  cursor: pointer; font: inherit; text-decoration: underline;
+}
+.rh2-linkbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.rh2-organising {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; border-radius: 9px;
+  background: var(--accent-soft); font-size: 13px;
+}
+.rh2-organising-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+  animation: rh2-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rh2-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+/* Progress must still read as progress when animation is switched off. */
+@media (prefers-reduced-motion: reduce) {
+  .rh2-organising-dot { animation: none; opacity: 1; }
+}
+
+/* ── Bulk selection and moving (§36) ── */
+.rh2-movebar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 9px 12px; margin: 0 0 14px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--panel);
+}
+.rh2-movebar-count { font-size: 13px; font-weight: 600; }
+
+.rh2-selwrap { position: relative; }
+.rh2-selwrap.is-selected .rh2-cardtile { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.rh2-selbox {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--panel); border: 1px solid var(--border); cursor: pointer;
+}
+.rh2-selbox input { margin: 0; cursor: pointer; }
+
+/* ── New / rename folder ── */
+.rh2-folderform {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px; margin: 0 0 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg, 12px); background: var(--panel);
+  max-width: 460px;
+}
+.rh2-folderform .rh2-label { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+.rh2-folderform-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+@media (max-width: 640px) {
+  .rh2-folder-open { padding: 11px 12px; gap: 10px; }
+  .rh2-folder-desc { white-space: normal; }
+  .rh2-folderform { max-width: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ASSIGN LEARNING — batch selection, review step, publish state
+   (rh2-learn-* additions; appended after the library-folders block)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.rh2-learn-selbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.rh2-learn-selbox { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+.rh2-learn-wf-sel { border-color: var(--accent); }
+
+.rh2-learn-review-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+@media (max-width: 560px) { .rh2-learn-review-cols { grid-template-columns: 1fr; } }
+.rh2-learn-review-h { margin: 8px 0 4px; font-size: 13px; color: var(--ink-soft); }
+.rh2-learn-review-list { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 3px; }
+.rh2-learn-review-sum { font-weight: 600; margin: 12px 0 4px; }
+.rh2-learn-review-block { margin-top: 10px; font-size: 13px; }
+.rh2-learn-review-block .rh2-learn-review-list { list-style: none; padding-left: 4px; margin-top: 4px; }
+.rh2-learn-assign-whatlist { margin-bottom: 10px; }
+#la-as-review-h { outline: none; }

@@ -351,7 +351,17 @@
       openAssignment: null, openData: null, openLoading: false,
       resPick: null, // resource picker inside the editor: { q, rows, loading, forItem }
     },
-    lib: { q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false },
+    // The Library. `folders`/`folderId` are the semantic shelving added in
+    // migration 039; everything else is the flat-list state it was before, and
+    // is still used unchanged by Saved, All Resources and every search.
+    lib: {
+      q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '',
+      sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false,
+      browse: 'folders', folders: null, foldersLoading: false, foldersErr: '', organised: false,
+      totalResources: 0, folderId: '', folderMeta: null, folderSearch: false,
+      org: null, orgPoll: null, orgErr: '', busy: '',
+      selMode: false, sel: {}, moveOpen: false, moveErr: '', moveNote: '', folderForm: null,
+    },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
     admin: {
@@ -447,7 +457,15 @@
     // 'Saved' is the library filtered to the user's favourites — entering it
     // clears other filters so the saved list is never silently narrowed.
     if (view === 'saved') {
-      S.lib = { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: true, rows: null, loading: false };
+      // Clear the QUESTION, keep the STRUCTURE. Rebuilding S.lib wholesale
+      // here used to be harmless; it now discards the loaded folder tree and
+      // the run status, so Saved would blank the folders behind it.
+      Object.assign(S.lib, {
+        q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '',
+        sort: 'relevant', saved: true, rows: null, loading: false, offset: 0, hasMore: false,
+        folderId: '', folderMeta: null, folderSearch: false, browse: 'folders',
+        selMode: false, sel: {}, moveOpen: false, folderForm: null,
+      });
       view = 'library';
     } else if (view === 'library' && S.lib.saved) {
       S.lib.saved = false;
@@ -463,7 +481,11 @@
     }
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
-    if (view === 'library' && !S.lib.rows) loadLibrary();
+    if (view === 'library') {
+      if (!S.lib.rows) loadLibrary();
+      loadFolders();
+      if (!S.lib.org) loadOrgStatus(true);
+    }
     if (view === 'learning') { loadLearning(); loadMyLearning(); }
     if (view === 'pd') { S.pd.openId = null; if (!S.pd.data) loadPd(); }
     if (view === 'instruments') {
@@ -699,6 +721,13 @@
     if (f.authority) qs.push('authority=' + encodeURIComponent(f.authority));
     if (f.collection) qs.push('collectionKey=' + encodeURIComponent(f.collection));
     if (f.saved) qs.push('saved=1');
+    /* Folder scoping is added ONLY when the reader is browsing a folder, or has
+       deliberately narrowed a search back to it. A plain search never carries a
+       folder, so search keeps spanning the whole library (§21). */
+    if (f.folderId && (!libSearching(f) || f.folderSearch)) {
+      qs.push('folderId=' + encodeURIComponent(f.folderId));
+      qs.push('folderScope=tree');
+    }
     if (f.sort) qs.push('sort=' + encodeURIComponent(f.sort));
     qs.push('limit=' + LIB_PAGE);
     if (offset) qs.push('offset=' + offset);
@@ -845,49 +874,578 @@
       + '</span></button>';
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     THE LIBRARY AS FOLDERS
+
+     The Library used to open onto every document at once — six hundred cards
+     with a search box above them. Folders replace that first screen, and only
+     that first screen: the card, the detail page, the previews, the filters,
+     the favourites and the search all still work exactly as they did, because
+     a folder here is a place to look rather than a place a file has been moved
+     to. Nothing about a resource changes when it is shelved.
+
+     Four things can be on screen, and which one is decided by what the reader
+     asked for rather than by a mode they have to set:
+
+       folder grid     the default. Folders, counts, and All Resources.
+       folder contents a folder was opened. Breadcrumb, subfolders, resources.
+       search results  anything was typed or filtered. Spans the WHOLE library
+                       (§21) unless the reader deliberately narrows it back to
+                       the folder they were in.
+       all resources   the flat list, kept for people who prefer it (§49).
+
+     Owner controls live in the same place as the browsing they affect. There
+     is no separate management screen, because the moment somebody notices a
+     document is in the wrong folder is the moment they are looking at it.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /** True when the reader has asked a question, rather than browsing. */
+  function libSearching(f) {
+    return !!(f.q || f.kind || f.type || f.topic || f.cost || f.population || f.setting || f.authority);
+  }
+
+  async function loadFolders(force) {
+    var f = S.lib;
+    if (f.foldersLoading) return;
+    if (f.folders && !force) return;
+    f.foldersLoading = true;
+    var d = await api('/api/rh2/library/folders');
+    f.foldersLoading = false;
+    f.folders = (d.ok && d.folders) ? d.folders : [];
+    f.totalResources = d.ok ? (d.totalResources || 0) : 0;
+    f.organised = !!(d.ok && d.organised);
+    f.foldersErr = d.ok ? '' : (d.error || 'Folders could not be loaded.');
+    if (S.view === 'library') render();
+  }
+
+  /**
+   * Poll while a run is going. The interval is generous on purpose: this is a
+   * progress bar, not a live feed, and a run over a library of this size takes
+   * a few seconds to a few minutes.
+   */
+  async function loadOrgStatus(startPolling) {
+    var d = await api('/api/rh2/library/status');
+    if (!d.ok) return;
+    S.lib.org = d;
+    var running = d.run && d.run.status === 'running';
+    if (running && startPolling !== false) {
+      if (S.lib.orgPoll) clearTimeout(S.lib.orgPoll);
+      S.lib.orgPoll = setTimeout(function () { loadOrgStatus(true); }, 2500);
+    } else if (S.lib.orgPoll) {
+      clearTimeout(S.lib.orgPoll);
+      S.lib.orgPoll = null;
+      // The structure changed under the reader — refresh what they are looking
+      // at rather than leaving stale counts on screen.
+      if (d.run && d.run.status === 'complete') { loadFolders(true); loadLibrary(); }
+    }
+    if (S.view === 'library') render();
+  }
+
+  /** Plain words for each phase. No model, no table, no job id reaches here (§16). */
+  var ORG_PHASES = {
+    scanning: 'Reading resources…',
+    reading: 'Understanding document topics…',
+    structuring: 'Creating library structure…',
+    organising: 'Organising resources…',
+    done: 'Complete',
+  };
+
+  async function libOrganise(mode) {
+    if (S.lib.busy) return;
+    S.lib.busy = 'organise';
+    render();
+    var d = await api('/api/rh2/library/organise', {
+      method: 'POST', body: { mode: mode || 'organise' },
+    });
+    S.lib.busy = '';
+    if (!d.ok) {
+      S.lib.orgErr = d.error || 'Library organisation couldn\'t be completed right now. Your resources have not been changed.';
+      render();
+      return;
+    }
+    S.lib.orgErr = '';
+    loadOrgStatus(true);
+  }
+
+  async function libUndoOrganise() {
+    if (S.lib.busy) return;
+    S.lib.busy = 'undo';
+    render();
+    var d = await api('/api/rh2/library/rollback', { method: 'POST', body: {} });
+    S.lib.busy = '';
+    S.lib.orgErr = d.ok ? '' : (d.error || 'That could not be undone.');
+    if (d.ok) { loadFolders(true); loadLibrary(); loadOrgStatus(false); }
+    render();
+  }
+
+  function libOpenFolder(id) {
+    var f = S.lib;
+    f.folderId = id || '';
+    f.folderMeta = null;
+    f.folderSearch = false;
+    f.browse = 'folders';
+    f.q = ''; f.kind = ''; f.type = ''; f.topic = ''; f.cost = '';
+    f.population = ''; f.setting = ''; f.authority = '';
+    f.sel = {}; f.selMode = false;
+    if (id) loadFolderMeta(id);
+    loadLibrary();
+  }
+
+  async function loadFolderMeta(id) {
+    var d = await api('/api/rh2/library/folders/' + encodeURIComponent(id));
+    if (S.lib.folderId !== id) return; // the reader moved on
+    S.lib.folderMeta = d.ok ? d : null;
+    if (S.view === 'library') render();
+  }
+
+  function libBrowse(mode) {
+    S.lib.browse = mode;
+    S.lib.folderId = '';
+    S.lib.folderMeta = null;
+    S.lib.sel = {}; S.lib.selMode = false;
+    loadLibrary();
+  }
+
+  /** Search this folder instead of the whole library — the reader's choice (§21). */
+  function libScopeSearch(on) {
+    S.lib.folderSearch = !!on;
+    loadLibrary();
+  }
+
+  // ── Owner: selection and moving ─────────────────────────────────────────
+
+  function libSelectMode(on) {
+    S.lib.selMode = !!on;
+    if (!on) S.lib.sel = {};
+    render();
+  }
+
+  function libToggleSel(id) {
+    if (S.lib.sel[id]) delete S.lib.sel[id];
+    else S.lib.sel[id] = true;
+    render();
+  }
+
+  function libSelCount() { return Object.keys(S.lib.sel || {}).length; }
+
+  function libMoveOpen(on) {
+    S.lib.moveOpen = !!on;
+    S.lib.moveErr = '';
+    render();
+  }
+
+  /** Every folder as a flat list, for the move picker. */
+  function libFolderOptions() {
+    var out = [];
+    (S.lib.folders || []).forEach(function (p) {
+      out.push({ id: p.id, label: p.name });
+      (p.children || []).forEach(function (c) {
+        out.push({ id: c.id, label: p.name + ' → ' + c.name });
+      });
+    });
+    return out;
+  }
+
+  async function libMoveTo(folderId) {
+    if (!folderId) return;
+    var ids = Object.keys(S.lib.sel || {});
+    if (!ids.length) return;
+    S.lib.busy = 'move';
+    render();
+    var d = await api('/api/rh2/library/move', {
+      method: 'POST', body: { folderId: folderId, resourceIds: ids },
+    });
+    S.lib.busy = '';
+    if (!d.ok) { S.lib.moveErr = d.error || 'Those resources could not be moved.'; render(); return; }
+    S.lib.sel = {}; S.lib.selMode = false; S.lib.moveOpen = false; S.lib.moveErr = '';
+    S.lib.moveNote = d.moved + (d.moved === 1 ? ' resource moved to ' : ' resources moved to ') + d.folder;
+    loadFolders(true);
+    loadLibrary();
+  }
+
+  // ── Owner: folder management ────────────────────────────────────────────
+
+  function libFolderForm(open, folder) {
+    S.lib.folderForm = open ? {
+      id: folder ? folder.id : '',
+      name: folder ? folder.name : '',
+      description: folder ? (folder.description || '') : '',
+      parentId: folder ? (folder.parentId || '') : (S.lib.folderId || ''),
+      err: '',
+    } : null;
+    render();
+  }
+
+  function libFolderFormField(k, v) {
+    if (S.lib.folderForm) S.lib.folderForm[k] = v;
+  }
+
+  async function libFolderSave() {
+    var form = S.lib.folderForm;
+    if (!form || S.lib.busy) return;
+    S.lib.busy = 'folder';
+    render();
+    var body = { name: form.name, description: form.description };
+    var d;
+    if (form.id) {
+      d = await api('/api/rh2/library/folders/' + encodeURIComponent(form.id), {
+        method: 'PATCH', body: body,
+      });
+    } else {
+      body.parentId = form.parentId || null;
+      d = await api('/api/rh2/library/folders', { method: 'POST', body: body });
+    }
+    S.lib.busy = '';
+    if (!d.ok) { form.err = d.error || 'That folder could not be saved.'; render(); return; }
+    S.lib.folderForm = null;
+    loadFolders(true);
+    if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
+    render();
+  }
+
+  async function libFolderArchive(id, name) {
+    if (S.lib.busy) return;
+    if (!global.confirm('Remove the folder "' + name + '"? Its resources move to Needs Review — nothing is deleted.')) return;
+    S.lib.busy = 'folder';
+    render();
+    var d = await api('/api/rh2/library/folders/' + encodeURIComponent(id), { method: 'DELETE' });
+    S.lib.busy = '';
+    if (!d.ok) { S.lib.orgErr = d.error || 'That folder could not be removed.'; render(); return; }
+    if (S.lib.folderId === id) { S.lib.folderId = ''; S.lib.folderMeta = null; }
+    loadFolders(true);
+    loadLibrary();
+  }
+
+  // ── Rendering ───────────────────────────────────────────────────────────
+
+  function folderIcon() {
+    return '<span class="rh2-folder-glyph" aria-hidden="true">' + icn('folder', 'doc', 18) + '</span>';
+  }
+
+  function countLabel(n) {
+    return n + (n === 1 ? ' resource' : ' resources');
+  }
+
+  /**
+   * A folder row. The name is the heading and the count is the fact; there is
+   * deliberately nothing else on it. Metadata belongs on the resource, not on
+   * the shelf (§18).
+   */
+  function folderCard(node, owner) {
+    var kids = (node.children || []).length;
+    return '<div class="rh2-folder' + (node.isReviewBucket ? ' rh2-folder-review' : '') + '">'
+      + '<button type="button" class="rh2-folder-open" onclick="RH2.libOpenFolder(\'' + esc(node.id) + '\')">'
+      + folderIcon()
+      + '<span class="rh2-folder-body">'
+      + '<span class="rh2-folder-name">' + esc(node.name) + '</span>'
+      + (node.description ? '<span class="rh2-folder-desc">' + esc(node.description) + '</span>' : '')
+      + '<span class="rh2-folder-count">' + esc(countLabel(node.count))
+      + (kids ? ' · ' + kids + (kids === 1 ? ' subfolder' : ' subfolders') : '') + '</span>'
+      + '</span></button>'
+      + (owner ? '<span class="rh2-folder-tools">'
+        + '<button type="button" class="rh2-iconbtn" title="Rename folder" aria-label="Rename ' + esc(node.name) + '" '
+        + 'onclick="RH2.libFolderForm(true,' + esc(JSON.stringify({ id: node.id, name: node.name, description: node.description, parentId: node.parentId }).replace(/"/g, '&quot;')) + ')">'
+        + icn('edit', 'doc', 14) + '</button>'
+        + (node.isReviewBucket ? '' : '<button type="button" class="rh2-iconbtn" title="Remove folder" aria-label="Remove ' + esc(node.name) + '" '
+          + 'onclick="RH2.libFolderArchive(\'' + esc(node.id) + '\',\'' + esc(String(node.name).replace(/'/g, '')) + '\')">'
+          + icn('trash', 'close', 14) + '</button>')
+        + '</span>' : '')
+      + '</div>';
+  }
+
+  /** Where the reader is. Always present once they are inside a folder (§20). */
+  function libCrumbs() {
+    var meta = S.lib.folderMeta;
+    var parts = ['<button type="button" class="rh2-crumb-link" onclick="RH2.libOpenFolder(\'\')">Library</button>'];
+    if (meta) {
+      (meta.breadcrumb || []).forEach(function (b) {
+        parts.push('<button type="button" class="rh2-crumb-link" onclick="RH2.libOpenFolder(\'' + esc(b.id) + '\')">' + esc(b.name) + '</button>');
+      });
+      parts.push('<span class="rh2-crumb-here" aria-current="page">' + esc(meta.folder.name) + '</span>');
+    }
+    return '<nav class="rh2-crumbs" aria-label="Library location">'
+      + parts.join('<span class="rh2-crumb-sep" aria-hidden="true">›</span>')
+      + '</nav>';
+  }
+
+  /** The Owner's run controls and, while one is going, its progress. */
+  function libOwnerBar() {
+    if (!isOwner()) return '';
+    var org = S.lib.org;
+    var run = org && org.run;
+    var running = run && run.status === 'running';
+    var out = '<div class="rh2-libtools">';
+
+    if (running) {
+      out += '<div class="rh2-organising" role="status" aria-live="polite">'
+        + '<span class="rh2-organising-dot" aria-hidden="true"></span>'
+        + '<span>Organising Resource Library — ' + esc(ORG_PHASES[run.phase] || 'Working…') + '</span>'
+        + '</div>';
+    } else {
+      out += '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '')
+        + ' onclick="RH2.libOrganise(\'' + (S.lib.organised ? 'reorganise' : 'organise') + '\')">'
+        + (S.lib.busy === 'organise' ? 'Starting…' : (S.lib.organised ? 'Reorganise Library' : 'Organise Library'))
+        + '</button>';
+      out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(true)">New folder</button>';
+      if (S.lib.organised) {
+        out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(' + (S.lib.selMode ? 'false' : 'true') + ')">'
+          + (S.lib.selMode ? 'Done selecting' : 'Select resources') + '</button>';
+      }
+      if (run && run.status === 'complete' && !run.rolledBackAt) {
+        out += '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (S.lib.busy ? 'disabled' : '')
+          + ' onclick="RH2.libUndoOrganise()">' + (S.lib.busy === 'undo' ? 'Undoing…' : 'Undo last organisation') + '</button>';
+      }
+    }
+
+    if (run && run.status === 'failed') {
+      out += '<p class="rh2-libnote rh2-libnote-warn" role="status">Library organisation couldn\'t be completed right now. '
+        + 'Your resources have not been changed.</p>';
+    }
+    if (S.lib.orgErr) out += '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(S.lib.orgErr) + '</p>';
+    if (S.lib.moveNote) out += '<p class="rh2-libnote" role="status">' + esc(S.lib.moveNote) + '</p>';
+    if (run && run.status === 'complete' && run.keptManual) {
+      out += '<p class="rh2-libnote">' + esc(run.keptManual) + ' '
+        + (run.keptManual === 1 ? 'resource you placed by hand was left where you put it.'
+          : 'resources you placed by hand were left where you put them.') + '</p>';
+    }
+    return out + '</div>';
+  }
+
+  /** The move panel: a folder list, not a tree widget. */
+  function libMovePanel() {
+    if (!S.lib.moveOpen) return '';
+    var options = libFolderOptions();
+    return '<div class="rh2-movebar" role="group" aria-label="Move selected resources">'
+      + '<span class="rh2-movebar-count">' + esc(countLabel(libSelCount())) + ' selected</span>'
+      + '<label class="rh2-visually-hidden" for="rh2-move-to">Move to folder</label>'
+      + '<select id="rh2-move-to" class="rh2-select" onchange="RH2.libMoveTo(this.value)">'
+      + '<option value="">Move to folder…</option>'
+      + options.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.label) + '</option>'; }).join('')
+      + '</select>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libMoveOpen(false)">Cancel</button>'
+      + (S.lib.moveErr ? '<span class="rh2-libnote rh2-libnote-warn">' + esc(S.lib.moveErr) + '</span>' : '')
+      + '</div>';
+  }
+
+  function libFolderDialog() {
+    var form = S.lib.folderForm;
+    if (!form) return '';
+    var parents = (S.lib.folders || []).filter(function (p) { return !p.isReviewBucket; });
+    return '<div class="rh2-folderform" role="group" aria-label="' + (form.id ? 'Rename folder' : 'New folder') + '">'
+      + '<h2 class="rh2-h2">' + (form.id ? 'Rename folder' : 'New folder') + '</h2>'
+      + '<label class="rh2-label" for="rh2-ff-name">Name</label>'
+      + '<input id="rh2-ff-name" class="rh2-input" maxlength="60" value="' + esc(form.name) + '" '
+      + 'oninput="RH2.libFolderFormField(\'name\',this.value)">'
+      + '<label class="rh2-label" for="rh2-ff-desc">Short description</label>'
+      + '<input id="rh2-ff-desc" class="rh2-input" maxlength="200" value="' + esc(form.description) + '" '
+      + 'oninput="RH2.libFolderFormField(\'description\',this.value)">'
+      + (form.id ? '' : '<label class="rh2-label" for="rh2-ff-parent">Inside</label>'
+        + '<select id="rh2-ff-parent" class="rh2-select" onchange="RH2.libFolderFormField(\'parentId\',this.value)">'
+        + '<option value="">Top level</option>'
+        + parents.map(function (p) {
+          return '<option value="' + esc(p.id) + '"' + (form.parentId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+        }).join('') + '</select>')
+      + (form.err ? '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(form.err) + '</p>' : '')
+      + '<div class="rh2-folderform-actions">'
+      + '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '') + ' onclick="RH2.libFolderSave()">Save</button>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(false)">Cancel</button>'
+      + '</div></div>';
+  }
+
+  /** The default screen: folders, then the way out to the flat list (§48, §49). */
+  function renderFolderGrid() {
+    var f = S.lib;
+    if (f.foldersLoading || f.folders === null) {
+      if (f.folders === null && !f.foldersLoading) loadFolders();
+      return '<div class="rh2-folders">' + skel(4, 44) + '</div>';
+    }
+    if (f.foldersErr) {
+      return '<div class="rh2-empty">' + esc(f.foldersErr)
+        + ' <button type="button" class="rh2-btn" onclick="RH2.libReloadFolders()">Retry</button></div>';
+    }
+    if (!f.folders.length) {
+      return '<div class="rh2-empty">'
+        + (isOwner()
+          ? 'This library has not been organised into folders yet. Choose <strong>Organise Library</strong> and the portal will read the resources and build a structure from what is actually in them.'
+          : 'This library has not been organised into folders yet. Search or open All Resources to browse everything.')
+        + '</div>' + allResourcesRow();
+    }
+    var owner = isOwner();
+    return '<div class="rh2-folders">'
+      + f.folders.map(function (n) { return folderCard(n, owner); }).join('')
+      + '</div>' + allResourcesRow();
+  }
+
+  function allResourcesRow() {
+    var n = S.lib.totalResources || 0;
+    return '<div class="rh2-allrow">'
+      + '<button type="button" class="rh2-allrow-btn" onclick="RH2.libBrowse(\'all\')">'
+      + '<span class="rh2-allrow-name">All Resources</span>'
+      + '<span class="rh2-folder-count">' + esc(countLabel(n)) + '</span>'
+      + '</button></div>';
+  }
+
+  /** Subfolders of the open folder, above its own resources. */
+  function renderSubfolders() {
+    var meta = S.lib.folderMeta;
+    if (!meta || !(meta.children || []).length) return '';
+    var byId = {};
+    (S.lib.folders || []).forEach(function (p) {
+      byId[p.id] = p;
+      (p.children || []).forEach(function (c) { byId[c.id] = c; });
+    });
+    var owner = isOwner();
+    return '<div class="rh2-folders rh2-folders-sub">'
+      + meta.children.map(function (c) {
+        var known = byId[c.id] || {};
+        return folderCard({
+          id: c.id, name: c.name, description: c.description,
+          count: known.count || 0, children: [], parentId: meta.folder.id,
+        }, owner);
+      }).join('') + '</div>';
+  }
+
   var KINDS = [['hosted', 'Documents'], ['external', 'External links'], ['guide', 'Guides']];
+
+  /**
+   * One card, optionally with a selection box in front of it.
+   *
+   * The card itself is untouched — same markup, same handler, same everything
+   * (§19). Selection is a wrapper the Owner turns on, so a therapist's Library
+   * is exactly the Library it always was.
+   */
+  function selectableCard(r, backView) {
+    var id = pick(r, 'id');
+    if (!S.lib.selMode) return resourceCard(r, backView);
+    var on = !!S.lib.sel[id];
+    return '<div class="rh2-selwrap' + (on ? ' is-selected' : '') + '">'
+      + '<label class="rh2-selbox">'
+      + '<input type="checkbox"' + (on ? ' checked' : '')
+      + ' onchange="RH2.libToggleSel(\'' + esc(id) + '\')">'
+      + '<span class="rh2-visually-hidden">Select ' + esc(pick(r, 'title')) + '</span>'
+      + '</label>' + resourceCard(r, backView) + '</div>';
+  }
 
   function renderLibrary() {
     var f = S.lib;
-    var topicOpts = (S.topics || []).map(function (t) { return [t.id, t.name]; });
-    var costOpts = (S.costs || []).map(function (t) { return [t.id, t.name]; });
-    var authOpts = Object.keys(AUTHORITY).map(function (k) { return [k, AUTHORITY[k].label]; });
-    var out = '<div class="rh2-page"><h1 class="rh2-h1">' + (f.saved ? 'Saved' : 'Library') + '</h1>' +
-      '<div class="rh2-filters">' +
-      '<input type="search" id="rh2-lib-q" class="rh2-search" placeholder="Search the library..." aria-label="Search the library" value="' + esc(f.q) + '" ' +
-      'oninput="RH2.libInput(this.value)">' +
-      sel('rh2-f-kind', 'All kinds', KINDS, f.kind, "RH2.libFilter('kind',this.value)") +
-      sel('rh2-f-type', 'All types', CONTENT_TYPES, f.type, "RH2.libFilter('type',this.value)") +
-      sel('rh2-f-topic', 'All topics', topicOpts, f.topic, "RH2.libFilter('topic',this.value)") +
-      sel('rh2-f-cost', 'All costs', costOpts, f.cost, "RH2.libFilter('cost',this.value)") +
-      sel('rh2-f-pop', 'All populations', countedVocab(POPULATIONS, 'populationUnclassified'), f.population, "RH2.libFilter('population',this.value)") +
-      sel('rh2-f-set', 'All settings', countedVocab(SETTINGS, 'settingUnclassified'), f.setting, "RH2.libFilter('setting',this.value)") +
-      sel('rh2-f-auth', 'All authorities', authOpts, f.authority, "RH2.libFilter('authority',this.value)") +
-      '<label class="rh2-visually-hidden" for="rh2-f-sort">Sort</label>' +
-      '<select id="rh2-f-sort" class="rh2-select" onchange="RH2.libFilter(\'sort\',this.value)">' +
-      SORTS.map(function (o) {
-        return '<option value="' + o[0] + '"' + (f.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-      }).join('') + '</select>' +
-      (f.collection ? '<button type="button" class="rh2-chip rh2-chip-clear" onclick="RH2.libFilter(\'collection\',\'\')">Collection filter — clear</button>' : '') +
-      '</div>';
+    var searching = libSearching(f);
+    var inFolder = !!f.folderId;
+    // Saved, All Resources and any search are all "a list of resources".
+    // Only an unqualified browse shows folders.
+    var flat = f.saved || f.browse === 'all' || searching || inFolder;
+
+    var title = 'Library';
+    if (f.saved) title = 'Saved';
+    else if (f.browse === 'all' && !searching) title = 'All Resources';
+    else if (inFolder && f.folderMeta && !searching) title = f.folderMeta.folder.name;
+
+    var out = '<div class="rh2-page rh2-library">';
+    out += '<h1 class="rh2-h1">' + esc(title) + '</h1>';
+
+    // Breadcrumbs whenever the reader is anywhere other than the front page.
+    if (!f.saved && (inFolder || f.browse === 'all')) {
+      out += (inFolder ? libCrumbs()
+        : '<nav class="rh2-crumbs" aria-label="Library location">'
+          + '<button type="button" class="rh2-crumb-link" onclick="RH2.libBrowse(\'folders\')">Library</button>'
+          + '<span class="rh2-crumb-sep" aria-hidden="true">›</span>'
+          + '<span class="rh2-crumb-here" aria-current="page">All Resources</span></nav>');
+    }
+    if (inFolder && f.folderMeta && f.folderMeta.folder.description && !searching) {
+      out += '<p class="rh2-folder-lede">' + esc(f.folderMeta.folder.description) + '</p>';
+    }
+
+    // ── search and filters ────────────────────────────────────────────────
+    // The search box is always the first control, and it always searches the
+    // whole library. A reader inside a folder is offered the narrower search
+    // rather than given it (§21).
+    out += '<div class="rh2-filters">'
+      + '<input type="search" id="rh2-lib-q" class="rh2-search" '
+      + 'placeholder="Search all resources..." aria-label="Search all resources" value="' + esc(f.q) + '" '
+      + 'oninput="RH2.libInput(this.value)">';
+
+    if (flat && !f.saved) {
+      out += sel('rh2-f-kind', 'All kinds', KINDS, f.kind, "RH2.libFilter('kind',this.value)")
+        + sel('rh2-f-type', 'All types', CONTENT_TYPES, f.type, "RH2.libFilter('type',this.value)")
+        + sel('rh2-f-topic', 'All topics', (S.topics || []).map(function (t) { return [t.id, t.name]; }), f.topic, "RH2.libFilter('topic',this.value)")
+        + sel('rh2-f-cost', 'All costs', (S.costs || []).map(function (t) { return [t.id, t.name]; }), f.cost, "RH2.libFilter('cost',this.value)")
+        + sel('rh2-f-pop', 'All populations', countedVocab(POPULATIONS, 'populationUnclassified'), f.population, "RH2.libFilter('population',this.value)")
+        + sel('rh2-f-set', 'All settings', countedVocab(SETTINGS, 'settingUnclassified'), f.setting, "RH2.libFilter('setting',this.value)")
+        + sel('rh2-f-auth', 'All authorities', Object.keys(AUTHORITY).map(function (k) { return [k, AUTHORITY[k].label]; }), f.authority, "RH2.libFilter('authority',this.value)")
+        + '<label class="rh2-visually-hidden" for="rh2-f-sort">Sort</label>'
+        + '<select id="rh2-f-sort" class="rh2-select" onchange="RH2.libFilter(\'sort\',this.value)">'
+        + SORTS.map(function (o) {
+          return '<option value="' + o[0] + '"' + (f.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select>';
+    }
+    if (f.collection) {
+      out += '<button type="button" class="rh2-chip rh2-chip-clear" onclick="RH2.libFilter(\'collection\',\'\')">Collection filter — clear</button>';
+    }
+    out += '</div>';
+
+    // Searching from inside a folder spans the whole library by default, and
+    // says so, because silently narrowing a search is the behaviour §21 exists
+    // to prevent.
+    if (searching && inFolder) {
+      out += '<p class="rh2-libnote" role="status">'
+        + (f.folderSearch
+          ? 'Searching ' + esc(f.folderMeta ? f.folderMeta.folder.name : 'this folder') + ' only. '
+            + '<button type="button" class="rh2-linkbtn" onclick="RH2.libScopeSearch(false)">Search the whole library</button>'
+          : 'Searching the whole library. '
+            + '<button type="button" class="rh2-linkbtn" onclick="RH2.libScopeSearch(true)">Search '
+            + esc(f.folderMeta ? f.folderMeta.folder.name : 'this folder') + ' only</button>')
+        + '</p>';
+    }
+
+    out += libOwnerBar();
+    out += libFolderDialog();
+    if (f.selMode) {
+      out += libSelCount()
+        ? (S.lib.moveOpen ? libMovePanel()
+          : '<div class="rh2-movebar"><span class="rh2-movebar-count">' + esc(countLabel(libSelCount())) + ' selected</span>'
+            + '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.libMoveOpen(true)">Move to folder</button>'
+            + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(false)">Cancel</button></div>')
+        : '<p class="rh2-libnote" role="status">Tick the resources you want to move.</p>';
+    }
+
+    // ── the folder front page ─────────────────────────────────────────────
+    if (!flat) return out + renderFolderGrid() + '</div>';
+
+    // ── a list of resources ───────────────────────────────────────────────
+    if (inFolder && !searching) out += renderSubfolders();
 
     if (f.loading || f.rows === null) {
       out += '<div class="rh2-grid">' + skelCards(8) + '</div>';
       if (f.rows === null && !f.loading) loadLibrary();
       return out + '</div>';
     }
-    if (f.error) return out + '<div class="rh2-empty">' + esc(f.error) + ' <button type="button" class="rh2-btn" onclick="RH2.libFilter(\'sort\',\'' + esc(f.sort) + '\')">Retry</button></div></div>';
+    if (f.error) {
+      return out + '<div class="rh2-empty">' + esc(f.error)
+        + ' <button type="button" class="rh2-btn" onclick="RH2.libFilter(\'sort\',\'' + esc(f.sort) + '\')">Retry</button></div></div>';
+    }
+
+    var backView = f.saved ? 'saved' : 'library';
+    var tools = toolsFor(f);
+
     if (!f.rows.length) {
-      if (f.saved) {
-        return out + '<div class="rh2-empty">Save resources you use often and they will appear here.</div></div>';
+      if (tools.length) {
+        return out + '<p class="rh2-count" role="status">' + tools.length
+          + (tools.length === 1 ? ' resource' : ' resources') + '</p>'
+          + '<div class="rh2-grid">' + tools.map(toolCard).join('') + '</div></div>';
+      }
+      if (f.saved) return out + '<div class="rh2-empty">Save resources you use often and they will appear here.</div></div>';
+      if (inFolder && !searching) {
+        return out + '<div class="rh2-empty">Nothing is filed here yet.'
+          + (isOwner() ? ' Select resources elsewhere in the Library and move them in.' : '') + '</div></div>';
       }
       return out + '<div class="rh2-empty">No resources match. Try clearing a filter, or tell us what is missing via feedback on any related resource.</div></div>';
     }
 
-    var backView = f.saved ? 'saved' : 'library';
     out += '<p class="rh2-count" role="status">'
-      + f.rows.length + (f.hasMore ? '+' : '') + (f.rows.length === 1 ? ' resource' : ' resources') + '</p>';
-    out += '<div class="rh2-grid">' + f.rows.map(function (r) { return resourceCard(r, backView); }).join('') + '</div>';
+      + (f.rows.length + tools.length) + (f.hasMore ? '+' : '')
+      + ((f.rows.length + tools.length) === 1 ? ' resource' : ' resources') + '</p>';
+    out += '<div class="rh2-grid">'
+      + tools.map(toolCard).join('')
+      + f.rows.map(function (r) { return selectableCard(r, backView); }).join('') + '</div>';
     if (f.hasMore) {
       out += '<div class="rh2-loadmore"><button type="button" class="rh2-btn" '
         + (f.loadingMore ? 'disabled' : '') + ' onclick="RH2.libMore()">'
@@ -912,8 +1470,14 @@
   }
   function libFilter(k, v) {
     S.lib[k] = v;
+    // A filter is a question about the library, so leaving a half-made
+    // selection behind would move resources the reader can no longer see.
+    S.lib.sel = {};
     loadLibrary();
   }
+
+  function libReloadFolders() { loadFolders(true); }
+
 
   // ── DETAIL ────────────────────────────────────────────────────────────────
 
@@ -4542,6 +5106,20 @@
     libInput: libInput,
     libFilter: libFilter,
     libMore: libMore,
+    libOpenFolder: libOpenFolder,
+    libBrowse: libBrowse,
+    libScopeSearch: libScopeSearch,
+    libReloadFolders: libReloadFolders,
+    libOrganise: libOrganise,
+    libUndoOrganise: libUndoOrganise,
+    libSelectMode: libSelectMode,
+    libToggleSel: libToggleSel,
+    libMoveOpen: libMoveOpen,
+    libMoveTo: libMoveTo,
+    libFolderForm: libFolderForm,
+    libFolderFormField: libFolderFormField,
+    libFolderSave: libFolderSave,
+    libFolderArchive: libFolderArchive,
     previewFile: previewFile,
     regenPreview: regenPreview,
     adminUpload: adminUpload,

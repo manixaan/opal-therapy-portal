@@ -447,6 +447,39 @@ router.get('/api/rh2/home', safe(async (req, res) => {
 
 // ═══ 2. Search + filters ═════════════════════════════════════════════════════
 
+
+/**
+ * AUTOMATIC SHELVING FOR A RESOURCE THAT HAS NO SHELF (§23, §57).
+ *
+ * Called after the events that give a resource enough substance to place: it
+ * was created, a file arrived, or it was approved into the browsable library.
+ *
+ * Deliberately only touches a resource with NO assignment yet. That single
+ * condition is what satisfies three separate requirements at once — an edit
+ * does not undo the Owner's filing (§58), a replaced document keeps its folder
+ * (§59), and a manual placement is never revisited (§14) — without any of them
+ * needing a rule of its own. Re-filing on purpose is the explicit
+ * /api/rh2/library/reclassify route.
+ *
+ * Fire-and-forget and never awaited by a response: an upload must not wait on
+ * classification, and a classification failure must not fail an upload.
+ */
+function shelveIfUnfiled(req, resourceId) {
+  const orgId = orgOf(req);
+  const userId = req.user && req.user.id;
+  Promise.resolve()
+    .then(async () => {
+      const { rows } = await pool.query(
+        'SELECT 1 FROM resource_folder_assignments WHERE resource_id = $1', [resourceId]);
+      if (rows.length) return;
+      await require('./resource-library-organiser')
+        .classifyResource(orgId, resourceId, { userId });
+    })
+    .catch((err) => log.warn('automatic shelving skipped', {
+      resourceId, reason: err && err.message,
+    }));
+}
+
 router.get('/api/rh2/resources', safe(async (req, res) => {
   const orgId = orgOf(req);
   const params = [orgId];
@@ -489,6 +522,35 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
                     OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(t.aliases) al WHERE al ILIKE ${p}))))`;
   }
   if (req.query.contentType) { params.push(str(req.query.contentType, 40)); where += ` AND r.content_type = $${params.length}`; }
+  /**
+   * FOLDER BROWSING — opt-in, and only ever a narrowing the caller asked for.
+   *
+   * The semantic library folders live in resource_folder_assignments (migration
+   * 039); `resources.folder_id` is the older ingestion grouping and is left
+   * alone. A folder narrows the list ONLY when this parameter is present, so
+   * search keeps spanning the whole library by default (§21) and no bookmark or
+   * existing caller changes behaviour.
+   *
+   * `folderScope=tree` includes a folder's subfolders, which is what opening a
+   * parent should show.
+   */
+  if (req.query.folderId !== undefined && req.query.folderId !== '') {
+    if (!isUuid(req.query.folderId)) {
+      return res.status(400).json({
+        error: 'Unknown folder.', code: 'invalid_filter_value', parameter: 'folderId',
+      });
+    }
+    params.push(req.query.folderId);
+    const p = `$${params.length}`;
+    const scoped = req.query.folderScope === 'tree'
+      ? `(a.folder_id = ${p} OR a.folder_id IN (
+            SELECT sf.id FROM resource_folders sf
+             WHERE sf.parent_id = ${p}
+               AND sf.organisation_id IS NOT DISTINCT FROM $1))`
+      : `a.folder_id = ${p}`;
+    where += ` AND EXISTS (SELECT 1 FROM resource_folder_assignments a
+                 WHERE a.resource_id = r.id AND ${scoped})`;
+  }
   let collectionKeyIdx = null; // param index, reused for curated ordering below
   if (req.query.collectionKey) {
     params.push(str(req.query.collectionKey, 60));
@@ -864,6 +926,7 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
   await syncCollections(orgId, resource.id, b.collections);
   await syncTags(resource.id, b.tagIds);
   await audit(req, 'rh2.resource_created', resource.id, { title, slug });
+  shelveIfUnfiled(req, resource.id);
   res.status(201).json({ resource });
 }));
 
@@ -1098,6 +1161,9 @@ router.post('/api/rh2/resources/:id/approve', safe(async (req, res) => {
       WHERE NOT EXISTS (SELECT 1 FROM resource_versions WHERE resource_id = $1)`,
     [r.id, r.version, r.title, r.content, req.user.id]);
   await audit(req, 'rh2.resource_approved', r.id, { version: r.version, from: result.from });
+  // Approval is the moment a resource joins the browsable library, so it is
+  // the moment it needs a shelf.
+  shelveIfUnfiled(req, r.id);
   res.json({ ok: true, resource: r });
 }));
 
@@ -1501,6 +1567,10 @@ router.post('/api/rh2/resources/:id/files', safe(async (req, res) => {
   await audit(req, 'rh2.file_uploaded', resource.id, {
     fileId: fileRow.id, format, sizeBytes: buffer.length, checksum,
   });
+
+  // A document that arrived after the record was created can now be read, so
+  // an unfiled resource gets a better answer than its metadata alone gave.
+  shelveIfUnfiled(req, resource.id);
 
   // Derivatives are best-effort: a missing renderer must never fail an upload.
   let previews = null;
