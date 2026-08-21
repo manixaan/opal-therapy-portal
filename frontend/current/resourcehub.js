@@ -346,11 +346,13 @@
       editor: null, editorErr: '', editorSaving: false,
       preview: null,
       assign: null, // { wfId, wfTitle, q, selected:{}, dueAt, note, mandatory, priority, busy, err, done }
-      staff: null,
+      staff: null, staffErr: '', staffLoading: false,
       assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '', afOverdue: false,
       openAssignment: null, openData: null, openLoading: false,
       resPick: null, // resource picker inside the editor: { q, rows, loading, forItem }
     },
+    // Owner-only: which collection is open on Assign Learning, and its search.
+    asl: { collection: null, q: '' },
     // The Library. `folders`/`folderId` are the semantic shelving added in
     // migration 039; everything else is the flat-list state it was before, and
     // is still used unchanged by Saved, All Resources and every search.
@@ -408,7 +410,7 @@
     if (S.view === 'home') body = renderHome();
     else if (S.view === 'library') body = renderLibrary();
     else if (S.view === 'detail') body = renderDetail();
-    else if (S.view === 'learning') body = renderLearning();
+    else if (S.view === 'learning') body = isOwner() ? renderAssignLearning() : renderLearning();
     else if (S.view === 'assignment') body = renderAssignment();
     else if (S.view === 'pd') body = renderPd();
     else if (S.view === 'instruments') body = renderInstruments();
@@ -434,8 +436,12 @@
   }
 
   function renderNav() {
+    // The same route, a different job. An Owner manages and assigns the
+    // library; everybody else works through their own. Renaming only the label
+    // keeps every existing link, bookmark and notification target working.
     var items = [
-      ['home', 'Home'], ['library', 'Library'], ['saved', 'Saved'], ['learning', 'My Learning'],
+      ['home', 'Home'], ['library', 'Library'], ['saved', 'Saved'],
+      ['learning', isOwner() ? 'Assign Learning' : 'My Learning'],
     ];
     // The instrument register is clinical reference material, so it belongs in
     // the hub proper rather than behind Admin. It was previously only reachable
@@ -486,7 +492,16 @@
       loadFolders();
       if (!S.lib.org) loadOrgStatus(true);
     }
-    if (view === 'learning') { loadLearning(); loadMyLearning(); }
+    if (view === 'learning') {
+      if (isOwner()) {
+        // The library and the staff list; Home supplies the PD panel.
+        loadLa();
+        if (!S.home && !S.homeLoading) loadHome();
+      } else {
+        loadLearning();
+        loadMyLearning();
+      }
+    }
     if (view === 'pd') { S.pd.openId = null; if (!S.pd.data) loadPd(); }
     if (view === 'instruments') {
       // Navigating to the section always lands on the catalogue, never on the
@@ -562,32 +577,39 @@
     var links = pick(h, 'quick_links') || pick(h, 'quickLinks') || [];
     var recent = pick(h, 'recently_added') || pick(h, 'recentlyAdded') || [];
 
-    // Continue Learning + Required for You
-    out += '<div class="rh2-grid-2">';
-    out += '<section class="rh2-card" aria-labelledby="rh2-h-cont"><h2 id="rh2-h-cont">Continue learning</h2>';
-    if (!cont.length) out += '<p class="rh2-quiet">Nothing in progress — explore the Library or open My Learning to start a path.</p>';
-    else out += cont.map(function (p) {
-      var done = Number(pick(p, 'completed') || 0), total = Number(pick(p, 'total') || 0);
-      var pct = pick(p, 'percent');
-      if (pct == null) pct = total ? Math.round(done / total * 100) : 0;
-      return '<div class="rh2-cont"><div class="rh2-cont-main">' +
-        '<div class="rh2-cont-name">' + esc(pick(p, 'name')) + '</div>' +
-        '<div class="rh2-row-sub">' + done + ' of ' + total + ' complete</div>' +
-        '<div class="rh2-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100">' +
-        '<span style="width:' + Math.max(0, Math.min(100, pct)) + '%"></span></div></div>' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.nav(\'learning\')">Continue</button></div>';
-    }).join('');
-    out += '</section>';
+    /* CONTINUE LEARNING + REQUIRED FOR YOU — staff only.
+       Both are a personal record, and an Owner does not have one: they assign
+       the work rather than complete it. The panels are not rendered at all for
+       an owner, so there is no empty card, no orphaned heading and nothing a
+       stylesheet could bring back. The grid below opens only when they do,
+       which is what keeps the layout from leaving a hole. */
+    if (!isOwner()) {
+      out += '<div class="rh2-grid-2">';
+      out += '<section class="rh2-card" aria-labelledby="rh2-h-cont"><h2 id="rh2-h-cont">Continue learning</h2>';
+      if (!cont.length) out += '<p class="rh2-quiet">Nothing in progress — explore the Library or open My Learning to start a path.</p>';
+      else out += cont.map(function (p) {
+        var done = Number(pick(p, 'completed') || 0), total = Number(pick(p, 'total') || 0);
+        var pct = pick(p, 'percent');
+        if (pct == null) pct = total ? Math.round(done / total * 100) : 0;
+        return '<div class="rh2-cont"><div class="rh2-cont-main">' +
+          '<div class="rh2-cont-name">' + esc(pick(p, 'name')) + '</div>' +
+          '<div class="rh2-row-sub">' + done + ' of ' + total + ' complete</div>' +
+          '<div class="rh2-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100">' +
+          '<span style="width:' + Math.max(0, Math.min(100, pct)) + '%"></span></div></div>' +
+          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.nav(\'learning\')">Continue</button></div>';
+      }).join('');
+      out += '</section>';
 
-    out += '<section class="rh2-card" aria-labelledby="rh2-h-req"><h2 id="rh2-h-req">Required for you</h2>';
-    if (!required.length) out += '<p class="rh2-quiet">You are up to date — nothing outstanding.</p>';
-    else out += required.map(function (r) {
-      var chip = pick(r, 'acknowledgement_required')
-        ? '<span class="rh2-chip rh2-chip-warn">Acknowledgement required</span>'
-        : '<span class="rh2-chip">Required</span>';
-      return homeResRow(r, chip);
-    }).join('');
-    out += '</section></div>';
+      out += '<section class="rh2-card" aria-labelledby="rh2-h-req"><h2 id="rh2-h-req">Required for you</h2>';
+      if (!required.length) out += '<p class="rh2-quiet">You are up to date — nothing outstanding.</p>';
+      else out += required.map(function (r) {
+        var chip = pick(r, 'acknowledgement_required')
+          ? '<span class="rh2-chip rh2-chip-warn">Acknowledgement required</span>'
+          : '<span class="rh2-chip">Required</span>';
+        return homeResRow(r, chip);
+      }).join('');
+      out += '</section></div>';
+    }
 
     // Collections
     out += '<section aria-labelledby="rh2-h-col"><h2 class="rh2-h2" id="rh2-h-col">Browse by collection</h2><div class="rh2-collections">';
@@ -851,6 +873,92 @@
     var glyph = TYPE_ICONS[pick(r, 'content_type')] || 'doc';
     return '<span class="rh2-card-thumb rh2-thumb-type">' + icn(glyph)
       + (kind === 'hosted' ? formatChip(pick(r, 'primary_file_format')) : '') + '</span>';
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     WORKFLOW TOOLS IN THE LIBRARY
+
+     Most library entries are CONTENT: a row in `resources` with a file or a
+     body of markdown. A few are WORKFLOWS — a document the portal builds with
+     you rather than one you read — and the Service Agreement is the first.
+
+     They belong in the same grid because that is where a person looks for
+     them, and they carry a `category` because "Agreements and forms" is how
+     somebody describes what they want before they know what it is called.
+     They are declared here rather than seeded as resource rows because a
+     workflow has no file, no version to review and no governance record — it
+     is code, and a `resources` row describing code would need a governance
+     lifecycle nobody could complete.
+
+     `collections` and `keywords` are what make them findable: the collection
+     puts a tool in the same place as the templates it belongs with, and the
+     keywords answer the searches people actually type. `permission` is a
+     COURTESY gate only — every one of these opens a surface whose server
+     routes enforce their own access.
+     ═══════════════════════════════════════════════════════════════════════ */
+  var TOOLS = [
+    {
+      key: 'service-agreement',
+      title: 'Service Agreement',
+      description: 'Create, complete and issue an Opal Therapy Service Agreement using '
+        + 'participant and portal information.',
+      category: 'Agreements and forms',
+      contentType: 'template',
+      collections: ['templates'],
+      permission: 'service_agreements.access',
+      keywords: [
+        'service agreement', 'ndis agreement', 'participant agreement', 'agreement',
+        'service booking', 'agreements and forms', 'sign', 'signing', 'consent',
+        'schedule of supports', 'ndis',
+      ],
+      open: function () { if (global.SVA && global.SVA.route) global.SVA.route(''); },
+    },
+  ];
+
+  /** Tools the signed-in user may see, for the current filters. */
+  function toolsFor(f) {
+    // The hub reads the signed-in user from APP_USER, like every other gate
+    // in this file. An owner holds every service-agreement permission
+    // implicitly (permissions.js), and APP_USER carries the expanded list.
+    var perms = user().permissions || [];
+    var q = String((f && f.q) || '').trim().toLowerCase();
+    return TOOLS.filter(function (t) {
+      if (t.permission && perms.indexOf(t.permission) === -1) return false;
+      // A collection filter must match, but no collection filter means the
+      // whole library — where a tool still belongs.
+      if (f && f.collection && t.collections.indexOf(f.collection) === -1) return false;
+      if (f && f.type && f.type !== t.contentType) return false;
+      // The tag/authority/cost facets describe content governance, which a
+      // workflow has none of. Any of them narrows the list to real resources.
+      if (f && (f.topic || f.cost || f.population || f.setting || f.authority || f.saved)) return false;
+      if (!q) return true;
+      var hay = (t.title + ' ' + t.description + ' ' + t.category + ' ' + t.keywords.join(' ')).toLowerCase();
+      return hay.indexOf(q) !== -1 || q.split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1; });
+    });
+  }
+
+  /**
+   * A tool rendered as an ordinary library card.
+   *
+   * Deliberately the same markup, classes and shape as resourceCard() so it
+   * reads as a native member of the grid — a person should not have to learn
+   * that some cards are a different kind of thing.
+   */
+  function toolCard(t) {
+    return '<button type="button" class="rh2-cardtile rh2-cardtile-tool" '
+      + 'onclick="RH2.openTool(\'' + esc(t.key) + '\')">'
+      + '<span class="rh2-card-thumb rh2-thumb-type">' + icn('file-text', 'file-text', 16) + '</span>'
+      + '<span class="rh2-cardtile-body">'
+      + '<span class="rh2-row-title">' + esc(t.title)
+      + ' <span class="rh2-chip rh2-chip-tool">Workflow</span></span>'
+      + '<span class="rh2-row-sub rh2-clamp">' + esc(t.description) + '</span>'
+      + '<span class="rh2-row-meta">' + esc(t.category) + '</span>'
+      + '</span></button>';
+  }
+
+  function openTool(key) {
+    var t = TOOLS.filter(function (x) { return x.key === String(key); })[0];
+    if (t) t.open();
   }
 
   function resourceCard(r, backView) {
@@ -1477,7 +1585,6 @@
   }
 
   function libReloadFolders() { loadFolders(true); }
-
 
   // ── DETAIL ────────────────────────────────────────────────────────────────
 
@@ -4020,7 +4127,9 @@
   /** Owner draft preview — same player, nothing persisted. */
   async function laPreview(wfId) {
     S.assignment = {
-      id: null, data: null, loading: true, err: '', backView: 'admin',
+      // Back goes where the Owner actually came from: Assign Learning or
+      // the Admin > Learning tab.
+      id: null, data: null, loading: true, err: '', backView: S.view === 'learning' ? 'learning' : 'admin',
       openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
       busy: false, preview: true, previewWfId: String(wfId || ''), previewDone: {}, celebrate: false,
     };
@@ -4286,7 +4395,23 @@
     la.workflows = wf.ok ? (wf.workflows || []) : la.workflows;
     la.categories = wf.ok ? (wf.categories || null) : la.categories;
     la.staff = staff.ok ? (staff.staff || []) : la.staff;
+    // A failed people list used to leave `staff` null forever, which the assign
+    // dialog rendered as a skeleton that never resolved. Remember the failure so
+    // it can say so and offer a way out.
+    la.staffErr = staff.ok ? '' : (staff.error || 'The list of people could not be loaded.');
     if (la.tab === 'assignments') loadLaAssignments();
+    render();
+  }
+
+  /** Reload only the people list — used to retry after it failed to load. */
+  async function loadLaStaff() {
+    S.la.staffErr = '';
+    S.la.staffLoading = true;
+    render();
+    var d = await api('/api/learning/staff');
+    S.la.staffLoading = false;
+    if (d.ok) S.la.staff = d.staff || [];
+    else S.la.staffErr = d.error || 'The list of people could not be loaded.';
     render();
   }
 
@@ -4333,12 +4458,14 @@
       }).join('') + '</div>';
     if (la.err) out += '<div class="rh2-empty">' + esc(la.err) + '</div>';
     if (la.editor) return out + renderLaEditor() + '</div>';
-    if (la.assign) return out + renderLaAssign() + '</div>';
-    if (la.loading && !la.workflows) return out + '<div class="rh2-card">' + skel(3, 72) + '</div></div>';
+    // The dialog goes ON TOP of the library rather than replacing it: the
+    // Owner keeps sight of what they were working through, and closing it
+    // returns them exactly where they were.
+    if (la.loading && !la.workflows) return out + '<div class="rh2-card">' + skel(3, 72) + '</div>' + renderLaAssign() + '</div>';
     if (la.tab === 'library') out += renderLaLibrary();
     else if (la.tab === 'assignments') out += renderLaAssignments();
     else if (la.tab === 'staff') out += renderLaStaff();
-    return out + '</div>';
+    return out + renderLaAssign() + '</div>';
   }
 
   // ── Owner: library ──────────────────────────────────────────────────────────
@@ -4354,33 +4481,350 @@
     if (!rows.length) {
       return out + '<div class="rh2-empty">No learning workflows yet. Create your first learning workflow to begin assigning staff learning.</div>';
     }
-    out += rows.map(function (w) {
-      var archived = w.status === 'archived';
-      return '<section class="rh2-card rh2-learn-wf' + (archived ? ' rh2-learn-wf-archived' : '') + '">' +
-        '<div class="rh2-learn-card-head"><span class="rh2-row-title">' + esc(w.title) + '</span>' +
-          (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>'
-            : (w.has_unpublished_changes ? '<span class="rh2-chip rh2-chip-warn">Draft changes</span>' : '<span class="rh2-chip rh2-chip-ok">Up to date</span>')) +
-        '</div>' +
-        '<div class="rh2-row-sub">' + esc(laCatLabel(w.category)) +
-          ' · ' + (w.module_count || 0) + ' modules' +
-          (w.current_version ? ' · Version ' + w.current_version : ' · Never assigned') +
-          ' · ' + (w.active_assignments || 0) + ' active / ' + (w.completed_assignments || 0) + ' completed' +
-          ' · Updated ' + esc(fmtDate(w.updated_at)) + '</div>' +
-        (w.description ? '<p class="rh2-quiet">' + esc(w.description) + '</p>' : '') +
-        '<div class="rh2-learn-card-actions">' +
-          (!archived ? '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laAssignOpen(\'' + esc(w.id) + '\')">Assign</button>' : '') +
-          (!archived ? '<button type="button" class="rh2-btn" onclick="RH2.laEdit(\'' + esc(w.id) + '\')">Edit</button>' : '') +
-          '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(w.id) + '\')">Preview</button>' +
-          '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
-          '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
-          (archived
-            ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>'
-            : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
-          (!w.active_assignments && !w.completed_assignments && !w.current_version
-            ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '') +
-        '</div></section>';
-    }).join('');
+    out += rows.map(laWorkflowCard).join('');
     return out;
+  }
+
+  /**
+   * One learning item, with every management action the Owner already had.
+   *
+   * Shared by the Admin > Learning tab and by Assign Learning so the two
+   * surfaces cannot drift: an action added here appears in both, and an item
+   * that cannot be assigned says so in the same words wherever it is seen.
+   *
+   * `Assign` leads because assigning is what the Owner came to do, but it is
+   * withheld from an archived item and from one with nothing in it — a button
+   * the server would refuse is worse than no button.
+   */
+  function laWorkflowCard(w) {
+    var archived = w.status === 'archived';
+    var empty = !(w.module_count || 0);
+    var assignable = !archived && !empty;
+    var duration = aslDuration(w);
+    // The selection checkbox belongs to the Assign Learning page only — the
+    // Admin > Learning tab shares this card but has no batch assignment bar.
+    var selectable = S.view === 'learning' && assignable;
+    var selOn = selectable && !!aslSel()[w.id];
+    return '<section class="rh2-card rh2-learn-wf' + (archived ? ' rh2-learn-wf-archived' : '') +
+      (selOn ? ' rh2-learn-wf-sel' : '') + '">' +
+      '<div class="rh2-learn-card-head">' +
+      (selectable
+        ? '<input type="checkbox" class="rh2-learn-selbox" ' + (selOn ? 'checked ' : '') +
+          'aria-label="Select ' + esc(w.title) + ' for assignment" ' +
+          'onchange="RH2.aslToggleSel(\'' + esc(w.id) + '\')">'
+        : '') +
+      '<span class="rh2-row-title">' + esc(w.title) + '</span>' +
+        (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>'
+          : (w.has_unpublished_changes ? '<span class="rh2-chip rh2-chip-warn">Draft changes</span>' : '<span class="rh2-chip rh2-chip-ok">Up to date</span>')) +
+      '</div>' +
+      '<div class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
+        ' · ' + (w.module_count || 0) + ' modules' +
+        (duration ? ' · ' + esc(duration) : '') +
+        (w.current_version ? ' · Version ' + w.current_version : ' · Never assigned') +
+        ' · ' + (w.active_assignments || 0) + ' active / ' + (w.completed_assignments || 0) + ' completed' +
+        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</div>' +
+      (w.description ? '<p class="rh2-quiet">' + esc(w.description) + '</p>' : '') +
+      (!archived && empty
+        ? '<p class="rh2-quiet rh2-learn-cannot">Add at least one module before this can be assigned.</p>'
+        : '') +
+      '<div class="rh2-learn-card-actions">' +
+        (assignable ? '<button type="button" class="rh2-btn rh2-btn-primary" id="asl-assign-' + esc(w.id) +
+          '" onclick="RH2.laAssignOpen(\'' + esc(w.id) + '\')">Assign</button>' : '') +
+        (!archived ? '<button type="button" class="rh2-btn" onclick="RH2.laEdit(\'' + esc(w.id) + '\')">Edit</button>' : '') +
+        '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(w.id) + '\')">Preview</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
+        (archived
+          ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>'
+          : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
+        (!w.active_assignments && !w.completed_assignments && !w.current_version
+          ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '') +
+      '</div></section>';
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  OWNER: ASSIGN LEARNING
+  //
+  //  The Owner's learning surface is a REPOSITORY, not a personal record. Where
+  //  a therapist sees "My Learning" — what they must do — an Owner sees the
+  //  practice's whole library and who to give it to.
+  //
+  //  "Continue learning" and "Required for you" are therefore not merely hidden
+  //  here: renderHome and the view dispatch never build them for an owner, so
+  //  there is nothing in the DOM to reveal. An Owner's own progress is not a
+  //  thing this product tracks, and an empty personal panel shown to the person
+  //  who assigns the work reads as a bug.
+  //
+  //  Collections come from the categories the workflows actually carry, not
+  //  from a list in this file. The schema treats category as a free vocabulary,
+  //  so a practice that invents "graduate_foundations" gets a collection for it
+  //  without a code change.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** How many of the most recently updated items "Recently added" shows. */
+  var ASL_RECENT_LIMIT = 6;
+
+  /** Initials for a person chip. No avatar image is stored, so this is it. */
+  function initials(name, email) {
+    var src = String(name || '').trim() || String(email || '').split('@')[0].replace(/[._-]+/g, ' ');
+    // Leading punctuation is not a name: display names here include things like
+    // "Ann (Owner)", which must initial as AO rather than "A(".
+    var parts = src.split(/\s+/).map(function (w) {
+      return w.replace(/^[^0-9A-Za-z\u00C0-\uFFFF]+/, '');
+    }).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  /** "graduate_foundations" → "Graduate Foundations". */
+  function titleish(s) {
+    return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  /**
+   * A collection name: the seeded label where there is one, and a readable
+   * version of whatever the practice typed where there is not.
+   */
+  function aslCatLabel(key) { return titleish(laCatLabel(key) || key || 'Uncategorised'); }
+
+  /** A portal role, in the words the Owner uses for it. */
+  var ASL_ROLE_LABELS = {
+    owner: 'Owner', admin: 'Admin', therapist: 'Therapist',
+    read_only: 'Read-only', pre_employee: 'New starter',
+  };
+  function roleLabel(r) { return ASL_ROLE_LABELS[r] || titleish(r); }
+
+  /** Estimated duration, only when the author actually recorded one. */
+  function aslDuration(w) {
+    var m = Number(w.estimated_minutes || 0);
+    if (!m) return '';
+    if (m < 60) return m + ' min';
+    var h = Math.floor(m / 60), rem = m % 60;
+    return h + ' hr' + (h === 1 ? '' : 's') + (rem ? ' ' + rem + ' min' : '');
+  }
+
+  /**
+   * Group the library by the category each workflow carries.
+   *
+   * Anything without one lands in a single honest bucket rather than being
+   * dropped from the library — an item you cannot see is an item you cannot
+   * assign, and the Owner has no other way to reach it.
+   */
+  function aslCollections(rows) {
+    var by = {};
+    (rows || []).forEach(function (w) {
+      var key = w.category || 'uncategorised';
+      (by[key] = by[key] || []).push(w);
+    });
+    return Object.keys(by).sort(function (x, y) {
+      return aslCatLabel(x).localeCompare(aslCatLabel(y));
+    }).map(function (k) { return { key: k, label: aslCatLabel(k), items: by[k] }; });
+  }
+
+  /** The library, narrowed by the open collection and the search box. */
+  function aslVisible() {
+    var rows = (S.la.workflows || []).slice();
+    var a = S.asl;
+    if (a.collection) {
+      rows = rows.filter(function (w) { return (w.category || 'uncategorised') === a.collection; });
+    }
+    var q = String(a.q || '').trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(function (w) {
+        return String(w.title || '').toLowerCase().indexOf(q) !== -1 ||
+               String(w.description || '').toLowerCase().indexOf(q) !== -1 ||
+               aslCatLabel(w.category).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    return rows;
+  }
+
+  function aslOpenCollection(key) { S.asl.collection = key || null; render(); }
+  function aslClearCollection() { S.asl.collection = null; render(); }
+  function aslSearch(v) { S.asl.q = v; render(); }
+  function aslResetFilters() { S.asl.q = ''; S.asl.collection = null; render(); }
+  function aslReload() { loadLa(); }
+
+  // ── Library multi-select (checkbox per card → one Assign for the batch) ────
+
+  function aslSel() { if (!S.asl.sel) S.asl.sel = {}; return S.asl.sel; }
+
+  /**
+   * The selected items that can ACTUALLY be assigned right now.
+   *
+   * Selection is held by id, and the library behind it can move: an item can
+   * be archived, emptied or deleted in another tab between the tick and the
+   * click. Counting raw keys would then advertise "Assign selected (3)" and
+   * open a dialog with two items — or, if every key is stale, a button that
+   * does nothing at all. Resolving against the live library each render is
+   * what keeps the count honest.
+   */
+  function aslSelectedWorkflows() {
+    var sel = aslSel();
+    return (S.la.workflows || []).filter(function (w) {
+      return sel[w.id] && w.status === 'active' && (w.module_count || 0) > 0;
+    });
+  }
+
+  function aslSelCount() { return aslSelectedWorkflows().length; }
+
+  function aslToggleSel(id) {
+    var s = aslSel();
+    if (s[id]) delete s[id];
+    else s[id] = true;
+    render();
+  }
+
+  function aslClearSel() { S.asl.sel = {}; render(); }
+
+  /** Every assignable card currently shown (active, has modules). */
+  function aslSelectable() {
+    return aslVisible().filter(function (w) {
+      return w.status === 'active' && (w.module_count || 0) > 0;
+    });
+  }
+
+  /** Toggle: select every assignable card shown, or clear them all. */
+  function aslSelectAllShown() {
+    var s = aslSel();
+    var shown = aslSelectable();
+    var allOn = shown.length > 0 && shown.every(function (w) { return s[w.id]; });
+    shown.forEach(function (w) {
+      if (allOn) delete s[w.id];
+      else s[w.id] = true;
+    });
+    render();
+  }
+
+  function renderAssignLearning() {
+    var la = S.la;
+    var a = S.asl;
+    var out = '<div class="rh2-page">' +
+      '<h1 class="rh2-h1">Assign Learning</h1>' +
+      '<p class="rh2-page-intro">Browse the practice&rsquo;s learning library, edit any item, and assign it ' +
+      'to the people who need it. Anything you assign appears in that person&rsquo;s own learning.</p>';
+
+    if (la.loading && !la.workflows) {
+      return out + '<div class="rh2-card">' + skel(3, 72) + '</div></div>';
+    }
+    if (la.err && !la.workflows) {
+      return out + '<div class="rh2-empty">' + esc(la.err) +
+        ' <button type="button" class="rh2-btn" onclick="RH2.aslReload()">Retry</button></div></div>';
+    }
+    // The editor takes the whole page, as it does in Admin.
+    if (la.editor) return out + renderLaEditor() + '</div>';
+
+    var all = la.workflows || [];
+    var collections = aslCollections(all.filter(function (w) { return w.status !== 'archived'; }));
+
+    // ── Browse by collection ────────────────────────────────────────────────
+    out += '<section aria-labelledby="asl-h-col"><h2 class="rh2-h2" id="asl-h-col">Browse by collection</h2>';
+    if (!collections.length) {
+      out += '<div class="rh2-empty">No learning collections yet. Create a learning item and give it a ' +
+        'category, and it will appear here as a collection.' +
+        '<div class="rh2-empty-act"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+        'onclick="RH2.laCreate()">+ New learning item</button></div></div>';
+    } else {
+      out += '<div class="rh2-collections">' + collections.map(function (c) {
+        var on = a.collection === c.key;
+        return '<button type="button" class="rh2-collection' + (on ? ' rh2-collection-on' : '') + '"' +
+          ' aria-pressed="' + (on ? 'true' : 'false') + '"' +
+          ' onclick="RH2.aslOpenCollection(\'' + esc(c.key) + '\')">' +
+          '<span class="rh2-collection-icn">' + icn('folder', 'folder', 18) + '</span>' +
+          '<span class="rh2-collection-name">' + esc(c.label) + '</span>' +
+          '<span class="rh2-collection-tag">' + c.items.length + ' item' +
+            (c.items.length === 1 ? '' : 's') + '</span>' +
+          '</button>';
+      }).join('') + '</div>';
+    }
+    out += '</section>';
+
+    // ── The library itself ──────────────────────────────────────────────────
+    var rows = aslVisible();
+    var openLabel = a.collection ? aslCatLabel(a.collection) : 'All learning';
+    out += '<section class="rh2-card" aria-labelledby="asl-h-lib">' +
+      '<div class="rh2-learn-lib-head">' +
+      '<h2 class="rh2-h2" id="asl-h-lib">' + esc(openLabel) + '</h2>' +
+      '<div class="rh2-learn-lib-tools">' +
+      '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
+      '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
+        ' oninput="RH2.aslSearch(this.value)">' +
+      (a.collection ? '<button type="button" class="rh2-btn" onclick="RH2.aslClearCollection()">Show all</button>' : '') +
+      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
+        'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+      '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
+      '</div></div>';
+
+    if (!all.length) {
+      out += '<div class="rh2-empty">No learning items yet. Create your first one to start assigning ' +
+        'learning to the team.</div>';
+    } else if (!rows.length) {
+      out += '<div class="rh2-empty">' +
+        (a.q ? 'Nothing matches &ldquo;' + esc(a.q) + '&rdquo;' + (a.collection ? ' in this collection' : '') + '.'
+             : 'This collection is empty.') +
+        ' <button type="button" class="rh2-btn" onclick="RH2.aslResetFilters()">Clear filters</button></div>';
+    } else {
+      // Batch bar: tick several items, assign them all in one pass. Lives
+      // above the cards so the count and the action stay in view together.
+      var selCount = aslSelCount();
+      var selectable = aslSelectable();
+      var allOn = selectable.length > 0 && selectable.every(function (w) { return aslSel()[w.id]; });
+      out += '<div class="rh2-learn-selbar">' +
+        (selectable.length > 1
+          ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.aslSelectAllShown()">' +
+            (allOn ? 'Clear shown' : 'Select all shown (' + selectable.length + ')') + '</button>'
+          : '') +
+        '<span class="rh2-learn-assign-count" role="status" aria-live="polite">' +
+          (selCount ? selCount + ' selected' : 'Tick items to assign several at once') + '</span>' +
+        (selCount
+          ? '<button type="button" class="rh2-btn rh2-btn-primary" id="asl-bulk-assign" ' +
+            'onclick="RH2.laAssignOpenMulti()">Assign selected (' + selCount + ')</button>' +
+            '<button type="button" class="rh2-btn" onclick="RH2.aslClearSel()">Clear selection</button>'
+          : '') +
+        '</div>';
+      out += rows.map(laWorkflowCard).join('');
+    }
+    out += '</section>';
+
+    out += '<div class="rh2-grid-2">';
+
+    // ── Upcoming professional development ───────────────────────────────────
+    var pd = (S.home && (pick(S.home, 'upcoming_pd') || pick(S.home, 'upcomingPd'))) || [];
+    out += '<section class="rh2-card rh2-pd-preview" aria-labelledby="asl-h-pd">' +
+      '<h2 class="rh2-h-link"><button type="button" class="rh2-heading-btn" onclick="RH2.nav(\'pd\')">' +
+      '<span id="asl-h-pd">Upcoming professional development</span>' +
+      '<span class="rh2-heading-more" aria-hidden="true">&rsaquo;</span>' +
+      '<span class="rh2-visually-hidden"> — open the professional development page</span>' +
+      '</button></h2>';
+    if (S.homeLoading && !S.home) out += skel(2);
+    else if (!pd.length) out += '<p class="rh2-quiet">No upcoming professional development is scheduled.</p>';
+    else out += pd.map(function (e) {
+      return '<div class="rh2-pd-row"><div class="rh2-pd-date">' + esc(fmtDateTime(pick(e, 'starts_at'))) + '</div>' +
+        '<div class="rh2-row-title">' + esc(pick(e, 'title')) + '</div>' +
+        '<div class="rh2-row-sub">' + esc(pick(e, 'provider') || '') + '</div></div>';
+    }).join('');
+    out += '</section>';
+
+    // ── Recently added ──────────────────────────────────────────────────────
+    var recent = all.slice().sort(function (x, y) {
+      return String(y.updated_at || '').localeCompare(String(x.updated_at || ''));
+    }).slice(0, ASL_RECENT_LIMIT);
+    out += '<section class="rh2-card" aria-labelledby="asl-h-recent">' +
+      '<h2 id="asl-h-recent">Recently added</h2>';
+    if (!recent.length) out += '<p class="rh2-quiet">Nothing has been added yet.</p>';
+    else out += recent.map(function (w) {
+      return '<button type="button" class="rh2-row rh2-row-btn" onclick="RH2.aslOpenCollection(\'' +
+        esc(w.category || 'uncategorised') + '\')">' +
+        '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(w.title) + '</span>' +
+        '<span class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
+        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</span></span></button>';
+    }).join('');
+    out += '</section></div>';
+
+    // The assignment dialog goes ON TOP of the page rather than replacing it,
+    // so closing it returns the Owner exactly where they were.
+    return out + renderLaAssign() + '</div>';
   }
 
   function laToggleArchived(on) { S.la.includeArchived = !!on; loadLa(); }
@@ -4452,8 +4896,15 @@
       }),
       versions: d.versions || [],
       counts: d.assignment_counts || {},
+      // Optimistic lock token: sent back on Save so a save over another
+      // session's newer edit is refused (409) instead of clobbering it.
+      _loadedUpdatedAt: w.updated_at || null,
+      // What learners currently receive, for the editor's publish line.
+      _currentVersion: Number(w.current_version) || 0,
+      _hasUnpublished: !!w.has_unpublished_changes,
     };
     S.la.editorErr = '';
+    S.la.editorStale = false;
     S.la.resPick = null;
     render();
   }
@@ -4463,6 +4914,8 @@
         !confirm('Discard unsaved changes to this workflow?')) return;
     S.la.editor = null;
     S.la.resPick = null;
+    S.la.publishNote = '';
+    S.la.editorStale = false;
     loadLa();
   }
 
@@ -4504,6 +4957,7 @@
     if (!ed || S.la.editorSaving) return;
     S.la.editorSaving = true;
     render();
+    S.la.publishNote = '';
     var d = await api('/api/learning/workflows/' + encodeURIComponent(ed.id), {
       method: 'PUT',
       body: {
@@ -4511,13 +4965,60 @@
         description: ed.description,
         category: ed.category,
         content: laEditorContentForApi(ed),
+        // The updated_at this editor loaded. If another session saved since,
+        // the server answers 409 rather than letting this save clobber it.
+        expectedUpdatedAt: ed._loadedUpdatedAt || undefined,
       },
     });
     S.la.editorSaving = false;
-    if (!d.ok) { S.la.editorErr = d.error || 'Saving failed.'; return render(); }
+    if (!d.ok) {
+      S.la.editorErr = d.error || 'Saving failed.';
+      // A stale edit gets its own recovery path: the fix is to reload, not
+      // to hammer Save until the other session's work is overwritten.
+      S.la.editorStale = d.status === 409 && d.code === 'stale_edit';
+      return render();
+    }
     S.la.editorErr = '';
+    S.la.editorStale = false;
     // Re-open from the server's normalised copy (keys may have been assigned).
     await laEdit(ed.id);
+  }
+
+  /** Discard this editor's unsaved work and load what the server now holds. */
+  function laEditorReload() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    if (ed._dirty && !confirm('Discard your unsaved changes and load the latest version?')) return;
+    laEdit(ed.id);
+  }
+
+  /**
+   * Deliberate publish: snapshot the saved draft as the latest version without
+   * assigning anyone. Unsaved edits are saved first — publishing what is on
+   * the server while the screen shows something newer would mislead.
+   */
+  async function laPublish(id) {
+    var ed = S.la.editor;
+    if (S.la.editorSaving || S.la.publishBusy) return;
+    if (ed && ed._dirty) {
+      await laSave();
+      ed = S.la.editor;
+      if (S.la.editorErr) return; // save failed (or stale) — surfaced already
+    }
+    S.la.publishBusy = true;
+    render();
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/publish', { method: 'POST' });
+    S.la.publishBusy = false;
+    if (!d.ok) {
+      if (ed) { S.la.editorErr = d.error || 'Publishing failed.'; render(); }
+      else alert(d.error || 'Publishing failed.');
+      return;
+    }
+    var msg = d.published
+      ? 'Published version ' + d.version + ' — learners now receive it.'
+      : 'Already up to date — learners already receive version ' + d.version + '.';
+    if (ed) { S.la.publishNote = msg; await laEdit(id); S.la.publishNote = msg; render(); }
+    else { alert(msg); loadLa(); }
   }
 
   // Editor field handlers deliberately do NOT re-render on keystroke — the
@@ -4713,17 +5214,34 @@
   function renderLaEditor() {
     var ed = S.la.editor;
     var cats = S.la.categories || ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    // What learners receive right now, stated plainly next to Save/Publish so
+    // the Owner can always tell draft state from published state.
+    var pubLine = ed._currentVersion
+      ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' · unpublished draft changes' : ' · up to date')
+      : 'Never published — assigning (or Publish) creates version 1';
     var out = '<div class="rh2-learn-ed">' +
       '<div class="rh2-learn-ed-bar">' +
         '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">← Library</button>' +
-        '<span class="rh2-quiet">' + (ed.counts.total ? ed.counts.total + ' assignment(s) pinned to published versions — saving edits never changes them' : 'Draft — nothing assigned yet') + '</span>' +
+        '<span class="rh2-quiet">' +
+          esc(pubLine) + ' · ' +
+          (ed.counts.total ? ed.counts.total + ' assignment(s) pinned to published versions — saving edits never changes them' : 'nothing assigned yet') +
+        '</span>' +
         '<span class="rh2-learn-ed-bar-actions">' +
           '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(ed.id) + '\')">Preview</button>' +
+          '<button type="button" class="rh2-btn" ' + ((S.la.editorSaving || S.la.publishBusy) ? 'disabled ' : '') +
+            'onclick="RH2.laPublish(\'' + esc(ed.id) + '\')">' +
+            (S.la.publishBusy ? 'Publishing…' : 'Publish version') + '</button>' +
           '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') + 'onclick="RH2.laSave()">' +
             (S.la.editorSaving ? 'Saving…' : 'Save') + '</button>' +
         '</span>' +
       '</div>' +
-      (S.la.editorErr ? '<div class="rh2-empty">' + esc(S.la.editorErr) + '</div>' : '') +
+      (S.la.publishNote ? '<div class="rh2-learn-done-banner" role="status">' + esc(S.la.publishNote) + '</div>' : '') +
+      (S.la.editorErr
+        ? '<div class="rh2-empty" role="alert">' + esc(S.la.editorErr) +
+          (S.la.editorStale
+            ? ' <button type="button" class="rh2-btn" onclick="RH2.laEditorReload()">Reload latest version</button>'
+            : '') + '</div>'
+        : '') +
       '<section class="rh2-card"><div class="rh2-form-grid">' +
         '<label class="rh2-lbl" for="la-ed-title">Title</label>' +
         '<input class="rh2-input" id="la-ed-title" value="' + esc(ed.title) + '" oninput="RH2.laMeta(\'title\',this.value)">' +
@@ -4775,46 +5293,230 @@
 
   // ── Owner: assign panel ─────────────────────────────────────────────────────
 
+  /**
+   * THE ASSIGNMENT DIALOG.
+   *
+   * A real dialog rather than an inline panel: choosing several people out of
+   * a list is a task that wants the rest of the page to stop competing for
+   * attention, and it is the one place in this module where focus has to be
+   * managed deliberately. `aria-modal` plus the Tab trap in the keydown
+   * handler below keep a keyboard user inside it; closing puts focus back on
+   * the Assign button that opened it.
+   *
+   * Selection lives in a map keyed by user id, NOT in the rendered checkboxes,
+   * which is what lets somebody search for "Sam", tick Sam, clear the search,
+   * filter to therapists, and still have Sam selected. Every render reads the
+   * map; nothing reads the DOM.
+   */
   function laAssignOpen(wfId, userId) {
     var wf = (S.la.workflows || []).find(function (w) { return w.id === wfId; }) || null;
     var selected = {};
     if (userId) selected[userId] = true;
     S.la.assign = {
       wfId: wf ? wf.id : '', wfTitle: wf ? wf.title : '',
-      q: '', selected: selected, dueAt: '', note: '',
+      // The dialog works on a LIST of learning items; opening from one card is
+      // simply a list of one. stage: 'pick' → 'review' → done.
+      wfIds: wf ? [wf.id] : [],
+      stage: 'pick', reassign: {}, pairs: null,
+      q: '', roleFilter: '', selected: selected, dueAt: '', note: '',
       mandatory: true, priority: 'normal', busy: false, err: '', done: null,
+      openerId: wf ? ('asl-assign-' + wf.id) : '',
     };
     render();
+    // Land on the search box: it is what the Owner reaches for first, and it
+    // is inside the trap so Tab immediately moves through the list.
+    var q = doc.getElementById('la-as-q');
+    if (q) { try { q.focus(); } catch (e) { /* not yet painted */ } }
   }
-  function laAssignClose() { S.la.assign = null; render(); }
+
+  /** Open the dialog for the library's checkbox selection (1..n items). */
+  function laAssignOpenMulti() {
+    var chosen = aslSelectedWorkflows();
+    // Every selected item became unassignable while the selection sat there.
+    // Say so rather than presenting a button that appears to do nothing.
+    if (!chosen.length) {
+      S.asl.sel = {};
+      S.la.err = 'Those learning items can no longer be assigned — they may have been archived or emptied. The selection has been cleared.';
+      render();
+      return;
+    }
+    S.la.assign = {
+      wfId: chosen.length === 1 ? chosen[0].id : '',
+      wfTitle: chosen.length === 1 ? chosen[0].title : '',
+      wfIds: chosen.map(function (w) { return w.id; }),
+      stage: 'pick', reassign: {}, pairs: null,
+      q: '', roleFilter: '', selected: {}, dueAt: '', note: '',
+      mandatory: true, priority: 'normal', busy: false, err: '', done: null,
+      openerId: 'asl-bulk-assign',
+    };
+    render();
+    var q = doc.getElementById('la-as-q');
+    if (q) { try { q.focus(); } catch (e) { /* not yet painted */ } }
+  }
+
+  /** Titles of the learning items currently in the dialog, in library order. */
+  function laAssignWfList() {
+    var a = S.la.assign;
+    var byId = {};
+    (S.la.workflows || []).forEach(function (w) { byId[w.id] = w; });
+    return (a.wfIds || []).map(function (id) { return byId[id]; }).filter(Boolean);
+  }
+
+  function laAssignClose() {
+    var a = S.la.assign;
+    var openerId = a && a.openerId;
+    S.la.assign = null;
+    render();
+    if (openerId) {
+      var opener = doc.getElementById(openerId);
+      if (opener) { try { opener.focus(); } catch (e) { /* the card may have gone */ } }
+    }
+  }
+
   function laAssignQ(v) { S.la.assign.q = v; render(); }
+  function laAssignRole(v) { S.la.assign.roleFilter = v; render(); }
+
   function laAssignToggle(userId) {
     var a = S.la.assign;
     if (a.selected[userId]) delete a.selected[userId];
     else a.selected[userId] = true;
     render();
   }
+
   function laAssignField(f, v) { S.la.assign[f] = v; }
+
   function laAssignWf(wfId) {
     var a = S.la.assign;
     a.wfId = wfId;
+    a.wfIds = wfId ? [wfId] : [];
     var wf = (S.la.workflows || []).find(function (w) { return w.id === wfId; });
     a.wfTitle = wf ? wf.title : '';
+    render();
+  }
+
+  /** Everybody who currently passes the search box and the role filter. */
+  function laAssignVisible() {
+    var a = S.la.assign;
+    var staff = S.la.staff || [];
+    var q = String(a.q || '').trim().toLowerCase();
+    return staff.filter(function (u) {
+      if (a.roleFilter && u.role !== a.roleFilter) return false;
+      if (!q) return true;
+      return String(u.name || '').toLowerCase().indexOf(q) !== -1 ||
+             String(u.email || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  /**
+   * Does this person already have EVERY selected item active? With one item
+   * that is the old behaviour; with several, someone who has only some of
+   * them stays selectable — the review step resolves the rest per pair.
+   */
+  function laAssignHas(u) {
+    var a = S.la.assign;
+    if (!a || !(a.wfIds || []).length) return false;
+    return a.wfIds.every(function (id) {
+      return (u.active_workflow_ids || []).indexOf(id) !== -1;
+    });
+  }
+
+  /** One (workflow, user) pair's current state, from the staff rollups. */
+  function laPairState(u, wfId) {
+    if ((u.active_workflow_ids || []).indexOf(wfId) !== -1) return 'active';
+    if ((u.completed_workflow_ids || []).indexOf(wfId) !== -1) return 'completed';
+    return 'new';
+  }
+
+  /**
+   * Select every visible person who could actually receive this.
+   *
+   * Deliberately skips anybody who already has it: ticking somebody the server
+   * would refuse just to report it back as "skipped" is a worse experience
+   * than not offering the tick.
+   */
+  function laAssignSelectAllVisible() {
+    var a = S.la.assign;
+    var eligible = laAssignVisible().filter(function (u) { return !laAssignHas(u); });
+    var allOn = eligible.length > 0 && eligible.every(function (u) { return a.selected[u.id]; });
+    eligible.forEach(function (u) {
+      if (allOn) delete a.selected[u.id];
+      else a.selected[u.id] = true;
+    });
+    render();
+  }
+
+  /**
+   * From the picker to the review step: every (learning, person) pair is
+   * classified before anything is written, so the Owner sees exactly what
+   * will be created, what is skipped as an active duplicate, and which
+   * completed pairs need a deliberate Reassign tick.
+   */
+  function laAssignReview() {
+    var a = S.la.assign;
+    if (!a || a.busy) return;
+    var userIds = Object.keys(a.selected);
+    if (!(a.wfIds || []).length) { a.err = 'Choose at least one learning item.'; return render(); }
+    if (!userIds.length) { a.err = 'Select at least one person.'; return render(); }
+    var byId = {};
+    (S.la.staff || []).forEach(function (u) { byId[u.id] = u; });
+    var pairs = [];
+    a.wfIds.forEach(function (wfId) {
+      userIds.forEach(function (userId) {
+        var u = byId[userId];
+        if (!u) return;
+        pairs.push({ workflowId: wfId, userId: userId, state: laPairState(u, wfId) });
+      });
+    });
+    a.pairs = pairs;
+    a.err = '';
+    a.stage = 'review';
+    render();
+    var heading = doc.getElementById('la-as-review-h');
+    if (heading) { try { heading.focus(); } catch (e) { /* not yet painted */ } }
+  }
+
+  function laAssignBack() {
+    var a = S.la.assign;
+    if (!a || a.busy) return;
+    a.stage = 'pick';
+    a.err = '';
+    render();
+  }
+
+  function laAssignReassign(pairKey) {
+    var a = S.la.assign;
+    if (!a) return;
+    a.reassign[pairKey] = !a.reassign[pairKey];
+    render();
+  }
+
+  /** The pairs the review step will actually send. */
+  function laAssignPayloadPairs() {
+    var a = S.la.assign;
+    return (a.pairs || []).filter(function (p) {
+      if (p.state === 'new') return true;
+      if (p.state === 'completed') return !!a.reassign[p.workflowId + ':' + p.userId];
+      return false; // active duplicates are never sent
+    }).map(function (p) {
+      return { workflowId: p.workflowId, userId: p.userId, reassign: p.state === 'completed' };
+    });
   }
 
   async function laAssignSubmit() {
     var a = S.la.assign;
-    if (!a || a.busy) return;
-    var userIds = Object.keys(a.selected);
-    if (!a.wfId) { a.err = 'Choose a learning workflow.'; return render(); }
-    if (!userIds.length) { a.err = 'Select at least one employee.'; return render(); }
+    if (!a || a.busy || a.stage !== 'review') return;
+    var payload = laAssignPayloadPairs();
+    if (!payload.length) {
+      a.err = 'Nothing to assign — everyone selected already has the selected learning.';
+      return render();
+    }
     a.busy = true;
     a.err = '';
     render();
-    var d = await api('/api/learning/workflows/' + encodeURIComponent(a.wfId) + '/assign', {
+    var d = await api('/api/learning/assign', {
       method: 'POST',
       body: {
-        userIds: userIds,
+        pairs: payload,
         dueAt: a.dueAt || null,
         note: a.note || null,
         mandatory: a.mandatory,
@@ -4822,47 +5524,144 @@
       },
     });
     a.busy = false;
-    if (!d.ok) { a.err = d.error || 'Assigning failed.'; return render(); }
+    // The selection survives a failure on purpose: the Owner picked those
+    // people, and making them pick again is the cost of our error.
+    if (!d.ok) { a.err = d.error || 'Assigning failed. Nothing was saved — try again.'; return render(); }
     a.done = d;
+    if (S.asl) S.asl.sel = {};
     render();
+    // Refresh the library and the staff list so counts, and who already has
+    // what, are right the moment the dialog closes.
     loadLa();
   }
 
   function renderLaAssign() {
     var a = S.la.assign;
-    var staff = S.la.staff || [];
-    var q = (a.q || '').toLowerCase();
-    var visible = q
-      ? staff.filter(function (u) {
-          return String(u.name || '').toLowerCase().indexOf(q) !== -1 ||
-                 String(u.email || '').toLowerCase().indexOf(q) !== -1;
-        })
-      : staff;
-    var out = '<section class="rh2-card rh2-learn-assign"><div class="rh2-learn-ed-bar">' +
-      '<h2 class="rh2-h2">Assign learning</h2>' +
-      '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laAssignClose()">Close</button></div>';
+    if (!a) return '';
+    var staff = S.la.staff;
+    var visible = staff ? laAssignVisible() : [];
+    var selCount = Object.keys(a.selected).length;
 
+    var out = '<div class="rh2-dialog-backdrop" onclick="RH2.laAssignBackdrop(event)">' +
+      '<section class="rh2-dialog rh2-learn-assign" role="dialog" aria-modal="true"' +
+      ' aria-labelledby="la-as-title" id="la-as-dialog">' +
+      '<div class="rh2-dialog-head">' +
+      '<h2 class="rh2-h2" id="la-as-title">Assign learning</h2>' +
+      '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laAssignClose()"' +
+      ' aria-label="Close the assignment dialog">Close</button></div>' +
+      '<div class="rh2-dialog-body">';
+
+    var wfTitleById = {};
+    (S.la.workflows || []).forEach(function (w) { wfTitleById[w.id] = w.title; });
+    var multi = (a.wfIds || []).length > 1;
+
+    // ── Success ────────────────────────────────────────────────────────────
     if (a.done) {
-      var assignedNames = (a.done.assigned || []).map(function (r) { return r.user_name || r.user_email; });
-      out += '<div class="rh2-learn-done-banner">✓ Assigned to ' +
-        (assignedNames.length ? esc(assignedNames.join(', ')) : 'no one new') +
-        (a.done.version ? ' (version ' + esc(a.done.version) + ')' : '') + '.</div>';
-      (a.done.skipped || []).forEach(function (s) {
-        var why = ' could not be assigned.';
-        if (s.reason === 'already_active') why = ' already has this learning in progress — cancel it first to reassign.';
-        else if (s.reason === 'read_only_account') why = ' has a read-only account, which cannot complete learning.';
-        out += '<div class="rh2-empty">' + esc(s.name || 'One employee') + esc(why) + '</div>';
-      });
-      out += '<div class="rh2-learn-card-actions">' +
+      var okCount = (a.done.assigned || []).length;
+      var skipped = a.done.skipped || [];
+      out += '<div class="rh2-learn-done-banner" role="status">' +
+        (okCount
+          ? (multi
+            ? '✓ ' + okCount + ' assignment' + (okCount === 1 ? '' : 's') + ' created across ' +
+              a.wfIds.length + ' learning items.'
+            : '✓ ' + esc(a.wfTitle || 'This learning') + ' assigned to ' + okCount +
+              ' ' + (okCount === 1 ? 'person' : 'people') + '.')
+          : 'Nothing new was assigned.') +
+        '</div>';
+      if (skipped.length) {
+        // Partial failure: the successes above stand, and every person who did
+        // not get it is named with the reason, so the Owner knows exactly who
+        // to follow up rather than re-running the whole thing.
+        out += '<div class="rh2-empty rh2-learn-partial" role="alert"><strong>' + skipped.length +
+          ' could not be assigned:</strong><ul class="rh2-learn-skipped">' +
+          skipped.map(function (sk) {
+            var why = 'could not be assigned.';
+            if (sk.reason === 'already_active') why = 'already has this in progress.';
+            else if (sk.reason === 'already_completed') why = 'has already completed this (tick Reassign to issue it again).';
+            else if (sk.reason === 'read_only_account') why = 'has a read-only account and cannot complete learning.';
+            else if (sk.reason === 'not_found') why = 'is no longer an active account.';
+            else if (sk.reason === 'workflow_archived') why = 'that learning item is archived.';
+            else if (sk.reason === 'workflow_empty') why = 'that learning item has no modules.';
+            else if (sk.reason === 'workflow_not_found') why = 'that learning item no longer exists.';
+            var what = multi && sk.workflowId && wfTitleById[sk.workflowId]
+              ? ' (' + esc(wfTitleById[sk.workflowId]) + ')' : '';
+            return '<li>' + esc(sk.name || sk.userId) + what + ' — ' + why + '</li>';
+          }).join('') + '</ul></div>';
+      }
+      out += '</div><div class="rh2-dialog-foot">' +
         '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laAssignClose()">Done</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(a.wfId) + '\')">View assignments</button></div>';
-      return out + '</section>';
+        '</div></section></div>';
+      return out;
     }
 
-    if (a.wfTitle) {
-      out += '<p><strong>' + esc(a.wfTitle) + '</strong></p>';
+    // ── Review step ────────────────────────────────────────────────────────
+    if (a.stage === 'review') {
+      var byId = {};
+      (S.la.staff || []).forEach(function (u) { byId[u.id] = u; });
+      var pairs = a.pairs || [];
+      var creating = pairs.filter(function (p) { return p.state === 'new'; });
+      var actives = pairs.filter(function (p) { return p.state === 'active'; });
+      var completes = pairs.filter(function (p) { return p.state === 'completed'; });
+      var reassignCount = completes.filter(function (p) { return a.reassign[p.workflowId + ':' + p.userId]; }).length;
+      var willCreate = creating.length + reassignCount;
+      var personName = function (id) { var u = byId[id]; return u ? (u.name || u.email) : 'One person'; };
+
+      out += '<h3 class="rh2-h2" id="la-as-review-h" tabindex="-1">Review before assigning</h3>' +
+        '<div class="rh2-learn-review-cols">' +
+        '<section aria-labelledby="la-as-rv-l"><h4 class="rh2-learn-review-h" id="la-as-rv-l">Learning selected</h4><ul class="rh2-learn-review-list">' +
+          (a.wfIds || []).map(function (id) { return '<li>' + esc(wfTitleById[id] || 'Learning item') + '</li>'; }).join('') +
+        '</ul></section>' +
+        '<section aria-labelledby="la-as-rv-p"><h4 class="rh2-learn-review-h" id="la-as-rv-p">Assigned to</h4><ul class="rh2-learn-review-list">' +
+          Object.keys(a.selected).map(function (id) { return '<li>' + esc(personName(id)) + '</li>'; }).join('') +
+        '</ul></section></div>';
+
+      out += '<p class="rh2-learn-review-sum" role="status">' + willCreate + ' assignment' +
+        (willCreate === 1 ? '' : 's') + ' will be created' +
+        (a.dueAt ? ', due ' + esc(fmtDate(a.dueAt)) : '') + '.</p>';
+
+      if (actives.length) {
+        out += '<div class="rh2-learn-review-block"><strong>Already assigned — skipped:</strong><ul class="rh2-learn-review-list">' +
+          actives.map(function (p) {
+            return '<li>' + esc(personName(p.userId)) +
+              (multi ? ' — ' + esc(wfTitleById[p.workflowId] || '') : '') +
+              ' <span class="rh2-quiet">(in progress or not started)</span></li>';
+          }).join('') + '</ul></div>';
+      }
+      if (completes.length) {
+        out += '<div class="rh2-learn-review-block"><strong>Previously completed — tick to reassign:</strong><ul class="rh2-learn-review-list">' +
+          completes.map(function (p) {
+            var key = p.workflowId + ':' + p.userId;
+            return '<li><label class="rh2-learn-inline-check">' +
+              '<input type="checkbox" ' + (a.reassign[key] ? 'checked ' : '') +
+              'onchange="RH2.laAssignReassign(\'' + esc(key) + '\')"> Reassign to ' + esc(personName(p.userId)) +
+              (multi ? ' — ' + esc(wfTitleById[p.workflowId] || '') : '') +
+              '</label> <span class="rh2-quiet">The completed record is kept either way.</span></li>';
+          }).join('') + '</ul></div>';
+      }
+
+      if (a.err) out += '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(a.err) + '</div>';
+
+      out += '</div><div class="rh2-dialog-foot">' +
+        '<button type="button" class="rh2-btn" ' + (a.busy ? 'disabled ' : '') + 'onclick="RH2.laAssignBack()">Back</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laAssignClose()">Cancel</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary"' + ((a.busy || !willCreate) ? ' disabled' : '') +
+          ' onclick="RH2.laAssignSubmit()">' +
+          (a.busy ? 'Assigning…' : 'Assign learning') + '</button>' +
+        '</div></section></div>';
+      return out;
+    }
+
+    // ── What is being assigned ─────────────────────────────────────────────
+    if (multi) {
+      out += '<p class="rh2-learn-assign-what"><span class="rh2-quiet">Assigning ' + a.wfIds.length + ' learning items</span></p>' +
+        '<ul class="rh2-learn-review-list rh2-learn-assign-whatlist">' +
+        laAssignWfList().map(function (w) { return '<li>' + esc(w.title) + '</li>'; }).join('') +
+        '</ul>';
+    } else if (a.wfTitle) {
+      out += '<p class="rh2-learn-assign-what"><span class="rh2-quiet">Assigning</span><br>' +
+        '<strong>' + esc(a.wfTitle) + '</strong></p>';
     } else {
-      out += '<label class="rh2-lbl" for="la-as-wf">Learning workflow</label>' +
+      out += '<label class="rh2-lbl" for="la-as-wf">Learning item</label>' +
         '<select class="rh2-select" id="la-as-wf" onchange="RH2.laAssignWf(this.value)">' +
         '<option value="">Choose…</option>' +
         (S.la.workflows || []).filter(function (w) { return w.status === 'active' && (w.module_count || 0) > 0; })
@@ -4870,37 +5669,136 @@
         '</select>';
     }
 
-    out += '<label class="rh2-lbl" for="la-as-q">Employee</label>' +
-      '<input class="rh2-input" id="la-as-q" placeholder="Search employee name or email…" value="' + esc(a.q) + '" oninput="RH2.laAssignQ(this.value)">' +
-      '<div class="rh2-learn-staff-pick">' +
-      (visible.length ? visible.map(function (u) {
-        var on = !!a.selected[u.id];
-        return '<label class="rh2-learn-staff-row' + (on ? ' rh2-learn-staff-on' : '') + '">' +
-          '<input type="checkbox" ' + (on ? 'checked ' : '') + 'onchange="RH2.laAssignToggle(\'' + esc(u.id) + '\')">' +
-          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(u.name || u.email) + '</span>' +
-          '<span class="rh2-row-sub">' + esc(u.email) + ' · ' + esc(u.role) + '</span></span></label>';
-      }).join('') : '<div class="rh2-empty">No matching employees.</div>') +
-      '</div>' +
-      '<div class="rh2-form-grid rh2-learn-assign-meta">' +
-        '<label class="rh2-lbl" for="la-as-due">Due date (optional)</label>' +
-        '<input type="date" class="rh2-input" id="la-as-due" value="' + esc(a.dueAt) + '" onchange="RH2.laAssignField(\'dueAt\',this.value)">' +
-        '<label class="rh2-lbl" for="la-as-note">Note to employee (optional)</label>' +
-        '<textarea class="rh2-input" id="la-as-note" rows="2" oninput="RH2.laAssignField(\'note\',this.value)">' + esc(a.note) + '</textarea>' +
-        '<label class="rh2-lbl" for="la-as-pri">Priority</label>' +
-        '<select class="rh2-select" id="la-as-pri" onchange="RH2.laAssignField(\'priority\',this.value)">' +
-          ['low', 'normal', 'high'].map(function (p) { return '<option value="' + p + '"' + (a.priority === p ? ' selected' : '') + '>' + p.charAt(0).toUpperCase() + p.slice(1) + '</option>'; }).join('') +
-        '</select>' +
-        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (a.mandatory ? 'checked ' : '') +
-          'onchange="RH2.laAssignField(\'mandatory\',this.checked)"> Mandatory</label>' +
-      '</div>' +
-      (a.err ? '<div class="rh2-empty">' + esc(a.err) + '</div>' : '') +
-      '<div class="rh2-learn-card-actions">' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" ' + (a.busy ? 'disabled ' : '') + 'onclick="RH2.laAssignSubmit()">' +
-          (a.busy ? 'Assigning…' : 'Assign learning') + '</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laAssignClose()">Cancel</button>' +
+    // ── Who ────────────────────────────────────────────────────────────────
+    var roles = {};
+    (staff || []).forEach(function (u) { if (u.role) roles[u.role] = true; });
+    var roleKeys = Object.keys(roles).sort();
+
+    out += '<div class="rh2-learn-assign-filters">' +
+      '<label class="rh2-visually-hidden" for="la-as-q">Search people by name or email</label>' +
+      '<input class="rh2-input" id="la-as-q" type="search" placeholder="Search by name…" value="' + esc(a.q) + '"' +
+        ' oninput="RH2.laAssignQ(this.value)">' +
+      (roleKeys.length > 1
+        ? '<label class="rh2-visually-hidden" for="la-as-role">Filter by role</label>' +
+          '<select class="rh2-select" id="la-as-role" onchange="RH2.laAssignRole(this.value)">' +
+          '<option value="">All roles</option>' +
+          roleKeys.map(function (r) {
+            return '<option value="' + esc(r) + '"' + (a.roleFilter === r ? ' selected' : '') + '>' +
+              esc(roleLabel(r)) + '</option>';
+          }).join('') + '</select>'
+        : '') +
       '</div>';
-    return out + '</section>';
+
+    if (!staff && S.la.staffErr && !S.la.staffLoading) {
+      // The people list failed. Without this the dialog showed a skeleton for
+      // ever, which reads as "still loading" and never resolves.
+      out += '<div class="rh2-empty" role="alert">' + esc(S.la.staffErr) +
+        ' <button type="button" class="rh2-btn" onclick="RH2.laAssignRetryStaff()">Try again</button></div>';
+    } else if (!staff) {
+      // Loading the people list.
+      out += '<div class="rh2-learn-staff-pick">' + skel(3) + '</div>';
+    } else if (!staff.length) {
+      out += '<div class="rh2-empty">There are no active people to assign learning to. ' +
+        'Invite a team member first.</div>';
+    } else {
+      var eligible = visible.filter(function (u) { return !laAssignHas(u); });
+      var allOn = eligible.length > 0 && eligible.every(function (u) { return a.selected[u.id]; });
+
+      out += '<div class="rh2-learn-assign-bar">' +
+        (eligible.length
+          ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laAssignSelectAllVisible()">' +
+            (allOn ? 'Clear visible' : 'Select all visible (' + eligible.length + ')') + '</button>'
+          : '') +
+        '<span class="rh2-learn-assign-count" role="status" aria-live="polite">' +
+        selCount + ' selected</span></div>';
+
+      out += '<div class="rh2-learn-staff-pick">';
+      if (!visible.length) {
+        out += '<div class="rh2-empty">Nobody matches ' +
+          (a.q ? '“' + esc(a.q) + '”' : 'that filter') + '.</div>';
+      } else if (!eligible.length) {
+        out += '<div class="rh2-empty">Everyone shown already has this learning. ' +
+          'Clear the filters to see other people.</div>';
+        out += visible.map(laAssignRow).join('');
+      } else {
+        out += visible.map(laAssignRow).join('');
+      }
+      out += '</div>';
+    }
+
+    // ── The rest of the assignment ─────────────────────────────────────────
+    out += '<div class="rh2-form-grid rh2-learn-assign-meta">' +
+      '<label class="rh2-lbl" for="la-as-due">Due date (optional)</label>' +
+      '<input type="date" class="rh2-input" id="la-as-due" value="' + esc(a.dueAt) + '" onchange="RH2.laAssignField(\'dueAt\',this.value)">' +
+      '<label class="rh2-lbl" for="la-as-note">Note to them (optional)</label>' +
+      '<textarea class="rh2-input" id="la-as-note" rows="2" oninput="RH2.laAssignField(\'note\',this.value)">' + esc(a.note) + '</textarea>' +
+      '<label class="rh2-lbl" for="la-as-pri">Priority</label>' +
+      '<select class="rh2-select" id="la-as-pri" onchange="RH2.laAssignField(\'priority\',this.value)">' +
+        ['low', 'normal', 'high'].map(function (p) { return '<option value="' + p + '"' + (a.priority === p ? ' selected' : '') + '>' + p.charAt(0).toUpperCase() + p.slice(1) + '</option>'; }).join('') +
+      '</select>' +
+      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (a.mandatory ? 'checked ' : '') +
+        'onchange="RH2.laAssignField(\'mandatory\',this.checked)"> Mandatory</label>' +
+      '</div>';
+
+    if (a.err) out += '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(a.err) + '</div>';
+
+    out += '</div><div class="rh2-dialog-foot">' +
+      '<button type="button" class="rh2-btn" onclick="RH2.laAssignClose()">Cancel</button>' +
+      '<button type="button" class="rh2-btn rh2-btn-primary"' +
+        ((a.busy || !selCount || !(a.wfIds || []).length) ? ' disabled' : '') +
+        ' onclick="RH2.laAssignReview()">' +
+        'Review assignment' + (selCount ? ' (' + selCount + ' ' + (selCount === 1 ? 'person' : 'people') + ')' : '') +
+      '</button></div></section></div>';
+    return out;
   }
+
+  /** One person in the picker. */
+  function laAssignRow(u) {
+    var a = S.la.assign;
+    var has = laAssignHas(u);
+    var on = !!a.selected[u.id];
+    // Somebody who already has it is not offered a checkbox at all — the state
+    // is carried by a word ("Already assigned"), never by colour alone.
+    return '<label class="rh2-learn-staff-row' + (on ? ' rh2-learn-staff-on' : '') +
+      (has ? ' rh2-learn-staff-has' : '') + '">' +
+      (has
+        ? '<span class="rh2-learn-staff-check" aria-hidden="true">' + icn('check', 'check') + '</span>'
+        : '<input type="checkbox" ' + (on ? 'checked ' : '') +
+          'onchange="RH2.laAssignToggle(\'' + esc(u.id) + '\')">') +
+      '<span class="rh2-avatar" aria-hidden="true">' + esc(initials(u.name, u.email)) + '</span>' +
+      '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(u.name || u.email) + '</span>' +
+      '<span class="rh2-row-sub">' + esc(roleLabel(u.role)) +
+      (has ? ' · Already assigned' : '') + '</span></span></label>';
+  }
+
+  /** Clicking the backdrop, but not the dialog itself, closes it. */
+  function laAssignBackdrop(ev) {
+    if (ev && ev.target && ev.target.classList &&
+        ev.target.classList.contains('rh2-dialog-backdrop')) laAssignClose();
+  }
+
+  /**
+   * Escape closes; Tab cycles inside.
+   *
+   * One document-level listener rather than per-render bindings, because this
+   * module replaces its whole subtree on every keystroke — a handler attached
+   * to the dialog would be thrown away and re-created constantly.
+   */
+  doc.addEventListener('keydown', function (e) {
+    if (!S.la || !S.la.assign) return;
+    var dlg = doc.getElementById('la-as-dialog');
+    if (!dlg) return;
+    if (e.key === 'Escape') { e.preventDefault(); laAssignClose(); return; }
+    if (e.key !== 'Tab') return;
+    var focusable = dlg.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 
   // ── Owner: assignments monitor ──────────────────────────────────────────────
 
@@ -4910,6 +5808,10 @@
     S.la.afWorkflow = wfId || '';
     S.la.afUser = '';
     S.la.tab = 'assignments';
+    // The assignments table lives on the Admin > Learning tab. Opened from
+    // Assign Learning there is nothing on screen that would show it, so go
+    // there rather than appearing to do nothing.
+    if (S.view === 'learning') { S.view = 'admin'; S.admin.tab = 'learning'; }
     loadLaAssignments();
     render();
   }
@@ -5103,6 +6005,8 @@
     reloadHome: function () { S.home = null; loadHome(); },
     homeSearch: homeSearch,
     openCollection: openCollection,
+    openTool: openTool,
+    _tools: TOOLS,
     libInput: libInput,
     libFilter: libFilter,
     libMore: libMore,
@@ -5205,6 +6109,27 @@
     laAssignField: laAssignField,
     laAssignWf: laAssignWf,
     laAssignSubmit: laAssignSubmit,
+    laAssignRole: laAssignRole,
+    laAssignSelectAllVisible: laAssignSelectAllVisible,
+    laAssignBackdrop: laAssignBackdrop,
+    laAssignRetryStaff: loadLaStaff,
+    // Batch assignment + review step + reassignment
+    laAssignOpenMulti: laAssignOpenMulti,
+    laAssignReview: laAssignReview,
+    laAssignBack: laAssignBack,
+    laAssignReassign: laAssignReassign,
+    // Deliberate publish + stale-edit recovery
+    laPublish: laPublish,
+    laEditorReload: laEditorReload,
+    // Owner: Assign Learning
+    aslOpenCollection: aslOpenCollection,
+    aslClearCollection: aslClearCollection,
+    aslSearch: aslSearch,
+    aslResetFilters: aslResetFilters,
+    aslReload: aslReload,
+    aslToggleSel: aslToggleSel,
+    aslSelectAllShown: aslSelectAllShown,
+    aslClearSel: aslClearSel,
     laViewAssignments: laViewAssignments,
     laAf: laAf,
     laAfQ: laAfQ,

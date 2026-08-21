@@ -590,11 +590,14 @@ describe('changed assets are cache-busted', () => {
     for (const [file, version] of [
       ['assessment.js', 3], ['assessment.css', 3],
       ['whodas.js', 5], ['whodas.css', 3],
-      // r16/r10: owner-controlled learning (assignment player + admin console)
-      ['resourcehub.js', 'r16'], ['resourcehub.css', 'r10'],
-      // 6: Onboarding Packages added an 'onboarding' route to the grammar
-      ['navigation.js', 6],
-      // 8: the onboarding journey — starter packs, returned documents,
+      // r17/r11: the Service Agreement joined the library grid as a workflow
+      // tool, which changed both the renderer and the card styles.
+      // r18/r12: the Owner's Assign Learning surface and its dialog
+      ['resourcehub.js', 'r19'], ['resourcehub.css', 'r13'],
+      // 7: the Service Agreement added a 'service-agreement' resources view
+      // (and its redirect aliases) to the route grammar
+      ['navigation.js', 7],
+      // 3: the onboarding journey — starter packs, returned documents,
       // extracted-detail review, account provisioning — and its styles
       ['onboarding.js', 8], ['onboarding.css', 8],
     ]) {

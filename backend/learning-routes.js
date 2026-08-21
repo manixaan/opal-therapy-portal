@@ -116,6 +116,9 @@ function workflowRow(r) {
     updated_at: r.updated_at,
     archived_at: r.archived_at,
     module_count: r.module_count !== undefined ? Number(r.module_count) : undefined,
+    // Summed from the items' own `minutes`, so it is the duration the Owner
+    // actually authored rather than an estimate this layer invented.
+    estimated_minutes: r.estimated_minutes !== undefined ? Number(r.estimated_minutes) : undefined,
     active_assignments: r.active_assignments !== undefined ? Number(r.active_assignments) : undefined,
     completed_assignments: r.completed_assignments !== undefined ? Number(r.completed_assignments) : undefined,
     has_unpublished_changes: r.has_unpublished_changes,
@@ -278,6 +281,7 @@ router.get('/api/learning/workflows', ownerOnly, safe(async (req, res) => {
       return workflowRow({
         ...r,
         module_count: stats.items,
+        estimated_minutes: stats.minutes,
         has_unpublished_changes: !unchanged,
       });
     }),
@@ -366,11 +370,35 @@ router.put('/api/learning/workflows/:id', ownerOnly, safe(async (req, res) => {
     content = norm.content;
   }
 
+  // Optimistic lock: the editor sends back the updated_at it loaded. A
+  // mismatch means another session (or another tab) saved in between — refuse
+  // with 409 rather than last-write-wins clobbering their content. Truncated
+  // to milliseconds because Postgres stores microseconds while the JS Date the
+  // editor round-trips holds milliseconds. Omitting the field skips the check
+  // (compatibility with existing callers and tests).
+  const params = [wf.id, title, description, category, JSON.stringify(content)];
+  let guard = '';
+  if (b.expectedUpdatedAt !== undefined) {
+    const expected = new Date(b.expectedUpdatedAt);
+    if (isNaN(expected.getTime())) {
+      return res.status(400).json({ error: 'expectedUpdatedAt must be a valid timestamp' });
+    }
+    params.push(expected.toISOString());
+    guard = ` AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $${params.length}::timestamptz)`;
+  }
+
   const { rows } = await pool.query(
     `UPDATE learning_workflows
         SET title = $2, description = $3, category = $4, draft_content = $5, updated_at = NOW()
-      WHERE id = $1 RETURNING *`,
-    [wf.id, title, description, category, JSON.stringify(content)]);
+      WHERE id = $1${guard} RETURNING *`,
+    params);
+  if (!rows[0]) {
+    // The workflow exists (loaded above) — the guard failed.
+    return res.status(409).json({
+      error: 'stale_edit',
+      message: 'This workflow was changed in another session — reload it before saving.',
+    });
+  }
   await audit(req, 'learning.workflow_updated', wf.id, {});
   res.json({ workflow: { ...workflowRow(rows[0]), draft_content: rows[0].draft_content, stats: lc.contentStats(rows[0].draft_content) } });
 }));
@@ -441,6 +469,50 @@ router.get('/api/learning/workflows/:id/preview', ownerOnly, safe(async (req, re
     content: lc.serialiseForEmployee(wf.draft_content),
     stats,
   });
+}));
+
+/**
+ * Explicit publish: snapshot the current draft as the latest version WITHOUT
+ * assigning anyone. Publishing is still automatic at assign/push time — this
+ * exists so the Owner can deliberately say "this is what learners receive
+ * from now on" after finishing edits (§ Save and Publish behaviour). A
+ * publish with no changes is a 200 no-op, not an error.
+ */
+router.post('/api/learning/workflows/:id/publish', ownerOnly, safe(async (req, res) => {
+  // Checked before taking a pool connection: a malformed id can never match,
+  // so opening a transaction for it is pure waste under load.
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const client = await pool.connect();
+  let outcome;
+  try {
+    await client.query('BEGIN');
+    const wf = await loadWorkflow(req, req.params.id, client);
+    if (!wf) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    if (wf.status === 'archived') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This workflow is archived — unarchive it to publish' });
+    }
+    if (!lc.contentStats(wf.draft_content).items) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Add at least one learning item before publishing' });
+    }
+    const version = await ensurePublishedVersion(client, req, wf);
+    await client.query('COMMIT');
+    outcome = {
+      wfId: wf.id,
+      version: Number(version.version),
+      published: Number(version.version) > Number(wf.current_version),
+    };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  if (outcome.published) {
+    await audit(req, 'learning.workflow_published', outcome.wfId, { version: outcome.version });
+  }
+  res.json({ published: outcome.published, version: outcome.version });
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -548,6 +620,176 @@ router.post('/api/learning/workflows/:id/assign', ownerOnly, safe(async (req, re
     assigned: result.assigned.map((a) => assignmentRow(a)),
     skipped: result.skipped,
     version: result.version,
+  });
+}));
+
+/**
+ * Bulk assignment: explicit (workflow, user) PAIRS, produced by the review
+ * step in the Assign Learning dialog. One transaction for the whole batch.
+ *
+ * Reassignment is deliberate at the API level, not just in the UI: a pair
+ * whose user has ALREADY COMPLETED that workflow is refused with
+ * 'already_completed' unless the pair carries reassign:true — the review
+ * step's per-pair Reassign checkbox is what sets it. Active duplicates are
+ * skipped by the same partial unique index as the single-workflow route.
+ * A new assignment after reassign NEVER touches the completed record — the
+ * history row stays exactly as it was.
+ *
+ * Workflows are locked FOR UPDATE in sorted-id order so two concurrent bulk
+ * assigns over overlapping workflow sets serialise instead of deadlocking.
+ */
+router.post('/api/learning/assign', ownerOnly, safe(async (req, res) => {
+  const b = req.body || {};
+  const rawPairs = Array.isArray(b.pairs) ? b.pairs : [];
+  if (!rawPairs.length || rawPairs.length > 500) {
+    return res.status(400).json({ error: 'pairs must list 1–500 workflow/user pairs' });
+  }
+  const seenPair = new Set();
+  const pairs = [];
+  for (const p of rawPairs) {
+    if (!p || !isUuid(p.workflowId) || !isUuid(p.userId)) {
+      return res.status(400).json({ error: 'every pair needs a valid workflowId and userId' });
+    }
+    const key = `${p.workflowId}:${p.userId}`.toLowerCase();
+    if (seenPair.has(key)) continue;
+    seenPair.add(key);
+    pairs.push({ workflowId: p.workflowId, userId: p.userId, reassign: p.reassign === true });
+  }
+  const due = parseDueAt(b.dueAt);
+  if (!due.ok) return res.status(400).json({ error: 'dueAt must be a valid date' });
+  const note = str(b.note, 1000);
+  const mandatory = b.mandatory !== false;
+  const priority = ['low', 'normal', 'high'].includes(b.priority) ? b.priority : 'normal';
+
+  const client = await pool.connect();
+  let result;
+  try {
+    await client.query('BEGIN');
+
+    // Lock + publish each workflow once, in sorted order (deadlock avoidance).
+    const workflowIds = [...new Set(pairs.map((p) => p.workflowId.toLowerCase()))].sort();
+    const workflows = new Map(); // id -> { wf, version, counted, publishedNew, skipReason }
+    for (const wfId of workflowIds) {
+      const wf = await loadWorkflow(req, wfId, client);
+      if (!wf) { workflows.set(wfId, { skipReason: 'workflow_not_found' }); continue; }
+      if (wf.status === 'archived') { workflows.set(wfId, { skipReason: 'workflow_archived' }); continue; }
+      if (!lc.contentStats(wf.draft_content).items) {
+        workflows.set(wfId, { skipReason: 'workflow_empty' });
+        continue;
+      }
+      const version = await ensurePublishedVersion(client, req, wf);
+      workflows.set(wfId, {
+        wf, version,
+        counted: lc.countedKeys(version.content).length,
+        publishedNew: Number(version.version) > Number(wf.current_version),
+      });
+    }
+
+    // Eligibility once per distinct user — same contract as the single route.
+    const userIds = [...new Set(pairs.map((p) => p.userId.toLowerCase()))];
+    const users = new Map(); // id -> row | { skipReason }
+    for (const userId of userIds) {
+      const { rows } = await client.query(
+        `SELECT id, name, email, role FROM users
+          WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2 AND is_active = TRUE`,
+        [userId, orgOf(req)]);
+      if (!rows[0]) { users.set(userId, { skipReason: 'not_found' }); continue; }
+      if (rows[0].role === 'read_only') {
+        users.set(userId, { skipReason: 'read_only_account', name: rows[0].name });
+        continue;
+      }
+      users.set(userId, { row: rows[0] });
+    }
+
+    const assigned = [];
+    const skipped = [];
+    for (const p of pairs) {
+      const wfEntry = workflows.get(p.workflowId.toLowerCase());
+      const userEntry = users.get(p.userId.toLowerCase());
+      if (wfEntry.skipReason) {
+        skipped.push({ workflowId: p.workflowId, userId: p.userId, reason: wfEntry.skipReason });
+        continue;
+      }
+      if (userEntry.skipReason) {
+        skipped.push({ workflowId: p.workflowId, userId: p.userId, reason: userEntry.skipReason, name: userEntry.name });
+        continue;
+      }
+      const user = userEntry.row;
+
+      if (!p.reassign) {
+        const { rows: done } = await client.query(
+          `SELECT 1 FROM learning_assignments
+            WHERE user_id = $1 AND workflow_id = $2 AND status = 'completed' LIMIT 1`,
+          [user.id, wfEntry.wf.id]);
+        if (done[0]) {
+          skipped.push({ workflowId: p.workflowId, userId: p.userId, reason: 'already_completed', name: user.name });
+          continue;
+        }
+      }
+
+      const ins = await client.query(
+        `INSERT INTO learning_assignments
+           (organisation_id, workflow_id, workflow_version_id, user_id, assigned_by,
+            due_at, mandatory, priority, owner_note, required_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (user_id, workflow_id) WHERE status IN ('assigned','in_progress')
+         DO NOTHING
+         RETURNING *`,
+        [orgOf(req), wfEntry.wf.id, wfEntry.version.id, user.id, req.user.id,
+          due.value, mandatory, priority, note, wfEntry.counted]);
+      if (!ins.rows[0]) {
+        skipped.push({ workflowId: p.workflowId, userId: p.userId, reason: 'already_active', name: user.name });
+        continue;
+      }
+      assigned.push({
+        ...ins.rows[0],
+        title: wfEntry.version.title,
+        version: wfEntry.version.version,
+        category: wfEntry.version.category,
+        user_name: user.name,
+        user_email: user.email,
+      });
+    }
+
+    await client.query('COMMIT');
+    const versions = {};
+    for (const [wfId, entry] of workflows) {
+      if (entry.version) versions[wfId] = Number(entry.version.version);
+    }
+    result = {
+      assigned, skipped, versions,
+      published: [...workflows.entries()]
+        .filter(([, e]) => e.publishedNew)
+        .map(([wfId, e]) => ({ workflowId: wfId, version: Number(e.version.version) })),
+    };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // After commit: audits + notifications, best-effort, same as the single route.
+  for (const pub of result.published) {
+    await audit(req, 'learning.workflow_published', pub.workflowId, { version: pub.version });
+  }
+  for (const a of result.assigned) {
+    await audit(req, 'learning.assigned', a.id, {
+      workflowId: a.workflow_id, versionId: a.workflow_version_id, userId: a.user_id,
+    });
+    await notify(a.user_id, {
+      type: `learning_assigned_${a.id}`,
+      title: 'New learning assigned',
+      message: `"${a.title}" has been assigned to you. Open My Learning to begin.`,
+      severity: 'info',
+      relatedEntity: 'learning_assignment',
+      actionPayload: { assignmentId: a.id },
+    });
+  }
+  res.status(201).json({
+    assigned: result.assigned.map((a) => assignmentRow(a)),
+    skipped: result.skipped,
+    versions: result.versions,
   });
 }));
 
@@ -717,16 +959,50 @@ router.post('/api/learning/assignments/:id/push-latest', ownerOnly, safe(async (
 }));
 
 /** Active staff directory for the assign picker + per-employee rollups. */
+/**
+ * The people an Owner may assign learning to.
+ *
+ * "Active" is TWO conditions, not one. `is_active` is the account switch; a
+ * suspended or deactivated account can still carry `is_active = TRUE` because
+ * `account_status` is what login actually refuses on. Filtering only the first
+ * would offer the Owner somebody who cannot sign in to do the work.
+ *
+ * `read_only` accounts are excluded for the reason the assign route already
+ * refuses them: requireAuth blocks every write they would need to record
+ * progress, so an assignment to one could never be started. Better absent from
+ * the list than present and silently skipped at submit.
+ *
+ * `pre_employee` stays IN. A new starter part-way through onboarding is
+ * precisely somebody an Owner wants to give the induction to, and
+ * /api/learning/my is on their path allowlist.
+ *
+ * `active_workflow_ids` is what lets the assignment picker mark "already has
+ * this" BEFORE the Owner submits, rather than reporting it afterwards as a
+ * skipped row.
+ */
 router.get('/api/learning/staff', ownerOnly, safe(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT u.id, u.name, u.email, u.role,
             COUNT(a.id) FILTER (WHERE a.status IN ('assigned','in_progress')) AS active_assignments,
             COUNT(a.id) FILTER (WHERE a.status = 'completed') AS completed_assignments,
-            MAX(a.last_activity_at) AS last_activity_at
+            MAX(a.last_activity_at) AS last_activity_at,
+            COALESCE(
+              ARRAY_AGG(DISTINCT a.workflow_id)
+                FILTER (WHERE a.status IN ('assigned','in_progress')),
+              '{}'
+            ) AS active_workflow_ids,
+            COALESCE(
+              ARRAY_AGG(DISTINCT a.workflow_id)
+                FILTER (WHERE a.status = 'completed'),
+              '{}'
+            ) AS completed_workflow_ids
        FROM users u
        LEFT JOIN learning_assignments a
               ON a.user_id = u.id AND a.organisation_id IS NOT DISTINCT FROM $1
-      WHERE u.organisation_id IS NOT DISTINCT FROM $1 AND u.is_active = TRUE
+      WHERE u.organisation_id IS NOT DISTINCT FROM $1
+        AND u.is_active = TRUE
+        AND COALESCE(u.account_status, 'active') = 'active'
+        AND u.role <> 'read_only'
       GROUP BY u.id, u.name, u.email, u.role
       ORDER BY u.name ASC`, [orgOf(req)]);
   res.json({
@@ -735,6 +1011,10 @@ router.get('/api/learning/staff', ownerOnly, safe(async (req, res) => {
       active_assignments: Number(r.active_assignments),
       completed_assignments: Number(r.completed_assignments),
       last_activity_at: r.last_activity_at,
+      active_workflow_ids: (r.active_workflow_ids || []).filter(Boolean),
+      // The review step marks completed pairs and offers per-pair Reassign;
+      // active pairs are skipped as duplicates. Same shape as active ids.
+      completed_workflow_ids: (r.completed_workflow_ids || []).filter(Boolean),
     })),
   });
 }));

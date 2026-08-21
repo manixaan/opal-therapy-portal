@@ -657,3 +657,158 @@ test('completing a resource item marks the hub resource complete (best-effort)',
     [emp.user.id, resource.id]);
   expect(rows).toHaveLength(1);
 });
+
+// ═══ The assignment picker ═══════════════════════════════════════════════════
+//
+// GET /api/learning/staff is what the Owner's Assign dialog is built from, so
+// what it returns IS what an Owner can assign to. Two things matter: everybody
+// listed can actually do the work, and the Owner can see who already has it
+// before they submit rather than being told afterwards.
+
+test('the picker lists only people who could actually do the work', async () => {
+  const owner = await agentFor('owner', org.id);
+  const therapist = await seedUser({ role: 'therapist', organisation_id: org.id, name: 'Working Therapist' });
+  const admin = await seedUser({ role: 'admin', organisation_id: org.id, name: 'Practice Admin' });
+  const starter = await seedUser({ role: 'pre_employee', organisation_id: org.id, name: 'New Starter' });
+
+  // Three ways an account can be unable to do it.
+  const deactivated = await seedUser({ role: 'therapist', organisation_id: org.id, is_active: false });
+  const suspended = await seedUser({ role: 'therapist', organisation_id: org.id, account_status: 'suspended' });
+  const readOnly = await seedUser({ role: 'read_only', organisation_id: org.id });
+
+  const otherOrg = await seedOrganisation('Other Org');
+  const outsider = await seedUser({ role: 'therapist', organisation_id: otherOrg.id });
+
+  const ids = (await owner.agent.get('/api/learning/staff')).body.staff.map((s) => s.id);
+
+  expect(ids).toContain(therapist.id);
+  expect(ids).toContain(admin.id);
+  // A new starter part-way through onboarding is exactly who the induction is
+  // for, and /api/learning/my is on their allowlist.
+  expect(ids).toContain(starter.id);
+
+  expect(ids).not.toContain(deactivated.id);
+  // is_active is TRUE on this one — account_status is what login refuses on,
+  // so filtering only the first would offer somebody who cannot sign in.
+  expect(ids).not.toContain(suspended.id);
+  // requireAuth blocks every write a read_only account would need to record
+  // progress; the assign route refuses them, so listing them would be a trap.
+  expect(ids).not.toContain(readOnly.id);
+  expect(ids).not.toContain(outsider.id);
+});
+
+test('the picker carries the name, role and what each person already has', async () => {
+  const owner = await agentFor('owner', org.id);
+  const sarah = await agentFor('therapist', org.id, { name: 'Sarah Jones' });
+  const tom = await agentFor('therapist', org.id, { name: 'Tom Ng' });
+
+  const induction = await createWorkflow(owner, { title: 'Induction' });
+  const manual = await createWorkflow(owner, { title: 'Manual Handling' });
+  await assign(owner, induction.id, [sarah.user.id]);
+
+  const staff = (await owner.agent.get('/api/learning/staff')).body.staff;
+  const bySarah = staff.find((s) => s.id === sarah.user.id);
+  const byTom = staff.find((s) => s.id === tom.user.id);
+
+  // Everything the dialog renders for a row comes from here.
+  expect(bySarah.name).toBe('Sarah Jones');
+  expect(bySarah.role).toBe('therapist');
+  expect(bySarah.email).toBeTruthy();
+
+  // This is what lets the dialog mark "already assigned" BEFORE submitting,
+  // instead of reporting it afterwards as a skipped row.
+  expect(bySarah.active_workflow_ids).toContain(induction.id);
+  expect(bySarah.active_workflow_ids).not.toContain(manual.id);
+  expect(byTom.active_workflow_ids).toEqual([]);
+});
+
+test('learning finished is no longer "already has it" — it can be assigned again', async () => {
+  const owner = await agentFor('owner', org.id);
+  const sarah = await agentFor('therapist', org.id, { name: 'Sarah Jones' });
+  const wf = await createWorkflow(owner);
+  const out = await assign(owner, wf.id, [sarah.user.id]);
+
+  await db.pool.query(
+    "UPDATE learning_assignments SET status = 'completed', completed_at = NOW() WHERE id = $1",
+    [out.assigned[0].id]);
+
+  const staff = (await owner.agent.get('/api/learning/staff')).body.staff;
+  const row = staff.find((s) => s.id === sarah.user.id);
+  expect(row.active_workflow_ids).not.toContain(wf.id);
+  expect(row.completed_assignments).toBe(1);
+});
+
+test('assigning to several people at once records who assigned it, and when', async () => {
+  const owner = await agentFor('owner', org.id);
+  const sarah = await agentFor('therapist', org.id, { name: 'Sarah Jones' });
+  const tom = await agentFor('therapist', org.id, { name: 'Tom Ng' });
+  const wf = await createWorkflow(owner);
+
+  const before = new Date();
+  const out = await assign(owner, wf.id, [sarah.user.id, tom.user.id]);
+  expect(out.assigned).toHaveLength(2);
+  expect(out.skipped).toHaveLength(0);
+
+  const { rows } = await db.pool.query(
+    'SELECT user_id, assigned_by, assigned_at FROM learning_assignments WHERE workflow_id = $1', [wf.id]);
+  expect(rows).toHaveLength(2);
+  for (const r of rows) {
+    expect(r.assigned_by).toBe(owner.user.id);
+    expect(new Date(r.assigned_at).getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
+  }
+
+  // And it lands on each person's own learning, which is the whole point.
+  expect((await sarah.agent.get('/api/learning/my')).body.assignments).toHaveLength(1);
+  expect((await tom.agent.get('/api/learning/my')).body.assignments).toHaveLength(1);
+});
+
+test('assigning the same thing twice adds nothing and loses nothing', async () => {
+  const owner = await agentFor('owner', org.id);
+  const sarah = await agentFor('therapist', org.id, { name: 'Sarah Jones' });
+  const tom = await agentFor('therapist', org.id, { name: 'Tom Ng' });
+  const wf = await createWorkflow(owner);
+
+  await assign(owner, wf.id, [sarah.user.id]);
+  // The Owner picks both — the dialog would have marked Sarah, but a stale
+  // page, a second tab or a double submit must not create a second row.
+  const again = await assign(owner, wf.id, [sarah.user.id, tom.user.id]);
+
+  expect(again.assigned.map((a) => a.user_id)).toEqual([tom.user.id]);
+  expect(again.skipped).toEqual([
+    expect.objectContaining({ userId: sarah.user.id, reason: 'already_active' }),
+  ]);
+
+  const { rows } = await db.pool.query(
+    'SELECT user_id FROM learning_assignments WHERE workflow_id = $1 AND user_id = $2', [wf.id, sarah.user.id]);
+  expect(rows).toHaveLength(1);
+  expect((await sarah.agent.get('/api/learning/my')).body.assignments).toHaveLength(1);
+});
+
+test('only an owner can open the picker or assign — hiding the button is not the control', async () => {
+  const owner = await agentFor('owner', org.id);
+  const wf = await createWorkflow(owner);
+  const therapist = await agentFor('therapist', org.id);
+  const admin = await agentFor('admin', org.id);
+  const target = await seedUser({ role: 'therapist', organisation_id: org.id });
+
+  for (const who of [therapist, admin]) {
+    expect((await who.agent.get('/api/learning/staff')).status).toBe(403);
+    expect((await who.agent.post(`/api/learning/workflows/${wf.id}/assign`)
+      .send({ userIds: [target.id] })).status).toBe(403);
+  }
+  // Nothing was created by the refused calls.
+  const { rows } = await db.pool.query('SELECT id FROM learning_assignments WHERE workflow_id = $1', [wf.id]);
+  expect(rows).toHaveLength(0);
+
+  // Signed out is refused too, not merely unrendered.
+  expect((await request(app).get('/api/learning/staff')).status).toBe(401);
+});
+
+test('the library reports the duration the Owner authored, for the card to show', async () => {
+  const owner = await agentFor('owner', org.id);
+  await createWorkflow(owner);
+  const wf = (await owner.agent.get('/api/learning/workflows')).body.workflows[0];
+  // CONTENT records five minutes against one item and nothing against the rest.
+  expect(wf.estimated_minutes).toBe(5);
+  expect(wf.module_count).toBe(4);
+});

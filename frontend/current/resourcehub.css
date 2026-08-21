@@ -856,6 +856,133 @@ span.rh2-dochero-thumb { cursor: default; }
 .rh2-learn-adetail-items { list-style: none; margin: 4px 0 0; padding: 0 0 0 6px; display: flex; flex-direction: column; gap: 3px; }
 .rh2-learn-adone { color: var(--ink-soft); }
 
+
+/* ── Workflow tools in the library grid ──────────────────────────────────────
+   A tool is a document the portal BUILDS with you rather than one you read.
+   It uses the ordinary card so it reads as a native member of the grid; the
+   only distinction is the chip, because "this one does something" is worth
+   knowing before you click. */
+
+.rh2-cardtile-tool .rh2-card-thumb {
+  background: var(--rh2-mint, #E4EFEB);
+  color: var(--rh2-primary, #2F5651);
+}
+.rh2-chip-tool {
+  background: var(--rh2-mint, #E4EFEB);
+  color: var(--rh2-primary, #2F5651);
+  border-color: var(--rh2-mint, #E4EFEB);
+}
+
+/* ── Owner: Assign Learning ───────────────────────────────────────────────── */
+
+.rh2-page-intro {
+  font-size: 14px; color: var(--ink-soft); margin: -4px 0 var(--space-5);
+  max-width: 68ch; line-height: 1.6;
+}
+
+/* The open collection. Carries a border AND a tint, so the selected tile is
+   distinguishable without relying on colour. aria-pressed carries it for a
+   screen reader. */
+.rh2-collection-on {
+  border-color: var(--accent); background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.rh2-learn-lib-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rh2-learn-lib-tools .rh2-input { min-width: 190px; }
+
+/* An item that cannot go out yet says why, next to the actions that are
+   missing an Assign button. */
+.rh2-learn-cannot { color: var(--rh2-primary, #2F5651); font-size: 12.5px; margin: 6px 0 0; }
+
+.rh2-row-btn {
+  display: flex; width: 100%; text-align: left; background: none;
+  border: 0; border-bottom: 1px solid var(--border); padding: 9px 0;
+  font: inherit; cursor: pointer;
+}
+.rh2-row-btn:last-child { border-bottom: 0; }
+.rh2-row-btn:hover .rh2-row-title { color: var(--accent-deep, #2F5651); }
+.rh2-row-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 6px; }
+
+/* ── The assignment dialog ────────────────────────────────────────────────── */
+
+.rh2-dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1300;
+  background: rgba(20, 24, 23, 0.5);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 5vh 16px; overflow: auto;
+}
+
+.rh2-dialog {
+  background: var(--panel, #fff); border-radius: var(--radius-md, 11px);
+  box-shadow: var(--shadow-lg); width: 100%; max-width: 620px;
+  display: flex; flex-direction: column; max-height: 90vh;
+}
+
+.rh2-dialog-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.rh2-dialog-head h2 { margin: 0; }
+
+.rh2-dialog-body { padding: var(--space-4) var(--space-5); overflow: auto; }
+
+.rh2-dialog-foot {
+  display: flex; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.rh2-learn-assign-what { margin: 0 0 var(--space-4); font-size: 14px; }
+.rh2-learn-assign-filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.rh2-learn-assign-filters .rh2-input { flex: 1; min-width: 160px; }
+
+.rh2-learn-assign-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
+}
+.rh2-learn-assign-count { font-size: 12.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* Initials rather than a photograph: the app stores no avatar image, and a
+   coloured circle with two letters is honest about that. */
+.rh2-avatar {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--rh2-mint, #E4EFEB); color: var(--rh2-primary, #2F5651);
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px;
+}
+
+/* Already assigned: dimmed, no checkbox, and the row says so in words. */
+.rh2-learn-staff-has { opacity: 0.72; cursor: default; }
+.rh2-learn-staff-has:hover { background: none; }
+.rh2-learn-staff-check {
+  flex: none; width: 16px; display: inline-flex; align-items: center;
+  justify-content: center; color: var(--ok, #2f7d4f);
+}
+
+/* A control that cannot be pressed must not look pressable. "Assign to 0
+   users" is disabled until somebody is selected, and the only thing that
+   told the Owner so was the click doing nothing. */
+.rh2-dialog .rh2-btn[disabled],
+.rh2-dialog .rh2-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* A call to action inside an empty state needs room above the sentence. */
+.rh2-empty-act { margin-top: 10px; }
+
+.rh2-learn-partial { text-align: left; }
+.rh2-learn-skipped { margin: 8px 0 0 18px; font-size: 13px; line-height: 1.6; }
+.rh2-learn-assign-err { text-align: left; }
+
+@media (max-width: 640px) {
+  .rh2-dialog-backdrop { padding: 0; }
+  .rh2-dialog { max-width: none; max-height: 100vh; border-radius: 0; min-height: 100vh; }
+  .rh2-learn-lib-tools { width: 100%; }
+  .rh2-learn-lib-tools .rh2-input { min-width: 0; flex: 1; }
+  .rh2-dialog-foot { flex-direction: column-reverse; }
+  .rh2-dialog-foot .rh2-btn { width: 100%; }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    LIBRARY FOLDERS
 
@@ -1027,3 +1154,7 @@ span.rh2-dochero-thumb { cursor: default; }
 .rh2-learn-review-block .rh2-learn-review-list { list-style: none; padding-left: 4px; margin-top: 4px; }
 .rh2-learn-assign-whatlist { margin-bottom: 10px; }
 #la-as-review-h { outline: none; }
+/* Long titles and person names must wrap rather than run under the dialog
+   edge on a phone — these lists carry both, side by side. */
+.rh2-learn-review-list li,
+.rh2-learn-assign-whatlist li { overflow-wrap: anywhere; }
