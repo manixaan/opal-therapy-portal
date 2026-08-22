@@ -594,9 +594,11 @@ describe('changed assets are cache-busted', () => {
       // tool, which changed both the renderer and the card styles.
       // r18/r12: the Owner's Assign Learning surface and its dialog
       ['resourcehub.js', 'r19'], ['resourcehub.css', 'r13'],
-      // 7: the Service Agreement added a 'service-agreement' resources view
-      // (and its redirect aliases) to the route grammar
-      ['navigation.js', 7],
+      // 6: the last committed navigation.js change. The Service Agreement's
+      // route-grammar bump to 7 is still uncommitted in another session's
+      // tree — this list pins what the SHELL IN THIS COMMIT actually loads,
+      // so it moves to 7 in the commit that ships that navigation.js.
+      ['navigation.js', 6],
       // 3: the onboarding journey — starter packs, returned documents,
       // extracted-detail review, account provisioning — and its styles
       ['onboarding.js', 8], ['onboarding.css', 8],
