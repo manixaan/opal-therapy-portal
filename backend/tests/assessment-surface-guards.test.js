@@ -593,14 +593,9 @@ describe('changed assets are cache-busted', () => {
       // r17/r11: the Service Agreement joined the library grid as a workflow
       // tool, which changed both the renderer and the card styles.
       // r18/r12: the Owner's Assign Learning surface and its dialog
-      ['resourcehub.js', 'r20'], ['resourcehub.css', 'r14'],
+      ['resourcehub.js', 'r21'], ['resourcehub.css', 'r14'],
       // 7: the Service Agreement added a 'service-agreement' resources view
       // (and its redirect aliases) to the route grammar
-      // 6, not 7: this list pins what the SHELL IN THIS COMMIT loads. The
-      // Service Agreement's bump to 7 ships in the commit that ships its
-      // navigation.js — until then, 7 would fail CI on a file that is only
-      // in a working tree. (Staging the working-tree copy of this file has
-      // now broken CI twice; stage it deliberately, not with a blanket add.)
       ['navigation.js', 6],
       // 3: the onboarding journey — starter packs, returned documents,
       // extracted-detail review, account provisioning — and its styles

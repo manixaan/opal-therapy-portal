@@ -385,7 +385,7 @@ describe('the server, not the button, is what protects this', () => {
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
     expect(SHELL).toContain('/resourcehub.css?v=r14');
-    expect(SHELL).toContain('/resourcehub.js?v=r20');
+    expect(SHELL).toContain('/resourcehub.js?v=r21');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -488,15 +488,27 @@ describe('the empty library', () => {
     expect(page).toMatch(/\(all\.length[\s\S]{0,120}rh2-learn-lib-tools/);
   });
 
-  test('the one call to action lives in the empty state', () => {
-    const empty = page.slice(page.indexOf('No learning items yet'));
+  test('the empty state offers the import as well as a fresh start', () => {
+    // The practice's inductions already exist as Resource Hub learning paths
+    // and portal walkthroughs, so an empty library is almost never "you have
+    // no inductions" — it is "they are not in here yet".
+    const empty = page.slice(page.indexOf('No learning items here yet'));
     expect(empty).toContain('rh2-empty-act');
+    expect(empty).toContain('RH2.laImport()');
     expect(empty).toContain('RH2.laCreate()');
+  });
+
+  test('importing is idempotent and owner-triggered, never automatic', () => {
+    // An import that ran on its own could resurrect an induction the Owner
+    // deliberately archived.
+    expect(fn('laImport')).toContain("api('/api/learning/workflows/import'");
+    expect(VISIBLE).not.toMatch(/loadLa\(\)[\s\S]{0,200}laImport\(\)/);
   });
 
   test('exactly one create button renders when the library is empty', () => {
     // Two identical primary buttons on one screen is the defect this pins.
     const emptyBranch = page.slice(page.indexOf('if (!all.length) {'), page.indexOf('} else if (!rows.length) {'));
     expect((emptyBranch.match(/RH2\.laCreate\(\)/g) || []).length).toBe(1);
+    expect((emptyBranch.match(/RH2\.laImport\(\)/g) || []).length).toBe(1);
   });
 });

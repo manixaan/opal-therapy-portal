@@ -332,3 +332,153 @@ test('staff reports completed_workflow_ids alongside active_workflow_ids', async
   expect(row.completed_workflow_ids).toEqual([wfA.id]);
   expect(row.active_workflow_ids).toEqual([wfB.id]);
 });
+
+// ═══ Importing the practice's existing inductions ════════════════════════════
+
+/** Seed a Resource Hub learning path with N real resources. */
+async function seedPath(orgId, key, name, titles, opts = {}) {
+  const { rows: [path] } = await db.pool.query(
+    `INSERT INTO learning_paths (organisation_id, key, name, description, target_role)
+     VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+    [orgId, key, name, opts.description || null, opts.targetRole || 'therapist']);
+  let i = 0;
+  for (const t of titles) {
+    const { rows: [r] } = await db.pool.query(
+      `INSERT INTO resources (organisation_id, title, status, resource_type, slug, estimated_minutes)
+       VALUES ($1,$2,'approved','guide',$3,$4) RETURNING id`,
+      [orgId, t, `${key}-${i}`, 10 + i]);
+    await db.pool.query(
+      `INSERT INTO learning_path_items (path_id, resource_id, sort_order, required)
+       VALUES ($1,$2,$3,$4)`, [path.id, r.id, i, i !== 1]); // one optional item
+    i += 1;
+  }
+  return path.id;
+}
+
+test('existing learning paths import as editable, assignable workflows', async () => {
+  const owner = await agentFor('owner', org.id);
+  await seedPath(org.id, 'new-ot-starter', 'New Starter — Occupational Therapist',
+    ['Welcome to Opal', 'How we work', 'Privacy policy'], { description: 'The ordered essentials.' });
+  await seedPath(org.id, 'rural-remote-starter', 'Rural and Remote Starter',
+    ['Rural overview', 'Pre-trip checklist']);
+
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  expect(res.status).toBe(200);
+  const byTitle = Object.fromEntries(res.body.created.map((c) => [c.title, c]));
+  expect(byTitle['New Starter — Occupational Therapist'].items).toBe(3);
+  expect(byTitle['Rural and Remote Starter'].items).toBe(2);
+
+  // The imported workflow is a normal, fully editable workflow.
+  const wfId = byTitle['New Starter — Occupational Therapist'].id;
+  const detail = await owner.agent.get(`/api/learning/workflows/${wfId}`);
+  expect(detail.status).toBe(200);
+  const items = detail.body.workflow.draft_content.sections[0].items;
+  expect(items.map((i) => i.title)).toEqual(['Welcome to Opal', 'How we work', 'Privacy policy']);
+  // Order, resource links and the path's own required flags all survive.
+  items.forEach((i) => { expect(i.type).toBe('resource'); expect(i.resource_id).toBeTruthy(); });
+  expect(items[1].required).toBe(false);
+  // Rural naming picks the rural category rather than defaulting to induction.
+  const rural = await owner.agent.get(`/api/learning/workflows/${byTitle['Rural and Remote Starter'].id}`);
+  expect(rural.body.workflow.category).toBe('rural_remote');
+});
+
+test('the Owner can edit an imported induction and add steps to it', async () => {
+  const owner = await agentFor('owner', org.id);
+  await seedPath(org.id, 'admin-starter', 'New Starter — Admin', ['Portal basics', 'Privacy']);
+  const imported = (await owner.agent.post('/api/learning/workflows/import')).body.created
+    .find((c) => c.title === 'New Starter — Admin');
+
+  const before = await owner.agent.get(`/api/learning/workflows/${imported.id}`);
+  const content = before.body.workflow.draft_content;
+  content.sections[0].items.push({ type: 'acknowledgement', title: 'Confirm the handbook',
+    ack_statement: 'I have read the admin handbook.', required: true });
+  content.sections.push({ title: 'Added by the Owner', items: [
+    { type: 'content', title: 'Local office notes', body: 'Where the keys live.', required: true } ] });
+
+  const saved = await owner.agent.put(`/api/learning/workflows/${imported.id}`)
+    .send({ content, expectedUpdatedAt: before.body.workflow.updated_at });
+  expect(saved.status).toBe(200);
+  expect(saved.body.workflow.stats.items).toBe(4);
+  expect(saved.body.workflow.stats.sections).toBe(2);
+
+  // And it can then be assigned like anything else.
+  const emp = await agentFor('therapist', org.id);
+  const assign = await owner.agent.post('/api/learning/assign')
+    .send({ pairs: [{ workflowId: imported.id, userId: emp.user.id }] });
+  expect(assign.body.assigned).toHaveLength(1);
+  const mine = await emp.agent.get('/api/learning/my');
+  expect(mine.body.assignments[0].title).toBe('New Starter — Admin');
+});
+
+test('importing twice creates nothing the second time', async () => {
+  const owner = await agentFor('owner', org.id);
+  await seedPath(org.id, 'new-grad-ot', 'New Graduate — Clinical Foundations', ['Standards', 'Documentation']);
+
+  const first = await owner.agent.post('/api/learning/workflows/import');
+  expect(first.body.created.some((c) => c.title === 'New Graduate — Clinical Foundations')).toBe(true);
+
+  const second = await owner.agent.post('/api/learning/workflows/import');
+  expect(second.body.created.some((c) => c.title === 'New Graduate — Clinical Foundations')).toBe(false);
+  expect(second.body.skipped.some((s) => s.title === 'New Graduate — Clinical Foundations'
+    && s.reason === 'already_present')).toBe(true);
+
+  const { rows } = await db.pool.query(
+    `SELECT COUNT(*)::int AS n FROM learning_workflows WHERE title = 'New Graduate — Clinical Foundations'`);
+  expect(rows[0].n).toBe(1);
+});
+
+test('an Owner edit is never overwritten by a later import', async () => {
+  const owner = await agentFor('owner', org.id);
+  await seedPath(org.id, 'new-ot-starter', 'New Starter — Occupational Therapist', ['Welcome to Opal']);
+  const made = (await owner.agent.post('/api/learning/workflows/import')).body.created[0];
+
+  await owner.agent.put(`/api/learning/workflows/${made.id}`).send({
+    description: 'Rewritten by the practice owner.',
+    content: { sections: [{ title: 'Owner section', items: [
+      { key: 'i-own', type: 'content', title: 'Owner content', required: true } ] }] },
+  });
+  await owner.agent.post('/api/learning/workflows/import');
+
+  const after = await owner.agent.get(`/api/learning/workflows/${made.id}`);
+  expect(after.body.workflow.description).toBe('Rewritten by the practice owner.');
+  expect(after.body.workflow.draft_content.sections[0].title).toBe('Owner section');
+});
+
+test('the portal induction imports as its own workflow', async () => {
+  const owner = await agentFor('owner', org.id);
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  const portal = res.body.created.find((c) => c.title === 'Opal Portal Induction');
+  expect(portal).toBeTruthy();
+  expect(portal.items).toBeGreaterThanOrEqual(9);
+
+  const detail = await owner.agent.get(`/api/learning/workflows/${portal.id}`);
+  const items = detail.body.workflow.draft_content.sections[0].items;
+  // Without hub tutorial pages present these are tasks naming the walkthrough.
+  expect(items.every((i) => i.type === 'task' || i.type === 'resource')).toBe(true);
+  expect(items.map((i) => i.title)).toContain('Getting Started with the Opal Portal');
+});
+
+test('a path whose resources are gone is reported, not silently dropped', async () => {
+  const owner = await agentFor('owner', org.id);
+  await db.pool.query(
+    `INSERT INTO learning_paths (organisation_id, key, name) VALUES ($1,'empty-path','Empty Induction')`,
+    [org.id]);
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  expect(res.body.created.some((c) => c.title === 'Empty Induction')).toBe(false);
+  expect(res.body.skipped.some((s) => s.title === 'Empty Induction' && s.reason === 'no_items')).toBe(true);
+});
+
+test('importing is owner-only', async () => {
+  const therapist = await agentFor('therapist', org.id);
+  expect((await therapist.agent.post('/api/learning/workflows/import')).status).toBe(403);
+  const admin = await agentFor('admin', org.id);
+  expect((await admin.agent.post('/api/learning/workflows/import')).status).toBe(403);
+});
+
+test('another organisation\'s paths are never imported', async () => {
+  const otherOrg = await seedOrganisation('Other Org');
+  await seedPath(otherOrg.id, 'foreign-path', 'Foreign Induction', ['Secret module']);
+  const owner = await agentFor('owner', org.id);
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  expect(res.body.created.some((c) => c.title === 'Foreign Induction')).toBe(false);
+});

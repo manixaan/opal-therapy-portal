@@ -346,6 +346,7 @@
       editor: null, editorErr: '', editorSaving: false,
       preview: null,
       assign: null, // { wfId, wfTitle, q, selected:{}, dueAt, note, mandatory, priority, busy, err, done }
+      importing: false, importNote: '', // bringing existing inductions in
       create: null, // the New learning item dialog: { title, category, busy, err }
       staff: null, staffErr: '', staffLoading: false,
       assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '', afOverdue: false,
@@ -4764,16 +4765,30 @@
           (a.collection ? '<button type="button" class="rh2-btn" onclick="RH2.aslClearCollection()">Show all</button>' : '') +
           '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
             'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+          '<button type="button" class="rh2-btn" ' + (la.importing ? 'disabled ' : '') +
+            'onclick="RH2.laImport()" title="Bring the Resource Hub learning paths and the portal ' +
+            'induction in as editable, assignable items">' +
+            (la.importing ? 'Importing…' : 'Import existing') + '</button>' +
           '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
           '</div>'
         : '') +
-      '</div>';
+      '</div>' +
+      (la.importNote
+        ? '<div class="rh2-learn-done-banner" role="status">' + esc(la.importNote) +
+          ' <button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laImportDismiss()">Dismiss</button></div>'
+        : '');
 
     if (!all.length) {
-      out += '<div class="rh2-empty">No learning items yet. Create your first one to start assigning ' +
-        'learning to the team.' +
-        '<div class="rh2-empty-act"><button type="button" class="rh2-btn rh2-btn-primary" ' +
-        'onclick="RH2.laCreate()">+ New learning item</button></div></div>';
+      // The practice almost certainly HAS inductions already — as Resource Hub
+      // learning paths and the portal walkthroughs. Offering to import them is
+      // more use than an empty page that implies none exist.
+      out += '<div class="rh2-empty">No learning items here yet. Import the practice&rsquo;s existing ' +
+        'inductions to edit and assign them, or start something new.' +
+        '<div class="rh2-empty-act">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" ' + (la.importing ? 'disabled ' : '') +
+          'onclick="RH2.laImport()">' + (la.importing ? 'Importing…' : 'Import existing inductions') + '</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laCreate()">+ New learning item</button>' +
+        '</div></div>';
     } else if (!rows.length) {
       out += '<div class="rh2-empty">' +
         (a.q ? 'Nothing matches &ldquo;' + esc(a.q) + '&rdquo;' + (a.collection ? ' in this collection' : '') + '.'
@@ -4892,6 +4907,36 @@
     S.la.create = null;
     render();
   }
+
+  /**
+   * Bring the practice's existing inductions into the assignable library.
+   *
+   * The Resource Hub's learning paths and the interactive portal induction
+   * are real content that predates this page, but neither can be assigned to
+   * a named person or edited step by step. Importing copies them in as
+   * workflows the Owner owns outright. Idempotent, so the button is safe to
+   * press twice.
+   */
+  async function laImport() {
+    if (S.la.importing) return;
+    S.la.importing = true;
+    S.la.err = '';
+    render();
+    var d = await api('/api/learning/workflows/import', { method: 'POST' });
+    S.la.importing = false;
+    if (!d.ok) {
+      S.la.err = d.error || 'The existing inductions could not be imported.';
+      return render();
+    }
+    var made = (d.created || []).length;
+    S.la.importNote = made
+      ? made + ' induction' + (made === 1 ? '' : 's') + ' imported. Edit any of them, then assign.'
+      : 'Nothing new to import — the existing inductions are already in this library.';
+    await loadLa();
+    render();
+  }
+
+  function laImportDismiss() { S.la.importNote = ''; render(); }
 
   function laCreateField(field, value) {
     if (!S.la.create) return;
@@ -6228,6 +6273,8 @@
     laCreateField: laCreateField,
     laCreateSubmit: laCreateSubmit,
     laCreateBackdrop: laCreateBackdrop,
+    laImport: laImport,
+    laImportDismiss: laImportDismiss,
     // Batch assignment + review step + reassignment
     laAssignOpenMulti: laAssignOpenMulti,
     laAssignReview: laAssignReview,

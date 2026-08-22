@@ -75,6 +75,23 @@ function notify(userId, payload) {
     .catch(() => {});
 }
 
+/**
+ * The induction registry, or null where it cannot be loaded.
+ *
+ * It is a frontend file the backend require()s (the same contract
+ * tutorial-routes.js relies on), so a packaging change that leaves it out
+ * must degrade the import rather than 500 the whole request.
+ */
+function requireInductionRegistry() {
+  try {
+    const reg = require('../frontend/current/induction-modules.js');
+    return (reg && typeof reg.modulesForRole === 'function') ? reg : null;
+  } catch (e) {
+    log.warn('induction registry unavailable for import', { error: e });
+    return null;
+  }
+}
+
 function parseDueAt(v) {
   if (v === undefined || v === null || v === '') return { ok: true, value: null };
   const d = new Date(v);
@@ -469,6 +486,122 @@ router.get('/api/learning/workflows/:id/preview', ownerOnly, safe(async (req, re
     content: lc.serialiseForEmployee(wf.draft_content),
     stats,
   });
+}));
+
+/**
+ * Import the practice's EXISTING inductions into the assignable library.
+ *
+ * Two bodies of induction content predate this feature and are not
+ * assignable on their own:
+ *
+ *   • Resource Hub learning paths (migration 011) — curated, ordered lists of
+ *     real hub resources ("New Starter — Occupational Therapist" and friends).
+ *     They render inside an employee's My Learning but an Owner cannot assign
+ *     one to a named person, set a due date, or edit its steps.
+ *   • The interactive portal induction (migration 032) — the walkthroughs of
+ *     the portal itself, code-owned in induction-modules.js.
+ *
+ * This turns each of them into a learning_workflow the Owner fully owns:
+ * assignable, versioned, and editable step by step. Path resources become
+ * `resource` items (the hub page is the content, so nothing is duplicated);
+ * portal walkthroughs become `task` items naming the walkthrough to run, or
+ * `resource` items where the hub carries the matching tutorial page — the
+ * module key IS that resource's slug, by the induction registry's own rule.
+ *
+ * Idempotent by title within the organisation: an import that has already
+ * happened creates nothing, and an Owner's later edits are never overwritten.
+ */
+router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) => {
+  const org = orgOf(req);
+  const created = [];
+  const skipped = [];
+
+  const existing = await pool.query(
+    `SELECT title FROM learning_workflows WHERE organisation_id IS NOT DISTINCT FROM $1`, [org]);
+  const haveTitle = new Set(existing.rows.map((r) => String(r.title).trim().toLowerCase()));
+
+  const insert = async (title, description, category, sections) => {
+    if (haveTitle.has(title.trim().toLowerCase())) { skipped.push({ title, reason: 'already_present' }); return; }
+    const norm = lc.normaliseContent({ sections });
+    if (!norm.ok) { skipped.push({ title, reason: 'invalid_content' }); return; }
+    if (!lc.contentStats(norm.content).items) { skipped.push({ title, reason: 'no_items' }); return; }
+    const { rows } = await pool.query(
+      `INSERT INTO learning_workflows (organisation_id, title, description, category, draft_content, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title`,
+      [org, title, description, category, JSON.stringify(norm.content), req.user.id]);
+    haveTitle.add(title.trim().toLowerCase());
+    created.push({ id: rows[0].id, title: rows[0].title, items: lc.contentStats(norm.content).items });
+  };
+
+  // ── Resource Hub learning paths ────────────────────────────────────────────
+  const { rows: paths } = await pool.query(
+    `SELECT id, key, name, description, target_role FROM learning_paths
+      WHERE organisation_id IS NOT DISTINCT FROM $1 AND is_active = TRUE
+      ORDER BY sort_order ASC, name ASC`, [org]);
+
+  for (const p of paths) {
+    const { rows: items } = await pool.query(
+      `SELECT r.id, r.title, r.estimated_minutes, r.learning_minutes, i.required
+         FROM learning_path_items i
+         JOIN resources r ON r.id = i.resource_id
+        WHERE i.path_id = $1
+        ORDER BY i.sort_order ASC`, [p.id]);
+    if (!items.length) { skipped.push({ title: p.name, reason: 'no_items' }); continue; }
+    await insert(
+      p.name,
+      p.description || null,
+      // target_role is advisory on a path; the workflow's category is a
+      // vocabulary the Owner can change afterwards.
+      /rural|remote/i.test(p.name) ? 'rural_remote' : 'induction',
+      [{
+        title: 'Modules',
+        items: items.map((r) => ({
+          type: 'resource',
+          title: r.title,
+          resource_id: r.id,
+          resource_title: r.title,
+          required: r.required !== false,
+          minutes: Number(r.learning_minutes || r.estimated_minutes) || undefined,
+        })),
+      }]);
+  }
+
+  // ── The interactive portal induction ───────────────────────────────────────
+  const modules = requireInductionRegistry();
+  if (modules) {
+    const mods = modules.modulesForRole('therapist').concat(
+      modules.modulesForRole('owner').filter((m) => !m.roles.includes('therapist')));
+    if (mods.length) {
+      // Where the hub carries the matching tutorial page, link it; the module
+      // key is that resource's slug by the registry's own contract.
+      const { rows: tutorialRows } = await pool.query(
+        `SELECT id, slug, title FROM resources
+          WHERE organisation_id IS NOT DISTINCT FROM $1 AND slug = ANY($2::text[])`,
+        [org, mods.map((m) => m.key)]);
+      const bySlug = Object.fromEntries(tutorialRows.map((r) => [r.slug, r]));
+      await insert(
+        'Opal Portal Induction',
+        'The interactive walkthroughs of the portal itself: calendar, bookings, travel, resources and your profile.',
+        'induction',
+        [{
+          title: 'Portal walkthroughs',
+          items: mods.map((m) => {
+            const hit = bySlug[m.key];
+            return hit
+              ? { type: 'resource', title: m.title, resource_id: hit.id, resource_title: hit.title, required: true, minutes: m.minutes }
+              : { type: 'task', title: m.title, required: true, minutes: m.minutes,
+                  body: (m.description || '') + '\n\nRun this walkthrough from the Resource Hub — My Learning, under the portal induction.' };
+          }),
+        }]);
+    }
+  }
+
+  if (created.length) {
+    await audit(req, 'learning.workflows_imported', null, {
+      created: created.map((c) => c.id), count: created.length,
+    });
+  }
+  res.json({ created, skipped });
 }));
 
 /**
