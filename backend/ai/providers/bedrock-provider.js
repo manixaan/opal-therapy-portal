@@ -97,12 +97,43 @@ function tagGuardContent(text, suffix) {
  * prefill (a trailing assistant turn) cannot silently leave the current user
  * message untagged.
  */
+function currentUserMessageIndex(list) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i] && list[i].role === 'user') return i;
+  }
+  return -1;
+}
+
+/**
+ * Is there anything in the current user turn that tagging can actually tag?
+ *
+ * Input tagging evaluates ONLY tagged content. Tag nothing and input
+ * evaluation becomes a silent no-op: the request still declares a tagSuffix,
+ * Bedrock still returns 200, the response looks entirely normal, and the
+ * input filter saw nothing at all. There is no error and no marker — which
+ * makes it exactly the kind of hole that survives a code review.
+ *
+ * A turn carrying only image blocks is precisely that case, and it is now
+ * reachable: credential scans send page images. That feature does not use this
+ * scope, and must not — but the trap is for whoever later copies
+ * `guardrailInputScope: 'current_user_message'` off Opa's policy, where it
+ * solves a real problem, onto a feature that carries pictures.
+ */
+function hasTaggableCurrentUserText(messages) {
+  const list = messages || [];
+  const idx = currentUserMessageIndex(list);
+  if (idx === -1) return false;
+  const content = list[idx].content;
+  if (typeof content === 'string') return content.length > 0;
+  if (Array.isArray(content)) {
+    return content.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.length > 0);
+  }
+  return false;
+}
+
 function withGuardedCurrentUserMessage(messages, suffix) {
   const list = messages || [];
-  let currentIdx = -1;
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (list[i] && list[i].role === 'user') { currentIdx = i; break; }
-  }
+  const currentIdx = currentUserMessageIndex(list);
   return list.map((m, i) => {
     if (i !== currentIdx) return m;
     if (typeof m.content === 'string') {
@@ -371,10 +402,21 @@ async function invoke({
   // gateway passes the feature policy's guardrailInputScope through; anything
   // other than the recognised value keeps the default full-request
   // evaluation, so a typo fails towards MORE scrutiny, not less.
+  //
+  // The scope is also refused when there is nothing to tag. Declaring a
+  // tagSuffix and then tagging nothing does not narrow input evaluation, it
+  // ABOLISHES it — invisibly. Falling back to full-request evaluation is the
+  // safe direction: the worst case is a false refusal somebody can see, rather
+  // than an unevaluated request nobody can.
   if (guardInputScope === 'current_user_message') {
-    const suffix = freshTagSuffix();
-    body.messages = withGuardedCurrentUserMessage(messages, suffix);
-    body['amazon-bedrock-guardrailConfig'] = { tagSuffix: suffix };
+    if (hasTaggableCurrentUserText(messages)) {
+      const suffix = freshTagSuffix();
+      body.messages = withGuardedCurrentUserMessage(messages, suffix);
+      body['amazon-bedrock-guardrailConfig'] = { tagSuffix: suffix };
+    } else {
+      console.warn('[bedrock-provider] current_user_message scope requested with no taggable text '
+        + '— falling back to full-request input evaluation');
+    }
   }
 
   // FAIL CLOSED BEFORE ANY TRANSMISSION.

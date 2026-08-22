@@ -93,6 +93,65 @@ afterEach(() => {
   delete process.env.BEDROCK_GUARDRAIL_VERSION;
 });
 
+describe('a narrowed scope with nothing to tag falls back to evaluating everything', () => {
+  /**
+   * The hole this closes: input tagging evaluates ONLY tagged content, so a
+   * request that declares a tagSuffix and then tags nothing has no input
+   * evaluation at all. Bedrock returns 200, the response looks normal, and
+   * nothing anywhere marks that the filter saw an empty set.
+   *
+   * Reachable since credential scans began sending page images. That feature
+   * deliberately does not use this scope — the trap is for whoever copies it
+   * off Opa's policy, where it solves a real problem, onto a feature that
+   * carries pictures.
+   */
+  const imageTurn = [{
+    role: 'user',
+    content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } }],
+  }];
+
+  test('an image-only turn does NOT declare a tagSuffix', async () => {
+    await invoke({ guardInputScope: 'current_user_message', messages: imageTurn });
+    const call = mockBedrockState.calls[0];
+    // No suffix means no input tagging means the WHOLE request is evaluated —
+    // which is the default, and the safe direction to fail in.
+    expect(call.body[CONFIG_KEY]).toBeUndefined();
+    expect(JSON.stringify(call.body.messages)).not.toContain(TAG);
+  });
+
+  test('the guardrail itself is still applied — the scope is dropped, not the filter', async () => {
+    await invoke({ guardInputScope: 'current_user_message', messages: imageTurn });
+    const headers = mockBedrockState.calls[0].opts.headers;
+    expect(headers['X-Amzn-Bedrock-GuardrailIdentifier']).toBe('abcd1234efgh');
+    expect(headers['X-Amzn-Bedrock-GuardrailVersion']).toBe('1');
+  });
+
+  test('an empty user message is treated the same way', async () => {
+    await invoke({ guardInputScope: 'current_user_message', messages: [{ role: 'user', content: '' }] });
+    expect(mockBedrockState.calls[0].body[CONFIG_KEY]).toBeUndefined();
+  });
+
+  test('a turn mixing an image WITH text still tags the text', async () => {
+    await invoke({
+      guardInputScope: 'current_user_message',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } },
+          { type: 'text', text: 'read this certificate' },
+        ],
+      }],
+    });
+    const call = mockBedrockState.calls[0];
+    const suffix = suffixOf(call);
+    expect(call.body.messages[0].content[1].text)
+      .toBe(`<${TAG}_${suffix}>read this certificate</${TAG}_${suffix}>`);
+    // The image block is passed through untouched — it is not text, and
+    // Bedrock's content filters operate on text regardless.
+    expect(call.body.messages[0].content[0].type).toBe('image');
+  });
+});
+
 describe('current_user_message scope tags the current turn and nothing else', () => {
   test('the user message is wrapped; the system prompt is not', async () => {
     await invoke({ guardInputScope: 'current_user_message' });
