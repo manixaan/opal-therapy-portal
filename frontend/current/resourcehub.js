@@ -346,6 +346,7 @@
       editor: null, editorErr: '', editorSaving: false,
       preview: null,
       assign: null, // { wfId, wfTitle, q, selected:{}, dueAt, note, mandatory, priority, busy, err, done }
+      create: null, // the New learning item dialog: { title, category, busy, err }
       staff: null, staffErr: '', staffLoading: false,
       assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '', afOverdue: false,
       openAssignment: null, openData: null, openLoading: false,
@@ -4461,11 +4462,11 @@
     // The dialog goes ON TOP of the library rather than replacing it: the
     // Owner keeps sight of what they were working through, and closing it
     // returns them exactly where they were.
-    if (la.loading && !la.workflows) return out + '<div class="rh2-card">' + skel(3, 72) + '</div>' + renderLaAssign() + '</div>';
+    if (la.loading && !la.workflows) return out + '<div class="rh2-card">' + skel(3, 72) + '</div>' + renderLaAssign() + renderLaCreate() + '</div>';
     if (la.tab === 'library') out += renderLaLibrary();
     else if (la.tab === 'assignments') out += renderLaAssignments();
     else if (la.tab === 'staff') out += renderLaStaff();
-    return out + renderLaAssign() + '</div>';
+    return out + renderLaAssign() + renderLaCreate() + '</div>';
   }
 
   // ── Owner: library ──────────────────────────────────────────────────────────
@@ -4719,12 +4720,16 @@
     var collections = aslCollections(all.filter(function (w) { return w.status !== 'archived'; }));
 
     // ── Browse by collection ────────────────────────────────────────────────
+    // With an empty library this whole section is noise: it would explain
+    // collections, and offer a "New learning item" button, immediately above a
+    // library header offering the SAME button and a search box with nothing to
+    // search. One empty state, one call to action — so the section is skipped
+    // entirely and the library below carries the invitation.
+    if (all.length) {
     out += '<section aria-labelledby="asl-h-col"><h2 class="rh2-h2" id="asl-h-col">Browse by collection</h2>';
     if (!collections.length) {
-      out += '<div class="rh2-empty">No learning collections yet. Create a learning item and give it a ' +
-        'category, and it will appear here as a collection.' +
-        '<div class="rh2-empty-act"><button type="button" class="rh2-btn rh2-btn-primary" ' +
-        'onclick="RH2.laCreate()">+ New learning item</button></div></div>';
+      out += '<div class="rh2-empty">Nothing is grouped into a collection yet. Give a learning item a ' +
+        'category and it will appear here.</div>';
     } else {
       out += '<div class="rh2-collections">' + collections.map(function (c) {
         var on = a.collection === c.key;
@@ -4739,6 +4744,7 @@
       }).join('') + '</div>';
     }
     out += '</section>';
+    }
 
     // ── The library itself ──────────────────────────────────────────────────
     var rows = aslVisible();
@@ -4746,19 +4752,28 @@
     out += '<section class="rh2-card" aria-labelledby="asl-h-lib">' +
       '<div class="rh2-learn-lib-head">' +
       '<h2 class="rh2-h2" id="asl-h-lib">' + esc(openLabel) + '</h2>' +
-      '<div class="rh2-learn-lib-tools">' +
-      '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
-      '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
-        ' oninput="RH2.aslSearch(this.value)">' +
-      (a.collection ? '<button type="button" class="rh2-btn" onclick="RH2.aslClearCollection()">Show all</button>' : '') +
-      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
-        'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
-      '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
-      '</div></div>';
+      // Search, the archived toggle and "Show all" filter a list. With no
+      // items they are controls that cannot do anything, so only the create
+      // action survives — and on an empty library even that moves into the
+      // empty state, where the eye already is.
+      (all.length
+        ? '<div class="rh2-learn-lib-tools">' +
+          '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
+          '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
+            ' oninput="RH2.aslSearch(this.value)">' +
+          (a.collection ? '<button type="button" class="rh2-btn" onclick="RH2.aslClearCollection()">Show all</button>' : '') +
+          '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
+            'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
+          '</div>'
+        : '') +
+      '</div>';
 
     if (!all.length) {
       out += '<div class="rh2-empty">No learning items yet. Create your first one to start assigning ' +
-        'learning to the team.</div>';
+        'learning to the team.' +
+        '<div class="rh2-empty-act"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+        'onclick="RH2.laCreate()">+ New learning item</button></div></div>';
     } else if (!rows.length) {
       out += '<div class="rh2-empty">' +
         (a.q ? 'Nothing matches &ldquo;' + esc(a.q) + '&rdquo;' + (a.collection ? ' in this collection' : '') + '.'
@@ -4824,7 +4839,7 @@
 
     // The assignment dialog goes ON TOP of the page rather than replacing it,
     // so closing it returns the Owner exactly where they were.
-    return out + renderLaAssign() + '</div>';
+    return out + renderLaAssign() + renderLaCreate() + '</div>';
   }
 
   function laToggleArchived(on) { S.la.includeArchived = !!on; loadLa(); }
@@ -4856,13 +4871,102 @@
     loadLa();
   }
 
-  async function laCreate() {
-    var title = prompt('Name the new learning workflow (e.g. "New Graduate OT Induction"):');
-    if (!title || !title.trim()) return;
-    var d = await api('/api/learning/workflows', { method: 'POST', body: { title: title.trim() } });
-    if (!d.ok) { alert(d.error || 'The workflow could not be created.'); return; }
+  /**
+   * Naming a new learning item.
+   *
+   * This used to be window.prompt(). A native prompt is unstyled, ignores the
+   * portal's design language, cannot show a category or a validation message,
+   * and on some browsers is suppressed entirely — which made the primary
+   * "create" action look broken. It is a portal dialog now, the same component
+   * the assignment flow uses.
+   */
+  function laCreate() {
+    S.la.create = { title: '', category: 'induction', busy: false, err: '' };
+    render();
+    var input = doc.getElementById('la-new-title');
+    if (input) { try { input.focus(); } catch (e) { /* not yet painted */ } }
+  }
+
+  function laCreateClose() {
+    if (S.la.create && S.la.create.busy) return;
+    S.la.create = null;
+    render();
+  }
+
+  function laCreateField(field, value) {
+    if (!S.la.create) return;
+    S.la.create[field] = value;
+    // No re-render: the field already shows what was typed, and re-rendering
+    // mid-keystroke would fight the caret.
+  }
+
+  function laCreateBackdrop(ev) {
+    if (ev && ev.target && ev.target.classList &&
+        ev.target.classList.contains('rh2-dialog-backdrop')) laCreateClose();
+  }
+
+  async function laCreateSubmit() {
+    var c = S.la.create;
+    if (!c || c.busy) return;
+    var title = String(c.title || '').trim();
+    if (!title) {
+      c.err = 'Give the learning item a name.';
+      render();
+      var input = doc.getElementById('la-new-title');
+      if (input) { try { input.focus(); } catch (e) { /* gone */ } }
+      return;
+    }
+    c.busy = true;
+    c.err = '';
+    render();
+    var d = await api('/api/learning/workflows', {
+      method: 'POST', body: { title: title, category: c.category },
+    });
+    c.busy = false;
+    if (!d.ok) { c.err = d.error || 'The learning item could not be created.'; return render(); }
+    S.la.create = null;
     await loadLa();
+    // Straight into the editor: naming it is the start of building it.
     laEdit(d.workflow.id);
+  }
+
+  function renderLaCreate() {
+    var c = S.la.create;
+    if (!c) return '';
+    var cats = S.la.categories || ['induction', 'clinical', 'compliance', 'safety',
+      'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    return '<div class="rh2-dialog-backdrop" onclick="RH2.laCreateBackdrop(event)">' +
+      '<section class="rh2-dialog rh2-dialog-sm" role="dialog" aria-modal="true"' +
+      ' aria-labelledby="la-new-title-h" id="la-new-dialog">' +
+      '<div class="rh2-dialog-head">' +
+        '<h2 class="rh2-h2" id="la-new-title-h">New learning item</h2>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateClose()"' +
+        ' aria-label="Close without creating">Close</button>' +
+      '</div>' +
+      '<div class="rh2-dialog-body">' +
+        '<p class="rh2-quiet rh2-learn-new-hint">Name it now — you can add sections, modules and ' +
+        'assessments on the next screen. Nothing is visible to anyone until you assign it.</p>' +
+        '<div class="rh2-form-grid">' +
+          '<label class="rh2-lbl" for="la-new-title">Name</label>' +
+          '<input class="rh2-input" id="la-new-title" value="' + esc(c.title) + '"' +
+            ' placeholder="e.g. New Graduate OT Induction" autocomplete="off"' +
+            ' oninput="RH2.laCreateField(\'title\',this.value)"' +
+            ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();RH2.laCreateSubmit();}">' +
+          '<label class="rh2-lbl" for="la-new-cat">Category</label>' +
+          '<select class="rh2-select" id="la-new-cat" onchange="RH2.laCreateField(\'category\',this.value)">' +
+            cats.map(function (k) {
+              return '<option value="' + esc(k) + '"' + (c.category === k ? ' selected' : '') + '>' +
+                esc(aslCatLabel(k)) + '</option>';
+            }).join('') +
+          '</select>' +
+        '</div>' +
+        (c.err ? '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(c.err) + '</div>' : '') +
+      '</div>' +
+      '<div class="rh2-dialog-foot">' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary"' + (c.busy ? ' disabled' : '') +
+          ' onclick="RH2.laCreateSubmit()">' + (c.busy ? 'Creating…' : 'Create and edit') + '</button>' +
+      '</div></section></div>';
   }
 
   async function laEdit(id) {
@@ -5785,10 +5889,16 @@
    * to the dialog would be thrown away and re-created constantly.
    */
   doc.addEventListener('keydown', function (e) {
-    if (!S.la || !S.la.assign) return;
-    var dlg = doc.getElementById('la-as-dialog');
+    if (!S.la) return;
+    // Whichever learning dialog is open owns the keyboard. The create dialog
+    // is checked first because it can be opened from inside the library while
+    // no assignment dialog exists.
+    var dlg = null;
+    var close = null;
+    if (S.la.create) { dlg = doc.getElementById('la-new-dialog'); close = laCreateClose; }
+    else if (S.la.assign) { dlg = doc.getElementById('la-as-dialog'); close = laAssignClose; }
     if (!dlg) return;
-    if (e.key === 'Escape') { e.preventDefault(); laAssignClose(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
     if (e.key !== 'Tab') return;
     var focusable = dlg.querySelectorAll(
       'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
@@ -6113,6 +6223,11 @@
     laAssignSelectAllVisible: laAssignSelectAllVisible,
     laAssignBackdrop: laAssignBackdrop,
     laAssignRetryStaff: loadLaStaff,
+    // New learning item — a portal dialog, not window.prompt
+    laCreateClose: laCreateClose,
+    laCreateField: laCreateField,
+    laCreateSubmit: laCreateSubmit,
+    laCreateBackdrop: laCreateBackdrop,
     // Batch assignment + review step + reassignment
     laAssignOpenMulti: laAssignOpenMulti,
     laAssignReview: laAssignReview,

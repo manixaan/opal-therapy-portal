@@ -304,7 +304,10 @@ describe('the assignment dialog', () => {
   });
 
   test('escape closes and tab is trapped', () => {
-    expect(HUB).toContain("if (e.key === 'Escape') { e.preventDefault(); laAssignClose(); return; }");
+    // The handler now serves both learning dialogs, so it closes whichever is
+    // open rather than naming laAssignClose inline.
+    expect(HUB).toContain("if (e.key === 'Escape') { e.preventDefault(); close(); return; }");
+    expect(HUB).toContain("close = laAssignClose;");
     expect(HUB).toContain("if (e.key !== 'Tab') return;");
     expect(HUB).toContain('e.shiftKey && doc.activeElement === first');
   });
@@ -381,8 +384,8 @@ describe('the server, not the button, is what protects this', () => {
 
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
-    expect(SHELL).toContain('/resourcehub.css?v=r13');
-    expect(SHELL).toContain('/resourcehub.js?v=r19');
+    expect(SHELL).toContain('/resourcehub.css?v=r14');
+    expect(SHELL).toContain('/resourcehub.js?v=r20');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -403,5 +406,97 @@ describe('the shell', () => {
 
   test('focus is visible on the new controls', () => {
     expect(CSS).toContain('.rh2-row-btn:focus-visible');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  CREATING A LEARNING ITEM IS A PORTAL DIALOG, NOT A BROWSER PROMPT
+//
+//  window.prompt() renders in the browser's own chrome: no portal styling, no
+//  category field, no validation message — and Safari and Firefox suppress it
+//  outright in some configurations, which makes the primary "create" action
+//  look broken. It is a portal dialog now.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the new learning item dialog', () => {
+  test('no native prompt is used to name a learning item', () => {
+    expect(fn('laCreate')).not.toMatch(/\bprompt\(/);
+    // And nowhere in the learning surface at all.
+    expect(VISIBLE).not.toMatch(/=\s*prompt\(/);
+  });
+
+  test('it is a real dialog, labelled and modal, like the assignment one', () => {
+    const dlg = fn('renderLaCreate');
+    expect(dlg).toContain('role="dialog"');
+    expect(dlg).toContain('aria-modal="true"');
+    expect(dlg).toContain('aria-labelledby="la-new-title-h"');
+    expect(dlg).toContain('rh2-dialog-backdrop');
+  });
+
+  test('it collects a name and a category, and the category list is data-driven', () => {
+    const dlg = fn('renderLaCreate');
+    expect(dlg).toContain('la-new-title');
+    expect(dlg).toContain('la-new-cat');
+    expect(dlg).toContain('S.la.categories');
+  });
+
+  test('an empty name is refused in the dialog rather than posted', () => {
+    const submit = fn('laCreateSubmit');
+    expect(submit).toContain("if (!title) {");
+    expect(submit).toContain('Give the learning item a name.');
+    // The guard comes before the request.
+    expect(submit.indexOf('Give the learning item a name.')).toBeLessThan(submit.indexOf("api('/api/learning/workflows'"));
+  });
+
+  test('a submission in flight cannot be double-sent, and closing is blocked while it is', () => {
+    expect(fn('laCreateSubmit')).toContain('if (!c || c.busy) return;');
+    expect(fn('laCreateClose')).toContain('if (S.la.create && S.la.create.busy) return;');
+  });
+
+  test('Escape closes whichever learning dialog is open', () => {
+    // One document-level handler serves both; the create dialog is checked
+    // first because it opens from the library with no assign dialog present.
+    expect(VISIBLE).toContain("if (S.la.create) { dlg = doc.getElementById('la-new-dialog'); close = laCreateClose; }");
+    expect(VISIBLE).toContain("else if (S.la.assign) { dlg = doc.getElementById('la-as-dialog'); close = laAssignClose; }");
+  });
+
+  test('the dialog is mounted wherever the assignment dialog is', () => {
+    // Otherwise it would be unreachable from one of the owner surfaces.
+    expect(HUB.match(/renderLaAssign\(\) \+ renderLaCreate\(\)/g).length).toBe(3);
+  });
+
+  test('it is narrower than the people picker', () => {
+    expect(CSS).toContain('.rh2-dialog-sm');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE EMPTY LIBRARY OFFERS ONE ACTION, NOT TWO
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the empty library', () => {
+  const page = fn('renderAssignLearning');
+
+  test('the collections section is skipped entirely when nothing exists', () => {
+    // It used to render an explanation plus its own "New learning item"
+    // button directly above a library header carrying the same button.
+    expect(page).toContain('if (all.length) {');
+    expect(page.indexOf('if (all.length) {')).toBeLessThan(page.indexOf('Browse by collection</h2>'));
+  });
+
+  test('search and the archived toggle are not offered against an empty list', () => {
+    expect(page).toMatch(/\(all\.length[\s\S]{0,120}rh2-learn-lib-tools/);
+  });
+
+  test('the one call to action lives in the empty state', () => {
+    const empty = page.slice(page.indexOf('No learning items yet'));
+    expect(empty).toContain('rh2-empty-act');
+    expect(empty).toContain('RH2.laCreate()');
+  });
+
+  test('exactly one create button renders when the library is empty', () => {
+    // Two identical primary buttons on one screen is the defect this pins.
+    const emptyBranch = page.slice(page.indexOf('if (!all.length) {'), page.indexOf('} else if (!rows.length) {'));
+    expect((emptyBranch.match(/RH2\.laCreate\(\)/g) || []).length).toBe(1);
   });
 });

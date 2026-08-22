@@ -1158,3 +1158,10 @@ span.rh2-dochero-thumb { cursor: default; }
    edge on a phone — these lists carry both, side by side. */
 .rh2-learn-review-list li,
 .rh2-learn-assign-whatlist li { overflow-wrap: anywhere; }
+
+/* The "New learning item" dialog: two fields, so it should not open at the
+   width of the people picker. */
+.rh2-dialog-sm { max-width: 460px; }
+.rh2-learn-new-hint { margin: 0 0 14px; }
+/* The empty library's single call to action, centred under its sentence. */
+.rh2-empty-act { margin-top: 12px; }
