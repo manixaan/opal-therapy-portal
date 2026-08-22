@@ -151,46 +151,6 @@ const AI_POLICIES = {
     auditCategory: 'onboarding_extraction',
   },
 
-  /**
-   * Resource Hub library documents -> a folder taxonomy and a shelf for each.
-   *
-   * Declared INTERNAL, and that is the accurate call rather than a convenient
-   * one. What this feature reads is the practice's own reference library:
-   * worksheets, policies, NDIS guidance, assessment protocols. It is clinical
-   * SUBJECT MATTER, which is not the same thing as clinical DATA — no
-   * participant's record, note, plan or identity is involved, and the caller
-   * excludes the client-derived records the Resource Hub already marks
-   * excluded-private before any text is assembled.
-   *
-   * Stretching CLINICAL to cover "a document that mentions sensory processing"
-   * would make the audit register unable to answer the only question it is
-   * really for: has any participant's information ever reached a model? For
-   * this feature the answer has to stay no, and be true.
-   *
-   * INTERNAL still pins the call to Australia (see requirementsFor), so this
-   * is not a relaxation of residency.
-   *
-   * ASSISTANT_RESPONSE only. A folder name is not a clinical document and
-   * declaring it as one would attach a clinical human-review obligation to a
-   * filing decision. The review that matters here is the Owner's, and it is
-   * enforced by the feature: every assignment is reversible, every manual
-   * placement outranks the model permanently, and the model can neither create
-   * a database reference nor reach a resource id it was not given.
-   *
-   * The standard model: naming a shelf is not reasoning about a person.
-   */
-  resource_library_classification: {
-    classification: classification.INTERNAL,
-    allowedClassifications: [classification.INTERNAL],
-    outputTypes: [outputTypes.ASSISTANT_RESPONSE],
-    defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
-    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
-    allowedModels: ['clinical_standard', 'mock'],
-    defaultModel: 'clinical_standard',
-    region: 'australia',
-    mayReceiveClinicalData: false,
-    auditCategory: 'resource_classification',
-  },
 };
 
 /** Recognised guardrailInputScope values; absent means 'full'. */

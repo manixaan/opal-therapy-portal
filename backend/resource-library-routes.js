@@ -3,10 +3,17 @@
 /**
  * THE LIBRARY'S FOLDER SURFACE.
  *
- * Browsing is open to anybody who may browse the Resource Hub; restructuring
- * is the Owner's (§34). That split is enforced here on every route rather than
- * in the client, because a folder tree is navigation and navigation is not a
- * permission — but moving four hundred documents is.
+ * Folders are a filing cabinet the practice keeps by hand: the Owner makes
+ * them, names them, and puts documents in them. Browsing is open to anybody
+ * who may browse the Resource Hub; changing the structure is the Owner's, and
+ * that split is enforced here on every route rather than in the client.
+ *
+ * ── THIS USED TO ORGANISE ITSELF ──────────────────────────────────────────
+ * An earlier version derived the folder tree from the documents' contents and
+ * refined it with a model. The folders it produced are still here and still
+ * correct — they are ordinary rows — but the machinery that generated them has
+ * been removed at the practice's request. Nothing reads a document to decide
+ * where it goes any more; a file lands where a person puts it.
  *
  * ── COUNTS ARE PER READER ─────────────────────────────────────────────────
  * A folder's count is what THIS user can actually open. The same predicates
@@ -27,10 +34,20 @@ const db = require('./database');
 const { pool } = require('./database');
 const { requireAuth } = require('./permissions');
 const governance = require('./resource-governance');
-const organiser = require('./resource-library-organiser');
-const taxonomy = require('./resource-library-taxonomy');
-const classifier = require('./resource-library-classifier');
+const intake = require('./resource-file-intake');
 const log = require('./logger').createLogger('resource-library');
+
+/**
+ * The resources a folder may hold: this organisation's own, still active, and
+ * never a client-derived record. Lifted from the removed organiser module,
+ * which existed mostly to hold it.
+ */
+const SCOPE_SQL = `
+     r.organisation_id IS NOT DISTINCT FROM $1
+ AND r.status <> 'archived'
+ AND r.archived_at IS NULL
+ AND COALESCE(r.access_tier, '') <> 'excluded-private'
+ AND COALESCE(r.publication_state, '') <> 'excluded-private'`;
 
 const hubEnabled = () => process.env.ENABLE_RESOURCE_HUB !== 'false';
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
@@ -55,6 +72,24 @@ function requireOwner(req, res) {
     error: 'Only the practice owner can change the library structure.',
     code: 'library_structure_forbidden',
   });
+}
+
+/**
+ * A folder name a person would accept: ordinary words, nothing that looks like
+ * a database code, and nothing that means "we did not decide".
+ */
+const BANNED_FOLDER_NAMES = ['miscellaneous', 'misc', 'other', 'other documents', 'general',
+  'general files', 'unsorted', 'various', 'stuff', 'documents', 'files'];
+
+function validFolderName(name) {
+  const n = String(name || '').trim();
+  if (n.length < 2 || n.length > 60) return null;
+  if (!/^[A-Za-z][A-Za-z0-9&/,'’\- ]*$/.test(n)) return null;
+  if (/\d{2,}|_|^[A-Z]{4,}$/.test(n)) return null;
+  if (/\s\d+$/.test(n)) return null;
+  if (n.split(/\s+/).length > 5) return null;
+  if (BANNED_FOLDER_NAMES.includes(n.toLowerCase())) return null;
+  return n;
 }
 
 const str = (v, max) => {
@@ -212,106 +247,6 @@ router.get('/api/rh2/library/folders/:idOrSlug', safe(async (req, res) => {
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  ORGANISING
-// ═════════════════════════════════════════════════════════════════════════════
-
-const RUN_FIELDS = `id, status, phase, mode, scanned_count, profiled_count, assigned_count,
-  skipped_locked, review_count, folders_created, ai_used, taxonomy, duplicates,
-  error, rolled_back_at, started_at, finished_at`;
-
-/**
- * How the current or last run is going.
- *
- * Deliberately says nothing about which model, how many tokens, or which
- * table (§16) — `phase` is a word the client turns into "Understanding
- * document topics…" and nothing else leaves here.
- */
-router.get('/api/rh2/library/status', safe(async (req, res) => {
-  const orgId = orgOf(req);
-  const { rows } = await pool.query(
-    `SELECT ${RUN_FIELDS} FROM resource_classification_runs
-      WHERE organisation_id IS NOT DISTINCT FROM $1
-      ORDER BY started_at DESC LIMIT 1`, [orgId]);
-
-  const run = rows[0] || null;
-  res.json({
-    run: run ? {
-      id: run.id, status: run.status, phase: run.phase, mode: run.mode,
-      scanned: run.scanned_count, profiled: run.profiled_count,
-      assigned: run.assigned_count, keptManual: run.skipped_locked,
-      needsReview: run.review_count, foldersCreated: run.folders_created,
-      startedAt: run.started_at, finishedAt: run.finished_at,
-      rolledBackAt: run.rolled_back_at,
-      // The Owner is told plainly whether the deeper review ran. Everyone is
-      // spared the reason code.
-      reviewed: !!run.ai_used,
-      failed: run.status === 'failed',
-      duplicates: isOwner(req.user) ? (run.duplicates || []) : [],
-    } : null,
-    canOrganise: isOwner(req.user),
-  });
-}));
-
-/**
- * Organise (or reorganise) the library.
- *
- * Returns as soon as the run row exists; the work continues in the background
- * and progress is read from /status. There is no approval step — the Owner
- * asked for it, and corrections afterwards are one click (§15).
- */
-router.post('/api/rh2/library/organise', safe(async (req, res) => {
-  const denied = requireOwner(req, res); if (denied) return denied;
-  const orgId = orgOf(req);
-  const mode = req.body && req.body.mode === 'reorganise' ? 'reorganise' : 'organise';
-
-  const run = await organiser.startRun(orgId, req.user.id, mode);
-  if (!run) {
-    return res.status(409).json({
-      error: 'The library is already being organised.', code: 'organisation_in_progress',
-    });
-  }
-
-  await audit(req, 'resource_library.organise_started', null, { runId: run.id, mode });
-
-  // Detached on purpose: the caller gets an id, not a five-minute request.
-  // executeRun records its own failure on the run row, so nothing is lost if
-  // this rejects.
-  Promise.resolve()
-    .then(() => organiser.executeRun(run, { userId: req.user.id }))
-    .catch((err) => log.error('organisation run threw', { error: err, runId: run.id }));
-
-  res.status(202).json({ runId: run.id, status: 'running' });
-}));
-
-/** Undo a run's placements (§39). */
-router.post('/api/rh2/library/rollback', safe(async (req, res) => {
-  const denied = requireOwner(req, res); if (denied) return denied;
-  const orgId = orgOf(req);
-
-  let runId = str(req.body && req.body.runId, 40);
-  if (runId && !isUuid(runId)) return res.status(400).json({ error: 'Unknown run.' });
-  if (!runId) {
-    const last = await pool.query(
-      `SELECT id FROM resource_classification_runs
-        WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'complete'
-        ORDER BY started_at DESC LIMIT 1`, [orgId]);
-    if (!last.rows.length) return res.status(404).json({ error: 'Nothing to undo.' });
-    runId = last.rows[0].id;
-  }
-
-  const result = await organiser.rollbackRun(orgId, runId, req.user.id);
-  if (!result.ok) {
-    const message = result.reason === 'still_running'
-      ? 'That organisation is still running.'
-      : result.reason === 'already_rolled_back'
-        ? 'That organisation has already been undone.'
-        : 'Unknown run.';
-    return res.status(result.reason === 'not_found' ? 404 : 409).json({ error: message, code: result.reason });
-  }
-  res.json({ ok: true, restored: result.restored });
-}));
-
-// ═════════════════════════════════════════════════════════════════════════════
 //  FOLDER MANAGEMENT (§37)
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -333,7 +268,7 @@ router.post('/api/rh2/library/folders', safe(async (req, res) => {
   const denied = requireOwner(req, res); if (denied) return denied;
   const orgId = orgOf(req);
 
-  const name = classifier.validFolderName(str(req.body && req.body.name, 60));
+  const name = validFolderName(str(req.body && req.body.name, 60));
   if (!name) {
     return res.status(400).json({
       error: 'Give the folder a short, descriptive name of ordinary words.',
@@ -392,7 +327,7 @@ router.patch('/api/rh2/library/folders/:id', safe(async (req, res) => {
   const changed = {};
 
   if (req.body && req.body.name !== undefined) {
-    const name = classifier.validFolderName(str(req.body.name, 60));
+    const name = validFolderName(str(req.body.name, 60));
     if (!name) {
       return res.status(400).json({
         error: 'Give the folder a short, descriptive name of ordinary words.',
@@ -475,17 +410,39 @@ router.delete('/api/rh2/library/folders/:id', safe(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const review = await client.query(
+    /**
+     * Somewhere for the orphans to land.
+     *
+     * The bucket used to be created by the automatic organiser. Nothing
+     * creates it now, so it is made on demand — the first time a folder is
+     * removed and there is nowhere for its documents to go. Creating it here
+     * rather than up front means a practice that never deletes a folder never
+     * sees a folder it did not make.
+     */
+    let review = await client.query(
       `SELECT id FROM resource_folders
         WHERE organisation_id IS NOT DISTINCT FROM $1 AND kind = 'library' AND is_review_bucket
         LIMIT 1`, [orgId]);
+    if (!review.rows.length) {
+      review = await client.query(
+        `INSERT INTO resource_folders
+           (organisation_id, name, description, slug, kind, source, sort_order,
+            is_active, is_review_bucket, name_locked, created_by)
+         VALUES ($1, 'Needs Review',
+                 'Documents left without a folder. Move them where they belong.',
+                 'needs-review', 'library', 'manual', 999, TRUE, TRUE, TRUE, $2)
+         ON CONFLICT (organisation_id, slug) WHERE slug IS NOT NULL AND kind = 'library'
+           DO UPDATE SET is_active = TRUE, is_review_bucket = TRUE
+         RETURNING id`,
+        [orgId, req.user.id]);
+    }
 
     const descendants = await client.query(
       `SELECT id FROM resource_folders WHERE id = $1 OR parent_id = $1`, [id]);
     const ids = descendants.rows.map((r) => r.id);
 
     let moved = 0;
-    if (review.rows.length) {
+    {
       const upd = await client.query(
         `UPDATE resource_folder_assignments
             SET folder_id = $1, manual_lock = FALSE, classification_source = 'rules',
@@ -494,12 +451,6 @@ router.delete('/api/rh2/library/folders/:id', safe(async (req, res) => {
           WHERE folder_id = ANY($2::uuid[])`,
         [review.rows[0].id, ids]);
       moved = upd.rowCount;
-    } else {
-      // No review bucket to catch them: refuse rather than orphan.
-      await client.query('ROLLBACK');
-      return res.status(409).json({
-        error: 'Organise the library once before removing folders.', code: 'no_review_folder',
-      });
     }
 
     await client.query(
@@ -553,7 +504,7 @@ router.post('/api/rh2/library/move', safe(async (req, res) => {
   // written anywhere. A caller cannot file somebody else's document by
   // guessing a uuid (§33).
   const valid = await pool.query(
-    `SELECT r.id FROM resources r WHERE r.id = ANY($2::uuid[]) AND ${organiser.SCOPE_SQL}`,
+    `SELECT r.id FROM resources r WHERE r.id = ANY($2::uuid[]) AND ${SCOPE_SQL}`,
     [orgId, requested]);
   const ids = valid.rows.map((r) => r.id);
   if (!ids.length) return res.status(404).json({ error: 'No matching resources.' });
@@ -597,38 +548,170 @@ router.post('/api/rh2/library/move', safe(async (req, res) => {
   res.json({ ok: true, moved: ids.length, folder: folder.rows[0].name });
 }));
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  PUTTING A DOCUMENT IN A FOLDER
+// ═════════════════════════════════════════════════════════════════════════════
+
 /**
- * Hand a resource back to automatic classification.
+ * Upload a file straight into a folder.
  *
- * The counterpart to a manual move: an Owner who changes their mind should not
- * have to guess where the machine would have put it.
+ * This is the front door: drag a PDF onto a folder, or pick it from the button,
+ * and it is there. One request creates the resource record, stores the bytes
+ * through the shared intake gate, and files it — so a half-done upload cannot
+ * leave a resource with no document or a document with no home.
+ *
+ * ── WHY IT ARRIVES LIVE ───────────────────────────────────────────────────
+ * The record is created approved and staff-visible rather than as a draft
+ * awaiting review. That is a deliberate decision by the practice: a folder a
+ * person files into is expected to contain what they just put in it, and a
+ * drag-and-drop that silently produces something nobody else can see is a
+ * worse lie than no review step. The governance lifecycle still exists for
+ * resources authored through Admin; it is this door that skips it.
+ *
+ * The privacy gate does NOT skip. A PDF or Word file carrying somebody's
+ * completed details is refused here exactly as it is in Admin.
  */
-router.post('/api/rh2/library/reclassify', safe(async (req, res) => {
+router.post('/api/rh2/library/folders/:id/upload', safe(async (req, res) => {
   const denied = requireOwner(req, res); if (denied) return denied;
   const orgId = orgOf(req);
-  const resourceId = str(req.body && req.body.resourceId, 40);
-  if (!isUuid(resourceId)) return res.status(400).json({ error: 'Unknown resource.' });
+  const folderId = req.params.id;
+  if (!isUuid(folderId)) return res.status(404).json({ error: 'Unknown folder.' });
 
-  const result = await organiser.classifyResource(orgId, resourceId, {
-    userId: req.user.id, force: true,
-  });
-  if (!result) {
-    return res.status(409).json({
-      error: 'Organise the library once before classifying a single resource.',
-      code: 'not_organised',
+  const folder = await pool.query(
+    `SELECT id, name FROM resource_folders
+      WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2
+        AND kind = 'library' AND is_active`, [folderId, orgId]);
+  if (!folder.rows.length) return res.status(404).json({ error: 'Unknown folder.' });
+
+  const fileName = str(req.body && req.body.fileName, 300);
+  if (!fileName) return res.status(400).json({ error: 'A file name is required.' });
+
+  // The format comes from the name, not from the caller: a client that says
+  // "pdf" about a .exe should not get to choose which gate runs.
+  const format = intake.formatForName(fileName);
+  if (!format) {
+    return res.status(415).json({
+      error: 'That file type is not supported. Use PDF, Word, Excel, PowerPoint or an image.',
+      code: 'unsupported_format',
     });
   }
-  res.json({ ok: true, folder: result.folderName, needsReview: result.review, confidence: result.confidence });
+
+  // The title defaults to the file name without its extension — what a person
+  // would have typed anyway — and stays renameable afterwards.
+  const title = str(req.body && req.body.title, 300)
+    || fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 300)
+    || fileName;
+
+  const client = await pool.connect();
+  let resource;
+  try {
+    await client.query('BEGIN');
+    const slug = await uniqueResourceSlug(client, orgId, title);
+    const created = await client.query(
+      `INSERT INTO resources
+         (organisation_id, title, slug, content_type, resource_type, status,
+          publication_state, access_tier, source_class, rights_status,
+          authority_level, created_by, content_owner, approved_by, approved_at)
+       VALUES ($1, $2, $3, 'download', 'download', 'approved',
+               'approved', 'staff', 'opal-original', 'opal-owned',
+               'internal', $4, $4, $4, NOW())
+       RETURNING *`,
+      [orgId, title, slug, req.user.id]);
+    resource = created.rows[0];
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  const stored = await intake.storeFile(resource, {
+    fileName, format, fileData: req.body && req.body.fileData, isPrimary: true,
+    // Thumbnails are generated by shelling out to a renderer, which is slow
+    // and entirely optional. Somebody dropping twenty files should not wait
+    // for twenty renders; the cards lazy-load thumbnails and fall back to a
+    // file-type glyph when one is not there yet.
+  }, { userId: req.user.id, deferDerivatives: true });
+
+  if (!stored.ok) {
+    // The record exists but has no document, which is not a resource — remove
+    // it rather than leaving an empty shell in the folder. It was created
+    // moments ago by this request and has nothing else attached to it.
+    await pool.query('DELETE FROM resources WHERE id = $1', [resource.id]).catch(() => {});
+    if (stored.code === 'privacy_rejected') {
+      await audit(req, 'resource_library.upload_privacy_rejected', null,
+        { folder: folder.rows[0].name, privacy: stored.privacy, identifiers: stored.identifiers });
+    }
+    return res.status(stored.status).json({ error: stored.error, code: stored.code });
+  }
+
+  await pool.query(
+    `INSERT INTO resource_folder_assignments
+       (resource_id, organisation_id, folder_id, classification_source, confidence,
+        manual_lock, rationale)
+     VALUES ($1, $2, $3, 'manual', 1.0, TRUE, 'Uploaded into this folder.')
+     ON CONFLICT (resource_id) DO UPDATE SET folder_id = EXCLUDED.folder_id`,
+    [resource.id, orgId, folderId]);
+
+  await audit(req, 'resource_library.file_uploaded', resource.id, {
+    folder: folder.rows[0].name, fileName, format, sizeBytes: stored.sizeBytes,
+  });
+
+  res.status(201).json({
+    ok: true,
+    resource: { id: resource.id, title: resource.title, slug: resource.slug },
+    file: stored.file,
+    folder: folder.rows[0].name,
+    warnings: stored.warnings,
+    // Said plainly so the client can be honest about what was and was not
+    // inspected, rather than implying every format is scanned.
+    privacyScanned: stored.privacyScanned,
+  });
 }));
 
-/** The taxonomy vocabulary, so a picker can offer folders that do not exist yet. */
-router.get('/api/rh2/library/themes', safe(async (req, res) => {
+/** A resource slug that is unique for the organisation. */
+async function uniqueResourceSlug(client, orgId, title) {
+  const base = String(title || 'document').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 140) || 'document';
+  for (let i = 1; i < 80; i++) {
+    const candidate = i === 1 ? base : `${base}-${i}`;
+    const { rows } = await client.query(
+      'SELECT 1 FROM resources WHERE organisation_id IS NOT DISTINCT FROM $1 AND slug = $2',
+      [orgId, candidate]);
+    if (!rows.length) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
+/**
+ * Rename a document.
+ *
+ * Deliberately its own route rather than the Admin PATCH. Renaming from a
+ * right-click is a filing action, not an editorial one: it changes what the
+ * card says and nothing else, so it does not ask for a change note and does
+ * not touch the version history or anybody's acknowledgement.
+ */
+router.patch('/api/rh2/library/resources/:id', safe(async (req, res) => {
   const denied = requireOwner(req, res); if (denied) return denied;
-  res.json({
-    themes: taxonomy.THEMES.map((t) => ({
-      key: t.key, name: t.name, description: t.description, parent: t.parent || null,
-    })),
-  });
+  const orgId = orgOf(req);
+  const id = req.params.id;
+  if (!isUuid(id)) return res.status(404).json({ error: 'Not found' });
+
+  const title = str(req.body && req.body.title, 300);
+  if (!title) return res.status(400).json({ error: 'Give the document a name.', code: 'empty_title' });
+
+  // SCOPE_SQL is written against an `r` alias, so the UPDATE has to provide
+  // one — without it Postgres refuses with "missing FROM-clause entry".
+  const { rows } = await pool.query(
+    `UPDATE resources r SET title = $3, updated_at = NOW()
+      WHERE r.id = $2 AND ${SCOPE_SQL}
+      RETURNING r.id, r.title, r.slug`,
+    [orgId, id, title]);
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+
+  await audit(req, 'resource_library.resource_renamed', id, { title });
+  res.json({ ok: true, resource: rows[0] });
 }));
 
 module.exports = router;

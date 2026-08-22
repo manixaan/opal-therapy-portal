@@ -448,38 +448,6 @@ router.get('/api/rh2/home', safe(async (req, res) => {
 // ═══ 2. Search + filters ═════════════════════════════════════════════════════
 
 
-/**
- * AUTOMATIC SHELVING FOR A RESOURCE THAT HAS NO SHELF (§23, §57).
- *
- * Called after the events that give a resource enough substance to place: it
- * was created, a file arrived, or it was approved into the browsable library.
- *
- * Deliberately only touches a resource with NO assignment yet. That single
- * condition is what satisfies three separate requirements at once — an edit
- * does not undo the Owner's filing (§58), a replaced document keeps its folder
- * (§59), and a manual placement is never revisited (§14) — without any of them
- * needing a rule of its own. Re-filing on purpose is the explicit
- * /api/rh2/library/reclassify route.
- *
- * Fire-and-forget and never awaited by a response: an upload must not wait on
- * classification, and a classification failure must not fail an upload.
- */
-function shelveIfUnfiled(req, resourceId) {
-  const orgId = orgOf(req);
-  const userId = req.user && req.user.id;
-  Promise.resolve()
-    .then(async () => {
-      const { rows } = await pool.query(
-        'SELECT 1 FROM resource_folder_assignments WHERE resource_id = $1', [resourceId]);
-      if (rows.length) return;
-      await require('./resource-library-organiser')
-        .classifyResource(orgId, resourceId, { userId });
-    })
-    .catch((err) => log.warn('automatic shelving skipped', {
-      resourceId, reason: err && err.message,
-    }));
-}
-
 router.get('/api/rh2/resources', safe(async (req, res) => {
   const orgId = orgOf(req);
   const params = [orgId];
@@ -926,7 +894,6 @@ router.post('/api/rh2/resources', safe(async (req, res) => {
   await syncCollections(orgId, resource.id, b.collections);
   await syncTags(resource.id, b.tagIds);
   await audit(req, 'rh2.resource_created', resource.id, { title, slug });
-  shelveIfUnfiled(req, resource.id);
   res.status(201).json({ resource });
 }));
 
@@ -1161,9 +1128,6 @@ router.post('/api/rh2/resources/:id/approve', safe(async (req, res) => {
       WHERE NOT EXISTS (SELECT 1 FROM resource_versions WHERE resource_id = $1)`,
     [r.id, r.version, r.title, r.content, req.user.id]);
   await audit(req, 'rh2.resource_approved', r.id, { version: r.version, from: result.from });
-  // Approval is the moment a resource joins the browsable library, so it is
-  // the moment it needs a shelf.
-  shelveIfUnfiled(req, r.id);
   res.json({ ok: true, resource: r });
 }));
 
@@ -1441,7 +1405,7 @@ router.get('/api/rh2/files/:fileId/thumbnail', safe(async (req, res) => {
  * derivatives. A file that names a client never reaches storage; a file whose
  * bytes disagree with its extension never reaches staff.
  */
-const qualityGate = require('./resource-file-quality');
+const intake = require('./resource-file-intake');
 
 const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 /** Formats staff may upload — the same set the delivery allow-list serves. */
@@ -1460,143 +1424,42 @@ router.post('/api/rh2/resources/:id/files', safe(async (req, res) => {
     return res.status(409).json({ error: 'This resource cannot receive files in its current state.' });
   }
 
-  const fileName = str(req.body.fileName, 300);
-  const format = String(req.body.format || '').toLowerCase();
-  const fileData = req.body.fileData;
-  if (!fileName || !fileData || typeof fileData !== 'string') {
-    return res.status(400).json({ error: 'fileName and base64 fileData are required.' });
-  }
-  if (!UPLOADABLE_FORMATS.has(format)) {
-    return res.status(415).json({ error: 'Unsupported file format.', code: 'unsupported_format' });
-  }
-  // Size guard BEFORE decoding: base64 is 4/3 of binary, so the string length
-  // bounds the payload without materialising it.
-  if (fileData.length > (UPLOAD_MAX_BYTES / 3) * 4 + 4) {
-    return res.status(413).json({ error: 'File exceeds the 25 MB upload limit.' });
-  }
-  let buffer;
-  try {
-    buffer = Buffer.from(fileData, 'base64');
-  } catch (_) {
-    return res.status(400).json({ error: 'fileData must be base64.' });
-  }
-  if (!buffer.length) return res.status(400).json({ error: 'File is empty.' });
-  if (buffer.length > UPLOAD_MAX_BYTES) {
-    return res.status(413).json({ error: 'File exceeds the 25 MB upload limit.' });
-  }
+    // Checking and storing live in resource-file-intake.js so this door and the
+  // Library's drag-and-drop door cannot drift apart — a privacy scan that
+  // applies to one upload path and not the other is the gap nobody notices.
+  const stored = await intake.storeFile(resource, {
+    fileName: str(req.body.fileName, 300),
+    format: String(req.body.format || '').toLowerCase(),
+    fileData: req.body.fileData,
+    isPrimary: req.body.isPrimary !== false,
+  }, { userId: req.user.id });
 
-  // Quality + privacy gate on the BYTES. Two failure classes are separated:
-  // privacy findings quarantine the attempt outright; structural findings
-  // (wrong magic bytes, encrypted, corrupt) reject it; an image-only PDF is
-  // allowed through as a warning — plenty of legitimate published worksheets
-  // are scans, and the privacy scan has nothing to read either way, which is
-  // exactly why page-render review exists for that class.
-  let assessment = null;
-  if (format === 'pdf' || format === 'docx') {
-    assessment = await qualityGate.assessFile(buffer, { declaredFormat: format, declaredName: fileName });
-    const privacyBlocked = assessment.report.privacy
-      && assessment.report.privacy.verdict !== 'no-obvious-pii';
-    if (privacyBlocked || (assessment.report.identifierFindings || []).length) {
+  if (!stored.ok) {
+    if (stored.code === 'privacy_rejected') {
       await audit(req, 'rh2.file_upload_privacy_rejected', resource.id, {
         // Counts and kinds only — never content.
-        privacy: assessment.report.privacy,
-        identifiers: assessment.report.identifierFindings,
-      });
-      return res.status(422).json({
-        error: 'This file appears to contain a person\'s completed details and was not stored. '
-          + 'Remove client information and try again, or contact an administrator.',
-        code: 'privacy_rejected',
+        privacy: stored.privacy, identifiers: stored.identifiers,
       });
     }
-    const blocking = assessment.failures.filter((f) => !/text layer/i.test(f));
-    if (blocking.length) {
-      return res.status(422).json({ error: blocking.join(' '), code: 'quality_rejected' });
-    }
-  } else {
-    // Other formats get the magic-byte check only.
-    const magic = qualityGate.sniffMagic(buffer);
-    const expect = { pptx: 'zip', xlsx: 'zip', png: 'png', jpg: 'jpeg' }[format];
-    if (expect && magic !== expect && !(expect === 'zip' && magic === 'ole')) {
-      return res.status(422).json({
-        error: `The file's contents do not match the declared ${format.toUpperCase()} format.`,
-        code: 'quality_rejected',
-      });
-    }
+    return res.status(stored.status).json({ error: stored.error, code: stored.code });
   }
 
-  const checksum = fileStorage.sha256(buffer);
-  const ext = `.${format}`;
-  const storageKey = `resources/${checksum.slice(0, 2)}/${checksum}${ext}`;
-
-  // Content-addressed dedupe: an identical blob is stored once, ever.
-  const { rows: existingBlob } = await pool.query(
-    `SELECT 1 FROM resource_files WHERE storage_key = $1 LIMIT 1`, [storageKey]);
-  if (!existingBlob.length || !(await fileStorage.existsBlob(storageKey))) {
-    await fileStorage.putBuffer(storageKey, buffer);
-  }
-
-  const wantPrimary = req.body.isPrimary !== false;
-  const client = await pool.connect();
-  let fileRow;
-  try {
-    await client.query('BEGIN');
-    if (wantPrimary) {
-      await client.query(
-        `UPDATE resource_files SET is_primary = FALSE WHERE resource_id = $1 AND is_primary`,
-        [resource.id]);
-    }
-    const { rows: created } = await client.query(
-      `INSERT INTO resource_files
-         (resource_id, file_name, file_mime, file_size_bytes, storage_backend,
-          storage_key, checksum_sha256, is_primary, format, uploaded_by)
-       VALUES ($1,$2,$3,$4,'rhub',$5,$6,$7,$8,$9)
-       ON CONFLICT (resource_id, storage_key) WHERE storage_key IS NOT NULL DO UPDATE
-         SET file_name = EXCLUDED.file_name, is_primary = EXCLUDED.is_primary
-       RETURNING id, file_name, format, file_size_bytes, checksum_sha256, is_primary, uploaded_at`,
-      [resource.id, fileName, fileStorage.mimeForFormat(format), buffer.length,
-        storageKey, checksum, wantPrimary, format, req.user.id]);
-    fileRow = created[0];
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  const fileRow = stored.file;
+  const format = fileRow.format;
+  const checksum = stored.checksum;
+  const previews = stored.previews;
 
   await audit(req, 'rh2.file_uploaded', resource.id, {
-    fileId: fileRow.id, format, sizeBytes: buffer.length, checksum,
+    fileId: fileRow.id, format, sizeBytes: stored.sizeBytes, checksum,
   });
 
-  // A document that arrived after the record was created can now be read, so
-  // an unfiled resource gets a better answer than its metadata alone gave.
-  shelveIfUnfiled(req, resource.id);
-
-  // Derivatives are best-effort: a missing renderer must never fail an upload.
-  let previews = null;
-  try {
-    previews = await previewService.ensureDerivatives(pool, {
-      id: fileRow.id, storage_key: storageKey, format, checksum_sha256: checksum,
-      access_tier: null, publication_state: resource.publication_state,
-      archived_at: resource.archived_at,
-    });
-  } catch (err) {
-    log.warn('preview generation failed after upload', { fileId: fileRow.id, reason: err.message });
-  }
-
+  // Derivatives were generated inside the intake, which is also where a
+  // renderer failure is swallowed — a missing thumbnail must never fail an
+  // upload.
   res.status(201).json({
-    file: {
-      id: fileRow.id,
-      fileName: fileRow.file_name,
-      format: fileRow.format,
-      sizeBytes: Number(fileRow.file_size_bytes),
-      checksumSha256: fileRow.checksum_sha256,
-      isPrimary: fileRow.is_primary,
-      uploadedAt: fileRow.uploaded_at,
-      downloadUrl: `/api/rh2/files/${fileRow.id}`,
-    },
+    file: fileRow,
     previews: previews ? previews.results : null,
-    warnings: assessment ? assessment.warnings : [],
+    warnings: stored.warnings,
   });
 }));
 

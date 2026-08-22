@@ -384,8 +384,13 @@ describe('the server, not the button, is what protects this', () => {
 
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
-    expect(SHELL).toContain('/resourcehub.css?v=r14');
-    expect(SHELL).toContain('/resourcehub.js?v=r21');
+    // These pins move whenever ANY feature changes the hub assets — the file
+    // is shared, so the version is shared. r22/r15 is the Library's
+    // hand-managed filing rewrite; bump both this and the list in
+    // assessment-surface-guards.test.js together, or CI fails on the half
+    // that was forgotten.
+    expect(SHELL).toContain('/resourcehub.css?v=r15');
+    expect(SHELL).toContain('/resourcehub.js?v=r22');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

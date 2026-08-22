@@ -363,8 +363,10 @@
       sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false,
       browse: 'folders', folders: null, foldersLoading: false, foldersErr: '', organised: false,
       totalResources: 0, folderId: '', folderMeta: null, folderSearch: false,
-      org: null, orgPoll: null, orgErr: '', busy: '',
+      orgErr: '', busy: '',
       selMode: false, sel: {}, moveOpen: false, moveErr: '', moveNote: '', folderForm: null,
+      // Uploading, right-click and renaming.
+      uploads: null, dropTarget: '', menu: null, renaming: null,
     },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
@@ -473,6 +475,7 @@
         sort: 'relevant', saved: true, rows: null, loading: false, offset: 0, hasMore: false,
         folderId: '', folderMeta: null, folderSearch: false, browse: 'folders',
         selMode: false, sel: {}, moveOpen: false, folderForm: null,
+        menu: null, renaming: null, uploads: null, dropTarget: '',
       });
       view = 'library';
     } else if (view === 'library' && S.lib.saved) {
@@ -492,7 +495,6 @@
     if (view === 'library') {
       if (!S.lib.rows) loadLibrary();
       loadFolders();
-      if (!S.lib.org) loadOrgStatus(true);
     }
     if (view === 'learning') {
       if (isOwner()) {
@@ -1028,63 +1030,255 @@
     if (S.view === 'library') render();
   }
 
-  /**
-   * Poll while a run is going. The interval is generous on purpose: this is a
-   * progress bar, not a live feed, and a run over a library of this size takes
-   * a few seconds to a few minutes.
-   */
-  async function loadOrgStatus(startPolling) {
-    var d = await api('/api/rh2/library/status');
-    if (!d.ok) return;
-    S.lib.org = d;
-    var running = d.run && d.run.status === 'running';
-    if (running && startPolling !== false) {
-      if (S.lib.orgPoll) clearTimeout(S.lib.orgPoll);
-      S.lib.orgPoll = setTimeout(function () { loadOrgStatus(true); }, 2500);
-    } else if (S.lib.orgPoll) {
-      clearTimeout(S.lib.orgPoll);
-      S.lib.orgPoll = null;
-      // The structure changed under the reader — refresh what they are looking
-      // at rather than leaving stale counts on screen.
-      if (d.run && d.run.status === 'complete') { loadFolders(true); loadLibrary(); }
-    }
-    if (S.view === 'library') render();
-  }
+  /* ── Uploading ────────────────────────────────────────────────────────────
+     Two ways in, one path: drag files onto a folder, or press Upload and pick
+     them. Both end up in libUploadFiles, so the two doors cannot behave
+     differently.
 
-  /** Plain words for each phase. No model, no table, no job id reaches here (§16). */
-  var ORG_PHASES = {
-    scanning: 'Reading resources…',
-    reading: 'Understanding document topics…',
-    structuring: 'Creating library structure…',
-    organising: 'Organising resources…',
-    done: 'Complete',
-  };
+     Files are read one at a time rather than all at once. A person dropping
+     twenty PDFs would otherwise have twenty base64 copies in memory
+     simultaneously, and the browser tab is not the place to discover that. */
 
-  async function libOrganise(mode) {
-    if (S.lib.busy) return;
-    S.lib.busy = 'organise';
-    render();
-    var d = await api('/api/rh2/library/organise', {
-      method: 'POST', body: { mode: mode || 'organise' },
+  var UPLOAD_EXT = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'];
+  var UPLOAD_ACCEPT = '.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg';
+  var UPLOAD_MAX = 25 * 1024 * 1024;
+
+  function readAsBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('unreadable')); };
+      reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
+      reader.readAsDataURL(file);
     });
-    S.lib.busy = '';
-    if (!d.ok) {
-      S.lib.orgErr = d.error || 'Library organisation couldn\'t be completed right now. Your resources have not been changed.';
-      render();
-      return;
-    }
-    S.lib.orgErr = '';
-    loadOrgStatus(true);
   }
 
-  async function libUndoOrganise() {
-    if (S.lib.busy) return;
-    S.lib.busy = 'undo';
+  /**
+   * Send each file to the folder, one after another, reporting as it goes.
+   *
+   * Rejections are per FILE, not per batch: an Excel sheet with client details
+   * in it stops that file and nothing else. The server decides — the checks
+   * here only save a round trip on the obvious cases.
+   */
+  async function libUploadFiles(folderId, fileList) {
+    var files = [].slice.call(fileList || []);
+    if (!files.length || !folderId) return;
+
+    S.lib.uploads = files.map(function (f) { return { name: f.name, state: 'waiting' }; });
+    S.lib.dropTarget = '';
     render();
-    var d = await api('/api/rh2/library/rollback', { method: 'POST', body: {} });
+
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      var entry = S.lib.uploads[i];
+      var ext = String(file.name.split('.').pop() || '').toLowerCase();
+
+      if (UPLOAD_EXT.indexOf(ext) === -1) {
+        entry.state = 'error';
+        entry.message = 'Not a supported file type.';
+        render();
+        continue;
+      }
+      if (file.size > UPLOAD_MAX) {
+        entry.state = 'error';
+        entry.message = 'Larger than 25 MB.';
+        render();
+        continue;
+      }
+
+      entry.state = 'uploading';
+      render();
+      try {
+        var base64 = await readAsBase64(file);
+        var d = await api('/api/rh2/library/folders/' + encodeURIComponent(folderId) + '/upload', {
+          method: 'POST',
+          body: { fileName: file.name, fileData: base64 },
+        });
+        if (d.ok) {
+          entry.state = 'done';
+          entry.message = (d.warnings || []).join(' ');
+        } else {
+          entry.state = 'error';
+          entry.message = d.error || 'Upload failed.';
+        }
+      } catch (e) {
+        entry.state = 'error';
+        entry.message = 'Could not read that file.';
+      }
+      render();
+    }
+
+    // The folder counts and the open list are both stale now.
+    loadFolders(true);
+    if (S.lib.folderId) loadLibrary();
+  }
+
+  function libPickFiles(folderId) {
+    var input = doc.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = UPLOAD_ACCEPT;
+    input.onchange = function () { libUploadFiles(folderId, input.files); };
+    input.click();
+  }
+
+  function libUploadsDismiss() { S.lib.uploads = null; render(); }
+
+  /* Drag state is kept as the id of the folder currently under the pointer, so
+     only that card highlights. dragleave is unreliable across child elements,
+     so entering another card simply replaces the value. */
+  function libDragOver(ev, folderId) {
+    if (!isOwner()) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (S.lib.dropTarget !== folderId) { S.lib.dropTarget = folderId; render(); }
+  }
+
+  function libDragLeave(ev, folderId) {
+    if (S.lib.dropTarget === folderId) { S.lib.dropTarget = ''; render(); }
+  }
+
+  function libDrop(ev, folderId) {
+    if (!isOwner()) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    S.lib.dropTarget = '';
+    var dt = ev.dataTransfer;
+    if (dt && dt.files && dt.files.length) libUploadFiles(folderId, dt.files);
+    else render();
+  }
+
+  function uploadPanel() {
+    var ups = S.lib.uploads;
+    if (!ups || !ups.length) return '';
+    var done = ups.filter(function (u) { return u.state === 'done'; }).length;
+    var failed = ups.filter(function (u) { return u.state === 'error'; });
+    var busy = ups.some(function (u) { return u.state === 'uploading' || u.state === 'waiting'; });
+    return '<div class="rh2-uploads" role="status" aria-live="polite">'
+      + '<div class="rh2-uploads-head">'
+      + '<strong>' + (busy ? 'Uploading…' : ('Uploaded ' + done + ' of ' + ups.length)) + '</strong>'
+      + (busy ? '' : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libUploadsDismiss()">Dismiss</button>')
+      + '</div>'
+      + ups.map(function (u) {
+        var mark = u.state === 'done' ? '✓' : u.state === 'error' ? '✗' : '·';
+        return '<div class="rh2-upload-row rh2-upload-' + esc(u.state) + '">'
+          + '<span class="rh2-upload-mark" aria-hidden="true">' + mark + '</span>'
+          + '<span class="rh2-upload-name">' + esc(u.name) + '</span>'
+          + (u.message ? '<span class="rh2-upload-msg">' + esc(u.message) + '</span>' : '')
+          + '</div>';
+      }).join('')
+      + (failed.length
+        ? '<p class="rh2-libnote">Files that were refused have not been stored. Nothing else was affected.</p>'
+        : '')
+      + '</div>';
+  }
+
+  /* ── Right-click ──────────────────────────────────────────────────────────
+     One menu, two kinds of target. It is Owner-only because every action on it
+     is: a therapist right-clicking gets their browser's own menu, which is the
+     correct outcome rather than a menu of buttons that would all be refused. */
+
+  function libMenu(ev, kind, id, name) {
+    if (!isOwner()) return true;
+    ev.preventDefault();
+    ev.stopPropagation();
+    S.lib.menu = {
+      kind: kind, id: id, name: name,
+      x: Math.min(ev.clientX, (global.innerWidth || 1200) - 210),
+      y: Math.min(ev.clientY, (global.innerHeight || 800) - 190),
+    };
+    render();
+    return false;
+  }
+
+  function libMenuClose() { S.lib.menu = null; render(); }
+
+  function renderMenu() {
+    var m = S.lib.menu;
+    if (!m) return '';
+    var items = [];
+    if (m.kind === 'folder') {
+      items.push(['Open', "RH2.libOpenFolder('" + esc(m.id) + "')"]);
+      items.push(['Rename…', "RH2.libRenameStart('folder','" + esc(m.id) + "')"]);
+      items.push(['Upload files here…', "RH2.libPickFiles('" + esc(m.id) + "')"]);
+      if (!m.review) items.push(['Remove folder…', "RH2.libFolderArchive('" + esc(m.id) + "','" + esc(String(m.name).replace(/'/g, '')) + "')"]);
+    } else {
+      items.push(['Open', "RH2.openDetail('" + esc(m.id) + "','library')"]);
+      items.push(['Rename…', "RH2.libRenameStart('resource','" + esc(m.id) + "')"]);
+      items.push(['Move to folder…', "RH2.libMoveOne('" + esc(m.id) + "')"]);
+    }
+    return '<div class="rh2-menu-veil" onclick="RH2.libMenuClose()" oncontextmenu="RH2.libMenuClose();return false;"></div>'
+      + '<div class="rh2-menu" role="menu" aria-label="Actions for ' + esc(m.name) + '" '
+      + 'style="left:' + Math.round(m.x) + 'px; top:' + Math.round(m.y) + 'px;">'
+      + '<div class="rh2-menu-title">' + esc(m.name) + '</div>'
+      + items.map(function (it) {
+        return '<button type="button" role="menuitem" class="rh2-menu-item" '
+          + 'onclick="RH2.libMenuClose();' + it[1] + '">' + esc(it[0]) + '</button>';
+      }).join('')
+      + '</div>';
+  }
+
+  /* ── Renaming ─────────────────────────────────────────────────────────────
+     An inline panel rather than window.prompt: prompt cannot be styled, cannot
+     show the server's refusal, and is blocked outright in some browsers. */
+
+  function libRenameStart(kind, id) {
+    var name = '';
+    if (kind === 'folder') {
+      (S.lib.folders || []).forEach(function (f) {
+        if (f.id === id) name = f.name;
+        (f.children || []).forEach(function (c) { if (c.id === id) name = c.name; });
+      });
+    } else {
+      (S.lib.rows || []).forEach(function (r) { if (pick(r, 'id') === id) name = pick(r, 'title'); });
+    }
+    S.lib.renaming = { kind: kind, id: id, name: name, err: '' };
+    render();
+  }
+
+  function libRenameField(v) { if (S.lib.renaming) S.lib.renaming.name = v; }
+  function libRenameCancel() { S.lib.renaming = null; render(); }
+
+  async function libRenameSave() {
+    var r = S.lib.renaming;
+    if (!r || S.lib.busy) return;
+    S.lib.busy = 'rename';
+    render();
+    var d = r.kind === 'folder'
+      ? await api('/api/rh2/library/folders/' + encodeURIComponent(r.id), {
+        method: 'PATCH', body: { name: r.name },
+      })
+      : await api('/api/rh2/library/resources/' + encodeURIComponent(r.id), {
+        method: 'PATCH', body: { title: r.name },
+      });
     S.lib.busy = '';
-    S.lib.orgErr = d.ok ? '' : (d.error || 'That could not be undone.');
-    if (d.ok) { loadFolders(true); loadLibrary(); loadOrgStatus(false); }
+    if (!d.ok) { r.err = d.error || 'That name could not be saved.'; render(); return; }
+    S.lib.renaming = null;
+    loadFolders(true);
+    if (r.kind === 'resource') loadLibrary();
+    render();
+  }
+
+  function renameDialog() {
+    var r = S.lib.renaming;
+    if (!r) return '';
+    return '<div class="rh2-folderform" role="group" aria-label="Rename">'
+      + '<h2 class="rh2-h2">Rename ' + (r.kind === 'folder' ? 'folder' : 'document') + '</h2>'
+      + '<label class="rh2-label" for="rh2-rename">Name</label>'
+      + '<input id="rh2-rename" class="rh2-input" maxlength="300" value="' + esc(r.name) + '" '
+      + 'oninput="RH2.libRenameField(this.value)">'
+      + (r.err ? '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(r.err) + '</p>' : '')
+      + '<div class="rh2-folderform-actions">'
+      + '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '') + ' onclick="RH2.libRenameSave()">Save</button>'
+      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libRenameCancel()">Cancel</button>'
+      + '</div></div>';
+  }
+
+  /** Move a single resource — the right-click counterpart to bulk selection. */
+  function libMoveOne(id) {
+    S.lib.sel = {};
+    S.lib.sel[id] = true;
+    S.lib.selMode = true;
+    S.lib.moveOpen = true;
     render();
   }
 
@@ -1097,6 +1291,7 @@
     f.q = ''; f.kind = ''; f.type = ''; f.topic = ''; f.cost = '';
     f.population = ''; f.setting = ''; f.authority = '';
     f.sel = {}; f.selMode = false;
+    f.menu = null; f.renaming = null;
     if (id) loadFolderMeta(id);
     loadLibrary();
   }
@@ -1243,7 +1438,19 @@
    */
   function folderCard(node, owner) {
     var kids = (node.children || []).length;
-    return '<div class="rh2-folder' + (node.isReviewBucket ? ' rh2-folder-review' : '') + '">'
+    var dropping = owner && S.lib.dropTarget === node.id;
+    // The drop handlers are only attached for an Owner: a therapist dragging a
+    // file onto a folder they cannot write to should get the browser's default
+    // (open the file), not a silent no-op that looks broken.
+    var dnd = owner
+      ? ' ondragover="RH2.libDragOver(event,\'' + esc(node.id) + '\')"'
+        + ' ondragleave="RH2.libDragLeave(event,\'' + esc(node.id) + '\')"'
+        + ' ondrop="RH2.libDrop(event,\'' + esc(node.id) + '\')"'
+        + ' oncontextmenu="return RH2.libMenu(event,\'folder\',\'' + esc(node.id) + '\',\''
+        + esc(String(node.name).replace(/'/g, '')) + '\')"'
+      : '';
+    return '<div class="rh2-folder' + (node.isReviewBucket ? ' rh2-folder-review' : '')
+      + (dropping ? ' is-dropping' : '') + '"' + dnd + '>'
       + '<button type="button" class="rh2-folder-open" onclick="RH2.libOpenFolder(\'' + esc(node.id) + '\')">'
       + folderIcon()
       + '<span class="rh2-folder-body">'
@@ -1252,13 +1459,15 @@
       + '<span class="rh2-folder-count">' + esc(countLabel(node.count))
       + (kids ? ' · ' + kids + (kids === 1 ? ' subfolder' : ' subfolders') : '') + '</span>'
       + '</span></button>'
+      + (dropping ? '<span class="rh2-folder-dropmsg" aria-hidden="true">Drop to upload</span>' : '')
       + (owner ? '<span class="rh2-folder-tools">'
+        + '<button type="button" class="rh2-iconbtn" title="Upload files here" aria-label="Upload files into ' + esc(node.name) + '" '
+        + 'onclick="RH2.libPickFiles(\'' + esc(node.id) + '\')">' + icn('plus', 'doc', 14) + '</button>'
         + '<button type="button" class="rh2-iconbtn" title="Rename folder" aria-label="Rename ' + esc(node.name) + '" '
-        + 'onclick="RH2.libFolderForm(true,' + esc(JSON.stringify({ id: node.id, name: node.name, description: node.description, parentId: node.parentId }).replace(/"/g, '&quot;')) + ')">'
-        + icn('edit', 'doc', 14) + '</button>'
+        + 'onclick="RH2.libRenameStart(\'folder\',\'' + esc(node.id) + '\')">' + icn('edit', 'doc', 14) + '</button>'
         + (node.isReviewBucket ? '' : '<button type="button" class="rh2-iconbtn" title="Remove folder" aria-label="Remove ' + esc(node.name) + '" '
           + 'onclick="RH2.libFolderArchive(\'' + esc(node.id) + '\',\'' + esc(String(node.name).replace(/'/g, '')) + '\')">'
-          + icn('trash', 'close', 14) + '</button>')
+          + icn('trash', 'x', 14) + '</button>')
         + '</span>' : '')
       + '</div>';
   }
@@ -1278,46 +1487,32 @@
       + '</nav>';
   }
 
-  /** The Owner's run controls and, while one is going, its progress. */
+  /**
+   * The Owner's controls.
+   *
+   * Everything here acts on the folder the reader is actually looking at, so
+   * "Upload files" inside Assessments puts them in Assessments. On the folder
+   * grid there is no single target, so uploading is offered per folder instead
+   * — by dropping onto a card or right-clicking it.
+   */
   function libOwnerBar() {
     if (!isOwner()) return '';
-    var org = S.lib.org;
-    var run = org && org.run;
-    var running = run && run.status === 'running';
+    var f = S.lib;
     var out = '<div class="rh2-libtools">';
 
-    if (running) {
-      out += '<div class="rh2-organising" role="status" aria-live="polite">'
-        + '<span class="rh2-organising-dot" aria-hidden="true"></span>'
-        + '<span>Organising Resource Library — ' + esc(ORG_PHASES[run.phase] || 'Working…') + '</span>'
-        + '</div>';
-    } else {
-      out += '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '')
-        + ' onclick="RH2.libOrganise(\'' + (S.lib.organised ? 'reorganise' : 'organise') + '\')">'
-        + (S.lib.busy === 'organise' ? 'Starting…' : (S.lib.organised ? 'Reorganise Library' : 'Organise Library'))
-        + '</button>';
-      out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(true)">New folder</button>';
-      if (S.lib.organised) {
-        out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(' + (S.lib.selMode ? 'false' : 'true') + ')">'
-          + (S.lib.selMode ? 'Done selecting' : 'Select resources') + '</button>';
-      }
-      if (run && run.status === 'complete' && !run.rolledBackAt) {
-        out += '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (S.lib.busy ? 'disabled' : '')
-          + ' onclick="RH2.libUndoOrganise()">' + (S.lib.busy === 'undo' ? 'Undoing…' : 'Undo last organisation') + '</button>';
-      }
+    if (f.folderId) {
+      out += '<button type="button" class="rh2-btn rh2-btn-primary" '
+        + 'onclick="RH2.libPickFiles(\'' + esc(f.folderId) + '\')">Upload files</button>';
     }
+    out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(true)">New folder</button>';
+    if ((f.folders || []).length) {
+      out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(' + (f.selMode ? 'false' : 'true') + ')">'
+        + (f.selMode ? 'Done selecting' : 'Select resources') + '</button>';
+    }
+    out += '<span class="rh2-libhint">Right-click a folder or document to rename, move or upload.</span>';
 
-    if (run && run.status === 'failed') {
-      out += '<p class="rh2-libnote rh2-libnote-warn" role="status">Library organisation couldn\'t be completed right now. '
-        + 'Your resources have not been changed.</p>';
-    }
-    if (S.lib.orgErr) out += '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(S.lib.orgErr) + '</p>';
-    if (S.lib.moveNote) out += '<p class="rh2-libnote" role="status">' + esc(S.lib.moveNote) + '</p>';
-    if (run && run.status === 'complete' && run.keptManual) {
-      out += '<p class="rh2-libnote">' + esc(run.keptManual) + ' '
-        + (run.keptManual === 1 ? 'resource you placed by hand was left where you put it.'
-          : 'resources you placed by hand were left where you put them.') + '</p>';
-    }
+    if (f.orgErr) out += '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(f.orgErr) + '</p>';
+    if (f.moveNote) out += '<p class="rh2-libnote" role="status">' + esc(f.moveNote) + '</p>';
     return out + '</div>';
   }
 
@@ -1376,8 +1571,8 @@
     if (!f.folders.length) {
       return '<div class="rh2-empty">'
         + (isOwner()
-          ? 'This library has not been organised into folders yet. Choose <strong>Organise Library</strong> and the portal will read the resources and build a structure from what is actually in them.'
-          : 'This library has not been organised into folders yet. Search or open All Resources to browse everything.')
+          ? 'No folders yet. Choose <strong>New folder</strong> to make one, then drag documents onto it or use <strong>Upload files</strong>.'
+          : 'No folders yet. Search, or open All Resources to browse everything.')
         + '</div>' + allResourcesRow();
     }
     var owner = isOwner();
@@ -1426,7 +1621,13 @@
    */
   function selectableCard(r, backView) {
     var id = pick(r, 'id');
-    if (!S.lib.selMode) return resourceCard(r, backView);
+    // Right-click is Owner-only, so a therapist keeps the browser's own menu.
+    if (!S.lib.selMode) {
+      if (!isOwner()) return resourceCard(r, backView);
+      return '<div class="rh2-ctxwrap" oncontextmenu="return RH2.libMenu(event,\'resource\',\''
+        + esc(id) + '\',\'' + esc(String(pick(r, 'title') || '').replace(/'/g, '')) + '\')">'
+        + resourceCard(r, backView) + '</div>';
+    }
     var on = !!S.lib.sel[id];
     return '<div class="rh2-selwrap' + (on ? ' is-selected' : '') + '">'
       + '<label class="rh2-selbox">'
@@ -1450,6 +1651,7 @@
     else if (inFolder && f.folderMeta && !searching) title = f.folderMeta.folder.name;
 
     var out = '<div class="rh2-page rh2-library">';
+    out += renderMenu();
     out += '<h1 class="rh2-h1">' + esc(title) + '</h1>';
 
     // Breadcrumbs whenever the reader is anywhere other than the front page.
@@ -1507,7 +1709,9 @@
     }
 
     out += libOwnerBar();
+    out += uploadPanel();
     out += libFolderDialog();
+    out += renameDialog();
     if (f.selMode) {
       out += libSelCount()
         ? (S.lib.moveOpen ? libMovePanel()
@@ -1522,6 +1726,17 @@
 
     // ── a list of resources ───────────────────────────────────────────────
     if (inFolder && !searching) out += renderSubfolders();
+    if (inFolder && isOwner()) {
+      var over = S.lib.dropTarget === f.folderId;
+      out += '<div class="rh2-dropzone' + (over ? ' is-dropping' : '') + '"'
+        + ' ondragover="RH2.libDragOver(event,\'' + esc(f.folderId) + '\')"'
+        + ' ondragleave="RH2.libDragLeave(event,\'' + esc(f.folderId) + '\')"'
+        + ' ondrop="RH2.libDrop(event,\'' + esc(f.folderId) + '\')">'
+        + (over ? 'Drop to upload into this folder'
+          : 'Drop files here, or <button type="button" class="rh2-linkbtn" onclick="RH2.libPickFiles(\''
+            + esc(f.folderId) + '\')">choose files</button> — PDF, Word, Excel, PowerPoint or images')
+        + '</div>';
+    }
 
     if (f.loading || f.rows === null) {
       out += '<div class="rh2-grid">' + skelCards(8) + '</div>';
@@ -6169,8 +6384,19 @@
     libBrowse: libBrowse,
     libScopeSearch: libScopeSearch,
     libReloadFolders: libReloadFolders,
-    libOrganise: libOrganise,
-    libUndoOrganise: libUndoOrganise,
+    libPickFiles: libPickFiles,
+    libUploadFiles: libUploadFiles,
+    libUploadsDismiss: libUploadsDismiss,
+    libDragOver: libDragOver,
+    libDragLeave: libDragLeave,
+    libDrop: libDrop,
+    libMenu: libMenu,
+    libMenuClose: libMenuClose,
+    libRenameStart: libRenameStart,
+    libRenameField: libRenameField,
+    libRenameCancel: libRenameCancel,
+    libRenameSave: libRenameSave,
+    libMoveOne: libMoveOne,
     libSelectMode: libSelectMode,
     libToggleSel: libToggleSel,
     libMoveOpen: libMoveOpen,

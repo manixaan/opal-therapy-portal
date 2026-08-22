@@ -593,10 +593,12 @@ describe('changed assets are cache-busted', () => {
       // r17/r11: the Service Agreement joined the library grid as a workflow
       // tool, which changed both the renderer and the card styles.
       // r18/r12: the Owner's Assign Learning surface and its dialog
-      ['resourcehub.js', 'r21'], ['resourcehub.css', 'r14'],
+      // r22/r15: the Library became a hand-managed filing cabinet — folder
+      // upload, drag-and-drop and right-click in, automatic organisation out.
+      ['resourcehub.js', 'r22'], ['resourcehub.css', 'r15'],
       // 7: the Service Agreement added a 'service-agreement' resources view
       // (and its redirect aliases) to the route grammar
-      ['navigation.js', 6],
+      ['navigation.js', 7],
       // 3: the onboarding journey — starter packs, returned documents,
       // extracted-detail review, account provisioning — and its styles
       ['onboarding.js', 8], ['onboarding.css', 8],

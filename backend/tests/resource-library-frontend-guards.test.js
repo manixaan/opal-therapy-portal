@@ -92,15 +92,10 @@ describe('search stays global (§21)', () => {
 });
 
 describe('Owner-only controls are gated in the client too (§34)', () => {
-  const OWNER_ONLY = [
-    'RH2.libOrganise(', 'RH2.libUndoOrganise()', 'RH2.libFolderArchive(',
-    'RH2.libFolderForm(true)', 'RH2.libSelectMode(',
-  ];
-
-  it('renders the run controls only inside an owner check', () => {
+  it('renders the folder controls only inside an owner check', () => {
     const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('function libMovePanel()'));
     expect(bar).toContain("if (!isOwner()) return '';");
-    for (const control of ['RH2.libOrganise(', 'RH2.libUndoOrganise()', 'RH2.libSelectMode(']) {
+    for (const control of ['RH2.libPickFiles(', 'RH2.libFolderForm(true)', 'RH2.libSelectMode(']) {
       expect(bar).toContain(control);
     }
   });
@@ -110,34 +105,39 @@ describe('Owner-only controls are gated in the client too (§34)', () => {
     expect(JS).toContain('var owner = isOwner();');
   });
 
-  it('keeps every owner-only handler out of the therapist path', () => {
-    // Each control appears only where an owner check precedes it.
-    for (const control of OWNER_ONLY) {
-      expect(JS).toContain(control);
-    }
-    expect(JS).toContain("owner ? '<span class=\"rh2-folder-tools\">'");
+  it('attaches drop handlers only for an Owner', () => {
+    // A therapist dragging a file onto a folder should get the browser's
+    // default, not a silent no-op that looks broken.
+    expect(JS).toContain('var dnd = owner');
+    const drag = JS.slice(JS.indexOf('function libDragOver('), JS.indexOf('function uploadPanel()'));
+    expect(drag).toContain('if (!isOwner()) return;');
+  });
+
+  it('gives a therapist the browser\'s own right-click menu', () => {
+    const menu = JS.slice(JS.indexOf('function libMenu('), JS.indexOf('function libMenuClose()'));
+    expect(menu).toContain('if (!isOwner()) return true;');
+    expect(JS).toContain('if (!isOwner()) return resourceCard(r, backView);');
   });
 });
 
-describe('progress is described in words, not internals (§16)', () => {
-  it('maps each phase to a plain sentence', () => {
-    expect(JS).toContain('var ORG_PHASES = {');
-    for (const phrase of ['Reading resources…', 'Understanding document topics…',
-      'Creating library structure…', 'Organising resources…']) {
-      expect(JS).toContain(phrase);
+describe('the AI organisation is gone, not hidden', () => {
+  /**
+   * The practice asked for automatic organisation to be removed. A button that
+   * merely stops being rendered is not removal — the handler, the polling and
+   * the phase vocabulary all have to be absent, or the next person to read
+   * this file will reasonably assume the feature still exists.
+   */
+  it('leaves no organise handler, poller or phase vocabulary behind', () => {
+    for (const gone of ['libOrganise', 'libUndoOrganise', 'loadOrgStatus', 'ORG_PHASES',
+      'Organise Library', 'Reorganise Library', 'Undo last organisation',
+      '/api/rh2/library/organise', '/api/rh2/library/rollback', '/api/rh2/library/status',
+      '/api/rh2/library/reclassify']) {
+      expect(JS).not.toContain(gone);
     }
   });
 
-  it('never shows a model, a token count, a provider or a run id', () => {
-    const owner = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('function libMovePanel()'));
-    for (const leak of ['modelKey', 'providerRequestId', 'tokens', 'bedrock', 'run.id', 'runId']) {
-      expect(owner.toLowerCase()).not.toContain(leak.toLowerCase());
-    }
-  });
-
-  it('says plainly when organisation could not run, and that nothing changed (§61)', () => {
-    expect(JS).toContain("Library organisation couldn\\'t be completed right now.");
-    expect(JS).toContain('Your resources have not been changed.');
+  it('leaves no organise styling behind', () => {
+    expect(CSS).not.toContain('rh2-organising');
   });
 });
 
@@ -149,7 +149,12 @@ describe('manual control is offered where the mistake is noticed (§35, §36)', 
   });
 
   it('leaves the resource card itself untouched when not selecting (§19)', () => {
-    expect(JS).toContain('if (!S.lib.selMode) return resourceCard(r, backView);');
+    // Selection and right-click are both WRAPPERS. The card markup, its
+    // handler and its classes are the same ones every other view renders.
+    const sel = JS.slice(JS.indexOf('function selectableCard('), JS.indexOf('function renderLibrary()'));
+    expect(sel).toContain('if (!isOwner()) return resourceCard(r, backView);');
+    expect(sel).toContain("+ resourceCard(r, backView) + '</div>'");
+    expect(sel).toContain('resourceCard(r, backView)');
   });
 
   it('warns that removing a folder does not delete anything', () => {
@@ -176,6 +181,111 @@ describe('the api() contract', () => {
     const block = JS.slice(JS.indexOf('async function libOrganise('), JS.indexOf('function libFolderArchive('));
     expect(block).not.toMatch(/body:\s*JSON\.stringify/);
     expect(block).not.toMatch(/body:\s*'\{/);
+  });
+});
+
+describe('uploading (drag-and-drop and the button)', () => {
+  it('offers both doors, and both end up in one place', () => {
+    expect(JS).toContain('function libUploadFiles(');
+    expect(JS).toContain('function libPickFiles(');
+    expect(JS).toContain("api('/api/rh2/library/folders/'");
+    // The button builds an <input type=file> that routes into the same call.
+    const pick = JS.slice(JS.indexOf('function libPickFiles('), JS.indexOf('function libUploadsDismiss()'));
+    expect(pick).toContain('libUploadFiles(folderId, input.files)');
+  });
+
+  it('accepts the formats the server accepts, and no more', () => {
+    expect(JS).toContain("var UPLOAD_EXT = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'];");
+    expect(JS).toContain("'.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg'");
+  });
+
+  it('reads files one at a time rather than all at once', () => {
+    // Twenty base64 copies of twenty PDFs in memory at once is how a browser
+    // tab dies; the loop awaits each read before starting the next.
+    const up = JS.slice(JS.indexOf('async function libUploadFiles('), JS.indexOf('function libPickFiles('));
+    expect(up).toContain('for (var i = 0; i < files.length; i++)');
+    expect(up).toContain('await readAsBase64(file)');
+  });
+
+  it('reports each file\'s outcome separately', () => {
+    expect(JS).toContain('function uploadPanel()');
+    expect(JS).toContain("entry.state = 'error'");
+    expect(JS).toContain("entry.state = 'done'");
+    expect(JS).toContain('Files that were refused have not been stored.');
+  });
+
+  it('refreshes the counts and the open folder once uploading ends', () => {
+    const up = JS.slice(JS.indexOf('async function libUploadFiles('), JS.indexOf('function libPickFiles('));
+    expect(up).toContain('loadFolders(true)');
+    expect(up).toContain('loadLibrary()');
+  });
+
+  it('shows a drop target before the file lands', () => {
+    expect(JS).toContain('rh2-dropzone');
+    expect(JS).toContain('Drop to upload');
+    expect(CSS).toContain('.rh2-folder.is-dropping');
+    expect(CSS).toContain('.rh2-dropzone.is-dropping');
+  });
+
+  it('signals a drop target by more than colour (§54)', () => {
+    // Border and a label, so the affordance survives a monochrome display.
+    expect(CSS).toContain('border-style: dashed');
+    expect(JS).toContain('rh2-folder-dropmsg');
+  });
+});
+
+describe('right-click', () => {
+  it('opens one menu for folders and documents alike', () => {
+    expect(JS).toContain('function libMenu(');
+    expect(JS).toContain('function renderMenu()');
+    expect(JS).toContain("oncontextmenu=\"return RH2.libMenu(event,\\'folder\\'");
+    expect(JS).toContain("oncontextmenu=\"return RH2.libMenu(event,\\'resource\\'");
+  });
+
+  it('offers rename on both, and upload on a folder', () => {
+    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('/* ── Renaming'));
+    expect(menu).toContain("RH2.libRenameStart('folder'");
+    expect(menu).toContain("RH2.libRenameStart('resource'");
+    expect(menu).toContain('RH2.libPickFiles(');
+    expect(menu).toContain('RH2.libMoveOne(');
+  });
+
+  it('closes on an outside click and is dismissible', () => {
+    expect(JS).toContain('rh2-menu-veil');
+    expect(JS).toContain('RH2.libMenuClose()');
+  });
+
+  it('escapes every name it renders', () => {
+    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('/* ── Renaming'));
+    expect(menu).toContain('esc(m.name)');
+    expect(menu).toContain('esc(it[0])');
+  });
+
+  it('labels the menu for a screen reader', () => {
+    expect(JS).toContain('role="menu"');
+    expect(JS).toContain('role="menuitem"');
+  });
+});
+
+describe('renaming', () => {
+  it('uses an inline panel, never window.prompt', () => {
+    // A native prompt cannot be styled, cannot show the server's refusal, and
+    // is blocked outright in some browsers.
+    expect(JS).toContain('function renameDialog()');
+    const rename = JS.slice(JS.indexOf('function libRenameStart('), JS.indexOf('function renameDialog()'));
+    expect(rename).not.toMatch(/(?:window|global)\.prompt\(/);
+    expect(JS).toContain("<input id=\"rh2-rename\"");
+  });
+
+  it('sends a folder rename and a document rename to different routes', () => {
+    const save = JS.slice(JS.indexOf('async function libRenameSave()'), JS.indexOf('function renameDialog()'));
+    expect(save).toContain("'/api/rh2/library/folders/'");
+    expect(save).toContain("'/api/rh2/library/resources/'");
+  });
+
+  it('shows the server\'s refusal rather than swallowing it', () => {
+    const save = JS.slice(JS.indexOf('async function libRenameSave()'), JS.indexOf('function renameDialog()'));
+    expect(save).toContain('r.err = d.error');
   });
 });
 
@@ -225,9 +335,12 @@ describe('responsive layout (§53)', () => {
     expect(CSS).toContain('.rh2-folders { display: flex; flex-direction: column;');
   });
 
-  it('adapts the folder row and the folder form on a narrow screen', () => {
-    const small = CSS.slice(CSS.lastIndexOf('@media (max-width: 640px)'));
-    expect(small).toContain('.rh2-folder-open');
-    expect(small).toContain('.rh2-folderform');
+  it('adapts the folder row, the form and the dropzone on a narrow screen', () => {
+    // There is more than one narrow-screen block now, so gather them all
+    // rather than assuming the last one carries every rule.
+    const blocks = CSS.split('@media (max-width: 640px)').slice(1).join('\n');
+    for (const rule of ['.rh2-folder-open', '.rh2-folderform', '.rh2-dropzone']) {
+      expect(blocks).toContain(rule);
+    }
   });
 });
