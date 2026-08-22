@@ -151,6 +151,45 @@ const AI_POLICIES = {
     auditCategory: 'onboarding_extraction',
   },
 
+  /**
+   * Reading a staff member's scanned credential — the AHPRA certificate, the
+   * WWCC card, the insurance certificate of currency — so the expiry date is
+   * transcribed rather than typed.
+   *
+   * SEPARATE FROM onboarding_document_extraction, deliberately. That feature
+   * reads TEXT from returned forms and has no OCR path at all. This one sends
+   * a PAGE IMAGE of an identity document to a vision model, which is a
+   * materially different data flow, and folding it into the onboarding policy
+   * would make `ai_interactions.feature` unable to answer the one question a
+   * reviewer will ask: has an image of a staff identity document ever reached
+   * a model? It must be answerable without reading code.
+   *
+   * INTERNAL, not clinical, and that is the accurate call: a practitioner's
+   * own registration certificate is information about somebody who works here,
+   * not health information about somebody we treat. INTERNAL still pins the
+   * call to Australia — see requirementsFor().
+   *
+   * ASSISTANT_RESPONSE only. A transcription is not a clinical document. The
+   * review that matters is enforced by the feature and more strictly: nothing
+   * read from a scan reaches the credentials table until a person saves the
+   * form field by field.
+   *
+   * The standard model, not the complex one: reading a printed certificate is
+   * transcription, and the harder model buys no accuracy on it.
+   */
+  credential_document_extraction: {
+    classification: classification.INTERNAL,
+    allowedClassifications: [classification.INTERNAL],
+    outputTypes: [outputTypes.ASSISTANT_RESPONSE],
+    defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
+    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
+    allowedModels: ['clinical_standard', 'mock'],
+    defaultModel: 'clinical_standard',
+    region: 'australia',
+    mayReceiveClinicalData: false,
+    auditCategory: 'credential_extraction',
+  },
+
 };
 
 /** Recognised guardrailInputScope values; absent means 'full'. */

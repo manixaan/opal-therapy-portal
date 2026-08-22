@@ -21,6 +21,7 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('./database');
 const { requireAuth } = require('./permissions');
+const credentialExtraction = require('./credential-extraction');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -356,6 +357,55 @@ function validateUpload({ fileName, fileMime, fileData }) {
   return null;
 }
 
+/**
+ * Persist an uploaded file and return its pd_documents row.
+ *
+ * Both PD evidence and credential scans land here. The db/blob split is
+ * fiddly enough that a second copy of it would eventually disagree with this
+ * one — and the copy that disagrees is the one that leaves a row pointing at
+ * bytes nobody wrote.
+ */
+async function storeUploadedDocument({
+  user, title, documentType, fileName, fileMime, fileSizeBytes, fileData,
+  relatedCpdActivityId = null,
+}) {
+  const { getBackend, getBackendName } = require('./storage');
+  const backend = getBackend();
+
+  // db backend: bytes go inline via the INSERT. local/blob: create the row
+  // first (to get an id for the storage key), write the object, then link it
+  // and clear the inline column.
+  if (getBackendName() === 'db' || !fileData) {
+    return db.createPDDocument({
+      userId: user.id, organisationId: user.organisation_id,
+      title, documentType, fileName, fileMime, fileSizeBytes,
+      fileData: fileData || null,
+      relatedCpdActivityId: relatedCpdActivityId || null,
+      storageBackend: 'db',
+    });
+  }
+
+  const record = await db.createPDDocument({
+    userId: user.id, organisationId: user.organisation_id,
+    title, documentType, fileName, fileMime, fileSizeBytes,
+    fileData: null, relatedCpdActivityId: relatedCpdActivityId || null,
+    storageBackend: getBackendName(),
+  });
+  try {
+    const { backend: b, storageKey } = await backend.put({
+      userId: user.id, docId: record.id, fileName, mime: fileMime, base64: fileData,
+    });
+    await db.setPDDocumentStorage(record.id, { storageBackend: b, storageKey, clearInline: true });
+    record.storage_backend = b;
+  } catch (putErr) {
+    // Storage write failed — remove the metadata row so no orphaned
+    // "document" without content survives, then surface the failure.
+    await db.deletePDDocument(record.id, user.id).catch(() => {});
+    throw putErr;
+  }
+  return record;
+}
+
 router.post('/api/profile/documents', requireAuth, async (req, res) => {
   try {
     const user = req.user;
@@ -371,41 +421,10 @@ router.post('/api/profile/documents', requireAuth, async (req, res) => {
     const uploadError = validateUpload({ fileName, fileMime, fileData });
     if (uploadError) return res.status(415).json({ error: uploadError });
 
-    const { getBackend, getBackendName } = require('./storage');
-    const backend = getBackend();
-
-    // db backend: bytes go inline via the INSERT. local/blob: create the row
-    // first (to get an id for the storage key), write the object, then link it
-    // and clear the inline column.
-    let record;
-    if (getBackendName() === 'db' || !fileData) {
-      record = await db.createPDDocument({
-        userId: user.id, organisationId: user.organisation_id,
-        title, documentType, fileName, fileMime, fileSizeBytes,
-        fileData: fileData || null,
-        relatedCpdActivityId: relatedCpdActivityId || null,
-        storageBackend: 'db',
-      });
-    } else {
-      record = await db.createPDDocument({
-        userId: user.id, organisationId: user.organisation_id,
-        title, documentType, fileName, fileMime, fileSizeBytes,
-        fileData: null, relatedCpdActivityId: relatedCpdActivityId || null,
-        storageBackend: getBackendName(),
-      });
-      try {
-        const { backend: b, storageKey } = await backend.put({
-          userId: user.id, docId: record.id, fileName, mime: fileMime, base64: fileData,
-        });
-        await db.setPDDocumentStorage(record.id, { storageBackend: b, storageKey, clearInline: true });
-        record.storage_backend = b;
-      } catch (putErr) {
-        // Storage write failed — remove the metadata row so no orphaned
-        // "document" without content survives, then surface the failure.
-        await db.deletePDDocument(record.id, user.id).catch(() => {});
-        throw putErr;
-      }
-    }
+    const record = await storeUploadedDocument({
+      user, title, documentType, fileName, fileMime, fileSizeBytes, fileData,
+      relatedCpdActivityId,
+    });
 
     // Audit: title/filename are employee-chosen metadata, never file content.
     await db.logAuditEvent({
@@ -516,6 +535,152 @@ router.delete('/api/profile/documents/:id', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * WHY A SCAN IS REQUIRED
+ *
+ * Before this, a credential was an assertion: somebody typed "WWCC, expires
+ * 1 May 2029" and the practice's whole compliance position rested on that
+ * typing being right. Nothing was ever checked against anything, because there
+ * was nothing to check against — and the Owner's Verify button was a click on
+ * somebody's word.
+ *
+ * Requiring the document changes what the register is. It also changes what
+ * Verify means, which is the point of the exercise.
+ *
+ * Credentials created BEFORE this rule keep their place and are shown as
+ * "scan missing" rather than deleted or hidden — a practice's existing
+ * compliance record is not something a deploy gets to invalidate.
+ */
+
+/** File types a credential scan may be. A certificate is a scan or a PDF;
+ *  DOC/DOCX is accepted for PD evidence but is not what a certificate is. */
+const SCAN_ALLOWED = {
+  'application/pdf': ['pdf'],
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+};
+
+const SCAN_MAX_BASE64 = 7 * 1024 * 1024; // ≈5 MB of file
+
+function validateScanUpload({ fileName, fileMime, fileData }) {
+  if (!fileData) return 'A scan of the credential document is required';
+  const exts = SCAN_ALLOWED[String(fileMime || '').toLowerCase()];
+  if (!exts) return 'Scan must be a PDF, PNG or JPEG';
+  const ext = String(fileName || '').split('.').pop().toLowerCase();
+  if (!exts.includes(ext)) return `File extension ".${ext}" does not match the declared type`;
+  if (/[/\\]|\.\./.test(String(fileName))) return 'Invalid file name';
+  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(String(fileData).slice(0, 1000))) {
+    return 'File content must be base64-encoded';
+  }
+  return null;
+}
+
+/**
+ * Resolve the document a credential is claiming as its scan, and refuse every
+ * way that claim can be wrong: absent, someone else's, not a credential scan,
+ * or already standing as the evidence for a different credential.
+ *
+ * That last one matters more than it looks. One certificate backing two
+ * credentials means deleting either one takes the evidence for both.
+ */
+async function resolveScanForClaim({ documentId, userId, credentialId = null }) {
+  if (!documentId || !isUuid(documentId)) {
+    return { status: 400, error: 'A scan of the credential document is required' };
+  }
+  const doc = await db.getPDDocumentForDownload(documentId, userId);
+  if (!doc || doc.user_id !== userId) {
+    return { status: 404, error: 'That scan could not be found' };
+  }
+  const claimedBy = await db.pool.query(
+    `SELECT id FROM credentials WHERE document_id = $1 AND ($2::uuid IS NULL OR id <> $2)`,
+    [documentId, credentialId]
+  );
+  if (claimedBy.rows.length) {
+    return { status: 409, error: 'That scan is already attached to another credential' };
+  }
+  return { document: doc };
+}
+
+/** The fields a verification tick actually attested to. Notes are not among
+ *  them — a reviewer's own annotation does not undo somebody else's check. */
+const MATERIAL_FIELDS = [
+  'credential_type', 'credential_name', 'issuing_body',
+  'registration_number', 'issue_date', 'expiry_date', 'document_id',
+];
+
+/** Which material fields this request genuinely moves. Comparing dates as
+ *  strings would report a change every time, so DATE columns are compared on
+ *  their ISO day. */
+function materialChanges(existing, fields) {
+  const asDay = (v) => {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    return String(v).slice(0, 10);
+  };
+  // `ahpra` and `ahpra_registration` are the same credential type under two
+  // spellings. Saving a record written with the old one must not read as a
+  // change and withdraw somebody's verification.
+  const asType = (v) => credentialExtraction.canonicalType(v) || v;
+
+  const changed = [];
+  for (const key of MATERIAL_FIELDS) {
+    if (!(key in fields)) continue;
+    const norm = key.endsWith('_date') ? asDay : key === 'credential_type' ? asType : (v) => v;
+    const before = norm(existing[key]) ?? null;
+    const after  = norm(fields[key]) ?? null;
+    if (String(before ?? '') !== String(after ?? '')) changed.push(key);
+  }
+  return changed;
+}
+
+/**
+ * Close the loop on a model reading: record which credential it ended up on
+ * and which of its proposed values survived the human.
+ *
+ * Failure here is deliberately swallowed. The credential is already saved and
+ * correct; losing the provenance row is a gap in a measurement, not a reason
+ * to fail the save the person actually asked for.
+ */
+async function linkExtraction({ extractionId, credential, user }) {
+  if (!extractionId || !isUuid(extractionId)) return;
+  try {
+    const extraction = await db.getCredentialExtraction(extractionId);
+    if (!extraction || extraction.requested_by_user_id !== user.id) return;
+
+    const proposed = extraction.proposed || {};
+    const applied = {};
+    for (const [key, entry] of Object.entries(proposed)) {
+      const def = credentialExtraction.FIELDS[key];
+      if (!def || !def.target) continue;
+      const saved = credential[def.target];
+      const savedDay = saved instanceof Date ? saved.toISOString().slice(0, 10) : saved;
+      if (savedDay != null && String(savedDay).slice(0, 10) === String(entry.value)) {
+        applied[key] = entry;
+      }
+    }
+    await db.applyCredentialExtraction(extractionId, {
+      credentialId: credential.id, applied, appliedByUserId: user.id,
+    });
+  } catch (err) {
+    console.warn('credential extraction link failed:', err.message);
+  }
+}
+
+/** Read a stored document's bytes through whichever backend holds them. */
+async function readStoredDocument(doc) {
+  const { getBackend } = require('./storage');
+  const backend = getBackend(doc.storage_backend || 'db');
+  try {
+    const { base64 } = await backend.get({
+      backend: doc.storage_backend, storageKey: doc.storage_key, fileData: doc.file_data,
+    });
+    return base64 ? Buffer.from(base64, 'base64') : null;
+  } catch (err) {
+    console.warn(`Credential scan ${doc.id} unreadable (${err.code || err.name})`);
+    return null;
+  }
+}
+
+/**
  * GET /api/profile/credentials
  * Therapist: own credentials. Owner/Admin: all org credentials (?mine=1 for own only).
  */
@@ -539,25 +704,42 @@ router.get('/api/profile/credentials', requireAuth, async (req, res) => {
 
 /**
  * POST /api/profile/credentials
- * Add a credential.
- * Body: { credentialType, credentialName, issuingBody?, registrationNumber?, issueDate?, expiryDate?, documentId?, notes? }
+ * Add a credential. A scan of the document is REQUIRED — see the note on
+ * requireScan below.
+ * Body: { credentialType, credentialName, issuingBody?, registrationNumber?,
+ *         issueDate?, expiryDate?, documentId, extractionId?, notes? }
  */
 router.post('/api/profile/credentials', requireAuth, async (req, res) => {
   try {
     const user = req.user;
     const { credentialType, credentialName, issuingBody, registrationNumber,
-            issueDate, expiryDate, documentId, notes } = req.body;
+            issueDate, expiryDate, documentId, extractionId, notes } = req.body;
 
     if (!credentialType || !credentialName) {
       return res.status(400).json({ error: 'credentialType and credentialName are required' });
     }
 
+    const scan = await resolveScanForClaim({ documentId, userId: user.id });
+    if (scan.error) return res.status(scan.status).json({ error: scan.error });
+
+    const canonical = credentialExtraction.canonicalType(credentialType);
+    if (!canonical) return res.status(400).json({ error: 'Unknown credential type' });
+
     const record = await db.createCredential({
       userId:             user.id,
       organisationId:     user.organisation_id,
-      credentialType, credentialName, issuingBody, registrationNumber,
-      issueDate, expiryDate, documentId, notes,
+      credentialType: canonical, credentialName, issuingBody, registrationNumber,
+      issueDate, expiryDate, documentId: scan.document.id, notes,
     });
+
+    await linkExtraction({ extractionId, credential: record, user });
+
+    await db.logAuditEvent({
+      actorUserId: user.id, action: 'credential.created',
+      targetType: 'credential', targetId: record.id, ipAddress: req.ip,
+      organisationId: user.organisation_id,
+      metadata: { credentialType, documentId: scan.document.id, fromExtraction: Boolean(extractionId) },
+    }).catch(() => {});
 
     res.status(201).json({ credential: record });
   } catch (err) {
@@ -568,23 +750,86 @@ router.post('/api/profile/credentials', requireAuth, async (req, res) => {
 
 /**
  * PATCH /api/profile/credentials/:id
- * Update own credential fields (credential owner only, unless manager).
- * Body: { credentialName?, issuingBody?, registrationNumber?, issueDate?, expiryDate?, notes? }
+ * Update a credential. The HOLDER only — an Owner reviewing the practice's
+ * credentials may verify and may read the scan, but may not edit somebody
+ * else's record. A compliance record that a manager can silently retype is
+ * not evidence of anything.
+ *
+ * Body: { credentialType?, credentialName?, issuingBody?, registrationNumber?,
+ *         issueDate?, expiryDate?, documentId?, extractionId?, notes? }
  */
 router.patch('/api/profile/credentials/:id', requireAuth, async (req, res) => {
   try {
     if (!isUuid(req.params.id)) return notFound(res);
-    const { credentialName, issuingBody, registrationNumber, issueDate, expiryDate, notes } = req.body;
-    const record = await db.updateCredential(req.params.id, req.user.id, {
+    const user = req.user;
+    const { credentialType, credentialName, issuingBody, registrationNumber,
+            issueDate, expiryDate, documentId, extractionId, notes } = req.body;
+
+    const existing = await db.getCredentialById(req.params.id);
+    if (!existing) return notFound(res);
+    // Not 403: a holder must not learn from an error code that a credential
+    // they cannot see exists.
+    if (existing.user_id !== user.id) return notFound(res);
+
+    // Folded to the canonical spelling — the portal has two names for four of
+    // these, and a record that keeps the old one shows a raw database string
+    // on every screen that knows only the new one.
+    const canonicalCredentialType = credentialType === undefined
+      ? undefined : credentialExtraction.canonicalType(credentialType);
+    if (credentialType !== undefined && !canonicalCredentialType) {
+      return res.status(400).json({ error: 'Unknown credential type' });
+    }
+
+    let scanDocumentId;
+    if (documentId !== undefined && documentId !== existing.document_id) {
+      const scan = await resolveScanForClaim({ documentId, userId: user.id, credentialId: existing.id });
+      if (scan.error) return res.status(scan.status).json({ error: scan.error });
+      scanDocumentId = scan.document.id;
+    }
+
+    const fields = {
+      credential_type:     canonicalCredentialType,
       credential_name:     credentialName,
       issuing_body:        issuingBody,
       registration_number: registrationNumber,
       issue_date:          issueDate,
       expiry_date:         expiryDate,
       notes,
-    });
+    };
+    if (scanDocumentId) fields.document_id = scanDocumentId;
+
+    // Only the fields the caller actually sent. `undefined` means "not in this
+    // request"; null means "clear it", and the two must not be conflated.
+    for (const k of Object.keys(fields)) if (fields[k] === undefined) delete fields[k];
+    if (!Object.keys(fields).length) return res.json({ credential: existing });
+
+    const changed = materialChanges(existing, fields);
+    const record = await db.updateCredential(req.params.id, user.id, fields);
     if (!record) return notFound(res);
-    res.json({ credential: record });
+
+    // A tick attests to the values that were on screen when it was given.
+    // Change one of them and it no longer attests to anything.
+    let verificationWithdrawn = false;
+    let current = record;
+    if (changed.length && existing.status === 'verified') {
+      const cleared = await db.clearCredentialVerification(req.params.id);
+      if (cleared) { verificationWithdrawn = true; current = cleared; }
+    }
+
+    await linkExtraction({ extractionId, credential: current, user });
+
+    if (changed.length) {
+      await db.logAuditEvent({
+        actorUserId: user.id, action: 'credential.updated',
+        targetType: 'credential', targetId: req.params.id, ipAddress: req.ip,
+        organisationId: user.organisation_id,
+        // Which fields moved, never the values — an audit log is not a second
+        // copy of the register.
+        metadata: { fields: changed, verificationWithdrawn },
+      }).catch(() => {});
+    }
+
+    res.json({ credential: current, verificationWithdrawn });
   } catch (err) {
     console.error('PATCH credential error:', err);
     res.status(500).json({ error: 'Failed to update credential' });
@@ -620,12 +865,203 @@ router.patch('/api/profile/credentials/:id/verify', requireAuth, async (req, res
 router.delete('/api/profile/credentials/:id', requireAuth, async (req, res) => {
   try {
     if (!isUuid(req.params.id)) return notFound(res);
+    const existing = await db.getCredentialById(req.params.id);
     const deleted = await db.deleteCredential(req.params.id, req.user.id);
     if (!deleted) return notFound(res);
+
+    // The scan existed to evidence this credential and nothing else — it is
+    // hidden from the PD documents list, so leaving it behind would leave a
+    // file nobody can see and nobody can remove.
+    if (existing && existing.document_id) {
+      await db.deletePDDocument(existing.document_id, req.user.id).catch(() => {});
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('DELETE credential error:', err);
     res.status(500).json({ error: 'Failed to delete credential' });
+  }
+});
+
+// ── The scan, and reading it ───────────────────────────────────────────────
+
+/**
+ * POST /api/profile/credentials/scans
+ * Store a credential scan that has no credential yet.
+ *
+ * The Add flow needs this: a person uploads the certificate, the reader
+ * proposes the fields, and only then is there anything worth saving. The row
+ * is theirs and invisible in the PD list until a credential claims it.
+ *
+ * Body: { fileName, fileMime, fileSizeBytes?, fileData }
+ */
+router.post('/api/profile/credentials/scans', requireAuth, async (req, res) => {
+  try {
+    const { fileName, fileMime, fileSizeBytes, fileData } = req.body;
+    if (fileData && fileData.length > SCAN_MAX_BASE64) {
+      return res.status(413).json({ error: 'Scan exceeds the 5 MB limit' });
+    }
+    const invalid = validateScanUpload({ fileName, fileMime, fileData });
+    if (invalid) return res.status(415).json({ error: invalid });
+
+    const record = await storeUploadedDocument({
+      user: req.user,
+      title: String(fileName || 'Credential scan').slice(0, 255),
+      documentType: 'credential_scan',
+      fileName, fileMime, fileSizeBytes, fileData,
+    });
+
+    await db.logAuditEvent({
+      actorUserId: req.user.id, action: 'credential.scan_uploaded',
+      targetType: 'pd_document', targetId: record.id, ipAddress: req.ip,
+      organisationId: req.user.organisation_id,
+      metadata: { mime: fileMime, sizeBytes: fileSizeBytes || null },
+    }).catch(() => {});
+
+    res.status(201).json({ document: record });
+  } catch (err) {
+    console.error('POST credential scan error:', err);
+    res.status(500).json({ error: 'Failed to upload the scan' });
+  }
+});
+
+/**
+ * POST /api/profile/credentials/scans/:documentId/extract
+ * Read a stored scan and PROPOSE the credential's fields.
+ *
+ * Nothing here writes to a credential. The proposal is returned for a person
+ * to accept field by field, and recorded so that "what did the model say"
+ * and "what did the human keep" stay two separable questions.
+ *
+ * Holder only: an Owner may read the scan, but a re-read spends a model call
+ * and produces a proposal only the holder can act on.
+ *
+ * Body: { pageImages?: [{ data, mime }], credentialType? }
+ */
+router.post('/api/profile/credentials/scans/:documentId/extract', requireAuth, async (req, res) => {
+  try {
+    if (!isUuid(req.params.documentId)) return notFound(res);
+    const user = req.user;
+    const doc = await db.getPDDocumentForDownload(req.params.documentId, user.id);
+    if (!doc || doc.user_id !== user.id) return notFound(res);
+
+    const { pageImages, credentialType, credentialId } = req.body || {};
+    const buffer = await readStoredDocument(doc);
+
+    const result = await credentialExtraction.extract({
+      buffer,
+      mime: doc.file_mime,
+      pageImages,
+      credentialTypeHint: credentialType,
+      userId: user.id,
+      organisationId: user.organisation_id,
+    });
+
+    // Recorded whether or not it found anything: a read that produced nothing
+    // is evidence too, and "did we try?" has to be answerable.
+    let extraction = null;
+    try {
+      extraction = await db.createCredentialExtraction({
+        organisationId: user.organisation_id,
+        requestedByUserId: user.id,
+        documentId: doc.id,
+        credentialId: isUuid(credentialId) ? credentialId : null,
+        sourceKind: result.sourceKind,
+        status: result.status === 'proposed' ? 'proposed'
+          : result.status === 'refused' ? 'refused' : 'unreadable',
+        proposed: result.fields,
+        notes: result.notes,
+        modelKey: result.meta && result.meta.modelKey,
+        aiInteractionId: result.meta && result.meta.interactionId,
+      });
+    } catch (recordErr) {
+      // The reading is still usable; losing its provenance row must not cost
+      // the person the read they just waited for.
+      console.warn('credential extraction not recorded:', recordErr.message);
+    }
+
+    const warnings = [...(result.warnings || [])];
+    // display_name is what the portal shows; `name` is what registration
+    // captured. Either identifies the person, and a mismatch warning that
+    // depended on which one happened to be set would fire at random.
+    const accountName = user.display_name || user.name;
+    if (result.fields.holder_name
+        && credentialExtraction.holderNameMismatch(result.fields.holder_name.value, accountName)) {
+      warnings.push(`This document is issued to "${result.fields.holder_name.value}", which does not look like your name. Check you have uploaded your own certificate.`);
+    }
+
+    res.json({
+      extractionId: extraction ? extraction.id : null,
+      status: result.status,
+      fields: result.fields,
+      notes: result.notes,
+      warnings,
+      sourceKind: result.sourceKind,
+    });
+  } catch (err) {
+    console.error('POST credential extract error:', err);
+    res.status(500).json({ error: 'Failed to read the scan' });
+  }
+});
+
+/**
+ * POST /api/profile/credentials/:id/scan
+ * Attach or replace the scan on an existing credential. Holder only.
+ *
+ * Replacing the evidence withdraws any verification for the same reason
+ * editing a field does: the tick was given against the old document.
+ *
+ * Body: { fileName, fileMime, fileSizeBytes?, fileData }
+ */
+router.post('/api/profile/credentials/:id/scan', requireAuth, async (req, res) => {
+  try {
+    if (!isUuid(req.params.id)) return notFound(res);
+    const user = req.user;
+    const existing = await db.getCredentialById(req.params.id);
+    if (!existing || existing.user_id !== user.id) return notFound(res);
+
+    const { fileName, fileMime, fileSizeBytes, fileData } = req.body;
+    if (fileData && fileData.length > SCAN_MAX_BASE64) {
+      return res.status(413).json({ error: 'Scan exceeds the 5 MB limit' });
+    }
+    const invalid = validateScanUpload({ fileName, fileMime, fileData });
+    if (invalid) return res.status(415).json({ error: invalid });
+
+    const record = await storeUploadedDocument({
+      user,
+      title: String(fileName || 'Credential scan').slice(0, 255),
+      documentType: 'credential_scan',
+      fileName, fileMime, fileSizeBytes, fileData,
+    });
+
+    const updated = await db.updateCredential(req.params.id, user.id, { document_id: record.id });
+    if (!updated) {
+      await db.deletePDDocument(record.id, user.id).catch(() => {});
+      return notFound(res);
+    }
+
+    // Only once the new scan is safely in place.
+    if (existing.document_id) {
+      await db.deletePDDocument(existing.document_id, user.id).catch(() => {});
+    }
+
+    let verificationWithdrawn = false;
+    let current = updated;
+    if (existing.status === 'verified') {
+      const cleared = await db.clearCredentialVerification(req.params.id);
+      if (cleared) { verificationWithdrawn = true; current = cleared; }
+    }
+
+    await db.logAuditEvent({
+      actorUserId: user.id, action: 'credential.scan_attached',
+      targetType: 'credential', targetId: req.params.id, ipAddress: req.ip,
+      organisationId: user.organisation_id,
+      metadata: { documentId: record.id, replaced: Boolean(existing.document_id), verificationWithdrawn },
+    }).catch(() => {});
+
+    res.status(201).json({ credential: current, document: record, verificationWithdrawn });
+  } catch (err) {
+    console.error('POST credential scan attach error:', err);
+    res.status(500).json({ error: 'Failed to attach the scan' });
   }
 });
 

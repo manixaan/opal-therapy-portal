@@ -143,6 +143,13 @@ app.use('/api/accounting/webhooks/xero', express.raw({ type: '*/*' }));
 // keeps the small default limit as a request-size defence.
 app.use('/api/profile/documents', bodyParser.json({ limit: '8mb' }));
 
+// Credential scans: the certificate itself (5 MB binary cap enforced in the
+// route, ≈ 6.7 MB base64) and, for a read, the page images the browser
+// rasterised from it (credential-extraction.js caps those at 3 pages × 2 MB).
+// Without this the subtree keeps the 100kb default and a photographed WWCC
+// card 413s before any route sees it.
+app.use('/api/profile/credentials', bodyParser.json({ limit: '12mb' }));
+
 // Support-ticket screenshots use the same base64 upload pattern (5 MB cap
 // enforced in the route) — the /api/support subtree gets the larger limit.
 app.use('/api/support', bodyParser.json({ limit: '8mb' }));

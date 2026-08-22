@@ -1838,6 +1838,11 @@ async function getPDDocuments({ userId }) {
             file_size_bytes, uploaded_at, uploaded_by_user_id, related_cpd_activity_id, status, created_at
      FROM pd_documents
      WHERE user_id = $1 AND status != 'archived'
+       -- Credential scans live in this table but belong to the credential
+       -- card, not to the Professional Development list. Showing the same
+       -- file in two places invites somebody to delete it from the one where
+       -- it looks like a stray.
+       AND document_type IS DISTINCT FROM 'credential_scan'
      ORDER BY created_at DESC`,
     [userId]
   );
@@ -1897,9 +1902,12 @@ async function deletePDDocument(id, userId) {
 async function getCredentials({ userId, organisationId, allOrg = false }) {
   if (allOrg && organisationId) {
     const r = await pool.query(
-      `SELECT c.*, u.email AS user_email, u.display_name AS user_display_name
+      `SELECT c.*, u.email AS user_email, u.display_name AS user_display_name,
+              d.file_name AS document_file_name, d.file_mime AS document_mime,
+              d.file_size_bytes AS document_size_bytes
        FROM credentials c
        JOIN users u ON u.id = c.user_id
+       LEFT JOIN pd_documents d ON d.id = c.document_id
        WHERE c.organisation_id = $1
        ORDER BY c.created_at DESC`,
       [organisationId]
@@ -1907,7 +1915,12 @@ async function getCredentials({ userId, organisationId, allOrg = false }) {
     return r.rows;
   }
   const r = await pool.query(
-    `SELECT * FROM credentials WHERE user_id = $1 ORDER BY created_at DESC`,
+    `SELECT c.*, d.file_name AS document_file_name, d.file_mime AS document_mime,
+            d.file_size_bytes AS document_size_bytes
+       FROM credentials c
+       LEFT JOIN pd_documents d ON d.id = c.document_id
+      WHERE c.user_id = $1
+      ORDER BY c.created_at DESC`,
     [userId]
   );
   return r.rows;
@@ -1927,7 +1940,7 @@ async function createCredential({ userId, organisationId, credentialType, creden
 }
 
 async function updateCredential(id, userId, fields) {
-  const allowed = ['credential_name','issuing_body','registration_number','issue_date','expiry_date','document_id','notes','status'];
+  const allowed = ['credential_type','credential_name','issuing_body','registration_number','issue_date','expiry_date','document_id','notes','status'];
   const sets = [];
   const vals = [];
   let idx = 1;
@@ -1959,6 +1972,85 @@ async function deleteCredential(id, userId) {
     [id, userId]
   );
   return r.rows[0];
+}
+
+/** One credential with its holder, for routes that must decide who may act. */
+async function getCredentialById(id) {
+  const r = await pool.query(
+    `SELECT c.*, u.email AS user_email, u.display_name AS user_display_name
+       FROM credentials c
+       JOIN users u ON u.id = c.user_id
+      WHERE c.id = $1`,
+    [id]
+  );
+  return r.rows[0] || null;
+}
+
+/**
+ * Verification attests to the values that were on screen when the Owner
+ * pressed Verify. Change the registration number afterwards and the tick no
+ * longer attests to anything, so it is withdrawn rather than carried forward
+ * onto values nobody checked.
+ *
+ * Returns the row only when a tick was actually withdrawn, so the caller can
+ * tell the holder what just happened instead of guessing.
+ */
+async function clearCredentialVerification(id) {
+  const r = await pool.query(
+    `UPDATE credentials
+        SET status = 'active', verified_by_user_id = NULL, verified_at = NULL, updated_at = NOW()
+      WHERE id = $1 AND status = 'verified'
+      RETURNING *`,
+    [id]
+  );
+  return r.rows[0] || null;
+}
+
+// ===== CREDENTIAL SCAN EXTRACTIONS (migration 042) =====
+
+/**
+ * Record what a model proposed after reading a scan. Written whether or not
+ * anybody accepts it — a read that produced nothing is evidence too, and the
+ * question "did we try?" has to be answerable.
+ */
+async function createCredentialExtraction({
+  organisationId, requestedByUserId, documentId, credentialId,
+  sourceKind, status, proposed, notes, modelKey, aiInteractionId,
+}) {
+  const r = await pool.query(
+    `INSERT INTO credential_extractions
+       (organisation_id, requested_by_user_id, document_id, credential_id,
+        source_kind, status, proposed, notes, model_key, ai_interaction_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING *`,
+    [organisationId || null, requestedByUserId, documentId || null, credentialId || null,
+     sourceKind || 'unknown', status || 'proposed', JSON.stringify(proposed || {}),
+     notes || null, modelKey || null, aiInteractionId || null]
+  );
+  return r.rows[0];
+}
+
+async function getCredentialExtraction(id) {
+  const r = await pool.query(`SELECT * FROM credential_extractions WHERE id = $1`, [id]);
+  return r.rows[0] || null;
+}
+
+/**
+ * Close the loop: which of the proposed values a person actually kept, and on
+ * which credential. `applied` being a separate column from `proposed` is the
+ * whole point — the difference between them is the measure of how often the
+ * reader is right, and a single overwritten column could not answer it.
+ */
+async function applyCredentialExtraction(id, { credentialId, applied, appliedByUserId }) {
+  const r = await pool.query(
+    `UPDATE credential_extractions
+        SET status = 'applied', credential_id = COALESCE($2, credential_id),
+            applied = $3, applied_at = NOW(), applied_by_user_id = $4
+      WHERE id = $1
+      RETURNING *`,
+    [id, credentialId || null, JSON.stringify(applied || {}), appliedByUserId || null]
+  );
+  return r.rows[0] || null;
 }
 
 // ===== EXPORTS =====
@@ -2036,8 +2128,13 @@ module.exports = {
   deletePDDocument,
   // Credentials
   getCredentials,
+  getCredentialById,
   createCredential,
   updateCredential,
   verifyCredential,
+  clearCredentialVerification,
   deleteCredential,
+  createCredentialExtraction,
+  getCredentialExtraction,
+  applyCredentialExtraction,
 };

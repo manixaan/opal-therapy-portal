@@ -72,6 +72,9 @@ const ALL_TABLES = [
   'compliance_requirements',
   // Interview Preparation (migration 036) — one table, no children.
   'interview_records',
+  // Credential scans (migration 042). Before credentials and pd_documents,
+  // both of which it references; both are listed further up.
+  'credential_extractions',
   'users', 'organisations',
 ];
 

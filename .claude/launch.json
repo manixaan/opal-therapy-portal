@@ -100,6 +100,16 @@
       ],
       "port": 5013,
       "autoPort": false
+    },
+    {
+      "name": "opal-credentials-5015",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5015 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5015,http://127.0.0.1:5015 APP_BASE_URL=http://localhost:5015 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5015,
+      "autoPort": false
     }
   ]
 }

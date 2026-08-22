@@ -3423,6 +3423,59 @@ window.opIcon = function (name, size) {
   .cred-card .cred-actions { margin-top: 8px; display: flex; gap: 6px; }
   .cred-card .cred-actions button { font-size: 11px; flex: 1; }
 
+  /* A card is the way into the credential, so it has to look like one. */
+  .cred-card.clickable { cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .12s; }
+  .cred-card.clickable:hover { border-color: var(--brand); box-shadow: 0 2px 10px rgba(0,0,0,.06); transform: translateY(-1px); }
+  .cred-card.clickable:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .cred-card .cred-scan {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
+    font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 2px 8px;
+    background: rgba(0,0,0,.04); color: var(--ink-soft); align-self: flex-start;
+  }
+  .cred-card .cred-scan.missing { background: #fff4e5; color: #92510a; }
+  .cred-card .cred-scan.present { background: #eaf7ef; color: #1d6b3f; }
+
+  /* Credential detail — the scan beside the fields it produced */
+  .cred-detail-grid { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .cred-detail-grid { grid-template-columns: 1fr; } }
+  .cred-scan-panel {
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--bg);
+  }
+  .cred-scan-thumb {
+    width: 100%; height: 150px; border-radius: 8px; border: 1px solid var(--border);
+    background: #f4f4f5 center/cover no-repeat; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); font-size: 11.5px; text-align: center;
+    padding: 8px; overflow: hidden;
+  }
+  .cred-scan-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .cred-dropzone {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 18px 12px;
+    text-align: center; cursor: pointer; font-size: 12px; color: var(--ink-soft);
+  }
+  .cred-dropzone:hover, .cred-dropzone.dragover { border-color: var(--brand); background: rgba(0,0,0,.02); }
+  .cred-dropzone .cred-dz-title { font-weight: 600; color: var(--ink); margin-bottom: 3px; font-size: 12.5px; }
+
+  /* A proposal is never presented as a fact — it is labelled, and reversible. */
+  .cred-proposed { border-color: var(--brand) !important; background: #f7fdfa; }
+  .cred-proposal-note {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    font-size: 10.5px; color: var(--ink-soft);
+  }
+  .cred-proposal-note .conf { font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+  .cred-proposal-note .conf.high { color: #1d6b3f; }
+  .cred-proposal-note .conf.medium { color: #92510a; }
+  .cred-proposal-note .conf.low { color: var(--danger); }
+  .cred-proposal-note button {
+    background: none; border: none; padding: 0; font-size: 10.5px; color: var(--brand);
+    text-decoration: underline; cursor: pointer;
+  }
+  .cred-read-status {
+    font-size: 11.5px; border-radius: 8px; padding: 8px 10px; margin-top: 10px; display: none;
+  }
+  .cred-read-status.info { background: rgba(0,0,0,.04); color: var(--ink-soft); }
+  .cred-read-status.warn { background: #fff4e5; color: #92510a; }
+  .cred-read-status.err  { background: #fdecec; color: var(--danger); }
+
   /* Approval action row */
   .approval-row {
     display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
@@ -7661,43 +7714,63 @@ window.opIcon = function (name, size) {
   <div class="modal large">
     <h3>Add credential</h3>
     <div class="modal-body">
-      <p style="margin: 0 0 14px; font-size: 12.5px; color: var(--ink-soft);">Add a professional credential, licence, or clearance. You can attach a document after saving.</p>
+      <p style="margin: 0 0 14px; font-size: 12.5px; color: var(--ink-soft);">Start with the document. Opal reads the certificate you upload and fills in what it can — you check every value before it is saved.</p>
       <div id="cred-modal-err" style="display:none; color:var(--danger); font-size:12.5px; margin-bottom:10px;"></div>
+
+      <div class="cred-dropzone" id="cred-add-dropzone" style="margin-bottom:14px;"
+           onclick="document.getElementById('cred-add-file').click()"
+           ondragover="event.preventDefault(); this.classList.add('dragover');"
+           ondragleave="this.classList.remove('dragover');"
+           ondrop="credOnScanDrop(event, 'add')">
+        <div class="cred-dz-title" id="cred-add-dz-title">Upload the credential document</div>
+        <div id="cred-add-dz-sub">Click to choose a file, or drag it here · PDF, PNG or JPG · max 5&nbsp;MB</div>
+        <input type="file" id="cred-add-file" style="display:none;" accept="application/pdf,image/png,image/jpeg"
+               onchange="credOnScanSelected(this, 'add')" />
+      </div>
+      <div class="cred-read-status" id="cred-add-read-status"></div>
+
       <div class="form-grid-2">
         <div class="field">
           <label>Credential type <span style="color:var(--danger)">*</span></label>
           <select id="cred-type-modal">
-            <option value="ahpra">AHPRA registration</option>
+            <option value="ahpra_registration">AHPRA registration</option>
             <option value="wwcc">Working with Children Check</option>
-            <option value="ndis_screening">NDIS Worker Screening</option>
-            <option value="police_clearance">Police clearance</option>
+            <option value="ndis_worker_screening">NDIS Worker Screening Check</option>
+            <option value="police_check">Police check</option>
             <option value="drivers_licence">Driver's licence</option>
-            <option value="indemnity_insurance">Professional indemnity insurance</option>
+            <option value="professional_indemnity">Professional indemnity</option>
             <option value="public_liability">Public liability insurance</option>
+            <option value="qualification">Qualification</option>
             <option value="first_aid">First aid certificate</option>
             <option value="cpr">CPR certificate</option>
             <option value="other">Other</option>
           </select>
+          <div class="cred-proposal-note" id="cred-note-credential_type" style="display:none;"></div>
         </div>
         <div class="field">
           <label>Credential name <span style="color:var(--danger)">*</span></label>
           <input type="text" id="cred-name-modal" placeholder="e.g. AHPRA OT Registration" />
+          <div class="cred-proposal-note" id="cred-note-credential_name" style="display:none;"></div>
         </div>
         <div class="field">
           <label>Issuing body</label>
           <input type="text" id="cred-issuer-modal" placeholder="e.g. AHPRA" />
+          <div class="cred-proposal-note" id="cred-note-issuing_body" style="display:none;"></div>
         </div>
         <div class="field">
           <label>Registration / reference number</label>
           <input type="text" id="cred-regnum-modal" placeholder="e.g. OCC0012345" />
+          <div class="cred-proposal-note" id="cred-note-registration_number" style="display:none;"></div>
         </div>
         <div class="field">
           <label>Issue date</label>
           <input type="date" id="cred-issue-modal" />
+          <div class="cred-proposal-note" id="cred-note-issue_date" style="display:none;"></div>
         </div>
         <div class="field">
           <label>Expiry date</label>
           <input type="date" id="cred-expiry-modal" />
+          <div class="cred-proposal-note" id="cred-note-expiry_date" style="display:none;"></div>
         </div>
         <div class="field span2">
           <label>Notes (optional)</label>
@@ -7706,8 +7779,110 @@ window.opIcon = function (name, size) {
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('modal-add-credential')">Cancel</button>
+      <button class="btn" onclick="credCloseAddModal()">Cancel</button>
       <button class="btn primary" id="cred-submit-btn" onclick="submitCredentialModal()">Save credential</button>
+    </div>
+  </div>
+</div>
+
+<!-- Credential Detail Modal -->
+<!--
+  Opened by clicking a credential card. Two audiences, one dialog:
+
+    the holder      edits every field, replaces the scan, re-reads it, removes
+                    the credential
+    the Owner       reads the record and the scan, and verifies — but does not
+                    edit somebody else's compliance record, because a register
+                    a manager can silently retype is not evidence of anything
+
+  The backend enforces that split; this only reflects it.
+-->
+<div class="modal-backdrop" id="modal-credential-detail">
+  <div class="modal large">
+    <h3 id="credx-heading">Credential</h3>
+    <div class="modal-body">
+      <div id="credx-err" style="display:none; color:var(--danger); font-size:12.5px; margin-bottom:10px;"></div>
+      <div id="credx-banner" style="display:none; font-size:12px; border-radius:8px; padding:9px 11px; margin-bottom:12px;"></div>
+
+      <div class="cred-detail-grid">
+        <!-- ── The scan ─────────────────────────────────────────────────── -->
+        <div class="cred-scan-panel">
+          <div style="font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--muted); margin-bottom:8px;">DOCUMENT</div>
+          <div class="cred-scan-thumb" id="credx-thumb">No document attached</div>
+          <div id="credx-scan-meta" style="font-size:11px; color:var(--muted); margin:8px 0 0;"></div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
+            <button class="btn" id="credx-view-btn" style="font-size:12px;" onclick="credViewScan()">View document</button>
+            <button class="btn" id="credx-replace-btn" style="font-size:12px;"
+                    onclick="document.getElementById('credx-file').click()">Replace document</button>
+            <button class="btn" id="credx-read-btn" style="font-size:12px;" onclick="credReadScan('detail')">
+              Re-read this document
+            </button>
+            <input type="file" id="credx-file" style="display:none;" accept="application/pdf,image/png,image/jpeg"
+                   onchange="credOnScanSelected(this, 'detail')" />
+          </div>
+          <div class="cred-read-status" id="credx-read-status"></div>
+        </div>
+
+        <!-- ── The fields it produced ───────────────────────────────────── -->
+        <div>
+          <div class="form-grid-2">
+            <div class="field">
+              <label>Credential type <span style="color:var(--danger)">*</span></label>
+              <select id="credx-type">
+                <option value="ahpra_registration">AHPRA registration</option>
+                <option value="wwcc">Working with Children Check</option>
+                <option value="ndis_worker_screening">NDIS Worker Screening Check</option>
+                <option value="police_check">Police check</option>
+                <option value="drivers_licence">Driver's licence</option>
+                <option value="professional_indemnity">Professional indemnity</option>
+                <option value="public_liability">Public liability insurance</option>
+                <option value="qualification">Qualification</option>
+                <option value="first_aid">First aid certificate</option>
+                <option value="cpr">CPR certificate</option>
+                <option value="other">Other</option>
+              </select>
+              <div class="cred-proposal-note" id="credx-note-credential_type" style="display:none;"></div>
+            </div>
+            <div class="field">
+              <label>Credential name <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="credx-name" />
+              <div class="cred-proposal-note" id="credx-note-credential_name" style="display:none;"></div>
+            </div>
+            <div class="field">
+              <label>Issuing body</label>
+              <input type="text" id="credx-issuer" />
+              <div class="cred-proposal-note" id="credx-note-issuing_body" style="display:none;"></div>
+            </div>
+            <div class="field">
+              <label>Registration / reference number</label>
+              <input type="text" id="credx-regnum" />
+              <div class="cred-proposal-note" id="credx-note-registration_number" style="display:none;"></div>
+            </div>
+            <div class="field">
+              <label>Issue date</label>
+              <input type="date" id="credx-issue" />
+              <div class="cred-proposal-note" id="credx-note-issue_date" style="display:none;"></div>
+            </div>
+            <div class="field">
+              <label>Expiry date</label>
+              <input type="date" id="credx-expiry" />
+              <div class="cred-proposal-note" id="credx-note-expiry_date" style="display:none;"></div>
+            </div>
+            <div class="field span2">
+              <label>Notes</label>
+              <textarea id="credx-notes"></textarea>
+            </div>
+          </div>
+          <div id="credx-status-line" style="font-size:11.5px; color:var(--muted); margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions" id="credx-actions">
+      <button class="btn" style="color:var(--danger);" id="credx-remove-btn" onclick="credRemoveFromDetail()">Remove</button>
+      <span style="flex:1;"></span>
+      <button class="btn" onclick="credCloseDetail()">Close</button>
+      <button class="btn" id="credx-verify-btn" onclick="credVerifyFromDetail()">Verify</button>
+      <button class="btn primary" id="credx-save-btn" onclick="credSaveDetail()">Save changes</button>
     </div>
   </div>
 </div>
@@ -10625,7 +10800,7 @@ async function loadCredentialsSection() {
   hdr.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
       <h3 style="margin:0;">Credentials</h3>
-      <button class="btn primary" onclick="showModal('modal-add-credential')" style="font-size:12px;">
+      <button class="btn primary" onclick="credOpenAddModal()" style="font-size:12px;">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add credential</button>
     </div>
@@ -10646,20 +10821,72 @@ async function loadCredentialsSection() {
   }
 }
 
+/**
+ * The portal grew two names for four credential types: onboarding writes
+ * `ahpra_registration`, the profile's own dialog used to write `ahpra`. Both
+ * are in the table. A screen that knows only one spelling renders the other as
+ * a raw database string — which is what this list did before, showing
+ * "ndis_worker_screening" under a card.
+ *
+ * The onboarding spelling is canonical. Nothing is renamed in the database by
+ * this; the server folds a type when a credential is saved, and the two
+ * spellings count as the same value so an idle save cannot withdraw a
+ * verification.
+ */
+var CRED_TYPE_LABELS = {
+  ahpra_registration: 'AHPRA registration',
+  wwcc: 'Working with Children Check',
+  ndis_worker_screening: 'NDIS Worker Screening Check',
+  police_check: 'Police check',
+  drivers_licence: "Driver's licence",
+  professional_indemnity: 'Professional indemnity',
+  public_liability: 'Public liability insurance',
+  qualification: 'Qualification',
+  first_aid: 'First aid certificate',
+  cpr: 'CPR certificate',
+  other: 'Other',
+};
+
+var CRED_TYPE_ALIASES = {
+  ahpra: 'ahpra_registration',
+  ndis_screening: 'ndis_worker_screening',
+  police_clearance: 'police_check',
+  indemnity_insurance: 'professional_indemnity',
+};
+
+function credCanonicalType(type) {
+  const key = String(type || '').toLowerCase();
+  return CRED_TYPE_ALIASES[key] || key;
+}
+
+/**
+ * The cards, and the last credential list the page loaded.
+ *
+ * Kept because the detail dialog opens from a click on a card and must show
+ * the record as loaded, not re-fetch a single credential the API has no route
+ * for. Refreshed on every load, so it cannot go stale behind the dialog.
+ */
+var _credCache = [];
+
 function _renderCredentialCards(body, creds, isManager) {
+  _credCache = creds || [];
+
   if (!creds.length) {
     body.innerHTML = _pfEmpty('No credentials added yet.') +
       `<div style="text-align:center;margin-top:8px;">
-        <button class="btn primary" onclick="showModal('modal-add-credential')">Add your first credential</button>
+        <button class="btn primary" onclick="credOpenAddModal()">Add your first credential</button>
       </div>`;
     return;
   }
+
+  const meId = (window.APP_USER || {}).id;
 
   const cards = creds.map(c => {
     const days = _pfCredDaysToExpiry(c.expiry_date);
     const isExpired  = days !== null && days < 0;
     const isExpiring = days !== null && days >= 0 && days <= 60;
     const cardClass  = isExpired ? 'expired' : isExpiring ? 'expiring-soon' : '';
+    const isMine     = c.user_id === meId;
 
     let statusLabel;
     if (isExpired)       statusLabel = `<span style="color:var(--danger);font-size:11px;font-weight:600;">EXPIRED</span>`;
@@ -10667,7 +10894,16 @@ function _renderCredentialCards(body, creds, isManager) {
     else if (c.expiry_date) statusLabel = `<span style="color:var(--ok);font-size:11px;">Current</span>`;
     else                 statusLabel = `<span style="font-size:11px;color:var(--muted);">No expiry date</span>`;
 
-    return `<div class="cred-card ${cardClass}">
+    // A credential with no document behind it is a claim, not evidence, and
+    // the card says so rather than looking complete.
+    const scanBadge = c.document_id
+      ? `<span class="cred-scan present">✓ Document attached</span>`
+      : `<span class="cred-scan missing">Scan missing</span>`;
+
+    return `<div class="cred-card clickable ${cardClass}" role="button" tabindex="0"
+        onclick="pfOpenCredential('${c.id}')"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pfOpenCredential('${c.id}');}"
+        title="Open this credential">
       <div class="cred-name">${escapeHtml(c.credential_name)}</div>
       ${isManager ? `<div class="cred-sub">${escapeHtml(c.user_display_name || c.user_email || '')}</div>` : ''}
       <div class="cred-sub">${_pfCredTypeLabel(c.credential_type)}</div>
@@ -10678,9 +10914,10 @@ function _renderCredentialCards(body, creds, isManager) {
         ${statusLabel}
         ${c.status === 'verified' ? `<br><span style="color:var(--ok);font-size:10.5px;">✓ Verified</span>` : ''}
       </div>
-      <div class="cred-actions">
+      ${scanBadge}
+      <div class="cred-actions" onclick="event.stopPropagation();">
         ${isManager && c.status !== 'verified' ? `<button class="btn" onclick="pfVerifyCredential('${c.id}')">Verify</button>` : ''}
-        <button class="btn" style="color:var(--danger);" onclick="pfDeleteCredential('${c.id}')">Remove</button>
+        ${isMine ? `<button class="btn" style="color:var(--danger);" onclick="pfDeleteCredential('${c.id}')">Remove</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -10689,11 +10926,7 @@ function _renderCredentialCards(body, creds, isManager) {
 }
 
 function _pfCredTypeLabel(type) {
-  const map = { ahpra:'AHPRA registration', wwcc:'Working with Children Check',
-    ndis_screening:'NDIS Worker Screening', police_clearance:'Police clearance',
-    drivers_licence:"Driver's licence", indemnity_insurance:'Professional indemnity',
-    public_liability:'Public liability', first_aid:'First aid', cpr:'CPR', other:'Other' };
-  return map[type] || type || '—';
+  return CRED_TYPE_LABELS[credCanonicalType(type)] || type || '—';
 }
 
 async function submitCredentialModal() {
@@ -10709,6 +10942,11 @@ async function submitCredentialModal() {
 
   errBox.style.display = 'none';
   if (!credentialName) { errBox.textContent = 'Credential name is required.'; errBox.style.display = ''; return; }
+  if (!_credScan.add.documentId) {
+    errBox.textContent = 'Upload the credential document before saving. The register keeps the evidence, not just the claim.';
+    errBox.style.display = '';
+    return;
+  }
 
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
@@ -10721,17 +10959,14 @@ async function submitCredentialModal() {
         issueDate:          issueDate          || null,
         expiryDate:         expiryDate         || null,
         notes:              notes              || null,
+        documentId:         _credScan.add.documentId,
+        extractionId:       _credScan.add.extractionId || null,
       }),
     });
     const json = await r.json();
     if (!r.ok) throw new Error(json.error || 'Save failed');
 
-    closeModal('modal-add-credential');
-    ['cred-name-modal','cred-issuer-modal','cred-regnum-modal',
-     'cred-issue-modal','cred-expiry-modal','cred-notes-modal'].forEach(id => {
-      document.getElementById(id).value = '';
-    });
-
+    credCloseAddModal();
     showToast('Credential saved', credentialName);
     loadCredentialsSection();
   } catch (e) {
@@ -10741,6 +10976,674 @@ async function submitCredentialModal() {
     btn.disabled = false;
     btn.textContent = 'Save credential';
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CREDENTIAL SCANS — upload, read, review
+
+   The shape of this, and why:
+
+     1. The person uploads the certificate. It is stored immediately, before
+        any credential exists, because the reader needs bytes and because a
+        failed read should not cost them the upload.
+     2. The page rasterises the first pages LOCALLY with the portal's own
+        vendored pdf.js and sends those images alongside. The server has no
+        canvas, and a photographed WWCC card has no text layer at all — so
+        without this step the reader would have nothing to look at in exactly
+        the case it exists for.
+     3. The model PROPOSES values. They land in the form marked as proposals,
+        with the reader's own confidence, and every one can be undone in a
+        click. Nothing is saved until the person presses Save.
+
+   Step 3 is the part to keep honest. A field silently filled by a model, and
+   then saved, is a compliance date nobody chose.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Per-dialog scan state. `add` is the new-credential flow, `detail` the
+ *  dialog opened from a card. */
+var _credScan = {
+  add:    { file: null, documentId: null, extractionId: null, mime: null, previewUrl: null },
+  detail: { file: null, documentId: null, extractionId: null, mime: null, previewUrl: null },
+};
+
+/** Which input each proposed field lands in, per dialog. */
+var CRED_FIELD_INPUTS = {
+  add: {
+    credential_type: 'cred-type-modal', credential_name: 'cred-name-modal',
+    issuing_body: 'cred-issuer-modal', registration_number: 'cred-regnum-modal',
+    issue_date: 'cred-issue-modal', expiry_date: 'cred-expiry-modal',
+  },
+  detail: {
+    credential_type: 'credx-type', credential_name: 'credx-name',
+    issuing_body: 'credx-issuer', registration_number: 'credx-regnum',
+    issue_date: 'credx-issue', expiry_date: 'credx-expiry',
+  },
+};
+
+var CRED_NOTE_PREFIX = { add: 'cred-note-', detail: 'credx-note-' };
+var CRED_STATUS_BOX  = { add: 'cred-add-read-status', detail: 'credx-read-status' };
+var CRED_MAX_SCAN_BYTES = 5 * 1024 * 1024;
+
+function _credStatus(scope, kind, html) {
+  const box = document.getElementById(CRED_STATUS_BOX[scope]);
+  if (!box) return;
+  if (!html) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.className = 'cred-read-status ' + kind;
+  box.innerHTML = html;
+  box.style.display = 'block';
+}
+
+// ── Rasterising, so the reader has something to look at ────────────────────
+
+var _credPdfLib = null;
+function _credLoadPdfJs() {
+  if (_credPdfLib) return Promise.resolve(_credPdfLib);
+  return import('/vendor/pdfjs/pdf.min.mjs').then(function (lib) {
+    lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+    _credPdfLib = lib;
+    return lib;
+  });
+}
+
+/** Long edge of the images sent to the reader. Large enough that a licence
+ *  number stays legible, small enough to stay well inside the upload budget. */
+var CRED_RASTER_MAX = 1600;
+var CRED_RASTER_PAGES = 2;
+
+/** Longest we will wait for the browser to draw the pages. See below. */
+var CRED_RASTER_TIMEOUT_MS = 20000;
+
+function _credBlobToBase64(blob) {
+  return new Promise(function (resolve, reject) {
+    const fr = new FileReader();
+    fr.onload = function (e) { resolve(String(e.target.result).split(',')[1]); };
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+
+/**
+ * A surface to draw a page on, and a way to get JPEG bytes back off it.
+ *
+ * OffscreenCanvas is preferred because nothing here is ever shown: these
+ * pixels exist to be encoded and posted, so putting a canvas element in the
+ * document to hold them buys nothing and costs a layout.
+ *
+ * It is NOT what makes a background tab work — pdf.js schedules its render
+ * loop on requestAnimationFrame whatever surface it is given. That is handled
+ * where the render task is created, by driving the loop directly.
+ */
+function _credMakeCanvas(width, height) {
+  if (typeof OffscreenCanvas === 'function') {
+    const canvas = new OffscreenCanvas(width, height);
+    return {
+      canvas: canvas,
+      ctx: canvas.getContext('2d'),
+      toJpeg: function () {
+        return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.75 }).then(_credBlobToBase64);
+      },
+    };
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return {
+    canvas: canvas,
+    ctx: canvas.getContext('2d'),
+    toJpeg: function () {
+      return Promise.resolve(canvas.toDataURL('image/jpeg', 0.75).split(',')[1]);
+    },
+  };
+}
+
+/** PDF → page images, via the same pdf.js the document preview uses. */
+async function _credPdfPageImages(file) {
+  const lib = await _credLoadPdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const images = [];
+  const pages = Math.min(pdf.numPages, CRED_RASTER_PAGES);
+  for (let i = 1; i <= pages; i += 1) {
+    const page = await pdf.getPage(i);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(CRED_RASTER_MAX / Math.max(base.width, base.height), 3);
+    const viewport = page.getViewport({ scale: scale > 0 ? scale : 1 });
+    const surface = _credMakeCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    // A PDF page is transparent where it is "white". Without this the JPEG
+    // comes out black and the reader sees nothing at all.
+    surface.ctx.fillStyle = '#ffffff';
+    surface.ctx.fillRect(0, 0, surface.canvas.width, surface.canvas.height);
+    // intent 'print' is not about printing. It is the one documented way to
+    // get pdf.js to render WITHOUT scheduling each chunk on
+    // requestAnimationFrame, which does not fire in a background tab — so a
+    // person who uploads a certificate and switches tabs while it reads would
+    // otherwise wait for ever. (`onContinue` does not help: the continuation
+    // it hands you is the rAF scheduler itself.) The appearance difference is
+    // nil for a scan and correct for a form: printed values, not editor
+    // widgets.
+    await page.render({ canvasContext: surface.ctx, viewport: viewport, intent: 'print' }).promise;
+    images.push({ data: await surface.toJpeg(), mime: 'image/jpeg' });
+  }
+  try { pdf.destroy(); } catch (e) { /* best effort */ }
+  return images;
+}
+
+/** Photograph or screenshot → one down-scaled image. */
+async function _credImagePageImages(file) {
+  const bitmap = typeof createImageBitmap === 'function'
+    ? await createImageBitmap(file)
+    : await new Promise(function (resolve, reject) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('That image could not be opened.')); };
+      img.src = url;
+    });
+
+  const scale = Math.min(1, CRED_RASTER_MAX / Math.max(bitmap.width, bitmap.height));
+  const surface = _credMakeCanvas(
+    Math.max(1, Math.round(bitmap.width * scale)),
+    Math.max(1, Math.round(bitmap.height * scale))
+  );
+  surface.ctx.fillStyle = '#ffffff';
+  surface.ctx.fillRect(0, 0, surface.canvas.width, surface.canvas.height);
+  surface.ctx.drawImage(bitmap, 0, 0, surface.canvas.width, surface.canvas.height);
+  if (bitmap.close) bitmap.close();
+  return [{ data: await surface.toJpeg(), mime: 'image/jpeg' }];
+}
+
+/**
+ * The page images, or none.
+ *
+ * Bounded by a timeout on purpose. Rasterising is the one step here that can
+ * stall rather than fail — an old browser without OffscreenCanvas, backgrounded
+ * mid-upload, leaves pdf.js waiting on an animation frame that will not come.
+ * "Opal could not read this one, please type the three fields" is a bad
+ * outcome; a dialog that says "Reading the document…" for ever is a worse one,
+ * because nobody can tell it from working.
+ */
+async function _credPageImages(file) {
+  const timeout = new Promise(function (resolve) {
+    setTimeout(function () { resolve('__timeout__'); }, CRED_RASTER_TIMEOUT_MS);
+  });
+  try {
+    let work = null;
+    if (file.type === 'application/pdf') work = _credPdfPageImages(file);
+    else if (/^image\//.test(file.type)) work = _credImagePageImages(file);
+    if (!work) return [];
+
+    const result = await Promise.race([work, timeout]);
+    if (result === '__timeout__') {
+      console.warn('credential rasterise timed out — falling back to the text layer');
+      return [];
+    }
+    return result;
+  } catch (e) {
+    // The upload still succeeded and the text layer may carry the day; a
+    // rasterising failure is not a reason to lose the whole read.
+    console.warn('credential rasterise failed', e);
+    return [];
+  }
+}
+
+function _credFileToBase64(file) {
+  return new Promise(function (resolve, reject) {
+    const fr = new FileReader();
+    fr.onload = function (e) { resolve(e.target.result.split(',')[1]); };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+// ── Choosing a file ────────────────────────────────────────────────────────
+
+function credOnScanDrop(event, scope) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('dragover');
+  const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+  if (file) credHandleScanFile(file, scope);
+}
+
+function credOnScanSelected(input, scope) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (file) credHandleScanFile(file, scope);
+}
+
+/**
+ * Upload the chosen file, then read it.
+ *
+ * Upload and read are separate so a refusal from the reader — a tripped
+ * guardrail, a model outage, a blurred photo — leaves the document attached
+ * and the person typing three fields, which is exactly what they did before
+ * this feature existed.
+ */
+async function credHandleScanFile(file, scope) {
+  const allowed = ['application/pdf', 'image/png', 'image/jpeg'];
+  if (allowed.indexOf(file.type) === -1) {
+    _credStatus(scope, 'err', 'That file type is not accepted. Upload a PDF, PNG or JPG of the document.');
+    return;
+  }
+  if (file.size > CRED_MAX_SCAN_BYTES) {
+    _credStatus(scope, 'err', 'That file is larger than 5 MB. A photo of the certificate is usually enough.');
+    return;
+  }
+
+  const state = _credScan[scope];
+  state.file = file;
+  state.mime = file.type;
+  _credStatus(scope, 'info', 'Uploading the document…');
+
+  try {
+    const fileData = await _credFileToBase64(file);
+    const isDetail = scope === 'detail' && _credDetail;
+    const url = isDetail
+      ? `/api/profile/credentials/${_credDetail.id}/scan`
+      : '/api/profile/credentials/scans';
+
+    const r = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({
+        fileName: file.name, fileMime: file.type, fileSizeBytes: file.size, fileData,
+      }),
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Upload failed');
+
+    state.documentId = json.document.id;
+    if (isDetail) {
+      _credDetail = json.credential || _credDetail;
+      _credDetail.document_id = json.document.id;
+      _credDetail.document_file_name = file.name;
+      _credDetail.document_mime = file.type;
+      _credRenderScanPanel();
+      if (json.verificationWithdrawn) {
+        _credBanner('warn', 'The document changed, so the practice\u2019s verification has been withdrawn. Ask for it to be verified again.');
+      }
+    } else {
+      document.getElementById('cred-add-dz-title').textContent = file.name;
+      document.getElementById('cred-add-dz-sub').innerHTML =
+        'Attached · <span style="color:var(--brand);">choose a different file</span>';
+    }
+
+    await credReadScan(scope);
+  } catch (e) {
+    _credStatus(scope, 'err', (e.message || 'The document could not be uploaded.'));
+  }
+}
+
+// ── Reading it ─────────────────────────────────────────────────────────────
+
+/**
+ * Ask the server to read the stored scan, and put what comes back in front of
+ * the person as a proposal.
+ *
+ * Every unhappy ending gets its own sentence. "Opal could not read this one"
+ * and "Opal is switched off" and "the safety filter stopped it" are different
+ * facts, and a single "something went wrong" would leave somebody retrying a
+ * thing that cannot work.
+ */
+async function credReadScan(scope) {
+  const state = _credScan[scope];
+  if (!state.documentId) {
+    _credStatus(scope, 'err', 'Upload the document first.');
+    return;
+  }
+
+  _credStatus(scope, 'info', 'Reading the document…');
+  const btn = scope === 'detail' ? document.getElementById('credx-read-btn') : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+
+  try {
+    const pageImages = state.file ? await _credPageImages(state.file) : [];
+    const typeInput = document.getElementById(CRED_FIELD_INPUTS[scope].credential_type);
+
+    const r = await fetch(`/api/profile/credentials/scans/${state.documentId}/extract`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({
+        pageImages,
+        credentialType: typeInput ? typeInput.value : null,
+        credentialId: scope === 'detail' && _credDetail ? _credDetail.id : null,
+      }),
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'The document could not be read');
+
+    state.extractionId = json.extractionId || null;
+
+    if (json.status === 'refused') {
+      _credStatus(scope, 'warn',
+        'Opal was not permitted to read this document — the safety filter stopped it. ' +
+        'The document is attached; please type the details below.');
+      return;
+    }
+    if (json.status === 'unavailable' || json.status === 'failed') {
+      _credStatus(scope, 'warn',
+        'Opal could not read the document just now. It is attached; please type the details below.');
+      return;
+    }
+    if (json.status !== 'proposed' || !json.fields || !Object.keys(json.fields).length) {
+      _credStatus(scope, 'warn',
+        'Opal could not make out the details on this one'
+        + (json.notes ? ' — ' + escapeHtml(json.notes) : '')
+        + '. The document is attached; please type the details below.');
+      return;
+    }
+
+    const applied = credApplyProposal(scope, json.fields);
+    const bits = [];
+    bits.push(`<strong>Opal read ${applied} field${applied === 1 ? '' : 's'} from this document.</strong> Check each one — they are proposals, not facts.`);
+    if (json.notes) bits.push(escapeHtml(json.notes));
+    (json.warnings || []).forEach(w => bits.push('⚠ ' + escapeHtml(w)));
+    _credStatus(scope, (json.warnings || []).length ? 'warn' : 'info', bits.join('<br>'));
+  } catch (e) {
+    _credStatus(scope, 'err', e.message || 'The document could not be read.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Re-read this document'; }
+  }
+}
+
+/**
+ * Put the proposals into the form, marked as proposals.
+ *
+ * An existing value is never overwritten silently: if the person already typed
+ * something, the proposal is offered beneath the field instead of replacing
+ * what they wrote.
+ */
+function credApplyProposal(scope, fields) {
+  const inputs = CRED_FIELD_INPUTS[scope];
+  let applied = 0;
+
+  Object.keys(inputs).forEach(function (key) {
+    const el = document.getElementById(inputs[key]);
+    const note = document.getElementById(CRED_NOTE_PREFIX[scope] + key);
+    if (!el || !note) return;
+
+    const proposal = fields[key];
+    if (!proposal) { note.style.display = 'none'; note.innerHTML = ''; el.classList.remove('cred-proposed'); return; }
+
+    const previous = el.value;
+    const conflicts = previous && previous !== proposal.value;
+
+    if (!conflicts) {
+      el.value = proposal.value;
+      el.classList.add('cred-proposed');
+      applied += 1;
+    }
+
+    const conf = String(proposal.confidence || 'low');
+    note.innerHTML = conflicts
+      ? `Opal read <strong>${escapeHtml(proposal.value)}</strong> here
+         <span class="conf ${conf}">${conf}</span>
+         <button type="button" onclick="credUseProposal('${scope}','${key}','${encodeURIComponent(proposal.value)}')">use it</button>`
+      : `Read from your document <span class="conf ${conf}">${conf}</span>
+         <button type="button" onclick="credUndoProposal('${scope}','${key}','${encodeURIComponent(previous)}')">undo</button>`;
+    note.style.display = 'flex';
+  });
+
+  return applied;
+}
+
+function credUseProposal(scope, key, encoded) {
+  const el = document.getElementById(CRED_FIELD_INPUTS[scope][key]);
+  if (!el) return;
+  const previous = el.value;
+  el.value = decodeURIComponent(encoded);
+  el.classList.add('cred-proposed');
+  const note = document.getElementById(CRED_NOTE_PREFIX[scope] + key);
+  if (note) {
+    note.innerHTML = `Read from your document
+      <button type="button" onclick="credUndoProposal('${scope}','${key}','${encodeURIComponent(previous)}')">undo</button>`;
+  }
+}
+
+function credUndoProposal(scope, key, encoded) {
+  const el = document.getElementById(CRED_FIELD_INPUTS[scope][key]);
+  if (!el) return;
+  el.value = decodeURIComponent(encoded || '');
+  el.classList.remove('cred-proposed');
+  const note = document.getElementById(CRED_NOTE_PREFIX[scope] + key);
+  if (note) { note.style.display = 'none'; note.innerHTML = ''; }
+}
+
+// ── The Add dialog ─────────────────────────────────────────────────────────
+
+function credOpenAddModal() {
+  _credScan.add = { file: null, documentId: null, extractionId: null, mime: null, previewUrl: null };
+  ['cred-name-modal','cred-issuer-modal','cred-regnum-modal',
+   'cred-issue-modal','cred-expiry-modal','cred-notes-modal'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.classList.remove('cred-proposed'); }
+  });
+  Object.keys(CRED_FIELD_INPUTS.add).forEach(function (key) {
+    const note = document.getElementById('cred-note-' + key);
+    if (note) { note.style.display = 'none'; note.innerHTML = ''; }
+  });
+  document.getElementById('cred-add-dz-title').textContent = 'Upload the credential document';
+  document.getElementById('cred-add-dz-sub').innerHTML =
+    'Click to choose a file, or drag it here · PDF, PNG or JPG · max 5&nbsp;MB';
+  const addErr = document.getElementById('cred-modal-err');
+  // Cleared, not just hidden. A hidden box that still holds "Credential name
+  // is required" will show that message again the next time anything reveals
+  // it, against a dialog where it is not true.
+  addErr.textContent = '';
+  addErr.style.display = 'none';
+  _credStatus('add', 'info', '');
+  showModal('modal-add-credential');
+}
+
+function credCloseAddModal() {
+  // An uploaded scan that never became a credential is the person's own file
+  // and stays theirs; it is invisible in the documents list until a credential
+  // claims it, so nothing here needs cleaning up on screen.
+  _credScan.add = { file: null, documentId: null, extractionId: null, mime: null, previewUrl: null };
+  closeModal('modal-add-credential');
+}
+
+// ── The detail dialog ──────────────────────────────────────────────────────
+
+var _credDetail = null;
+
+function _credBanner(kind, html) {
+  const el = document.getElementById('credx-banner');
+  if (!el) return;
+  if (!html) { el.style.display = 'none'; return; }
+  const colours = {
+    warn: 'background:#fff4e5;color:#92510a;',
+    info: 'background:rgba(0,0,0,.04);color:var(--ink-soft);',
+    ok:   'background:#eaf7ef;color:#1d6b3f;',
+  };
+  el.setAttribute('style', `font-size:12px;border-radius:8px;padding:9px 11px;margin-bottom:12px;${colours[kind] || colours.info}`);
+  el.innerHTML = html;
+}
+
+function pfOpenCredential(id) {
+  const cred = _credCache.filter(function (c) { return c.id === id; })[0];
+  if (!cred) return;
+  _credDetail = cred;
+  _credScan.detail = {
+    file: null, documentId: cred.document_id || null, extractionId: null,
+    mime: cred.document_mime || null, previewUrl: null,
+  };
+
+  const isMine = cred.user_id === (window.APP_USER || {}).id;
+  const isManager = ['owner','admin'].indexOf((window.APP_USER || {}).role) !== -1;
+
+  document.getElementById('credx-heading').textContent = cred.credential_name || 'Credential';
+  const detailErr = document.getElementById('credx-err');
+  detailErr.textContent = '';
+  detailErr.style.display = 'none';
+  _credStatus('detail', 'info', '');
+
+  const set = function (elId, value) {
+    const el = document.getElementById(elId);
+    if (el) { el.value = value == null ? '' : String(value); el.classList.remove('cred-proposed'); }
+  };
+  // Canonicalised before it reaches the select. A stored `ahpra` has no
+  // option to match, and an unmatched value leaves a select showing its FIRST
+  // option — which a save would then write, silently reclassifying somebody's
+  // registration as whatever happens to be at the top of the list.
+  const canonicalType = credCanonicalType(cred.credential_type);
+  set('credx-type', CRED_TYPE_LABELS[canonicalType] ? canonicalType : 'other');
+  set('credx-name', cred.credential_name);
+  set('credx-issuer', cred.issuing_body);
+  set('credx-regnum', cred.registration_number);
+  set('credx-issue', (cred.issue_date || '').slice(0, 10));
+  set('credx-expiry', (cred.expiry_date || '').slice(0, 10));
+  set('credx-notes', cred.notes);
+
+  Object.keys(CRED_FIELD_INPUTS.detail).forEach(function (key) {
+    const note = document.getElementById('credx-note-' + key);
+    if (note) { note.style.display = 'none'; note.innerHTML = ''; }
+  });
+
+  // The Owner reads and verifies; only the holder edits. The server enforces
+  // this — the dialog just stops offering what would be refused.
+  ['credx-type','credx-name','credx-issuer','credx-regnum','credx-issue','credx-expiry','credx-notes']
+    .forEach(function (elId) {
+      const el = document.getElementById(elId);
+      if (el) el.disabled = !isMine;
+    });
+  document.getElementById('credx-save-btn').style.display = isMine ? '' : 'none';
+  document.getElementById('credx-replace-btn').style.display = isMine ? '' : 'none';
+  document.getElementById('credx-read-btn').style.display = isMine ? '' : 'none';
+  document.getElementById('credx-remove-btn').style.display = isMine ? '' : 'none';
+  document.getElementById('credx-verify-btn').style.display =
+    (isManager && cred.status !== 'verified') ? '' : 'none';
+
+  if (!isMine) {
+    _credBanner('info', `This credential belongs to <strong>${escapeHtml(cred.user_display_name || cred.user_email || 'a colleague')}</strong>. You can read it and verify it; only they can change it.`);
+  } else if (!cred.document_id) {
+    _credBanner('warn', 'No document is attached to this credential yet. Upload the certificate so the record carries its evidence — Opal will read what it can from it.');
+  } else {
+    _credBanner('', '');
+  }
+
+  const bits = [];
+  if (cred.status === 'verified') {
+    bits.push(`✓ Verified${cred.verified_at ? ' on ' + _pfDateFmt(cred.verified_at) : ''}. Changing any detail below withdraws that verification.`);
+  }
+  const days = _pfCredDaysToExpiry(cred.expiry_date);
+  if (days !== null && days < 0) bits.push('This credential has expired.');
+  else if (days !== null && days <= 60) bits.push(`Expires in ${days} day${days === 1 ? '' : 's'}.`);
+  document.getElementById('credx-status-line').textContent = bits.join(' ');
+
+  _credRenderScanPanel();
+  showModal('modal-credential-detail');
+}
+
+function _credRenderScanPanel() {
+  const cred = _credDetail;
+  const thumb = document.getElementById('credx-thumb');
+  const meta = document.getElementById('credx-scan-meta');
+  const viewBtn = document.getElementById('credx-view-btn');
+  const readBtn = document.getElementById('credx-read-btn');
+  if (!cred || !thumb) return;
+
+  const has = Boolean(cred.document_id);
+  viewBtn.disabled = !has;
+  readBtn.disabled = !has;
+  document.getElementById('credx-replace-btn').textContent = has ? 'Replace document' : 'Upload document';
+
+  if (!has) {
+    thumb.innerHTML = 'No document attached';
+    meta.textContent = '';
+    return;
+  }
+
+  const url = `/api/profile/documents/${cred.document_id}/download`;
+  if (/^image\//.test(cred.document_mime || '')) {
+    thumb.innerHTML = `<img src="${url}" alt="Scan of ${escapeHtml(cred.credential_name || 'the credential')}" />`;
+  } else {
+    thumb.innerHTML = '<div style="text-align:center;">PDF document<br><span style="font-size:10.5px;">Open it with View document</span></div>';
+  }
+  meta.innerHTML = escapeHtml(cred.document_file_name || 'Attached document')
+    + (cred.document_size_bytes ? ` · ${Math.round(cred.document_size_bytes / 1024)} KB` : '');
+}
+
+function credViewScan() {
+  const cred = _credDetail;
+  if (!cred || !cred.document_id) return;
+  const url = `/api/profile/documents/${cred.document_id}/download`;
+  if (/^image\//.test(cred.document_mime || '')) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  if (window.DocPreview) {
+    DocPreview.open({
+      kind: 'pdf', url: url, downloadUrl: url,
+      title: cred.credential_name || 'Credential document',
+      meta: cred.document_file_name || '',
+    });
+  } else {
+    window.open(url, '_blank', 'noopener');
+  }
+}
+
+async function credSaveDetail() {
+  const cred = _credDetail;
+  if (!cred) return;
+  const errBox = document.getElementById('credx-err');
+  const btn = document.getElementById('credx-save-btn');
+  const val = function (id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+
+  errBox.style.display = 'none';
+  const credentialName = val('credx-name');
+  if (!credentialName) {
+    errBox.textContent = 'Credential name is required.';
+    errBox.style.display = '';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`/api/profile/credentials/${cred.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({
+        credentialType:     val('credx-type'),
+        credentialName:     credentialName,
+        issuingBody:        val('credx-issuer') || null,
+        registrationNumber: val('credx-regnum') || null,
+        issueDate:          val('credx-issue') || null,
+        expiryDate:         val('credx-expiry') || null,
+        notes:              val('credx-notes') || null,
+        extractionId:       _credScan.detail.extractionId || null,
+      }),
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Save failed');
+
+    credCloseDetail();
+    showToast('Credential updated', json.verificationWithdrawn
+      ? 'Verification withdrawn — the details changed'
+      : credentialName);
+    loadCredentialsSection();
+  } catch (e) {
+    errBox.textContent = e.message || 'Could not save this credential.';
+    errBox.style.display = '';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save changes';
+  }
+}
+
+async function credVerifyFromDetail() {
+  if (!_credDetail) return;
+  const id = _credDetail.id;
+  credCloseDetail();
+  await pfVerifyCredential(id);
+}
+
+async function credRemoveFromDetail() {
+  if (!_credDetail) return;
+  const id = _credDetail.id;
+  credCloseDetail();
+  await pfDeleteCredential(id);
+}
+
+function credCloseDetail() {
+  _credDetail = null;
+  _credScan.detail = { file: null, documentId: null, extractionId: null, mime: null, previewUrl: null };
+  closeModal('modal-credential-detail');
 }
 
 async function pfVerifyCredential(id) {

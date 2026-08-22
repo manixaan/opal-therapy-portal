@@ -148,8 +148,15 @@ describe('credential verification audit', () => {
     const { agent: therapist } = await agentFor(app, { role: 'therapist' });
     const { agent: owner, user: o } = await agentFor(app, { role: 'owner' });
 
+    // A credential now carries the document behind it, so the scan is
+    // uploaded first — see tests/integration/credential-scans.itest.js.
+    const scan = await therapist.post('/api/profile/credentials/scans')
+      .send({ fileName: 'ahpra.pdf', fileMime: 'application/pdf', fileData: PDF_B64 });
+    expect(scan.status).toBe(201);
+
     const created = await therapist.post('/api/profile/credentials')
-      .send({ credentialType: 'ahpra', credentialName: 'AHPRA Registration' });
+      .send({ credentialType: 'ahpra', credentialName: 'AHPRA Registration',
+              documentId: scan.body.document.id });
     expect(created.status).toBe(201);
     const credId = created.body.credential.id;
 
