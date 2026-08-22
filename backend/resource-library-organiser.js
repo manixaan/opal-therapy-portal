@@ -47,6 +47,17 @@ const MAX_RESOURCES = 5000;
 
 const PHASES = Object.freeze(['scanning', 'reading', 'structuring', 'organising', 'done']);
 
+/**
+ * How quiet a 'running' run must go before it is treated as dead.
+ *
+ * A live run beats on every progress report — at least once per profiling
+ * batch and once per model batch, which on the slowest observed staging run
+ * was well under a minute apart. Fifteen minutes is therefore many times the
+ * longest legitimate silence, which matters because reaping a run that is
+ * merely slow would let a second one start and race it.
+ */
+const STALE_RUN_MINUTES = 15;
+
 // ═════════════════════════════════════════════════════════════════════════════
 //  SCOPE — what a run is allowed to look at
 // ═════════════════════════════════════════════════════════════════════════════
@@ -293,7 +304,11 @@ async function applyAssignments(client, orgId, runId, assignments, folderIds, us
 // ═════════════════════════════════════════════════════════════════════════════
 
 async function setPhase(runId, phase, patch = {}) {
-  const fields = ['phase = $2'];
+  // Every progress report is also a heartbeat. That is the point: a run that
+  // is working says so continuously, and a run whose process has died stops
+  // saying anything, which is what lets startRun tell them apart (migration
+  // 041).
+  const fields = ['phase = $2', 'heartbeat_at = NOW()'];
   const params = [runId, phase];
   for (const [col, val] of Object.entries(patch)) {
     params.push(val);
@@ -312,6 +327,18 @@ async function setPhase(runId, phase, patch = {}) {
  * check, and neither snapshot would then describe the library.
  */
 async function startRun(orgId, userId, mode = 'organise') {
+  // Clear the way first. A run whose process died still holds the partial
+  // unique index, and without this the Owner's button answers 409 for ever
+  // — the failure mode is permanent and invisible, which is the worst kind.
+  await pool.query(
+    `UPDATE resource_classification_runs
+        SET status = 'failed', finished_at = NOW(),
+            error = 'Interrupted — the server restarted while the library was being organised. Nothing was changed.'
+      WHERE organisation_id IS NOT DISTINCT FROM $1
+        AND status = 'running'
+        AND COALESCE(heartbeat_at, started_at) < NOW() - ($2 || ' minutes')::interval`,
+    [orgId, String(STALE_RUN_MINUTES)]).catch(() => {});
+
   try {
     const { rows } = await pool.query(
       `INSERT INTO resource_classification_runs (organisation_id, started_by, mode)
@@ -620,7 +647,7 @@ async function rollbackRun(orgId, runId, userId) {
 }
 
 module.exports = {
-  PHASES, SCOPE_SQL, MAX_FILES_SAMPLED, MAX_RESOURCES,
+  PHASES, SCOPE_SQL, STALE_RUN_MINUTES, MAX_FILES_SAMPLED, MAX_RESOURCES,
   loadCorpus, buildProfiles, slugFor, upsertFolders, applyAssignments,
   describeFolders, setPhase, startRun, executeRun, classifyResource, rollbackRun,
 };

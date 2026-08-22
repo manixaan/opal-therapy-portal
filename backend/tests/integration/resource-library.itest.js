@@ -200,6 +200,64 @@ describe('organising a library', () => {
     expect(rows[0].is_active).toBe(true);
   });
 
+  /**
+   * The failure this protects against is permanent and silent: migration 039's
+   * partial unique index gives an organisation one active run, and a process
+   * that dies mid-run leaves the row saying 'running' for ever. On staging a
+   * full run takes ~17 minutes, most of it waiting on the model, so an App
+   * Service restart inside that window is not hypothetical.
+   */
+  it('reaps a run whose process died, so the Owner is not locked out for ever', async () => {
+    const org = await seedOrganisation();
+    const { agent, user } = await agentFor('owner', org.id);
+    await seedResource(org.id, { title: 'Anything' });
+
+    const dead = await organiser.startRun(org.id, user.id);
+    expect(dead).toBeTruthy();
+
+    // Still beating: a slow run must NOT be reaped, or a second run would
+    // start and race it.
+    const blocked = await agent.post('/api/rh2/library/organise').send({});
+    expect(blocked.status).toBe(409);
+
+    // Its process dies — the heartbeat stops.
+    await db.pool.query(
+      `UPDATE resource_classification_runs
+          SET heartbeat_at = NOW() - ($2 || ' minutes')::interval,
+              started_at   = NOW() - ($2 || ' minutes')::interval
+        WHERE id = $1`,
+      [dead.id, String(organiser.STALE_RUN_MINUTES + 5)]);
+
+    const retry = await agent.post('/api/rh2/library/organise').send({});
+    expect(retry.status).toBe(202);
+
+    const { rows } = await db.pool.query(
+      'SELECT status, error FROM resource_classification_runs WHERE id = $1', [dead.id]);
+    expect(rows[0].status).toBe('failed');
+    expect(rows[0].error).toMatch(/Interrupted/);
+  });
+
+  it('beats while it works, so a slow run is never mistaken for a dead one', async () => {
+    const org = await seedOrganisation();
+    const { user } = await agentFor('owner', org.id);
+    await seedLibrary(org.id);
+
+    const run = await organiser.startRun(org.id, user.id);
+    const before = await db.pool.query(
+      'SELECT heartbeat_at FROM resource_classification_runs WHERE id = $1', [run.id]);
+    // Backdate the heartbeat, then let the run report progress.
+    await db.pool.query(
+      "UPDATE resource_classification_runs SET heartbeat_at = NOW() - INTERVAL '1 hour' WHERE id = $1",
+      [run.id]);
+    await organiser.executeRun(run, { userId: user.id });
+
+    const after = await db.pool.query(
+      'SELECT status, heartbeat_at FROM resource_classification_runs WHERE id = $1', [run.id]);
+    expect(after.rows[0].status).toBe('complete');
+    expect(new Date(after.rows[0].heartbeat_at).getTime())
+      .toBeGreaterThan(new Date(before.rows[0].heartbeat_at).getTime() - 1000);
+  });
+
   it('is idempotent — a second run reuses the same folder rows and slugs (§25, §52)', async () => {
     const org = await seedOrganisation();
     const { agent, user } = await agentFor('owner', org.id);
