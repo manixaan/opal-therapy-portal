@@ -113,6 +113,25 @@ function parseModelText(raw) {
   return { answer: text.slice(0, MAX_FALLBACK_CHARS), actions: [] };
 }
 
+/**
+ * Rebuild the JSON object an assistant turn originally was, from the columns
+ * that hold its parts. See the note at the history query for why.
+ *
+ * `actions` arrives as JSONB — already an array from pg, or a string if the
+ * driver hands back raw text. Both are tolerated; anything else contributes an
+ * empty list rather than throwing, because a malformed historical row must not
+ * be able to fail a live request.
+ */
+function replayAssistantTurn(row) {
+  let actions = [];
+  const raw = row.actions;
+  if (Array.isArray(raw)) actions = raw;
+  else if (typeof raw === 'string') {
+    try { const p = JSON.parse(raw); if (Array.isArray(p)) actions = p; } catch (_) { /* empty */ }
+  }
+  return JSON.stringify({ answer: String(row.content || ''), actions });
+}
+
 /** Filter model-proposed actions against the navigation allowlist. */
 function sanitiseActions(actions) {
   if (!Array.isArray(actions)) return [];
@@ -166,13 +185,34 @@ router.post('/api/opa/chat', chatRateLimit, safe(async (req, res) => {
   });
 
   // Conversation history (oldest → newest) for continuity.
+  //
+  // ── ASSISTANT TURNS ARE REPLAYED IN CONTRACT ──────────────────────────────
+  // The system prompt requires a single JSON object and nothing else. What is
+  // STORED, though, is the extracted `answer` string — parseModelText unwraps
+  // the object before persistence, because the answer is what the reader and
+  // every other consumer of opa_messages actually want.
+  //
+  // Replaying that stored prose verbatim showed the model a conversation in
+  // which it had apparently ignored its own response contract on every prior
+  // turn — the single strongest signal a model has for how to format the next
+  // one. Because parseModelText falls back to treating unparseable text as the
+  // whole answer, the drift was invisible: replies degraded to plain prose,
+  // succeeded, and silently lost their actions, which live only in the JSON.
+  //
+  // So the object is reconstructed from the columns that already hold its
+  // parts. `confidence` is not stored and is not invented — a field the model
+  // sees itself omitting is honest, where a fabricated "high" would teach it
+  // that the field is decorative.
   let history = [];
   if (conversation) {
     const { rows } = await pool.query(
-      `SELECT role, content FROM opa_messages
+      `SELECT role, content, actions FROM opa_messages
         WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`,
       [conversation.id]);
-    history = rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+    history = rows.reverse().map((r) => ({
+      role: r.role,
+      content: r.role === 'assistant' ? replayAssistantTurn(r) : r.content,
+    }));
   }
 
   const system = buildSystemPrompt({ user: req.user, context: ctx, knowledge });
@@ -330,3 +370,5 @@ router.get('/api/opa/suggestions', safe(async (req, res) => {
 
 module.exports = router;
 module.exports._resetOpaRateLimit = _resetOpaRateLimit;
+/** Test seam — the history-replay contract is worth pinning directly. */
+module.exports._replayAssistantTurn = replayAssistantTurn;

@@ -51,6 +51,13 @@ const ALLOWED_FIELDS = Object.freeze([
   'status',         // 'generated' | 'denied' | 'provider_error'
   'denyReason',     // short machine-ish code, never free text from a user
   'latencyMs',
+  // Token counts from the provider. NUMBERS, so they cannot carry narrative, a
+  // name or a prompt — which is why they are admissible in a table whose whole
+  // rule is that content has no path in. They are what makes "what does this
+  // feature cost" and "how close are we to the context window" answerable
+  // without storing a single word of the request.
+  'inputTokens',
+  'outputTokens',
   'auditCategory',
 ]);
 
@@ -104,8 +111,9 @@ async function insertInteraction({ actorUserId, organisationId, event }) {
     `INSERT INTO ai_interactions
        (id, user_id, organisation_id, feature, classification, output_type,
         audit_category, provider, model_id, source_region, provider_request_id,
-        status, deny_reason, latency_ms, review_required, review_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        status, deny_reason, latency_ms, review_required, review_status,
+        input_tokens, output_tokens)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
       event.eventId,
       actorUserId || null,
@@ -125,6 +133,11 @@ async function insertInteraction({ actorUserId, organisationId, event }) {
       // Review starts unstarted; a clinical output moves to 'review_required'
       // so it shows up in a "needs attention" list rather than looking done.
       event.humanReviewRequired === true ? 'review_required' : 'ai_generated',
+      // Absent on a reservation (the call has not happened yet) and on any
+      // denial (it never will), so NULL is the honest value rather than zero —
+      // zero would read as "a call that consumed nothing".
+      typeof event.inputTokens === 'number' ? event.inputTokens : null,
+      typeof event.outputTokens === 'number' ? event.outputTokens : null,
     ]
   );
 }
@@ -204,17 +217,23 @@ async function finalise(eventId, patch = {}) {
               deny_reason = COALESCE($2, deny_reason),
               provider_request_id = COALESCE($3, provider_request_id),
               latency_ms = COALESCE($4, latency_ms),
+              input_tokens = COALESCE($5, input_tokens),
+              output_tokens = COALESCE($6, output_tokens),
               review_status = CASE
-                WHEN $5 = FALSE AND review_status = 'review_required'
+                WHEN $7 = FALSE AND review_status = 'review_required'
                   THEN 'ai_generated'
                 ELSE review_status
               END
-        WHERE id = $6`,
+        WHERE id = $8`,
       [
         status,
         safe.denyReason || null,
         safe.providerRequestId || null,
         typeof safe.latencyMs === 'number' ? safe.latencyMs : null,
+        // COALESCE above, so finalising a failure cannot blank counts that a
+        // reservation path might already hold.
+        typeof safe.inputTokens === 'number' ? safe.inputTokens : null,
+        typeof safe.outputTokens === 'number' ? safe.outputTokens : null,
         producedOutput,
         eventId,
       ]

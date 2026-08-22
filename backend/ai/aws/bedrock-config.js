@@ -166,7 +166,17 @@ function resolveGuardrail() {
 }
 
 /**
- * The clinical inference profile.
+ * The environment variable that carries a specific registry key's profile.
+ *
+ * Derived from the key rather than listed, so adding a registry entry does not
+ * also require adding a name here and remembering to keep the two in step.
+ */
+function profileEnvNameFor(modelKey) {
+  return `BEDROCK_MODEL_ID_${String(modelKey).toUpperCase()}`;
+}
+
+/**
+ * The clinical inference profile for one registry key.
  *
  * REQUIRED for Bedrock, not an override. The registry used to carry literal
  * `au.anthropic.*` ids as defaults; they were never verified against the AWS
@@ -174,11 +184,34 @@ function resolveGuardrail() {
  * at invoke time having already been audited as the model in use, so the id now
  * comes from the deployment or the call does not happen.
  *
+ * ── WHY THIS TAKES A MODEL KEY ────────────────────────────────────────────
+ * It previously did not, and that was a defect rather than a simplification.
+ * The registry declares two clinical tiers — `clinical_standard` for everyday
+ * structuring and `clinical_complex` for report-grade fidelity — and the
+ * policies pick between them deliberately: case notes default to complex,
+ * everything else to standard. But every Bedrock model resolved through the
+ * single `BEDROCK_MODEL_ID`, so both tiers invoked the SAME profile. The audit
+ * row was still honest (it records the id actually invoked), which is exactly
+ * what made this hard to see: nothing looked wrong, the two-tier decision was
+ * simply never carried out.
+ *
+ * `BEDROCK_MODEL_ID` remains the base and stays REQUIRED, so a deployment that
+ * sets only it keeps working exactly as before and nothing breaks on the way
+ * past. A tier that wants its own profile sets `BEDROCK_MODEL_ID_<KEY>`, which
+ * is validated by the same rules — an override that fails them is refused
+ * outright rather than silently falling back to the base, because invoking a
+ * different model than the one an operator explicitly named is worse than not
+ * starting.
+ *
  * @param {object} registry injected so this module holds no model strings
+ * @param {string} [modelKey] registry key; omitted means the base setting
  * @returns {{ok: true, id: string}|{ok: false, reason: string}}
  */
-function resolveModelProfile(registry) {
-  const id = str('BEDROCK_MODEL_ID');
+function resolveModelProfile(registry, modelKey) {
+  // A tier-specific value wins; absent, the base applies. Read separately so a
+  // present-but-invalid override can be refused rather than fall through.
+  const override = modelKey ? str(profileEnvNameFor(modelKey)) : null;
+  const id = override || str('BEDROCK_MODEL_ID');
   // `configured: false` distinguishes "nothing supplied" from "supplied and
   // wrong", exactly as resolveGuardrail does. Nothing supplied is the normal
   // state on a laptop and in tests, where the mock provider serves and no
@@ -203,17 +236,36 @@ function resolveModelProfile(registry) {
 /**
  * A redacted view for the health endpoint and the boot log.
  * Reports whether each input resolved, never what it resolved to.
+ *
+ * `modelTiers` answers the question the single `modelProfile` line could not:
+ * does each registry tier actually have its own profile, or are they sharing
+ * the base? It reports resolution and distinctness as booleans — never an id,
+ * because an inference profile is an account internal and this reaches a
+ * status endpoint.
  */
 function describe(registry) {
   const guardrail = resolveGuardrail();
   const profile = resolveModelProfile(registry);
   const region = resolveRegion();
+
+  const modelTiers = {};
+  const base = str('BEDROCK_MODEL_ID');
+  for (const key of registry.keys()) {
+    const model = registry.get(key);
+    if (model.provider !== registry.PROVIDER_BEDROCK) continue;
+    const resolved = resolveModelProfile(registry, key);
+    modelTiers[key] = resolved.ok
+      ? { configured: true, dedicated: !!(str(profileEnvNameFor(key))), sharesBase: resolved.id === base }
+      : { configured: false, reason: resolved.reason };
+  }
+
   return {
     region: region.ok ? { configured: true, region: region.region } : { configured: false, reason: region.reason },
     guardrail: guardrail.ok
       ? { configured: true, version: guardrail.version, isDraft: !!guardrail.isDraft }
       : { configured: !!guardrail.configured, reason: guardrail.reason },
     modelProfile: profile.ok ? { configured: true } : { configured: false, reason: profile.reason },
+    modelTiers,
   };
 }
 
@@ -240,5 +292,6 @@ module.exports = {
   resolveRegion,
   resolveGuardrail,
   resolveModelProfile,
+  profileEnvNameFor,
   describe,
 };

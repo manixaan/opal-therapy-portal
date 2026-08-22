@@ -194,7 +194,14 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
     // REQUIRED, not an override. The registry carries no Bedrock id at all now
     // (see its header), so this is the only place one can come from. No id
     // means no call — never a fallback to something that merely parses.
-    const profile = bedrockConfig.resolveModelProfile(registry);
+    //
+    // THE KEY IS PASSED, and that is the whole point. Without it every Bedrock
+    // tier resolved through one setting, so `clinical_complex` invoked exactly
+    // the same profile as `clinical_standard` and the policies' deliberate
+    // choice between them did nothing. The config owner now resolves per tier,
+    // falling back to the base setting when a deployment has not separated
+    // them — so this is a fix, not a new requirement.
+    const profile = bedrockConfig.resolveModelProfile(registry, modelKey);
     if (!profile.ok) return { ok: false, reason: profile.reason, policy };
     model = { ...registryModel, id: profile.id };
   }
@@ -359,12 +366,21 @@ async function generate(opts = {}) {
     throw err;
   }
 
+  // Counts only, and only from a successful call. Recorded here rather than
+  // left to each feature because cost and context pressure are properties of
+  // the gateway, not of whoever happened to ask.
+  const usage = {
+    inputTokens: result.usage?.inputTokens ?? null,
+    outputTokens: result.usage?.outputTokens ?? null,
+  };
+
   let event;
   if (reserved) {
     await audit.finalise(reserved.eventId, {
       status: 'generated',
       providerRequestId: result.providerRequestId,
       latencyMs: Date.now() - startedAt,
+      ...usage,
     });
     event = reserved;
   } else {
@@ -376,6 +392,7 @@ async function generate(opts = {}) {
         status: 'generated',
         providerRequestId: result.providerRequestId,
         latencyMs: Date.now() - startedAt,
+        ...usage,
       },
     });
   }
@@ -404,6 +421,10 @@ async function generate(opts = {}) {
       sourceRegion: result.sourceRegion,
       providerRequestId: result.providerRequestId,
       reviewRequired: decision.humanReviewRequired,
+      // Counts, so a caller can show or bound its own usage. Still no content:
+      // a token total says how much was processed, never what.
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
     },
   };
 }

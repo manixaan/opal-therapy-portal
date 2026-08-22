@@ -291,7 +291,7 @@ The AWS SDK credential chain resolves in this order. **Anything earlier than web
 | 7 | Key Vault references resolving to keys | Review every Key Vault reference in App Settings | None resolve to an AWS key |
 | 8 | Deployment pipeline variables | Review the pipeline definition | No AWS key injected at deploy time |
 
-**Permitted AWS-related settings:** `AWS_REGION`, `AWS_FED_ROLE_ARN`, `AWS_FED_ENTRA_RESOURCE`, `AWS_FED_MI_CLIENT_ID`, `AI_AWS_REGION`. Nothing else.
+**Permitted AWS-related settings:** `AWS_REGION`, `AWS_ROLE_ARN`, `AZURE_BEDROCK_AUDIENCE`, `AWS_ROLE_SESSION_NAME`. Nothing else. (`AWS_FED_*` and `AI_AWS_REGION` appeared in earlier drafts and are not read by the application — see `backend/ai/aws/bedrock-config.js`, which owns and validates every Bedrock setting.)
 
 ### 5.2 Record
 

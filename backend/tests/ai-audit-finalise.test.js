@@ -30,18 +30,27 @@ beforeEach(() => {
     deny_reason: null,
     provider_request_id: null,
     latency_ms: null,
+    input_tokens: null,
+    output_tokens: null,
     review_status: 'review_required',
   };
   db.pool.query.mockReset();
   db.pool.query.mockImplementation(async (sql, params) => {
     const q = String(sql).replace(/\s+/g, ' ');
     if (q.includes('UPDATE ai_interactions') && q.includes('deny_reason = COALESCE')) { // finalise
-      const [status, denyReason, requestId, latency, producedOutput, id] = params;
+      // Positional, deliberately: the point of this suite is that the SQL and
+      // its parameters are asserted together, so a column added in the middle
+      // has to be reflected here rather than silently shifting the mapping.
+      const [status, denyReason, requestId, latency,
+        inputTokens, outputTokens, producedOutput, id] = params;
       if (id !== row.id) return { rowCount: 0 };
       row.status = status;
       row.deny_reason = denyReason ?? row.deny_reason;
       row.provider_request_id = requestId ?? row.provider_request_id;
       row.latency_ms = latency ?? row.latency_ms;
+      // COALESCE in the real query — a later finalise must not blank counts.
+      row.input_tokens = inputTokens ?? row.input_tokens;
+      row.output_tokens = outputTokens ?? row.output_tokens;
       if (producedOutput === false && row.review_status === 'review_required') {
         row.review_status = 'ai_generated';
       }
@@ -81,6 +90,28 @@ test('a successful generation STAYS in the review queue', async () => {
   expect(row.status).toBe('generated');
   expect(row.review_status).toBe('review_required');
   expect(row.provider_request_id).toBe('req-1');
+});
+
+test('token counts are persisted when a generation finalises', async () => {
+  await audit.finalise(row.id, {
+    status: 'generated', providerRequestId: 'req-1', latencyMs: 950,
+    inputTokens: 1629, outputTokens: 308,
+  });
+  expect(row.input_tokens).toBe(1629);
+  expect(row.output_tokens).toBe(308);
+});
+
+test('a denial leaves the counts NULL — nothing was consumed', async () => {
+  await audit.finalise(row.id, { status: 'denied', denyReason: 'guardrail_intervened' });
+  expect(row.input_tokens).toBeNull();
+  expect(row.output_tokens).toBeNull();
+});
+
+test('COALESCE: finalising again without counts does not blank the ones already stored', async () => {
+  await audit.finalise(row.id, { status: 'generated', inputTokens: 100, outputTokens: 50 });
+  await audit.finalise(row.id, { status: 'generated', latencyMs: 12 });
+  expect(row.input_tokens).toBe(100);
+  expect(row.output_tokens).toBe(50);
 });
 
 test('the guard is on review_required — a reviewed row is never reclassified', async () => {

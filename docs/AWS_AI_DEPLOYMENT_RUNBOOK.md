@@ -198,10 +198,23 @@ Global cross-region requests evaluate `aws:RequestedRegion` as the literal strin
 
 ## 5. Bedrock approved models
 
-| Registry key | Model id | Source regions |
+> **The ids below are ILLUSTRATIVE, not authoritative.** `backend/ai/ai-model-registry.js`
+> deliberately carries `id: null` for both clinical entries: which inference profiles
+> exist is a fact about one AWS account and cannot be read from source, and an
+> unverified-but-plausible profile id is the worst kind — it passes every local check,
+> is written into the audit row as the model in use, and only fails when a therapist is
+> waiting. The real ids come from `BEDROCK_MODEL_ID` (and optionally the per-tier
+> `BEDROCK_MODEL_ID_CLINICAL_STANDARD` / `_CLINICAL_COMPLEX`).
+>
+> **Verify against the account before writing anything into the IAM policy below**, and
+> make the policy's resource list match what is actually configured. A resource list
+> naming profiles the deployment does not use produces an `AccessDenied` that looks
+> exactly like a broken federation path.
+
+| Registry key | Purpose | Source regions |
 |---|---|---|
-| `clinical_standard` | `au.anthropic.claude-sonnet-4-6` | ap-southeast-2, ap-southeast-4 |
-| `clinical_complex` | `au.anthropic.claude-opus-4-8` | ap-southeast-2, ap-southeast-4 |
+| `clinical_standard` | Everyday structuring and summarisation; the default for most work | ap-southeast-2, ap-southeast-4 |
+| `clinical_complex` | Report-grade fidelity where omission risk matters most | ap-southeast-2, ap-southeast-4 |
 
 **Nothing else.** Not Haiku, not Sonnet 5, not global or apac profiles, not another provider — until deliberately approved through the change-control process in [`AI_SECURITY_ARCHITECTURE.md`](AI_SECURITY_ARCHITECTURE.md) §15.
 
@@ -280,7 +293,9 @@ Before creating any AWS resource, run the diagnostic in §8.1 and confirm `ver`,
 
    The change is confined to `backend/ai/providers/bedrock-provider.js` plus one new module. No call sites change, and the gateway, policy engine and audit layer are untouched.
 
-7. Set App Service settings: `AWS_REGION`, `AWS_FED_ROLE_ARN`, `AWS_FED_ENTRA_RESOURCE`, `AWS_FED_MI_CLIENT_ID`, plus `AI_AWS_REGION=ap-southeast-2`.
+7. Set App Service settings — **these are the names the code actually reads** (`backend/ai/aws/bedrock-config.js` is the single owner and validates all six): `AWS_REGION=ap-southeast-2`, `AWS_ROLE_ARN`, `AZURE_BEDROCK_AUDIENCE`, `BEDROCK_MODEL_ID`, `BEDROCK_GUARDRAIL_ID`, `BEDROCK_GUARDRAIL_VERSION`. Optionally `AWS_ROLE_SESSION_NAME`, and `BEDROCK_MODEL_ID_CLINICAL_STANDARD` / `BEDROCK_MODEL_ID_CLINICAL_COMPLEX` to give the two tiers separate profiles.
+
+   > Earlier revisions of this step named `AWS_FED_ROLE_ARN`, `AWS_FED_ENTRA_RESOURCE`, `AWS_FED_MI_CLIENT_ID` and `AI_AWS_REGION`. **None of those is read by the application.** A deployment configured from that list has no working AI and no error saying so, because every one of the real settings is simply absent.
 8. **Remove any `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.** `fromEnv` is first in the credential chain, so stale keys would mask a broken federation path — you would believe federation works when it does not. This is the single most likely way to ship a false pass.
 9. Confirm `WEBSITE_DISABLE_MSI` is **not** set — it disables the local token service while leaving the identity visibly assigned.
 10. Deploy. Run the acceptance test ([`AI_SECURITY_ACCEPTANCE_TEST.md`](AI_SECURITY_ACCEPTANCE_TEST.md)) before enabling any feature flag.

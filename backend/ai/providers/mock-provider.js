@@ -35,6 +35,10 @@ async function invoke({ model, region, system, messages, tools, toolChoice } = {
       toolUse: { type: 'tool_use', name: toolChoice.name, input: {} },
       providerRequestId: 'mock-request-id',
       sourceRegion: region,
+      // Mirrors the Bedrock provider's shape, with nulls rather than invented
+      // counts: a mock that reports plausible token usage would let a cost
+      // assertion pass against numbers nobody was billed for.
+      usage: { inputTokens: null, outputTokens: null },
     };
   }
 
@@ -43,6 +47,7 @@ async function invoke({ model, region, system, messages, tools, toolChoice } = {
     toolUse: null,
     providerRequestId: 'mock-request-id',
     sourceRegion: region,
+    usage: { inputTokens: null, outputTokens: null },
   };
 }
 

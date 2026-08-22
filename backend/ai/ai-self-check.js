@@ -172,9 +172,26 @@ function run() {
       // absent profile means Bedrock calls refuse — it does not mean the
       // boundary is broken, and it must not disable the mock path.
       const p = bedrockConfig.resolveModelProfile(registry);
-      if (p.ok) return 'supplied by deployment';
-      if (p.configured) throw new Error(p.reason);
-      return 'not configured — Bedrock calls will refuse';
+      if (p.configured === true && !p.ok) throw new Error(p.reason);
+
+      // EVERY TIER, not just the base. A per-tier override is validated by the
+      // same rules, and a broken one must fail here rather than at 4pm on the
+      // first request that happens to select that tier — which, for
+      // `clinical_complex`, is a therapist waiting on a case note.
+      const dedicated = [];
+      for (const key of registry.keys()) {
+        if (registry.get(key).provider !== registry.PROVIDER_BEDROCK) continue;
+        const tier = bedrockConfig.resolveModelProfile(registry, key);
+        if (tier.configured === true && !tier.ok) {
+          throw new Error(`${bedrockConfig.profileEnvNameFor(key)}: ${tier.reason}`);
+        }
+        if (process.env[bedrockConfig.profileEnvNameFor(key)]) dedicated.push(key);
+      }
+
+      if (!p.ok) return 'not configured — Bedrock calls will refuse';
+      return dedicated.length
+        ? `supplied by deployment (dedicated: ${dedicated.join(', ')})`
+        : 'supplied by deployment (all tiers share the base profile)';
     }),
 
     check('kill switch available', () => {

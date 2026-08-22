@@ -1,18 +1,23 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   OPA AI — Phase 1: the shell.
+   OPA AI — the assistant shell and chat client.
    Global floating assistant: collapsed pebble button, draggable/resizable
    chat panel, minimise/maximise/close, position persistence, mobile sheet.
-   No model calls in this phase — the composer answers with an honest
-   "not connected yet" note so the shell can ship and be validated alone.
 
-   Architecture notes (Phases 2-8 ready):
+   Chat is LIVE and goes to POST /api/opa/chat. (This header claimed "no model
+   calls in this phase" for four phases after that stopped being true, which is
+   exactly how a reader ends up trusting the wrong file.)
+
+   Architecture notes:
    - window.Opa            public API (open/close/toggle/newChat/_state)
    - window.registerOpaContext(ctx)  modules push structured page context;
      Opa never scrapes the DOM. Context is metadata only — never client
      records, notes, or clinical content (minimum-necessary principle).
-   - OPA_SUGGESTIONS       controlled per-module suggestion config.
-   - Future /api/opa/chat calls will be server-side only; nothing in this
-     file may ever hold a model API key.
+     NOTE: nothing calls this yet, so currentModule() falls back to reading the
+     active tab. Registering real context is a pending improvement, not a
+     feature you can assume is running.
+   - OPA_SUGGESTIONS       offline fallback only; the server owns suggestions.
+   - Every model call is server-side. Nothing in this file may ever hold a
+     model API key, a model id, or an AWS credential.
    ═══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -102,7 +107,21 @@
     return tab ? tab.dataset.tab : 'calendar';
   }
 
-  // Controlled per-module suggestions (config, not scattered hard-coding).
+  // OFFLINE FALLBACK ONLY — the server owns these.
+  //
+  // /api/opa/suggestions is the single source (it filters by role, which this
+  // file cannot do); this copy shows only when that call fails, so the empty
+  // state is never blank.
+  //
+  // KEEP IT IN STEP WITH backend/opa-routes.js → OPA_SUGGESTIONS. It drifted
+  // once and the drift was worse than a stale chip: this list offered "Find a
+  // handwriting resource" and "Find a therapy resource", while the system
+  // prompt (backend/opa-prompt.js) explicitly instructs Opa that resource
+  // search is not connected to it and that it must never invent resource
+  // titles. The product was teaching users to ask the one question it is
+  // required to refuse, and every refusal read as the assistant being broken.
+  //
+  // A chip must only ever ask for something Opa can actually answer.
   var OPA_SUGGESTIONS = {
     calendar: [
       'How do I schedule an appointment?',
@@ -111,15 +130,15 @@
       "Why isn't an appointment showing?",
     ],
     resources: [
-      'Find a handwriting resource',
       'Where are the Opal policies?',
-      'Show me the new therapist starter kit',
-      'How do I submit a resource?',
+      'How do learning paths work?',
+      'How do I record CPD from a resource?',
+      'How do I submit a resource for review?',
     ],
     accounting: [
       'Explain this dashboard',
-      'How are invoices created?',
-      'How does Xero reconciliation work?',
+      'How are invoice candidates created?',
+      'How do I check the Xero connection?',
     ],
     book: [
       'How do I create an appointment?',
@@ -128,11 +147,15 @@
     profile: [
       'How do I connect Outlook?',
       'Where do I upload my documents?',
-      'How do I record CPD?',
+      'How do I request leave?',
+    ],
+    settings: [
+      'How do I change my working hours?',
+      'How do I connect Outlook?',
+      'How do I invite a therapist?',
     ],
     default: [
       'How does this page work?',
-      'Find a therapy resource',
       'Show me around Opal Portal',
       'Where are our policies?',
     ],

@@ -63,7 +63,7 @@
 | # | Check | How to verify | Pass criterion |
 |---|---|---|---|
 | C1 | ☐ CloudTrail confirms Australian inference | Generate a synthetic note; find its `provider_request_id` in `ai_interactions`; locate that request in CloudTrail | `additionalEventData.inferenceRegion` is `ap-southeast-2` **or** `ap-southeast-4` |
-| C2 | ☐ Non-AU region denied by the app | Set `AI_AWS_REGION=us-east-1`, attempt generation | Denied, reason `region_not_australian:us-east-1`. **Nothing transmitted** |
+| C2 | ☐ Non-AU region denied by the app | Set `AWS_REGION=us-east-1`, attempt generation | Denied, reason `region_not_permitted`. **Nothing transmitted** |
 | C3 | ☐ Non-AU region denied by AWS | With the runtime role, attempt `bedrock:InvokeModel` in `us-east-1` | `AccessDenied` from the SCP — the app is not the only control |
 | C4 | ☐ Endpoint is pinned in code | Set `ANTHROPIC_BEDROCK_BASE_URL` to a us-east-1 host; restart; run the self-check | Boundary check **fails**, AI disabled. The variable name appears in `boundary_failures`; its **value does not** |
 | C5 | ☐ Bedrock invocation logging is off | `aws bedrock get-model-invocation-logging-configuration --region ap-southeast-2` | Not configured, or explicitly disabled |

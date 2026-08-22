@@ -456,6 +456,20 @@ async function invoke({
     return {
       text,
       toolUse,
+      // TWO NUMBERS, AND NOTHING ELSE FROM `usage`.
+      //
+      // Bedrock returns these on every successful invocation and they were
+      // being dropped here, which left the practice unable to answer the two
+      // questions that decide whether any of this can grow: what does a
+      // feature cost, and how close is a request to the context window. They
+      // are counts — they cannot carry narrative, a name, or a prompt — so
+      // they are safe in the metadata-only audit row in a way no other part of
+      // this response is. Read defensively: a shape change must yield null
+      // rather than throw on a call that has already succeeded.
+      usage: {
+        inputTokens: Number.isFinite(res?.usage?.input_tokens) ? res.usage.input_tokens : null,
+        outputTokens: Number.isFinite(res?.usage?.output_tokens) ? res.usage.output_tokens : null,
+      },
       // Correlates this call to its CloudTrail entry, which is where the
       // authoritative processing region lives
       // (additionalEventData.inferenceRegion). The geo profile may process a
