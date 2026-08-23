@@ -1,0 +1,14 @@
+# Ripgrep exclusions for code search (Claude Code's Grep/Glob use ripgrep).
+# These paths are dead, generated, or archived — excluding them keeps searches on
+# actual application source. Files here remain readable; only search skips them.
+#
+# node_modules/, coverage/, build output, .claude/worktrees/ and snapshot zips are
+# already excluded via .gitignore, which ripgrep honours.
+
+frontend/archive/
+docs/archive/
+reference/
+test-results/
+playwright-report/
+.playwright-mcp/
+*.zip
