@@ -627,14 +627,27 @@ describe('table of contents', () => {
     expect(tocEntries).not.toContain('Appendices');
   });
 
-  test('the real field and updateFields survive so Word repaginates on open', async () => {
+  test('the real TOC field survives, but nothing forces Word to rebuild it', async () => {
+    // THIS TEST REVERSED. It used to require `w:updateFields` to survive so
+    // Word would repaginate the contents list on open. That setting is what
+    // made Word for Mac warn every reader that the document "contains fields
+    // that may refer to other files" — a security prompt about a document
+    // whose only fields are its own TOC and page numbers.
+    //
+    // The field and its cached result still survive; only the two instructions
+    // to REBUILD it on open are gone (the document-wide w:updateFields and the
+    // per-field w:dirty). A therapist refreshes the contents list in Word when
+    // they have actually moved a page boundary, which is rare — and no reader
+    // is prompted. See backend/docx-sanitiser.js.
     const buffer = await generateFcaDocx({ templateBuffer, manifest: fullManifest() });
     const parts = await partsOf(buffer);
     expect(parts['word/document.xml']).toMatch(/TOC \\o "1-3"/);
     expect(parts['word/document.xml']).toContain('w:fldCharType="begin"');
     expect(parts['word/document.xml']).toContain('w:fldCharType="separate"');
     expect(parts['word/document.xml']).toContain('w:fldCharType="end"');
-    expect(parts['word/settings.xml']).toContain('w:updateFields');
+
+    expect(parts['word/settings.xml']).not.toContain('w:updateFields');
+    expect(parts['word/document.xml']).not.toMatch(/w:dirty="(?:true|1|on)"/);
   });
 
   test('the cached entries carry no invented page numbers', async () => {

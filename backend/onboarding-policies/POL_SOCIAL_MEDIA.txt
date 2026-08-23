@@ -1,0 +1,78 @@
+---
+code: POL_SOCIAL_MEDIA
+title: Social Media Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: How to use social media without putting a participant's privacy, your registration or Opal Therapy's reputation at risk — covering personal accounts, Opal's accounts, participant connection requests, and the advertising rules that bind registered health practitioners.
+reviewCycleMonths: 24
+basis: Health Practitioner Regulation National Law (WA) advertising provisions; AHPRA — Social media: how to meet your obligations under the National Law; Privacy Act 1988 (Cth); NDIS Code of Conduct element 2
+related: POL_PRIVACY; POL_BOUNDARIES; POL_CODE_OF_CONDUCT; POL_INFOSEC
+---
+SOCIAL MEDIA POLICY
+
+1. PURPOSE
+
+Nothing in this policy is about stopping you having a life online. It is about three specific risks: a participant being identifiable when you did not intend it, a registered practitioner breaching the National Law's advertising rules, and Opal being represented by someone who was not speaking for it.
+
+The National Law's advertising provisions apply to a registered practitioner's social media the same way they apply to a billboard. AHPRA has been explicit that the same obligations apply online as offline, including to content on a personal account.
+
+2. THE RULE THAT COVERS MOST SITUATIONS
+
+Assume everything you post is permanent, public, and will be read by a participant, their family, your regulator and a future employer. Privacy settings are a preference, not a protection.
+
+3. PARTICIPANTS
+
+3.1 Never post about a participant. Not their name, not their photo, not their story, not a "de-identified" anecdote. De-identification is much harder than it feels: in a small practice, in a small town, the combination of a suburb, a diagnosis, an age and a date is often enough. A participant recognising themselves in your post has had their privacy breached whether or not anyone else recognises them.
+
+3.2 Never post a photo taken in a participant's home, a school, or any setting where a participant might be identifiable — including a photo of equipment, a modification, a view, or your own coffee on their table.
+
+3.3 Do not accept or send friend or follow requests to participants or their family members on personal accounts. If a request arrives, do not accept it, and tell the participant kindly at the next session why not — that it is a rule about keeping the relationship professional, not a judgement about them.
+
+3.4 If a participant contacts you through a personal account, do not respond substantively. Redirect them to Opal's contact channels and record it.
+
+3.5 Do not look up participants on social media. Where there is a genuine clinical or safety reason to, discuss it with your supervisor first and document the reason.
+
+4. PERSONAL ACCOUNTS
+
+4.1 You are free to have opinions and to express them. You are not free to identify yourself as an Opal clinician while doing something that damages Opal's participants, colleagues or reputation.
+
+4.2 Where your profile identifies your profession or employer, add a line to the effect that views are your own.
+
+4.3 Do not post anything that discriminates against, harasses or vilifies any person or group. The Bullying and EEO policies apply to what you post as much as to what you say in a car park.
+
+4.4 Do not post about colleagues, internal disagreements, employment matters or Opal's clients, contracts or systems.
+
+4.5 Do not post photographs of Opal premises, screens, or documents. A screenshot with a portal window in the background has disclosed more than you meant it to.
+
+5. IF YOU ARE A REGISTERED PRACTITIONER
+
+The National Law's advertising provisions apply to anything you post that promotes a regulated health service, including on a personal account. In particular:
+• Testimonials about a clinical service must not be used in advertising. Do not solicit them, and do not share, repost or "like" one in a way that turns it into your advertising. Where you control a page, remove a testimonial posted by someone else.
+• Do not make claims that are false, misleading or deceptive, or that create an unreasonable expectation of benefit.
+• Do not offer a gift, discount or inducement without stating its terms.
+• Do not use titles or claims of expertise you do not hold.
+
+If you are unsure whether something you want to post counts as advertising a regulated health service, ask before posting.
+
+6. OPAL'S OWN ACCOUNTS
+
+6.1 Only people authorised by [TO CONFIRM: who is authorised to post on Opal's social media accounts] post on Opal's behalf.
+
+6.2 Every post about a participant, including a photograph, requires written, specific, informed consent obtained in advance, recorded in the participant's file, and revocable. Consent to one post is not consent to reuse.
+
+6.3 Comments on Opal's accounts are moderated. Anything raising a complaint or a clinical concern is taken offline and handled under the Complaints Management Policy — never argued with in public, and never answered with information about the person.
+
+7. IF SOMETHING GOES WRONG
+
+If you post something you should not have, take it down and tell your supervisor immediately. Deletion does not undo it, and telling someone quickly is what allows Opal to handle it — including notifying the participant if their privacy has been affected, which we would have to do under the Privacy & Confidentiality Policy.
+
+If you see content that puts a participant's privacy at risk — posted by a colleague, a family member or anyone else — report it.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

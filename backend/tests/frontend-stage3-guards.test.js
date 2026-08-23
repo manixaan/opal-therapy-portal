@@ -1545,11 +1545,12 @@ describe('fca report builder', () => {
     expect(HTML.indexOf('id="fca-root"')).toBeGreaterThan(HTML.lastIndexOf('</script>'));
     // A direct child of <body>: nothing but sibling full-screen surfaces and
     // whitespace/comments may sit between it and </body>. The assessment
-    // surface joined it there for the same reason.
+    // surface joined it there for the same reason, and the service agreement
+    // wizard after it.
     const tail = HTML.slice(HTML.indexOf('<div id="fca-root" hidden></div>'));
     expect(tail).toMatch(/<\/body>/);
     expect(tail.replace(/<!--[\s\S]*?-->/g, '')).toMatch(
-      /<div id="fca-root" hidden><\/div>\s*(?:<div id="assessment-root" class="assess-root" hidden><\/div>\s*)?<\/body>/);
+      /<div id="fca-root" hidden><\/div>\s*(?:<div id="sva-root" hidden><\/div>\s*)?(?:<div id="assessment-root" class="assess-root" hidden><\/div>\s*)?<\/body>/);
   });
 
   test('the Resource Hub carries a prominent "Create a new FCA report" action', () => {

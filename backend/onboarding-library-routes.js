@@ -254,6 +254,18 @@ router.get('/api/onboarding/documents/:id/versions/:vid/download',
         log.warn('library file unreadable', { versionId: version.id });
       }
     }
+    // An Opal-authored policy legitimately has no file: the schema gives a
+    // version a `body` precisely so a policy can live as portal content. The
+    // starter pack already ships those as text/plain, and serving them any
+    // differently here is what makes an Owner unable to READ a draft they are
+    // being asked to publish.
+    if (!base64 && version.body) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition',
+        `inline; filename="${encodeURIComponent(`${version.title || 'document'}.txt`)}"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(Buffer.from(String(version.body), 'utf8'));
+    }
     if (!base64) return res.status(404).json({ error: 'Document content unavailable' });
 
     res.setHeader('Content-Type', version.file_mime || 'application/octet-stream');

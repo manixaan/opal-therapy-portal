@@ -138,6 +138,17 @@ function pdfPageTexts(buffer) {
   return runPdfWorker('text', buffer);
 }
 
+/**
+ * Text items with their page coordinates.
+ *
+ * Exposed so a generated document can be checked against its own layout —
+ * whether anything overhangs a margin, collides with the footer or fell off
+ * the page — which the words alone cannot show.
+ */
+function pdfTextItems(buffer) {
+  return runPdfWorker('items', buffer);
+}
+
 async function inspectDocx(buffer) {
   const out = { parts: 0, hasDocumentXml: false, textChars: 0, encrypted: false, corrupt: false, error: null };
   if (sniffMagic(buffer) === 'ole') {
@@ -284,6 +295,7 @@ async function pdfText(buffer) {
 module.exports = {
   MIME_BY_FORMAT,
   pdfPageTexts,
+  pdfTextItems,
   sha256,
   sniffMagic,
   scanForIdentifiers,

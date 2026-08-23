@@ -1,0 +1,76 @@
+---
+code: POL_BULLYING
+title: Bullying, Harassment & Sexual Harassment Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: What bullying, harassment and sexual harassment are, Opal Therapy's positive duty to prevent them, how to report, and what happens next — including harassment by participants and their families, not only by colleagues.
+reviewCycleMonths: 24
+basis: Sex Discrimination Act 1984 (Cth) and the positive duty in Part IIA; Fair Work Act 2009 (Cth) Part 6-4B; Equal Opportunity Act 1984 (WA); Work Health and Safety Act 2020 (WA) and psychosocial hazard duties
+related: POL_EEO; POL_CODE_OF_CONDUCT; POL_WHS; POL_COMPLAINTS; POL_SOCIAL_MEDIA
+---
+BULLYING, HARASSMENT & SEXUAL HARASSMENT POLICY
+
+1. OPAL'S POSITION AND ITS DUTY
+
+Nobody at Opal has to tolerate being bullied, harassed or sexually harassed at work — by a colleague, a manager, a participant, a family member, a support worker or anyone else encountered in the course of the work.
+
+The law now requires more of an employer than a complaints box. Under the positive duty in the Sex Discrimination Act, Opal must take reasonable and proportionate measures to eliminate sex discrimination, sexual harassment and hostile workplace environments, so far as possible. Under the Work Health and Safety Act 2020 (WA), bullying and harassment are psychosocial hazards Opal must control like any other risk. Both duties run continuously, and neither waits for a complaint.
+
+2. DEFINITIONS
+
+2.1 Bullying is repeated unreasonable behaviour directed at a worker that creates a risk to health and safety. Examples: persistent belittling or criticism, spreading rumours, exclusion, setting impossible deadlines, withholding information needed to do the job, unjustified threats about job security, and aggressive or intimidating conduct.
+
+2.2 Harassment is unwelcome conduct related to a protected attribute — sex, race, disability, age, sexual orientation, gender identity, religion, pregnancy, family responsibilities and others — that a reasonable person would anticipate could offend, humiliate or intimidate.
+
+2.3 Sexual harassment is any unwelcome conduct of a sexual nature in the same circumstances. It includes sexual comments and jokes, staring or leering, unnecessary physical contact, sexually explicit messages or images, repeated invitations after a refusal, intrusive questions about someone's private life, and sexual assault, which is also a crime.
+It does not have to be repeated, it does not have to be directed at a particular person, and it does not depend on the intention of the person doing it.
+
+2.4 Sex-based harassment is demeaning conduct of a seriously offensive nature directed at a person because of their sex, even where nothing sexual is involved.
+
+2.5 Victimisation is subjecting someone to detriment because they made, supported or might make a complaint. It is treated as seriously as the original conduct.
+
+2.6 What this is not. Reasonable management action carried out in a reasonable way is not bullying — allocating work, setting performance expectations, giving fair feedback, managing underperformance, or investigating a complaint. Being managed is uncomfortable sometimes; that alone does not make it bullying.
+
+3. HARASSMENT BY PARTICIPANTS AND FAMILIES
+
+This does happen in home-based clinical work, and it is not part of the job. Sexualised comments, propositions, exposure, unwanted touching, persistent personal questions, racist or homophobic remarks, or intimidation by a family member are all reportable, whatever the person's disability or circumstances.
+
+If it happens: end the session if you can do so safely, leave, and report it the same day. You will be believed and supported. Opal will consider whether the service continues, whether it continues with a different arrangement, and what conditions apply. Nobody is required to keep attending an environment where they are being harassed, and no participant's needs outweigh a worker's safety.
+
+4. WHAT TO DO
+
+4.1 If you feel safe to, and only if you want to, you can tell the person the behaviour is unwelcome and ask them to stop. You are never obliged to do this first.
+
+4.2 Report it to your supervisor, or to [TO CONFIRM: the named contact for bullying and harassment complaints and their details]. If your concern is about that person, report to [TO CONFIRM: the alternative contact].
+
+4.3 Write down what happened while it is fresh: dates, times, what was said or done, who else was present.
+
+4.4 You can report on behalf of someone else, or report something you witnessed. Bystanders who say something are part of how this is prevented.
+
+4.5 You can also go outside Opal at any time: the Fair Work Commission for a stop-bullying or stop-sexual-harassment order, the Australian Human Rights Commission, the WA Equal Opportunity Commission, WorkSafe WA, or the police where a criminal offence may have occurred.
+
+5. HOW OPAL RESPONDS
+
+• We take every report seriously and treat it confidentially, sharing only with those who need to know.
+• You will be told what will happen, and asked what outcome you are seeking. Where the conduct is serious, we may need to act even if you would prefer we did not, and we will tell you if that is the case and why.
+• Informal resolution is available where it is appropriate and both people want it. It is never used for sexual harassment or for serious allegations.
+• A formal investigation is fair to everyone: the person complained about is told what is alleged and given a real opportunity to respond, and findings are made on the evidence.
+• Interim measures — changing reporting lines, adjusting a roster, reallocating a participant — are protective, not punitive, and are not a finding against anyone.
+• Outcomes range from an apology and training through to dismissal, and to a report to police or a regulator.
+
+6. NO VICTIMISATION
+
+Any detriment toward a person who reports, supports a report or participates in an investigation is itself a serious disciplinary matter, separate from whatever the original complaint was about.
+
+7. PREVENTION
+
+Training at induction and refreshed at [TO CONFIRM: refresher frequency]. Bullying and harassment risk is assessed as a psychosocial hazard under the Work Health and Safety Policy. Reports and near misses are reviewed for patterns by [TO CONFIRM: role responsible].
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

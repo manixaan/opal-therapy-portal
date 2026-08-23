@@ -1,0 +1,84 @@
+---
+code: POL_EXPENSES
+title: Expenses and Reimbursement Policy
+category: Employment
+tier: 3
+acknowledgement: no
+summary: What Opal Therapy pays for, what needs approval first, how to claim and by when, and the small number of things that are never reimbursed.
+reviewCycleMonths: 24
+basis: Fair Work Act 2009 (Cth); Australian Taxation Office substantiation rules for work-related expenses and fringe benefits
+related: POL_VEHICLE; POL_GIFTS; POL_LEAVE; POL_SUPERVISION
+---
+EXPENSES AND REIMBURSEMENT POLICY
+
+1. PRINCIPLE
+
+If you have to spend your own money to do your job, Opal pays it back. You should not be out of pocket for work, and you should not be waiting months to be made whole.
+
+The other side of that: spend Opal's money as if it were your own, and get approval before spending it on anything unusual.
+
+2. WHAT IS REIMBURSED
+
+2.1 Travel. Work-related vehicle use under the Vehicle and Travel Policy, at [TO CONFIRM: the rate per kilometre or method]. Parking at a participant visit. Public transport for work travel. Tolls.
+
+2.2 Overnight travel. Accommodation and meals for approved regional or rural work, within [TO CONFIRM: accommodation and meal limits per night]. Book through [TO CONFIRM: how accommodation is booked, and whether it is paid directly by Opal].
+
+2.3 Professional. Registration and CPD costs to the extent covered by the Supervision, Performance and CPD Policy. Professional association membership: [TO CONFIRM: whether membership is reimbursed and up to what value]. Approved courses and conferences, including reasonable travel.
+
+2.4 Clinical materials and equipment. Assessment tools, consumables and therapy materials, with prior approval above [TO CONFIRM: approval threshold].
+
+2.5 Phone and internet. [TO CONFIRM: whether Opal provides a phone, or pays an allowance or a proportion of a personal plan].
+
+2.6 Working with Children Check, NDIS Worker Screening Check and police check fees where the role requires them: [TO CONFIRM: which screening costs Opal pays, and whether it pays upfront or reimburses].
+
+2.7 Personal protective equipment and infection control supplies are provided by Opal at no cost to you. Under work health and safety law these are not a cost that may be passed to a worker, and you should not be buying them yourself. If you have had to, claim it and tell your supervisor that the supply failed.
+
+3. WHAT IS NOT REIMBURSED
+
+• Parking and traffic fines, and any other penalty.
+• Personal travel, including home to your usual place of work.
+• Alcohol.
+• Personal items, clothing other than approved uniform or PPE, and grooming.
+• Costs incurred without required prior approval, unless approved afterwards on genuinely exceptional grounds.
+• Anything you cannot substantiate with a receipt or a tax invoice.
+• A gift or hospitality you provided to a participant or a referrer — see the Gifts and Benefits Policy.
+
+4. APPROVAL
+
+4.1 Anything over [TO CONFIRM: pre-approval threshold] needs written approval before you spend it.
+
+4.2 Anything unusual needs approval regardless of value. If you are wondering whether it needs approval, it does.
+
+4.3 Approval comes from [TO CONFIRM: who approves expenses, and who approves the approver's own expenses]. Nobody approves their own expense claim.
+
+5. HOW TO CLAIM
+
+5.1 Submit through the portal with an itemised receipt or tax invoice attached. A bank statement line is not a receipt — it shows an amount but not what was bought.
+
+5.2 Claim within [TO CONFIRM: claim deadline, commonly 30 or 60 days] of the expense. Claims outside that window may be refused, and the reason for the delay should be given.
+
+5.3 Kilometres are recorded per trip, on the day, with the purpose and the start and finish points. A monthly total reconstructed from memory does not meet ATO substantiation requirements and cannot be reimbursed as one.
+
+5.4 Reimbursement is paid [TO CONFIRM: payment timing, e.g. with the next pay run after approval].
+
+6. IF A CLAIM IS QUERIED OR REFUSED
+
+You will be told why, in writing. If you disagree, raise it with [TO CONFIRM: escalation contact for a disputed expense claim]. A refused claim is a disagreement about a rule, not an accusation, unless the claim was dishonest.
+
+Falsifying a claim — inflated kilometres, a personal expense submitted as work, a duplicated receipt — is serious misconduct.
+
+7. CORPORATE CARDS AND ACCOUNTS
+
+[TO CONFIRM: whether Opal issues corporate cards or holds supplier accounts. If it does, this section must cover who holds one, permitted use, and the receipt and reconciliation requirements.]
+
+8. PARTICIPANT-RELATED COSTS
+
+Do not pay for things on a participant's behalf — a coffee, a bus fare, a piece of equipment, a co-payment. It creates a financial entanglement the Professional Boundaries Policy prohibits, and it obscures a gap in their plan that should be visible and addressed. Where a participant genuinely cannot afford something they need, raise it with your supervisor.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

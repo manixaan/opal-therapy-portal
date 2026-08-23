@@ -1,0 +1,82 @@
+---
+code: POL_CONFLICT
+title: Conflict of Interest Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: How to recognise and declare a conflict between your own interests and a participant's, including the conflicts specific to NDIS practice — recommending equipment, referring to a related provider, and holding more than one role for the same person.
+reviewCycleMonths: 24
+basis: NDIS Practice Standards; NDIS Code of Conduct element 4; Occupational Therapy Board of Australia — Code of conduct
+related: POL_CODE_OF_CONDUCT; POL_GIFTS; POL_BOUNDARIES; POL_PARTICIPANT_RIGHTS
+---
+CONFLICT OF INTEREST POLICY
+
+1. PURPOSE
+
+A participant relies on our recommendation being about them. A conflict of interest is anything that could reasonably be seen to compromise that — and the test is the appearance, not only the reality, because a participant cannot see inside your reasoning and should not have to.
+
+Having a conflict is not misconduct. Failing to declare one is.
+
+2. THE THREE KINDS
+
+2.1 Actual — your interests and the participant's genuinely diverge right now.
+2.2 Potential — they could diverge if circumstances change.
+2.3 Perceived — a reasonable person, knowing the facts, could think your judgement was affected. This one is declared on exactly the same terms as the others.
+
+3. THE CONFLICTS THAT ACTUALLY ARISE IN THIS PRACTICE
+
+3.1 Equipment and assistive technology. Recommending a product where you, a family member or Opal receive a commission, discount, rebate, sponsorship, referral fee or other benefit from the supplier. Also: a supplier relationship that has become comfortable enough that you stop comparing options.
+
+3.2 Referrals within a group. Referring to another service that Opal, an owner or a relative has an interest in, without telling the participant that connection exists and without offering alternatives.
+
+3.3 Multiple roles for one participant. Acting as both their therapist and their support coordinator, plan manager or behaviour support practitioner. The NDIS Practice Standards treat this as a conflict to be managed transparently, and Opal treats it as one to be avoided where it reasonably can be.
+
+3.4 Assessment and provision. Writing the functional capacity or equipment report that recommends a service Opal then delivers. This is common and often unavoidable in a small practice. It must be disclosed to the participant in writing, and the report must stand on evidence a different clinician would reach the same way.
+
+3.5 Personal relationships. Providing services to a friend, a relative, a neighbour or a former partner. Employing, supervising or making decisions about a person you have a close personal relationship with. Being involved in a hiring decision about a friend or relative.
+
+3.6 Outside work. Private practice, other employment, consultancy, teaching, a board position, or a business that competes with Opal or draws on Opal's participants, systems or information.
+
+3.7 Gifts, hospitality and benefits. Including supplier-funded conferences, meals, product training and travel. See the Gifts and Benefits Policy.
+
+3.8 Financial involvement with a participant. Prohibited outright — see the Professional Boundaries Policy.
+
+4. YOUR OBLIGATIONS
+
+4.1 Declare it as soon as you become aware of it. Not at the end of the episode of care, and not when someone asks.
+
+4.2 Declare in writing to your supervisor and to [TO CONFIRM: the role or register where conflict declarations are recorded]. Say what the interest is, who it affects, and what you propose to do about it.
+
+4.3 Declare on commencement, when anything changes, and at [TO CONFIRM: annual declaration cycle, if one is adopted].
+
+4.4 Do not act on the matter until you have been told how it is being managed, unless waiting would harm the participant.
+
+4.5 When you are uncertain whether something counts, declare it. The cost of an unnecessary declaration is five minutes.
+
+5. HOW A CONFLICT IS MANAGED
+
+In rough order of preference: avoid it — reallocate the participant or the decision; restrict it — remove yourself from the specific decision while continuing the rest of the work; disclose and monitor it — tell the participant plainly, in writing, offer them genuine alternatives, and have the decision reviewed independently.
+
+Disclosure alone is the weakest control and is not enough on its own for a significant conflict.
+
+Whatever is decided is recorded, along with who decided it.
+
+6. WHAT THE PARTICIPANT MUST BE TOLD
+
+Where a conflict affects a participant, they are told plainly: what the connection is, what alternatives exist, that they may choose a different provider or supplier, and that their supports will not be affected by that choice. In writing, in a form they can use, and recorded in their file.
+
+7. PROCUREMENT AND SUPPLIER RELATIONSHIPS
+
+Compare options for any significant equipment recommendation and record the comparison in the participant's file — what was considered, what was recommended, and why. Do not accept a benefit from a supplier that is conditional on volume or on recommending their product. Report any offer of a commission or referral fee.
+
+8. BREACHES
+
+An undeclared conflict that affects a participant's care or Opal's funding is a serious disciplinary matter and may be reportable to the NDIS Commission or AHPRA. As with everything else here, declaring late is far better than not declaring.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

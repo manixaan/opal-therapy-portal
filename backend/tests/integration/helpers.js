@@ -75,6 +75,12 @@ const ALL_TABLES = [
   // Credential scans (migration 042). Before credentials and pd_documents,
   // both of which it references; both are listed further up.
   'credential_extractions',
+  // Service Agreements (migration 037) — children before parents.
+  'service_agreement_deliveries',
+  'service_agreement_signing_sessions',
+  'service_agreement_artifacts',
+  'service_agreements',
+  'service_agreement_master_versions',
   'users', 'organisations',
 ];
 

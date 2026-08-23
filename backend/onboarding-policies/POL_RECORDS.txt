@@ -1,0 +1,93 @@
+---
+code: POL_RECORDS
+title: Records Management Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: What Opal Therapy keeps, where it keeps it, how long for, how it is destroyed, and the rules that apply when a record is subject to a subpoena, a complaint or an investigation.
+reviewCycleMonths: 24
+basis: Privacy Act 1988 (Cth) and Australian Privacy Principle 11; Fair Work Act 2009 (Cth) record-keeping obligations and Fair Work Regulations 2009; Limitation Act 2005 (WA); NDIS Practice Standards
+related: POL_PRIVACY; POL_CLINICAL_DOC; POL_INFOSEC; POL_COLLECTION_NOTICE
+---
+RECORDS MANAGEMENT POLICY
+
+1. PURPOSE
+
+Two failures are possible with records, and they pull in opposite directions: keeping something too long, and not being able to produce something you should still have. This policy sets out which is which.
+
+2. SCOPE
+
+Every record Opal creates or receives, in any format — portal entries, documents, email, photographs, recordings, text messages about work, handwritten notes, and paper files.
+
+A work-related message on a personal device is an Opal record. That is a reason to keep work communication on Opal systems, where it is captured properly.
+
+3. THE SYSTEM OF RECORD
+
+The portal is the system of record. A record that exists only in your email, on a local drive, in a notebook or on a personal device is not filed, cannot be found by anyone else, and cannot be produced when it is needed.
+
+Working documents are moved into the portal when they are finished. Personal drives and desktops are not storage.
+
+4. RETENTION PERIODS
+
+These are minimum periods. Where two apply, the longer one wins.
+
+4.1 Adult participant clinical records — at least 7 years from the date of last contact.
+
+4.2 Child or young person's clinical records — until the person turns 25, or 7 years from last contact, whichever is later. The reason is the limitation period: it generally does not begin to run until a person turns 18.
+
+4.3 Employee records — at least 7 years after employment ends, as the Fair Work Act requires for time and wages records.
+
+4.4 Workplace injury, workers compensation and rehabilitation records — [TO CONFIRM: retention period, noting exposure-related records may need to be kept far longer].
+
+4.5 WHS records — hazard, incident and risk records for at least 5 years, and longer for a notifiable incident or where exposure monitoring applies.
+
+4.6 Incident and complaint records — at least 7 years.
+
+4.7 Financial and tax records — at least 5 years, and 7 where another obligation applies.
+
+4.8 Recordings, photographs and video — kept only for the purpose and period the participant consented to, and destroyed at the end of it. Consent is recorded with the file.
+
+4.9 Unsuccessful job applications — [TO CONFIRM: retention period for unsuccessful applicants].
+
+5. DESTRUCTION
+
+5.1 Nothing is destroyed except under an approved schedule, and the destruction is recorded — what, when, by whom, under what authority.
+
+5.2 Paper is destroyed by secure shredding or a secure destruction service. Electronic records are deleted from live systems and from backups in line with the backup cycle. Devices are securely wiped or physically destroyed before disposal.
+
+5.3 Never destroy a record on your own initiative. If you think something should go, say so; do not act.
+
+6. LEGAL HOLD — THE RULE THAT OVERRIDES EVERYTHING ABOVE
+
+The moment a record is, or may become, relevant to a complaint, an incident investigation, a regulator's inquiry, a coronial matter, a subpoena, a claim or litigation:
+• stop any scheduled destruction of it immediately;
+• do not edit, tidy, reorganise or "complete" it;
+• tell [TO CONFIRM: role responsible for legal holds] straight away.
+
+Altering or destroying a record that is subject to a legal process is a criminal offence, and doing it out of a wish to be helpful is not a defence. Preserve first, ask second.
+
+7. REQUESTS FOR RECORDS
+
+7.1 A participant asking for their own records — Privacy & Confidentiality Policy. Do not release anything yourself.
+
+7.2 A subpoena, warrant, court order or statutory notice — pass it to [TO CONFIRM: role responsible for handling subpoenas] the day it arrives. Deadlines are short and non-negotiable.
+
+7.3 Another provider requesting records — only with the participant's consent, or where a lawful exception applies.
+
+7.4 A transfer of care — provide records promptly when a participant moves to another provider. Opal keeps its copy for the retention period; the participant leaving does not shorten it.
+
+8. QUALITY
+
+A record you cannot find is a record you do not have. Name things consistently, file them where they belong, and file them promptly. Version control matters most on documents that go out — the version sent to a funder must be identifiable later.
+
+9. BACKUPS AND CONTINUITY
+
+Opal's systems are backed up under [TO CONFIRM: backup arrangement and restore testing frequency]. Backups are not an archive: they exist to recover from failure, not to satisfy retention obligations.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

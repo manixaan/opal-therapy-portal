@@ -1,0 +1,85 @@
+---
+code: POL_PRIVACY
+title: Privacy & Confidentiality Policy
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: How Opal Therapy handles the personal, health and NDIS information of participants, employees and others — what we collect, who may see it, when we may disclose it without consent, and what a person can ask us for.
+reviewCycleMonths: 24
+basis: Privacy Act 1988 (Cth) and the Australian Privacy Principles; NDIS Code of Conduct element 2; Occupational Therapy Board of Australia — Code of conduct; Health Practitioner Regulation National Law (WA)
+related: POL_COLLECTION_NOTICE; POL_RECORDS; POL_INFOSEC; POL_CLINICAL_DOC; POL_SOCIAL_MEDIA
+---
+PRIVACY & CONFIDENTIALITY POLICY
+
+1. PURPOSE
+
+Participants tell us things they have not told their family. They do it because they assume we will handle it properly. This policy says what "properly" means, so that assumption is a fact rather than a hope.
+
+It covers information about participants, their families and carers, employees, contractors, job applicants and anyone else whose personal information reaches us.
+
+2. THE INFORMATION WE HOLD
+
+2.1 Participant information. Name and contact details, date of birth, NDIS number and plan details, diagnoses, assessment results, clinical notes, correspondence with other providers, funding and invoicing records, photographs or recordings where separately consented to, and information about family, carers and decision-makers.
+
+2.2 Health information is sensitive information under the Privacy Act. It attracts a higher standard: as a general rule we need consent to collect it, and it may only be used for the purpose it was collected for, or a directly related purpose the person would reasonably expect.
+
+2.3 Employee information. Recruitment records, identity and work-rights evidence, registration and screening checks, payroll and superannuation details, performance and supervision records, and health information where it is relevant to work capacity or an injury.
+
+3. YOUR OBLIGATIONS AS A WORKER
+
+3.1 Access on a need-to-know basis only. The portal's permission tiers are the floor, not the ceiling. Having technical access to a record is not authority to open it. Do not look up a participant you are not working with, a colleague, a friend, a family member, or yourself out of curiosity — every access is logged.
+
+3.2 Never discuss a participant where you can be overheard. Not in a waiting room, a corridor, a lift, a car park, a cafe, or a shared house during a telehealth call.
+
+3.3 Use Opal systems for Opal information. Do not move participant information into personal email, personal cloud storage, personal messaging apps or personal note-taking apps. If a tool you need is not available, ask for it rather than working around it.
+
+3.4 Devices. Lock your screen when you step away. Keep devices encrypted and passcoded. Report a lost or stolen device immediately, and to [TO CONFIRM: after-hours contact for a lost device] if it is out of hours.
+
+3.5 Paper. Keep it to a minimum, keep it out of sight in a vehicle or a home, return it the same day, and destroy it through secure disposal rather than a household bin.
+
+3.6 Confidentiality outlasts employment. Your obligation continues after you leave Opal, indefinitely.
+
+4. WHEN INFORMATION MAY BE SHARED
+
+4.1 With the participant's consent. This is the normal path. Consent should be informed, specific about who and what, recorded in the file, and treated as revocable.
+
+4.2 For the primary purpose of care. Sharing within the treating team so a participant receives coordinated support does not require a fresh consent each time, but it still requires the need-to-know test.
+
+4.3 Without consent, where the law permits or requires it. This is a short list and each case must be recorded in the file and raised with your supervisor first wherever it is safe to do so:
+• A serious and imminent threat to the life, health or safety of any person, or to public health or safety.
+• A suspicion of child abuse or neglect, reported under the Safeguarding Policy.
+• A reportable incident that must go to the NDIS Quality and Safeguards Commission.
+• A subpoena, warrant, court order or a statutory notice from a regulator.
+• A mandatory notification about a health practitioner under the National Law.
+
+4.4 When in doubt, do not disclose and ask. A disclosure cannot be undone. A delay of an hour to check almost always can be.
+
+5. REQUESTS TO SEE OR CORRECT A RECORD
+
+A person may ask for access to their own information, and may ask us to correct it. Do not answer a request like this on your own. Pass it to {{OPAL_ORG_PRIVACY_CONTACT}} on the day you receive it. Opal will respond within [TO CONFIRM: response timeframe in days, 30 days is the common commitment], and if access is refused we will explain why in writing.
+
+Correcting a clinical record does not mean deleting what was written. An error is corrected by an amendment that leaves the original visible and dated — a record that can be silently rewritten is worth nothing to the participant it is about.
+
+6. THIRD PARTIES AND OVERSEAS STORAGE
+
+Opal uses external providers to run its systems — cloud hosting, email, and AI-assisted features that operate under the portal's AI governance controls. These providers are bound by contract to protect the information and to use it only for the service they provide to us. Where information is stored or processed outside Australia, that is recorded in Opal's privacy collection notices. Current arrangements: [TO CONFIRM: list of external providers and the countries information is stored in].
+
+7. BREACHES
+
+Tell [TO CONFIRM: the person to notify of a suspected privacy breach] as soon as you suspect one — a misdirected email, a lost document, a record left open, an unauthorised access. Do not wait until you are certain, and do not attempt to fix it quietly first.
+
+An eligible data breach under the Notifiable Data Breaches scheme must be assessed promptly and, where it is likely to cause serious harm, notified to the affected individuals and to the Office of the Australian Information Commissioner. That clock starts when someone becomes aware of the possibility, which is why reporting a suspicion matters more than reporting a conclusion.
+
+Reporting a breach you caused will not, on its own, result in disciplinary action. Concealing one will.
+
+8. RELATED DOCUMENTS
+
+Employee Privacy Collection Notice · Records Management Policy · Information Security & Acceptable Use Policy · Clinical Documentation Policy · Social Media Policy
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months, or sooner if privacy law or our systems change
+Next review due: [TO CONFIRM: date]

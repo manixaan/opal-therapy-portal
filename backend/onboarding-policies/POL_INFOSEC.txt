@@ -1,0 +1,104 @@
+---
+code: POL_INFOSEC
+title: Information Security & Acceptable Use Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: How to use Opal Therapy's systems, devices and accounts safely — passwords and multi-factor authentication, email, mobile devices, remote work, AI tools, what is monitored, and what to do the moment something goes wrong.
+reviewCycleMonths: 12
+basis: Privacy Act 1988 (Cth) and Australian Privacy Principle 11; Notifiable Data Breaches scheme; NDIS Practice Standards; Australian Cyber Security Centre Essential Eight
+related: POL_PRIVACY; POL_RECORDS; POL_SOCIAL_MEDIA; POL_CLINICAL_DOC
+---
+INFORMATION SECURITY & ACCEPTABLE USE POLICY
+
+1. PURPOSE
+
+Opal holds health information about people with disability. It is among the most sensitive categories of personal information there is, and the practical consequences of losing control of it fall on people who are already vulnerable. This policy is the set of habits that keeps that from happening.
+
+2. WHO AND WHAT THIS COVERS
+
+Everyone who uses an Opal account, device or system, including contractors and students. It covers Opal-owned equipment, personal devices used for work, and any account created for Opal purposes.
+
+3. ACCOUNTS AND ACCESS
+
+3.1 Your account is yours alone. Never share a password, never let someone work under your login, and never log in on someone else's behalf. Every action is attributed to the account that performed it, and that attribution is the audit trail.
+
+3.2 Passwords. Long and unique for every service. A passphrase of several unrelated words beats a short complex string. Never reuse a password you use elsewhere, and never write one down where it can be found. Use the password manager if one is provided: [TO CONFIRM: approved password manager, or note that none is provided].
+
+3.3 Multi-factor authentication is required wherever it is available, and is not to be disabled. If MFA is asking you to approve something you did not initiate, deny it and report it immediately — that is an attacker with your password.
+
+3.4 Access is granted on least privilege. Ask if you need access you do not have. Do not use access you do have for a purpose outside your role, and do not look up records out of curiosity: every access is logged.
+
+3.5 Tell us promptly when someone leaves or changes role so their access can be changed the same day.
+
+4. DEVICES
+
+4.1 Lock your screen every time you walk away. Set an automatic lock of no more than [TO CONFIRM: screen lock timeout].
+
+4.2 Encryption and passcode on every device that touches Opal information, including a personal phone with Opal email on it.
+
+4.3 Keep operating systems and applications up to date. Install updates when prompted rather than deferring them indefinitely.
+
+4.4 Never leave a device visible in a vehicle. Take it with you or lock it out of sight before you arrive, not at the destination.
+
+4.5 Personal devices. Where you use one for work, you accept that Opal information on it must be protected to this standard, that Opal may require it to be removed when you leave, and that a lost device must be reported. Do not store participant files locally on a personal device.
+
+4.6 Public Wi-Fi is not to be used for participant information without [TO CONFIRM: whether a VPN is provided and required]. Tethering to your own phone is safer than a cafe network.
+
+5. EMAIL AND MESSAGING
+
+5.1 Use your Opal account for all work communication. Do not forward Opal mail to a personal account.
+
+5.2 Check the recipient before you send. Misaddressed email is the single most common privacy breach in health services, and autocomplete is how it happens. Slow down on anything containing participant information.
+
+5.3 Send the minimum. Use initials or a participant ID rather than a full name and address where the recipient will still understand.
+
+5.4 Phishing. Be suspicious of urgency, of a request to change bank details, of an unexpected attachment, and of a login page reached through a link. Verify by phoning a number you already have, never a number in the message. Report anything suspicious to [TO CONFIRM: who to report a suspected phishing email to] and do not delete it until told to.
+
+5.5 Do not use personal messaging apps for participant information.
+
+6. AI TOOLS
+
+Opal's portal includes AI-assisted features that operate under governance controls: logged, subject to a kill switch, and bounded to Opal's own systems. Use those.
+
+Do not paste participant information, employee information or Opal's confidential material into any external AI service — a general chatbot, a transcription site, a document summariser, a translation website. Text entered into a consumer AI service leaves Opal's control, and treating it as a disclosure is the correct assumption.
+
+Anything an AI feature produces is a draft you are responsible for checking. See the Clinical Documentation Policy.
+
+7. WORKING REMOTELY AND IN THE COMMUNITY
+
+Position your screen so it cannot be read over your shoulder, in a cafe, a waiting room or a participant's living room. Use headphones for calls and do not take a clinical call where you can be overheard, including at home if others are present. Do not print at home unless there is a secure way to destroy it.
+
+8. PAPER AND PHYSICAL SECURITY
+
+Minimise it. Do not leave documents in a vehicle overnight. Return them the same day. Secure destruction only — a household bin is not disposal. Keep the office locked and do not prop external doors.
+
+9. ACCEPTABLE USE
+
+Reasonable personal use of Opal systems is fine — a personal email at lunch, a bit of browsing. Not acceptable: anything illegal; pornographic, violent or discriminatory material; running a private business; installing unapproved software; circumventing a security control; or using Opal's systems to harass anyone.
+
+10. MONITORING
+
+Opal may monitor and log use of its systems, including access to participant records, email metadata, and security events. This is done for security, safety and compliance, not for general surveillance of staff, and access to logs is restricted. You should not expect privacy in what you do on Opal's systems.
+
+11. WHEN SOMETHING GOES WRONG
+
+Report immediately — a lost or stolen device, a misdirected email, a suspected phishing click, a password you think has been compromised, a record accessed by the wrong person, a ransomware message.
+
+Report it to [TO CONFIRM: the person to notify of a security incident, and an after-hours number]. Report a suspicion, not a conclusion; the assessment clock under the Notifiable Data Breaches scheme starts when someone becomes aware something might have happened.
+
+Do not attempt to fix it quietly, do not delete evidence, and do not pay anything to anyone.
+
+Reporting a mistake you made will not, on its own, lead to disciplinary action. Concealing one will.
+
+12. WHEN YOU LEAVE
+
+Return every device, key and card. Opal information is removed from personal devices. Your accounts are disabled on your last day, and your confidentiality obligation continues indefinitely.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

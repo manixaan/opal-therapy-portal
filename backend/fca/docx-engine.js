@@ -92,6 +92,8 @@
 const JSZip = require('jszip');
 const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 
+const { sanitizeDocxForDistribution } = require('../docx-sanitiser');
+
 const {
   STYLE,
   CONTROL_PARTS,
@@ -224,66 +226,155 @@ function el(doc, name, attrs) {
  * Populate every occurrence of every scalar tag in one part.
  * Returns the number of occurrences written.
  */
-function populateScalars(doc, scalarData, warnings, partName, multilineTags) {
+function populateScalars(doc, scalarData, warnings, partName, multilineTags, alreadyWritten) {
   let written = 0;
 
   for (const sdt of allSdts(doc)) {
     const tag = ownTag(sdt);
     if (!tag || !Object.prototype.hasOwnProperty.call(scalarData, tag)) continue;
+    // A control inside a cloned repeat row already holds ITS OWN row's value.
+    // The global pass writes one value per tag, so without this the last row's
+    // data would be stamped over every row.
+    if (alreadyWritten && alreadyWritten.has(sdt)) continue;
 
-    const raw = scalarData[tag];
-    // A null/undefined value leaves the template's own placeholder in place.
-    // This is the rule that stops 'null' and 'undefined' ever being printed.
-    if (raw === null || raw === undefined) continue;
-    const value = String(raw);
-
-    const content = directChild(sdt, 'w:sdtContent');
-    if (!content) {
-      warnings.push(`Control ${tag} in ${partName} has no w:sdtContent; left unpopulated.`);
-      continue;
+    if (writeScalarInto(doc, sdt, tag, scalarData[tag], warnings, partName, multilineTags)) {
+      written += 1;
     }
-
-    let texts = ownDescendants(content, 'w:t');
-
-    if (texts.length === 0) {
-      // No text node to write into — add one to an existing run if we can, so
-      // we still inherit that run's properties rather than inventing styling.
-      const run = ownDescendants(content, 'w:r')[0];
-      if (run) {
-        const t = el(doc, 'w:t');
-        run.appendChild(t);
-        texts = [t];
-      } else {
-        const para = ownDescendants(content, 'w:p')[0];
-        if (!para) {
-          warnings.push(`Control ${tag} in ${partName} has no run to populate; left unpopulated.`);
-          continue;
-        }
-        const r = el(doc, 'w:r');
-        const t = el(doc, 'w:t');
-        r.appendChild(t);
-        para.appendChild(r);
-        texts = [t];
-      }
-    }
-
-    // Blank the trailing text nodes BEFORE writing, so a multiline write's own
-    // freshly inserted w:t siblings are never mistaken for template leftovers.
-    for (let i = 1; i < texts.length; i++) setTextNode(texts[i], '');
-    if (multilineTags && multilineTags.has(tag)) setMultilineTextNode(texts[0], value);
-    else setTextNode(texts[0], value);
-
-    // The control now holds real content, so it is no longer showing Word's
-    // placeholder. Leaving this in makes Word re-substitute the placeholder.
-    const pr = directChild(sdt, 'w:sdtPr');
-    if (pr) {
-      for (const ph of directChildren(pr, 'w:showingPlcHdr')) pr.removeChild(ph);
-    }
-
-    written += 1;
   }
 
   return written;
+}
+
+/**
+ * Write one value into one control, using the same rules as the global pass.
+ * Extracted so repeat-row cloning cannot drift from populateScalars(): a second
+ * implementation is how a cloned row ends up with different run properties, or
+ * keeps a placeholder the main path would have cleared.
+ *
+ * @returns {boolean} whether a value was written
+ */
+function writeScalarInto(doc, sdt, tag, raw, warnings, partName, multilineTags) {
+  if (raw === null || raw === undefined) return false;
+  const value = String(raw);
+
+  const content = directChild(sdt, 'w:sdtContent');
+  if (!content) {
+    warnings.push(`Control ${tag} in ${partName} has no w:sdtContent; left unpopulated.`);
+    return false;
+  }
+
+  let texts = ownDescendants(content, 'w:t');
+  if (texts.length === 0) {
+    const run = ownDescendants(content, 'w:r')[0];
+    if (run) {
+      const t = el(doc, 'w:t');
+      run.appendChild(t);
+      texts = [t];
+    } else {
+      const para = ownDescendants(content, 'w:p')[0];
+      if (!para) {
+        warnings.push(`Control ${tag} in ${partName} has no run to populate; left unpopulated.`);
+        return false;
+      }
+      const r = el(doc, 'w:r');
+      const t = el(doc, 'w:t');
+      r.appendChild(t);
+      para.appendChild(r);
+      texts = [t];
+    }
+  }
+
+  for (let i = 1; i < texts.length; i++) setTextNode(texts[i], '');
+  if (multilineTags && multilineTags.has(tag)) setMultilineTextNode(texts[0], value);
+  else setTextNode(texts[0], value);
+
+  const pr = directChild(sdt, 'w:sdtPr');
+  if (pr) for (const ph of directChildren(pr, 'w:showingPlcHdr')) pr.removeChild(ph);
+
+  return true;
+}
+
+// ── 2a. Repeatable rows ──────────────────────────────────────────────────────
+
+/**
+ * Clone a tagged control once per data row.
+ *
+ * Used by the service agreement's Schedule A, where OPAL_REPEAT_SUPPORT_ROW
+ * wraps one table row that must become one row per agreed support.
+ *
+ * THREE THINGS MAKE THIS SAFE, and all three are the reason it lives in the
+ * engine rather than in a caller:
+ *
+ *   1. FRESH IDS. Every w:id inside a clone is reallocated. Word tolerates
+ *      duplicate content-control ids; the next edit does not, and two controls
+ *      sharing an id is precisely the corruption a naive `cloneNode(true)`
+ *      leaves behind.
+ *   2. IMMEDIATE POPULATION. Each clone is filled from its own row before the
+ *      next is made, and the nodes are returned so the global scalar pass
+ *      skips them. Otherwise every row would end up showing the same values.
+ *   3. THE PROTOTYPE IS CONSUMED. The template's own example row is the thing
+ *      being cloned, so it is removed afterwards — with no supports at all it
+ *      is removed and nothing replaces it, and the table is left with just its
+ *      header rather than a row of placeholders.
+ *
+ * Rows are marked `cantSplit` so a support does not break across a page. That
+ * is a readability rule with teeth: half a rate on one page and half on the
+ * next is a price a participant can misread.
+ *
+ * @param {Document} doc
+ * @param {object}   spec  { tag, rows: [{ [scalarTag]: value }] }
+ * @returns {{ written: number, nodes: Set<Node> }}
+ */
+function expandRepeatRows(doc, spec, idAllocator, warnings, partName, multilineTags) {
+  const nodes = new Set();
+  if (!spec || !spec.tag) return { written: 0, nodes };
+
+  const prototype = allSdts(doc).find((s) => ownTag(s) === spec.tag);
+  if (!prototype) {
+    if ((spec.rows || []).length) {
+      warnings.push(`Repeat rows were supplied but ${spec.tag} is not present in this template.`);
+    }
+    return { written: 0, nodes };
+  }
+
+  const parent = prototype.parentNode;
+  if (!parent) return { written: 0, nodes };
+
+  const rows = Array.isArray(spec.rows) ? spec.rows : [];
+
+  for (const row of rows) {
+    const clone = prototype.cloneNode(true);
+
+    // Reallocate EVERY w:id in the clone, the wrapper's own included.
+    for (const idEl of Array.from(clone.getElementsByTagName('w:id'))) {
+      idEl.setAttribute('w:val', String(idAllocator()));
+    }
+
+    // Keep the support on one page where the template allows it.
+    for (const trPr of Array.from(clone.getElementsByTagName('w:trPr'))) {
+      if (!directChildren(trPr, 'w:cantSplit').length) {
+        trPr.appendChild(el(doc, 'w:cantSplit'));
+      }
+    }
+
+    for (const sdt of Array.from(clone.getElementsByTagName('w:sdt'))) {
+      const tag = ownTag(sdt);
+      if (!tag) continue;
+      if (!Object.prototype.hasOwnProperty.call(row, tag)) continue;
+      writeScalarInto(doc, sdt, tag, row[tag], warnings, partName, multilineTags);
+      nodes.add(sdt);
+    }
+    // The wrapper itself carries the repeat tag and must not be re-read by the
+    // global pass either.
+    nodes.add(clone);
+
+    parent.insertBefore(clone, prototype);
+  }
+
+  // The prototype is the example row. It has served its purpose either way.
+  parent.removeChild(prototype);
+
+  return { written: rows.length, nodes };
 }
 
 // ── 2. Section removal ───────────────────────────────────────────────────────
@@ -892,6 +983,23 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     opts.customSectionAnchor, opts.buildCustomSection
   );
 
+  // ── Repeatable rows ───────────────────────────────────────────────────────
+  // Before the scalar pass and after the id allocator exists, because a clone
+  // needs fresh ids and its controls must be populated from their OWN row.
+  const multilineForRows = opts.multilineTags instanceof Set
+    ? opts.multilineTags
+    : (Array.isArray(opts.multilineTags) ? new Set(opts.multilineTags) : null);
+  const rowScalarNodes = new Set();
+  let repeatedRows = 0;
+  const repeatSpecs = Array.isArray(manifest.repeatRows) ? manifest.repeatRows : [];
+  for (const spec of repeatSpecs) {
+    const out = expandRepeatRows(
+      docDoc, spec, idAllocator, warnings, 'word/document.xml', multilineForRows
+    );
+    repeatedRows += out.written;
+    for (const n of out.nodes) rowScalarNodes.add(n);
+  }
+
   // ── Scalars, across every part that carries controls ──────────────────────
   // Deliberately BEFORE the TOC rebuild: the cover-page title is a heading
   // whose text is a content control, so a TOC built first would list the
@@ -902,7 +1010,10 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
 
   let scalarsWritten = 0;
   for (const [name, doc] of parts) {
-    scalarsWritten += populateScalars(doc, renderedScalars, warnings, name, multilineTags);
+    scalarsWritten += populateScalars(
+      doc, renderedScalars, warnings, name, multilineTags,
+      name === 'word/document.xml' ? rowScalarNodes : null
+    );
   }
 
   // ── Table of contents (last: the body must be final) ──────────────────────
@@ -926,6 +1037,16 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
 
   await validatePackage(buffer, originalNames, originalPageFields, Array.from(parts.keys()), label);
 
+  // ── Distribution safety, once, for every document type ────────────────────
+  // The LAST thing that happens to any composed Opal Word file, after every
+  // value, section, row and custom clause is in place. It strips the inherited
+  // `w:updateFields` that made Word warn "this document contains fields that
+  // may refer to other files" on open, and refuses to return a document that
+  // genuinely depends on another file. Doing it here rather than in each
+  // workflow is what makes the guarantee true of the FCA report, the letter,
+  // the service agreement and anything composed later.
+  const safeBuffer = await sanitizeDocxForDistribution(buffer, { label });
+
   // Attached for tests and for the generate route's warning channel; the
   // buffer is what callers actually consume. `fcaStats` is the historical name
   // and stays for the FCA routes and their tests; `docxStats` is the same
@@ -943,13 +1064,16 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     excludedAsEmptyControl: Array.from(excludedTags).filter((t) => !optionalLineTags.has(t)),
     excludedAsRemovedLine: Array.from(excludedTags).filter((t) => optionalLineTags.has(t)),
     customSections: customWritten,
+    repeatedRows,
     tocEntries: toc.entries,
     warnings,
   };
-  buffer.fcaStats = stats;
-  buffer.docxStats = stats;
+  // The sanitiser returns fresh bytes, so the stats ride on those.
+  stats.distributionAudit = safeBuffer.docxAudit;
+  safeBuffer.fcaStats = stats;
+  safeBuffer.docxStats = stats;
 
-  return buffer;
+  return safeBuffer;
 }
 
 /** The FCA report, pinned to its own options. Behaviour is unchanged. */
@@ -965,5 +1089,6 @@ module.exports = {
   _internals: {
     ownTag, directChild, ownDescendants, countPageFields, paragraphStyle, paragraphText,
     setMultilineTextNode, removeParagraphsContaining, styledParagraph, el, allSdts,
+    writeScalarInto, expandRepeatRows, usedSdtIds, populateScalars, removeSections,
   },
 };

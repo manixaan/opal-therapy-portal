@@ -1,0 +1,72 @@
+---
+code: POL_PARTICIPANT_RIGHTS
+title: Participant Rights, Choice and Control
+category: NDIS
+tier: 2
+acknowledgement: yes
+summary: The rights every person we support holds — dignity, privacy, choice, communication, advocacy, freedom from restrictive practice — and the specific things a worker must do to make each of them real rather than stated.
+reviewCycleMonths: 24
+basis: NDIS Practice Standards — Rights and Responsibilities module; NDIS Code of Conduct; United Nations Convention on the Rights of Persons with Disabilities; Disability Services Act 1993 (WA); Equal Opportunity Act 1984 (WA)
+related: POL_CODE_OF_CONDUCT; POL_SAFEGUARDING; POL_COMPLAINTS; POL_BOUNDARIES; POL_PRIVACY
+---
+PARTICIPANT RIGHTS, CHOICE AND CONTROL
+
+1. PURPOSE
+
+Every person we support holds these rights already. Nothing in this document grants them. What it does is state what a worker has to actually do so that a right the person already has is not quietly unavailable in practice.
+
+2. THE RIGHTS, AND WHAT THEY REQUIRE OF YOU
+
+2.1 To be treated with dignity and respect
+Speak to adults as adults, whatever their disability or communication method. Never use a childish tone, a nickname they have not chosen, or baby talk. Do not talk about a person over their head to a carer while they are in the room. Knock, wait, and ask before entering a bedroom or bathroom. Do not touch a person, their mobility aid or their belongings without asking — a wheelchair is part of someone's body space, not furniture.
+
+2.2 To make their own decisions
+Assume capacity. Capacity is decision-specific and can vary with the day, the topic and how well the information was explained. If a person appears not to understand, the first question is whether we explained it in a form they can use.
+Offer genuine options, including doing nothing. Explain the trade-offs honestly. Accept a decision you disagree with, and record the recommendation, the discussion, and the person's decision.
+Supported decision-making comes before substitute decision-making. Where a guardian or nominee is formally appointed, work with them and still include the participant in the conversation about their own life.
+
+2.3 To communicate in their own way
+Interpreters, Auslan, AAC devices, communication boards, plain language, Easy Read, extra time, written follow-up. Arranged and paid for by Opal, not by the participant.
+The obligation is on us to be understood, and to understand. If a session is not working, the communication method is the first thing to change.
+
+2.4 To privacy and confidentiality
+See the Privacy & Confidentiality Policy. In their home, that also means practical things: not reading documents left out, not opening cupboards you have not been invited into, not discussing them with a neighbour who asks.
+
+2.5 To have a support person or advocate
+Anyone may bring a family member, friend or advocate to any appointment. Independent advocacy contacts are offered on request, and we will help someone find one. Never suggest that involving an advocate will make things harder.
+
+2.6 To complain, and to be listened to
+Every participant is told how to complain, in a form they can use, at the start of the service and again whenever it is relevant. That includes the external bodies in the Complaints Management Policy. Never imply that complaining could affect the supports someone receives.
+
+2.7 To be free from violence, abuse, neglect, exploitation and discrimination
+See the Safeguarding Policy. Discrimination on the basis of race, sex, age, sexuality, gender identity, religion, or any other protected attribute has no place in how we deliver a service.
+
+2.8 To be free from unauthorised restrictive practice
+A restrictive practice is anything that restricts the rights or freedom of movement of a person — including physical, mechanical, chemical and environmental restraint, and seclusion. Restrictive practices are only ever used where they are authorised, are part of a behaviour support plan, and are the least restrictive option available.
+Where a recommendation you make would have a restrictive effect — a lock, a bed rail, a seat belt on a chair, a restrictive door handle — that is a restrictive practice question, not just an equipment question. Raise it with your supervisor before recommending it.
+
+2.9 To choose and change their provider
+A participant may decline a support, ask for a different clinician, or leave Opal, without giving a reason and without any consequence for how they are treated in the meantime. Transfer their records promptly when they ask, and do not make leaving difficult.
+
+2.10 To take risks
+Dignity of risk is a right. Adults are entitled to make choices that carry risk, including choices we would advise against. Our job is to make sure the decision is informed, to record the conversation and the person's decision, and to reduce the risk in the way they have agreed to — not to remove the choice.
+
+3. WHERE IT USUALLY GOES WRONG
+
+Not by anybody deciding to override a right. It goes wrong through habit and time pressure: assuming the carer speaks for the participant because it is quicker; explaining once, in clinical language, and treating a nod as agreement; recommending the safest option rather than the one the person wants; not offering an interpreter because the family member present can translate; scheduling a visit at a time that suits the roster.
+
+4. IF YOU SEE A RIGHT BEING DENIED
+
+Whether by a family member, a support worker, another provider, or an Opal colleague, raise it. Document what you observed. Where it involves abuse, neglect or an unauthorised restrictive practice, report it immediately under the Safeguarding and Incident Management policies.
+
+5. RELATED DOCUMENTS
+
+Opal Therapy Code of Conduct · Safeguarding — Violence, Abuse, Neglect and Exploitation Policy · Complaints Management Policy · Professional Boundaries Policy · Privacy & Confidentiality Policy
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

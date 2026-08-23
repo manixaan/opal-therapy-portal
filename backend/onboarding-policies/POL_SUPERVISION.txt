@@ -1,0 +1,84 @@
+---
+code: POL_SUPERVISION
+title: Supervision, Performance and CPD Policy
+category: Professional Registration
+tier: 2
+acknowledgement: yes
+summary: How clinical supervision works at Opal Therapy, what performance conversations look like, and the continuing professional development and recency requirements that keep an occupational therapist registered.
+reviewCycleMonths: 24
+basis: Occupational Therapy Board of Australia — Registration standard: Continuing professional development; Registration standard: Recency of practice; Registration standard: Professional indemnity insurance arrangements; Health Practitioner Regulation National Law (WA)
+related: POL_CLINICAL_DOC; POL_BOUNDARIES; POL_EEO; POL_LEAVE
+---
+SUPERVISION, PERFORMANCE AND CPD POLICY
+
+1. PURPOSE
+
+Supervision is a clinical safety control, not a management ritual. In a practice where clinicians work alone in other people's homes most of the day, it is the main mechanism by which a problem gets noticed by someone other than the person having it.
+
+2. SUPERVISION
+
+2.1 Everyone in a clinical role has a named supervisor, identified in the portal.
+
+2.2 Frequency. New graduates and staff new to a practice area: [TO CONFIRM: frequency for new graduates, commonly weekly for the first three months]. Experienced clinicians: [TO CONFIRM: ongoing frequency, commonly fortnightly or monthly]. Additional sessions are available on request, and asking for one is not a signal of difficulty.
+
+2.3 Protected time. Supervision is scheduled and is not the first thing cancelled when a week is busy. If it is repeatedly rescheduled, escalate that — the pattern is the problem, not the individual session.
+
+2.4 What it is for. Clinical reasoning and case discussion; complex, risky or stuck cases; ethical and boundary questions; caseload and workload; professional development; and how you are actually going. All of it.
+
+2.5 What is recorded. A brief record of the date, the cases and issues discussed, decisions and actions agreed, and anything to follow up. Clinical decisions made in supervision are also recorded in the participant's file. Personal matters you raise are not recorded in detail.
+
+2.6 Confidentiality and its limits. What you discuss stays between you unless it involves a risk to a participant or a worker, a reportable incident, unsafe practice, or something a regulator must be told. Your supervisor will tell you when a limit applies.
+
+2.7 Bring the difficult thing. Supervision is worth what you put into it. A supervisor who only hears about the cases that are going well is unable to help with the ones that are not.
+
+2.8 External supervision. Where specialist expertise is needed — [TO CONFIRM: which practice areas require external supervision, and Opal's contribution to its cost].
+
+3. PERFORMANCE
+
+3.1 Ongoing feedback rather than an annual surprise. Anything raised at a review should already have been said.
+
+3.2 Formal review at [TO CONFIRM: review cycle, commonly at three months and then annually]. It covers achievements, goals, development, workload, and what Opal needs to do differently.
+
+3.3 Underperformance is addressed openly, early, and with support: a clear statement of the concern, what is expected, what help is available, and a reasonable period to demonstrate change. You may bring a support person to any formal performance meeting.
+
+3.4 Serious misconduct is handled under the relevant conduct policy, not as a performance matter.
+
+3.5 Nothing in this policy limits your rights under your contract, an award or the Fair Work Act.
+
+4. CONTINUING PROFESSIONAL DEVELOPMENT
+
+4.1 The Occupational Therapy Board's registration standard requires at least 20 hours of CPD per registration year, including a minimum of 5 hours in an interactive setting with other practitioners. That is the current standard; the Board can revise it, and the portal holds the figures Opal is currently applying.
+
+4.2 CPD must be relevant to your practice, and you must keep your own evidence — a CPD portfolio with dates, activities, hours, and a reflection on what changed in your practice. AHPRA audits it, and the obligation is personal.
+
+4.3 What counts: courses and workshops, supervision and peer review, journal reading with reflection, presenting or teaching, research, professional reading, and mentoring. What does not: attendance without any record or reflection.
+
+4.4 Opal's contribution: [TO CONFIRM: paid CPD days, financial contribution per year, and the approval process].
+
+4.5 Mandatory training Opal requires regardless of CPD: [TO CONFIRM: list of mandatory training and refresher intervals].
+
+5. RECENCY OF PRACTICE AND REGISTRATION
+
+5.1 The Board's recency of practice standard requires a minimum amount of practice over a defined period. The figures Opal currently applies are held in the portal's onboarding settings, and the standard itself is the authority.
+
+5.2 Registration renews annually by 30 November. Renewing on time is your responsibility. Practising while unregistered is an offence under the National Law, and Opal cannot roster you to clinical work without current registration.
+
+5.3 Tell Opal immediately if a condition, undertaking, caution or reprimand is placed on your registration, if you are the subject of a notification, or if your registration lapses.
+
+5.4 Professional indemnity insurance arrangements must be in place for your whole scope of practice. Opal's arrangements: [TO CONFIRM: whether Opal's professional indemnity insurance covers employees, the insurer, and what it does and does not cover].
+
+6. STUDENTS AND NEW GRADUATES
+
+Students are supervised at a level appropriate to their stage, and the supervising clinician remains responsible for the participant's care and for the clinical record. New graduates receive additional supervision, a graduated caseload, and joint visits until their supervisor agrees they are ready to work independently.
+
+7. WHEN YOU ARE STRUGGLING
+
+Say so. Not being confident with a case, a technique or a caseload is normal and is a supervision matter, not a performance one. Where your health is affecting your ability to practise safely, tell your supervisor early — there are adjustments available, and the National Law obligations that apply to an impaired practitioner are much better met before someone is harmed.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months, or whenever an Occupational Therapy Board registration standard changes
+Next review due: [TO CONFIRM: date]

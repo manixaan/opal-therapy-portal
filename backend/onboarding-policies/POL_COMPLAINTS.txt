@@ -1,0 +1,86 @@
+---
+code: POL_COMPLAINTS
+title: Complaints Management Policy
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: How a participant, family member, worker or member of the public can complain about Opal Therapy, what we do with a complaint, and the external bodies a person can go to instead of or as well as us.
+reviewCycleMonths: 24
+basis: NDIS Act 2013 (Cth) and the NDIS (Complaints Management and Resolution) Rules 2018; NDIS Practice Standards; Occupational Therapy Board of Australia — Code of conduct
+related: POL_INCIDENT; POL_PARTICIPANT_RIGHTS; POL_CODE_OF_CONDUCT; POL_BULLYING
+---
+COMPLAINTS MANAGEMENT POLICY
+
+1. PURPOSE
+
+A complaint is information we would not otherwise have. This policy makes it easy to give us that information, and it commits us to responding to it without the person paying a price for having spoken up.
+
+2. WHO CAN COMPLAIN, AND ABOUT WHAT
+
+Anyone. A participant, a family member, a carer, a nominee, an advocate, a worker, another provider, or a member of the public. About anything — the quality of a support, the behaviour of a worker, a decision we made, a bill, an appointment, the way we handled an earlier complaint.
+
+A person may complain anonymously. An anonymous complaint is recorded and acted on; we simply cannot report an outcome back.
+
+3. HOW A COMPLAINT REACHES US
+
+• In person or by phone to any worker.
+• To {{OPAL_ORG_COMPLAINTS_CONTACT}}.
+• By phone on {{OPAL_ORG_PHONE}} or by email to {{OPAL_ORG_EMAIL}}.
+• Through a support person, advocate or interpreter — and we will help arrange one, at no cost, if that is what a person needs to be able to complain.
+
+4. YOUR OBLIGATIONS AS A WORKER
+
+4.1 Take it. If someone raises a concern with you, that is a complaint, whether or not they use the word. Do not tell them to put it in writing first and do not require them to use a form.
+
+4.2 Listen before you explain. Let the person finish. Do not defend Opal, your colleague or yourself in the moment.
+
+4.3 Never discourage a complaint, and never suggest that making one could affect the supports a participant receives. That suggestion is itself a serious breach of the NDIS Code of Conduct.
+
+4.4 Record and pass it on the same day. Log it in the portal and tell {{OPAL_ORG_COMPLAINTS_CONTACT}}, even if you have already resolved it on the spot — a resolved complaint is still a data point.
+
+4.5 If the complaint is about you, hand it over. Pass it to your supervisor or to [TO CONFIRM: the alternative complaints contact where the complaint concerns the usual contact]. Do not investigate a complaint about your own conduct.
+
+4.6 Tell the person what happens next, in the words of section 5 below.
+
+5. WHAT WE COMMIT TO
+
+• Acknowledge every complaint within [TO CONFIRM: acknowledgement timeframe, commonly 2 business days].
+• Tell the person who is handling it and how to contact them.
+• Keep them informed while it is open, at least every [TO CONFIRM: update interval].
+• Aim to resolve it within [TO CONFIRM: resolution target, commonly 21 or 28 days], and explain the delay if we cannot.
+• Give the outcome, the reasons, and what we are changing as a result.
+• Explain how to escalate if they are not satisfied, including to the bodies in section 7.
+• Deal with the complaint fairly, confidentially, and without cost to the complainant.
+
+6. NO DETRIMENT
+
+No participant will receive a lesser service because they complained. No worker will be disadvantaged for making a complaint or for supporting someone else's. Any suggestion of retaliation is treated as a serious matter in its own right.
+
+7. GOING OUTSIDE OPAL
+
+A person does not have to complain to us first, and can go to any of these at any time:
+
+• NDIS Quality and Safeguards Commission — 1800 035 544, ndiscommission.gov.au
+• AHPRA, for a concern about a registered practitioner — 1300 419 495, ahpra.gov.au
+• Health and Disability Services Complaints Office (WA) — 1800 813 583, hadsco.wa.gov.au
+• Office of the Australian Information Commissioner, for a privacy concern — 1300 363 992, oaic.gov.au
+• Fair Work Ombudsman, for an employment concern — 13 13 94, fairwork.gov.au
+• Police, for anything that may be a crime — 000 in an emergency, 131 444 otherwise
+
+These contact details must be given to any participant who asks how to complain, and must not be withheld or delayed.
+
+8. WHAT WE DO WITH THE PATTERN
+
+Complaints are reviewed together, at least [TO CONFIRM: review frequency for complaint trends], by [TO CONFIRM: role responsible]. One complaint is an event; three of the same complaint is a system problem, and it is the second reading that changes how we work.
+
+9. RECORDS
+
+Complaint records are kept for at least seven years, separately from the participant's clinical record, so that a complaint never sits in a file in a way that could colour someone's clinical care.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

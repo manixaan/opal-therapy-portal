@@ -213,20 +213,74 @@ const INTERVIEW_PERMISSION_LABELS = {
   'interviews.view_all': 'See all interviews in the practice',
 };
 
+/**
+ * SERVICE AGREEMENT DELEGATION. Same rule as onboarding and interviews, for a
+ * sharper reason: a service agreement is the contract between the practice and
+ * a participant. Issuing one commits Opal to prices and terms, and signing one
+ * creates a legal record. "This person manages the calendar" says nothing
+ * about whether they should be able to send a participant a contract.
+ *
+ * THREE POWERS, and the third is deliberately not like the others:
+ *
+ *   service_agreements.access        create, edit and issue agreements; email
+ *                                    signing links; download the participant
+ *                                    PDF. Sees the agreements THIS user
+ *                                    created, and nothing else.
+ *   service_agreements.view_all      read and export every agreement in the
+ *                                    practice. Read only — it never confers
+ *                                    the right to edit somebody else's.
+ *   service_agreements.manage_master edit clauses, upload a revised master,
+ *                                    publish, retire and republish, and
+ *                                    download the master Word file.
+ *
+ * `manage_master` is checked TOGETHER WITH role === 'owner' at every route
+ * that uses it (requireMasterAuthority below). Granting it to an admin does
+ * nothing: the master is the legal document every future agreement is built
+ * from, and the specification is explicit that only an owner holding this
+ * specific permission may publish or retire. Requiring both means a
+ * mis-click in the delegation UI cannot hand the practice's contract template
+ * to somebody who merely has administrative access.
+ */
+const SERVICE_AGREEMENT_PERMISSIONS = [
+  'service_agreements.access',
+  'service_agreements.view_all',
+  'service_agreements.manage_master',
+];
+
+/** Grouped for the Owner's delegation UI; the grouping carries the warning. */
+const SERVICE_AGREEMENT_PERMISSION_GROUPS = [
+  {
+    key: 'service_agreements',
+    label: 'Service Agreements',
+    description: 'Create and issue participant service agreements on the practice\'s behalf. '
+      + 'An issued agreement commits Opal to the prices and terms it states — grant only to '
+      + 'people who genuinely agree services with participants.',
+    permissions: SERVICE_AGREEMENT_PERMISSIONS,
+  },
+];
+
+/** Human labels for the delegation UI and for audit readability. */
+const SERVICE_AGREEMENT_PERMISSION_LABELS = {
+  'service_agreements.access': 'Service Agreements access',
+  'service_agreements.view_all': 'See all service agreements in the practice',
+  'service_agreements.manage_master': 'Manage the master agreement template (Owner only)',
+};
+
 /** Every permission string this file recognises — the grant allowlist. */
 const KNOWN_PERMISSIONS = new Set([
   ...Object.values(ROLE_PERMISSIONS).flat(),
   ...ONBOARDING_PERMISSIONS,
   ...INTERVIEW_PERMISSIONS,
+  ...SERVICE_AGREEMENT_PERMISSIONS,
 ]);
 
 /**
  * Return the permissions array for a given role.
  * Also merges any custom per-user permissions stored in the DB.
  *
- * The owner holds every onboarding and interview permission implicitly — the
- * practice owner is the data controller and cannot lock themselves out of
- * their own records.
+ * The owner holds every onboarding, interview and service-agreement permission
+ * implicitly — the practice owner is the data controller and cannot lock
+ * themselves out of their own records.
  *
  * @param {string}   role        - 'owner' | 'admin' | 'therapist' | 'read_only' | 'pre_employee'
  * @param {string[]} [extraPerms] - additional permissions from user.permissions column
@@ -234,7 +288,7 @@ const KNOWN_PERMISSIONS = new Set([
 function getPermissions(role, extraPerms = []) {
   const base = ROLE_PERMISSIONS[role] || [];
   const merged = role === 'owner'
-    ? [...base, ...ONBOARDING_PERMISSIONS, ...INTERVIEW_PERMISSIONS]
+    ? [...base, ...ONBOARDING_PERMISSIONS, ...INTERVIEW_PERMISSIONS, ...SERVICE_AGREEMENT_PERMISSIONS]
     : base;
   if (!extraPerms || !extraPerms.length) return [...new Set(merged)];
   // Per-user grants must name a permission this file actually defines. An
@@ -499,7 +553,6 @@ async function requireAuth(req, res, next) {
       !req.originalUrl.startsWith('/api/auth/') &&
       !req.originalUrl.startsWith('/api/onboarding/me/')
     ) {
-
       return res.status(403).json({ error: 'Read-only account — this action is not permitted' });
     }
 
@@ -535,6 +588,52 @@ function requireAnyPermission(...permissions) {
   };
 }
 
+/**
+ * requireMasterAuthority
+ * The master service agreement template: owner role AND the specific
+ * `service_agreements.manage_master` permission, both.
+ *
+ * Two checks rather than one because they refuse different mistakes. The role
+ * check refuses an administrator who was granted the permission by accident;
+ * the permission check refuses an owner who has deliberately not taken this
+ * power on. Either alone would let one of those through.
+ */
+function requireMasterAuthority(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Only the practice owner can manage the master service agreement template.',
+    });
+  }
+  if (!hasPermission(req.user, 'service_agreements.manage_master')) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Missing permission: service_agreements.manage_master',
+    });
+  }
+  return next();
+}
+
+/**
+ * requireOwner
+ * Word output, in either direction, is owner-only.
+ *
+ * A .docx is an EDITABLE document. Handing one to an employee makes the
+ * agreement's wording negotiable by whoever holds the file, which is the one
+ * thing the master-versioning design exists to prevent. Staff get PDF.
+ */
+function requireOwner(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'This action is restricted to the practice owner.',
+    });
+  }
+  return next();
+}
+
 module.exports = {
   ROLE_PERMISSIONS,
   ONBOARDING_PERMISSIONS,
@@ -542,6 +641,9 @@ module.exports = {
   INTERVIEW_PERMISSIONS,
   INTERVIEW_PERMISSION_GROUPS,
   INTERVIEW_PERMISSION_LABELS,
+  SERVICE_AGREEMENT_PERMISSIONS,
+  SERVICE_AGREEMENT_PERMISSION_GROUPS,
+  SERVICE_AGREEMENT_PERMISSION_LABELS,
   KNOWN_PERMISSIONS,
   PRE_EMPLOYEE_PATHS,
   isPreEmployeePath,
@@ -553,6 +655,8 @@ module.exports = {
   requireRole,
   requirePermission,
   requireAnyPermission,
+  requireMasterAuthority,
+  requireOwner,
   canViewCalendar,
   canViewFinancials,
   canManageSchedule,

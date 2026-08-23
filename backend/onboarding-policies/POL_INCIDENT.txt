@@ -1,0 +1,75 @@
+---
+code: POL_INCIDENT
+title: Incident Management Policy
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: What counts as an incident, how to report one, the timeframes that apply, and which incidents must be notified to WorkSafe WA or the NDIS Quality and Safeguards Commission.
+reviewCycleMonths: 24
+basis: NDIS Act 2013 (Cth) and the NDIS (Incident Management and Reportable Incidents) Rules 2018; Work Health and Safety Act 2020 (WA) Part 3; NDIS Practice Standards
+related: POL_SAFEGUARDING; POL_COMPLAINTS; POL_WHS; POL_INJURY_MANAGEMENT; POL_CLINICAL_DOC
+---
+INCIDENT MANAGEMENT POLICY
+
+1. PURPOSE
+
+An incident management system does two things: it makes sure the person harmed is looked after, and it makes sure the same thing is less likely to happen to the next person. Both depend on incidents actually being reported, which is why this policy is written to make reporting easy and safe rather than to make it rare.
+
+2. WHAT IS AN INCIDENT
+
+An incident is any act, omission, event or circumstance that:
+• caused harm, or could reasonably have caused harm, to a participant, a worker, or anyone else in connection with our work; or
+• involves alleged violence, abuse, neglect, exploitation or discriminatory conduct; or
+• involves the use of a restrictive practice that was not authorised or not in a behaviour support plan; or
+• is a near miss — something that did not cause harm this time only because of luck or a late intervention.
+
+Near misses are reported on the same form as everything else. A near miss is the cheapest possible warning and treating it as "nothing happened" is how a practice discovers a hazard the expensive way.
+
+3. WHAT TO DO, IN ORDER
+
+3.1 Make everyone safe. Give or arrange first aid. Call 000 if anyone is seriously hurt or at immediate risk. Remove the hazard if it is safe to do so.
+
+3.2 Do not disturb the scene of a serious incident. Where someone has died, been seriously injured, or a dangerous incident has occurred, the site must be left undisturbed until WorkSafe WA says otherwise, except to help an injured person, remove a body, make the site safe, or act under police direction.
+
+3.3 Tell someone the same day. Notify your supervisor immediately by phone for anything serious, and in any event before the end of your shift. Serious means: an injury needing more than basic first aid, an allegation of abuse, a death, a police or ambulance attendance, a missing participant, a medication error, or anything you would want to be told about if it were your family member.
+
+3.4 Record it in the portal within 24 hours. Report what happened, not what you think should have happened. Include the date, time and location, who was involved and who witnessed it, what you observed in factual terms, what you did, who you notified, and the participant's own account in their own words wherever they can give one.
+
+3.5 Keep the record honest. Do not speculate about cause, do not assign blame, and do not amend an earlier note to make the sequence look tidier. If your understanding changes, add a new dated entry.
+
+4. NOTIFICATIONS TO REGULATORS
+
+You are not expected to make these notifications yourself. Your job is to escalate fast enough that the person who does can meet the deadline.
+
+4.1 WorkSafe WA. Under the Work Health and Safety Act 2020 (WA), a notifiable incident — the death of a person, a serious injury or illness, or a dangerous incident — must be notified to WorkSafe WA immediately after becoming aware of it, with written notification to follow. Records of a notifiable incident must be kept for at least five years.
+
+4.2 NDIS Quality and Safeguards Commission. The reportable incidents regime under the NDIS Act binds registered NDIS providers. Opal's current registration status is recorded in the portal's onboarding settings; where Opal is a registered provider, reportable incidents — including death, serious injury, abuse or neglect, unlawful sexual or physical contact, sexual misconduct, and the unauthorised use of a restrictive practice — must be notified to the Commission within the statutory timeframe, which is 24 hours for most categories and five business days for an unauthorised restrictive practice.
+Where Opal is not a registered provider, that notification duty does not apply to us, and every other step in this policy still does. Opal's own escalation is not conditional on registration status.
+
+4.3 Police. Call the police for any suspected criminal conduct, including assault, sexual offences, theft and fraud. Do not let an internal process delay a police report.
+
+4.4 Other. A mandatory notification about a registered health practitioner goes to AHPRA. A privacy breach follows the Privacy & Confidentiality Policy. A workers compensation injury follows the Injury Management System information for workers.
+
+5. WHAT HAPPENS NEXT
+
+5.1 Support first. The participant and their family or nominee are told what happened, in plain language, and what we are doing about it. Workers involved in a serious incident are offered support, including [TO CONFIRM: employee assistance programme details, or state that none is currently provided].
+
+5.2 Review. Every incident is reviewed by [TO CONFIRM: role responsible for incident review]. Serious incidents get a documented review that asks what in the system allowed this, not who to blame. Findings that change practice are fed back to the team.
+
+5.3 Records. Incident records are retained for at least seven years, and longer where a regulator requires it.
+
+6. NO DETRIMENT
+
+Nobody at Opal will be disadvantaged for reporting an incident in good faith, including one they caused. Failing to report is the disciplinary matter.
+
+7. RELATED DOCUMENTS
+
+Safeguarding — Violence, Abuse, Neglect and Exploitation Policy · Complaints Management Policy · Work Health and Safety Policy · Injury Management System — information for workers · Clinical Documentation Policy
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months, or sooner if our NDIS registration status or WHS obligations change
+Next review due: [TO CONFIRM: date]

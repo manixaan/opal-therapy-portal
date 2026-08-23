@@ -80,9 +80,28 @@ beforeAll(async () => { found = await discover(); });
 
 describe('template file', () => {
   test('is the exact template the map was written against', () => {
+    // v1.1: v1 with `<w:updateFields w:val="true"/>` removed and nothing else.
+    // The map's own pin is the authority; the literal here is the second
+    // opinion that catches a map edited to match a swapped file.
     const sha = crypto.createHash('sha256').update(templateBuffer).digest('hex');
-    expect(sha).toBe('f686096730a793d44316f9e73aa329dd36ebe2583699df0ee80d0ece583ed5c5');
+    expect(sha).toBe('3f9a79e086d855282b17479e09b19f1f080db1eb5fadc25d9d4a5c3006dfb9e0');
     expect(sha).toBe(ltm.LETTER_TEMPLATE_SHA256);
+  });
+
+  test('the superseded v1 is kept on disk, and is the one that had the setting', async () => {
+    const path = require('path');
+    const fs = require('fs');
+    const JSZip = require('jszip');
+    const { readUpdateFields } = require('../docx-sanitiser');
+
+    const v1 = path.join(__dirname, '..', 'fca', 'templates', 'progress-note-letter-v1.docx');
+    expect(fs.existsSync(v1)).toBe(true);
+
+    const oldSha = crypto.createHash('sha256').update(fs.readFileSync(v1)).digest('hex');
+    expect(oldSha).toBe(ltm.LETTER_TEMPLATE_SHA256_V1);
+
+    const zip = await JSZip.loadAsync(fs.readFileSync(v1));
+    expect(readUpdateFields(await zip.file('word/settings.xml').async('string'))).toBe(true);
   });
 });
 
@@ -212,7 +231,7 @@ describe('block catalogue', () => {
   test('the template descriptor is the contract shape', () => {
     const d = ltm.letterTemplateDescriptor();
     expect(d.documentType).toBe('progress_note_letter');
-    expect(d.version).toBe('v1');
+    expect(d.version).toBe('v1.1');
     expect(d.sections).toHaveLength(5);
     expect(Object.keys(d.sections[0]).sort())
       .toEqual(['defaultOrder', 'defaultSelected', 'description', 'label', 'required', 'tag']);

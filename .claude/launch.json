@@ -92,6 +92,26 @@
       "autoPort": false
     },
     {
+      "name": "opal-service-agreements-5012",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5012 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5012,http://127.0.0.1:5012 APP_BASE_URL=http://localhost:5012 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5012,
+      "autoPort": false
+    },
+    {
+      "name": "opal-learning-5014",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5014 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5014,http://127.0.0.1:5014 APP_BASE_URL=http://localhost:5014 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5014,
+      "autoPort": false
+    },
+    {
       "name": "opal-onboarding-journey-5013",
       "runtimeExecutable": "sh",
       "runtimeArgs": [

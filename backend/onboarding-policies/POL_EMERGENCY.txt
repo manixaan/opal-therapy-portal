@@ -1,0 +1,84 @@
+---
+code: POL_EMERGENCY
+title: Emergency and Disaster Management Policy
+category: WHS
+tier: 3
+acknowledgement: yes
+summary: What to do in a fire, a medical emergency, a bushfire or cyclone, an extreme heat day, a road closure or a system outage — and how Opal Therapy keeps supporting participants when normal service is not possible.
+reviewCycleMonths: 12
+basis: Work Health and Safety Act 2020 (WA); NDIS Practice Standards — emergency and disaster management; Department of Fire and Emergency Services (WA) advice
+related: POL_WHS; POL_LONE_WORKER; POL_HOME_VISIT; POL_INCIDENT; POL_INFECTION; POL_TELEHEALTH
+---
+EMERGENCY AND DISASTER MANAGEMENT POLICY
+
+1. PURPOSE
+
+Two obligations sit together here. Keeping workers safe in an emergency, and making sure participants who depend on a support do not simply lose it because conditions became difficult. The NDIS Practice Standards require providers to plan for both, and in Western Australia the realistic scenarios are bushfire, cyclone, flood, extreme heat, storm, a long road closure, an infectious disease event, and the loss of power, telecommunications or our own systems.
+
+2. IN AN IMMEDIATE EMERGENCY
+
+Call 000. Ask for fire, police or ambulance. State the address first — including the suburb and any landmark, because you may be cut off.
+
+Your safety comes before everything else in this policy. You are not expected to put yourself at risk to continue a service.
+
+3. MEDICAL EMERGENCY DURING A VISIT
+
+1. Call 000.
+2. Give first aid within your training. Do not attempt what you are not trained for.
+3. Stay with the person until help arrives, unless staying is unsafe.
+4. Get the participant's emergency information — the portal holds their emergency contacts, and their medication list if we have one — and give it to the paramedics.
+5. Contact the emergency contact and your supervisor.
+6. Write it up the same day and report it as an incident within 24 hours.
+
+Take a mobile phone with charge to every visit. It is the first item on the list because everything above depends on it.
+
+4. FIRE
+
+In the office: raise the alarm, call 000, evacuate by the nearest safe exit, do not use lifts, go to the assembly point at [TO CONFIRM: office assembly point], and do not re-enter until told it is safe. Only attempt to fight a fire if it is small, you are trained, and you have a clear exit behind you.
+
+In a participant's home: get everyone out first, including the participant — which may need planning if they have mobility or sensory needs. Call 000 from outside.
+
+Office emergency arrangements — wardens, extinguishers, evacuation diagram, drill frequency: [TO CONFIRM: office emergency arrangements and who maintains them].
+
+5. BUSHFIRE
+
+5.1 Check the Emergency WA website and the Bureau of Meteorology before travelling to any regional or bushland area during the fire season, and check again before you leave a location.
+
+5.2 Do not travel into an area under a Watch and Act or Emergency Warning. Do not attempt to drive through smoke. A road that was open this morning may not be open this afternoon.
+
+5.3 On a Catastrophic fire danger rating day, visits in affected areas do not proceed. This is not a judgement call to be made at the roadside: [TO CONFIRM: who makes the call to cancel visits on a high fire danger day, and by when].
+
+5.4 If you are caught: do not drive through fire, do not shelter in the open, and follow the advice broadcast for the area. Call 000 and tell your supervisor where you are.
+
+6. CYCLONE, STORM AND FLOOD
+
+Follow DFES advice for the region. Do not drive through floodwater under any circumstances, at any depth. Where a cyclone warning is issued for an area we service, visits are suspended and participants are contacted under section 9.
+
+7. EXTREME HEAT
+
+Heat is a genuine risk both to you and to participants, particularly those with limited mobility, some medications, or no air conditioning. On a day forecast above [TO CONFIRM: temperature threshold]: schedule visits early, carry water, do not sit in a parked car, and check on participants known to be at risk. Consider telehealth instead of a long drive.
+
+8. LOSS OF SYSTEMS
+
+If the portal, phones or internet are unavailable: continue seeing participants, keep contemporaneous notes on paper, and enter them into the portal as soon as it is back — recording the actual date of the contact and the date of entry, as the Clinical Documentation Policy requires. Do not use personal accounts or unapproved tools as a workaround.
+Who to contact during an outage, and the backup contact method: [TO CONFIRM: outage contact and backup communication method].
+
+9. CONTINUING TO SUPPORT PARTICIPANTS
+
+9.1 Opal maintains a list of participants whose supports cannot safely be interrupted, and who is responsible for contacting each of them when normal service is disrupted: [TO CONFIRM: who maintains the priority participant list and who makes the calls].
+
+9.2 During a disruption, participants are contacted, told what is happening, and offered an alternative where one is safe — telehealth, a phone review, a rescheduled visit, or a referral for something urgent.
+
+9.3 Participants' own emergency plans are part of our clinical work with them. Where a participant relies on power for equipment, has limited mobility, or would not be able to evacuate without help, that belongs in their plan and should be discussed with them and their other providers before a season, not during one.
+
+10. AFTER
+
+Everyone involved is checked on, offered a debrief, and offered support through [TO CONFIRM: employee assistance programme details, or a note that none is currently provided]. The event is reviewed: what worked, what did not, and what changes before next time.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months, before the start of the fire season
+Next review due: [TO CONFIRM: date]

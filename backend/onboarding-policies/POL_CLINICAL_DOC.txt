@@ -1,0 +1,98 @@
+---
+code: POL_CLINICAL_DOC
+title: Clinical Documentation Policy
+category: Clinical
+tier: 2
+acknowledgement: yes
+summary: The standard for clinical records at Opal Therapy — what goes in a note, when it must be written, how errors are corrected, what must never be altered, and how AI-assisted drafting is governed.
+reviewCycleMonths: 24
+basis: Occupational Therapy Board of Australia — Code of conduct; NDIS Practice Standards; Privacy Act 1988 (Cth); Health Practitioner Regulation National Law (WA)
+related: POL_PRIVACY; POL_RECORDS; POL_INFOSEC; POL_SUPERVISION; POL_INCIDENT
+---
+CLINICAL DOCUMENTATION POLICY
+
+1. PURPOSE
+
+A clinical record has four jobs: it keeps the participant's care coherent across time and across clinicians; it evidences that the support was delivered; it is the primary source if a decision is ever questioned; and it is the participant's own account of their therapy, which they are entitled to read.
+
+A record written only for the first of those is not good enough for the other three.
+
+2. WHO THIS APPLIES TO
+
+Everyone who records anything about a participant — clinicians, students on placement, and administrative staff recording contacts and correspondence.
+
+3. WHEN TO WRITE
+
+3.1 Contemporaneously. Write the note during or immediately after the contact. Where that is genuinely not possible, write it the same working day, and in any event within 24 hours.
+
+3.2 A late note is written honestly. It records the date of the contact and the date it was written, and it does not pretend to be contemporaneous. A note that misstates when it was made damages the credibility of every other note in the file.
+
+3.3 Never write a note in advance of the contact it describes.
+
+4. WHAT EVERY ENTRY CONTAINS
+
+• Participant identifier, date, start and finish times, and the setting.
+• Who was present, including family, carers, support workers and interpreters.
+• The purpose of the contact and what was actually done.
+• Objective observations, and measurements where they were taken.
+• The participant's own words for anything significant, in quotation marks.
+• Your clinical reasoning — why you did what you did, and what you considered and ruled out.
+• Any risk identified and what you did about it.
+• What was agreed, what the participant chose, and anything they declined.
+• The plan, with who is doing what by when.
+• Your full name, role and signature or authenticated portal entry.
+
+5. HOW TO WRITE IT
+
+5.1 Separate observation from interpretation. "Participant sat on the edge of the bed for 40 seconds before standing" is an observation. "Participant is deconditioned" is an interpretation. Both belong, but not in the same sentence pretending to be one thing.
+
+5.2 Write for a stranger. Assume the reader is a therapist who has never met this person, reading in two years, under time pressure. Expand abbreviations that are not universally understood.
+
+5.3 Write for the participant. They can ask to read it. Avoid loaded language — "non-compliant", "attention-seeking", "difficult", "refused" — where a factual description does the job better. "Declined the recommended rail and explained that she does not want a hospital-looking bathroom" is more useful clinically and more respectful than "non-compliant".
+
+5.4 Record what did not happen too. A cancelled session, an unanswered call, a recommendation declined, a referral not yet actioned. Gaps in a record are read as gaps in care.
+
+5.5 Third parties. Record information about family members and others only where it is relevant to the participant's care, and remember they may see it.
+
+6. CORRECTIONS AND AMENDMENTS
+
+6.1 Never delete, overwrite or backdate. Never use correction fluid on paper or edit an entry to say something different from what was recorded.
+
+6.2 Correct by amendment. Add a new dated, signed entry that states what was wrong and what the correct position is. The original stays visible. The portal enforces this; on paper, strike through with a single line so the original remains legible, and initial and date the change.
+
+6.3 A participant may ask for a correction. See the Privacy & Confidentiality Policy. The same rule applies: their disagreement is recorded alongside the original, not instead of it.
+
+7. REPORTS AND CORRESPONDENCE
+
+7.1 Reports must be accurate, within your scope, and clear about the limits of the assessment — what was and was not assessed, in what setting, over what period, and what the findings do not support.
+
+7.2 Do not write a recommendation you do not clinically support because a funder, a family member or a coordinator wants it. Funding pressure is exactly the situation this rule exists for.
+
+7.3 Reports going to a funder, a tribunal or another provider are reviewed before they are sent, in line with [TO CONFIRM: which reports require supervisor review before release].
+
+7.4 Give the participant a copy of any report about them unless there is a documented reason not to.
+
+8. AI-ASSISTED DOCUMENTATION
+
+Opal's portal includes AI-assisted drafting under governance controls, including audit logging and a kill switch. The rules are simple and non-negotiable:
+• AI output is a draft. You read every line, you correct it, and you own what you sign.
+• Never sign a note you have not read in full.
+• Do not paste participant information into any AI tool that is not part of the portal.
+• Where a recording or transcript is used to help produce a note, the participant's consent is obtained first and recorded, and the retention of that recording follows the Records Management Policy.
+• If AI-generated text asserts something that did not happen, that is a clinical record error — correct it under section 6 and report it, because it tells us something about the tool.
+
+9. ACCESS, STORAGE AND RETENTION
+
+Records are stored in the portal, not on local drives, personal devices or personal cloud accounts. Retention is governed by the Records Management Policy: at least seven years from the last contact for an adult, and for a child, at least until they turn 25.
+
+10. WHAT GOES WRONG MOST OFTEN
+
+Notes written days later from memory. Sessions documented as planned rather than as they happened. Risk noticed but not written down. A phone call with a family member that never reached the file. A report sent without a supervisor check. Each of these is recoverable if you say so; none of them is recoverable if the first time anyone hears about it is at a coronial inquest or a tribunal.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

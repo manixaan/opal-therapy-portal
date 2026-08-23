@@ -1,0 +1,65 @@
+---
+code: DOC_WELCOME
+title: Welcome to Opal Therapy
+category: Employment
+tier: 1
+acknowledgement: no
+summary: The first page a new starter reads — what Opal Therapy is, what the first weeks look like, what to do before day one, and where to find everything else.
+reviewCycleMonths: 12
+basis: Opal Therapy onboarding workflow
+related: DOC_HANDBOOK; POL_COLLECTION_NOTICE; POL_CODE_OF_CONDUCT
+---
+WELCOME TO OPAL THERAPY
+
+Welcome. We are glad you said yes.
+
+You have joined a small occupational therapy practice, and small is the point rather than a stage we are trying to grow out of. It means the person who assessed a participant is usually the person who writes their report and the person who follows through on it. It means you will know every participant on your caseload by name. It also means your work is visible, and that what you decide to do on a Tuesday afternoon in someone's kitchen matters to the whole practice.
+
+WHAT WE DO
+
+We provide occupational therapy to people living with disability, most of it funded through the NDIS, and most of it delivered where people actually live — homes, schools, workplaces and community settings, including regional visits. Assessment, therapy, equipment and assistive technology, home modifications, functional capacity reporting, and the reports that unlock the funding a person needs.
+
+WHAT WE CARE ABOUT
+
+The participant decides. We bring expertise; we do not bring a plan for someone's life. Choice and control are not a slogan borrowed from the NDIS — they are the difference between therapy that is used and therapy that is politely tolerated.
+
+Write it down properly. A clinical record is how a participant's story survives a change of therapist. It is also the only evidence that the work happened.
+
+Say the awkward thing early. A concern raised on the day is a conversation. The same concern raised in three months is an incident.
+
+Nobody is expected to know everything. Asking is a professional strength here, and supervision exists for exactly this.
+
+YOUR FIRST WEEKS
+
+Before you start, your onboarding checklist in the portal lists everything we need from you — identity and work rights, bank and superannuation details, your AHPRA registration, any screening checks your role requires, and the policies you will be asked to read and acknowledge. Your exact role, start date, manager and onboarding contact are shown at the top of that checklist, because they are specific to you rather than to this page.
+
+Week one is mostly orientation: systems, the portal, the policies, meeting the team, and shadowing rather than carrying a caseload. Week two usually adds joint visits. You will pick up your own caseload when your supervisor thinks you are ready, not on a date decided in advance.
+
+You will have supervision from the beginning, and more of it early on than later.
+
+BEFORE DAY ONE — THREE THINGS
+
+1. Complete your onboarding checklist in the portal. Some items — screening checks in particular — take weeks to come back, so start those first.
+2. Read the Employee Handbook and the Tier 1 policies. You will be asked to acknowledge several of them.
+3. Tell us anything we need to know to set you up well: an adjustment you need, a name or pronoun you go by that differs from your legal name, dietary requirements, or a date you already have booked.
+
+IF SOMETHING GOES WRONG BEFORE YOU EVEN START
+
+Contact [TO CONFIRM: onboarding contact name, role, email and phone]. A delayed check, a document you cannot find, a start date that no longer works — all of it is easier to solve before day one than after.
+
+WHERE EVERYTHING LIVES
+
+The portal holds your onboarding checklist, the policy library, your calendar, participant records and clinical documentation. The Employee Handbook explains how we work day to day. Every policy referenced anywhere is in the portal's document library, in full, at the version you acknowledged.
+
+Welcome aboard.
+
+[TO CONFIRM: name and role of the person signing this welcome]
+{{OPAL_ORG_TRADING_NAME}}
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this document]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

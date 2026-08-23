@@ -92,7 +92,7 @@ const {
   templateDescriptor,
 } = templateMap;
 
-const TEMPLATE_FILE = path.join(__dirname, 'fca', 'templates', 'fca-v1.docx');
+const TEMPLATE_FILE = path.join(__dirname, 'fca', 'templates', 'fca-v1.1.docx');
 
 // ── House conventions ────────────────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ async function activeTemplate() {
      VALUES ($1,$2,$3,$4,$5,TRUE)
      ON CONFLICT (template_key, version) DO NOTHING
      RETURNING *`,
-    [TEMPLATE_ID, TEMPLATE_VERSION, TEMPLATE_NAME, 'fca/templates/fca-v1.docx', checksum]
+    [TEMPLATE_ID, TEMPLATE_VERSION, TEMPLATE_NAME, 'fca/templates/fca-v1.1.docx', checksum]
   );
   if (ins.rows[0]) return ins.rows[0];
 

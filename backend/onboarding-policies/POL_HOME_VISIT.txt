@@ -1,0 +1,91 @@
+---
+code: POL_HOME_VISIT
+title: Home Visit & Community Work Safety Policy
+category: WHS
+tier: 3
+acknowledgement: yes
+summary: How to stay safe working in participants' homes, schools and community settings — the pre-visit screen, the arrival assessment, animals, other people present, and your unconditional right to leave.
+reviewCycleMonths: 12
+basis: Work Health and Safety Act 2020 (WA); Work Health and Safety (General) Regulations 2022 (WA); WorkSafe WA guidance on working alone and occupational violence
+related: POL_WHS; POL_LONE_WORKER; POL_VEHICLE; POL_INFECTION; POL_INCIDENT; POL_EMERGENCY
+---
+HOME VISIT & COMMUNITY WORK SAFETY POLICY
+
+1. PURPOSE
+
+A participant's home is their home. It is also, while you are working in it, a workplace Opal has a duty to make safe so far as is reasonably practicable — and one we cannot inspect, control or modify in advance. This policy is how that duty is met in a place that belongs to someone else.
+
+2. THE OVERRIDING RULE
+
+You may leave any visit, at any time, for any safety reason, without seeking approval and without explaining yourself first. Report it afterwards. You will never be criticised, and you will never be asked to go back before the concern is addressed.
+
+Nothing about a participant's needs, a report deadline, a funding period or an inconvenienced family outweighs this.
+
+3. BEFORE THE FIRST VISIT
+
+3.1 Environmental risk screen. Complete one for every new participant before the first home visit, and record it in the portal. It covers: known aggression or behaviours of concern, whoever else lives in or visits the home, animals, drug or alcohol use, weapons, smoking indoors, hoarding, structural or electrical hazards, access and parking, mobile coverage, and any history of an incident at the address.
+
+3.2 Where the screen identifies significant risk, the first visit is a joint visit, or is held in a neutral setting, or does not proceed until a control is in place. Your supervisor decides that with you, not for you.
+
+3.3 Re-screen when something changes — a new household member, a change in behaviour, a relationship breakdown, a bereavement, a relapse.
+
+4. BEFORE YOU LEAVE THE OFFICE OR HOME
+
+• Check the participant's file, including alerts and the risk screen. Read them; do not assume you remember.
+• Confirm the appointment and ask who will be home.
+• Make sure your calendar shows the address and the expected finish time. Colleagues rely on it.
+• Charge your phone. Take a charger.
+• Follow the check-in arrangements in the Lone Worker Policy.
+• Tell someone if you are going somewhere with poor coverage.
+
+5. ARRIVING
+
+5.1 Assess from the car before you get out. Look at who is around, whether there is shouting, whether there is a dog, whether you can get out again — do not park where you can be blocked in. Reverse into a driveway if you can, or park on the street facing your exit.
+
+5.2 Take only what you need. Leave valuables locked out of sight, and lock the car.
+
+5.3 At the door, note who answers and whether it matches what you expected. If someone unexpected is present, decide whether the visit still goes ahead. You may say you will come back another time.
+
+5.4 If it feels wrong, it is wrong enough. Instinct in this setting is pattern recognition, not superstition. Leave and phone your supervisor from somewhere safe.
+
+6. INSIDE
+
+6.1 Know your exit. Sit or stand where you can reach a door without passing the other person. Do not let yourself be positioned in a back bedroom or a bathroom with no way past someone.
+
+6.2 Keep your phone and keys on you, not in a bag across the room.
+
+6.3 Watch for hazards as you work: trip hazards, wet floors, loose rugs, poor lighting, unstable furniture, exposed wiring, heaters, and anything you are being asked to lift.
+
+6.4 Animals. Ask for dogs to be secured before you arrive and again on arrival. Do not enter a yard with a loose dog. Do not accept "he's friendly" as a control. Record any animal risk in the file.
+
+6.5 Smoking. Ask for smoking to stop during the visit; that is a reasonable request and it is about your health as well as the participant's. If it continues, shorten the visit, move outside, or reschedule.
+
+6.6 Other people. Family members, support workers, visitors. Be clear about who is present, and if someone is intoxicated, aggressive or intimidating, end the visit.
+
+6.7 Weapons. Firearms, knives kept for protection, or anything used to threaten. Leave immediately and report. Never attempt to remove or secure a weapon.
+
+6.8 Manual handling. Do not lift or transfer a person alone where the plan requires two people or equipment. Do not improvise a transfer because equipment has not arrived.
+
+7. WHEN SOMETHING HAPPENS
+
+7.1 Immediate danger — leave. Call 000 from a safe place. Do not stay to de-escalate, and do not go back for your equipment.
+
+7.2 Aggression short of danger — end the visit calmly. Do not argue, do not raise your voice, do not turn your back, and do not warn the person about consequences. Leave, then phone your supervisor.
+
+7.3 Report everything, including the ones where nothing actually happened. Near misses are what let us fix an address before someone is hurt at it.
+
+8. AFTER A DIFFICULT VISIT
+
+Tell your supervisor the same day. You will be offered a debrief, and support through [TO CONFIRM: employee assistance programme details, or a note that none is currently provided]. Opal will review whether and how the service continues, including a joint-visit requirement, a change of setting, or ending the service. That decision is not yours to carry alone.
+
+9. SCHOOLS AND COMMUNITY SETTINGS
+
+Follow the site's own sign-in, visitor and emergency procedures, and ask on arrival where the exits and assembly point are. Confirm what checks the site requires of you before you attend — see the onboarding checklist for the checks that apply to your role. Everything in this policy about assessing the environment and leaving if it is unsafe applies equally.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

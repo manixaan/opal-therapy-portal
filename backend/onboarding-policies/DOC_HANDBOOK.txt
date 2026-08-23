@@ -1,0 +1,144 @@
+---
+code: DOC_HANDBOOK
+title: Welcome to Opal Therapy — Employee Handbook
+category: Employment
+tier: 1
+acknowledgement: no
+summary: How Opal Therapy works day to day — the practice, the people, the systems, the rhythms of the week, and where to go when something goes wrong. The handbook explains; the policies bind.
+reviewCycleMonths: 12
+basis: Opal Therapy practice; the policies referenced throughout
+related: DOC_WELCOME; POL_LEAVE; POL_EXPENSES; POL_CLINICAL_DOC; POL_SUPERVISION; POL_WHS; POL_INCIDENT; POL_COMPLAINTS; POL_VEHICLE; POL_INFOSEC
+---
+WELCOME TO OPAL THERAPY — EMPLOYEE HANDBOOK
+
+HOW TO USE THIS HANDBOOK
+
+This handbook explains how the practice works. It is not a contract and it does not create entitlements. Where it summarises a policy, the policy itself is the authority and is in the portal's document library in full. Where it summarises your contract or an award, those win.
+
+1. ABOUT OPAL THERAPY
+
+{{OPAL_ORG_LEGAL_NAME}}, trading as {{OPAL_ORG_TRADING_NAME}}, ABN {{OPAL_ORG_ABN}}.
+Office: {{OPAL_ORG_ADDRESS}} · Phone {{OPAL_ORG_PHONE}} · {{OPAL_ORG_EMAIL}} · {{OPAL_ORG_WEBSITE}}
+NDIS provider status: [TO CONFIRM: registered, unregistered, or registration in progress — this determines several obligations referenced in the policies]
+
+We are an occupational therapy practice working mainly with NDIS participants, delivering assessment, therapy, assistive technology, home modification and functional capacity work, largely in participants' own environments and including regional and rural visits.
+
+2. OUR VALUES, IN THE FORM THEY ACTUALLY TAKE
+
+The participant decides. Our expertise informs a decision that is not ours to make. If a participant declines a recommendation, that is a legitimate outcome and it gets documented as one.
+
+Do the unglamorous part properly. Reports, notes, follow-up calls, chasing a supplier. Most of the value a participant receives is delivered by somebody being organised on their behalf.
+
+Say it early. Concerns, mistakes, doubts about a plan, doubts about your own capacity this week. Every serious problem this practice has had began as a small one someone chose not to mention.
+
+Small practice, real standards. Being small is not a reason for informal record-keeping, vague scope or ad-hoc safety.
+
+3. TEAM STRUCTURE AND KEY PEOPLE
+
+[TO CONFIRM: the practice structure — who reports to whom, and what each role covers]
+
+Key contacts:
+• Your supervisor: [TO CONFIRM: assigned per employee — shown on your onboarding record in the portal]
+• Practice manager / operations: [TO CONFIRM: name and contact]
+• Clinical lead: [TO CONFIRM: name and contact]
+• Payroll and HR queries: [TO CONFIRM: name and contact]
+• WHS contact: [TO CONFIRM: name and contact]
+• Privacy contact: {{OPAL_ORG_PRIVACY_CONTACT}}
+• Complaints contact: {{OPAL_ORG_COMPLAINTS_CONTACT}}
+• After-hours contact, for safety matters only: [TO CONFIRM: name and number]
+
+4. HOW WE WORK
+
+4.1 The shape of a week. Most clinical days are a mix of participant visits, travel between them, and documentation time. Documentation time is scheduled, not squeezed into the gaps — if it is disappearing, that is a caseload problem to raise in supervision rather than an evening to absorb.
+
+4.2 Caseload. Allocated by your supervisor with regard to complexity, travel and your experience. Caseload is reviewed in supervision. You are expected to say when it is not sustainable, and that conversation will not be held against you.
+
+4.3 Participant-centred practice. Goals come from the participant, in their words, and are written that way in the plan. Sessions start by checking what has changed since last time. Recommendations are explained in a form the person can actually use — plain language, visual, translated, or via their support person. Where a participant has a decision-maker, we work with the decision-maker without talking past the participant.
+
+4.4 Scope. Work within your training, your registration and your supervision. Referring on, or asking for a joint visit, is the right call more often than new graduates expect.
+
+5. COMMUNICATION
+
+5.1 With participants. Respond to a participant contact within [TO CONFIRM: expected response time]. If you cannot answer yet, say so and say when. Phone a participant if you are running late — a text is not enough when someone has arranged their day around you.
+
+5.2 Within the team. [TO CONFIRM: which channel is used for what — email, portal messaging, phone, team chat]. Clinical decisions are recorded in the clinical record, not left in a chat thread.
+
+5.3 Meetings. [TO CONFIRM: the regular meeting rhythm — team meeting, clinical review, WHS discussion, and how often each occurs]
+
+5.4 Tone. Everything you write may be read later by the participant, their family, a funder, a regulator or a court. Write accordingly, and write about people the way you would want to be written about.
+
+6. HOURS, LEAVE AND PAY
+
+6.1 Hours. Your ordinary hours are in your contract. Record your time accurately in the portal, including payable travel.
+
+6.2 Leave. See the Leave and Attendance Policy. Request planned leave early; call in as early as you can when you are unwell, so appointments can be moved rather than cancelled.
+
+6.3 Payroll. Paid [TO CONFIRM: pay cycle and pay day] by electronic transfer. Pay slips are issued within one working day of payday. Superannuation is paid to your nominated fund, or to a stapled fund identified through the ATO if you have not nominated one. Check your first pay slip carefully and raise anything that looks wrong immediately — a payroll error caught in week one is a correction, and the same error caught in month six is a reconciliation.
+
+7. TRAVEL, RURAL VISITS AND EXPENSES
+
+7.1 Travel is a large part of this job. Plan routes to reduce driving, build in breaks, and do not schedule a full clinical day on top of a long drive. See the Vehicle and Travel Policy.
+
+7.2 Rural and regional visits. Plan these in advance with your supervisor: overnight arrangements, mobile coverage, fuel, fatigue, and a check-in schedule that someone is actually watching. Do not depart on a remote visit without a check-in plan. See the Lone Worker Policy and the Emergency and Disaster Management Policy.
+
+7.3 Expenses. Pre-approve anything unusual, keep receipts, claim in the portal. See the Expenses and Reimbursement Policy.
+
+8. SYSTEMS
+
+8.1 The portal is the system of record for participants, scheduling, clinical documentation, onboarding, policies, resources and compliance. If it is not in the portal, it did not happen and cannot be evidenced.
+
+8.2 Email and calendar. Use your Opal account for all work. Keep your calendar accurate and up to date — colleagues rely on it to know where you are, which is a safety control as well as a scheduling one.
+
+8.3 AI-assisted features. Some portal features use AI assistance under governance controls, including a kill switch and audit logging. AI output is a draft for you to check and take responsibility for, never a substitute for your clinical judgement, and never something to be sent onward unread. Do not paste participant information into any AI tool that is not part of the portal.
+
+8.4 Security. Multi-factor authentication where offered, locked screens, no participant information in personal accounts or on personal devices. See the Information Security & Acceptable Use Policy.
+
+9. CLINICAL DOCUMENTATION
+
+Notes are written the same day wherever possible, and the standard is set out in the Clinical Documentation Policy. In short: contemporaneous, factual, legible to a stranger, distinguishing what you observed from what you concluded, and never altered silently. Reports are checked before they go out — by you, and by your supervisor where the policy requires it.
+
+10. SUPERVISION AND PROFESSIONAL DEVELOPMENT
+
+Supervision is scheduled, protected and not the first thing cancelled when a week gets busy. It is for clinical reasoning, caseload, professional development and the things that are bothering you, and it is a place where saying "I got this wrong" is safe.
+
+CPD: the Occupational Therapy Board requires at least 20 hours per registration year, including a minimum of five hours in an interactive setting. You are responsible for meeting it and for keeping your own evidence. See the Supervision, Performance and CPD Policy for what Opal contributes.
+
+11. SAFETY
+
+Read the Work Health and Safety Policy before your first participant visit, along with the home visit, lone worker and infection control policies.
+
+The three things that matter most in this role: assess the environment on arrival every single time; leave if it is not safe, and never apologise for that; and check in and out as the lone worker procedure requires, so somebody notices if you do not.
+
+12. WHEN SOMETHING GOES WRONG
+
+12.1 Immediate danger. Call 000.
+
+12.2 Incidents, injuries, near misses. Tell your supervisor the same day and log it in the portal within 24 hours. See the Incident Management Policy.
+
+12.3 Safeguarding concerns. Report immediately under the Safeguarding Policy — you do not need to be sure, and you are not being asked to investigate.
+
+12.4 Complaints. Any concern raised by a participant or family member is a complaint. Take it, record it, pass it on the same day, and never discourage it. See the Complaints Management Policy.
+
+12.5 Something about your own work. Tell your supervisor early. Errors reported promptly are handled as learning; errors discovered later are handled differently.
+
+13. EMERGENCY CONTACTS
+
+Emergency services: 000
+Poisons Information Centre: 13 11 26
+Health Direct: 1800 022 222
+Opal after-hours safety contact: [TO CONFIRM: name and number]
+NDIS Quality and Safeguards Commission: 1800 035 544
+WorkSafe WA: 1300 307 877
+[TO CONFIRM: employee assistance programme contact, or a note that none is currently provided]
+
+14. WHEN YOU LEAVE
+
+Give the notice your contract requires, hand over your caseload properly, return equipment and keys, and remember that your confidentiality obligations do not end with your employment. We will provide a statement of service on request, and we would rather you left well than quietly.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this handbook]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

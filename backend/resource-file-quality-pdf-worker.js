@@ -11,7 +11,7 @@
  * worker_thread is a plain Node realm — no test runner, no VM hooks — so the
  * import below behaves identically under test, in CI and on the server.
  *
- * Protocol: workerData = { op: 'inspect'|'text', data: Uint8Array }.
+ * Protocol: workerData = { op: 'inspect'|'text'|'items', data: Uint8Array }.
  * Reply: { ok: true, result } or { ok: false, error }.
  */
 
@@ -92,12 +92,37 @@ async function pageTexts(pdfjs, data) {
   return texts;
 }
 
+/**
+ * Text items WITH their positions, so a caller can check the real laid-out
+ * geometry rather than just the words.
+ *
+ * `pageTexts` above answers "what does it say"; this answers "where is it".
+ * The service agreement's generated PDF is measured against unembedded
+ * standard fonts, whose advances differ slightly from viewer to viewer, so
+ * proving nothing overhangs the margin needs the coordinates and not the text.
+ */
+async function pageItems(pdfjs, data) {
+  const doc = await openDocument(pdfjs, data);
+  const items = [];
+  for (let i = 1; i <= doc.numPages; i += 1) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    for (const it of content.items) {
+      if (!it.str || !it.str.trim()) continue;
+      items.push({ page: i, x: it.transform[4], y: it.transform[5], width: it.width, str: it.str });
+    }
+  }
+  await doc.destroy().catch(() => {});
+  return items;
+}
+
 (async () => {
   const pdfjs = await import(pathToFileURL(path.join(PDFJS_ROOT, 'legacy/build/pdf.mjs')).href);
   const data = new Uint8Array(workerData.data);
-  const result = workerData.op === 'text'
-    ? await pageTexts(pdfjs, data)
-    : await inspect(pdfjs, data);
+  let result;
+  if (workerData.op === 'text') result = await pageTexts(pdfjs, data);
+  else if (workerData.op === 'items') result = await pageItems(pdfjs, data);
+  else result = await inspect(pdfjs, data);
   parentPort.postMessage({ ok: true, result });
 })().catch((err) => {
   parentPort.postMessage({ ok: false, error: err ? err.message : 'pdf worker failed' });

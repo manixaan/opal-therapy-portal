@@ -1,0 +1,81 @@
+---
+code: POL_LEAVE
+title: Leave and Attendance Policy
+category: Employment
+tier: 1
+acknowledgement: no
+summary: The leave you are entitled to, how to request it, what to do when you cannot get to work, and how attendance is recorded — including the caveat about which industrial relations system Opal falls under.
+reviewCycleMonths: 12
+basis: Fair Work Act 2009 (Cth) National Employment Standards; Minimum Conditions of Employment Act 1993 (WA); Long Service Leave Act 1958 (WA); the applicable modern award or industrial instrument
+related: POL_EXPENSES; POL_INJURY_MANAGEMENT; POL_SUPERVISION
+---
+LEAVE AND ATTENDANCE POLICY
+
+1. PURPOSE
+
+What leave you get, how to ask for it, and what to do when something goes wrong on a workday. Your contract and any applicable award or industrial instrument sit above this policy; where they differ, they win, and this policy is never the source of a lesser entitlement than the law provides.
+
+2. AN IMPORTANT CAVEAT ABOUT ENTITLEMENTS
+
+Which set of minimum entitlements applies to you depends on whether Opal is a national system employer under the Fair Work Act 2009 (Cth) or a Western Australian state system employer. An incorporated entity trading in WA is normally in the national system; a sole trader or unincorporated partnership normally sits in the WA state system, where the Minimum Conditions of Employment Act 1993 (WA) applies instead of the National Employment Standards.
+
+Opal's position: [TO CONFIRM: whether Opal is a national system or WA state system employer, and the applicable award or industrial instrument].
+
+The figures in section 3 state the National Employment Standards. If Opal is a WA state system employer, the WA equivalents apply and this policy must be amended before it is published. Long service leave in WA is governed by the Long Service Leave Act 1958 (WA) in either case.
+
+3. LEAVE ENTITLEMENTS
+
+3.1 Annual leave. Four weeks paid annual leave per year for full-time employees, accruing progressively and pro-rata for part-time employees. Casual employees do not accrue annual leave; casual loading is paid instead.
+
+3.2 Personal/carer's leave. Ten days paid personal/carer's leave per year for full-time employees, pro-rata for part-time, accruing progressively and carrying over. Use it when you are unfit for work because of illness or injury, or to care for a member of your immediate family or household who is ill, injured or affected by an unexpected emergency. Casual employees are entitled to two days unpaid carer's leave per occasion.
+
+3.3 Compassionate leave. Two days per occasion, paid for permanent employees and unpaid for casuals, when a member of your immediate family or household dies or suffers a life-threatening illness or injury, and also in the case of a miscarriage or stillbirth.
+
+3.4 Family and domestic violence leave. Ten days paid leave in a 12-month period, available in full from the first day, to every employee including casuals, and renewing each year rather than accruing. It does not need to be taken in one block.
+This is treated with particular care. Information about it is kept confidential and is not recorded on a pay slip in a way that identifies it. If you need it, contact [TO CONFIRM: the confidential contact for family and domestic violence leave] directly — you do not have to go through your supervisor.
+
+3.5 Parental leave. Up to 12 months unpaid parental leave after 12 months continuous service, with the right to request a further 12 months. Government-funded Parental Leave Pay is administered by Services Australia and is separate from anything Opal pays. Opal's own paid parental leave position: [TO CONFIRM: whether Opal offers paid parental leave, and on what terms].
+
+3.6 Long service leave. In Western Australia, 8⅔ weeks of paid long service leave after 10 years of continuous employment with the same employer, with a pro-rata entitlement on termination in defined circumstances after 7 years, under the Long Service Leave Act 1958 (WA).
+
+3.7 Public holidays. You are entitled to be absent on a WA public holiday. Opal may reasonably request work on a public holiday and you may reasonably refuse.
+
+3.8 Community service leave. Unpaid leave for a voluntary emergency management activity, and up to 10 days paid for jury service, in line with the National Employment Standards.
+
+3.9 Study, conference and professional development leave. Covered in the Supervision, Performance and CPD Policy. Opal's allowance: [TO CONFIRM: paid CPD days and study leave per year].
+
+4. REQUESTING LEAVE
+
+4.1 Planned leave. Request it in the portal, as far ahead as you can, and at least [TO CONFIRM: notice period for planned leave] for a period longer than [TO CONFIRM: threshold, e.g. three days]. Approval considers participant continuity, other approved leave, and the size of the team on that day. Do not book flights before your leave is approved.
+
+4.2 We will answer a leave request within [TO CONFIRM: response time], and we will not unreasonably refuse annual leave.
+
+4.3 Unplanned absence. Call — do not text or email — [TO CONFIRM: who to call when you cannot work, and the number] as early as you can and by [TO CONFIRM: cut-off time, e.g. 8:00am] at the latest. Tell us whether you expect to be back tomorrow, so your appointments can be moved rather than cancelled.
+
+4.4 Evidence. Medical evidence or a statutory declaration may be required for personal/carer's leave, and normally is for [TO CONFIRM: when evidence is required, e.g. absences of two or more consecutive days, or a day adjoining a public holiday]. A certificate never has to disclose your diagnosis.
+
+5. YOUR PARTICIPANTS COME FIRST WHEN YOU ARE AWAY
+
+You are not expected to work while on leave. You are expected to hand over: before planned leave, make sure notes are current, urgent matters are flagged to a colleague, reports due during your absence are either finished or reassigned, and your out-of-office and voicemail are set. For unplanned absence, {{OPAL_ORG_TRADING_NAME}} handles the handover — your only job is to tell us early enough that we can.
+
+6. ATTENDANCE AND HOURS
+
+6.1 Your ordinary hours are set out in your contract. Record your worked time accurately in the portal, including travel time where it is payable and any additional hours worked.
+
+6.2 Timeliness matters more in this work than in most: a participant who has arranged their day, their transport and their support worker around a 10am appointment is materially harmed by a late arrival. If you are running late, phone the participant, not just the office.
+
+6.3 Time in lieu, overtime and on-call arrangements: [TO CONFIRM: Opal's arrangements for overtime, time in lieu and any on-call expectation].
+
+6.4 Flexible work. An employee in certain circumstances — including as a parent or carer, with a disability, aged 55 or over, or experiencing family and domestic violence — has a statutory right to request a flexible working arrangement, and Opal must respond in writing within 21 days and may only refuse on reasonable business grounds after genuinely discussing it with you.
+
+7. UNAUTHORISED ABSENCE
+
+Failing to attend without contact is treated seriously, both because of the participant impact and because we may not know you are safe. Repeated unexplained absence is a performance and conduct matter. If something in your life is making attendance difficult, tell us before it becomes that — there is almost always an adjustment available.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review. Section 3 must be reconciled against the applicable industrial instrument before publication.
+Review cycle: every 12 months, or whenever the National Employment Standards or the applicable award changes
+Next review due: [TO CONFIRM: date]

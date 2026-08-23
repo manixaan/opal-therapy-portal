@@ -2,12 +2,19 @@
 
 /**
  * PROGRESS NOTE LETTER TEMPLATE MAP — the static description of
- * progress-note-letter-v1.docx, written in the same style as template-map.js
+ * progress-note-letter-v1.1.docx, written in the same style as template-map.js
  * and pinned to the exact file it describes.
  *
  * ── VERIFIED TEMPLATE CONTRACT ──────────────────────────────────────────────
- * progress-note-letter-v1.docx, sha256
- *   f686096730a793d44316f9e73aa329dd36ebe2583699df0ee80d0ece583ed5c5
+ * progress-note-letter-v1.1.docx, sha256
+ *   3f9a79e086d855282b17479e09b19f1f080db1eb5fadc25d9d4a5c3006dfb9e0
+ *
+ * v1.1 is v1 with `<w:updateFields w:val="true"/>` removed from
+ * word/settings.xml and NOTHING else — word/document.xml, the styles, the
+ * header, the footer and the media are byte-for-byte the v1 parts. That
+ * setting told Word to recalculate every field on open, which made Word for
+ * Mac warn that the document "contains fields that may refer to other files".
+ * It never did: its only field is the footer's PAGE. v1 is kept for audit.
  *
  *   30 unique w:tag content controls across 32 occurrences, made up of
  *     24 unique SCALAR tags across 26 occurrences,
@@ -53,13 +60,17 @@ const {
 
 const LETTER_DOCUMENT_TYPE = 'progress_note_letter';
 const LETTER_TEMPLATE_ID = 'progress_note_letter';
-const LETTER_TEMPLATE_VERSION = 'v1';
+const LETTER_TEMPLATE_VERSION = 'v1.1';
 const LETTER_TEMPLATE_NAME = 'Opal Therapy Progress Note Letter';
-const LETTER_TEMPLATE_FILENAME = 'progress-note-letter-v1.docx';
+const LETTER_TEMPLATE_FILENAME = 'progress-note-letter-v1.1.docx';
 const LETTER_TEMPLATE_STORAGE_PATH = `fca/templates/${LETTER_TEMPLATE_FILENAME}`;
 
 /** Pinned so a swapped template file fails a test instead of shipping quietly. */
 const LETTER_TEMPLATE_SHA256 =
+  '3f9a79e086d855282b17479e09b19f1f080db1eb5fadc25d9d4a5c3006dfb9e0';
+
+/** The pre-patch template, retained so an audit can identify a v1 document. */
+const LETTER_TEMPLATE_SHA256_V1 =
   'f686096730a793d44316f9e73aa329dd36ebe2583699df0ee80d0ece583ed5c5';
 
 const LETTER_CUSTOM_SECTION_ANCHOR = 'OPAL_ANCHOR_LETTER_CUSTOM_SECTIONS';
@@ -350,6 +361,7 @@ module.exports = {
   LETTER_TEMPLATE_FILENAME,
   LETTER_TEMPLATE_STORAGE_PATH,
   LETTER_TEMPLATE_SHA256,
+  LETTER_TEMPLATE_SHA256_V1,
   LETTER_CUSTOM_SECTION_ANCHOR,
   LETTER_CONTROL_PARTS,
   LETTER_DOCUMENT_ID_PREFIX,

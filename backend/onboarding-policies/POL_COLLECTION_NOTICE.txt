@@ -1,0 +1,93 @@
+---
+code: POL_COLLECTION_NOTICE
+title: Employee Privacy Collection Notice
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: The notice required by Australian Privacy Principle 5 — what Opal Therapy collects from you during recruitment and onboarding, why, who we disclose it to, what happens if you do not provide it, and how to access or correct it.
+reviewCycleMonths: 24
+basis: Privacy Act 1988 (Cth), Australian Privacy Principle 5; Fair Work Act 2009 (Cth) record-keeping obligations; Taxation Administration Act 1953 (Cth) for tax file numbers
+related: POL_PRIVACY; POL_RECORDS; POL_INFOSEC
+---
+EMPLOYEE PRIVACY COLLECTION NOTICE
+
+This notice is given to you before you provide personal information to us. Please read it before completing any onboarding form.
+
+1. WHO IS COLLECTING YOUR INFORMATION
+
+{{OPAL_ORG_LEGAL_NAME}}, trading as {{OPAL_ORG_TRADING_NAME}} (ABN {{OPAL_ORG_ABN}}).
+Address: {{OPAL_ORG_ADDRESS}}
+Phone: {{OPAL_ORG_PHONE}}
+Privacy contact: {{OPAL_ORG_PRIVACY_CONTACT}}
+
+2. WHY YOU ARE RECEIVING THIS NOW
+
+The Privacy Act's employee records exemption is narrower than most people assume. It applies to records about a current or former employee, held in relation to the employment relationship. It does not cover an applicant, and it does not cover a contractor. Much of what we collect during recruitment and onboarding is therefore collected as an applicant's information, under the full weight of the Australian Privacy Principles — so you get this notice first, before you hand anything over.
+
+3. WHAT WE COLLECT
+
+3.1 Identity and contact. Legal name, any previous names, date of birth, address, phone number, email address, and emergency contact details.
+
+3.2 Work rights and identity evidence. Passport, visa, birth certificate, driver licence or other documents used to verify your identity and your right to work in Australia.
+
+3.3 Professional. AHPRA registration details and conditions, qualifications, professional indemnity insurance, referee comments, CPD records, and where the role requires them, a Working with Children Check, NDIS Worker Screening Check or National Police Check.
+
+3.4 Payroll and tax. Bank account details, tax file number declaration information, superannuation fund details, and salary or wage records.
+
+3.5 Health, only where relevant. Pre-existing injuries relevant to the inherent requirements of the role, workplace injury and rehabilitation information, immunisation status where a role requires it, and information supporting a request for a workplace adjustment.
+
+3.6 Employment records. Contract, position description, performance and supervision records, leave, training and any disciplinary matters.
+
+4. HOW WE COLLECT IT
+
+Usually from you directly — through this portal, forms, interviews and conversations. We may also collect from: referees you nominate; AHPRA's public register; the screening agency that issues a check you have applied for; the ATO, in relation to superannuation; a recruitment agency, if one introduced you; and a previous employer where you have consented to that contact.
+
+5. WHY WE COLLECT IT, AND ON WHAT AUTHORITY
+
+• To assess your application and decide whether to make an offer.
+• To create and administer your employment — pay you, pay your superannuation, manage leave, and meet our record-keeping obligations under the Fair Work Act 2009 (Cth).
+• To meet tax and superannuation obligations. Providing a tax file number is not compulsory, but tax may be withheld at a higher rate if you do not, and the collection and handling of a TFN is separately regulated.
+• To verify that you are legally entitled to work in Australia.
+• To verify professional registration, screening and insurance where the role requires them, and to keep verifying them while you work here.
+• To meet our work health and safety duties, and to manage a workplace injury claim.
+• To meet obligations relating to the delivery of NDIS supports.
+
+6. IF YOU DO NOT PROVIDE IT
+
+You do not have to give us anything. But some of it we cannot work around: without identity and work-rights evidence we cannot lawfully employ you; without bank and superannuation details we cannot pay you correctly; without current registration and any screening the role requires, you cannot be rostered to participant-facing work. Where the information is optional, we will say so on the form.
+
+7. WHO WE DISCLOSE IT TO
+
+• Our payroll and accounting providers, and the ATO.
+• Your nominated superannuation fund, or the ATO where we must request a stapled fund.
+• Our insurers, including the workers compensation insurer, in relation to a claim.
+• Screening agencies and AHPRA, to verify a check or a registration.
+• Our IT and cloud service providers, who host the portal and our email under contract.
+• A regulator, court or law enforcement agency where we are required or authorised by law.
+• A professional adviser, such as a lawyer or accountant, where necessary.
+
+Some of these providers store information outside Australia. Current arrangements: [TO CONFIRM: overseas storage locations and providers, or "all data is stored in Australia" if that is accurate].
+
+We do not sell your information, and we do not use it for marketing.
+
+8. HOW IT IS PROTECTED
+
+Held in access-controlled systems, with the most sensitive fields — bank details, tax file numbers, identity document numbers — encrypted, masked in the interface, and visible only to the small number of people whose role requires them. Access is logged. Paper records are stored securely and disposed of by secure destruction.
+
+9. HOW LONG WE KEEP IT
+
+Employee records are kept for at least seven years after employment ends, as the Fair Work Act requires. Some categories are kept longer where another law requires it. Unsuccessful applicants' information is kept for [TO CONFIRM: retention period for unsuccessful applicants] and then destroyed.
+
+10. ACCESS, CORRECTION AND COMPLAINTS
+
+You can ask to see the personal information we hold about you, and ask us to correct it. Contact {{OPAL_ORG_PRIVACY_CONTACT}}. We will respond within [TO CONFIRM: response timeframe in days].
+
+If you are unhappy with how we have handled your information, tell us first — we would rather fix it. If you are not satisfied with our response, you can complain to the Office of the Australian Information Commissioner at oaic.gov.au or 1300 363 992.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this notice]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months, or sooner if what we collect changes
+Next review due: [TO CONFIRM: date]

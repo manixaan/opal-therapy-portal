@@ -1,0 +1,94 @@
+---
+code: POL_CODE_OF_CONDUCT
+title: Opal Therapy Code of Conduct
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: The standard of behaviour Opal Therapy expects of everyone who works here, built on the seven elements of the NDIS Code of Conduct and the shared Code of conduct that applies to registered occupational therapists.
+reviewCycleMonths: 24
+basis: NDIS Code of Conduct — National Disability Insurance Scheme (Code of Conduct) Rules 2018; Occupational Therapy Board of Australia — Code of conduct; Fair Work Act 2009 (Cth)
+related: POL_BOUNDARIES; POL_SAFEGUARDING; POL_INCIDENT; POL_COMPLAINTS; POL_CONFLICT; POL_SOCIAL_MEDIA
+---
+OPAL THERAPY CODE OF CONDUCT
+
+1. PURPOSE
+
+This Code sets out how everyone at {{OPAL_ORG_TRADING_NAME}} is expected to behave. It exists because the people we work with are often relying on us at a point in their lives when they have limited ability to walk away from a service that treats them badly. That imbalance is the reason a code of conduct is not optional paperwork.
+
+This Code does not replace your professional obligations. If you are a registered occupational therapist, the Occupational Therapy Board of Australia's Code of conduct applies to you in full, and where that Code sets a higher standard than this one, the higher standard wins. The same is true of the NDIS Code of Conduct, which applies to workers delivering NDIS supports whether or not the provider is registered.
+
+2. WHO THIS APPLIES TO
+
+Everyone. Employees, casual staff, contractors, students on placement, and anyone else delivering work on Opal's behalf. It applies during work, and it applies outside work where your conduct affects a participant, a colleague, or the trust the public places in the practice.
+
+3. THE SEVEN THINGS THE NDIS CODE OF CONDUCT REQUIRES
+
+These are the NDIS Code's own elements. Opal adopts them without modification and everything else in this document explains how we expect them to be met day to day.
+
+3.1 Act with respect for individual rights to freedom of expression, self-determination and decision-making, in accordance with applicable laws and conventions.
+3.2 Respect the privacy of people with disability.
+3.3 Provide supports and services in a safe and competent manner with care and skill.
+3.4 Act with integrity, honesty and transparency.
+3.5 Promptly take steps to raise and act on concerns about matters that may impact the quality and safety of supports and services.
+3.6 Take all reasonable steps to prevent and respond to all forms of violence against, and exploitation, neglect and abuse of, people with disability.
+3.7 Take all reasonable steps to prevent and respond to sexual misconduct.
+
+4. WHAT THIS LOOKS LIKE IN PRACTICE
+
+4.1 Respect and choice
+
+• Assume capacity. A participant's right to make a decision does not depend on you agreeing with the decision.
+• Where a participant has a decision-maker, guardian or nominee, work with them without talking past the participant.
+• Offer real options, including the option of declining a support, and record what was chosen.
+• Use the participant's preferred name, pronouns and communication method. If you do not know them, ask.
+• Adjust how you communicate to the person in front of you — interpreters, Auslan, plain language, AAC, extra time. The obligation to be understood is ours, not theirs.
+
+4.2 Safety and competence
+
+• Work within your scope of practice, your training and your supervision arrangements. Saying "this is outside what I can safely do" is a professional strength, not an admission.
+• Prepare. Read the file before the session, not during it.
+• Do not practise when impaired — by illness, fatigue, alcohol, other drugs, or a health condition that affects your judgement. Tell your supervisor instead.
+• Keep your registration, insurance, screening checks and mandatory training current. The portal will remind you; the obligation is still yours.
+
+4.3 Integrity and honesty
+
+• Claim only for supports actually delivered, for the time actually taken, at the agreed rate.
+• Do not overstate what a support can achieve, and do not let a funding conversation shape a clinical recommendation.
+• Correct your own errors promptly and in writing. Amending a record honestly is safe here; concealing an error is not.
+• Declare conflicts of interest as they arise, under the Conflict of Interest Policy.
+
+4.4 Speaking up
+
+• If you see or suspect harm, poor practice or a risk to a participant, you must raise it. This is element 3.5 of the NDIS Code and it is not discretionary.
+• Report to your supervisor or to [TO CONFIRM: the named person for conduct concerns and their contact details]. If the concern is about that person, report to [TO CONFIRM: the alternative escalation contact].
+• You can also report directly to a regulator — the NDIS Quality and Safeguards Commission, AHPRA, WorkSafe WA, or the police — and nothing in this Code and no instruction from anyone at Opal may discourage you from doing so.
+• Opal will not tolerate detriment of any kind against a person who raises a concern honestly. Retaliation is itself a breach of this Code.
+
+4.5 Preventing violence, abuse, neglect, exploitation and sexual misconduct
+
+• Never use physical force, threats, humiliation, or the withdrawal of a support as a way to manage behaviour.
+• Restrictive practices are only ever used where they are authorised, documented, and consistent with a behaviour support plan. If you are ever unsure whether something is a restrictive practice, treat it as one and ask.
+• Sexual or intimate contact with a participant is prohibited, without exception, including where a participant appears to consent or initiates it.
+• Report suspected abuse or neglect immediately under the Safeguarding Policy, whether or not the alleged perpetrator works for Opal.
+
+5. BREACHES
+
+A breach of this Code is a disciplinary matter and may also be a matter for a regulator or the police. Opal will investigate proportionately and fairly, tell you what is alleged, give you a real chance to respond, and keep the process confidential so far as it can. Outcomes range from additional supervision through to termination and notification to AHPRA or the NDIS Commission.
+
+Reporting your own mistake early will always be treated more favourably than the same mistake discovered later.
+
+6. RELATED DOCUMENTS
+
+Professional Boundaries Policy · Safeguarding — Violence, Abuse, Neglect and Exploitation Policy · Incident Management Policy · Complaints Management Policy · Conflict of Interest Policy · Social Media Policy · Privacy & Confidentiality Policy
+
+7. QUESTIONS
+
+Ask your supervisor. If your question is about whether something is allowed, ask before you do it — that conversation is always cheaper than the alternative.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months, or sooner if the law, the NDIS Practice Standards or our practice changes
+Next review due: [TO CONFIRM: date]

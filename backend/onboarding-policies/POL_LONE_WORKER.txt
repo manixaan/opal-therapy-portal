@@ -1,0 +1,88 @@
+---
+code: POL_LONE_WORKER
+title: Lone Worker Policy
+category: WHS
+tier: 3
+acknowledgement: yes
+summary: The check-in and escalation system that makes sure somebody notices if you do not come back — who monitors it, what happens when a check-in is missed, and the extra arrangements for remote and rural work.
+reviewCycleMonths: 12
+basis: Work Health and Safety Act 2020 (WA); Work Health and Safety (General) Regulations 2022 (WA) — remote or isolated work; WorkSafe WA guidance
+related: POL_WHS; POL_HOME_VISIT; POL_VEHICLE; POL_EMERGENCY; POL_INCIDENT
+---
+LONE WORKER POLICY
+
+1. PURPOSE
+
+Almost everyone here works alone for most of the day. The specific risk this policy addresses is not that something happens — it is that something happens and nobody knows for hours.
+
+The WHS Regulations require an employer to provide a system of work that includes effective communication with a worker carrying out remote or isolated work. This is that system. It only works if it is used every time, including on the ordinary days, because a check-in system that is used selectively cannot tell the difference between a missed check-in and a forgotten one.
+
+2. WHO IS A LONE WORKER HERE
+
+Anyone working without another Opal worker present: a home visit, a school or community visit, travel between appointments, work in the office outside normal hours, and any remote or rural visit.
+
+3. THE CHECK-IN SYSTEM
+
+3.1 Your calendar is the baseline. Every visit is in it, with the address and the expected finish time, kept current during the day. A colleague must be able to answer "where is she right now?" from your calendar alone.
+
+3.2 Check in and out for each visit by [TO CONFIRM: the check-in method — portal, SMS to a monitored number, or a phone call — and the number or channel].
+
+3.3 Who monitors it: [TO CONFIRM: the role that monitors check-ins during business hours, and after hours].
+
+3.4 Extend it if you are running over. A visit that runs long is normal; an unannounced visit that runs long is indistinguishable from a problem.
+
+4. ESCALATION WHEN A CHECK-IN IS MISSED
+
+This is what happens if you do not check out, and it is the reason the system matters:
+
+Step 1 — after [TO CONFIRM: minutes] past the expected finish, the monitor phones you.
+Step 2 — no answer: they phone again and send a message, and try [TO CONFIRM: any secondary contact method].
+Step 3 — still no answer after [TO CONFIRM: minutes]: they phone the participant or the site on the number in the file.
+Step 4 — still unresolved: they notify [TO CONFIRM: the escalation contact] and attempt to locate you, including your emergency contact.
+Step 5 — where there is reason to believe you are at risk, they call the police on 131 444, or 000 if there is immediate concern.
+
+Opal will always err toward escalating. If a missed check-in turns out to be a flat battery, that is a good outcome, not an embarrassment, and nobody will be criticised for triggering it.
+
+5. YOUR OBLIGATIONS
+
+• Check in and check out, every time.
+• Keep your calendar accurate.
+• Keep your phone charged, on, and on you — not in your bag in the car.
+• Answer or return a check-in call promptly.
+• Tell the monitor before you go somewhere with poor coverage, and give an expected clear time.
+• Update the monitor if plans change during the day.
+• Do not disable location sharing where it forms part of the arrangement.
+
+6. DURESS AND CODE WORDS
+
+Where you need help but cannot say so in front of someone, use the agreed duress phrase: [TO CONFIRM: the agreed duress word or phrase, and who is trained to recognise it]. It should be something you could say in a normal call — for example asking about a file or a person that does not exist. Anyone receiving it escalates immediately to step 5 and does not ask a clarifying question.
+
+Personal duress alarms: [TO CONFIRM: whether duress alarms or a lone worker app are provided, and to whom].
+
+7. REMOTE AND RURAL WORK
+
+7.1 Plan it in advance with your supervisor. A remote visit is not a normal visit that happens to be further away.
+
+7.2 Before departure, agree: the route, the expected arrival and return times, overnight arrangements, coverage blackspots and clear times, fuel stops, and who is monitoring.
+
+7.3 Where there is no reliable mobile coverage, a satellite messenger or a personal locator beacon is required: [TO CONFIRM: what remote communication equipment Opal provides and how it is booked].
+
+7.4 Carry water, food, a first aid kit and warm clothing appropriate to the season. See the Vehicle and Travel Policy for the vehicle requirements.
+
+7.5 Fatigue is the dominant risk on a long rural day. Do not plan a full clinical load on top of a long drive, and do not drive home after a day that has already run long — see the Vehicle and Travel Policy for overnight arrangements.
+
+8. AFTER HOURS AND OFFICE WORK ALONE
+
+Tell someone if you are working alone in the office outside normal hours, lock the external doors, and check in when you leave. The same escalation applies.
+
+9. IF THE SYSTEM FAILS
+
+If you cannot reach the monitor, if a check-in was missed and nobody followed up, or if the arrangement is not workable in practice, report it as a WHS matter. A control that quietly stopped working is more dangerous than no control at all, because everyone is relying on it.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review. Sections 3, 4 and 6 must be completed with real names, numbers and timings — an escalation procedure with placeholders in it is not a control.
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

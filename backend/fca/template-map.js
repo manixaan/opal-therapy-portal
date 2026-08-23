@@ -9,7 +9,19 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 bf918d21…5b2782)
+ * VERIFIED TEMPLATE FACTS (fca-v1.1.docx, sha256 5217d27d…1a78af)
+ *
+ * v1.1 removes the two things that made Word recalculate fields on open, and
+ * changes nothing else:
+ *   - `<w:updateFields w:val="true"/>` in word/settings.xml, the document-wide
+ *     setting that produced "this document contains fields that may refer to
+ *     other files";
+ *   - `w:dirty="true"` on the TOC field itself, which asked Word to rebuild
+ *     that one field on every open.
+ * This report's only fields are its TOC and its page numbers, all local. The
+ * TOC field and its RENDERED RESULT are untouched, so a reader still sees a
+ * populated contents list and a therapist refreshes it when they want to.
+ * v1 is kept for audit.
  *   58 unique w:tag content controls, 84 occurrences in total.
  *   25 of them are section/anchor controls, 33 are scalar (text) controls.
  *   15 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).
@@ -55,7 +67,7 @@ const STYLE = {
 };
 
 const TEMPLATE_ID = 'fca';
-const TEMPLATE_VERSION = 'v1';
+const TEMPLATE_VERSION = 'v1.1';
 const TEMPLATE_NAME = 'Opal Therapy Functional Assessment Report';
 const CUSTOM_SECTION_ANCHOR = 'OPAL_ANCHOR_CUSTOM_SECTIONS';
 

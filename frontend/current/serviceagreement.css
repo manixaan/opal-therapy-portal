@@ -1,0 +1,346 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPAL SERVICE AGREEMENTS — styles for the hub entry card, the wizard overlay,
+   the owner master console and the participant signing page.
+
+   Prefixed `sva-` throughout so nothing here can reach another surface, in the
+   manner of fca.css and letter.css. The palette is the Opal document palette
+   (backend/opal-document-builder.js), so the wizard's live preview and the
+   generated PDF read as the same document rather than as two designs.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sva-primary: #2F5651;
+  --sva-secondary: #566E70;
+  --sva-mint: #E4EFEB;
+  --sva-blush: #F6EDE5;
+  --sva-neutral: #FAF7F2;
+  --sva-ink: #1F2A28;
+  --sva-border: #C4CFCB;
+  --sva-danger: #8C2F2F;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+
+.sva-crumbs { margin-bottom: 2px; }
+.sva-crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; }
+.sva-crumbs li { display: inline-flex; align-items: center; }
+.sva-crumbs li + li::before {
+  content: '/'; margin: 0 6px; color: var(--sva-border); font-size: .74rem;
+}
+.sva-crumb {
+  background: none; border: none; padding: 0; font: inherit; font-size: .74rem;
+  color: var(--sva-secondary); cursor: pointer; text-decoration: none;
+}
+button.sva-crumb:hover { color: var(--sva-primary); text-decoration: underline; }
+.sva-crumb-here { color: var(--sva-ink); font-weight: 600; cursor: default; }
+
+/* ── Template overview header ────────────────────────────────────────────── */
+
+.sva-tpl-head {
+  border: 1px solid var(--sva-border); border-radius: 12px;
+  background: #fff; padding: 18px 20px; margin-bottom: 18px;
+}
+.sva-tpl-headmain { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.sva-tpl-headmain h3 { margin: 0 0 4px; font-size: 1.02rem; color: var(--sva-primary); }
+.sva-tpl-meta { margin: 8px 0 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sva-tpl-date { font-size: .74rem; color: var(--sva-secondary); }
+
+.sva-chip {
+  display: inline-flex; align-items: center;
+  background: var(--sva-neutral); color: var(--sva-secondary);
+  border: 1px solid var(--sva-border); border-radius: 999px;
+  padding: 2px 9px; font-size: .7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.sva-chip-ok { background: var(--sva-mint); color: var(--sva-primary); border-color: var(--sva-mint); }
+
+.sva-count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px;
+  padding: 0 6px; border-radius: 999px; background: var(--sva-mint);
+  color: var(--sva-primary); font-size: .7rem; font-weight: 700;
+  vertical-align: middle; margin-left: 4px;
+}
+
+/* ── Overflow menu ───────────────────────────────────────────────────────── */
+
+.sva-menu { position: relative; display: inline-block; }
+.sva-menu-btn { padding: 8px 12px; font-size: 1rem; line-height: 1; }
+.sva-menu-list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10;
+  min-width: 230px; background: #fff;
+  border: 1px solid var(--sva-border); border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(31, 42, 40, .16);
+  padding: 5px; display: grid; gap: 2px;
+}
+.sva-menu-list a, .sva-menu-list button {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; border-radius: 6px;
+  padding: 8px 10px; font: inherit; font-size: .84rem;
+  color: var(--sva-ink); text-decoration: none; cursor: pointer;
+}
+.sva-menu-list a:hover, .sva-menu-list button:hover,
+.sva-menu-list a:focus-visible, .sva-menu-list button:focus-visible {
+  background: var(--sva-mint); color: var(--sva-primary);
+}
+
+.sva-visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ── Entry rows (shared by every agreement list) ─────────────────────────── */
+
+.sva-entry {
+  border: 1px solid var(--sva-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 20px 22px;
+  margin: 18px 0;
+}
+
+.sva-entry-main { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.sva-entry-icn { flex: 0 0 auto; width: 26px; height: 26px; color: var(--sva-primary); }
+.sva-entry-icn svg { width: 100%; height: 100%; }
+.sva-entry h2 { margin: 0 0 4px; font-size: 1.05rem; color: var(--sva-primary); }
+.sva-entry-sub { margin: 0; font-size: .88rem; color: var(--sva-secondary); max-width: 62ch; line-height: 1.5; }
+.sva-entry-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.sva-entry-drafts { margin-top: 16px; border-top: 1px solid var(--sva-mint); padding-top: 12px; }
+.sva-entry-drafts h3 { margin: 0 0 8px; font-size: .78rem; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--sva-secondary); }
+
+.sva-entry-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sva-entry-row {
+  width: 100%; text-align: left; background: var(--sva-neutral);
+  border: 1px solid transparent; border-radius: 8px; padding: 9px 12px; cursor: pointer;
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  font: inherit; color: var(--sva-ink);
+}
+.sva-entry-row:hover, .sva-entry-row:focus-visible {
+  border-color: var(--sva-primary); background: var(--sva-mint);
+}
+.sva-entry-name { font-weight: 600; font-size: .9rem; }
+.sva-entry-meta { font-size: .78rem; color: var(--sva-secondary); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.sva-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; color: var(--sva-primary);
+  border: 1px solid var(--sva-border); border-radius: 8px;
+  padding: 8px 14px; font: inherit; font-size: .86rem; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+}
+.sva-btn:hover:not(:disabled) { background: var(--sva-mint); border-color: var(--sva-primary); }
+.sva-btn:disabled { opacity: .45; cursor: not-allowed; }
+.sva-btn svg { width: 15px; height: 15px; }
+
+.sva-btn-primary { background: var(--sva-primary); color: #fff; border-color: var(--sva-primary); }
+.sva-btn-primary:hover:not(:disabled) { background: #26433F; color: #fff; }
+.sva-btn-ghost { background: transparent; color: var(--sva-secondary); }
+.sva-btn-quiet { padding: 5px 10px; font-size: .78rem; font-weight: 500; }
+
+/* ── Overlay ─────────────────────────────────────────────────────────────── */
+
+.sva-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(31, 42, 40, .45);
+  display: flex; align-items: stretch; justify-content: center;
+  padding: 24px;
+}
+
+.sva-panel {
+  background: #fff; border-radius: 14px; width: min(1240px, 100%);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 18px 48px rgba(31, 42, 40, .28);
+}
+
+.sva-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px 20px; border-bottom: 1px solid var(--sva-mint); background: var(--sva-neutral);
+}
+.sva-head-left { min-width: 0; }
+.sva-head h2 { margin: 2px 0 0; font-size: 1rem; color: var(--sva-primary); }
+.sva-head-right { display: flex; align-items: center; gap: 12px; }
+.sva-savestate { font-size: .76rem; color: var(--sva-secondary); min-width: 8ch; }
+.sva-close {
+  background: none; border: none; font-size: 1.5rem; line-height: 1;
+  color: var(--sva-secondary); cursor: pointer; padding: 0 4px;
+}
+
+.sva-body { display: flex; gap: 0; flex: 1; min-height: 0; }
+.sva-main { flex: 1 1 58%; overflow-y: auto; padding: 18px 22px; min-width: 0; }
+.sva-aside {
+  flex: 1 1 42%; overflow-y: auto; padding: 18px 20px;
+  background: var(--sva-neutral); border-left: 1px solid var(--sva-mint); min-width: 0;
+}
+
+/* ── Alerts ──────────────────────────────────────────────────────────────── */
+
+.sva-alert { margin: 0; padding: 10px 20px; font-size: .84rem; line-height: 1.5; }
+.sva-alert-error { background: #FBEDED; color: var(--sva-danger); border-bottom: 1px solid #EBD3D3; }
+.sva-alert-note { background: var(--sva-blush); color: #6B4A2E; border-bottom: 1px solid #E9DACB; }
+
+/* ── Steps ───────────────────────────────────────────────────────────────── */
+
+.sva-steps {
+  list-style: none; margin: 0 0 18px; padding: 0;
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+.sva-steps button {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; padding: 5px 8px; border-radius: 6px;
+  font: inherit; font-size: .76rem; color: var(--sva-secondary); cursor: pointer;
+}
+.sva-steps .current button { background: var(--sva-mint); color: var(--sva-primary); font-weight: 700; }
+.sva-steps .done button { color: var(--sva-primary); }
+.sva-step-n {
+  display: inline-grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--sva-border); color: #fff; font-size: .68rem; font-weight: 700;
+}
+.sva-steps .current .sva-step-n, .sva-steps .done .sva-step-n { background: var(--sva-primary); }
+
+.sva-step { margin-bottom: 20px; }
+.sva-step h3 { margin: 0 0 12px; font-size: .98rem; color: var(--sva-primary); }
+.sva-step h4 { margin: 18px 0 8px; font-size: .84rem; color: var(--sva-primary); }
+
+/* ── Fields ──────────────────────────────────────────────────────────────── */
+
+.sva-fields { display: grid; gap: 14px; }
+.sva-field { display: grid; gap: 4px; }
+.sva-label { font-size: .8rem; font-weight: 600; color: var(--sva-ink); }
+
+.sva-input {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--sva-border); border-radius: 7px;
+  padding: 8px 10px; font: inherit; font-size: .88rem; color: var(--sva-ink); background: #fff;
+}
+.sva-input:focus-visible { outline: 2px solid var(--sva-primary); outline-offset: 1px; }
+.sva-textarea { resize: vertical; min-height: 62px; }
+
+/* Where a value came from. A missing one says so rather than looking blank. */
+.sva-src { font-size: .72rem; color: var(--sva-secondary); }
+.sva-src-missing { color: #8A6A3B; }
+
+.sva-choices { display: flex; gap: 14px; flex-wrap: wrap; }
+.sva-choice { display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; cursor: pointer; }
+
+.sva-modes { display: grid; gap: 12px; }
+.sva-mode {
+  display: flex; gap: 10px; align-items: flex-start;
+  border: 1px solid var(--sva-border); border-radius: 10px; padding: 12px 14px;
+  font-size: .86rem; line-height: 1.5; cursor: pointer;
+}
+.sva-mode:hover { border-color: var(--sva-primary); background: var(--sva-neutral); }
+
+/* ── Supports ────────────────────────────────────────────────────────────── */
+
+.sva-support {
+  border: 1px solid var(--sva-border); border-radius: 10px;
+  padding: 14px 16px; margin: 0 0 14px;
+}
+.sva-support legend { font-size: .8rem; font-weight: 700; color: var(--sva-primary); padding: 0 6px; }
+.sva-support .sva-field { margin-bottom: 10px; }
+
+/* ── Clients ─────────────────────────────────────────────────────────────── */
+
+.sva-clients { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
+.sva-clients button {
+  width: 100%; text-align: left; background: var(--sva-neutral);
+  border: 1px solid transparent; border-radius: 7px; padding: 8px 12px;
+  font: inherit; cursor: pointer; display: flex; justify-content: space-between; gap: 10px;
+}
+.sva-clients button:hover { border-color: var(--sva-primary); background: var(--sva-mint); }
+.sva-client-name { font-weight: 600; font-size: .88rem; }
+.sva-client-meta { font-size: .78rem; color: var(--sva-secondary); }
+
+/* ── Summary, sessions, versions ─────────────────────────────────────────── */
+
+.sva-summary {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 16px;
+  margin: 0 0 16px; font-size: .86rem;
+}
+.sva-summary dt { font-weight: 600; color: var(--sva-secondary); }
+.sva-summary dd { margin: 0; }
+.sva-summary code { font-size: .8rem; background: var(--sva-neutral); padding: 1px 5px; border-radius: 4px; }
+
+.sva-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
+
+.sva-sessions { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.sva-sessions li {
+  display: flex; align-items: center; gap: 12px; font-size: .82rem;
+  background: var(--sva-neutral); border-radius: 7px; padding: 7px 12px;
+}
+.sva-sessions li span:first-child { flex: 1; }
+
+.sva-state {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--sva-secondary);
+}
+.sva-state-signed, .sva-state-completed { color: var(--sva-primary); }
+.sva-state-void, .sva-state-revoked, .sva-state-expired { color: var(--sva-danger); }
+
+.sva-clauses { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.sva-clauses li { display: flex; align-items: center; gap: 10px; font-size: .86rem; }
+.sva-clauses .sva-field { flex: 1; }
+.sva-req { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--sva-secondary); }
+
+.sva-versions { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.sva-versions th, .sva-versions td {
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--sva-mint);
+}
+.sva-versions th { color: var(--sva-secondary); font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; }
+
+.sva-nav {
+  display: flex; gap: 8px; justify-content: flex-end;
+  border-top: 1px solid var(--sva-mint); padding-top: 14px; margin-top: 8px;
+}
+
+.sva-quiet { font-size: .84rem; color: var(--sva-secondary); line-height: 1.5; margin: 8px 0; }
+
+/* ── Live document preview ───────────────────────────────────────────────── */
+
+.sva-preview-head {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline;
+  font-size: .76rem; color: var(--sva-secondary); margin-bottom: 12px;
+}
+.sva-preview-head strong { color: var(--sva-primary); font-size: .82rem; }
+
+.sva-doc {
+  background: #fff; border: 1px solid var(--sva-border); border-radius: 8px;
+  padding: 22px 24px; font-size: .8rem; line-height: 1.55; color: var(--sva-ink);
+}
+.sva-doc-h { color: var(--sva-primary); margin: 16px 0 6px; line-height: 1.3; }
+.sva-doc-h0 { font-size: 1.24rem; margin-top: 0; }
+.sva-doc-h1 { font-size: 1.02rem; }
+.sva-doc-h2 { font-size: .92rem; }
+.sva-doc-h3, .sva-doc-h4 { font-size: .84rem; color: var(--sva-secondary); }
+.sva-doc-p { margin: 0 0 7px; }
+.sva-doc-p.em { font-weight: 600; }
+.sva-doc-p.sm { font-size: .74rem; color: var(--sva-secondary); }
+.sva-doc-li { margin: 0 0 4px 14px; }
+.sva-doc-li::before { content: '• '; color: var(--sva-secondary); }
+.sva-doc-space { height: 7px; }
+
+.sva-doc-table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: .74rem; }
+.sva-doc-table th, .sva-doc-table td {
+  border: 1px solid var(--sva-border); padding: 5px 7px; text-align: left; vertical-align: top;
+}
+.sva-doc-table tr.hdr th, .sva-doc-table tr.hdr td { background: var(--sva-mint); font-weight: 700; }
+
+/* A blank in the preview is shown as the question it will become in the PDF,
+   never as an empty gap the reader has to guess the meaning of. */
+.sva-doc-field {
+  display: inline-block; background: var(--sva-blush); border-bottom: 1px dashed var(--sva-secondary);
+  padding: 0 5px; border-radius: 3px 3px 0 0; color: #6B4A2E; font-size: .72rem; font-style: italic;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 980px) {
+  .sva-overlay { padding: 0; }
+  .sva-panel { border-radius: 0; }
+  .sva-body { flex-direction: column; }
+  .sva-aside { border-left: none; border-top: 1px solid var(--sva-mint); }
+  .sva-entry-actions { margin-left: 0; width: 100%; }
+}

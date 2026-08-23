@@ -20,6 +20,7 @@
 <link rel="stylesheet" href="/casenotes.css?v=1" />
 <link rel="stylesheet" href="/fca.css?v=5" />
 <link rel="stylesheet" href="/letter.css?v=1" />
+<link rel="stylesheet" href="/serviceagreement.css?v=2" />
 <link rel="stylesheet" href="/whodas.css?v=3" />
 <link rel="stylesheet" href="/assessment.css?v=3" />
 <link rel="stylesheet" href="/induction.css?v=1" />
@@ -43,6 +44,7 @@
 <script src="/vendor/docx-preview.min.js" defer></script>
 <script src="/fca.js?v=5" defer></script>
 <script src="/letter.js?v=2" defer></script>
+<script src="/serviceagreement.js?v=3" defer></script>
 <!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
      feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
 <script src="/whodas.js?v=5" defer></script>
@@ -62,7 +64,7 @@
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
 <script src="/profile.js?v=1" defer></script>
-<script src="/navigation.js?v=6" defer></script>
+<script src="/navigation.js?v=7" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -19003,10 +19005,17 @@ async function openClientProfile(patientId) {
     body.innerHTML += sectionHead('Assessments')
       + '<div id="cp-assessments"><div id="whodas-root" class="whodas-root"></div></div>';
 
+    // ── Documents ────────────────────────────────────────────────────────
+    // A shortcut into the Service Agreement wizard for THIS participant. Like
+    // the Assessments section above it, the heading renders only if the
+    // section under it does — an empty "Documents" heading is worse than none.
+    body.innerHTML += sectionHead('Documents') + '<div id="cp-documents"></div>';
+
     // Add quick-book button at bottom
     body.innerHTML += `<div style="padding:16px;"><button class="btn primary" style="width:100%" onclick="closeClientProfile();quickBook('${patientId}')">Book appointment →</button></div>`;
 
     mountClientAssessments(patientId, clientDisplayName(patient));
+    mountClientServiceAgreement(patientId);
 
   } catch (err) {
     body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load profile: ${err.message}</div>`;
@@ -19070,6 +19079,61 @@ function mountClientAssessments(patientId, clientName) {
       if (!root || !root.classList.contains('is-open')) hideAssessmentsSection();
     })
     .catch(hideAssessmentsSection);
+}
+
+/**
+ * A "Create service agreement" shortcut on the participant record.
+ *
+ * A SHORTCUT, not a second workflow. It calls SVA.createFor(), which is the
+ * same entry point the Templates card uses and which opens the same wizard at
+ * the same canonical address — Resource Hub → Templates → Service Agreement
+ * remains the one home. Nothing about the participant travels in the URL: the
+ * id is passed in memory and the address stays
+ * '#resources/service-agreement/new'.
+ *
+ * The section renders only for somebody who holds `service_agreements.access`.
+ * That permission is in no role's defaults but owner's, so an unauthorised
+ * employee sees no section at all — and the server refuses them regardless,
+ * which is the control this only mirrors.
+ */
+function mountClientServiceAgreement(patientId) {
+  const section = document.getElementById('cp-documents');
+  if (!section) return;
+
+  const perms = (window.APP_USER && window.APP_USER.permissions) || [];
+  const allowed = perms.indexOf('service_agreements.access') !== -1;
+  if (!allowed || typeof SVA === 'undefined' || typeof SVA.createFor !== 'function') {
+    hideDocumentsSection();
+    return;
+  }
+
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.style.width = '100%';
+  btn.type = 'button';
+  btn.textContent = 'Create service agreement \u2192';
+  btn.addEventListener('click', () => {
+    closeClientProfile();
+    // The canonical home lives in the Resources tab, so go there: the surface
+    // is a body-level overlay and would otherwise paint over an unrelated tab
+    // with the address pointing somewhere else.
+    if (typeof switchTab === 'function') switchTab('resources');
+    SVA.createFor(String(patientId));
+  });
+
+  const wrap = document.createElement('div');
+  wrap.style.padding = '16px';
+  wrap.appendChild(btn);
+  section.appendChild(wrap);
+}
+
+/** Remove the Documents heading when nothing rendered underneath it. */
+function hideDocumentsSection() {
+  const section = document.getElementById('cp-documents');
+  if (!section) return;
+  const heading = section.previousElementSibling;
+  if (heading && /documents/i.test(heading.textContent || '')) heading.remove();
+  section.remove();
 }
 
 /** Remove the Assessments heading when nothing rendered underneath it. */
@@ -27167,6 +27231,17 @@ document.addEventListener('keydown', function (e) {
      views are display:none when inactive, and a position:fixed overlay inside
      a display:none ancestor never paints. -->
 <div id="fca-root" hidden></div>
+
+<!-- Service Agreement — the Templates → Service Agreement surface, rendered
+     entirely by /serviceagreement.js and addressed as
+     #resources/service-agreement. There is no hub-entry mount: the workflow's
+     only discovery point is its card in the Templates collection, which
+     resourcehub.js renders into the library grid.
+
+     A direct child of <body> for the same reason as the two wizards above: a
+     tab view is display:none when inactive, and a position:fixed overlay
+     inside one never paints. -->
+<div id="sva-root" hidden></div>
 
 <!-- Assessments — the dedicated full-page surface, rendered entirely by
      /assessment.js. A direct child of <body> for the same reason as the two

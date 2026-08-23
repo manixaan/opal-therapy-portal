@@ -116,7 +116,34 @@
   // 'pd' is the one resources view that carries an id of its own: '#resources/pd'
   // is the catalogue, '#resources/pd/<id>' is one event. That is why the id rule
   // below tests for either view rather than for 'detail' alone.
-  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments', 'assignment'];
+  //
+  // 'service-agreement' is the Service Agreement template's own surface, and
+  // it is the CANONICAL home of that workflow. It carries an id slot that
+  // names what is open rather than a record alone:
+  //   #resources/service-agreement            the template overview
+  //   #resources/service-agreement/new        the creation wizard
+  //   #resources/service-agreement/<uuid>     one agreement
+  //   #resources/service-agreement/master     the owner's master console
+  //   #resources/service-agreement/versions   master version history
+  // Same shape as 'instruments', where the id is a key rather than a row id.
+  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments',
+    'assignment', 'service-agreement'];
+
+  /**
+   * Addresses that mean 'service-agreement' but are not it.
+   *
+   * The workflow briefly lived as a card mounted beside the hub with no
+   * address of its own, so there is no released URL to redirect. These are the
+   * spellings a person plausibly types or a colleague plausibly pastes, and
+   * normalising them costs nothing and prevents a dead link.
+   */
+  var RH_VIEW_ALIASES = {
+    'service-agreements': 'service-agreement',
+    serviceagreement: 'service-agreement',
+    serviceagreements: 'service-agreement',
+    agreements: 'service-agreement',
+    agreement: 'service-agreement',
+  };
 
   /** Resources views that may carry a record id.
    *  'instruments' joins them because each assessment has an information page
@@ -125,7 +152,7 @@
    *  page could not be linked to and Back skipped straight past it.
    *  'assignment' is a learning-assignment player ('#resources/assignment/<id>')
    *  — id-only: without an id RH2.nav degrades it to My Learning. */
-  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment'];
+  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment', 'service-agreement'];
 
   /** Onboarding sub-views. Mirrors MANAGE_VIEWS in onboarding.js; an
    *  unrecognised value normalises to the dashboard rather than 404ing. */
@@ -184,6 +211,7 @@
 
     } else if (out.tab === 'resources') {
       var view = lower(s.view);
+      if (RH_VIEW_ALIASES[view]) view = RH_VIEW_ALIASES[view];
       if (!inList(RH_VIEWS, view)) view = 'home';
       var rid = safeId(s.id);
       if (view === 'detail' && !rid) view = 'library'; // "#resources/detail/" with no id
@@ -251,6 +279,11 @@
       // degrades to itself rather than losing the segment.
       else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      // An idless '#resources/service-agreement' is the template overview — a
+      // real screen — so it degrades to itself rather than losing the segment.
+      else if (s.view === 'service-agreement') {
+        out += '/service-agreement' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      }
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'onboarding') {
       // '#onboarding' IS the dashboard, so it needs no segment of its own.
@@ -306,7 +339,9 @@
       st.view = parts[1];
     } else if (tab === 'resources') {
       st.view = parts[1];
-      if (inList(RH_VIEWS_WITH_ID, lower(parts[1]))) st.id = decodeSegment(parts[2]);
+      var rhView = lower(parts[1]);
+      if (RH_VIEW_ALIASES[rhView]) rhView = RH_VIEW_ALIASES[rhView];
+      if (inList(RH_VIEWS_WITH_ID, rhView)) st.id = decodeSegment(parts[2]);
     } else if (tab === 'onboarding') {
       st.view = parts[1];
     } else if (tab === 'casenotes') {
@@ -377,6 +412,8 @@
     KNOWN_TABS: KNOWN_TABS,
     CAL_MODES: CAL_MODES,
     RH_VIEWS: RH_VIEWS,
+    RH_VIEWS_WITH_ID: RH_VIEWS_WITH_ID,
+    RH_VIEW_ALIASES: RH_VIEW_ALIASES,
     PAGE_TABS: PAGE_TABS,
     ASSESS_VIEWS: ASSESS_VIEWS,
     OVERLAYS: OVERLAYS,
@@ -852,6 +889,12 @@
       } else if (t.view === 'assignment' && t.id && isFn(global.RH2.openAssignment)) {
         try { global.RH2.openAssignment(t.id); } catch (e) {}
         NAV.rhView = 'assignment'; NAV.rhId = t.id;
+      } else if (t.view === 'service-agreement' && global.SVA && isFn(global.SVA.route)) {
+        // The hub stays on the Templates collection underneath, so closing the
+        // Service Agreement surface lands back where the card was.
+        try { global.RH2.openCollection('templates'); } catch (e) {}
+        try { global.SVA.route(t.id || ''); } catch (e) {}
+        NAV.rhView = 'service-agreement'; NAV.rhId = t.id || null;
       } else if (isFn(global.RH2.nav)) {
         try { global.RH2.nav(t.view || 'home'); } catch (e) {}
         NAV.rhView = t.view || 'home'; NAV.rhId = null;

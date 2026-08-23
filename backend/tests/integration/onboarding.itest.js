@@ -1274,6 +1274,42 @@ describe('policy versioning and acknowledgements', () => {
     expect(reack.status).toBe(200);
     expect(reack.body.version).toBe(2);
   });
+
+  // An Opal-authored policy is allowed to have no file — a version's `body` is
+  // the whole point of that column. If the download route only serves files,
+  // an Owner cannot read the draft they are being asked to publish, and the
+  // review step the whole library depends on quietly stops working.
+  test('a body-only version downloads as text rather than 404ing', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const docs = (await owner.get('/api/onboarding/documents')).body.documents;
+    const policy = docs.find((d) => d.code === 'POL_LONE_WORKER');
+
+    const draft = await owner.post(`/api/onboarding/documents/${policy.id}/versions`)
+      .send({ title: 'Lone Worker Policy', body: 'LONE WORKER POLICY\n\n1. PURPOSE\n\nText.' });
+    expect(draft.status).toBe(201);
+
+    const res = await owner.get(
+      `/api/onboarding/documents/${policy.id}/versions/${draft.body.version.id}/download`
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/plain/);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.text).toContain('1. PURPOSE');
+  });
+
+  test('a version with neither a file nor a body is still a 404', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const docs = (await owner.get('/api/onboarding/documents')).body.documents;
+    const policy = docs.find((d) => d.code === 'POL_GIFTS');
+
+    const linkOnly = await owner.post(`/api/onboarding/documents/${policy.id}/versions`)
+      .send({ title: 'Gifts and Benefits Policy', sourceUrl: 'https://example.org/gifts' });
+    expect(linkOnly.status).toBe(201);
+
+    await owner.get(
+      `/api/onboarding/documents/${policy.id}/versions/${linkOnly.body.version.id}/download`
+    ).expect(404);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

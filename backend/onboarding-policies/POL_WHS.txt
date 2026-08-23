@@ -1,0 +1,99 @@
+---
+code: POL_WHS
+title: Work Health and Safety Policy
+category: WHS
+tier: 1
+acknowledgement: yes
+summary: Opal Therapy's duties and yours under the Work Health and Safety Act 2020 (WA) — the hazards that actually arise in mobile community occupational therapy, how we control them, and how to raise a safety concern.
+reviewCycleMonths: 12
+basis: Work Health and Safety Act 2020 (WA); Work Health and Safety (General) Regulations 2022 (WA); WorkSafe WA codes of practice
+related: POL_INCIDENT; POL_HOME_VISIT; POL_LONE_WORKER; POL_INFECTION; POL_EMERGENCY; POL_VEHICLE; POL_INJURY_MANAGEMENT
+---
+WORK HEALTH AND SAFETY POLICY
+
+1. PURPOSE AND COMMITMENT
+
+{{OPAL_ORG_TRADING_NAME}} is a person conducting a business or undertaking under the Work Health and Safety Act 2020 (WA), and owes a primary duty of care to ensure, so far as is reasonably practicable, the health and safety of workers and of anyone else affected by our work.
+
+Most of our work happens in other people's homes, in cars, in schools and in community settings — places we do not control and cannot inspect in advance. That is the defining feature of safety in this practice, and this policy is written around it rather than around an office we mostly do not use.
+
+Health includes psychological health. Psychosocial hazards are managed on the same footing as physical ones.
+
+2. WHO THIS APPLIES TO
+
+Every worker: employees, casuals, contractors, labour hire and students on placement. It also shapes how we work with participants, families and other providers.
+
+3. WHAT OPAL WILL DO
+
+• Identify hazards and assess risks before work starts, including a documented risk screen for each new participant environment.
+• Control risks using the hierarchy of control — eliminate first, and use personal protective equipment only when higher controls are not reasonably practicable.
+• Provide the information, training, instruction and supervision needed to work safely, and provide it before you are exposed to the hazard rather than after.
+• Provide and maintain safe equipment, including manual handling aids, and supply personal protective equipment at no cost to you.
+• Consult workers on matters that affect their health and safety, and consult genuinely — that means before a decision, with enough information to form a view.
+• Maintain first aid arrangements and emergency procedures.
+• Record, investigate and act on incidents, injuries and near misses.
+• Hold workers compensation insurance, and support recovery at work after an injury.
+• Never treat a worker unfavourably for raising a safety concern, refusing genuinely unsafe work, or making a claim.
+
+4. WHAT YOU MUST DO
+
+Section 28 of the WHS Act places duties on you personally. While at work you must:
+• take reasonable care for your own health and safety;
+• take reasonable care that what you do, or fail to do, does not adversely affect others;
+• comply with reasonable instructions on health and safety, so far as you are able; and
+• co-operate with Opal's health and safety policies and procedures.
+
+In practice that means:
+• Complete your WHS induction before your first participant visit.
+• Do a dynamic risk assessment on arrival at every environment — and leave if it is not safe. You will never be criticised for leaving.
+• Follow the Home Visit and Lone Worker policies, including check-in and check-out.
+• Use the manual handling techniques and equipment you have been trained in. Do not lift or transfer a person alone where the plan calls for two people or a hoist.
+• Report hazards, incidents, near misses and injuries — the same day, and before the end of your shift for anything serious.
+• Do not work impaired by alcohol, other drugs, medication side effects or fatigue.
+• Tell us about a health condition or medication that could affect your safe performance of the work. This is treated confidentially and used to make adjustments, not to exclude you.
+
+5. THE HAZARDS THAT ACTUALLY ARISE HERE
+
+5.1 Driving. The largest single risk in a mobile role, and it grows with fatigue and rural distance. See the Vehicle and Travel Policy.
+
+5.2 Unfamiliar and uncontrolled environments. Trip hazards, animals, hoarding, smoking indoors, unsafe electrical fittings, no clear exit, other people present who were not expected. See the Home Visit & Community Work Safety Policy.
+
+5.3 Working alone. See the Lone Worker Policy.
+
+5.4 Occupational violence and aggression. From participants, family members, or others present. Aggression is a hazard to be controlled, never something to be absorbed as part of the job.
+
+5.5 Manual handling. Transfers, equipment trials, assistive technology, carrying assessment kits, and prolonged awkward postures during home assessments.
+
+5.6 Infection. See the Infection Prevention and Control Policy.
+
+5.7 Psychosocial hazards. Exposure to trauma and distressing content, high emotional demand, isolation from colleagues, unreasonable workload or time pressure, poor role clarity, bullying or harassment, and the cumulative weight of clinical responsibility. These are risks to be assessed and controlled, and the controls are real ones: caseload management, supervision, debriefing after a difficult event, and the ability to say a workload is not safe.
+
+5.8 Remote and rural work. Distance from help, poor mobile coverage, long single-day drives, and weather. See the Emergency and Disaster Management Policy.
+
+6. RAISING A CONCERN
+
+Tell your supervisor first, in most cases. Anything you would rather not raise there goes to [TO CONFIRM: the named WHS contact and their contact details].
+
+If you reasonably believe that carrying out work would expose you to a serious risk from an immediate or imminent hazard, you may cease that work. Tell Opal as soon as you can and stay available for other suitable work. This right sits in the WHS Act and using it will not count against you.
+
+You may also contact WorkSafe WA on 1300 307 877 at any time.
+
+7. CONSULTATION
+
+Health and safety is a standing item at [TO CONFIRM: the meeting where WHS is discussed, and how often]. Opal's health and safety representative arrangements are: [TO CONFIRM: HSR arrangements, or record that no HSR has been requested]. Any worker may ask for an HSR to be elected.
+
+8. TRAINING
+
+Before starting participant-facing work: WHS induction, manual handling, infection control, and the home visit and lone worker procedures. Refreshed at [TO CONFIRM: refresher frequency]. First aid: [TO CONFIRM: which roles require a current first aid certificate, and who holds one].
+
+9. RELATED DOCUMENTS
+
+Incident Management Policy · Home Visit & Community Work Safety Policy · Lone Worker Policy · Infection Prevention and Control Policy · Emergency and Disaster Management Policy · Vehicle and Travel Policy · Injury Management System — information for workers
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

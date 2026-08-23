@@ -1,0 +1,85 @@
+---
+code: POL_BOUNDARIES
+title: Professional Boundaries Policy
+category: Clinical
+tier: 2
+acknowledgement: yes
+summary: Where the line sits between a therapeutic relationship and a personal one, why the responsibility for holding it is always the clinician's, and what to do when a boundary has already been crossed.
+reviewCycleMonths: 24
+basis: Occupational Therapy Board of Australia — Code of conduct; NDIS Code of Conduct elements 1, 4 and 7; Health Practitioner Regulation National Law (WA)
+related: POL_CODE_OF_CONDUCT; POL_SAFEGUARDING; POL_SOCIAL_MEDIA; POL_GIFTS; POL_CONFLICT; POL_PRIVACY
+---
+PROFESSIONAL BOUNDARIES POLICY
+
+1. WHY THIS POLICY EXISTS
+
+Occupational therapy is delivered in kitchens, bathrooms and bedrooms, often over months, often to people who are isolated. Warmth is part of the work and rapport is a clinical tool. That is precisely why the boundary needs to be explicit: the conditions that make this work effective are the same conditions in which boundaries erode without anyone deciding to cross one.
+
+2. THE PRINCIPLE
+
+The relationship exists for the participant's therapeutic benefit and for nothing else. There is a power imbalance in it — over access to supports, over what gets written in a report, over a funding recommendation — and it does not disappear because the relationship feels equal or friendly.
+
+Holding the boundary is always the clinician's responsibility. It is never the participant's, and it is not shared with them. A participant may initiate anything at all; the professional obligation to decline is unaffected.
+
+3. WHAT IS NOT PERMITTED
+
+3.1 Sexual or romantic involvement with a current participant. No exceptions, no consent defence, and no "it was outside work hours". This includes flirtation, sexualised comments, and sexual or intimate touching that is not clinically necessary and explained.
+
+3.2 A relationship with a former participant, or with a family member or carer of a current participant, where the therapeutic relationship or the participant's vulnerability is a factor. Discuss any such situation with your supervisor before it develops, not after.
+
+3.3 Financial entanglement. Lending or borrowing money, selling anything to a participant, accepting a loan, involvement in their financial affairs, acting as their power of attorney, being a beneficiary or witness to their will, or accepting any inheritance or bequest.
+
+3.4 Providing services to your own family members or close friends, or treating your own relative as a participant, except where it is discussed and documented in advance with your supervisor as the only reasonable option.
+
+3.5 Using information from the therapeutic relationship for any purpose outside it.
+
+4. WHAT NEEDS JUDGEMENT AND SUPERVISION
+
+Some things are not prohibited but need to be thought about, and the test is always: does this serve the participant's therapy, or does it serve me?
+
+• Self-disclosure. A short, purposeful disclosure can build rapport. Detailed disclosure about your own life, problems or health shifts the participant into supporting you.
+• Physical contact. Clinically necessary contact is explained and consented to before it happens. A hug initiated by a participant is not an emergency, but repeated physical affection is a pattern to raise in supervision.
+• Contact outside sessions. Personal phone number, personal email, messaging apps, out-of-hours contact. Use Opal channels. If a participant contacts you personally, redirect them and record it.
+• Social media. Do not connect with participants or their families on personal accounts. See the Social Media Policy.
+• Gifts. See the Gifts and Benefits Policy. Small tokens of thanks may be accepted in some circumstances; money, valuable items and anything given repeatedly may not.
+• Extra help. Giving a lift, running an errand, doing a small job around the house. Well-intentioned and frequently the beginning of an unsustainable pattern. If a participant needs it, it belongs in their plan, not in your goodwill.
+• Small communities. In rural and regional practice you will meet participants at the shops, the school and the football. Acknowledge them, follow their lead about being recognised, and do not discuss anything clinical.
+
+5. THE WARNING SIGNS
+
+You are being asked to notice these in yourself. In order of seriousness, roughly:
+• Thinking about a particular participant outside work more than others.
+• Looking forward to one participant's sessions differently, or dreading a different one.
+• Sessions consistently running long with one person.
+• Keeping something about the relationship out of your notes or out of supervision.
+• Telling yourself this participant is a special case.
+• Doing things for one participant you would not do for another, or that you would not want a colleague to see.
+• Feeling that you are the only one who understands them.
+
+None of these makes you a bad clinician. Not mentioning them does.
+
+6. WHAT TO DO
+
+6.1 Raise it in supervision, early. This is what supervision is for, and raising it is the expected professional behaviour rather than a confession.
+
+6.2 If a boundary has already been crossed, tell your supervisor immediately, and stop. Reporting it yourself is treated very differently from it being discovered.
+
+6.3 If a participant behaves toward you in a way that crosses a boundary — sexualised comments, persistent personal contact, romantic overtures — you do not have to manage it alone. Report it. Your safety and comfort matter, and the participant may need support with the underlying issue.
+
+6.4 If you have a concern about a colleague's boundaries, raise it. Under the NDIS Code of Conduct that is not optional, and under the National Law a notification to AHPRA may be required.
+
+7. CONSEQUENCES
+
+A sexual boundary violation is grounds for immediate dismissal, mandatory notification to AHPRA, notification to the NDIS Commission where applicable, and referral to police where a criminal offence may have occurred. Other boundary breaches are handled proportionately, and self-reported ones are handled as supervision and learning wherever they safely can be.
+
+8. RELATED DOCUMENTS
+
+Opal Therapy Code of Conduct · Safeguarding — Violence, Abuse, Neglect and Exploitation Policy · Social Media Policy · Gifts and Benefits Policy · Conflict of Interest Policy · Privacy & Confidentiality Policy
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

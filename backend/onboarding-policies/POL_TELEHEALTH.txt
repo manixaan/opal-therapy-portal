@@ -1,0 +1,87 @@
+---
+code: POL_TELEHEALTH
+title: Telehealth Policy
+category: Clinical
+tier: 3
+acknowledgement: yes
+summary: When telehealth is clinically appropriate and when it is not, consent, the platform and privacy requirements, how to run a safe session including an emergency plan, and how telehealth is documented and claimed.
+reviewCycleMonths: 24
+basis: Occupational Therapy Board of Australia — Code of conduct and telehealth guidance; Privacy Act 1988 (Cth); NDIS pricing arrangements; NDIS Practice Standards
+related: POL_CLINICAL_DOC; POL_PRIVACY; POL_INFOSEC; POL_PARTICIPANT_RIGHTS; POL_EMERGENCY
+---
+TELEHEALTH POLICY
+
+1. PURPOSE
+
+Telehealth is how a great deal of rural and regional occupational therapy becomes possible at all. It is also easy to deliver badly, and the failure modes — a missed environmental hazard, a participant who cannot use the platform, an emergency you cannot reach — are specific enough to be planned for.
+
+The professional standards that apply in person apply identically by video. Scope of practice, consent, documentation, privacy and boundaries do not change with the medium.
+
+2. WHEN TELEHEALTH IS APPROPRIATE
+
+Well suited to: review and follow-up, coaching and education, goal setting and planning, some functional interviews, equipment training and troubleshooting, report feedback, family and team meetings, and maintaining continuity when travel is not possible.
+
+Not appropriate, or only with an in-person component, where: hands-on assessment or physical measurement is required; a home or workplace environment must be assessed properly; pressure care, seating or complex equipment prescription is involved; a participant cannot engage with the format even with support; there are safeguarding concerns that need eyes in the room; or there is significant risk that could not be managed remotely.
+
+A first appointment is normally in person. Where it is not, record why.
+
+3. THE DECISION IS CLINICAL
+
+Choose telehealth because it suits the participant and the clinical task, not because it suits the schedule. Where the participant would prefer in person and it is reasonably possible, do it in person. Record the reason for the mode in the clinical record.
+
+Reassess it. A support that started well by video can stop working; if a participant is disengaging, the format is one of the first things to change.
+
+4. CONSENT
+
+Before the first telehealth session, explain and record consent covering: what telehealth involves and its limitations; that they can decline or switch to in person at any time without any effect on their supports; who else will be present at each end; how privacy is protected; what happens if the technology fails; and what happens in an emergency.
+Consent is recorded in the file and is revocable at any time.
+
+Sessions are not recorded unless there is a specific purpose, separate written consent, and a defined retention period under the Records Management Policy. Never record covertly. Ask participants not to record without telling you, and if they say they are recording, that is their choice to make about their own care — note it in the record.
+
+5. PLATFORM AND PRIVACY
+
+5.1 Use the approved platform: [TO CONFIRM: the approved telehealth platform and where the meeting is created]. Do not move a session to a personal video account, a social media call or a consumer messaging app.
+
+5.2 Your end. A private room with the door closed. Nobody else in earshot, including at home. Headphones. A neutral background with no participant information, no screens, no whiteboards and no files visible. Close everything on your screen you would not want shared, before you share anything.
+
+5.3 Their end. Ask at the start who else is present and who can hear. A participant may not be able to speak freely, and that matters most in exactly the situations where it is least visible. If you have any concern that someone is present who should not be, change the subject and follow it up separately.
+
+5.4 Confirm identity at the start of the first session, and be alert to the possibility that you are speaking to someone other than the person you booked.
+
+6. BEFORE THE SESSION
+
+• Confirm the participant can use the platform, and offer a test call before the first session.
+• Ask what support they need — a support person, an interpreter, a larger screen, a phone call as a fallback.
+• Confirm their physical location for this session, and their phone number. Do this every time, not just the first time. If you cannot say where they are, you cannot send help.
+• Confirm an emergency contact and, where relevant, local emergency services for their location — which will not be yours on a regional call.
+• Send any materials in advance.
+
+7. DURING THE SESSION
+
+Start by confirming location, who is present, and what to do if the connection drops — agree that you will phone them, so nobody sits waiting.
+
+Work more slowly than in person. Check understanding more often. Watch for fatigue, which arrives sooner on video, and offer breaks.
+
+Be honest about what you cannot see. If an assessment needs something you cannot observe properly, say so and arrange it in person rather than recording a conclusion the medium did not support.
+
+8. IF SOMETHING GOES WRONG
+
+Connection drops: phone them, as agreed. If you cannot reach them and there was any concern, escalate — emergency contact, then emergency services for their location.
+
+A medical or safety emergency during a session: call 000 and give their address, which is why section 6 requires you to have it. Stay on the line with them if you can. Follow the Emergency and Disaster Management Policy and report it as an incident.
+
+A safeguarding disclosure by video is handled exactly as one in person, under the Safeguarding Policy.
+
+9. DOCUMENTATION AND CLAIMING
+
+Record the mode of delivery, the platform, the participant's location, who was present at both ends, the duration, and any limitation the format imposed on the assessment or the session.
+
+Claim telehealth in line with the applicable NDIS pricing arrangements and the participant's service agreement. Do not claim travel that did not occur.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

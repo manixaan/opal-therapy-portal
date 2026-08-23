@@ -24,6 +24,8 @@ const path = require('path');
 const JSZip = require('jszip');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
+const { sanitizeDocxForDistribution } = require('./docx-sanitiser');
+
 /** FCA-aligned palette, from the handoff manifest. */
 const PALETTE = {
   primary: '2F5651',
@@ -218,7 +220,14 @@ async function buildDocx(spec) {
       <w:docGrid w:linePitch="360"/></w:sectPr>
   </w:body></w:document>`);
 
-  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+  // Through the same distribution gate as every other Opal Word file. This
+  // builder writes its own minimal package and has never set w:updateFields,
+  // so the sanitiser has nothing to remove — which is exactly why it is here:
+  // the guarantee should hold because it is checked, not because of what the
+  // author happened to write.
+  return sanitizeDocxForDistribution(buffer, { label: 'Opal document builder' });
 }
 
 // ── PDF ─────────────────────────────────────────────────────────────────────

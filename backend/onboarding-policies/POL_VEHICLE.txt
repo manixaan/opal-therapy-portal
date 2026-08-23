@@ -1,0 +1,89 @@
+---
+code: POL_VEHICLE
+title: Vehicle and Travel Policy
+category: Vehicle / Travel
+tier: 3
+acknowledgement: yes
+summary: Driving for work at Opal Therapy — licence and insurance requirements, using your own car, fatigue on long rural drives, transporting participants and equipment, and what to do after a crash or a fine.
+reviewCycleMonths: 24
+basis: Work Health and Safety Act 2020 (WA); Road Traffic Act 1974 (WA) and Road Traffic (Administration) Act 2008 (WA); Australian Taxation Office rules on car expenses; NDIS pricing arrangements for provider travel
+related: POL_WHS; POL_LONE_WORKER; POL_HOME_VISIT; POL_EXPENSES; POL_EMERGENCY
+---
+VEHICLE AND TRAVEL POLICY
+
+1. PURPOSE
+
+Driving is the single largest physical risk in this practice. It is also the part of the job most likely to be treated as not really being work. Time in a vehicle is work time, a vehicle used for work is a workplace, and both are managed accordingly.
+
+2. BEFORE YOU DRIVE FOR OPAL
+
+2.1 Hold a current, unrestricted Australian driver licence appropriate to the vehicle, and give Opal a copy at onboarding and on renewal.
+
+2.2 Tell Opal immediately if your licence is suspended, cancelled, restricted, or subject to conditions, or if you accumulate demerit points that put it at risk. Driving for work without a valid licence is not covered by insurance and is a serious disciplinary matter.
+
+2.3 Tell Opal about any medical condition or medication that could affect your ability to drive safely.
+
+3. USING YOUR OWN VEHICLE
+
+3.1 Your vehicle must be roadworthy, currently registered, and comprehensively insured, with your insurer aware that it is used for work. Confirm this at onboarding and annually: [TO CONFIRM: how and when vehicle insurance and registration are verified].
+
+3.2 Maintenance is yours — tyres, brakes, lights, wipers, fluids and servicing. Do not drive a vehicle you know is not roadworthy.
+
+3.3 Reimbursement. Opal reimburses work-related travel at [TO CONFIRM: the rate per kilometre or the method used, and whether it follows the ATO rate]. Home to your usual place of work is not reimbursable; travel between participants, and to a participant directly from home where that is your first appointment, generally is. Record every trip in the portal on the day: date, purpose, start and finish points, and kilometres. See the Expenses and Reimbursement Policy.
+
+3.4 Insurance excess after an at-fault crash while driving for work: [TO CONFIRM: whether Opal contributes to the excess, and in what circumstances].
+
+4. OPAL VEHICLES
+
+[TO CONFIRM: whether Opal provides pool vehicles. If it does, this section must cover booking, the pre-start check, fuel and toll cards, cleanliness, reporting damage, private use and who else may drive.]
+
+5. DRIVING SAFELY
+
+• Obey the road rules. A fine incurred while driving for work is yours to pay.
+• No handheld phone use. Set navigation before you move off. Calls only through a properly mounted hands-free system, and pull over for anything that needs your attention.
+• Do not write notes, read a file or eat while driving. Do not use the drive between appointments to catch up on documentation.
+• Never drive under the influence of alcohol or drugs, including prescription medication that carries a driving warning.
+• Wear a seatbelt, and make sure everyone in the vehicle does.
+• Secure equipment. An unrestrained hoist, wheelchair or assessment kit becomes a projectile in a crash. Heavy items go in the boot or are strapped down.
+• Adjust for conditions — rain, dust, glare, unsealed roads, and wildlife at dawn and dusk on country roads.
+
+6. FATIGUE
+
+6.1 Fatigue is the specific hazard of rural work in this state, and the distances are the reason. Treat it as a hazard to be planned around, not willpower to be applied.
+
+6.2 Plan a break of at least 15 minutes every two hours of driving.
+
+6.3 Maximum driving in a day for work: [TO CONFIRM: maximum daily driving hours]. Maximum combined driving and clinical work in a day: [TO CONFIRM: maximum combined working hours].
+
+6.4 Do not schedule a full clinical load on top of a long drive, and do not drive home after a day that has already run long. Opal will pay for overnight accommodation rather than have you drive tired: [TO CONFIRM: the distance or time threshold at which overnight accommodation is approved, and who approves it].
+
+6.5 If you are too tired to drive safely, stop. Phone your supervisor. This will always be supported.
+
+7. TRANSPORTING PARTICIPANTS
+
+[TO CONFIRM: whether Opal clinicians may transport participants in their own vehicle. If it is permitted, this section must set out the insurance position, when it is permitted, consent and documentation, restraint and wheelchair transport requirements, and who may be present.]
+
+Where transporting participants is not permitted, that is because the insurance, restraint and safeguarding considerations are substantial. Community access transport belongs in a participant's plan with a provider set up for it.
+
+8. PARKING AND ACCESS
+
+Park where you can leave without reversing into traffic or being blocked in. Do not park in a driveway you would need someone else to move a car to exit. Parking costs incurred at a participant visit are reimbursable; a parking fine is not.
+
+9. AFTER A CRASH OR AN INCIDENT
+
+1. Stop. Check for injuries and call 000 if anyone is hurt.
+2. Exchange details with the other driver. Do not admit liability.
+3. Photograph the scene, the vehicles and the damage.
+4. Call the police where required — anyone is injured, a vehicle is towed, or the other driver refuses details.
+5. Tell your supervisor as soon as it is safe to.
+6. Report it as an incident in the portal within 24 hours, and follow the Injury Management System information for workers if you were hurt.
+
+Report near misses too. A near miss on a rural road at the end of a long day is telling you something about the schedule, not about the driver.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review. Sections 4 and 7 are decisions Opal has not yet recorded and must be resolved before publication.
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

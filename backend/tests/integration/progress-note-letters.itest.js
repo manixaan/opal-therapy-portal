@@ -235,7 +235,7 @@ describe('GET /api/letters/template', () => {
 
     const { body } = await agent.get('/api/letters/template');
     expect(body.template.documentType).toBe('progress_note_letter');
-    expect(body.template.version).toBe('v1');
+    expect(body.template.version).toBe('v1.1');
     expect(body.template.sections).toHaveLength(5);
     expect(body.template.sections.filter((s) => s.required).map((s) => s.label))
       .toEqual(['Purpose and context', 'Therapy and progress update']);
@@ -962,7 +962,7 @@ describe('end to end: a real letter', () => {
     expect(row.target_id).toBe(draft.id);
     expect(row.metadata).toMatchObject({
       clientId: RILEY.id,
-      templateVersion: 'v1',
+      templateVersion: 'v1.1',
       documentType: 'progress_note_letter',
       sectionCount: 3,
       customSectionCount: 1,
@@ -1175,7 +1175,9 @@ describe('download', () => {
 
     const rows = await auditRows('letter.downloaded');
     expect(rows).toHaveLength(1);
-    expect(rows[0].metadata).toMatchObject({ documentId: gen.documentId, templateVersion: 'v1' });
+    expect(rows[0].metadata).toMatchObject({
+      documentId: gen.documentId, templateVersion: ltm.LETTER_TEMPLATE_VERSION,
+    });
   });
 });
 

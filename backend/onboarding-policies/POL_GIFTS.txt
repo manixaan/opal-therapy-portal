@@ -1,0 +1,70 @@
+---
+code: POL_GIFTS
+title: Gifts and Benefits Policy
+category: Policies
+tier: 3
+acknowledgement: no
+summary: When you may accept a gift from a participant or a supplier, when you must decline, what has to be declared, and how to refuse graciously without hurting someone who is genuinely grateful.
+reviewCycleMonths: 24
+basis: NDIS Code of Conduct element 4; NDIS Practice Standards; Occupational Therapy Board of Australia — Code of conduct
+related: POL_CONFLICT; POL_BOUNDARIES; POL_CODE_OF_CONDUCT; POL_EXPENSES
+---
+GIFTS AND BENEFITS POLICY
+
+1. WHY THIS IS NOT TRIVIAL
+
+Two very different things get called a gift. A participant handing you a jar of homemade jam at the end of a long piece of work is one. A supplier funding your conference attendance while you are writing equipment recommendations is the other. The first is a relationship to be handled with care; the second is a conflict of interest wearing a friendly face.
+
+2. THE TEST
+
+Before accepting anything, ask:
+• Could this reasonably look like it might influence my professional judgement?
+• Would I be comfortable if the participant's family, my colleagues, the NDIS Commission or a journalist knew about it?
+• Is this person in a position where they may feel they have to give me something?
+• Is this a pattern, or a one-off?
+
+If you hesitate on any of them, decline or declare.
+
+3. GIFTS FROM PARTICIPANTS AND FAMILIES
+
+3.1 May be accepted without declaration: a token of low value, given as thanks, at the natural end of a piece of work — chocolates, flowers, a card, baked goods, something handmade. Share it with the team where you can; that is usually the spirit it was given in.
+
+3.2 Must be declined: money in any form, gift cards and vouchers, alcohol above token value, jewellery, electronics, anything of significant value, anything given repeatedly, and anything given before or during a decision that affects the participant — a report, an equipment recommendation, a funding submission.
+
+3.3 Never, under any circumstances: a loan in either direction, a bequest or inheritance, property, being named in a will, or any involvement in a participant's financial affairs. See the Professional Boundaries Policy.
+
+3.4 Declaration threshold: anything valued above [TO CONFIRM: the declaration threshold, commonly $50] must be declared in writing to your supervisor and recorded in [TO CONFIRM: the gifts and benefits register and who maintains it], whether you accepted it or declined it. Recording a decline is as useful as recording an acceptance.
+
+4. HOW TO DECLINE WITHOUT CAUSING HURT
+
+Someone who has saved up to buy you something is not trying to compromise you, and being refused can feel like rejection. Say something true and warm: that you are not allowed to accept it, that the rule exists to keep things fair for everyone, and that what would mean the most is feedback about the service — or a note we can share with the team.
+
+If declining would cause real distress to a person for whom giving is culturally significant, accept it, declare it, and discuss it with your supervisor. Cultural context is a legitimate consideration and it is a reason to consult, not a loophole.
+
+5. SUPPLIERS, VENDORS AND OTHER PROVIDERS
+
+Held to a stricter standard, because the risk is direct.
+
+5.1 Acceptable: product information, genuine clinical education, a working lunch at a training session, product samples for clinical evaluation that are logged.
+
+5.2 Not acceptable: commissions, referral fees, kickbacks, or any payment linked to recommending a product; travel, accommodation or conference attendance funded by a supplier without written pre-approval; entertainment, event tickets and hospitality beyond a modest working meal; personal discounts on products you recommend professionally; and gifts to your household.
+
+5.3 Every offer from a supplier is declared, accepted or not, under the Conflict of Interest Policy.
+
+5.4 Where an equipment recommendation is involved, the comparison of options goes in the participant's file — what was considered, what was recommended, and why. That record is the answer to any later question about influence.
+
+6. GIFTS FROM OPAL TO OTHERS
+
+Do not give a gift, discount or benefit to a participant, a family member or a referrer that could look like an inducement. Opal does not pay for referrals. Small acknowledgements to another organisation — a thank you, flowers after a bereavement — are approved by [TO CONFIRM: who approves gifts given on Opal's behalf].
+
+7. IF YOU GET IT WRONG
+
+If you accepted something you should not have, say so. It is usually fixable — return it, donate it, or declare it late. An unreported gift discovered later looks like concealment, however innocent it was.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

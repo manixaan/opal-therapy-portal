@@ -335,6 +335,14 @@ app.get('/pending-approval', (req, res) => {
 // Onboarding invitation: a new starter follows the emailed link here to set
 // their password. Public by necessity — they have no account yet — and the
 // token is validated by /api/onboarding-invite/check, which is rate limited.
+// The participant's own signing surface. Unauthenticated by design: it is
+// opened by somebody who has no Opal account, from a link in their email. The
+// TOKEN is what grants access, and it is validated by
+// /api/service-agreement-signing/*, which is where every check actually lives.
+app.get('/service-agreement-sign', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'service-agreement-sign.html'));
+});
+
 app.get('/onboarding-invite', (req, res) => {
   res.sendFile(path.join(frontendPath, 'onboarding-invite.html'));
 });
@@ -610,6 +618,16 @@ app.use('/', require('./assessments-routes'));
 // the whole namespace 403s for anyone the Owner has not authorised.
 // Recruitment data: deliberately unrelated to any clinical surface.
 app.use('/', require('./interview-routes'));
+
+// Service Agreements — the Resource Hub's third document workflow, after the
+// FCA report and the progress-note letter. Every /api/service-agreements route
+// requires `service_agreements.access`, which no role but owner holds by
+// default. The module ALSO mounts /api/service-agreement-signing/*, which is
+// deliberately unauthenticated: it is how a participant with no portal account
+// completes and signs their own agreement, and it is guarded by a hashed
+// one-time token bound to one agreement and one recipient address rather than
+// by a session.
+app.use('/', require('./service-agreement-routes'));
 
 // Accounting / Xero module (owner-only; every route enforces role server-side)
 const accountingRoutes = require('./accounting-routes');

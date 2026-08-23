@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your service agreement — Opal Therapy</title>
+  <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#0f7c6c" />
+  <!-- A participant's agreement carries their NDIS number, their disability
+       information and their prices. It must never be indexed. -->
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:   #2F5651;
+      --secondary: #566E70;
+      --mint:      #E4EFEB;
+      --blush:     #F6EDE5;
+      --neutral:   #FAF7F2;
+      --ink:       #1F2A28;
+      --border:    #C4CFCB;
+      --danger:    #8C2F2F;
+      --danger-bg: #FBEDED;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: var(--neutral); color: var(--ink); line-height: 1.55;
+      padding: 24px 16px 64px;
+    }
+
+    .wrap { max-width: 760px; margin: 0 auto; }
+
+    header.brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0 20px; color: var(--primary); font-weight: 800; letter-spacing: .01em;
+    }
+
+    .card {
+      background: #fff; border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px 30px; margin-bottom: 18px;
+    }
+
+    h1 { font-size: 1.42rem; color: var(--primary); margin-bottom: 8px; line-height: 1.25; }
+    h2 { font-size: 1.02rem; color: var(--primary); margin: 22px 0 10px; }
+    p  { margin-bottom: 12px; }
+    p.lead { color: var(--secondary); }
+
+    .meta {
+      display: grid; grid-template-columns: auto 1fr; gap: 5px 16px;
+      font-size: .88rem; margin: 14px 0 18px;
+      padding: 14px 16px; background: var(--neutral); border-radius: 10px;
+    }
+    .meta dt { font-weight: 600; color: var(--secondary); }
+    .meta dd { margin: 0; }
+
+    label { display: block; font-weight: 600; font-size: .88rem; margin-bottom: 5px; }
+    .hint { font-weight: 400; color: var(--secondary); font-size: .82rem; }
+
+    input[type=text], input[type=email], textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px;
+      padding: 11px 13px; font: inherit; font-size: .95rem; background: #fff; color: var(--ink);
+    }
+    input:focus-visible, textarea:focus-visible, button:focus-visible {
+      outline: 2px solid var(--primary); outline-offset: 2px;
+    }
+    textarea { resize: vertical; min-height: 74px; }
+
+    .field { margin-bottom: 18px; }
+
+    .choices { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 2px; }
+    .choice { display: inline-flex; align-items: center; gap: 7px; font-weight: 400; font-size: .92rem; }
+
+    .check { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; font-size: .92rem; }
+    .check input { margin-top: 3px; flex: 0 0 auto; }
+
+    button {
+      background: var(--primary); color: #fff; border: none; border-radius: 9px;
+      padding: 13px 24px; font: inherit; font-size: .95rem; font-weight: 700; cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: #26433F; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.ghost { background: #fff; color: var(--primary); border: 1px solid var(--border); }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+    .alert { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: .9rem; }
+    .alert.error { background: var(--danger-bg); color: var(--danger); }
+    .alert.ok { background: var(--mint); color: var(--primary); }
+    .alert.note { background: var(--blush); color: #6B4A2E; }
+
+    .privacy {
+      font-size: .82rem; color: var(--secondary);
+      border-top: 1px solid var(--mint); padding-top: 14px; margin-top: 22px;
+    }
+
+    [hidden] { display: none !important; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="brand">Opal Therapy</header>
+
+    <div id="alert" class="alert" role="alert" hidden></div>
+
+    <!-- Loading ------------------------------------------------------------->
+    <section id="loading" class="card">
+      <p class="lead">Opening your agreement…</p>
+    </section>
+
+    <!-- Step 1: confirm identity ------------------------------------------->
+    <section id="verify" class="card" hidden>
+      <h1 id="verify-h">Confirm it's you</h1>
+      <p class="lead" id="verify-lead">
+        This link was sent to <strong id="email-hint"></strong>. Enter that email
+        address to open your service agreement.
+      </p>
+      <p class="lead" id="verify-dead" hidden>
+        Please use the most recent link Opal Therapy sent you. If you no longer
+        have it, contact Opal Therapy and they will send a new one.
+      </p>
+      <form id="verify-form" novalidate>
+        <div class="field">
+          <label for="email">Your email address</label>
+          <input id="email" name="email" type="email" autocomplete="email"
+                 inputmode="email" required />
+        </div>
+        <button type="submit" id="verify-btn">Open my agreement</button>
+      </form>
+      <p class="privacy">
+        We ask for this because the link opens a document containing your personal
+        information. If you did not expect this email, please contact Opal Therapy
+        before continuing.
+      </p>
+    </section>
+
+    <!-- Step 2: review and complete ------------------------------------------>
+    <section id="agreement" class="card" hidden>
+      <h1>Your service agreement</h1>
+      <p class="lead">
+        Please read your agreement, answer the questions below and sign at the
+        bottom. You can download a copy at any time.
+      </p>
+
+      <dl class="meta" id="meta"></dl>
+
+      <div class="actions">
+        <a id="download" class="ghost" style="text-decoration:none;display:inline-block;
+           padding:13px 24px;border-radius:9px;border:1px solid var(--border);
+           background:#fff;color:var(--primary);font-weight:700;font-size:.95rem"
+           href="#" target="_blank" rel="noopener">Read the full agreement (PDF)</a>
+      </div>
+
+      <h2>Your details and choices</h2>
+      <p class="lead">
+        Anything already filled in was provided by Opal Therapy. Change anything
+        that is not right, and answer anything left blank.
+      </p>
+      <form id="fields-form" novalidate>
+        <div id="fields"></div>
+        <button type="button" id="save-btn" class="ghost">Save my answers</button>
+      </form>
+
+      <h2>Sign</h2>
+      <form id="sign-form" novalidate>
+        <div class="check">
+          <input type="checkbox" id="consent" required />
+          <label for="consent" style="font-weight:400">
+            I agree to sign this agreement electronically, and to receive documents
+            about it by email.
+          </label>
+        </div>
+        <div class="field">
+          <label for="signature">Type your full name to sign
+            <span class="hint">This is your signature.</span>
+          </label>
+          <input id="signature" type="text" autocomplete="name" required />
+        </div>
+        <div class="field">
+          <label for="capacity">You are signing as
+            <span class="hint">For example: Participant, Parent, Plan nominee.</span>
+          </label>
+          <input id="capacity" type="text" />
+        </div>
+        <div class="check">
+          <input type="checkbox" id="intent" required />
+          <label for="intent" style="font-weight:400">
+            I have read this agreement, I understand it, and I intend to be bound by it.
+          </label>
+        </div>
+        <button type="submit" id="sign-btn">Sign this agreement</button>
+      </form>
+
+      <p class="privacy">
+        When you sign, Opal Therapy records your name, the capacity you stated, the
+        date and time, and a fingerprint of the exact document you signed. Your
+        typed name is an electronic signature — it is not a cryptographic digital
+        signature, and Opal does not describe it as one.
+      </p>
+    </section>
+
+    <!-- Step 3: done -------------------------------------------------------->
+    <section id="done" class="card" hidden>
+      <h1>Thank you — your agreement is signed</h1>
+      <p class="lead" id="done-detail"></p>
+      <div class="actions">
+        <a id="download-final" style="text-decoration:none;display:inline-block;
+           padding:13px 24px;border-radius:9px;background:var(--primary);color:#fff;
+           font-weight:700;font-size:.95rem" href="#">Download your signed copy</a>
+      </div>
+      <p class="privacy">
+        Keep this copy for your records. Opal Therapy also holds a copy, and you can
+        ask for it at any time.
+      </p>
+    </section>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     PARTICIPANT SIGNING PAGE
+
+     Deliberately standalone and dependency-free: it is opened by somebody who
+     has no Opal account, possibly on an old phone, from a link in an email.
+     Nothing here is shared with the staff portal bundle.
+
+     THREE RULES THIS FILE KEEPS:
+       1. It renders only what the server sent. The field list, the prompts and
+          the choices all arrive from GET /api/service-agreement-signing/:token.
+          There is no local copy of the agreement's structure, so this page
+          cannot show a participant a question the document does not ask.
+       2. Everything is escaped. Values come from a database and are rendered
+          as TEXT, never as markup.
+       3. It never explains a refusal it should not explain. A dead link says
+          "this link cannot be used" — the server does not tell it whether the
+          link expired, was revoked or never existed, and neither does this.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  var token = new URLSearchParams(location.search).get('token') || '';
+  var state = { fields: [], signatoryType: 'participant' };
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function show(id) {
+    ['loading', 'verify', 'agreement', 'done'].forEach(function (s) {
+      $(s).hidden = (s !== id);
+    });
+  }
+
+  function alertBox(message, kind) {
+    var n = $('alert');
+    if (!message) { n.hidden = true; return; }
+    n.hidden = false;
+    n.className = 'alert ' + (kind || 'error');
+    n.textContent = message;
+    n.scrollIntoView({ block: 'nearest' });
+  }
+
+  async function api(path, opts) {
+    var o = opts || {};
+    var init = { method: o.method || 'GET', headers: {} };
+    if (o.body !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(o.body);
+    }
+    try {
+      var r = await fetch(path, init);
+      var data = await r.json().catch(function () { return {}; });
+      if (!r.ok) return { ok: false, status: r.status, error: data.error || 'Something went wrong.' };
+      data.ok = true;
+      return data;
+    } catch (e) {
+      return { ok: false, status: 0, error: 'We could not reach Opal Therapy. Please check your connection and try again.' };
+    }
+  }
+
+  var base = '/api/service-agreement-signing/' + encodeURIComponent(token);
+
+  // ── Load ───────────────────────────────────────────────────────────────
+
+  async function load() {
+    if (!token) {
+      show('verify');
+      $('verify-h').textContent = 'This link cannot be used';
+      $('verify-lead').hidden = true;
+      $('verify-dead').hidden = false;
+      $('verify-form').hidden = true;
+      alertBox('This link is incomplete. Please use the link from your email.');
+      return;
+    }
+
+    var res = await api(base);
+    if (!res.ok) {
+      // A dead link says one thing, whatever killed it. Showing the verify
+      // prose here would ask for an email address against a masked hint that
+      // is not there — an instruction nobody can follow.
+      show('verify');
+      $('verify-h').textContent = 'This link cannot be used';
+      $('verify-lead').hidden = true;
+      $('verify-dead').hidden = false;
+      $('verify-form').hidden = true;
+      alertBox(res.error);
+      return;
+    }
+
+    if (res.state === 'verify') {
+      $('email-hint').textContent = res.emailHint || '';
+      state.signatoryType = res.signatoryType;
+      show('verify');
+      return;
+    }
+
+    renderAgreement(res);
+  }
+
+  function renderAgreement(res) {
+    state.fields = res.assignedFields || [];
+    state.signatoryType = res.signatoryType;
+
+    var a = res.agreement || {};
+    $('meta').innerHTML =
+      '<dt>Agreement</dt><dd>' + esc(a.reference || '') + '</dd>'
+      + '<dt>Participant</dt><dd>' + esc(a.participantName || '') + '</dd>'
+      + '<dt>Issued</dt><dd>' + esc(a.issuedAt ? String(a.issuedAt).slice(0, 10) : '') + '</dd>'
+      + (res.expiresAt
+        ? '<dt>This link expires</dt><dd>' + esc(String(res.expiresAt).slice(0, 10)) + '</dd>' : '');
+
+    $('download').href = base + '/pdf?disposition=inline';
+    $('download-final').href = base + '/pdf';
+
+    $('fields').innerHTML = state.fields.map(fieldHtml).join('');
+    if (res.recipientName) $('signature').value = res.recipientName;
+    if (res.consentGiven) $('consent').checked = true;
+
+    show('agreement');
+  }
+
+  function fieldHtml(f) {
+    var id = 'f-' + esc(f.tag);
+    var value = f.value == null ? '' : String(f.value);
+
+    if (f.kind === 'choice' && f.choices && f.choices.length) {
+      return '<div class="field"><label id="' + id + '-l">' + esc(f.prompt) + '</label>'
+        + '<div class="choices" role="radiogroup" aria-labelledby="' + id + '-l">'
+        + f.choices.map(function (c) {
+          return '<label class="choice"><input type="radio" name="' + id + '" '
+            + 'data-tag="' + esc(f.tag) + '" value="' + esc(c) + '"'
+            + (value === c ? ' checked' : '') + '> ' + esc(c) + '</label>';
+        }).join('')
+        + '</div></div>';
+    }
+
+    if (f.kind === 'multiline') {
+      return '<div class="field"><label for="' + id + '">' + esc(f.prompt) + '</label>'
+        + '<textarea id="' + id + '" data-tag="' + esc(f.tag) + '">' + esc(value) + '</textarea></div>';
+    }
+
+    return '<div class="field"><label for="' + id + '">' + esc(f.prompt)
+      + (f.kind === 'date' ? ' <span class="hint">DD/MM/YYYY</span>' : '') + '</label>'
+      + '<input id="' + id + '" type="text" data-tag="' + esc(f.tag) + '" '
+      + 'value="' + esc(value) + '"></div>';
+  }
+
+  function collect() {
+    var values = {};
+    $('fields').querySelectorAll('[data-tag]').forEach(function (n) {
+      if (n.type === 'radio') { if (n.checked) values[n.getAttribute('data-tag')] = n.value; }
+      else values[n.getAttribute('data-tag')] = n.value;
+    });
+    return values;
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────
+
+  $('verify-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    alertBox('');
+    var btn = $('verify-btn');
+    btn.disabled = true;
+
+    var res = await api(base + '/verify', { method: 'POST', body: { email: $('email').value } });
+    btn.disabled = false;
+
+    if (!res.ok) {
+      alertBox(res.error + (typeof res.attemptsRemaining === 'number'
+        ? ' You have ' + res.attemptsRemaining + ' attempt(s) left.' : ''));
+      return;
+    }
+    await load();
+  });
+
+  $('save-btn').addEventListener('click', async function () {
+    alertBox('');
+    var btn = $('save-btn');
+    btn.disabled = true;
+    var res = await api(base + '/save', { method: 'POST', body: { values: collect() } });
+    btn.disabled = false;
+    alertBox(res.ok ? 'Your answers are saved. You can come back to this link later.' : res.error,
+      res.ok ? 'ok' : 'error');
+  });
+
+  $('sign-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    alertBox('');
+
+    if (!$('consent').checked) { alertBox('Please agree to sign electronically before signing.'); return; }
+    if (!$('intent').checked) { alertBox('Please confirm you intend to be bound by this agreement.'); return; }
+    if ($('signature').value.trim().length < 2) { alertBox('Please type your full name to sign.'); return; }
+
+    var btn = $('sign-btn');
+    btn.disabled = true;
+
+    // Save the answers first, so a signature can never be recorded against a
+    // document that is missing what the participant just typed.
+    var saved = await api(base + '/save', { method: 'POST', body: { values: collect() } });
+    if (!saved.ok) { btn.disabled = false; alertBox(saved.error); return; }
+
+    var res = await api(base + '/sign', {
+      method: 'POST',
+      body: {
+        signatureName: $('signature').value.trim(),
+        capacity: $('capacity').value.trim(),
+        intent: true,
+        consentElectronic: true
+      }
+    });
+    btn.disabled = false;
+
+    if (!res.ok) { alertBox(res.error); return; }
+
+    $('done-detail').textContent =
+      'Signed on ' + new Date(res.signedAt).toLocaleDateString('en-AU')
+      + '. Your agreement reference is ' + (res.reference || '') + '.';
+    alertBox('');
+    show('done');
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

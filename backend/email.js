@@ -777,11 +777,11 @@ const MAX_ATTACHMENTS = 5;
  * Send an already-composed message through the shared transport.
  *
  * Every other sender here owns its subject and its HTML because every other
- * message is one fixed template. A feature whose message depends on data only
- * it holds — a starter pack's document list, an agreement's terms — composes
- * its own subject and body, but it MUST NOT create its own transporter: a
- * second nodemailer instance would bypass _setTransporterForTests, and a test
- * that thought it had stubbed email would quietly send a real one.
+ * message is one fixed template. The service agreement's completion email is
+ * composed by the feature that knows the agreement, but it MUST NOT create its
+ * own transporter: a second nodemailer instance would bypass
+ * _setTransporterForTests, and a test that thought it had stubbed email would
+ * quietly send a real one.
  *
  * Same three-state contract as the rest of this module: `{ skipped: true }`
  * when SMTP is unconfigured, `{ sent: true, messageId }` on success, and a

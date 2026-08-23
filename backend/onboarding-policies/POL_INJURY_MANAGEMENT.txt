@@ -1,0 +1,92 @@
+---
+code: POL_INJURY_MANAGEMENT
+title: Injury Management System — information for workers
+category: WHS
+tier: 2
+acknowledgement: yes
+summary: The document section 159 of the Workers Compensation and Injury Management Act 2023 (WA) requires Opal Therapy to make available to workers — how to claim, what Opal does, who is responsible for injury management, and how a dispute is resolved.
+reviewCycleMonths: 12
+basis: Workers Compensation and Injury Management Act 2023 (WA) s.159; Workers Compensation and Injury Management Regulations 2024 (WA) reg 73; WorkCover WA
+related: POL_WHS; POL_INCIDENT; POL_LEAVE; POL_HOME_VISIT
+---
+INJURY MANAGEMENT SYSTEM — INFORMATION FOR WORKERS
+
+Why you are being given this. Section 159 of the Workers Compensation and Injury Management Act 2023 (WA) requires an employer to establish and maintain an injury management system, and to describe it in a document made available to workers. This is that document. The content it must cover is prescribed by regulation, including naming the person responsible for injury management and how to contact them.
+
+1. WHAT AN INJURY MANAGEMENT SYSTEM IS FOR
+
+Two things. Making sure you get the treatment and the income support you are entitled to, and helping you get back to safe work — which for most injuries is the thing that most improves recovery, not a reward for having recovered.
+
+Workers compensation cover is Opal's obligation and Opal's cost. You are never asked to hold or pay for it.
+
+2. WHO IS RESPONSIBLE
+
+Person responsible for injury management at Opal: [TO CONFIRM: name, role, phone and email of the person responsible for injury management — required content under regulation 73]
+Alternative contact: [TO CONFIRM: name and contact]
+Opal's workers compensation insurer: [TO CONFIRM: insurer name, policy number and claims contact]
+
+3. WHAT TO DO IF YOU ARE INJURED AT WORK
+
+3.1 Get treatment. In an emergency call 000. Otherwise see a doctor as soon as you can. You may choose your own treating doctor.
+
+3.2 Tell Opal as soon as possible — the same day where you can, and before the end of your shift. Report to your supervisor and to the person named in section 2. Report even if you think the injury is minor: an injury that seems small at the time and is never reported becomes very difficult to claim for later.
+
+3.3 Report it as an incident in the portal within 24 hours, under the Incident Management Policy.
+
+3.4 If you want to claim, ask your doctor for a WorkCover WA First Certificate of Capacity. Give it to Opal with a completed claim form.
+
+3.5 Opal will forward your claim to the insurer within the statutory timeframe — [TO CONFIRM: verify the current forwarding timeframe under the Workers Compensation and Injury Management Act 2023 (WA) and state it here]. Opal will not delay a claim because it disagrees with it, and disputing liability is the insurer's decision to make, not ours.
+
+3.6 The insurer decides liability within the period the Act allows and will write to you. If liability is disputed, you keep your rights under section 7.
+
+4. WHAT OPAL WILL DO
+
+• Give you this document, a claim form and any help you need to complete it.
+• Forward your claim and certificates to the insurer within the statutory timeframe.
+• Nominate and pay for injury management support where the injury requires it.
+• Develop a return to work programme with you and your treating doctor where your certificate says you have some capacity for work.
+• Offer suitable duties where they are reasonably practicable — modified tasks, reduced hours, a different location, or administrative work while you recover.
+• Keep your medical information confidential and share it only with those who need it for the claim or your return to work.
+• Keep in contact with you while you are off work, and keep it supportive rather than pressuring.
+• Not dismiss you because of a work-related injury within the protected period the Act provides, and not treat you unfavourably for making a claim.
+
+5. WHAT WE ASK OF YOU
+
+• Report the injury promptly, and report it accurately.
+• Provide certificates of capacity on time, and keep providing them while you are receiving payments.
+• Attend medical appointments and follow reasonable treatment.
+• Take part in developing your return to work programme, and try the suitable duties offered where your doctor has approved them.
+• Tell us if your capacity changes, in either direction.
+• Tell us if a return to work arrangement is not working. It can be changed.
+
+6. RETURN TO WORK
+
+A return to work programme is written where your treating doctor certifies partial capacity. It names the duties, the hours, the restrictions, who is supervising the arrangement, and the review dates. It is developed with you — not handed to you — and reviewed as your capacity changes.
+
+Suitable duties are real work adjusted to your capacity, not a token task. Where Opal cannot reasonably provide suitable duties, we will say so and explain why.
+
+7. IF YOU DISAGREE WITH SOMETHING
+
+Raise it with the person named in section 2 first, if you feel able to.
+
+You can also contact:
+• WorkCover WA — advice on your rights, and the conciliation and arbitration services that resolve workers compensation disputes: 1300 794 744, workcover.wa.gov.au
+• Your union or a lawyer, at any stage.
+
+Using any of these will not affect how you are treated at Opal.
+
+8. INJURIES THAT ARE NOT OBVIOUSLY INJURIES
+
+This system covers psychological injury, gradual-onset musculoskeletal injury, and injury from a single exposure event as well as an obvious accident. A psychological injury arising from work is reportable and claimable on the same terms as a physical one, and Opal will treat it that way.
+
+9. PRIVACY
+
+Information about your injury and claim is used to manage the claim and your return to work. It is disclosed to the insurer, to the treating and assessing practitioners involved, and to those at Opal who need it. It is not shared with colleagues, and your diagnosis is not disclosed to your team.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this document]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review. Section 2 must be completed and every statutory timeframe verified against the current Act and regulations before publication.
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]

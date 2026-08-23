@@ -1,0 +1,92 @@
+---
+code: POL_SAFEGUARDING
+title: Safeguarding — Violence, Abuse, Neglect and Exploitation Policy
+category: Policies
+tier: 1
+acknowledgement: yes
+summary: How Opal Therapy prevents, recognises and responds to violence, abuse, neglect, exploitation and sexual misconduct against the people we support — including what you must do the moment you suspect it.
+reviewCycleMonths: 12
+basis: NDIS Code of Conduct elements 6 and 7; NDIS Practice Standards; Children and Community Services Act 2004 (WA); Working with Children (Screening) Act 2004 (WA); Criminal Code (WA)
+related: POL_INCIDENT; POL_CODE_OF_CONDUCT; POL_BOUNDARIES; POL_PARTICIPANT_RIGHTS; POL_COMPLAINTS
+---
+SAFEGUARDING — VIOLENCE, ABUSE, NEGLECT AND EXPLOITATION POLICY
+
+1. PURPOSE AND POSITION
+
+People with disability experience violence, abuse, neglect and exploitation at far higher rates than the general population, and it is most often committed by someone they know and depend on. Opal's position is unqualified: we do not tolerate it, we do not manage it internally to protect a reputation, and we report it.
+
+This policy applies whether the person causing harm is an Opal worker, a family member, another provider, a support worker, another participant, or a stranger.
+
+2. WHAT WE ARE TALKING ABOUT
+
+• Physical abuse — hitting, rough handling, unauthorised restraint, over-medication.
+• Sexual abuse and sexual misconduct — any sexual act without consent, any sexual contact with a person who cannot consent, grooming, exposure to sexual material, and any sexualised behaviour toward a participant by a worker.
+• Emotional and psychological abuse — threats, humiliation, intimidation, isolation, controlling who a person sees.
+• Neglect — failing to provide food, shelter, hygiene, medical care, supervision or supports the person depends on, including by omission.
+• Financial abuse and exploitation — taking or misusing money or property, pressuring a person over money, misuse of a debit card or NDIS funds, unpaid work.
+• Systemic and service abuse — inflexible routines that strip choice, withholding a support as punishment, restrictive practices used without authorisation.
+
+3. PREVENTION
+
+3.1 Screening. Everyone in a participant-facing role holds the checks their role requires, verified before they start and kept current. Working with Children Check requirements are determined by the actual duties of the role, not by job title, and Opal will tell you in writing which checks apply to you.
+
+3.2 Supervision and visibility. Lone work with a participant is normal in this profession, so the safeguard is documentation and supervision rather than a second person in the room. Sessions are recorded in the clinical record, plans are shared with the participant, and supervision is a place to raise unease early.
+
+3.3 Boundaries. The Professional Boundaries Policy is a safeguarding control, not an etiquette guide. Most serious harm begins with a boundary that was crossed quietly and never mentioned.
+
+3.4 Participant voice. Participants are told, in a format they can understand, that they can say no, that they can complain, and who to complain to. A participant who knows how to raise something is the strongest safeguard in the system.
+
+4. RECOGNISING IT
+
+Take seriously: unexplained or inconsistently explained injuries; fear of a particular person; sudden withdrawal, regression or distress; sexualised behaviour or knowledge that does not fit the person; poor hygiene or unmet basic needs where support is funded; missing money or possessions; a carer who will not leave the person alone with you; a participant's own disclosure, however partial.
+
+None of these proves abuse. All of them require you to act under section 5. You are not being asked to investigate or to decide. You are being asked to report what you observed.
+
+5. WHAT TO DO — IMMEDIATELY
+
+5.1 Make the person safe. Call 000 if they are in immediate danger or need urgent medical care.
+
+5.2 If a participant discloses to you:
+• Listen. Do not interrupt, do not correct them, and do not ask leading or probing questions — a well-meant question can compromise a later investigation.
+• Believe them and say so, in words like "thank you for telling me, I believe you, that should not have happened."
+• Do not promise to keep it secret. Say clearly that you have to tell someone whose job it is to help keep them safe.
+• Write down what they said in their own words, as close to verbatim as you can, as soon as you can, with the date and time.
+
+5.3 Preserve evidence. Do not clean, tidy, wash clothing, or move things where a criminal offence may have occurred.
+
+5.4 Report. Immediately by phone to [TO CONFIRM: the named safeguarding contact and their number], and to [TO CONFIRM: the after-hours safeguarding contact and their number] out of hours. Then record it as an incident in the portal within 24 hours under the Incident Management Policy.
+
+5.5 Do not confront the alleged perpetrator, do not warn them, and do not tell colleagues who do not need to know.
+
+6. EXTERNAL REPORTING
+
+6.1 Police. Any suspected criminal offence — assault, sexual offence, theft, fraud — is reported to police. This is not a decision for Opal to weigh against other considerations.
+
+6.2 Children. Concerns about a child's safety are reported to the Department of Communities Child Protection and Family Support (WA), Central Intake on 1800 273 889, or 000 in an emergency.
+Occupational therapists are not among the professions listed as mandatory reporters under section 124B of the Children and Community Services Act 2004 (WA). Opal nevertheless requires every worker to report a child protection concern, as a condition of working here. If you hold another registration or role that does make you a mandatory reporter, that legal duty applies to you personally and is not displaced by anything in this policy.
+
+6.3 NDIS Quality and Safeguards Commission. 1800 035 544. Where Opal is a registered NDIS provider, the reportable incidents regime imposes statutory notification duties and timeframes — see the Incident Management Policy. Any person, at any time, may make a complaint to the Commission directly, and no worker may be discouraged from doing so.
+
+6.4 AHPRA. Where the concern is about a registered health practitioner, a notification may be required under the National Law.
+
+7. IF THE CONCERN IS ABOUT AN OPAL WORKER
+
+They will be removed from contact with the participant while the matter is assessed. Suspension in these circumstances is a neutral protective step and is not a finding. The matter is reported externally as section 6 requires, whether or not the internal process has concluded, and Opal will not attempt to resolve an allegation of abuse "internally" as an alternative to reporting it.
+
+8. NO DETRIMENT, AND NO SILENCE
+
+Nobody will be disadvantaged for reporting a safeguarding concern in good faith, even if it turns out to be unfounded. Failing to report a concern is a serious disciplinary matter and may be a breach of the NDIS Code of Conduct.
+
+Nothing in any Opal contract, agreement or settlement prevents a person from reporting abuse to police, to a regulator, or to a court.
+
+9. RELATED DOCUMENTS
+
+Incident Management Policy · Opal Therapy Code of Conduct · Professional Boundaries Policy · Participant Rights, Choice and Control · Complaints Management Policy
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months — shorter than most policies because the consequences of it being out of date are not recoverable
+Next review due: [TO CONFIRM: date]

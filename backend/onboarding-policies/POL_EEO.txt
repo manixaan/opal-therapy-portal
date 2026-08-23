@@ -1,0 +1,68 @@
+---
+code: POL_EEO
+title: Equal Opportunity, Anti-Discrimination & Respectful Workplace Policy
+category: Policies
+tier: 2
+acknowledgement: yes
+summary: Opal Therapy's commitment to a workplace free of discrimination — the protected attributes, what discrimination looks like in recruitment and at work, the duty to make reasonable adjustments, and how to raise a concern.
+reviewCycleMonths: 24
+basis: Equal Opportunity Act 1984 (WA); Sex Discrimination Act 1984 (Cth); Disability Discrimination Act 1992 (Cth); Racial Discrimination Act 1975 (Cth); Age Discrimination Act 2004 (Cth); Fair Work Act 2009 (Cth) general protections
+related: POL_BULLYING; POL_CODE_OF_CONDUCT; POL_PARTICIPANT_RIGHTS; POL_SUPERVISION
+---
+EQUAL OPPORTUNITY, ANTI-DISCRIMINATION & RESPECTFUL WORKPLACE POLICY
+
+1. PURPOSE AND COMMITMENT
+
+Opal Therapy makes employment decisions on merit — the skills, experience and qualities a role actually needs — and on nothing else. This applies to recruitment, pay, hours, allocation of work, training, promotion, discipline and termination.
+
+It is not only a legal obligation. A disability service that does not itself employ, adjust for and promote people with disability is not credible to the people it supports.
+
+2. PROTECTED ATTRIBUTES
+
+It is unlawful to discriminate against a person because of: sex; gender identity; sexual orientation; intersex status; marital or relationship status; pregnancy, potential pregnancy or breastfeeding; family responsibilities or carer status; race, colour, descent, national or ethnic origin, and Aboriginal or Torres Strait Islander identity; religious or political conviction; age; disability, including a past, future or imputed disability, and an assistance animal; impairment; and having made a complaint about any of the above.
+
+3. WHAT DISCRIMINATION LOOKS LIKE
+
+3.1 Direct — treating someone less favourably because of a protected attribute. Not shortlisting an applicant because of their accent, assuming an older worker will not learn a new system, giving the interesting work to the person who is not a parent.
+
+3.2 Indirect — a rule that applies to everyone but disadvantages a group, and that cannot be justified as reasonable. Requiring all staff at a 7:30am meeting that carers cannot attend, when the meeting could be at 9:00.
+
+3.3 In recruitment. Advertising, screening, interviewing and referee checks are all covered. Do not ask about pregnancy plans, marital status, age, religion, health or disability except where you are asking whether a person can perform the inherent requirements of the role, with adjustments.
+
+4. REASONABLE ADJUSTMENTS
+
+Opal will make reasonable adjustments so that a person with disability can apply for, perform and progress in a role, unless doing so would impose unjustifiable hardship. Adjustments are usually small and cheap: modified hours, a different chair, screen-reading software, additional breaks, adjusted duties during recovery, a quieter workspace, flexible location, more written instructions.
+
+Ask for one by contacting [TO CONFIRM: who to contact to request a workplace adjustment]. You do not have to disclose a diagnosis to request an adjustment, and information you do give is kept confidential and used only to arrange it. An adjustment request is a normal operational conversation, not a performance matter.
+
+5. RESPECTFUL WORKPLACE
+
+Beyond the law, this is about what daily life here feels like. Use people's correct names and pronouns. Do not make jokes at the expense of a group. Do not comment on someone's body, accent, food, religion or family arrangements. Include people in conversations and decisions that affect them. Assume good faith when you disagree, and take the disagreement to the person rather than around them.
+
+If you get it wrong — a wrong pronoun, an assumption that landed badly — correct it, briefly, and move on. Over-apologising makes it about you.
+
+6. RECRUITMENT AND SELECTION
+
+Selection criteria are based on the inherent requirements of the role and set before applications are read. Interview questions are the same for every candidate. Panels avoid single-person decisions where possible. Reasons for decisions are recorded. Anyone with a personal relationship to a candidate declares it and steps out of the decision, under the Conflict of Interest Policy.
+
+7. PARTICIPANTS AND FAMILIES
+
+The same standard applies to how we treat participants and how we allow our workers to be treated. A request to change worker because of a worker's race, sex, religion, disability or sexuality is not accommodated as a matter of preference. A request grounded in a genuine cultural or trauma-related need — for example a participant requesting a clinician of the same sex for personal care — is a different matter and is considered on its merits, with the reasoning recorded.
+
+8. RAISING A CONCERN
+
+Speak to your supervisor, or to [TO CONFIRM: the named contact for discrimination complaints]. The process, the protections against victimisation, and the external avenues are the same as in the Bullying, Harassment & Sexual Harassment Policy, including the WA Equal Opportunity Commission, the Australian Human Rights Commission and the Fair Work Commission.
+
+You may raise a concern about something you witnessed, not only something done to you.
+
+9. BREACHES
+
+Discrimination and vilification are disciplinary matters up to and including dismissal, and may expose both Opal and the individual to legal liability.
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 24 months
+Next review due: [TO CONFIRM: date]

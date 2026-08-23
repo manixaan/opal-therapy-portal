@@ -1,0 +1,91 @@
+---
+code: POL_INFECTION
+title: Infection Prevention and Control Policy
+category: WHS
+tier: 2
+acknowledgement: yes
+summary: Standard precautions for occupational therapy delivered in homes, schools and community settings — hand hygiene, PPE, equipment cleaning, what to do when you or a participant is unwell, and how to respond to a blood or body fluid exposure.
+reviewCycleMonths: 12
+basis: Work Health and Safety Act 2020 (WA); NHMRC Australian Guidelines for the Prevention and Control of Infection in Healthcare; NDIS Practice Standards; WA Department of Health directions
+related: POL_WHS; POL_HOME_VISIT; POL_INCIDENT; POL_EMERGENCY; POL_INJURY_MANAGEMENT
+---
+INFECTION PREVENTION AND CONTROL POLICY
+
+1. PURPOSE
+
+We move between households in a single day, and many of the people we see are more vulnerable to infection and less able to recover from it than the general population. The risk this policy manages is not only to you — it is that you become the connection between one home and the next.
+
+2. STANDARD PRECAUTIONS
+
+Standard precautions apply to every participant, every time, regardless of their known infection status. They are not reserved for people known to be infectious, because you often will not know.
+
+2.1 Hand hygiene. The single most effective control. Clean your hands:
+• before entering a participant's home or space, and immediately on leaving;
+• before and after any contact with a participant;
+• before and after putting on and removing gloves;
+• after contact with body fluids, equipment or surfaces;
+• before eating and after using the toilet.
+Soap and running water for at least 20 seconds where hands are visibly soiled, and after contact with vomit or diarrhoea. Alcohol-based hand rub otherwise. Carry your own — do not assume a home will have either.
+
+2.2 Personal protective equipment. Supplied by Opal at no cost to you. Gloves for contact with body fluids, broken skin or contaminated surfaces. A mask where a respiratory illness is present or where a participant is immunocompromised. Eye protection where splashing is possible. An apron or gown for procedures likely to soil clothing.
+PPE is removed and disposed of before you leave, and hand hygiene follows removal. Never wear the same gloves between two participants, and never wear gloves as a substitute for hand hygiene.
+
+2.3 Respiratory hygiene. Cover a cough with your elbow or a tissue, dispose of the tissue immediately, and clean your hands.
+
+2.4 Sharps and body fluids. Do not recap needles. Use a sharps container where sharps are involved. Treat all blood and body fluids as potentially infectious.
+
+3. EQUIPMENT AND VEHICLES
+
+3.1 Clean assessment equipment between participants — goniometers, dynamometers, pens, tablets, test kits, and anything a participant handled.
+
+3.2 Equipment loaned to a participant is cleaned and, where required, disinfected before it goes out and after it comes back. Record it.
+
+3.3 Keep clean and used items separated in your car. Carry hand rub, gloves, wipes and a small waste bag as standard.
+
+3.4 Clean your phone and tablet daily. They go everywhere with you and get cleaned less than anything else you carry.
+
+4. WHEN YOU ARE UNWELL
+
+4.1 Do not attend a participant with symptoms of an infectious illness — fever, a new or worsening cough, sore throat, vomiting or diarrhoea. Call in under the Leave and Attendance Policy.
+
+4.2 Stay away until you meet the current exclusion period for the illness, and at least 24 hours after vomiting or diarrhoea has resolved. Where a public health direction applies, it takes precedence over this policy.
+
+4.3 Do not attend while symptomatic because a participant would otherwise miss a session. Reschedule. Nobody at Opal will be criticised for that decision.
+
+5. WHEN A PARTICIPANT OR HOUSEHOLD IS UNWELL
+
+Screen before you go — a phone call the morning of a visit is enough. Where someone in the household is unwell, consider rescheduling, switching to telehealth, or attending with additional precautions. Discuss it with your supervisor rather than deciding alone under time pressure, and record the decision.
+
+Some participants are immunocompromised and are scheduled deliberately — [TO CONFIRM: whether higher-risk participants are scheduled first in the day, and how they are identified].
+
+6. IMMUNISATION
+
+Opal recommends that clinical staff maintain immunisations recommended for healthcare workers, including an annual influenza vaccination. Where a specific immunisation is a requirement for a role or a setting — a school, a hospital or a residential facility may impose one — you will be told in writing before you start that work.
+Opal's position on which immunisations are required rather than recommended, and any support offered: [TO CONFIRM: required immunisations by role, and whether Opal funds them].
+Immunisation information is health information and is handled under the Privacy & Confidentiality Policy.
+
+7. EXPOSURE TO BLOOD OR BODY FLUIDS
+
+Act immediately, in this order:
+1. Wash the area with soap and water. Do not scrub. For an eye or mouth splash, rinse with water or saline.
+2. Seek medical assessment urgently — an emergency department or your GP, the same day. Post-exposure prophylaxis is time-critical and its effectiveness falls with delay.
+3. Tell your supervisor immediately and report it as an incident within 24 hours.
+4. Follow the Injury Management System information for workers — this may be a workers compensation matter.
+
+Do not wait until the end of the day to seek assessment, and do not decide on your own that the exposure was probably not significant.
+
+8. AN OUTBREAK OR A PUBLIC HEALTH DIRECTION
+
+Opal follows WA Department of Health and Commonwealth directions, which override this policy while they are in force. Additional measures may include screening, masks, testing, changed service delivery, or a temporary move to telehealth. You will be told what applies and for how long. See the Emergency and Disaster Management Policy.
+
+9. TRAINING
+
+Infection control is part of the WHS induction, before your first participant visit, and is refreshed at [TO CONFIRM: refresher frequency].
+
+DOCUMENT CONTROL
+Owner: [TO CONFIRM: role responsible for this policy]
+Approved by: [TO CONFIRM: name and role]
+Date approved: [TO CONFIRM: date]
+Version: 0.1 — generated draft, pending Owner review
+Review cycle: every 12 months
+Next review due: [TO CONFIRM: date]
