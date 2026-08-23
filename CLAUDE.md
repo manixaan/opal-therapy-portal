@@ -86,15 +86,21 @@ release integration, staging deployment, or full regression.
 Commands (run from `backend/`):
 
 ```
-npx jest tests/<file>.test.js                                   # one unit file
-npm test                                                        # all unit tests (fast, no DB)
-npx jest --config jest.integration.config.js tests/integration/<file>.itest.js --runInBand
-npm run test:integration                                        # all integration (real Postgres)
-npm run test:all                                                # unit + integration = RELEASE gate
-node ../scripts/check-asset-pins.js                             # before any frontend commit
+npx jest tests/<file>.test.js                                   # one unit file          FAST+
+npx jest --config jest.integration.config.js \
+         tests/integration/<file>.itest.js --runInBand          # one integration file   FEATURE+
+node ../scripts/check-asset-pins.js                             # before a frontend commit
+npm test                                                        # COMPLETE unit suite    RELEASE
+npm run test:integration                                        # COMPLETE integration   RELEASE
+npm run test:all                                                # the RELEASE gate       RELEASE
 ```
 
 E2E (repo root): `npm run test:e2e:local` — RELEASE only.
+
+A complete suite is **prohibited** at FAST and FEATURE — not merely discouraged,
+and never an extra confidence step. A `PreToolUse` hook registered from those two
+skills denies the commands marked RELEASE above. Full contract, and the five
+reasons Claude tends to talk itself into a full run: `.claude/rules/tests.md`.
 
 ## 7. Deployment rule
 
@@ -102,22 +108,20 @@ Normal development tasks must not deploy to Azure staging or production, run
 `deploy/*.sh`, or trigger a deploy workflow. Deployment belongs to an explicit
 RELEASE task authorised by the user.
 
-## 8. Git rule
+## 8. Git and concurrency rule
 
-One logical task → one focused commit. `git add` explicit paths only: this tree is
-routinely dirty with other sessions' work. Never revert or restage another
-session's changes because they look unrelated. Never edit a `git rebase -i` /
-force-push path without being asked.
-
-## 9. Worktrees
+One logical task → one focused commit, `git add` explicit paths only. Do not begin
+a new feature in a primary tree that already holds unrelated uncommitted work —
+use an isolated worktree/branch. Never modify, stage, revert or stash another
+session's dirty files. Never edit a `git rebase -i` / force-push path without
+being asked. Integration of completed commits belongs to `/opal-release`.
 
 `.claude/worktrees/` is gitignored and may hold live work from another session.
-Never delete a worktree you did not create; verify with `git -C <path> status` and
-`git merge-base --is-ancestor` before removing anything, and remove it with
-`git worktree remove`, never `rm -rf`. A fresh worktree needs its own
-`backend/node_modules` — symlink the primary checkout's rather than re-installing.
+Never delete a worktree you did not create.
 
-## 10. Completion behaviour
+Full rule, including how to create a worktree here: `.claude/rules/concurrency.md`.
+
+## 9. Completion behaviour
 
 Finish with only:
 
@@ -126,7 +130,7 @@ Finish with only:
 No retrospectives, no restating the plan, no summarising what the user can read in
 the diff. Explain at length only when a material problem needs it.
 
-## 11. Skills
+## 10. Skills
 
 `/opal-fast-change` · `/opal-feature` · `/opal-critical` · `/opal-release` —
 each carries the full procedure for that class of task so it stays out of this file.

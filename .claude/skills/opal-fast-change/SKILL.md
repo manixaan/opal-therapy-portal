@@ -1,6 +1,14 @@
 ---
 name: opal-fast-change
 description: FAST level for the Opal Therapy portal — a small, isolated change (copy fix, one guard, one query, one style rule). Locate the narrow implementation, edit, run only the directly affected tests, make one focused commit, stop. Use when the change is confined to one or two files and carries no auth, migration, AI, or accounting risk.
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: 'node "${CLAUDE_PROJECT_DIR}/.claude/hooks/test-level-guard.js" FAST'
+          timeout: 10
+          statusMessage: Checking test level
 ---
 
 # opal-fast-change (FAST)
@@ -19,11 +27,19 @@ description: FAST level for the Opal Therapy portal — a small, isolated change
 5. **Commit** the changed paths explicitly (`git add <paths>`), one focused message.
 6. **Stop.**
 
+## Start clean
+
+Do not start a FAST change in a primary tree that already holds unrelated
+uncommitted work — see `.claude/rules/concurrency.md`.
+
 ## Do not
 
 - Audit architecture, map the subsystem, or read files "for context".
 - Spawn subagents or run broad fan-out searches.
-- Run the full unit suite, the integration suite, or E2E.
+- **Run a complete suite.** `npm test`, `npm run test:all`,
+  `npm run test:integration`, bare `npx jest`, or E2E are prohibited at this
+  level — not discouraged. A `PreToolUse` hook denies them while this skill is
+  active. See the execution-level contract in `.claude/rules/tests.md`.
 - Open a browser or start a dev server.
 - Deploy anything, or touch `deploy/**`.
 - Restage or revert unrelated dirty files.
