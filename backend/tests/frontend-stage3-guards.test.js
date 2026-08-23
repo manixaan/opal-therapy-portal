@@ -19,6 +19,13 @@ const HTML = fs.readFileSync(
 const PROFILE = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'current', 'profile.js'), 'utf8');
 
+/**
+ * Likewise the Daily & Weekly Snapshot: its CODE moved to reports.js, its
+ * modal markup and .rpt-* / .sw-* styles stayed in the shell.
+ */
+const REPORTS = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'current', 'reports.js'), 'utf8');
+
 describe('professional shell', () => {
   test('title is professional — no "Mockup"', () => {
     expect(HTML).toContain('<title>Opal Therapy Portal</title>');
@@ -679,50 +686,50 @@ describe('contextual smart booking + interaction pass', () => {
 // ── Snapshot Day V2 (2026-08-09): one unified To-Do-style work list ──────────
 describe('snapshot day unified work list', () => {
   test('one list over both snapshot APIs — presentation unified, origin preserved', () => {
-    expect(HTML).toContain("fetch('/api/snapshot/reminders'");
-    expect(HTML).toContain("fetch('/api/snapshot/tasks'");
-    expect(HTML).toContain('function buildSnapshotWorkHTML()');
-    expect(HTML).toContain('return html_prefix + html;');
-    expect(HTML).toContain('function swModel()'); // reminders + tasks merged for rendering only
-    expect(HTML).toContain("kind === 'task' ? 'tasks/' : 'reminders/'"); // rows call their own endpoints
-    expect(HTML).toContain('function swCompare('); // overdue → today → dated → undated ordering
+    expect(REPORTS).toContain("fetch('/api/snapshot/reminders'");
+    expect(REPORTS).toContain("fetch('/api/snapshot/tasks'");
+    expect(REPORTS).toContain('function buildSnapshotWorkHTML()');
+    expect(REPORTS).toContain('return html_prefix + html;');
+    expect(REPORTS).toContain('function swModel()'); // reminders + tasks merged for rendering only
+    expect(REPORTS).toContain("kind === 'task' ? 'tasks/' : 'reminders/'"); // rows call their own endpoints
+    expect(REPORTS).toContain('function swCompare('); // overdue → today → dated → undated ordering
   });
 
   test('quiet header + composer replace the + Reminder / + Task buttons', () => {
-    expect(HTML).not.toContain('>+ Reminder</button>');
-    expect(HTML).not.toContain('>+ Task</button>');
-    expect(HTML).toContain("' remaining</span>");
-    expect(HTML).toContain('id="sw-composer-input"');
-    expect(HTML).toContain('swComposerKey(event)');
-    expect(HTML).toContain("if (!text) { ev.target.blur(); __swFocus = null; return; }"); // Enter on empty never creates
-    expect(HTML).toContain('function snapRenderWork()'); // surgical re-render keeps the caret
-    expect(HTML).toContain('function swEditCommit'); // inline title editing (Enter saves, Escape restores)
-    expect(HTML).toContain("opIcon('check'"); // icon-system check mark, never a literal character
+    expect(REPORTS).not.toContain('>+ Reminder</button>');
+    expect(REPORTS).not.toContain('>+ Task</button>');
+    expect(REPORTS).toContain("' remaining</span>");
+    expect(REPORTS).toContain('id="sw-composer-input"');
+    expect(REPORTS).toContain('swComposerKey(event)');
+    expect(REPORTS).toContain("if (!text) { ev.target.blur(); __swFocus = null; return; }"); // Enter on empty never creates
+    expect(REPORTS).toContain('function snapRenderWork()'); // surgical re-render keeps the caret
+    expect(REPORTS).toContain('function swEditCommit'); // inline title editing (Enter saves, Escape restores)
+    expect(REPORTS).toContain("opIcon('check'"); // icon-system check mark, never a literal character
   });
 
   test('delete is optimistic with toast undo; no prompt()/confirm() anywhere', () => {
-    expect(HTML).toContain('function swDelete(');
-    expect(HTML).toContain('function swUndoToast(');
-    expect(HTML).toContain('function swRestore('); // hard-delete backend → Undo re-creates the row
-    expect(HTML).not.toContain("prompt('Task:')");
-    expect(HTML).not.toContain("prompt('Reminder title:')");
-    expect(HTML).not.toContain("confirm('Delete this task?')");
+    expect(REPORTS).toContain('function swDelete(');
+    expect(REPORTS).toContain('function swUndoToast(');
+    expect(REPORTS).toContain('function swRestore('); // hard-delete backend → Undo re-creates the row
+    expect(REPORTS).not.toContain("prompt('Task:')");
+    expect(REPORTS).not.toContain("prompt('Reminder title:')");
+    expect(REPORTS).not.toContain("confirm('Delete this task?')");
     // the reminder-specific '+1h / Dismiss' inline controls are gone from list rows
-    expect(HTML).not.toContain("'defer',{minutes:60})\">+1h</button>");
-    expect(HTML).toContain('function snapReminderAct('); // dismiss/defer stay for the notification surface
+    expect(REPORTS).not.toContain("'defer',{minutes:60})\">+1h</button>");
+    expect(REPORTS).toContain('function snapReminderAct('); // dismiss/defer stay for the notification surface
   });
 
   test('completion + collapsible Completed section persist via API and localStorage', () => {
-    expect(HTML).toContain("(done ? 'complete' : 'reopen')"); // completion circle uses the API lifecycle
-    expect(HTML).toContain('__swPendingDone'); // ~800ms animation with cancel-on-second-click
-    expect(HTML).toContain("localStorage.getItem('sw_completed_collapsed')");
-    expect(HTML).toContain('function swToggleCompleted()');
+    expect(REPORTS).toContain("(done ? 'complete' : 'reopen')"); // completion circle uses the API lifecycle
+    expect(REPORTS).toContain('__swPendingDone'); // ~800ms animation with cancel-on-second-click
+    expect(REPORTS).toContain("localStorage.getItem('sw_completed_collapsed')");
+    expect(REPORTS).toContain('function swToggleCompleted()');
   });
 
   test('snapshot/report panel emoji sweep held', () => {
-    expect(HTML).not.toContain('🚗 Travel ·');
-    expect(HTML).not.toContain('🗺 Travel Logbook');
-    expect(HTML).not.toContain('⚠ No address');
+    expect(REPORTS).not.toContain('🚗 Travel ·');
+    expect(REPORTS).not.toContain('🗺 Travel Logbook');
+    expect(REPORTS).not.toContain('⚠ No address');
   });
 });
 

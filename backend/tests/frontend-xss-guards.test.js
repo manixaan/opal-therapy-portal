@@ -11,16 +11,18 @@
  * these renderers, update the assertions alongside it rather than deleting
  * them.
  *
- * Two files, one surface. The leave, CPD, PD-document and credential sinks
- * moved to profile.js when the My Profile domain was lifted out of the shell;
- * the rest are still inline in mockup_v3.html. Both are read together, so a
- * raw interpolation cannot come back by changing which file it lives in.
+ * Three files, one surface. The leave, CPD, PD-document and credential sinks
+ * moved to profile.js when the My Profile domain was lifted out of the shell,
+ * and the Snapshot work-list sinks moved to reports.js with the Daily & Weekly
+ * Snapshot; the rest are still inline in mockup_v3.html. All three are read
+ * together, so a raw interpolation cannot come back by changing which file it
+ * lives in.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const SRC = ['mockup_v3.html', 'profile.js']
+const SRC = ['mockup_v3.html', 'profile.js', 'reports.js']
   .map((f) => fs.readFileSync(
     path.join(__dirname, '..', '..', 'frontend', 'current', f), 'utf8'))
   .join('\n');

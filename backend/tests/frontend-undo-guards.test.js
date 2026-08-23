@@ -13,6 +13,10 @@ const HTML = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'current', 'mockup_v3.html'), 'utf8');
 const RH = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'current', 'resourcehub.js'), 'utf8');
+// The To-Do flows live in the Snapshot work list, which moved out of the shell
+// with the Daily & Weekly Snapshot domain.
+const REPORTS = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'current', 'reports.js'), 'utf8');
 
 describe('OpalUndo manager presence and limits', () => {
   test('window.OpalUndo exists with register/unregister and the _trigger test hook', () => {
@@ -55,9 +59,9 @@ describe('reversible flows are wired into the stack', () => {
     expect(HTML).toContain('__registerBookingUndo(oResult.dbId');
   });
   test('To-Do flows: create, complete, and delete each register (delete shares one restore with the toast button)', () => {
-    expect(HTML).toContain("label: 'Task created'");
-    expect(HTML).toContain("label: 'Task completed'");
-    expect(HTML).toContain('OpalUndo.unregister(undoEntry)');
+    expect(REPORTS).toContain("label: 'Task created'");
+    expect(REPORTS).toContain("label: 'Task completed'");
+    expect(REPORTS).toContain('OpalUndo.unregister(undoEntry)');
   });
   test('Resource Hub toggles register the inverse toggle; acknowledgements and quizzes stay append-only', () => {
     expect(RH).toContain('function registerToggleUndo(');

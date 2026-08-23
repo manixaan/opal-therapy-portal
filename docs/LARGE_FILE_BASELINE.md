@@ -8,16 +8,23 @@ future session can locate code inside these files without reading them whole.
 `profile.js`** — 1,553 lines of behaviour moved byte-for-byte, markup and
 `.pf-*` styles left in the shell. 28,988 → 27,259 lines.
 
+**Stage 2C (23 Aug 2026): the Daily & Weekly Snapshot domain left
+`mockup_v3.html` for `reports.js`** — 1,336 lines moved byte-for-byte (the
+panel shell, the `_rpt*` data layer, both renderers and the Snapshot Day work
+list), modal markup and the `#report-*` / `.rpt-*` / `.sw-*` styles left in the
+shell. 27,259 → 25,861 lines.
+
 ## Frontend (`frontend/current/`)
 
 | File | Lines | How to navigate it |
 |---|---|---|
-| `mockup_v3.html` | 27,259 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–69. A `→ /<file>.js` pointer comment sits wherever a domain has been extracted. |
+| `mockup_v3.html` | 25,861 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–70. A `→ /<file>.js` pointer comment sits wherever a domain has been extracted. |
 | `resourcehub.js` | 6,533 | Resource Hub tab; folders, upload, preview, right-click menu |
 | `onboarding.js` | 4,132 | Onboarding tab (employee-facing journey) |
 | `fca.js` | 3,006 | FCA assessment builder |
 | `letter.js` | 2,350 | Progress-note letters |
 | `profile.js` | 1,794 | My Profile tab — leave, CPD, PD documents, credentials, work schedule, notification preferences (extracted from the shell, Stage 2A) |
+| `reports.js` | 1,392 | Daily & Weekly Snapshot — `openReportPanel` and the panel shell, the `_rpt*` data layer, both report renderers, and the Snapshot Day reminder/task list (extracted from the shell, Stage 2C) |
 | `scheduler.js` | 1,786 | Calendar/scheduler tab |
 | `interview.js` | 1,733 | Interview preparation |
 | `induction-modules.js` | 1,728 | Learning module player |

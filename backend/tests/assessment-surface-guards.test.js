@@ -608,6 +608,9 @@ describe('changed assets are cache-busted', () => {
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
       ['profile.js', 1],
+      // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
+      // of the shell. Same reason as profile.js: a first pin is still a pin.
+      ['reports.js', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
