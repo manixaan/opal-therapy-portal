@@ -15,8 +15,7 @@ frontmatter) denies the complete-suite commands outright.
 | **RELEASE** | everything: `npm test`, `npm run test:integration`, `npm run test:all`, `npm run test:e2e:local` | — |
 
 **Running the complete unit/regression suite is not an optional extra confidence
-step. At FAST and FEATURE it is prohibited** unless the user explicitly overrides
-the level. Never run one:
+step. At FAST and FEATURE it is prohibited**, with no bypass. Never run one:
 
 - as a baseline before implementing;
 - as a sweep after implementing;
@@ -29,9 +28,11 @@ a regression test for the behaviour you changed → defer complete regression to
 RELEASE. If the risk genuinely warrants more, escalate the level (`/opal-critical`)
 rather than widening the command.
 
-The user overrides a level by saying so. Then, and only then, prefix the command
-with `OPAL_ALLOW_FULL_SUITE=1` — which is the guard's audit trail, not a
-workaround to reach for on your own initiative.
+There is no environment-variable escape hatch, and no prefix that exempts a
+command from the guard. Complete regression is a property of the *level*, not of
+the command: when a user genuinely needs it, the task is re-run under
+`/opal-critical` (risk-based breadth) or `/opal-release` (full regression), where
+this guard is not registered at all.
 
 ## Two suites, two contracts
 - **Unit** — `backend/tests/*.test.js`, config `jest.config.js`, setup

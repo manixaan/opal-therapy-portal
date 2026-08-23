@@ -14,8 +14,9 @@
  * invokes one of this project's known complete-suite runners with no test
  * selector. A targeted invocation of the same runner is always allowed.
  *
- * Escape hatch for an explicit user override of the level:
- *   OPAL_ALLOW_FULL_SUITE=1 npm test
+ * There is no environment-variable escape hatch. A task that genuinely needs
+ * complete regression validation is a CRITICAL or RELEASE task and must be run
+ * under /opal-critical or /opal-release, where this guard is not registered.
  */
 
 const LEVEL = (process.argv[2] || 'FEATURE').toUpperCase();
@@ -127,8 +128,8 @@ function classifyArgs(args) {
 function inspectSegment(segment) {
   let tokens = tokenise(segment);
   // Strip leading environment assignments: DB_NAME=x npm run ...
+  // No assignment exempts a command — an override prefix is stripped like any other.
   while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
-    if (tokens[0].startsWith('OPAL_ALLOW_FULL_SUITE=')) return null; // explicit override
     tokens = tokens.slice(1);
   }
   if (!tokens.length) return null;
@@ -193,8 +194,9 @@ function deny(hit) {
     'or a change that feels structurally broad. Escalate to /opal-critical if the',
     'risk is genuinely high, or defer complete regression to /opal-release.',
     '',
-    'If the user has explicitly overridden the level, re-run the command prefixed',
-    'with OPAL_ALLOW_FULL_SUITE=1.',
+    'There is no environment-variable bypass. If complete regression really is',
+    'required, the task itself must be re-run at the level that permits it:',
+    '/opal-critical for risk-based breadth, /opal-release for full regression.',
   ].join('\n');
 
   process.stdout.write(JSON.stringify({
