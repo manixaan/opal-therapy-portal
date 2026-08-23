@@ -349,7 +349,7 @@
       importing: false, importNote: '', // bringing existing inductions in
       create: null, // the New learning item dialog: { title, category, busy, err }
       staff: null, staffErr: '', staffLoading: false,
-      assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '', afOverdue: false,
+      assignments: null, afStatus: '', afWorkflow: '', afUser: '', afQ: '',
       openAssignment: null, openData: null, openLoading: false,
       resPick: null, // resource picker inside the editor: { q, rows, loading, forItem }
     },
@@ -4616,7 +4616,9 @@
     // dialog rendered as a skeleton that never resolved. Remember the failure so
     // it can say so and offer a way out.
     la.staffErr = staff.ok ? '' : (staff.error || 'The list of people could not be loaded.');
-    if (la.tab === 'assignments') loadLaAssignments();
+    // Both surfaces that show the monitor need its data: the Admin subnav tab
+    // when it is the open one, and Assign Learning, which shows it inline.
+    if (la.tab === 'assignments' || (S.view === 'learning' && isOwner())) loadLaAssignments();
     render();
   }
 
@@ -4635,11 +4637,15 @@
   async function loadLaAssignments() {
     var la = S.la;
     var qs = [];
-    if (la.afStatus) qs.push('status=' + encodeURIComponent(la.afStatus));
+    // `overdue` is not a stored lifecycle state — the server derives it from the
+    // due date and completion — so it travels as its own flag. Sending it as a
+    // status would either invent a state the data model does not have or filter
+    // on one that does not exist.
+    if (la.afStatus === 'overdue') qs.push('overdue=1');
+    else if (la.afStatus) qs.push('status=' + encodeURIComponent(la.afStatus));
     if (la.afWorkflow) qs.push('workflowId=' + encodeURIComponent(la.afWorkflow));
     if (la.afUser) qs.push('userId=' + encodeURIComponent(la.afUser));
     if (la.afQ) qs.push('q=' + encodeURIComponent(la.afQ));
-    if (la.afOverdue) qs.push('overdue=1');
     var d = await api('/api/learning/assignments' + (qs.length ? '?' + qs.join('&') : ''));
     la.assignments = d.ok ? (d.assignments || []) : [];
     if (!d.ok) la.err = d.error || 'Assignments could not be loaded.';
@@ -5031,6 +5037,28 @@
       out += rows.map(laWorkflowCard).join('');
     }
     out += '</section>';
+
+    // ── Assignment status ───────────────────────────────────────────────────
+    // The same monitor the Admin > Learning tab carries, rendered here in
+    // place. Assigning and checking who is behind on what are one job, and
+    // splitting them across two tabs meant the "Assignments" button on a card
+    // could only answer by throwing the Owner out of this page.
+    //
+    // Shared renderer, shared `S.la` state, shared endpoint — deliberately no
+    // second assignments view that could drift from this one.
+    //
+    // An empty library with no assignments has nothing to monitor, and the
+    // library's own empty state is already the invitation; but assignments can
+    // outlive a library filtered down to nothing (everything archived), so the
+    // section stays whenever there is something to show.
+    if (all.length || (la.assignments && la.assignments.length)) {
+      out += '<section class="rh2-card" id="asl-assignments" aria-labelledby="asl-h-assign">' +
+        '<h2 class="rh2-h2" id="asl-h-assign">Assignment status</h2>' +
+        '<p class="rh2-page-intro">Who has been assigned what, how far they have got, ' +
+        'and what has passed its due date.</p>' +
+        renderLaAssignments() +
+        '</section>';
+    }
 
     out += '<div class="rh2-grid-2">';
 
@@ -6178,16 +6206,22 @@
     S.la.afWorkflow = wfId || '';
     S.la.afUser = '';
     S.la.tab = 'assignments';
-    // The assignments table lives on the Admin > Learning tab. Opened from
-    // Assign Learning there is nothing on screen that would show it, so go
-    // there rather than appearing to do nothing.
-    if (S.view === 'learning') { S.view = 'admin'; S.admin.tab = 'learning'; }
+    // Assign Learning now shows the monitor itself, so stay on it and bring the
+    // section into view. Previously this had to jump to Admin > Learning
+    // because nothing on this page could have displayed the answer.
+    var inPlace = S.view === 'learning';
     loadLaAssignments();
     render();
+    if (inPlace) {
+      var el = doc.getElementById('asl-assignments');
+      // Without this the click looks inert: the filter applies to a table
+      // sitting below the fold.
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   function laAf(field, value) {
-    S.la[field] = field === 'afOverdue' ? !!value : value;
+    S.la[field] = value;
     loadLaAssignments();
   }
 
@@ -6229,8 +6263,13 @@
   function renderLaAssignments() {
     var la = S.la;
     var out = '<div class="rh2-learn-af">' +
+      // One control, not a dropdown plus an "Overdue only" tickbox. The pair
+      // could express combinations that are always empty by definition —
+      // Completed AND overdue — which reads as "no results" when the honest
+      // answer is that the question cannot have any.
       '<select class="rh2-select" aria-label="Filter by status" onchange="RH2.laAf(\'afStatus\',this.value)">' +
-        [['', 'All statuses'], ['assigned', 'Not started'], ['in_progress', 'In progress'], ['completed', 'Completed'], ['cancelled', 'Cancelled']].map(function (o) {
+        [['', 'All'], ['assigned', 'Not started'], ['in_progress', 'In progress'],
+         ['completed', 'Completed'], ['overdue', 'Overdue'], ['cancelled', 'Cancelled']].map(function (o) {
           return '<option value="' + o[0] + '"' + (la.afStatus === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
         }).join('') + '</select>' +
       '<select class="rh2-select" aria-label="Filter by workflow" onchange="RH2.laAf(\'afWorkflow\',this.value)">' +
@@ -6240,8 +6279,6 @@
         }).join('') + '</select>' +
       '<input class="rh2-input" id="la-af-q" placeholder="Search employee or learning…" value="' + esc(la.afQ) + '" ' +
         'oninput="RH2.laAfQ(this.value)">' +
-      '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.afOverdue ? 'checked ' : '') +
-        'onchange="RH2.laAf(\'afOverdue\',this.checked)"> Overdue only</label>' +
       '</div>';
 
     // The employee filter arrives from Staff progress → View learning; it has

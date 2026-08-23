@@ -595,7 +595,7 @@ describe('changed assets are cache-busted', () => {
       // r18/r12: the Owner's Assign Learning surface and its dialog
       // r22/r15: the Library became a hand-managed filing cabinet — folder
       // upload, drag-and-drop and right-click in, automatic organisation out.
-      ['resourcehub.js', 'r22'], ['resourcehub.css', 'r15'],
+      ['resourcehub.js', 'r23'], ['resourcehub.css', 'r15'],
       // 6, not 7: navigation.js is byte-identical to the version already
       // deployed. The Service Agreement's route-grammar change bumps it to 7
       // in the commit that actually ships that navigation.js — asserting it

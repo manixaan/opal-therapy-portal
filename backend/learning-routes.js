@@ -162,7 +162,13 @@ function assignmentRow(r, { forEmployee = false } = {}) {
     progress_percent: r.progress_percent,
     required_done: r.required_done,
     required_total: r.required_total,
-    overdue: !!(r.due_at && !r.completed_at && r.status !== 'cancelled' &&
+    // Derived, never stored: an assignment is overdue only while it is still
+    // live and unfinished. Completed and cancelled records are never overdue
+    // however far past their due date they sit — and this must stay in step
+    // with the `overdue=1` SQL filter below, which selects on the same three
+    // facts. Two definitions of overdue is the bug this line exists to avoid.
+    overdue: !!(r.due_at && !r.completed_at &&
+      (r.status === 'assigned' || r.status === 'in_progress') &&
       new Date(r.due_at).getTime() < Date.now()),
   };
   if (!forEmployee) {

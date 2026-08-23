@@ -390,7 +390,7 @@ describe('the shell', () => {
     // assessment-surface-guards.test.js together, or CI fails on the half
     // that was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r15');
-    expect(SHELL).toContain('/resourcehub.js?v=r22');
+    expect(SHELL).toContain('/resourcehub.js?v=r23');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -515,5 +515,102 @@ describe('the empty library', () => {
     const emptyBranch = page.slice(page.indexOf('if (!all.length) {'), page.indexOf('} else if (!rows.length) {'));
     expect((emptyBranch.match(/RH2\.laCreate\(\)/g) || []).length).toBe(1);
     expect((emptyBranch.match(/RH2\.laImport\(\)/g) || []).length).toBe(1);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ASSIGNMENT STATUS — THE MONITOR LIVES ON THE PAGE THAT ASSIGNS
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the Owner can see assignment status without leaving Assign Learning', () => {
+  const page = fn('renderAssignLearning');
+
+  test('the workspace renders the monitor in place', () => {
+    expect(page).toContain('id="asl-assignments"');
+    expect(page).toContain('Assignment status');
+    expect(page).toContain('renderLaAssignments()');
+  });
+
+  test('it is the SAME renderer the Admin tab uses, not a second copy', () => {
+    // A parallel assignments table is the failure this pins: two surfaces
+    // answering "who is overdue" from different code will eventually disagree,
+    // and the Owner has no way to tell which one is lying.
+    expect((VISIBLE.match(/function renderLaAssignments\(/g) || []).length).toBe(1);
+    expect(VISIBLE).toContain("else if (la.tab === 'assignments') out += renderLaAssignments();");
+  });
+
+  test('opening it from a card no longer throws the Owner over to Admin', () => {
+    const view = fn('laViewAssignments');
+    expect(view).not.toContain("S.view = 'admin'");
+    expect(view).toContain("var inPlace = S.view === 'learning'");
+    // A filter applied to a table below the fold reads as a dead button.
+    expect(view).toContain('scrollIntoView');
+  });
+
+  test('landing on Assign Learning loads the assignments, not just the library', () => {
+    // Without this the section renders its skeleton forever: nothing else on
+    // this page calls loadLaAssignments on first paint.
+    expect(fn('loadLa')).toContain("(S.view === 'learning' && isOwner())");
+  });
+
+  test('every required status filter is offered, from one control', () => {
+    const render = fn('renderLaAssignments');
+    for (const label of ['All', 'Not started', 'In progress', 'Completed', 'Overdue']) {
+      expect(`${label}:${render.includes(`'${label}'`)}`).toBe(`${label}:true`);
+    }
+    // The dropdown-plus-tickbox pair it replaced could express Completed AND
+    // overdue, which is empty by definition rather than by the data.
+    expect(render).not.toContain('afOverdue');
+    expect(VISIBLE).not.toContain('Overdue only');
+  });
+
+  test('overdue is asked for as a derived flag, never as a stored status', () => {
+    // The data model has four lifecycle states and overdue is not one of them.
+    const load = fn('loadLaAssignments');
+    expect(load).toContain("if (la.afStatus === 'overdue') qs.push('overdue=1');");
+    expect(load).toContain("else if (la.afStatus) qs.push('status=' + encodeURIComponent(la.afStatus));");
+  });
+
+  test('the table shows recipient, learning item, due date and status', () => {
+    const render = fn('renderLaAssignments');
+    expect(render).toContain('<th>Employee</th>');
+    expect(render).toContain('<th>Learning</th>');
+    expect(render).toContain('<th>Due</th>');
+    expect(render).toContain('<th>Status</th>');
+    expect(render).toContain('laStatusChip(r)');
+  });
+
+  test('a completed assignment reads Completed even when its due date passed', () => {
+    // The chip is ordered: completion and cancellation are checked before the
+    // overdue flag, so a late finish is never labelled Overdue.
+    const chip = fn('laStatusChip');
+    expect(chip.indexOf("a.status === 'completed'")).toBeLessThan(chip.indexOf('a.overdue'));
+    expect(chip.indexOf("a.status === 'cancelled'")).toBeLessThan(chip.indexOf('a.overdue'));
+  });
+});
+
+describe('the assignment-status data is owner-only on the server', () => {
+  test('overdue is derived from the same three facts in the serialiser and the SQL', () => {
+    // Two definitions of overdue is the drift this pins: the row the Owner
+    // reads and the rows the filter returns must agree.
+    expect(ROUTES).toMatch(
+      /overdue: !!\(r\.due_at && !r\.completed_at &&\s*\n\s*\(r\.status === 'assigned' \|\| r\.status === 'in_progress'\)/);
+    expect(ROUTES).toContain(
+      "AND a.status IN ('assigned','in_progress') AND a.due_at < NOW()");
+  });
+
+  test('the filters are applied in SQL, not left to the browser', () => {
+    // A client-side filter over a 500-row page would silently under-report,
+    // and would have sent every employee's record to a screen that only
+    // needed one of them.
+    const at = ROUTES.indexOf("router.get('/api/learning/assignments'");
+    const body = ROUTES.slice(at, at + 1600);
+    expect(body).toContain('ownerOnly');
+    expect(body).toContain("['assigned', 'in_progress', 'completed', 'cancelled'].includes(status)");
+    expect(body).toContain('u.name ILIKE');
+    expect(body).toContain('v.title ILIKE');
+    // Parameterised, never interpolated.
+    expect(body).toContain('params.push');
+    expect(body).not.toMatch(/WHERE[\s\S]{0,200}\$\{req\.query/);
   });
 });

@@ -482,3 +482,130 @@ test('another organisation\'s paths are never imported', async () => {
   const res = await owner.agent.post('/api/learning/workflows/import');
   expect(res.body.created.some((c) => c.title === 'Foreign Induction')).toBe(false);
 });
+
+// ═══ Assignment status monitor ═══════════════════════════════════════════════
+
+/**
+ * The Owner-facing monitor behind Assign Learning's "Assignment status"
+ * section. Filtering is the whole feature, so each filter is exercised against
+ * real rows — and the overdue one is exercised against the case that actually
+ * bites: an assignment finished AFTER its due date.
+ */
+describe('assignment status filters', () => {
+  const list = (owner, qs) => owner.agent.get('/api/learning/assignments' + (qs ? '?' + qs : ''));
+  const titles = (res) => res.body.assignments.map((a) => a.user_name).sort();
+
+  async function scenario() {
+    const owner = await agentFor('owner', org.id);
+    const wf = await createWorkflow(owner, { title: 'Manual Handling' });
+
+    const notStarted = await agentFor('therapist', org.id, { name: 'Not Started', email: 'ns@x.test' });
+    const inProgress = await agentFor('therapist', org.id, { name: 'In Progress', email: 'ip@x.test' });
+    const done = await agentFor('therapist', org.id, { name: 'All Done', email: 'ad@x.test' });
+    const late = await agentFor('therapist', org.id, { name: 'Running Late', email: 'rl@x.test' });
+
+    // Everyone is assigned with a due date already in the past, so "overdue"
+    // can only be distinguishing on completion — not on the date.
+    const past = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    const asg = await owner.agent.post(`/api/learning/workflows/${wf.id}/assign`).send({
+      userIds: [notStarted.user.id, inProgress.user.id, done.user.id, late.user.id],
+      dueAt: past,
+    });
+    expect(asg.status).toBe(201);
+
+    // In progress: started, nothing finished.
+    const ipId = (await inProgress.agent.get('/api/learning/my')).body.assignments[0].id;
+    expect((await inProgress.agent.post(`/api/learning/my/${ipId}/start`)).status).toBe(200);
+
+    // Completed — both of these finished LATE, which is the interesting case.
+    for (const emp of [done, late]) {
+      const id = (await emp.agent.get('/api/learning/my')).body.assignments[0].id;
+      await completeAll(emp, id);
+    }
+    return { owner, wf, notStarted, inProgress, done, late };
+  }
+
+  test('every assignment is listed with recipient, item, dates and status', async () => {
+    const { owner } = await scenario();
+    const res = await list(owner);
+    expect(res.status).toBe(200);
+    expect(res.body.assignments).toHaveLength(4);
+    for (const a of res.body.assignments) {
+      expect(typeof a.user_name).toBe('string');
+      expect(a.title).toBe('Manual Handling');
+      expect(a.assigned_at).toBeTruthy();
+      expect(a.due_at).toBeTruthy();
+      expect(['assigned', 'in_progress', 'completed']).toContain(a.status);
+    }
+  });
+
+  test('not-started, in-progress and completed each return exactly their own', async () => {
+    const { owner } = await scenario();
+    expect(titles(await list(owner, 'status=assigned'))).toEqual(['Not Started']);
+    expect(titles(await list(owner, 'status=in_progress'))).toEqual(['In Progress']);
+    expect(titles(await list(owner, 'status=completed'))).toEqual(['All Done', 'Running Late']);
+  });
+
+  test('overdue means past due AND unfinished — a late completion is not overdue', async () => {
+    const { owner } = await scenario();
+    // All four are past their due date; only the two still open are overdue.
+    const res = await list(owner, 'overdue=1');
+    expect(titles(res)).toEqual(['In Progress', 'Not Started']);
+    res.body.assignments.forEach((a) => {
+      expect(a.overdue).toBe(true);
+      expect(a.completed_at).toBeNull();
+    });
+
+    // And the serialised flag agrees with the filter on the rows it excluded —
+    // the drift that would let the table say Overdue on a finished record.
+    const all = await list(owner);
+    all.body.assignments.filter((a) => a.status === 'completed')
+      .forEach((a) => expect([a.user_name, a.overdue]).toEqual([a.user_name, false]));
+  });
+
+  test('a cancelled assignment is never overdue, however far past due', async () => {
+    const { owner, notStarted } = await scenario();
+    const id = (await list(owner, 'status=assigned')).body.assignments[0].id;
+    expect((await owner.agent.post(`/api/learning/assignments/${id}/cancel`)).status).toBe(200);
+
+    expect(titles(await list(owner, 'overdue=1'))).toEqual(['In Progress']);
+    const cancelled = (await list(owner, 'status=cancelled')).body.assignments[0];
+    expect([cancelled.user_id, cancelled.overdue]).toEqual([notStarted.user.id, false]);
+  });
+
+  test('search finds a person or a learning item; a miss returns nothing', async () => {
+    const { owner } = await scenario();
+    expect(titles(await list(owner, 'q=Running'))).toEqual(['Running Late']);
+    expect(titles(await list(owner, 'q=rl@x.test'))).toEqual(['Running Late']);
+    expect((await list(owner, 'q=Manual Handling')).body.assignments).toHaveLength(4);
+    expect((await list(owner, 'q=nobody-by-that-name')).body.assignments).toEqual([]);
+  });
+
+  test('filters compose — one person, one status', async () => {
+    const { owner, late } = await scenario();
+    expect(titles(await list(owner, `userId=${late.user.id}&status=completed`))).toEqual(['Running Late']);
+    expect((await list(owner, `userId=${late.user.id}&status=assigned`)).body.assignments).toEqual([]);
+  });
+
+  test('non-owners cannot read the monitor at all — no filter reaches the data', async () => {
+    const { owner } = await scenario();
+    for (const role of ['therapist', 'admin', 'read_only']) {
+      const other = await agentFor(role, org.id, { email: `guard-${role}@x.test` });
+      for (const qs of ['', 'status=completed', 'overdue=1', 'q=Running']) {
+        const res = await other.agent.get('/api/learning/assignments' + (qs ? '?' + qs : ''));
+        expect([role, qs, res.status]).toEqual([role, qs, 403]);
+        expect(res.body.assignments).toBeUndefined();
+      }
+    }
+    // The owner still gets through, so the guard is the role and not an outage.
+    expect((await list(owner)).status).toBe(200);
+  });
+
+  test('another organisation’s assignments are invisible', async () => {
+    await scenario();
+    const otherOrg = await seedOrganisation('Other Practice');
+    const intruder = await agentFor('owner', otherOrg.id, { email: 'other-owner@x.test' });
+    expect((await list(intruder)).body.assignments).toEqual([]);
+    expect((await list(intruder, 'overdue=1')).body.assignments).toEqual([]);
+  });
+});
