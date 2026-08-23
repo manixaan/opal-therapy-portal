@@ -26,6 +26,15 @@ const PROFILE = fs.readFileSync(
 const REPORTS = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'current', 'reports.js'), 'utf8');
 
+/**
+ * And the travel domain: the routing engine, computeDayTravelSegments and the
+ * DAY_SEGMENTS store, the calendar leg overlays and the travel details panel
+ * moved to travel.js. The #travel-panel markup and the .travel-overlay / .tp-*
+ * styles stayed in the shell, so markup and CSS assertions keep reading HTML.
+ */
+const TRAVEL = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'current', 'travel.js'), 'utf8');
+
 describe('professional shell', () => {
   test('title is professional — no "Mockup"', () => {
     expect(HTML).toContain('<title>Opal Therapy Portal</title>');
@@ -1147,14 +1156,18 @@ describe('splose calendar decoupling (patients only)', () => {
 // cards crowded the calendar — gone completely. Travel-leg indicators stay.
 describe('free-time gap overlay removed', () => {
   test('no gap overlay is rendered and its machinery is gone', () => {
-    expect(HTML).not.toContain('function renderGapOverlay');
-    expect(HTML).not.toContain("el.className = 'gap-overlay'");
-    expect(HTML).not.toContain('dismissGapOverlay');
-    expect(HTML).not.toContain('isGapDismissed');
-    expect(HTML).not.toContain('GAP_DISMISSED_KEY');
-    expect(HTML).not.toContain('gap-qa-btn');
+    // Both halves of the surface — the machinery must not come back by moving
+    // between the shell and the travel module.
+    for (const SRC of [HTML, TRAVEL]) {
+      expect(SRC).not.toContain('function renderGapOverlay');
+      expect(SRC).not.toContain("el.className = 'gap-overlay'");
+      expect(SRC).not.toContain('dismissGapOverlay');
+      expect(SRC).not.toContain('isGapDismissed');
+      expect(SRC).not.toContain('GAP_DISMISSED_KEY');
+      expect(SRC).not.toContain('gap-qa-btn');
+    }
     // the render dispatch explicitly skips gap segments
-    expect(HTML).toContain('FREE-TIME/GAP OVERLAY REMOVED');
+    expect(TRAVEL).toContain('FREE-TIME/GAP OVERLAY REMOVED');
   });
 
   test('the hatched gap CSS is gone (travel-overlay CSS remains)', () => {
@@ -1165,14 +1178,19 @@ describe('free-time gap overlay removed', () => {
   });
 
   test('travel-leg indicators still render on the calendar', () => {
-    expect(HTML).toContain("el.className = 'travel-overlay ' + seg.kind;");
-    expect(HTML).toContain('function renderSegmentOverlay');
-    expect(HTML).toContain('openTravelPanel(seg)');
+    expect(TRAVEL).toContain("el.className = 'travel-overlay ' + seg.kind;");
+    expect(TRAVEL).toContain('function renderSegmentOverlay');
+    expect(TRAVEL).toContain('openTravelPanel(seg)');
+    // the shell still loads the module that draws them, ahead of reports.js
+    expect(HTML).toContain('<script src="/travel.js?v=1" defer></script>');
+    expect(HTML.indexOf('/travel.js?v=')).toBeLessThan(HTML.indexOf('/reports.js?v='));
   });
 
   test('gap segments are still computed for the Snapshot report and suggestions', () => {
-    expect(HTML).toContain('function computeDayTravelSegments');
-    expect(HTML).toContain("segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: {},");
+    expect(TRAVEL).toContain('function computeDayTravelSegments');
+    expect(TRAVEL).toContain("segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: {},");
+    // reports.js reads them from here — the cross-module contract
+    expect(REPORTS).toContain('computeDayTravelSegments(');
   });
 });
 

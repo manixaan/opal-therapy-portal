@@ -611,6 +611,9 @@ describe('changed assets are cache-busted', () => {
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
+      // 1: travel.js is new — the travel domain lifted out of the shell.
+      // Same reason again: a first pin is still a pin.
+      ['travel.js', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

@@ -14,17 +14,27 @@ panel shell, the `_rpt*` data layer, both renderers and the Snapshot Day work
 list), modal markup and the `#report-*` / `.rpt-*` / `.sw-*` styles left in the
 shell. 27,259 → 25,861 lines.
 
+**Stage 2D (23 Aug 2026): the travel domain left `mockup_v3.html` for
+`travel.js`** — 748 lines moved byte-for-byte (the routing engine and its
+caches, the session→location resolvers, `DAY_SEGMENTS` and
+`computeDayTravelSegments`, the calendar leg overlays and the travel details
+panel), `#travel-panel` markup and the `.travel-overlay` / `.tp-*` styles left
+in the shell, and `WORK_BASES` left with the work-location state that reads it
+at parse time. 25,861 → 25,141 lines. This closes the planned frontend
+extractions.
+
 ## Frontend (`frontend/current/`)
 
 | File | Lines | How to navigate it |
 |---|---|---|
-| `mockup_v3.html` | 25,861 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–70. A `→ /<file>.js` pointer comment sits wherever a domain has been extracted. |
+| `mockup_v3.html` | 25,141 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–75. A `→ /<file>.js` pointer comment sits wherever a domain has been extracted. |
 | `resourcehub.js` | 6,533 | Resource Hub tab; folders, upload, preview, right-click menu |
 | `onboarding.js` | 4,132 | Onboarding tab (employee-facing journey) |
 | `fca.js` | 3,006 | FCA assessment builder |
 | `letter.js` | 2,350 | Progress-note letters |
 | `profile.js` | 1,794 | My Profile tab — leave, CPD, PD documents, credentials, work schedule, notification preferences (extracted from the shell, Stage 2A) |
 | `reports.js` | 1,392 | Daily & Weekly Snapshot — `openReportPanel` and the panel shell, the `_rpt*` data layer, both report renderers, and the Snapshot Day reminder/task list (extracted from the shell, Stage 2C) |
+| `travel.js` | 829 | Travel — the Google Routes engine and `ROUTE_CACHE`, `travelMinutes()`, the session→location resolvers, `DAY_SEGMENTS` / `computeDayTravelSegments()`, the calendar leg overlays and the travel details panel (extracted from the shell, Stage 2D). `reports.js` consumes `computeDayTravelSegments()` and `mapsLink()` from here |
 | `scheduler.js` | 1,786 | Calendar/scheduler tab |
 | `interview.js` | 1,733 | Interview preparation |
 | `induction-modules.js` | 1,728 | Learning module player |
