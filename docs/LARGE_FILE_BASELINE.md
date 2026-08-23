@@ -1,19 +1,23 @@
 # Large-file baseline — 23 Aug 2026
 
-Recorded during the Claude Code workflow optimisation (Stage 1). **No refactor was
-performed.** Behaviour-preserving modularisation is a separate stage; this file
-exists so a future session can locate code inside these files without reading them
-whole, and so Stage 2 has a before-measurement.
+Recorded during the Claude Code workflow optimisation (Stage 1) as a
+before-measurement, and kept current as modularisation proceeds. It exists so a
+future session can locate code inside these files without reading them whole.
+
+**Stage 2A (23 Aug 2026): the My Profile domain left `mockup_v3.html` for
+`profile.js`** — 1,553 lines of behaviour moved byte-for-byte, markup and
+`.pf-*` styles left in the shell. 28,988 → 27,259 lines.
 
 ## Frontend (`frontend/current/`)
 
 | File | Lines | How to navigate it |
 |---|---|---|
-| `mockup_v3.html` | 28,988 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–65. |
+| `mockup_v3.html` | 27,259 | `grep -n '============ .* TAB' ` gives every tab's start line; read a bounded slice with `sed -n`. Asset `<script>` pins are lines 1–69. A `→ /<file>.js` pointer comment sits wherever a domain has been extracted. |
 | `resourcehub.js` | 6,533 | Resource Hub tab; folders, upload, preview, right-click menu |
 | `onboarding.js` | 4,132 | Onboarding tab (employee-facing journey) |
 | `fca.js` | 3,006 | FCA assessment builder |
 | `letter.js` | 2,350 | Progress-note letters |
+| `profile.js` | 1,794 | My Profile tab — leave, CPD, PD documents, credentials, work schedule, notification preferences (extracted from the shell, Stage 2A) |
 | `scheduler.js` | 1,786 | Calendar/scheduler tab |
 | `interview.js` | 1,733 | Interview preparation |
 | `induction-modules.js` | 1,728 | Learning module player |
@@ -47,7 +51,12 @@ Backend total: ~59.8k lines across top-level `*.js`.
 ## Stage 2 candidates, in priority order
 
 1. `mockup_v3.html` — by far the largest single-file cost in every frontend task.
-   Split per-tab blocks into included partials or per-tab HTML fragments loaded by
-   `navigation.js`, preserving the `?v=` pin contract.
+   Lift one bounded domain at a time into its own `<feature>.js`, deferred and
+   pinned, leaving the markup and shared styles behind: My Profile went first
+   (Stage 2A). The next candidates with the same shape are the daily/weekly
+   report panel (`openReportPanel` … `buildWeeklyReportHTML`, ~1,350 lines), the
+   billing dashboard (~320) and the Xero accounting console (~360). Splitting the
+   markup itself needs a templating step this repository does not have — the
+   logic is where the cost is.
 2. `resourcehub.js` and `onboarding.js` — split by concern (data, render, events).
 3. `routes.js` — carve the remaining legacy endpoints into focused route modules.

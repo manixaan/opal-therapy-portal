@@ -21,15 +21,25 @@ const fs = require('fs');
 const path = require('path');
 
 const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
-const SHELL = fs.readFileSync(path.join(FRONTEND, 'mockup_v3.html'), 'utf8');
+
+/**
+ * The credentials surface is two files, not one. The My Profile domain was
+ * lifted out of the shell into profile.js; the markup and the styles stayed
+ * behind. These guards are about behaviour and about the words the screen
+ * says, so they read the pair and assert against it as a single surface —
+ * which also means a promise cannot be dropped by moving it between the two.
+ */
+const SURFACE = ['mockup_v3.html', 'profile.js']
+  .map((f) => fs.readFileSync(path.join(FRONTEND, f), 'utf8'))
+  .join('\n');
 const ROUTES = fs.readFileSync(path.join(__dirname, '..', 'profile-routes.js'), 'utf8');
 
-/** The text of one top-level function in the shell's inline script. */
+/** The text of one top-level function on that surface. */
 function fn(name) {
-  const start = SHELL.indexOf(`function ${name}(`);
+  const start = SURFACE.indexOf(`function ${name}(`);
   if (start === -1) return '';
-  const next = SHELL.indexOf('\nfunction ', start + 10);
-  return SHELL.slice(start, next === -1 ? Math.min(start + 8000, SHELL.length) : next);
+  const next = SURFACE.indexOf('\nfunction ', start + 10);
+  return SURFACE.slice(start, next === -1 ? Math.min(start + 8000, SURFACE.length) : next);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -85,7 +95,7 @@ describe('what the reader proposes', () => {
 
   test('every proposal can be undone', () => {
     expect(apply).toContain('credUndoProposal');
-    expect(SHELL).toContain('function credUndoProposal(');
+    expect(SURFACE).toContain('function credUndoProposal(');
   });
 
   test('a value the person already typed is never overwritten silently', () => {
@@ -191,7 +201,7 @@ describe('verification and change', () => {
   });
 
   test('the holder is told when their verification has been withdrawn', () => {
-    expect(SHELL).toMatch(/verification has been withdrawn/i);
+    expect(SURFACE).toMatch(/verification has been withdrawn/i);
   });
 });
 
@@ -201,7 +211,7 @@ describe('verification and change', () => {
 
 describe('rasterising', () => {
   test('uses the portal\'s own vendored pdf.js, not a CDN', () => {
-    const load = fn('_credLoadPdfJs') || SHELL.slice(SHELL.indexOf('_credLoadPdfJs'), SHELL.indexOf('_credLoadPdfJs') + 700);
+    const load = fn('_credLoadPdfJs') || SURFACE.slice(SURFACE.indexOf('_credLoadPdfJs'), SURFACE.indexOf('_credLoadPdfJs') + 700);
     expect(load).toContain('/vendor/pdfjs/pdf.min.mjs');
     expect(load).not.toMatch(/https?:\/\//);
   });
@@ -212,8 +222,8 @@ describe('rasterising', () => {
   });
 
   test('images are bounded before they leave the browser', () => {
-    expect(SHELL).toMatch(/CRED_RASTER_MAX = \d+/);
-    expect(SHELL).toMatch(/CRED_MAX_SCAN_BYTES = 5 \* 1024 \* 1024/);
+    expect(SURFACE).toMatch(/CRED_RASTER_MAX = \d+/);
+    expect(SURFACE).toMatch(/CRED_MAX_SCAN_BYTES = 5 \* 1024 \* 1024/);
   });
 });
 

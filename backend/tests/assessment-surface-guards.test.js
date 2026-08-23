@@ -604,6 +604,10 @@ describe('changed assets are cache-busted', () => {
       // 3: the onboarding journey — starter packs, returned documents,
       // extracted-detail review, account provisioning — and its styles
       ['onboarding.js', 8], ['onboarding.css', 8],
+      // 1: profile.js is new — the My Profile domain lifted out of the shell.
+      // A first pin is still a pin: the proxy caches by URL, so the shell that
+      // introduces the file has to name a version it can bump later.
+      ['profile.js', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

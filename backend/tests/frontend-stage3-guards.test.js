@@ -11,6 +11,14 @@ const path = require('path');
 const HTML = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'current', 'mockup_v3.html'), 'utf8');
 
+/**
+ * The My Profile domain's CODE moved to profile.js; its MARKUP and styles
+ * stayed in the shell. Assertions about what the profile screen contains keep
+ * reading HTML; assertions about what its functions do read this.
+ */
+const PROFILE = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'current', 'profile.js'), 'utf8');
+
 describe('professional shell', () => {
   test('title is professional — no "Mockup"', () => {
     expect(HTML).toContain('<title>Opal Therapy Portal</title>');
@@ -79,7 +87,7 @@ describe('frozen mockup dates removed from launch-facing code', () => {
 
 describe('launch-facing affordances', () => {
   test('PD documents table has a Download action', () => {
-    expect(HTML).toContain('href="/api/profile/documents/${d.id}/download"');
+    expect(PROFILE).toContain('href="/api/profile/documents/${d.id}/download"');
   });
   test('resource empty state does not promise the non-existent draft flow', () => {
     expect(HTML).not.toContain('therapist drafts appear after review');
@@ -281,10 +289,10 @@ describe('profile dashboard redesign', () => {
   });
 
   test('cards open focused areas; back returns to the dashboard', () => {
-    expect(HTML).toContain('function pfOpenArea(id)');
-    expect(HTML).toContain('function pfBackToDashboard()');
-    expect(HTML).toContain('function scrollToProfile(id) { pfOpenArea(id); }');
-    expect(HTML).toContain("PF_AREA_IDS = ['pf-details', 'pf-location', 'pf-leave', 'pf-cpd', 'pf-pddocs', 'pf-credentials', 'pf-alerts']");
+    expect(PROFILE).toContain('function pfOpenArea(id)');
+    expect(PROFILE).toContain('function pfBackToDashboard()');
+    expect(PROFILE).toContain('function scrollToProfile(id) { pfOpenArea(id); }');
+    expect(PROFILE).toContain("PF_AREA_IDS = ['pf-details', 'pf-location', 'pf-leave', 'pf-cpd', 'pf-pddocs', 'pf-credentials', 'pf-alerts']");
   });
 
   test('no emojis on the profile dashboard or its panels', () => {
