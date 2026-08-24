@@ -106,10 +106,17 @@ describe('the route grammar knows the tab', () => {
     const helpers = require(path.join(FRONTEND, 'navigation.js'));
     for (const [hash, expected] of [
       ['#onboarding', '#onboarding'],
-      ['#onboarding/active', '#onboarding/active'],
-      ['#onboarding/compliance', '#onboarding/compliance'],
-      // The dashboard is the bare address, so it degrades to itself.
+      ['#onboarding/packages', '#onboarding/packages'],
+      ['#onboarding/start', '#onboarding/start'],
+      // Track Onboarding is the bare address, so it degrades to itself.
+      ['#onboarding/track', '#onboarding'],
+      // The retired sub-view addresses — dashboard, active, employees,
+      // compliance, expiring, documents, settings — degrade to the bare
+      // address, so an old bookmark lands on Track rather than nothing.
+      ['#onboarding/active', '#onboarding'],
       ['#onboarding/dashboard', '#onboarding'],
+      ['#onboarding/compliance', '#onboarding'],
+      ['#onboarding/settings', '#onboarding'],
       // An unrecognised sub-view never produces an address that renders nothing.
       ['#onboarding/nonsense', '#onboarding'],
       ['#onboarding/', '#onboarding'],

@@ -335,3 +335,92 @@ describe('buildZip', () => {
     }
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE EMAIL
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the starter-pack email', () => {
+  const ASSIGNMENT = {
+    applicant_name: 'Jane Smith',
+    job_title: 'Occupational Therapist',
+    start_date: '2026-09-01',
+  };
+  const compose = (extra) => pack.composeStarterPackEmail({
+    assignment: ASSIGNMENT,
+    orgName: 'Opal Therapy',
+    packFileName: 'Opal Therapy - Jane Smith - Starter Pack.zip',
+    downloadUrl: null,
+    senderName: 'Antony',
+    dueDate: '2026-08-28',
+    ...extra,
+  });
+
+  test('an unedited send carries EXACTLY the wording the template serves', () => {
+    // Start Onboarding shows defaultStarterPackMessage for the Owner to edit;
+    // if they leave it alone, the send must contain those same words — one
+    // source, no drift.
+    const shown = pack.defaultStarterPackMessage({
+      applicantName: 'Jane Smith', orgName: 'Opal Therapy',
+      roleTitle: 'Occupational Therapist',
+    });
+    const sent = compose({});
+    expect(sent.text.startsWith(shown)).toBe(true);
+  });
+
+  test('the default wording greets by first name and keeps the TFN caution', () => {
+    const msg = pack.defaultStarterPackMessage({
+      applicantName: 'Jane Smith', orgName: 'Opal Therapy', roleTitle: null,
+    });
+    expect(msg).toMatch(/^Hi Jane,/);
+    expect(msg).toMatch(/do not email your tax file number/i);
+  });
+
+  test('the default subject names the practice and the person', () => {
+    expect(compose({}).subject).toBe('Your Opal Therapy starter pack — Jane Smith');
+    expect(pack.defaultStarterPackSubject('Opal Therapy', ''))
+      .toBe('Your Opal Therapy starter pack');
+  });
+
+  test('an edited message and subject are used in place of the defaults', () => {
+    const out = compose({
+      customSubject: 'Welcome aboard, Jane',
+      customMessage: 'Hi Jane,\n\nThank you for joining Opal Therapy.',
+    });
+    expect(out.subject).toBe('Welcome aboard, Jane');
+    expect(out.text).toContain('Thank you for joining Opal Therapy.');
+    expect(out.html).toContain('Thank you for joining Opal Therapy.');
+    expect(out.text).not.toMatch(/delighted/);
+  });
+
+  test('a blank edit falls back to the default rather than sending nothing', () => {
+    const out = compose({ customSubject: '   ', customMessage: '  \n ' });
+    expect(out.subject).toBe('Your Opal Therapy starter pack — Jane Smith');
+    expect(out.text).toMatch(/delighted you are joining/);
+  });
+
+  test('an edited message cannot smuggle markup into the email', () => {
+    const out = compose({ customMessage: 'Hello <script>alert(1)</script> & <b>bold</b>' });
+    expect(out.html).not.toContain('<script>');
+    expect(out.html).toContain('&lt;script&gt;');
+    expect(out.html).toContain('&lt;b&gt;');
+  });
+
+  test('the delivery machinery survives an edit — dates and the secure link', () => {
+    // The message is prose; the facts box and the oversize-pack download link
+    // are delivery machinery the Owner must not be able to edit away.
+    const out = compose({
+      customMessage: 'Short note.',
+      downloadUrl: 'https://portal.example/api/onboarding/starter-pack/download?token=abc',
+    });
+    expect(out.html).toContain('Your start date:');
+    expect(out.html).toContain('Please return your forms by:');
+    expect(out.html).toContain('starter-pack/download?token=abc');
+    expect(out.text).toContain('Your starter pack is here: https://portal.example');
+  });
+
+  test('with no link, the attachment is named in the plain-text fallback', () => {
+    const out = compose({ customMessage: 'Short note.' });
+    expect(out.text).toContain('Opal Therapy - Jane Smith - Starter Pack.zip');
+  });
+});

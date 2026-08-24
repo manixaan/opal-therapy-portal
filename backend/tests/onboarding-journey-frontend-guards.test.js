@@ -323,7 +323,7 @@ describe('the changed assets are cache-busted', () => {
     // Azure staging does not revalidate on ETag; a stale onboarding.js there
     // would call routes the old code does not know about.
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
-    expect(SHELL).toContain('src="/onboarding.js?v=8"');
+    expect(SHELL).toContain('src="/onboarding.js?v=9"');
   });
 
   test('no new tab was added — this all lives inside the existing one', () => {

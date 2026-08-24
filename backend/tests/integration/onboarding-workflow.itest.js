@@ -1547,3 +1547,200 @@ describe('the audit trail', () => {
     expect(JSON.stringify(rows[0].metadata)).not.toContain(res.body.temporaryPassword);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE THREE-TAB CONSOLIDATION — the inspection ZIP and the editable email
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('inspecting a package ZIP from Packages', () => {
+  /** The published package the recommender would offer for an OT full-timer. */
+  async function recommendedPackageId(agent) {
+    const rec = await agent.get(
+      '/api/onboarding/packages/recommend?roleCategory=occupational_therapist&employmentType=full_time'
+    );
+    expect(rec.status).toBe(200);
+    return rec.body.recommended.packageId;
+  }
+
+  test('an authorised Owner downloads the same payload delivery would build', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const packageId = await recommendedPackageId(agent);
+
+    const res = await agent.get(`/api/onboarding/packages/${packageId}/starter-pack/download`)
+      .buffer().parse(binaryParser);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/zip');
+    expect(res.headers['content-disposition']).toContain('Starter Pack Preview');
+
+    const zip = await JSZip.loadAsync(res.body);
+    const previewNames = Object.keys(zip.files).sort();
+    expect(previewNames[0]).toBe('00 - Read Me First.txt');
+    expect(previewNames.length).toBeGreaterThan(1);
+
+    // The same package, delivered for real: the archive entries must match
+    // the inspection copy exactly — one generation path, not two.
+    const { assignmentId } = await startOnboarding(agent, { packageId });
+    const gen = await agent.post(`/api/onboarding/assignments/${assignmentId}/starter-pack`).send({});
+    expect(gen.status).toBe(201);
+    const { rows } = await db.pool.query(
+      'SELECT manifest FROM onboarding_starter_packs WHERE assignment_id = $1', [assignmentId]
+    );
+    const deliveredNames = rows[0].manifest.map((m) => m.fileName).sort();
+    expect(previewNames.filter((n) => n !== '00 - Read Me First.txt')).toEqual(deliveredNames);
+  });
+
+  test('inspection alters nothing — no pack row, no assignment, no package state', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const packageId = await recommendedPackageId(agent);
+    const before = await db.pool.query(
+      'SELECT status, draft_dirty, current_version FROM onboarding_packages WHERE id = $1', [packageId]
+    );
+
+    const res = await agent.get(`/api/onboarding/packages/${packageId}/starter-pack/download`)
+      .buffer().parse(binaryParser);
+    expect(res.status).toBe(200);
+
+    const packs = await db.pool.query('SELECT COUNT(*)::int AS n FROM onboarding_starter_packs');
+    expect(packs.rows[0].n).toBe(0);
+    const assignments = await db.pool.query('SELECT COUNT(*)::int AS n FROM onboarding_assignments');
+    expect(assignments.rows[0].n).toBe(0);
+    const after = await db.pool.query(
+      'SELECT status, draft_dirty, current_version FROM onboarding_packages WHERE id = $1', [packageId]
+    );
+    expect(after.rows[0]).toEqual(before.rows[0]);
+  });
+
+  test('the download is audited as an inspection, not a delivery', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const packageId = await recommendedPackageId(agent);
+    await agent.get(`/api/onboarding/packages/${packageId}/starter-pack/download`)
+      .buffer().parse(binaryParser);
+
+    const { rows } = await db.pool.query(
+      "SELECT metadata FROM audit_logs WHERE action = 'onboarding.package_pack_previewed'"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].metadata.packageId).toBe(packageId);
+    expect(rows[0].metadata.documentCount).toBeGreaterThan(0);
+  });
+
+  test('a therapist cannot download it; a delegate with onboarding.view can', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const packageId = await recommendedPackageId(owner);
+
+    const { agent: therapist } = await agentFor({ role: 'therapist' });
+    const denied = await therapist.get(`/api/onboarding/packages/${packageId}/starter-pack/download`);
+    expect(denied.status).toBe(403);
+
+    const { agent: delegate } = await agentFor({
+      role: 'admin', permissions: ['onboarding.view'],
+    });
+    const allowed = await delegate.get(`/api/onboarding/packages/${packageId}/starter-pack/download`)
+      .buffer().parse(binaryParser);
+    expect(allowed.status).toBe(200);
+  });
+
+  test('another organisation cannot reach the package by id', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const packageId = await recommendedPackageId(owner);
+
+    const otherOrg = await seedOrganisation('Another Practice');
+    const hash = await bcrypt.hash(PASSWORD, 4);
+    const outsider = await seedUser({
+      role: 'owner', password_hash: hash, organisation_id: otherOrg.id,
+    });
+    const agent = request.agent(server);
+    const login = await agent.post('/api/auth/login')
+      .set('X-Forwarded-For', nextIp())
+      .send({ email: outsider.email, password: PASSWORD });
+    expect(login.status).toBe(200);
+
+    const res = await agent.get(`/api/onboarding/packages/${packageId}/starter-pack/download`);
+    expect(res.status).toBe(404);
+  });
+
+  test('a base package refuses — it is a building block, not a pack', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const { rows } = await db.pool.query(
+      "SELECT id FROM onboarding_packages WHERE organisation_id = $1 AND kind = 'base' LIMIT 1",
+      [org.id]
+    );
+    const res = await agent.get(`/api/onboarding/packages/${rows[0].id}/starter-pack/download`);
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('the editable onboarding email', () => {
+  test('serves the pre-populated wording to an authorised sender', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    const res = await agent.get(
+      '/api/onboarding/email-template?applicantName=Jane%20Smith&jobTitle=Occupational%20Therapist'
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.subject).toContain('starter pack — Jane Smith');
+    expect(res.body.message).toMatch(/^Hi Jane,/);
+    expect(res.body.message).toMatch(/tax file number/i);
+  });
+
+  test('requires onboarding.assign', async () => {
+    const { agent } = await agentFor({ role: 'therapist' });
+    const res = await agent.get('/api/onboarding/email-template');
+    expect(res.status).toBe(403);
+  });
+
+  test('an edited subject and message travel with the send and are recorded', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    const { assignmentId } = await startOnboarding(agent);
+    await agent.post(`/api/onboarding/assignments/${assignmentId}/starter-pack`).send({});
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/starter-pack/send`)
+      .send({
+        toEmail: 'jane.smith@example.com',
+        customSubject: 'Welcome aboard, Jane',
+        customMessage: 'Hi Jane,\n\nThank you for joining Opal Therapy.',
+      });
+    expect(res.status).toBe(200);
+    // SMTP is not configured under test — "skipped" is the honest outcome,
+    // and the dispatch still records exactly what would have been sent.
+    expect(res.body.status).toBe('skipped');
+
+    const { rows } = await db.pool.query(
+      'SELECT subject FROM onboarding_email_dispatches WHERE assignment_id = $1', [assignmentId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].subject).toBe('Welcome aboard, Jane');
+  });
+
+  test('sending twice still leaves exactly one onboarding record for the person', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    await publishAllDocuments();
+    await startOnboarding(agent);
+
+    // The Start Onboarding page retrying its create step can never mint a
+    // second live run for the same email — the partial unique index refuses.
+    const rec = await agent.get(
+      '/api/onboarding/packages/recommend?roleCategory=occupational_therapist&employmentType=full_time'
+    );
+    const dup = await agent.post('/api/onboarding/assignments').send({
+      applicantName: 'Jane Smith',
+      applicantEmail: 'jane.smith@example.com',
+      employmentType: 'full_time',
+      roleCategory: 'occupational_therapist',
+      packageId: rec.body.recommended.packageId,
+    });
+    expect(dup.status).toBe(409);
+    expect(dup.body.code).toBe('assignment_exists');
+
+    const { rows } = await db.pool.query(
+      'SELECT COUNT(*)::int AS n FROM onboarding_assignments WHERE organisation_id = $1', [org.id]
+    );
+    expect(rows[0].n).toBe(1);
+  });
+});
