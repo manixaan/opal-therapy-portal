@@ -1110,14 +1110,6 @@
         },
         {
           "type": "highlight",
-          "target": ".rh2-collections",
-          "pad": 6,
-          "rounded": "10px",
-          "title": "Browse by collection",
-          "body": "Collections are curated shelves — related resources grouped so you can browse by purpose rather than hunt one by one. **Using Opal**, for example, gathers the portal tutorials that pair with these walkthroughs.\n\nClicking a collection opens the Library showing just that shelf, with a **Collection filter — clear** chip to get back to everything."
-        },
-        {
-          "type": "highlight",
           "target": ".rh2-hero-search",
           "pad": 6,
           "rounded": "10px",

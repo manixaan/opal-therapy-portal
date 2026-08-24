@@ -390,7 +390,7 @@ describe('the shell', () => {
     // assessment-surface-guards.test.js together, or CI fails on the half
     // that was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r15');
-    expect(SHELL).toContain('/resourcehub.js?v=r23');
+    expect(SHELL).toContain('/resourcehub.js?v=r24');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

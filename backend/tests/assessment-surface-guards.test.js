@@ -595,7 +595,13 @@ describe('changed assets are cache-busted', () => {
       // r18/r12: the Owner's Assign Learning surface and its dialog
       // r22/r15: the Library became a hand-managed filing cabinet — folder
       // upload, drag-and-drop and right-click in, automatic organisation out.
-      ['resourcehub.js', 'r23'], ['resourcehub.css', 'r15'],
+      // r24: Browse by collection left Resource Hub Home; the Library folders
+      // are where organised browsing lives. The CSS stays at r15 — Assign
+      // Learning still renders the .rh2-collection cards.
+      ['resourcehub.js', 'r24'], ['resourcehub.css', 'r15'],
+      // 2: the Resource Hub walkthrough lost the step that spotlighted the
+      // Home collections grid, because the grid it pointed at is gone.
+      ['induction-modules.js', 2],
       // 6, not 7: navigation.js is byte-identical to the version already
       // deployed. The Service Agreement's route-grammar change bumps it to 7
       // in the commit that actually ships that navigation.js — asserting it

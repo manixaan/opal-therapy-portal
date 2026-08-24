@@ -141,6 +141,48 @@ describe('the AI organisation is gone, not hidden', () => {
   });
 });
 
+describe('Home no longer browses by collection', () => {
+  /**
+   * Organised browsing belongs to the Library's folders. Home's collection
+   * grid was the older answer to the same question, and two of them on one
+   * hub is one too many. Same standard as the AI organisation above: the
+   * cards, the heading, the empty state and the handler all have to be gone,
+   * not merely unrendered.
+   */
+  const home = (() => {
+    const start = JS.indexOf('function renderHome()');
+    return JS.slice(start, JS.indexOf('\n  function ', start + 10));
+  })();
+
+  it('renders no collection heading, cards or empty state on Home', () => {
+    for (const gone of ['rh2-h-col', 'Browse by collection', 'rh2-collections',
+      'Collections will appear here once content is approved']) {
+      expect(home).not.toContain(gone);
+    }
+  });
+
+  it('leaves no Home-only handler behind', () => {
+    expect(JS).not.toContain('RH2.openCollection');
+    expect(JS).not.toContain('function openCollection(');
+    expect(JS).not.toContain('openCollection: openCollection');
+  });
+
+  it('keeps the Library folders as the way in', () => {
+    expect(JS).toContain('function renderFolderGrid()');
+    expect(JS).toContain("browse: 'folders'");
+  });
+
+  it('leaves Assign Learning\'s own collection cards and their styles alone', () => {
+    // The .rh2-collection* rules are shared — deleting them with the Home
+    // section would have stripped the Owner's Assign Learning shelves.
+    expect(JS).toContain("RH2.aslOpenCollection(\\'");
+    for (const kept of ['.rh2-collections', '.rh2-collection-icn', '.rh2-collection-name',
+      '.rh2-collection-tag', '.rh2-collection-on']) {
+      expect(CSS).toContain(kept);
+    }
+  });
+});
+
 describe('manual control is offered where the mistake is noticed (§35, §36)', () => {
   it('supports selecting several resources and moving them at once', () => {
     expect(JS).toContain('function selectableCard(');

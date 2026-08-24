@@ -576,7 +576,6 @@
 
     var cont = pick(h, 'continue_learning') || pick(h, 'continueLearning') || [];
     var required = pick(h, 'required_for_you') || pick(h, 'requiredForYou') || pick(h, 'required') || [];
-    var collections = h.collections || [];
     var pd = pick(h, 'upcoming_pd') || pick(h, 'upcomingPd') || [];
     var links = pick(h, 'quick_links') || pick(h, 'quickLinks') || [];
     var recent = pick(h, 'recently_added') || pick(h, 'recentlyAdded') || [];
@@ -614,18 +613,6 @@
       }).join('');
       out += '</section></div>';
     }
-
-    // Collections
-    out += '<section aria-labelledby="rh2-h-col"><h2 class="rh2-h2" id="rh2-h-col">Browse by collection</h2><div class="rh2-collections">';
-    if (!collections.length) out += '<p class="rh2-quiet">Collections will appear here once content is approved.</p>';
-    else out += collections.map(function (c) {
-      return '<button type="button" class="rh2-collection" onclick="RH2.openCollection(\'' + esc(pick(c, 'key') || pick(c, 'id')) + '\')">' +
-        '<span class="rh2-collection-icn">' + icn(pick(c, 'icon'), 'folder', 18) + '</span>' +
-        '<span class="rh2-collection-name">' + esc(pick(c, 'name')) + '</span>' +
-        (pick(c, 'tagline') ? '<span class="rh2-collection-tag">' + esc(pick(c, 'tagline')) + '</span>' : '') +
-        '</button>';
-    }).join('');
-    out += '</div></section>';
 
     // Upcoming PD + Quick links + Recently added
     out += '<div class="rh2-grid-2">';
@@ -712,11 +699,6 @@
   function homeSearch(q) {
     S.lib.q = String(q || '').trim();
     S.lib.rows = null;
-    nav('library');
-  }
-
-  function openCollection(key) {
-    S.lib = { q: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '', sort: 'relevant', saved: false, rows: null, loading: false, collection: String(key || '') };
     nav('library');
   }
 
@@ -6411,7 +6393,6 @@
     pdReload: function () { S.pd.data = null; loadPd(); },
     reloadHome: function () { S.home = null; loadHome(); },
     homeSearch: homeSearch,
-    openCollection: openCollection,
     openTool: openTool,
     _tools: TOOLS,
     libInput: libInput,
