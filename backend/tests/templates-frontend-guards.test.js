@@ -66,9 +66,10 @@ describe('Resource Hub navigation', () => {
 
 describe('the shell wires the surface', () => {
   test('templates.js and templates.css are loaded, with cache-bust pins', () => {
-    // v=2: the FCA section panel, participant-named documents and
-    // server-named downloads (the standalone-export fixes).
-    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=2" />');
+    // js v=2: the FCA section panel, participant-named documents and
+    // server-named downloads. css v=3: .tpl-head opted out of the shell's
+    // sticky app-bar header rule; dialog raised above the app bar.
+    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=3" />');
     expect(SHELL).toContain('<script src="/templates.js?v=2" defer></script>');
   });
 

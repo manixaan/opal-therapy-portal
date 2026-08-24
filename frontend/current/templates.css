@@ -13,7 +13,17 @@
 #templates-root[hidden] { display: none; }
 
 /* ── Headings ── */
-.tpl-head { margin: 0 0 14px; }
+/* .tpl-head is a real <header> element, so without this it inherits the
+   shell's app-bar rule (`header { position: sticky; top: 0; z-index: 1000;
+   background; border-bottom; padding; display: flex }`) — which made the
+   Templates banner a sticky white band that painted over the nav's More
+   dropdown and the New-document dialog. It is a heading, not chrome. */
+#templates-root .tpl-head {
+  position: static; top: auto; z-index: auto;
+  display: block; padding: 0; gap: 0;
+  background: transparent; border-bottom: 0;
+  margin: 0 0 14px;
+}
 .tpl-h2 { margin: 0; font-size: 20px; color: var(--ink); }
 .tpl-h3 { margin: 0 0 10px; font-size: 15px; color: var(--ink); }
 .tpl-sub { margin: 6px 0 0; font-size: 13px; color: var(--ink-soft); max-width: 78ch; line-height: 1.5; }
@@ -68,7 +78,10 @@
 /* ── New-document dialog ── */
 .tpl-modal-backdrop {
   position: fixed; inset: 0; background: rgba(20, 28, 26, 0.42);
-  display: flex; align-items: center; justify-content: center; z-index: 800; padding: 18px;
+  /* 1200 matches the FCA overlay: a dialog dims EVERYTHING, including the
+     app bar (z-index 1000) — at the old 800, any sticky chrome painted over
+     the dialog. */
+  display: flex; align-items: center; justify-content: center; z-index: 1200; padding: 18px;
 }
 .tpl-modal {
   background: var(--panel); border-radius: 12px; padding: 20px;
@@ -87,7 +100,8 @@
 .tpl-result:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* ── Editor header ── */
-.tpl-head-editor { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+/* Scoped to outrank the .tpl-head reset above, which sets display: block. */
+#templates-root .tpl-head-editor { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .tpl-head-main { flex: 1; min-width: 220px; }
 .tpl-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tpl-savestate { font-size: 12px; color: var(--ink-soft); min-width: 62px; }

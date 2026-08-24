@@ -633,9 +633,11 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
-      // 2: the FCA section-structure panel, participant-named documents and
+      // js 2: the FCA section-structure panel, participant-named documents and
       // server-named downloads (the standalone-export fixes).
-      ['templates.js', 2], ['templates.css', 2],
+      // css 3: .tpl-head opted out of the shell's sticky app-bar header rule,
+      // and the New-document dialog raised above the app bar (z 800 → 1200).
+      ['templates.js', 2], ['templates.css', 3],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
