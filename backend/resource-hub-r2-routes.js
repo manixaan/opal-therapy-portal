@@ -510,14 +510,27 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
     }
     params.push(req.query.folderId);
     const p = `$${params.length}`;
+    // `kind`/`is_active` are repeated from the folder grid's own enumeration:
+    // it counts only live Library folders, so a deactivated subfolder — or an
+    // ingestion folder that ended up parented to a Library one — must not put
+    // rows into a list the card never counted.
     const scoped = req.query.folderScope === 'tree'
       ? `(a.folder_id = ${p} OR a.folder_id IN (
             SELECT sf.id FROM resource_folders sf
              WHERE sf.parent_id = ${p}
-               AND sf.organisation_id IS NOT DISTINCT FROM $1))`
+               AND sf.organisation_id IS NOT DISTINCT FROM $1
+               AND sf.kind = 'library' AND sf.is_active))`
       : `a.folder_id = ${p}`;
     where += ` AND EXISTS (SELECT 1 FROM resource_folder_assignments a
                  WHERE a.resource_id = r.id AND ${scoped})`;
+    // A FOLDER HOLDS LIVE DOCUMENTS ONLY.
+    //
+    // Unfiltered, this route is the catalogue, and an owner browsing it may
+    // legitimately meet a retired record. A folder is not the catalogue: its
+    // card states a count that has always excluded retired records, so
+    // without this an owner would open "18 resources" and be handed twenty.
+    // Shared with the count rather than restated — see resource-governance.
+    where += ` AND ${governance.LIVE_RESOURCE_SQL}`;
   }
   let collectionKeyIdx = null; // param index, reused for curated ordering below
   if (req.query.collectionKey) {

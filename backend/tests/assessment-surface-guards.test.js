@@ -604,7 +604,11 @@ describe('changed assets are cache-busted', () => {
       // The same release made the Library a real file workspace — the toolbar
       // reads as controls, the whole surface takes a dropped file, and the
       // background answers a right-click.
-      ['resourcehub.js', 'r25'], ['resourcehub.css', 'r16'],
+      // r26: a folder shows only what is filed in it — workflow tools no
+      // longer appear inside one — and its header states the server's folder
+      // count instead of counting the cards on the page. The CSS is untouched
+      // by that change and stays where the workspace release left it.
+      ['resourcehub.js', 'r26'], ['resourcehub.css', 'r16'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],

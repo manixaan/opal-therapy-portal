@@ -104,6 +104,24 @@ const LISTABLE_STATES = ['approved', 'published'];
  */
 const BROWSABLE_STATES = ['approved', 'published', 'inventory'];
 
+/**
+ * A FILED DOCUMENT IS A LIVE DOCUMENT — one SQL definition, two readers.
+ *
+ * The Library's folder card states a count, and opening that folder issues a
+ * different query on a different route. Those two have to describe the same
+ * set of rows or the card promises documents the folder cannot show, and a
+ * person is left counting cards to work out which number lied.
+ *
+ * Retirement is where they used to part company: the count has always
+ * excluded archived records, while the browse route excluded them only for a
+ * reader who could not author (an owner or admin saw them listed). Both now
+ * read this constant, so retiring a filed document moves the card and the
+ * folder together or not at all.
+ *
+ * Written against the alias `r`, which is what both queries call `resources`.
+ */
+const LIVE_RESOURCE_SQL = "r.status <> 'archived' AND r.archived_at IS NULL";
+
 function isListable(resource, role) {
   if (!resource) return false;
   if (resource.access_tier === 'excluded-private') return false;
@@ -406,6 +424,7 @@ module.exports = {
   BRAND_REVIEW_STATUSES,
   LISTABLE_STATES,
   BROWSABLE_STATES,
+  LIVE_RESOURCE_SQL,
   TRANSITIONS,
   ROLE_TIERS,
   PUBLISH_ENABLED,
