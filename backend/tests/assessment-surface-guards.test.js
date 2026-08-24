@@ -615,14 +615,13 @@ describe('changed assets are cache-busted', () => {
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],
-      // 6, not 7: navigation.js is byte-identical to the version already
-      // deployed. The Service Agreement's route-grammar change bumps it to 7
-      // in the commit that actually ships that navigation.js — asserting it
-      // ahead of the content is what broke CI twice.
-      ['navigation.js', 6],
-      // 3: the onboarding journey — starter packs, returned documents,
-      // extracted-detail review, account provisioning — and its styles
-      ['onboarding.js', 8], ['onboarding.css', 8],
+      // 7: the Onboarding three-tab consolidation changed the sub-view route
+      // grammar (OB_VIEWS is now track/packages/start, bare address = track).
+      ['navigation.js', 7],
+      // 9: the Owner surface consolidated to Packages / Start Onboarding /
+      // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
+      // the consolidation reuses the existing ob-* styles unchanged.
+      ['onboarding.js', 9], ['onboarding.css', 8],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.

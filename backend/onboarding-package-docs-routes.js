@@ -418,4 +418,91 @@ router.get('/api/onboarding/packages/:id/documents/:documentId/history',
     });
   }));
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  INSPECTION ZIP
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Download the exact starter-pack ZIP a new starter on this package would
+ * receive today, so an Owner can open it locally and inspect the files before
+ * using the package on a real person.
+ *
+ * Same payload by construction: it reads the PUBLISHED version's pinned
+ * snapshot through the same fromVersionContent → buildZip path assignment
+ * generation uses — never a second generation route that could drift. The
+ * read-me carries placeholder employee details, which is the honest content
+ * for a pack that belongs to nobody.
+ *
+ * Read-only by design: no onboarding_starter_packs row, no assignment, no
+ * status change, no download token. The only record is the audit event.
+ */
+router.get('/api/onboarding/packages/:id/starter-pack/download',
+  requireAnyPermission('onboarding.manage_packages', 'onboarding.view'),
+  safe(async (req, res) => {
+    const pkg = await loadPackage(req);
+    if (!pkg) return notFound(res);
+    if (pkg.kind !== 'package') {
+      return res.status(409).json({
+        error: 'Base and overlay packages are building blocks — they have no starter pack of their own.',
+      });
+    }
+    const version = await odb.getCurrentPackageVersion(pkg.id);
+    if (!version) {
+      return res.status(409).json({
+        error: 'This package has no published version yet. Publish it to see what a new starter would receive.',
+        code: 'not_published',
+      });
+    }
+    const pinned = starterPack.fromVersionContent(version.content);
+    if (pinned.legacy) {
+      return res.status(409).json({
+        error: 'This package was published before starter packs existed. Publish a new version to include one.',
+        code: 'legacy_version',
+      });
+    }
+    if (!pinned.documents.length) {
+      return res.status(409).json({
+        error: 'This package has no starter-pack documents.',
+        code: 'no_documents',
+      });
+    }
+
+    const settings = await odb.getOnboardingSettings();
+    let orgName = settings.organisationName || null;
+    if (!orgName) {
+      const { rows } = await odb.pool.query(
+        'SELECT name FROM organisations WHERE id = $1', [orgOf(req)]
+      );
+      orgName = rows[0]?.name || 'Opal Therapy';
+    }
+
+    const built = await starterPack.buildZip(pinned.documents, {
+      orgName,
+      employeeName: 'Sample New Starter',
+      roleTitle: null,
+      startDate: null,
+      dueDate: null,
+      returnEmail: settings.returnEmail || req.user?.email || null,
+      contactName: req.user?.name || null,
+    });
+
+    await auditOnboarding(req, 'package_pack_previewed', {
+      targetType: 'onboarding_package', targetId: pkg.id,
+      metadata: {
+        packageId: pkg.id, code: pkg.code,
+        packageVersionId: version.id, version: version.version,
+        documentCount: built.manifest.length,
+        omissionCount: built.omissions.length,
+        sizeBytes: built.buffer.length,
+      },
+    });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition',
+      `attachment; filename="${starterPack.safeStem(`${orgName} - ${pkg.title} - Starter Pack Preview`)}.zip"`);
+    res.send(built.buffer);
+  }));
+
 module.exports = router;

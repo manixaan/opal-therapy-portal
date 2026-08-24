@@ -11,8 +11,12 @@
    The same tab shows a different thing depending on who is looking:
 
      • Whoever holds onboarding.view (the Owner, or an Admin the Owner has
-       delegated to) gets the MANAGEMENT surface — dashboard, packages,
-       active onboarding, employees, compliance, documents, settings.
+       delegated to) gets the MANAGEMENT surface — three workflow tabs:
+       Packages (define and inspect what a new starter receives), Start
+       Onboarding (send a package to a new starter by email) and Track
+       Onboarding (the operational view of every run, with the overview
+       metrics, workforce compliance and expiry warnings consolidated in).
+       Onboarding settings and delegation live behind a Settings dialog.
 
      • Everyone else gets MY ONBOARDING: their own run and nothing else. A
        therapist, a read-only account and a pre-employee all land here.
@@ -150,7 +154,7 @@
   var S = {
     booted: false,
     mode: null,            // 'manage' | 'mine' | 'none'
-    view: 'dashboard',
+    view: 'track',
     dashboard: null,
     packages: null,
     packageDocs: null,
@@ -171,6 +175,9 @@
     permissions: null,
     mine: null,
     filters: { status: '', search: '' },
+    // Open the Document library disclosure on the next Packages render —
+    // set when "Open in the Document Library" is followed from a package.
+    libraryOpen: false,
     busy: false,
   };
 
@@ -287,22 +294,23 @@
   //  BOOT AND ROUTING
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * The whole management surface is three workflow tabs. Everything the old
+   * Dashboard / Active Onboarding / Employees / Compliance / Expiring
+   * Credentials / Document Library / Settings tabs did is consolidated:
+   * overview metrics, workforce compliance and expiry live inside Track
+   * Onboarding; the document library lives inside Packages; settings and
+   * delegation live behind the Settings dialog on the Track hero.
+   */
   var MANAGE_VIEWS = [
-    { key: 'dashboard', label: 'Dashboard' },
     { key: 'packages', label: 'Packages' },
-    { key: 'active', label: 'Active Onboarding' },
-    { key: 'employees', label: 'Employees' },
-    { key: 'compliance', label: 'Compliance' },
-    { key: 'expiring', label: 'Expiring Credentials' },
-    { key: 'documents', label: 'Document Library' },
-    { key: 'settings', label: 'Settings' },
+    { key: 'start', label: 'Start Onboarding' },
+    { key: 'track', label: 'Track Onboarding' },
   ];
 
   function visibleViews() {
     return MANAGE_VIEWS.filter(function (v) {
-      if (v.key === 'documents') return can('onboarding.manage_documents') || can('onboarding.view');
-      if (v.key === 'settings') return can('onboarding.manage_compliance') || user().role === 'owner';
-      if (v.key === 'compliance') return can('onboarding.manage_compliance') || can('onboarding.view');
+      if (v.key === 'start') return can('onboarding.assign');
       return true;
     });
   }
@@ -391,8 +399,9 @@
       + '<div class="ob-root">'
       + '  <div class="ob-hero">'
       + '    <div>'
-      + '      <h1>Onboarding Packages</h1>'
-      + '      <p>New starter onboarding, credential verification and ongoing workforce compliance.</p>'
+      + '      <h1>Onboarding</h1>'
+      + '      <p>Define a package, start onboarding by email, and track each new starter '
+      + 'through documents, credentials and compliance to their first day.</p>'
       + '    </div>'
       + '    <div class="ob-hero-actions" id="ob-hero-actions"></div>'
       + '  </div>'
@@ -411,30 +420,23 @@
     if (actions) actions.innerHTML = '';
 
     switch (view) {
-      case 'dashboard': return viewDashboard(pane, actions);
       case 'packages': return S.packageDetail ? viewPackageDetail(pane, actions) : viewPackages(pane, actions);
-      case 'active': return S.assignmentDetail ? viewAssignment(pane, actions) : viewActive(pane, actions);
-      case 'employees': return viewEmployees(pane);
-      case 'compliance': return viewCompliance(pane, actions);
-      case 'expiring': return viewExpiring(pane);
-      case 'documents': return viewDocuments(pane, actions);
-      case 'settings': return viewSettings(pane);
+      case 'start': return viewStart(pane, actions);
+      case 'track': return S.assignmentDetail ? viewAssignment(pane, actions) : viewTrack(pane, actions);
       default: pane.innerHTML = empty('Not found', '');
     }
   }
 
-  // ── Dashboard ─────────────────────────────────────────────────────────────
+  // ── Track Onboarding — the one operational view ───────────────────────────
 
-  async function viewDashboard(pane, actions) {
-    var d = S.dashboard && S.dashboard.ok ? S.dashboard : await api('/api/onboarding/dashboard');
-    S.dashboard = d;
-    if (!d.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(d.error) + '</div>'; return; }
-
-    if (actions && can('onboarding.assign')) {
-      actions.innerHTML = '<button class="btn primary" onclick="Onboarding.assignDialog()">'
-        + 'Start onboarding</button>';
-    }
-
+  /**
+   * The overview strip that lands at the top of Track Onboarding.
+   *
+   * The old Dashboard tab, kept as landing content rather than a competing
+   * destination: the same three metric cards and the same configuration
+   * warnings, above the list they summarise instead of a tab away from it.
+   */
+  function overviewStrip(d) {
     var ob = d.onboarding || {};
     var pk = d.packages || {};
     var c = d.compliance || {};
@@ -468,7 +470,7 @@
         + '</div>';
     };
 
-    pane.innerHTML = notes
+    return notes
       + '<div class="ob-grid">'
       + card('Packages', [
         ['Published', pk.published], ['Draft', pk.draft],
@@ -487,22 +489,152 @@
         ['Expired', c.expired, c.expired ? 'is-alert' : ''],
         ['Overdue onboarding', d.overdue, d.overdue ? 'is-alert' : ''],
       ])
-      + '</div>'
-      + '<div class="ob-section-card"><div class="ob-section-head">'
-      + '<h2>Needs attention</h2></div><div class="ob-section-body" id="ob-attention">'
-      + spinner() + '</div></div>';
+      + '</div>';
+  }
 
-    var list = await api('/api/onboarding/assignments?active=1');
-    var el = doc.getElementById('ob-attention');
-    if (!el) return;
-    if (!list.ok) { el.innerHTML = '<p class="ob-quiet">' + esc(list.error) + '</p>'; return; }
+  function needsAttention(a) {
+    return ['employer_review', 'corrections_required', 'ready_to_activate'].indexOf(a.status) !== -1
+      || a.overdue;
+  }
 
-    var needs = (list.assignments || []).filter(function (a) {
-      return ['employer_review', 'corrections_required', 'ready_to_activate'].indexOf(a.status) !== -1
-        || a.overdue;
+  /**
+   * Per-person credential trouble, keyed by user id, for the Issues column.
+   *
+   * Expired and expiring counts come from the expiring feed (which also covers
+   * pre-employees and work-rights expiries); unverified counts come from the
+   * employees view, which is the only place they exist. A person missing from
+   * both simply has no issues to show.
+   */
+  function credentialIssues(expiring, employees) {
+    var by = {};
+    var of = function (id) { return by[id] || (by[id] = { expired: 0, expiring: 0, unverified: 0 }); };
+    (((expiring && expiring.ok && expiring.items) || [])).forEach(function (i) {
+      if (!i.userId) return;
+      if (i.expired) of(i.userId).expired += 1;
+      else if (i.window !== null && i.window !== undefined) of(i.userId).expiring += 1;
     });
-    el.innerHTML = needs.length ? assignmentTable(needs)
-      : '<p class="ob-quiet">Nothing waiting on you right now.</p>';
+    (((employees && employees.ok && employees.employees) || [])).forEach(function (e) {
+      if (e.unverifiedCredentials) of(e.userId).unverified = e.unverifiedCredentials;
+    });
+    return by;
+  }
+
+  function issueChips(a, issues) {
+    var out = [];
+    if (a.overdue) out.push('<span class="ob-chip expired">Overdue</span>');
+    var i = a.userId && issues ? issues[a.userId] : null;
+    if (i) {
+      if (i.expired) out.push('<span class="ob-chip expired">' + esc(i.expired) + ' expired</span>');
+      if (i.expiring) out.push('<span class="ob-chip submitted">' + esc(i.expiring) + ' expiring</span>');
+      if (i.unverified) out.push('<span class="ob-chip in_progress">' + esc(i.unverified) + ' unverified</span>');
+    }
+    return out.length ? out.join(' ') : '<span class="ob-quiet">—</span>';
+  }
+
+  async function viewTrack(pane, actions) {
+    if (actions) {
+      var btns = '';
+      if (can('onboarding.assign')) {
+        btns += '<button class="btn primary" onclick="Onboarding.nav(\'start\')">Start onboarding</button>';
+      }
+      if (can('onboarding.manage_compliance') || user().role === 'owner') {
+        btns += ' <button class="btn" onclick="Onboarding.settingsDialog()">Settings</button>';
+      }
+      actions.innerHTML = btns;
+    }
+
+    var wantAttention = S.filters.status === 'attention';
+    var qs = [];
+    if (S.filters.status && !wantAttention) qs.push('status=' + encodeURIComponent(S.filters.status));
+    if (S.filters.search) qs.push('search=' + encodeURIComponent(S.filters.search));
+
+    var results = await Promise.all([
+      S.dashboard && S.dashboard.ok
+        ? Promise.resolve(S.dashboard) : api('/api/onboarding/dashboard'),
+      api('/api/onboarding/assignments' + (qs.length ? '?' + qs.join('&') : '')),
+      api('/api/onboarding/compliance/expiring?days=120'),
+      api('/api/onboarding/employees'),
+    ]);
+    var d = results[0];
+    var res = results[1];
+    S.dashboard = d;
+    S.assignments = res;
+    S.expiring = results[2];
+    S.employees = results[3];
+
+    if (!d.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(d.error) + '</div>'; return; }
+    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
+
+    var rows = res.assignments || [];
+    if (wantAttention) {
+      rows = rows.filter(needsAttention);
+    } else if (!S.filters.status) {
+      // Terminal noise stays out of the default list. Activated and completed
+      // runs remain — they carry the workforce compliance the Owner scans for
+      // — but archived and cancelled runs appear only when asked for by name.
+      rows = rows.filter(function (a) {
+        return a.status !== 'archived' && a.status !== 'cancelled';
+      });
+    }
+    var issues = credentialIssues(S.expiring, S.employees);
+
+    // The paper round-trip states are offered too, so an Owner can ask the
+    // question they actually have: "who am I waiting on documents from?"
+    var STATUSES = ['created', 'starter_pack_ready', 'starter_pack_sent',
+      'documents_received', 'details_extracted', 'ready_for_account',
+      'account_created', 'invite_sent', 'invite_accepted', 'in_progress',
+      'employee_actions_complete', 'employer_review', 'corrections_required',
+      'ready_to_activate', 'activated', 'completed', 'cancelled', 'archived'];
+
+    pane.innerHTML = ''
+      + overviewStrip(d)
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head">'
+      + '    <h2>Track Onboarding</h2>'
+      + '    <div class="ob-inline-actions">'
+      + '      <label for="ob-f-search" class="ob-sr">Search by name or email</label>'
+      + '      <input type="text" id="ob-f-search" placeholder="Search name or email"'
+      + '             value="' + esc(S.filters.search) + '"'
+      + '             style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;">'
+      + '      <label for="ob-f-status" class="ob-sr">Filter by status</label>'
+      + '      <select id="ob-f-status"'
+      + '              style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;">'
+      + '        <option value="">All statuses</option>'
+      + '        <option value="attention"' + (wantAttention ? ' selected' : '') + '>Needs attention</option>'
+      + STATUSES.map(function (s) {
+        return '<option value="' + s + '"' + (S.filters.status === s ? ' selected' : '') + '>'
+          + esc(statusText(s)) + '</option>';
+      }).join('')
+      + '      </select>'
+      + '      <button class="btn ob-btn-sm" onclick="Onboarding.applyFilters()">Apply</button>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="ob-section-body is-flush">'
+      + (rows.length
+        ? assignmentTable(rows, issues)
+        : (wantAttention
+          ? '<p class="ob-quiet" style="padding:16px;">Nothing waiting on you right now.</p>'
+          : empty('No active onboarding',
+            'When you start onboarding a new employee, their progress will appear here.')))
+      + '  </div>'
+      + '</div>'
+      + trackDisclosures();
+  }
+
+  /**
+   * The consolidated tails of the old Employees, Expiring Credentials and
+   * Compliance tabs — reference material, so it sits behind disclosures
+   * under the run list rather than as three destinations of its own.
+   */
+  function trackDisclosures() {
+    var out = '<details class="ob-details"><summary>Workforce & credential compliance</summary>'
+      + workforceSection() + '</details>';
+    if (can('onboarding.manage_compliance') || can('onboarding.view')) {
+      out += '<details class="ob-details" ontoggle="Onboarding.loadComplianceSection(this)">'
+        + '<summary>Compliance registry & organisation records</summary>'
+        + '<div id="ob-compliance-host">' + spinner() + '</div></details>';
+    }
+    return out;
   }
 
   // ── Active onboarding ─────────────────────────────────────────────────────
@@ -580,11 +712,12 @@
     return Math.round((done / milestones.length) * 100);
   }
 
-  function assignmentTable(rows) {
+  function assignmentTable(rows, issues) {
     return '<div class="ob-table-wrap"><table class="ob-table">'
       + '<thead><tr>'
       + '<th scope="col">Employee</th><th scope="col">Role</th><th scope="col">Package</th>'
       + '<th scope="col">Started</th><th scope="col">Status</th>'
+      + '<th scope="col">Issues</th>'
       + '<th scope="col">Progress</th>'
       + '</tr></thead><tbody>'
       + rows.map(function (a) {
@@ -600,8 +733,10 @@
           // scans to find a name.
           + '<td>' + esc(a.packageTitle) + '</td>'
           + '<td>' + fmtDate(a.createdAt || a.startDate) + '</td>'
-          + '<td>' + statusChip(a.status)
-          + (a.overdue ? ' <span class="ob-chip expired">Overdue</span>' : '') + '</td>'
+          + '<td>' + statusChip(a.status) + '</td>'
+          // Overdue onboarding, expired / expiring / unverified credentials —
+          // the old Compliance and Expiring Credentials tabs, one cell wide.
+          + '<td>' + issueChips(a, issues) + '</td>'
           + '<td class="ob-num"><span class="ob-sr">'
           + esc(statusText(a.status)) + ', </span>' + pct + '%</td>'
           + '</tr>';
@@ -609,73 +744,23 @@
       + '</tbody></table></div>';
   }
 
-  async function viewActive(pane, actions) {
-    if (actions && can('onboarding.assign')) {
-      actions.innerHTML = '<button class="btn primary" onclick="Onboarding.assignDialog()">'
-        + 'Start onboarding</button>';
-    }
-    var qs = [];
-    if (S.filters.status) qs.push('status=' + encodeURIComponent(S.filters.status));
-    if (S.filters.search) qs.push('search=' + encodeURIComponent(S.filters.search));
-    var res = await api('/api/onboarding/assignments' + (qs.length ? '?' + qs.join('&') : ''));
-    S.assignments = res;
-    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
-
-    // The paper round-trip states are offered too, so an Owner can ask the
-    // question they actually have: "who am I waiting on documents from?"
-    var STATUSES = ['created', 'starter_pack_ready', 'starter_pack_sent',
-      'documents_received', 'details_extracted', 'ready_for_account',
-      'account_created', 'invite_sent', 'invite_accepted', 'in_progress',
-      'employee_actions_complete', 'employer_review', 'corrections_required',
-      'ready_to_activate', 'activated', 'completed', 'cancelled', 'archived'];
-
-    pane.innerHTML = ''
-      + '<div class="ob-section-card">'
-      + '  <div class="ob-section-head">'
-      + '    <h2>Onboarding</h2>'
-      + '    <div class="ob-inline-actions">'
-      + '      <label for="ob-f-search" class="ob-sr">Search by name or email</label>'
-      + '      <input type="text" id="ob-f-search" placeholder="Search name or email"'
-      + '             value="' + esc(S.filters.search) + '"'
-      + '             style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;">'
-      + '      <label for="ob-f-status" class="ob-sr">Filter by status</label>'
-      + '      <select id="ob-f-status"'
-      + '              style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;">'
-      + '        <option value="">All statuses</option>'
-      + STATUSES.map(function (s) {
-        return '<option value="' + s + '"' + (S.filters.status === s ? ' selected' : '') + '>'
-          + esc(statusText(s)) + '</option>';
-      }).join('')
-      + '      </select>'
-      + '      <button class="btn ob-btn-sm" onclick="Onboarding.applyFilters()">Apply</button>'
-      + '    </div>'
-      + '  </div>'
-      + '  <div class="ob-section-body is-flush">'
-      + ((res.assignments || []).length
-        ? assignmentTable(res.assignments)
-        : empty('No active onboarding',
-          'When you start onboarding a new employee, their progress will appear here.'))
-      + '  </div>'
-      + '</div>';
-  }
-
   function applyFilters() {
     var s = doc.getElementById('ob-f-search');
     var st = doc.getElementById('ob-f-status');
     S.filters.search = s ? s.value.trim() : '';
     S.filters.status = st ? st.value : '';
-    loadView('active');
+    loadView('track');
   }
 
   // ── One assignment ────────────────────────────────────────────────────────
 
   async function openAssignment(id) {
-    S.view = 'active';
+    S.view = 'track';
     S.assignmentDetail = { id: id };
     await renderManage(root());
   }
 
-  function backToActive() { S.assignmentDetail = null; loadView('active'); }
+  function backToTrack() { S.assignmentDetail = null; loadView('track'); }
 
   async function viewAssignment(pane, actions) {
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.assignmentDetail.id));
@@ -687,7 +772,7 @@
     var act = res.activation || { ok: false, blockers: [] };
 
     if (actions) {
-      var buttons = '<button class="btn" onclick="Onboarding.backToActive()">Back to list</button>';
+      var buttons = '<button class="btn" onclick="Onboarding.backToTrack()">Back to list</button>';
       if (can('onboarding.assign') && a.status === 'invite_sent') {
         buttons += ' <button class="btn" onclick="Onboarding.resendInvite()">Resend invitation</button>'
           + ' <button class="btn" onclick="Onboarding.showInviteLink()">Copy link</button>';
@@ -711,6 +796,17 @@
       // requirements yet, `canActivate` is vacuously true.
       if (can('onboarding.activate') && res.canActivate && a.userId) {
         buttons += ' <button class="btn primary" onclick="Onboarding.activate()">Activate employee</button>';
+      }
+      // The tidy-up verbs the API always had and the UI never offered: a
+      // finished run archives out of the default list; a live run that should
+      // never have been started is cancelled, with a reason, which also
+      // revokes its invitation. Neither deletes anything.
+      if (can('onboarding.assign')) {
+        if (['activated', 'completed', 'cancelled'].indexOf(a.status) !== -1) {
+          buttons += ' <button class="btn" onclick="Onboarding.archiveAssignmentDialog()">Archive record</button>';
+        } else if (a.status !== 'archived') {
+          buttons += ' <button class="btn" onclick="Onboarding.cancelAssignmentDialog()">Cancel onboarding</button>';
+        }
       }
       actions.innerHTML = buttons;
     }
@@ -894,7 +990,7 @@
     if (!res.ok) { toast(res.error, true); return false; }
     closeModal();
     toast('Updated');
-    await loadView('active');
+    await loadView('track');
     return true;
   }
 
@@ -1029,7 +1125,68 @@
     }
     closeModal();
     toast('Employee activated');
-    await loadView('active');
+    await loadView('track');
+  }
+
+  function archiveAssignmentDialog() {
+    var a = S.assignmentDetail && S.assignmentDetail.data && S.assignmentDetail.data.assignment;
+    if (!a) return;
+    openModal({
+      title: 'Archive this record',
+      subtitle: a.applicantName,
+      body: '<div class="ob-note is-info">Archiving removes a finished onboarding from the '
+        + 'default Track Onboarding list. Nothing is deleted — the record, its documents and '
+        + 'its history are all kept, and the Archived status filter still finds it.</div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + '<button class="btn primary" onclick="Onboarding.confirmArchiveAssignment()">Archive</button>',
+    });
+  }
+
+  async function confirmArchiveAssignment() {
+    if (S.busy) return;
+    S.busy = true;
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/archive', { method: 'POST', body: {} });
+    S.busy = false;
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast('Record archived');
+    S.dashboard = null;
+    backToTrack();
+  }
+
+  function cancelAssignmentDialog() {
+    var a = S.assignmentDetail && S.assignmentDetail.data && S.assignmentDetail.data.assignment;
+    if (!a) return;
+    openModal({
+      title: 'Cancel this onboarding',
+      subtitle: a.applicantName,
+      body: '<div class="ob-note is-warn">Cancelling stops this onboarding: any invitation link '
+        + 'stops working immediately, and an account that never became staff is deactivated. '
+        + 'Nothing is deleted — the record and its history are kept.</div>'
+        + '<div class="ob-field">'
+        + '  <label for="ob-cx-reason">Why is it being cancelled?<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+        + '  <textarea id="ob-cx-reason" name="reason" maxlength="500" required'
+        + '            placeholder="e.g. Started in error, or the candidate withdrew."></textarea>'
+        + '</div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Keep it</button>'
+        + '<button class="btn primary" onclick="Onboarding.confirmCancelAssignment()">Cancel onboarding</button>',
+    });
+  }
+
+  async function confirmCancelAssignment() {
+    var v = modalValues();
+    if (!v.reason || !v.reason.trim()) { modalError('A reason is required.'); return; }
+    if (S.busy) return;
+    S.busy = true;
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/cancel', { method: 'POST', body: { reason: v.reason.trim() } });
+    S.busy = false;
+    if (!res.ok) { modalError(res.error); return; }
+    closeModal();
+    toast('Onboarding cancelled');
+    S.dashboard = null;
+    backToTrack();
   }
 
   async function resendInvite() {
@@ -1235,120 +1392,198 @@
     });
   }
 
-  // ── Assign dialog ─────────────────────────────────────────────────────────
+  // ── Start Onboarding ──────────────────────────────────────────────────────
 
-  async function assignDialog() {
-    var pkgs = S.packages && S.packages.ok ? S.packages : await api('/api/onboarding/packages');
+  /**
+   * One focused page: who is joining, which package they receive, and the
+   * email that carries it — pre-written, editable, sent from here. Replaces
+   * the old Active Onboarding assign dialog. Sending creates exactly one
+   * tracked onboarding record (the server holds a unique index on live runs
+   * per email, so a retry can never mint a second one) and lands the Owner
+   * on that record in Track Onboarding.
+   */
+  function startValues() {
+    var form = doc.getElementById('ob-start-form');
+    var out = {};
+    if (!form) return out;
+    form.querySelectorAll('[name]').forEach(function (el) {
+      if (el.type === 'checkbox') out[el.name] = el.checked;
+      else if (el.type === 'radio') { if (el.checked) out[el.name] = el.value; }
+      else out[el.name] = el.value;
+    });
+    return out;
+  }
+
+  function startError(message) {
+    var el = doc.getElementById('ob-start-error');
+    if (!el) { toast(message, true); return; }
+    el.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(message) + '</div>';
+    el.scrollIntoView({ block: 'nearest' });
+  }
+
+  function startProgress(message) {
+    var el = doc.getElementById('ob-start-progress');
+    if (el) el.textContent = message || '';
+  }
+
+  async function viewStart(pane, actions) {
+    if (actions) actions.innerHTML = '';
+    if (!can('onboarding.assign')) {
+      pane.innerHTML = empty('Not available',
+        'Starting onboarding needs the onboarding.assign permission.');
+      return;
+    }
+    var pkgs = await api('/api/onboarding/packages');
     S.packages = pkgs;
-    if (!pkgs.ok) { toast(pkgs.error, true); return; }
+    if (!pkgs.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(pkgs.error) + '</div>'; return; }
     var assignable = (pkgs.packages || []).filter(function (p) {
       return p.kind === 'package' && p.status === 'published';
     });
     if (!assignable.length) {
-      toast('Publish a package before assigning onboarding', true);
+      pane.innerHTML = '<div class="ob-section-card"><div class="ob-section-body">'
+        + empty('No published packages',
+          'Publish a package first — it decides what a new starter receives and must complete.')
+        + '<div class="ob-inline-actions ob-mt-3">'
+        + '<button class="btn" onclick="Onboarding.nav(\'packages\')">Open Packages</button></div>'
+        + '</div></div>';
       return;
     }
 
-    openModal({
-      title: 'Start onboarding',
-      subtitle: 'Nothing is sent yet — you prepare the starter pack on the next screen.',
-      wide: true,
-      body: ''
-        + '<div class="ob-form">'
+    pane.innerHTML = ''
+      + '<div id="ob-start-form">'
+      + '<div id="ob-start-error"></div>'
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Who is joining?</h2></div>'
+      + '  <div class="ob-section-body"><div class="ob-form">'
         // WHO, then WHAT THEY DO, then — recommended from those two — WHICH
         // PACKAGE. The package used to be the first question, which asked the
         // Owner to make the technical choice before the human one.
-        + '  <div class="ob-form-row">'
-        + '    <div class="ob-field"><label for="ob-a-name">Full name<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '      <input type="text" id="ob-a-name" name="applicantName" required maxlength="200"></div>'
-        + '    <div class="ob-field"><label for="ob-a-email">Email<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '      <input type="email" id="ob-a-email" name="applicantEmail" required maxlength="255"'
-        + '             aria-describedby="ob-a-email-hint">'
-        + '      <p class="ob-hint" id="ob-a-email-hint">Where the starter pack goes. It becomes their '
-        + '        sign-in unless you give them an Opal address later.</p></div>'
-        + '  </div>'
-        + '  <div class="ob-form-row">'
-        + '    <div class="ob-field"><label for="ob-a-title">Role / position</label>'
-        + '      <input type="text" id="ob-a-title" name="jobTitle" maxlength="150"'
-        + '             placeholder="e.g. Occupational Therapist"></div>'
-        + '    <div class="ob-field"><label for="ob-a-mobilenum">Mobile (optional)</label>'
-        + '      <input type="tel" id="ob-a-mobilenum" name="mobile" maxlength="40"></div>'
-        + '  </div>'
-        + '  <div class="ob-form-row is-thirds">'
-        + '    <div class="ob-field"><label for="ob-a-rolecat">Role category</label>'
-        + '      <select id="ob-a-rolecat" name="roleCategory" onchange="Onboarding.recommendPackage()">'
-        + '        <option value="occupational_therapist">Occupational therapist</option>'
-        + '        <option value="administration">Administration</option>'
-        + '      </select></div>'
-        + '    <div class="ob-field"><label for="ob-a-emptype">Employment type<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '      <select id="ob-a-emptype" name="employmentType" required onchange="Onboarding.recommendPackage()">'
-        + '        <option value="full_time">Full-time</option>'
-        + '        <option value="part_time">Part-time</option>'
-        + '        <option value="casual">Casual</option>'
-        + '        <option value="fixed_term">Fixed-term</option>'
-        + '      </select></div>'
-        + '    <div class="ob-field"><label for="ob-a-start">Start date</label>'
-        + '      <input type="date" id="ob-a-start" name="startDate"></div>'
-        + '  </div>'
-        + '  <div class="ob-form-row is-single"><div class="ob-field">'
-        + '    <label for="ob-a-package">Onboarding package<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '    <select id="ob-a-package" name="packageId" required>'
-        + assignable.map(function (p) {
-          return '<option value="' + esc(p.id) + '" data-type="' + esc(p.employmentType || '')
-            + '" data-role="' + esc(p.roleCategory || '') + '">' + esc(p.title) + '</option>';
-        }).join('')
-        + '    </select>'
-        + '    <p class="ob-hint" id="ob-a-package-hint" aria-live="polite"></p>'
-        + '  </div></div>'
-        + '  <div class="ob-form-row is-single"><div class="ob-field">'
-        + '    <label for="ob-a-role">Portal access when they join</label>'
-        + '    <select id="ob-a-role" name="proposedRole">'
-        + '      <option value="therapist">Employee — their own calendar, clients and records</option>'
-        + '      <option value="admin">Admin — practice-wide scheduling and travel</option>'
-        + '      <option value="read_only">Read-only</option>'
-        + '    </select>'
-        + '    <p class="ob-hint">You confirm this again when you create their account.</p>'
-        + '  </div></div>'
-        + '  <div class="ob-note is-info">These determinations decide which statutory requirements '
-        + '    are issued. They follow the role\'s <strong>usual duties</strong>, not its job title, '
-        + '    and an undecided answer deliberately issues the requirement rather than skipping it.</div>'
-        + '  <div class="ob-form-row">'
-        + '    <div class="ob-field"><label for="ob-a-child">Child-related work</label>'
-        + '      <select id="ob-a-child" name="childRelatedWork" aria-describedby="ob-a-child-hint">'
-        + '        <option value="assessment_required">Not yet determined</option>'
-        + '        <option value="yes">Yes</option>'
-        + '        <option value="no">No</option>'
-        + '      </select>'
-        + '      <p class="ob-hint" id="ob-a-child-hint">Drives the WA Working with Children Check.</p></div>'
-        + '    <div class="ob-field"><label for="ob-a-risk">NDIS risk-assessed role</label>'
-        + '      <select id="ob-a-risk" name="ndisRiskAssessedRole" aria-describedby="ob-a-risk-hint">'
-        + '        <option value="requires_determination">Not yet determined</option>'
-        + '        <option value="yes">Yes</option>'
-        + '        <option value="no">No</option>'
-        + '      </select>'
-        + '      <p class="ob-hint" id="ob-a-risk-hint">More than incidental contact with participants.</p></div>'
-        + '  </div>'
-        + '  <div class="ob-form-row">'
-        + '    <div class="ob-field"><div class="ob-check">'
-        + '      <input type="checkbox" id="ob-a-mobile" name="mobileCommunityRole">'
-        + '      <label for="ob-a-mobile">Mobile / community role (home and community visits)</label>'
-        + '    </div></div>'
-        + '    <div class="ob-field"><div class="ob-check">'
-        + '      <input type="checkbox" id="ob-a-vehicle" name="usesOwnVehicle">'
-        + '      <label for="ob-a-vehicle">Uses their own vehicle for work</label>'
-        + '    </div></div>'
-        + '  </div>'
-        + '  <div class="ob-form-row is-single"><div class="ob-field">'
-        + '    <label for="ob-a-note">Note for the new starter (optional)</label>'
-        + '    <textarea id="ob-a-note" name="ownerNote" maxlength="2000"></textarea>'
-        + '  </div></div>'
-        + '</div>',
-      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
-        + '<button class="btn" onclick="Onboarding.previewAssign()">Preview requirements</button>'
-        + '<button class="btn primary" onclick="Onboarding.submitAssign()">Start onboarding</button>',
-    });
+      + '  <div class="ob-form-row">'
+      + '    <div class="ob-field"><label for="ob-a-name">Full name<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+      + '      <input type="text" id="ob-a-name" name="applicantName" required maxlength="200"'
+      + '             onchange="Onboarding.refreshEmailTemplate()"></div>'
+      + '    <div class="ob-field"><label for="ob-a-email">Recipient email<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+      + '      <input type="email" id="ob-a-email" name="applicantEmail" required maxlength="255"'
+      + '             aria-describedby="ob-a-email-hint">'
+      + '      <p class="ob-hint" id="ob-a-email-hint">Where the onboarding email and starter pack go. It becomes their '
+      + '        sign-in unless you give them an Opal address later.</p></div>'
+      + '  </div>'
+      + '  <div class="ob-form-row">'
+      + '    <div class="ob-field"><label for="ob-a-title">Role / position</label>'
+      + '      <input type="text" id="ob-a-title" name="jobTitle" maxlength="150"'
+      + '             onchange="Onboarding.refreshEmailTemplate()"'
+      + '             placeholder="e.g. Occupational Therapist"></div>'
+      + '    <div class="ob-field"><label for="ob-a-mobilenum">Mobile (optional)</label>'
+      + '      <input type="tel" id="ob-a-mobilenum" name="mobile" maxlength="40"></div>'
+      + '  </div>'
+      + '  <div class="ob-form-row is-thirds">'
+      + '    <div class="ob-field"><label for="ob-a-rolecat">Role category</label>'
+      + '      <select id="ob-a-rolecat" name="roleCategory" onchange="Onboarding.recommendPackage()">'
+      + '        <option value="occupational_therapist">Occupational therapist</option>'
+      + '        <option value="administration">Administration</option>'
+      + '      </select></div>'
+      + '    <div class="ob-field"><label for="ob-a-emptype">Employment type<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+      + '      <select id="ob-a-emptype" name="employmentType" required onchange="Onboarding.recommendPackage()">'
+      + '        <option value="full_time">Full-time</option>'
+      + '        <option value="part_time">Part-time</option>'
+      + '        <option value="casual">Casual</option>'
+      + '        <option value="fixed_term">Fixed-term</option>'
+      + '      </select></div>'
+      + '    <div class="ob-field"><label for="ob-a-start">Start date</label>'
+      + '      <input type="date" id="ob-a-start" name="startDate"></div>'
+      + '  </div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-package">Onboarding package<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+      + '    <select id="ob-a-package" name="packageId" required>'
+      + assignable.map(function (p) {
+        return '<option value="' + esc(p.id) + '" data-type="' + esc(p.employmentType || '')
+          + '" data-role="' + esc(p.roleCategory || '') + '">' + esc(p.title) + '</option>';
+      }).join('')
+      + '    </select>'
+      + '    <p class="ob-hint" id="ob-a-package-hint" aria-live="polite"></p>'
+      + '  </div></div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-role">Portal access when they join</label>'
+      + '    <select id="ob-a-role" name="proposedRole">'
+      + '      <option value="therapist">Employee — their own calendar, clients and records</option>'
+      + '      <option value="admin">Admin — practice-wide scheduling and travel</option>'
+      + '      <option value="read_only">Read-only</option>'
+      + '    </select>'
+      + '    <p class="ob-hint">You confirm this again when you create their account.</p>'
+      + '  </div></div>'
+      + '  <div class="ob-note is-info">These determinations decide which statutory requirements '
+      + '    are issued. They follow the role\'s <strong>usual duties</strong>, not its job title, '
+      + '    and an undecided answer deliberately issues the requirement rather than skipping it.</div>'
+      + '  <div class="ob-form-row">'
+      + '    <div class="ob-field"><label for="ob-a-child">Child-related work</label>'
+      + '      <select id="ob-a-child" name="childRelatedWork" aria-describedby="ob-a-child-hint">'
+      + '        <option value="assessment_required">Not yet determined</option>'
+      + '        <option value="yes">Yes</option>'
+      + '        <option value="no">No</option>'
+      + '      </select>'
+      + '      <p class="ob-hint" id="ob-a-child-hint">Drives the WA Working with Children Check.</p></div>'
+      + '    <div class="ob-field"><label for="ob-a-risk">NDIS risk-assessed role</label>'
+      + '      <select id="ob-a-risk" name="ndisRiskAssessedRole" aria-describedby="ob-a-risk-hint">'
+      + '        <option value="requires_determination">Not yet determined</option>'
+      + '        <option value="yes">Yes</option>'
+      + '        <option value="no">No</option>'
+      + '      </select>'
+      + '      <p class="ob-hint" id="ob-a-risk-hint">More than incidental contact with participants.</p></div>'
+      + '  </div>'
+      + '  <div class="ob-form-row">'
+      + '    <div class="ob-field"><div class="ob-check">'
+      + '      <input type="checkbox" id="ob-a-mobile" name="mobileCommunityRole">'
+      + '      <label for="ob-a-mobile">Mobile / community role (home and community visits)</label>'
+      + '    </div></div>'
+      + '    <div class="ob-field"><div class="ob-check">'
+      + '      <input type="checkbox" id="ob-a-vehicle" name="usesOwnVehicle">'
+      + '      <label for="ob-a-vehicle">Uses their own vehicle for work</label>'
+      + '    </div></div>'
+      + '  </div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-note">Note for the new starter (optional)</label>'
+      + '    <textarea id="ob-a-note" name="ownerNote" maxlength="2000"></textarea>'
+      + '  </div></div>'
+      + '</div></div></div>'
+
+      + '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Onboarding email</h2>'
+      + '    <button class="btn ob-btn-sm" onclick="Onboarding.resetEmailTemplate()">Reset to standard wording</button>'
+      + '  </div>'
+      + '  <div class="ob-section-body"><div class="ob-form">'
+      + '  <div class="ob-note is-info">The selected package\'s starter pack travels with this email — '
+      + 'attached, or as a secure link when it is too large. The start date, the return-by date and '
+      + 'the download link are added automatically; this text is yours to adjust before sending.</div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-subject">Subject</label>'
+      + '    <input type="text" id="ob-a-subject" name="emailSubject" maxlength="200"'
+      + '           oninput="this.dataset.touched=\'1\'">'
+      + '  </div></div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-message">Message</label>'
+      + '    <textarea id="ob-a-message" name="emailMessage" maxlength="4000" rows="12"'
+      + '              style="min-height:220px;" oninput="this.dataset.touched=\'1\'"></textarea>'
+      + '  </div></div>'
+      + '  <div class="ob-form-row is-single"><div class="ob-field">'
+      + '    <label for="ob-a-method">How to send</label>'
+      + '    <select id="ob-a-method" name="method">'
+      + '      <option value="smtp">Send it now from the practice mailbox</option>'
+      + '      <option value="graph_draft">Prepare a draft in my Outlook to review first</option>'
+      + '    </select>'
+      + '    <p class="ob-hint">A draft needs Outlook permissions your practice may not have granted '
+      + 'yet. If it is unavailable we will tell you, and nothing is lost.</p>'
+      + '  </div></div>'
+      + '</div></div></div>'
+
+      + '<div class="ob-inline-actions ob-mb-4">'
+      + '  <button class="btn" onclick="Onboarding.previewAssign()">Preview requirements</button>'
+      + '  <button class="btn primary" onclick="Onboarding.submitStart()">Send onboarding</button>'
+      + '  <span id="ob-start-progress" class="ob-quiet" aria-live="polite"></span>'
+      + '</div>'
+      + '</div>';
 
     recommendPackage();
+    refreshEmailTemplate();
   }
 
   /**
@@ -1366,7 +1601,7 @@
     var select = doc.getElementById('ob-a-package');
     if (!hint || !select) return;
 
-    var v = modalValues();
+    var v = startValues();
     var qs = 'roleCategory=' + encodeURIComponent(v.roleCategory || '')
       + '&employmentType=' + encodeURIComponent(v.employmentType || '');
     var res = await api('/api/onboarding/packages/recommend?' + qs);
@@ -1381,8 +1616,32 @@
     select.onchange = function () { select.dataset.touched = '1'; };
   }
 
-  function assignPayload() {
-    var v = modalValues();
+  /**
+   * Prefill the email from the server's template, and keep it current while
+   * the Owner has not started editing. The server is the single source of the
+   * wording — the same function that composes an unedited send serves this
+   * text, so what the Owner reads is what would be sent.
+   */
+  async function refreshEmailTemplate(force) {
+    var subject = doc.getElementById('ob-a-subject');
+    var message = doc.getElementById('ob-a-message');
+    if (!subject || !message) return;
+    if (!force && (subject.dataset.touched || message.dataset.touched)) return;
+
+    var v = startValues();
+    var res = await api('/api/onboarding/email-template?applicantName='
+      + encodeURIComponent(v.applicantName || '')
+      + '&jobTitle=' + encodeURIComponent(v.jobTitle || ''));
+    if (!res.ok) return;
+    subject.value = res.subject || '';
+    message.value = res.message || '';
+    if (force) { delete subject.dataset.touched; delete message.dataset.touched; }
+  }
+
+  function resetEmailTemplate() { refreshEmailTemplate(true); }
+
+  function startPayload() {
+    var v = startValues();
     return {
       packageId: v.packageId,
       applicantName: (v.applicantName || '').trim(),
@@ -1403,7 +1662,8 @@
   }
 
   async function previewAssign() {
-    var p = assignPayload();
+    var p = startPayload();
+    if (!p.packageId) { startError('Choose a package first.'); return; }
     var res = await api('/api/onboarding/packages/' + encodeURIComponent(p.packageId) + '/preview', {
       method: 'POST',
       body: {
@@ -1419,7 +1679,7 @@
         },
       },
     });
-    if (!res.ok) { modalError(res.error); return; }
+    if (!res.ok) { startError(res.error); return; }
     openModal({
       title: 'What this person will be asked for',
       subtitle: res.appliedCount + ' items · ' + res.blockingCount + ' required before they start',
@@ -1447,32 +1707,105 @@
             return '<li>' + esc(s.title) + ' <span class="ob-quiet">— ' + esc(s.rule) + '</span></li>';
           }).join('') + '</ul></div>'
         : ''),
-      footer: '<button class="btn primary" onclick="Onboarding.assignDialog()">Back</button>',
+      footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
     });
   }
 
-  async function submitAssign() {
-    var p = assignPayload();
-    if (!p.applicantName) { modalError('A full name is required.'); return; }
+  /**
+   * Create the tracked record, build the pack, send the email — one press.
+   *
+   * Each step is the EXISTING endpoint; this page only sequences them. If the
+   * record is created but the pack or the email fails, nothing is lost: the
+   * Owner lands on the tracked record, where the pack, the dispatch history
+   * and every retry already live. Re-pressing Send after a create can never
+   * duplicate the person — the server refuses a second live run for the same
+   * email, and this page reports that as "already in progress".
+   */
+  async function submitStart() {
+    var el = doc.getElementById('ob-start-error');
+    if (el) el.innerHTML = '';
+    var p = startPayload();
+    var v = startValues();
+    if (!p.applicantName) { startError('A full name is required.'); return; }
     if (!p.applicantEmail || p.applicantEmail.indexOf('@') === -1) {
-      modalError('A valid email address is required.'); return;
+      startError('A valid email address is required.'); return;
     }
+    if (!p.packageId) { startError('Choose an onboarding package.'); return; }
     if (S.busy) return;
     S.busy = true;
-    var res = await api('/api/onboarding/assignments', { method: 'POST', body: p });
+
+    startProgress('Creating the onboarding record…');
+    var created = await api('/api/onboarding/assignments', { method: 'POST', body: p });
+    if (!created.ok) {
+      S.busy = false;
+      startProgress('');
+      if (created.code === 'assignment_exists') {
+        startError('An onboarding run is already in progress for this email address. '
+          + 'Find them in Track Onboarding rather than starting a second one.');
+      } else {
+        startError(created.error);
+      }
+      return;
+    }
+    var id = created.assignment.id;
+
+    startProgress('Building the starter pack…');
+    var gen = await api('/api/onboarding/assignments/' + encodeURIComponent(id)
+      + '/starter-pack', { method: 'POST', body: {} });
+    if (!gen.ok) {
+      S.busy = false;
+      startProgress('');
+      S.dashboard = null;
+      toast('Onboarding record created, but the starter pack could not be built', true);
+      S.view = 'track';
+      S.assignmentDetail = { id: id };
+      await renderManage(root());
+      return;
+    }
+
+    startProgress('Sending…');
+    var send = await api('/api/onboarding/assignments/' + encodeURIComponent(id)
+      + '/starter-pack/send', {
+      method: 'POST',
+      body: {
+        toEmail: p.applicantEmail,
+        method: v.method === 'graph_draft' ? 'graph_draft' : 'smtp',
+        customSubject: (v.emailSubject || '').trim() || undefined,
+        customMessage: (v.emailMessage || '').trim() || undefined,
+      },
+    });
     S.busy = false;
-    if (!res.ok) { modalError(res.error); return; }
-    closeModal();
-    toast('Onboarding started — prepare their starter pack next');
-    S.view = 'active';
-    S.assignmentDetail = { id: res.assignment.id };
-    // Straight into the workspace, which tells them the next step. This used
-    // to open the release dialog immediately, which sent an invitation before
-    // the new starter had received a single form — and skipped the whole paper
-    // round-trip the workflow now exists for. Releasing is still available,
-    // from the workspace, for an Owner who genuinely wants to go straight to
-    // the portal.
+    startProgress('');
+    // The overview counts just changed — refetch them on the next Track render.
+    S.dashboard = null;
+
+    // Four distinct outcomes, reported as themselves — a draft is not "sent",
+    // and a skipped or failed email still leaves a complete, recoverable
+    // record with a manual download path.
+    var webLink = send.ok && send.webLink ? send.webLink : null;
+    if (!send.ok) {
+      toast(send.error || 'The email could not be sent — the record and pack are saved', true);
+    } else if (send.status === 'draft_created') {
+      toast('Draft prepared in Outlook');
+    } else if (send.status === 'skipped') {
+      toast('Email is not configured — download the pack from the record and send it yourself', true);
+    } else {
+      toast('Onboarding sent');
+    }
+
+    S.view = 'track';
+    S.assignmentDetail = { id: id };
     await renderManage(root());
+
+    if (webLink) {
+      openModal({
+        title: 'Draft ready in Outlook',
+        body: '<div class="ob-note is-ok">' + esc(send.message || 'A draft is waiting in your Outlook. Read it over and press Send.') + '</div>',
+        footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>'
+          + '<a class="btn primary" href="' + esc(webLink) + '" target="_blank"'
+          + ' rel="noopener noreferrer">Open the draft</a>',
+      });
+    }
   }
 
   function releaseDialog(id, preview) {
@@ -1503,7 +1836,7 @@
       if (res.code === 'documents_unpublished' && res.details && res.details.documents) {
         modalError(res.error + ': ' + res.details.documents.map(function (d) {
           return d.title;
-        }).join(', ') + '. Publish these in the Document Library first.');
+        }).join(', ') + '. Publish these from Packages → Document library first.');
         return;
       }
       modalError(res.error);
@@ -1512,7 +1845,7 @@
     closeModal();
     if (res.emailSent) toast('Invitation sent');
     else toast('Released — email is not configured, use “Copy link” to share it', true);
-    await loadView('active');
+    await loadView('track');
   }
 
   // ── Packages ──────────────────────────────────────────────────────────────
@@ -1588,13 +1921,69 @@
               + '<td>' + chip(p.status) + '</td></tr>';
           }).join('')
           + '</tbody></table></div></details>'
-        : '');
+        : '')
+      + libraryDisclosure();
+
+    var det = doc.getElementById('ob-library-details');
+    if (det && det.open) loadLibrarySection(det);
+  }
+
+  /**
+   * The Document Library, consolidated into Packages.
+   *
+   * Package source documents are managed here — the library feeds every
+   * package's starter pack — so it lives under Packages as a disclosure
+   * rather than as a navigation destination of its own. Loaded on first
+   * open, not on every Packages render.
+   */
+  function libraryDisclosure() {
+    if (!(can('onboarding.manage_documents') || can('onboarding.view'))) return '';
+    var open = S.libraryOpen === true;
+    S.libraryOpen = false;
+    return '<details class="ob-details" id="ob-library-details"' + (open ? ' open' : '')
+      + ' ontoggle="Onboarding.loadLibrarySection(this)">'
+      + '<summary>Document library</summary>'
+      + '<div id="ob-library-host">' + spinner() + '</div></details>';
   }
 
   async function openPackage(id) {
     S.view = 'packages';
     S.packageDetail = { id: id };
     await renderManage(root());
+  }
+
+  /**
+   * Download the package's inspection ZIP.
+   *
+   * Fetched rather than linked so a refusal — never published, a legacy
+   * version, an empty pack — lands as a readable message in the app instead
+   * of a page of JSON. The bytes come from the same generation path that
+   * builds a real starter pack; the server creates no record beyond audit.
+   */
+  async function downloadPackageZip(id) {
+    var r;
+    try {
+      r = await fetch('/api/onboarding/packages/' + encodeURIComponent(id)
+        + '/starter-pack/download', { credentials: 'include' });
+    } catch (_) {
+      toast('Network error — please try again.', true);
+      return;
+    }
+    if (!r.ok) {
+      var data = await r.json().catch(function () { return {}; });
+      toast(data.error || 'The package ZIP could not be built.', true);
+      return;
+    }
+    var blob = await r.blob();
+    var m = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '');
+    var a = doc.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : 'Starter Pack Preview.zip';
+    doc.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
+    toast('Starter pack ZIP downloaded');
   }
 
   function backToPackages() { S.packageDetail = null; loadView('packages'); }
@@ -1606,6 +1995,12 @@
 
     if (actions) {
       var b = '<button class="btn" onclick="Onboarding.backToPackages()">Back to packages</button>';
+      // Inspection copy of the exact pack a new starter on this package would
+      // receive — same generation path as onboarding delivery, no side effects.
+      if (p.kind === 'package' && p.currentVersion) {
+        b += ' <button class="btn" onclick="Onboarding.downloadPackageZip(\'' + jsq(p.id)
+          + '\')">Download ZIP</button>';
+      }
       if (can('onboarding.manage_packages') && p.kind === 'package') {
         // "Publish v4" told the Owner a number they never chose and cannot
         // act on. What they are doing is making their edits live for new
@@ -1729,42 +2124,95 @@
     await loadView('packages');
   }
 
-  // ── Employees, compliance, expiring, documents, settings ──────────────────
+  // ── Consolidated sections — workforce, compliance, library, settings ──────
+  //
+  // The old Employees, Compliance, Expiring Credentials, Document Library and
+  // Settings tabs, kept as capability and re-homed: workforce and expiry render
+  // inside Track Onboarding's disclosures, the library inside Packages, and
+  // settings/delegation behind the Settings dialog. Nothing here gained or
+  // lost a permission — each section reads the same endpoints behind the same
+  // server-side guards as the tab it replaces.
 
-  async function viewEmployees(pane) {
-    var res = await api('/api/onboarding/employees');
-    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
-    pane.innerHTML = '<div class="ob-section-card">'
-      + '<div class="ob-section-head"><h2>Employees</h2></div>'
-      + '<div class="ob-section-body is-flush"><div class="ob-table-wrap"><table class="ob-table">'
-      + '<thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Employment</th>'
-      + '<th scope="col">Started</th><th scope="col">Screening</th>'
-      + '<th scope="col">Expired</th><th scope="col">Unverified</th>'
-      + '<th scope="col">Policies</th></tr></thead><tbody>'
-      + (res.employees || []).map(function (e) {
-        return '<tr>'
-          + '<td><span class="ob-strong">' + esc(e.name) + '</span></td>'
-          + '<td>' + esc(titleCase(e.role)) + '</td>'
-          + '<td>' + esc(titleCase(e.employmentType) || '—') + '</td>'
-          + '<td>' + fmtDate(e.startDate) + '</td>'
-          + '<td>' + (e.ndisRiskAssessedRole ? chip(e.ndisRiskAssessedRole) : '—') + '</td>'
-          + '<td class="ob-num">' + (e.expiredCredentials
-            ? '<span class="ob-chip expired">' + esc(e.expiredCredentials) + '</span>' : '0') + '</td>'
-          + '<td class="ob-num">' + (e.unverifiedCredentials || 0) + '</td>'
-          + '<td class="ob-num">' + (e.acknowledgements || 0) + '</td>'
-          + '</tr>';
-      }).join('')
-      + '</tbody></table></div></div></div>';
+  /** Employees + expiring credentials, from the caches Track just fetched. */
+  function workforceSection() {
+    var emp = S.employees && S.employees.ok ? (S.employees.employees || []) : null;
+    var exp = S.expiring && S.expiring.ok ? (S.expiring.items || []) : null;
+
+    var out = '';
+    out += '<div class="ob-section-card">'
+      + '<div class="ob-section-head"><h2>Employees</h2>'
+      + '<span class="ob-quiet">Workforce compliance at a glance</span></div>'
+      + '<div class="ob-section-body is-flush">';
+    if (!emp) {
+      out += '<p class="ob-quiet" style="padding:16px;">'
+        + esc((S.employees && S.employees.error) || 'Employee compliance could not be loaded.') + '</p>';
+    } else if (!emp.length) {
+      out += empty('No employees yet', 'People appear here once their portal account exists.');
+    } else {
+      out += '<div class="ob-table-wrap"><table class="ob-table">'
+        + '<thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Employment</th>'
+        + '<th scope="col">Started</th><th scope="col">Screening</th>'
+        + '<th scope="col">Expired</th><th scope="col">Unverified</th>'
+        + '<th scope="col">Policies</th></tr></thead><tbody>'
+        + emp.map(function (e) {
+          return '<tr>'
+            + '<td><span class="ob-strong">' + esc(e.name) + '</span></td>'
+            + '<td>' + esc(titleCase(e.role)) + '</td>'
+            + '<td>' + esc(titleCase(e.employmentType) || '—') + '</td>'
+            + '<td>' + fmtDate(e.startDate) + '</td>'
+            + '<td>' + (e.ndisRiskAssessedRole ? chip(e.ndisRiskAssessedRole) : '—') + '</td>'
+            + '<td class="ob-num">' + (e.expiredCredentials
+              ? '<span class="ob-chip expired">' + esc(e.expiredCredentials) + '</span>' : '0') + '</td>'
+            + '<td class="ob-num">' + (e.unverifiedCredentials || 0) + '</td>'
+            + '<td class="ob-num">' + (e.acknowledgements || 0) + '</td>'
+            + '</tr>';
+        }).join('')
+        + '</tbody></table></div>';
+    }
+    out += '</div></div>';
+
+    out += '<div class="ob-note is-info">Credentials are re-checked daily. Reminders go out '
+      + 'at 90, 60, 30 and 7 days, and again on expiry — each one sent once.</div>'
+      + '<div class="ob-section-card"><div class="ob-section-head"><h2>Expiring and expired</h2></div>'
+      + '<div class="ob-section-body is-flush">';
+    if (!exp) {
+      out += '<p class="ob-quiet" style="padding:16px;">'
+        + esc((S.expiring && S.expiring.error) || 'Expiring credentials could not be loaded.') + '</p>';
+    } else if (!exp.length) {
+      out += empty('Nothing expiring', 'No credential expires in the next 120 days.');
+    } else {
+      out += '<div class="ob-table-wrap"><table class="ob-table">'
+        + '<thead><tr><th scope="col">Person</th><th scope="col">Credential</th>'
+        + '<th scope="col">Expires</th><th scope="col">Status</th></tr></thead><tbody>'
+        + exp.map(function (i) {
+          return '<tr><td>' + esc(i.userName || 'Organisation') + '</td>'
+            + '<td>' + esc(i.title || titleCase(i.kind)) + '</td>'
+            + '<td>' + fmtDate(i.expiryDate) + '</td>'
+            + '<td>' + (i.expired
+              ? '<span class="ob-chip expired">Expired</span>'
+              : '<span class="ob-chip submitted">In ' + esc(i.window) + ' days</span>') + '</td></tr>';
+        }).join('')
+        + '</tbody></table></div>';
+    }
+    out += '</div></div>';
+    return out;
   }
 
-  async function viewCompliance(pane, actions) {
+  /** Compliance registry + organisation records, loaded on first disclosure. */
+  async function loadComplianceSection(el) {
+    if (!el || !el.open || el.dataset.loaded) return;
+    el.dataset.loaded = '1';
+    var host = doc.getElementById('ob-compliance-host');
+    if (!host) return;
+    host.innerHTML = spinner();
+
     var reg = await api('/api/onboarding/compliance/requirements');
     var org = can('onboarding.manage_compliance')
       ? await api('/api/onboarding/compliance/organisation') : { ok: false };
 
-    if (!reg.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(reg.error) + '</div>'; return; }
+    if (!reg.ok) { host.innerHTML = '<div class="ob-note is-danger">' + esc(reg.error) + '</div>'; return; }
 
-    pane.innerHTML = ''
+    host.innerHTML = ''
       + (org.ok ? '<div class="ob-section-card">'
         + '<div class="ob-section-head"><h2>Organisation compliance</h2>'
         + '<span class="ob-quiet">Employer obligations — never an employee upload</span></div>'
@@ -1805,37 +2253,16 @@
       + '</tbody></table></div></div></div>';
   }
 
-  async function viewExpiring(pane) {
-    var res = await api('/api/onboarding/compliance/expiring?days=120');
-    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
-    var items = res.items || [];
-    pane.innerHTML = '<div class="ob-note is-info">Credentials are re-checked daily. Reminders go out '
-      + 'at 90, 60, 30 and 7 days, and again on expiry — each one sent once.</div>'
-      + '<div class="ob-section-card"><div class="ob-section-head"><h2>Expiring and expired</h2></div>'
-      + '<div class="ob-section-body is-flush">'
-      + (items.length
-        ? '<div class="ob-table-wrap"><table class="ob-table">'
-          + '<thead><tr><th scope="col">Person</th><th scope="col">Credential</th>'
-          + '<th scope="col">Expires</th><th scope="col">Status</th></tr></thead><tbody>'
-          + items.map(function (i) {
-            return '<tr><td>' + esc(i.userName || 'Organisation') + '</td>'
-              + '<td>' + esc(i.title || titleCase(i.kind)) + '</td>'
-              + '<td>' + fmtDate(i.expiryDate) + '</td>'
-              + '<td>' + (i.expired
-                ? '<span class="ob-chip expired">Expired</span>'
-                : '<span class="ob-chip submitted">In ' + esc(i.window) + ' days</span>') + '</td></tr>';
-          }).join('')
-          + '</tbody></table></div>'
-        : empty('Nothing expiring', 'No credential expires in the next 120 days.'))
-      + '</div></div>';
-  }
+  /** The library list, rendered into the Packages disclosure on first open. */
+  async function loadLibrarySection(el) {
+    if (!el || !el.open || el.dataset.loaded) return;
+    el.dataset.loaded = '1';
+    var host = doc.getElementById('ob-library-host');
+    if (!host) return;
+    host.innerHTML = spinner();
 
-  async function viewDocuments(pane, actions) {
-    if (actions && can('onboarding.manage_documents')) {
-      actions.innerHTML = '<button class="btn" onclick="Onboarding.importDialog()">Import ZIP</button>';
-    }
     var res = await api('/api/onboarding/documents');
-    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
+    if (!res.ok) { host.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
 
     var docs = res.documents || [];
     var needContent = docs.filter(function (d) { return d.contentStatus === 'document_required'; });
@@ -1843,7 +2270,11 @@
     var byCat = {};
     docs.forEach(function (d) { (byCat[d.category] = byCat[d.category] || []).push(d); });
 
-    pane.innerHTML = ''
+    host.innerHTML = ''
+      + (can('onboarding.manage_documents')
+        ? '<div class="ob-inline-actions ob-mb-3">'
+          + '<button class="btn" onclick="Onboarding.importDialog()">Import ZIP</button></div>'
+        : '')
       + (needContent.length
         ? '<div class="ob-note is-warn"><strong>' + needContent.length
           + ' document' + (needContent.length === 1 ? '' : 's') + ' still need content.</strong> '
@@ -1954,70 +2385,87 @@
     if (!res.ok) { modalError(res.error); return; }
     closeModal();
     toast(res.created.length + ' document(s) imported as drafts');
-    await loadView('documents');
+    // Reopen Packages with the library disclosure expanded and refreshed.
+    S.libraryOpen = true;
+    S.packageDetail = null;
+    await loadView('packages');
   }
 
-  async function viewSettings(pane) {
+  // ── Settings dialog — organisation settings + delegation ──────────────────
+
+  /**
+   * The old Settings tab as a dialog off the Track hero. These are essential
+   * legal configuration (provider status, IR system, reminder cadences), not
+   * preferences — so they stay one click away rather than becoming a fourth
+   * workflow tab. Delegation (owner-only) renders below the form, unchanged.
+   */
+  async function settingsDialog() {
     var res = await api('/api/onboarding/settings');
-    if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger">' + esc(res.error) + '</div>'; return; }
+    if (!res.ok) { toast(res.error, true); return; }
     var s = res.settings;
     S.settings = s;
 
     var perms = user().role === 'owner' ? await api('/api/onboarding/permissions') : { ok: false };
 
-    pane.innerHTML = ''
-      + '<div class="ob-section-card"><div class="ob-section-head"><h2>Organisation</h2></div>'
-      + '<div class="ob-section-body">'
-      + '  <div class="ob-note is-info">These answers change what the portal states is legally '
-      + '  required. Opal never asserts an obligation it cannot support — an unregistered provider '
-      + '  is told worker screening is an Opal policy, not law.</div>'
-      + '  <div class="ob-form">'
-      + '    <div class="ob-form-row">'
-      + '      <div class="ob-field"><label for="ob-s-ndis">NDIS provider status</label>'
-      + '        <select id="ob-s-ndis" name="ndisProviderStatus">'
-      + ['unregistered', 'application_in_progress', 'registered', 'registration_inactive']
-        .map(function (v) {
-          return '<option value="' + v + '"' + (s.ndisProviderStatus === v ? ' selected' : '') + '>'
-            + esc(titleCase(v)) + '</option>';
+    openModal({
+      title: 'Onboarding settings',
+      subtitle: 'Organisation configuration and who can manage onboarding.',
+      wide: true,
+      body: ''
+        + '<div class="ob-section-card"><div class="ob-section-head"><h2>Organisation</h2></div>'
+        + '<div class="ob-section-body">'
+        + '  <div class="ob-note is-info">These answers change what the portal states is legally '
+        + '  required. Opal never asserts an obligation it cannot support — an unregistered provider '
+        + '  is told worker screening is an Opal policy, not law.</div>'
+        + '  <div class="ob-form">'
+        + '    <div class="ob-form-row">'
+        + '      <div class="ob-field"><label for="ob-s-ndis">NDIS provider status</label>'
+        + '        <select id="ob-s-ndis" name="ndisProviderStatus">'
+        + ['unregistered', 'application_in_progress', 'registered', 'registration_inactive']
+          .map(function (v) {
+            return '<option value="' + v + '"' + (s.ndisProviderStatus === v ? ' selected' : '') + '>'
+              + esc(titleCase(v)) + '</option>';
+          }).join('')
+        + '        </select></div>'
+        + '      <div class="ob-field"><label for="ob-s-ir">Industrial relations system</label>'
+        + '        <select id="ob-s-ir" name="industrialRelationsSystem">'
+        + [['unknown', 'Not yet determined'], ['national', 'National system (Fair Work)'],
+          ['wa_state', 'WA state system']].map(function (v) {
+          return '<option value="' + v[0] + '"' + (s.industrialRelationsSystem === v[0] ? ' selected' : '')
+            + '>' + esc(v[1]) + '</option>';
         }).join('')
-      + '        </select></div>'
-      + '      <div class="ob-field"><label for="ob-s-ir">Industrial relations system</label>'
-      + '        <select id="ob-s-ir" name="industrialRelationsSystem">'
-      + [['unknown', 'Not yet determined'], ['national', 'National system (Fair Work)'],
-        ['wa_state', 'WA state system']].map(function (v) {
-        return '<option value="' + v[0] + '"' + (s.industrialRelationsSystem === v[0] ? ' selected' : '')
-          + '>' + esc(v[1]) + '</option>';
-      }).join('')
-      + '        </select>'
-      + '        <p class="ob-hint">A WA sole trader or unincorporated partnership is generally in '
-      + '           the state system, where the Fair Work statements do not apply.</p></div>'
-      + '    </div>'
-      + '    <div class="ob-form-row">'
-      + '      <div class="ob-field"><div class="ob-check">'
-      + '        <input type="checkbox" id="ob-s-small" name="smallBusinessEmployer"'
-      + (s.smallBusinessEmployer ? ' checked' : '') + '>'
-      + '        <label for="ob-s-small">Small business employer (fewer than 15 employees)</label>'
-      + '      </div><p class="ob-hint">Changes the Casual Employment Information Statement cadence '
-      + '        from 6/12 months then annually, to 12-monthly.</p></div>'
-      + '      <div class="ob-field"><label for="ob-s-due">Default days to complete onboarding</label>'
-      + '        <input type="number" id="ob-s-due" name="defaultDueDays" min="1" max="120"'
-      + '               value="' + esc(s.defaultDueDays) + '"></div>'
-      + '    </div>'
-      + '    <div class="ob-form-row is-thirds">'
-      + '      <div class="ob-field"><label for="ob-s-cpd">OT CPD hours per year</label>'
-      + '        <input type="number" id="ob-s-cpd" name="otCpdHoursPerYear" min="0" max="200"'
-      + '               value="' + esc(s.otCpdHoursPerYear) + '"></div>'
-      + '      <div class="ob-field"><label for="ob-s-wwcc">WWCC validity (years)</label>'
-      + '        <input type="number" id="ob-s-wwcc" name="wwccValidityYears" min="1" max="10"'
-      + '               value="' + esc(s.wwccValidityYears) + '"></div>'
-      + '      <div class="ob-field"><label for="ob-s-scr">NDIS screening validity (years)</label>'
-      + '        <input type="number" id="ob-s-scr" name="ndisScreeningValidityYears" min="1" max="10"'
-      + '               value="' + esc(s.ndisScreeningValidityYears) + '"></div>'
-      + '    </div>'
-      + '    <div><button class="btn primary" onclick="Onboarding.saveSettings()">Save settings</button></div>'
-      + '  </div>'
-      + '</div></div>'
-      + (perms.ok ? renderPermissions(perms) : '');
+        + '        </select>'
+        + '        <p class="ob-hint">A WA sole trader or unincorporated partnership is generally in '
+        + '           the state system, where the Fair Work statements do not apply.</p></div>'
+        + '    </div>'
+        + '    <div class="ob-form-row">'
+        + '      <div class="ob-field"><div class="ob-check">'
+        + '        <input type="checkbox" id="ob-s-small" name="smallBusinessEmployer"'
+        + (s.smallBusinessEmployer ? ' checked' : '') + '>'
+        + '        <label for="ob-s-small">Small business employer (fewer than 15 employees)</label>'
+        + '      </div><p class="ob-hint">Changes the Casual Employment Information Statement cadence '
+        + '        from 6/12 months then annually, to 12-monthly.</p></div>'
+        + '      <div class="ob-field"><label for="ob-s-due">Default days to complete onboarding</label>'
+        + '        <input type="number" id="ob-s-due" name="defaultDueDays" min="1" max="120"'
+        + '               value="' + esc(s.defaultDueDays) + '"></div>'
+        + '    </div>'
+        + '    <div class="ob-form-row is-thirds">'
+        + '      <div class="ob-field"><label for="ob-s-cpd">OT CPD hours per year</label>'
+        + '        <input type="number" id="ob-s-cpd" name="otCpdHoursPerYear" min="0" max="200"'
+        + '               value="' + esc(s.otCpdHoursPerYear) + '"></div>'
+        + '      <div class="ob-field"><label for="ob-s-wwcc">WWCC validity (years)</label>'
+        + '        <input type="number" id="ob-s-wwcc" name="wwccValidityYears" min="1" max="10"'
+        + '               value="' + esc(s.wwccValidityYears) + '"></div>'
+        + '      <div class="ob-field"><label for="ob-s-scr">NDIS screening validity (years)</label>'
+        + '        <input type="number" id="ob-s-scr" name="ndisScreeningValidityYears" min="1" max="10"'
+        + '               value="' + esc(s.ndisScreeningValidityYears) + '"></div>'
+        + '    </div>'
+        + '    <div><button class="btn primary" onclick="Onboarding.saveSettings()">Save settings</button></div>'
+        + '  </div>'
+        + '</div></div>'
+        + (perms.ok ? renderPermissions(perms) : ''),
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>',
+    });
   }
 
   function renderPermissions(perms) {
@@ -3921,7 +4369,9 @@
     closeModal();
     S.documentFocus = documentId;
     S.packageDetail = null;
-    nav('documents');
+    // The library lives inside Packages now — open it expanded.
+    S.libraryOpen = true;
+    nav('packages');
   }
 
   async function movePackageDoc(documentId, delta) {
@@ -4037,13 +4487,17 @@
     closeModal: closeModal,
     applyFilters: applyFilters,
     // management
-    assignDialog: assignDialog,
     previewAssign: previewAssign,
-    submitAssign: submitAssign,
+    submitStart: submitStart,
+    refreshEmailTemplate: refreshEmailTemplate,
+    resetEmailTemplate: resetEmailTemplate,
+    settingsDialog: settingsDialog,
+    loadComplianceSection: loadComplianceSection,
+    loadLibrarySection: loadLibrarySection,
     releaseDialog: releaseDialog,
     confirmRelease: confirmRelease,
     openAssignment: openAssignment,
-    backToActive: backToActive,
+    backToTrack: backToTrack,
     reviewAction: reviewAction,
     verifyDialog: verifyDialog,
     submitVerify: submitVerify,
@@ -4055,6 +4509,10 @@
     submitWaive: submitWaive,
     activate: activate,
     confirmActivate: confirmActivate,
+    archiveAssignmentDialog: archiveAssignmentDialog,
+    confirmArchiveAssignment: confirmArchiveAssignment,
+    cancelAssignmentDialog: cancelAssignmentDialog,
+    confirmCancelAssignment: confirmCancelAssignment,
     resendInvite: resendInvite,
     showInviteLink: showInviteLink,
     showPersonal: showPersonal,
@@ -4064,6 +4522,7 @@
     showIdentity: showIdentity,
     exportArchive: exportArchive,
     openPackage: openPackage,
+    downloadPackageZip: downloadPackageZip,
     backToPackages: backToPackages,
     recommendPackage: recommendPackage,
     // journey

@@ -71,6 +71,9 @@ describe('every journey route carries a permission', () => {
     'POST /api/onboarding/assignments/:id/account/invite': 'onboarding.assign',
     'GET /api/onboarding/assignments/:id/journey': 'onboarding.view',
     'GET /api/onboarding/packages/recommend': 'onboarding.assign',
+    // Start Onboarding's editable email prefill — the same default wording an
+    // unedited send composes, served before any assignment exists.
+    'GET /api/onboarding/email-template': 'onboarding.assign',
   };
 
   const declared = declaredRoutes(WORKFLOW);
@@ -116,6 +119,9 @@ describe('every package-document route carries a permission', () => {
     for (const key of [
       'GET /api/onboarding/packages/:id/documents',
       'GET /api/onboarding/packages/:id/documents/:documentId/history',
+      // The Owner's inspection ZIP — read-only, same generation path as
+      // onboarding delivery.
+      'GET /api/onboarding/packages/:id/starter-pack/download',
     ]) {
       expect(`${key}:${(byKey[key] || '').includes('requireAnyPermission(')}`).toBe(`${key}:true`);
     }

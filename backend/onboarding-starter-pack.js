@@ -364,6 +364,142 @@ function buildReadme({ employeeName, orgName, roleTitle, startDate, dueDate, ret
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+//  THE EMAIL
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** The date format every email in this workflow uses. */
+function fmtEmailDate(d) {
+  if (!d) return null;
+  const parsed = new Date(d);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString('en-AU', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
+  });
+}
+
+function defaultStarterPackSubject(orgName, applicantName) {
+  const name = String(applicantName || '').trim();
+  return `Your ${orgName} starter pack${name ? ` — ${name}` : ''}`;
+}
+
+/**
+ * The editable body of the starter-pack email, as plain text.
+ *
+ * ONE source of truth: Start Onboarding fetches this text for the Owner to
+ * read and edit before sending, and composeStarterPackEmail falls back to it
+ * when no edited message arrives — so the wording the Owner was shown and the
+ * wording the server sends can never drift apart.
+ *
+ * Structural facts — start date, return-by date, the download link for an
+ * oversize pack — are NOT part of this text. They are appended by the
+ * composer from the assignment itself, so an Owner editing the greeting
+ * cannot accidentally delete the link the whole email exists to carry.
+ */
+function defaultStarterPackMessage({ applicantName, orgName, roleTitle }) {
+  const firstName = String(applicantName || '').trim().split(/\s+/)[0];
+  return [
+    firstName ? `Hi ${firstName},` : 'Hello,',
+    '',
+    `We are delighted you are joining ${orgName}`
+      + `${roleTitle ? ` as ${roleTitle}` : ''}. Everything we need before your `
+      + 'first day is in the starter pack that comes with this email.',
+    '',
+    'Read the pack, complete the forms, and reply to this email with them '
+      + 'attached. Scans and clear photographs are both fine.',
+    '',
+    'Once we have them we will set up your portal account and send you a '
+      + 'sign-in link. Your details will already be filled in, so you will '
+      + 'only need to check them rather than type them again.',
+    '',
+    'Please do not email your tax file number. You will enter that directly '
+      + 'into the secure portal once your account is ready.',
+    '',
+    'If anything is unclear, just reply to this email.',
+  ].join('\n');
+}
+
+/**
+ * Compose the starter-pack email — subject, HTML and plain text.
+ *
+ * `customMessage` / `customSubject` are the Owner's per-send edits from Start
+ * Onboarding. The message is plain text, escaped here and rendered as
+ * paragraphs; it can never carry markup. Whatever the message says, the
+ * composer still renders the facts box (start / return-by dates) and, for an
+ * oversize pack, the secure download link — those are delivery machinery, not
+ * prose, and an edit must not be able to lose them.
+ */
+function composeStarterPackEmail({
+  assignment, orgName, packFileName, downloadUrl, senderName, dueDate,
+  customSubject, customMessage,
+}) {
+  const { escapeHtml: esc } = require('./email');
+
+  const message = String(customMessage || '').trim() || defaultStarterPackMessage({
+    applicantName: assignment.applicant_name,
+    orgName,
+    roleTitle: assignment.job_title || assignment.package_title,
+  });
+
+  const due = fmtEmailDate(dueDate);
+  const start = fmtEmailDate(assignment.start_date);
+
+  const paragraphs = message
+    .split(/\n{2,}/)
+    .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+    .join('\n  ');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;margin:0;padding:24px;color:#241f1a;}
+ .card{background:#fff;border-radius:10px;max-width:560px;margin:0 auto;padding:36px 40px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+ .logo{font-size:20px;font-weight:700;color:#0f7c6c;margin-bottom:28px;}
+ h2{font-size:22px;font-weight:700;color:#1a1a2e;margin:0 0 12px;}
+ p{font-size:15px;line-height:1.6;color:#3a3a4a;margin:0 0 14px;}
+ .facts{background:#faf6f0;border-radius:8px;padding:14px 18px;margin:0 0 20px;}
+ .facts p{margin:0 0 6px;font-size:14px;}
+ .facts p:last-child{margin-bottom:0;}
+ .btn{display:inline-block;background:#0f7c6c;color:#fff !important;text-decoration:none;padding:13px 26px;border-radius:8px;font-weight:600;font-size:15px;margin:8px 0 18px;}
+ .url{font-size:12px;color:#99928a;word-break:break-all;}
+ .footer{font-size:12px;color:#99928a;margin-top:28px;border-top:1px solid #e9e3d9;padding-top:16px;}
+</style></head>
+<body><div class="card">
+  <div class="logo">🌿 ${esc(orgName)}</div>
+  <h2>Welcome to ${esc(orgName)}</h2>
+  ${paragraphs}
+  ${(start || due) ? `<div class="facts">
+    ${start ? `<p><strong>Your start date:</strong> ${esc(start)}</p>` : ''}
+    ${due ? `<p><strong>Please return your forms by:</strong> ${esc(due)}</p>` : ''}
+  </div>` : ''}
+  ${downloadUrl ? `<a href="${downloadUrl}" class="btn">Download my starter pack →</a>
+    <p class="url">${esc(downloadUrl)}</p>` : ''}
+  <div class="footer">
+    ${esc(senderName || orgName)}<br>${esc(orgName)}
+  </div>
+</div></body></html>`;
+
+  const text = [
+    message,
+    '',
+    start ? `Your start date: ${start}` : '',
+    due ? `Please return your forms by: ${due}` : '',
+    downloadUrl
+      ? `Your starter pack is here: ${downloadUrl}`
+      : `Your starter pack (${packFileName}) is attached to this email.`,
+    '',
+    senderName || orgName,
+    orgName,
+  ].filter((l) => l !== '').join('\n');
+
+  return {
+    subject: String(customSubject || '').trim()
+      || defaultStarterPackSubject(orgName, assignment.applicant_name),
+    html,
+    text,
+  };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 //  ZIP BUILD
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -511,4 +647,7 @@ module.exports = {
   readVersionBytes,
   safeStem,
   extensionFor,
+  defaultStarterPackSubject,
+  defaultStarterPackMessage,
+  composeStarterPackEmail,
 };

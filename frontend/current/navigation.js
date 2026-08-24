@@ -93,8 +93,8 @@
     // Assessments tab, exactly as the on-screen Back button does.
     'assessment',
     // Onboarding Packages. A tab like any other, but it carries a sub-view so
-    // an owner can link a colleague straight to, say, expiring credentials:
-    //   #onboarding | #onboarding/active | #onboarding/compliance
+    // an owner can link a colleague straight to a workflow step:
+    //   #onboarding | #onboarding/packages | #onboarding/start
     'onboarding',
   ];
 
@@ -128,9 +128,11 @@
   var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment'];
 
   /** Onboarding sub-views. Mirrors MANAGE_VIEWS in onboarding.js; an
-   *  unrecognised value normalises to the dashboard rather than 404ing. */
-  var OB_VIEWS = ['dashboard', 'packages', 'active', 'employees',
-    'compliance', 'expiring', 'documents', 'settings'];
+   *  unrecognised value — including the retired dashboard/active/employees/
+   *  compliance/expiring/documents/settings addresses — normalises to Track
+   *  Onboarding rather than 404ing, so old bookmarks keep landing somewhere
+   *  true. */
+  var OB_VIEWS = ['track', 'packages', 'start'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -194,9 +196,9 @@
 
     } else if (out.tab === 'onboarding') {
       var obView = lower(s.view);
-      // An unrecognised sub-view degrades to the dashboard rather than
+      // An unrecognised sub-view degrades to Track Onboarding rather than
       // producing an address that renders nothing.
-      out.view = inList(OB_VIEWS, obView) ? obView : 'dashboard';
+      out.view = inList(OB_VIEWS, obView) ? obView : 'track';
 
     } else if (out.tab === 'casenotes') {
       out.id = safeId(s.id) || null;
@@ -253,8 +255,8 @@
       else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'onboarding') {
-      // '#onboarding' IS the dashboard, so it needs no segment of its own.
-      if (s.view && s.view !== 'dashboard') out += '/' + s.view;
+      // '#onboarding' IS Track Onboarding, so it needs no segment of its own.
+      if (s.view && s.view !== 'track') out += '/' + s.view;
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
     } else if (s.tab === 'interviews') {
@@ -476,7 +478,7 @@
     var st = { tab: tab };
     if (tab === 'calendar') st.view = calendarModeName();
     else if (tab === 'resources') { st.view = NAV.rhView || 'home'; st.id = NAV.rhId; }
-    else if (tab === 'onboarding') st.view = NAV.obView || 'dashboard';
+    else if (tab === 'onboarding') st.view = NAV.obView || 'track';
     else if (tab === 'casenotes') st.id = caseNoteSelectedId();
     else if (tab === 'interviews') st.id = interviewRecordId();
     return st;
@@ -825,9 +827,9 @@
       // section. open() is idempotent, so calling it here as well as from the
       // RBAC guard's post-switch dispatch is safe.
       if (isFn(global.Onboarding.open)) {
-        try { global.Onboarding.open(t.view || 'dashboard'); } catch (e) {}
+        try { global.Onboarding.open(t.view || 'track'); } catch (e) {}
       }
-      NAV.obView = t.view || 'dashboard';
+      NAV.obView = t.view || 'track';
     }
 
     if (t.tab === 'resources' && global.RH2) {
@@ -1005,7 +1007,7 @@
       hookMethod('Onboarding', 'nav', function (orig) {
         return function (view) {
           var out = orig.apply(this, arguments);
-          NAV.obView = lower(view) || 'dashboard';
+          NAV.obView = lower(view) || 'track';
           syncBase();
           return out;
         };

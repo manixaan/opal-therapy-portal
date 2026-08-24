@@ -220,6 +220,26 @@ router.get('/api/onboarding/packages/recommend', requireAuth,
     });
   }));
 
+/**
+ * The pre-populated onboarding email, before any assignment exists.
+ *
+ * Start Onboarding shows this text in an editable field; the send endpoint
+ * accepts the edited version back. Served from the same
+ * defaultStarterPackMessage the composer falls back to, so what the Owner is
+ * shown and what an unedited send contains are the same words by construction.
+ */
+router.get('/api/onboarding/email-template', requireAuth,
+  requirePermission('onboarding.assign'), safe(async (req, res) => {
+    const applicantName = str(req.query.applicantName, 200) || '';
+    const roleTitle = str(req.query.jobTitle, 150);
+    const { orgName } = await practiceDetails(req, null);
+    res.json({
+      ok: true,
+      subject: starterPack.defaultStarterPackSubject(orgName, applicantName),
+      message: starterPack.defaultStarterPackMessage({ applicantName, orgName, roleTitle }),
+    });
+  }));
+
 // ═════════════════════════════════════════════════════════════════════════════
 //  STARTER PACK — generate, download, send
 // ═════════════════════════════════════════════════════════════════════════════
@@ -409,93 +429,14 @@ router.get('/api/onboarding/assignments/:id/starter-pack/download',
  */
 const MAX_SMTP_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 
-function starterPackEmail({ assignment, orgName, packFileName, downloadUrl, senderName, dueDate }) {
-  const esc = email.escapeHtml;
-  const firstName = String(assignment.applicant_name || '').trim().split(/\s+/)[0];
-  const greeting = firstName ? `Hi ${esc(firstName)},` : 'Hello,';
-  const role = assignment.job_title || assignment.package_title;
-  const fmt = (d) => {
-    if (!d) return null;
-    const parsed = new Date(d);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString('en-AU', {
-      day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth',
-    });
-  };
-  const due = fmt(dueDate);
-  const start = fmt(assignment.start_date);
-
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
- body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f5f5f5;margin:0;padding:24px;color:#241f1a;}
- .card{background:#fff;border-radius:10px;max-width:560px;margin:0 auto;padding:36px 40px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
- .logo{font-size:20px;font-weight:700;color:#0f7c6c;margin-bottom:28px;}
- h2{font-size:22px;font-weight:700;color:#1a1a2e;margin:0 0 12px;}
- p{font-size:15px;line-height:1.6;color:#3a3a4a;margin:0 0 14px;}
- ul{font-size:15px;line-height:1.7;color:#3a3a4a;padding-left:20px;margin:0 0 18px;}
- .facts{background:#faf6f0;border-radius:8px;padding:14px 18px;margin:0 0 20px;}
- .facts p{margin:0 0 6px;font-size:14px;}
- .facts p:last-child{margin-bottom:0;}
- .btn{display:inline-block;background:#0f7c6c;color:#fff !important;text-decoration:none;padding:13px 26px;border-radius:8px;font-weight:600;font-size:15px;margin:8px 0 18px;}
- .url{font-size:12px;color:#99928a;word-break:break-all;}
- .footer{font-size:12px;color:#99928a;margin-top:28px;border-top:1px solid #e9e3d9;padding-top:16px;}
-</style></head>
-<body><div class="card">
-  <div class="logo">🌿 ${esc(orgName)}</div>
-  <h2>Welcome to ${esc(orgName)}</h2>
-  <p>${greeting}</p>
-  <p>We are delighted you are joining us${role ? ` as <strong>${esc(role)}</strong>` : ''}.
-     Everything we need before your first day is in the starter pack
-     ${downloadUrl ? 'linked below' : 'attached to this email'}.</p>
-  ${(start || due) ? `<div class="facts">
-    ${start ? `<p><strong>Your start date:</strong> ${esc(start)}</p>` : ''}
-    ${due ? `<p><strong>Please return your forms by:</strong> ${esc(due)}</p>` : ''}
-  </div>` : ''}
-  ${downloadUrl ? `<a href="${downloadUrl}" class="btn">Download my starter pack →</a>
-    <p class="url">${esc(downloadUrl)}</p>` : ''}
-  <p>Inside you will find:</p>
-  <ul>
-    <li>a short read-me explaining what to complete</li>
-    <li>the forms we need back from you</li>
-    <li>the policies and information statements you are entitled to receive</li>
-  </ul>
-  <p><strong>What to do next.</strong> Read the pack, complete the forms, and reply to this
-     email with them attached. Scans and clear photographs are both fine.</p>
-  <p>Once we have them we will set up your portal account and send you a sign-in link.
-     Your details will already be filled in, so you will only need to check them.</p>
-  <p><strong>Please do not email your tax file number.</strong> You will enter that directly
-     into the secure portal once your account is ready.</p>
-  <p>If anything is unclear, just reply to this email.</p>
-  <div class="footer">
-    ${esc(senderName || orgName)}<br>${esc(orgName)}
-  </div>
-</div></body></html>`;
-
-  const text = [
-    greeting.replace(/<[^>]+>/g, ''),
-    '',
-    `We are delighted you are joining ${orgName}${role ? ` as ${role}` : ''}.`,
-    downloadUrl
-      ? `Your starter pack is here: ${downloadUrl}`
-      : `Your starter pack (${packFileName}) is attached to this email.`,
-    '',
-    start ? `Your start date: ${start}` : '',
-    due ? `Please return your forms by: ${due}` : '',
-    '',
-    'Read the pack, complete the forms, and reply to this email with them attached.',
-    'Once we have them we will set up your portal account and send you a sign-in link.',
-    '',
-    'Please do NOT email your tax file number — you will enter that in the secure portal.',
-    '',
-    senderName || orgName,
-    orgName,
-  ].filter((l) => l !== '').join('\n');
-
+/** The Owner's per-send email edits, bounded. Plain text only — the composer
+ *  escapes; nothing typed here can carry markup into the email. */
+function customEmailEdits(body) {
   return {
-    subject: `Your ${orgName} starter pack${firstName ? ` — ${assignment.applicant_name}` : ''}`,
-    html,
-    text,
+    customSubject: str(body?.customSubject, 200),
+    customMessage: typeof body?.customMessage === 'string'
+      ? String(body.customMessage).replace(/\r\n/g, '\n').trim().slice(0, 4000) || null
+      : null,
   };
 }
 
@@ -549,12 +490,13 @@ router.post('/api/onboarding/assignments/:id/starter-pack/send',
         + `?token=${encodeURIComponent(token)}`;
     }
 
-    const composed = starterPackEmail({
+    const composed = starterPack.composeStarterPackEmail({
       assignment, orgName,
       packFileName: pack.file_name,
       downloadUrl,
       senderName: req.user.name || null,
       dueDate: assignment.due_at,
+      ...customEmailEdits(req.body),
     });
 
     let outcome;
@@ -1939,7 +1881,7 @@ module.exports._internals = {
   statusLabel,
   STATUS_LABELS,
   JOURNEY_ORDER,
-  starterPackEmail,
+  customEmailEdits,
   MAX_SMTP_ATTACHMENT_BYTES,
   RETURN_ALLOWED,
 };
