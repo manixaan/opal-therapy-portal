@@ -905,6 +905,19 @@
 
   /** Tools the signed-in user may see, for the current filters. */
   function toolsFor(f) {
+    /* A TOOL IS NOT FILED ANYWHERE, SO IT IS NEVER INSIDE A FOLDER.
+       Shelving is `resource_folder_assignments`, which can only hold a
+       resource id — a workflow has no row there and no folder it belongs to.
+       Offering one inside every folder made each folder show a document it
+       does not hold, put the Service Agreement (and, as Templates grows, the
+       FCA and Progress Note masters) in front of a reader who had opened
+       Handwriting & Motor Skills, and counted those cards in the tally above
+       the grid. An empty folder went as far as reporting "1 resource" and
+       showing a template instead of saying it was empty.
+       They stay on the Library front page, in All Resources, in a search and
+       in the Templates collection — every place that is the library rather
+       than one shelf of it. */
+    if (f && f.folderId) return [];
     // The hub reads the signed-in user from APP_USER, like every other gate
     // in this file. An owner holds every service-agreement permission
     // implicitly (permissions.js), and APP_USER carries the expanded list.
@@ -1014,6 +1027,18 @@
     if (S.view === 'library') render();
   }
 
+  /**
+   * Everything the Library shows a number for comes from two server reads: the
+   * folder grid, and — when one is open — that folder. Anything that changes
+   * what is filed invalidates both, so they are refreshed together. Refreshing
+   * only the grid was how the card and the folder header came to hold two
+   * different figures until the next navigation reconciled them.
+   */
+  function libRefreshFolders() {
+    loadFolders(true);
+    if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
+  }
+
   /* ── Uploading ────────────────────────────────────────────────────────────
      Two ways in, one path: drag files onto a folder, or press Upload and pick
      them. Both end up in libUploadFiles, so the two doors cannot behave
@@ -1092,7 +1117,7 @@
     }
 
     // The folder counts and the open list are both stale now.
-    loadFolders(true);
+    libRefreshFolders();
     if (S.lib.folderId) loadLibrary();
   }
 
@@ -1237,7 +1262,7 @@
     S.lib.busy = '';
     if (!d.ok) { r.err = d.error || 'That name could not be saved.'; render(); return; }
     S.lib.renaming = null;
-    loadFolders(true);
+    libRefreshFolders();
     if (r.kind === 'resource') loadLibrary();
     render();
   }
@@ -1274,8 +1299,17 @@
     f.browse = 'folders';
     f.q = ''; f.kind = ''; f.type = ''; f.topic = ''; f.cost = '';
     f.population = ''; f.setting = ''; f.authority = '';
+    // A collection left over from wherever the reader came from would narrow
+    // the list this folder returns while its count stayed unnarrowed — the
+    // folder would look emptier than its card, with nothing on screen saying
+    // why. Opening a folder asks one question: what is filed in here.
+    f.collection = '';
     f.sel = {}; f.selMode = false;
     f.menu = null; f.renaming = null;
+    // The shelves are needed inside a folder too — the move picker reads them,
+    // and a reader who arrived here without passing the grid has none. It is
+    // cached, so this is free on every path that already loaded them.
+    loadFolders();
     if (id) loadFolderMeta(id);
     loadLibrary();
   }
@@ -1292,6 +1326,10 @@
     S.lib.folderId = '';
     S.lib.folderMeta = null;
     S.lib.sel = {}; S.lib.selMode = false;
+    // All Resources states the library's size from the same tree read the
+    // "All Resources · 653" row uses, so the row and the page it opens cannot
+    // give two answers. Cached, so this costs nothing on the usual path.
+    loadFolders();
     loadLibrary();
   }
 
@@ -1348,7 +1386,7 @@
     if (!d.ok) { S.lib.moveErr = d.error || 'Those resources could not be moved.'; render(); return; }
     S.lib.sel = {}; S.lib.selMode = false; S.lib.moveOpen = false; S.lib.moveErr = '';
     S.lib.moveNote = d.moved + (d.moved === 1 ? ' resource moved to ' : ' resources moved to ') + d.folder;
-    loadFolders(true);
+    libRefreshFolders();
     loadLibrary();
   }
 
@@ -1387,8 +1425,7 @@
     S.lib.busy = '';
     if (!d.ok) { form.err = d.error || 'That folder could not be saved.'; render(); return; }
     S.lib.folderForm = null;
-    loadFolders(true);
-    if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
+    libRefreshFolders();
     render();
   }
 
@@ -1401,7 +1438,7 @@
     S.lib.busy = '';
     if (!d.ok) { S.lib.orgErr = d.error || 'That folder could not be removed.'; render(); return; }
     if (S.lib.folderId === id) { S.lib.folderId = ''; S.lib.folderMeta = null; }
-    loadFolders(true);
+    libRefreshFolders();
     loadLibrary();
   }
 
@@ -1574,22 +1611,23 @@
       + '</button></div>';
   }
 
-  /** Subfolders of the open folder, above its own resources. */
+  /**
+   * Subfolders of the open folder, above its own resources.
+   *
+   * Counts come from the folder route with the subfolders themselves. Looking
+   * them up in the folder tree meant a reader who had not passed the grid was
+   * shown "0 resources" on a shelf that was full, and the number changed under
+   * them the moment the tree happened to load.
+   */
   function renderSubfolders() {
     var meta = S.lib.folderMeta;
     if (!meta || !(meta.children || []).length) return '';
-    var byId = {};
-    (S.lib.folders || []).forEach(function (p) {
-      byId[p.id] = p;
-      (p.children || []).forEach(function (c) { byId[c.id] = c; });
-    });
     var owner = isOwner();
     return '<div class="rh2-folders rh2-folders-sub">'
       + meta.children.map(function (c) {
-        var known = byId[c.id] || {};
         return folderCard({
           id: c.id, name: c.name, description: c.description,
-          count: known.count || 0, children: [], parentId: meta.folder.id,
+          count: c.count || 0, children: [], parentId: meta.folder.id,
         }, owner);
       }).join('') + '</div>';
   }
@@ -1749,9 +1787,24 @@
       return out + '<div class="rh2-empty">No resources match. Try clearing a filter, or tell us what is missing via feedback on any related resource.</div></div>';
     }
 
-    out += '<p class="rh2-count" role="status">'
-      + (f.rows.length + tools.length) + (f.hasMore ? '+' : '')
-      + ((f.rows.length + tools.length) === 1 ? ' resource' : ' resources') + '</p>';
+    /* BROWSING STATES THE SIZE OF THE SHELF; SEARCHING STATES THE HITS.
+       A page is 48 cards, and counting them made a folder of 451 announce
+       "48+ resources" one line below the card that had just said 451 — then a
+       third number as soon as Load more ran. Whenever the reader is browsing
+       a known set, the tally is that set's server count: the folder's, sent
+       with the folder, or the library's, sent with the tree. A search or a
+       filter is a different question — how many matched — and keeps counting
+       what came back. */
+    var known = null;
+    if (inFolder && !searching && f.folderMeta && f.folderMeta.folder
+      && typeof f.folderMeta.folder.count === 'number') known = f.folderMeta.folder.count;
+    else if (!inFolder && !searching && !f.saved && !f.collection
+      && f.browse === 'all' && typeof f.totalResources === 'number') known = f.totalResources;
+
+    var tally = known !== null ? countLabel(known)
+      : (f.rows.length + tools.length) + (f.hasMore ? '+' : '')
+        + ((f.rows.length + tools.length) === 1 ? ' resource' : ' resources');
+    out += '<p class="rh2-count" role="status">' + esc(tally) + '</p>';
     out += '<div class="rh2-grid">'
       + tools.map(toolCard).join('')
       + f.rows.map(function (r) { return selectableCard(r, backView); }).join('') + '</div>';
@@ -6818,6 +6871,11 @@
 
     _md: mdRender, // exported for unit tests
     _esc: esc,
+    // The two rules behind every number and card in a Library folder. Exported
+    // so they can be exercised rather than pattern-matched in the source:
+    // which cards a folder is allowed to add, and how a count reads.
+    _toolsFor: toolsFor,
+    _countLabel: countLabel,
   };
 
 })(typeof window !== 'undefined' ? window : this);

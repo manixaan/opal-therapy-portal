@@ -586,3 +586,174 @@ describe('browsing, search and deep links', () => {
       .toBeLessThan(folderNamed(asOwner.body.folders, 'Policies').count);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE COUNT AND THE CONTENTS ARE ONE ANSWER
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A folder card states a number; opening the folder issues a different query
+ * on a different route. Every test here asserts the same property from a
+ * different angle: those two must describe the same set of rows.
+ *
+ * The regression these exist for is a card that read "30 resources" over a
+ * folder that opened to one. Two of the three mechanisms behind it were
+ * client-side (a workflow tool card counted as a resource in every folder, and
+ * a tally that counted the page rather than the folder — see
+ * resource-library-frontend-guards.test.js); the third was here, in a browse
+ * route that did not exclude what the count excluded.
+ *
+ * `openedIds` is deliberately the exact call the Library makes when a reader
+ * clicks a folder. Asserting against a hand-built query would test the query,
+ * not the screen.
+ */
+describe('a folder\'s count and its contents are the same set', () => {
+  let org; let agent; let owner; let shelf;
+
+  /** Exactly what the client requests when a folder is opened. */
+  const openedIds = async (who, folderId) => {
+    const res = await who.get(`/api/rh2/resources?folderId=${folderId}&folderScope=tree&limit=100`);
+    expect(res.status).toBe(200);
+    return (res.body.resources || []).map((r) => r.id).sort();
+  };
+
+  const cardCount = async (who, name) => folderNamed(
+    (await who.get('/api/rh2/library/folders')).body.folders, name).count;
+
+  const headerCount = async (who, folderId) => {
+    const res = await who.get(`/api/rh2/library/folders/${folderId}`);
+    expect(res.status).toBe(200);
+    return res.body.folder.count;
+  };
+
+  beforeEach(async () => {
+    org = await seedOrganisation();
+    const o = await agentFor('owner', org.id);
+    agent = o.agent; owner = o.user;
+    shelf = await makeFolder(agent, 'Assessments');
+  });
+
+  it('an empty folder says nothing is in it, and opens to nothing', async () => {
+    expect(await cardCount(agent, 'Assessments')).toBe(0);
+    expect(await headerCount(agent, shelf.id)).toBe(0);
+    expect(await openedIds(agent, shelf.id)).toEqual([]);
+  });
+
+  it('a folder holding one document says 1, and opens to that one document', async () => {
+    const only = await seedResource(org.id, { title: 'Sensory Profile Protocol' });
+    await agent.post('/api/rh2/library/move')
+      .send({ folderId: shelf.id, resourceIds: [only.id] });
+
+    expect(await cardCount(agent, 'Assessments')).toBe(1);
+    expect(await headerCount(agent, shelf.id)).toBe(1);
+    expect(await openedIds(agent, shelf.id)).toEqual([only.id]);
+  });
+
+  it('a folder holding several says so, and opens to exactly those', async () => {
+    const docs = [];
+    for (const title of ['COPM Guide', 'AMPS Manual', 'Sensory Profile']) {
+      docs.push(await seedResource(org.id, { title }));
+    }
+    await agent.post('/api/rh2/library/move')
+      .send({ folderId: shelf.id, resourceIds: docs.map((d) => d.id) });
+
+    expect(await cardCount(agent, 'Assessments')).toBe(3);
+    expect(await headerCount(agent, shelf.id)).toBe(3);
+    expect(await openedIds(agent, shelf.id)).toEqual(docs.map((d) => d.id).sort());
+  });
+
+  it('a document filed elsewhere is in neither the count nor the contents', async () => {
+    const other = await makeFolder(agent, 'Policies');
+    const mine = await seedResource(org.id, { title: 'Assessment Consent Form' });
+    const theirs = await seedResource(org.id, { title: 'Leave Policy' });
+    await agent.post('/api/rh2/library/move').send({ folderId: shelf.id, resourceIds: [mine.id] });
+    await agent.post('/api/rh2/library/move').send({ folderId: other.id, resourceIds: [theirs.id] });
+
+    expect(await cardCount(agent, 'Assessments')).toBe(1);
+    expect(await openedIds(agent, shelf.id)).toEqual([mine.id]);
+    expect(await openedIds(agent, other.id)).toEqual([theirs.id]);
+  });
+
+  it('retiring a filed document removes it from the count AND from the folder', async () => {
+    // THE REGRESSION. The count has always excluded retired records; the
+    // browse route excluded them only for a reader who cannot author, so an
+    // owner opening "2 resources" was handed three.
+    const live = await seedResource(org.id, { title: 'Current Protocol' });
+    const retired = await seedResource(org.id, { title: 'Withdrawn Protocol' });
+    await agent.post('/api/rh2/library/move')
+      .send({ folderId: shelf.id, resourceIds: [live.id, retired.id] });
+    expect(await cardCount(agent, 'Assessments')).toBe(2);
+
+    await db.pool.query(
+      "UPDATE resources SET status = 'archived', archived_at = NOW(), publication_state = 'retired' WHERE id = $1",
+      [retired.id]);
+
+    expect(await cardCount(agent, 'Assessments')).toBe(1);
+    expect(await headerCount(agent, shelf.id)).toBe(1);
+    expect(await openedIds(agent, shelf.id)).toEqual([live.id]);
+  });
+
+  it('a record the reader may not open is in neither their count nor their folder', async () => {
+    const open = await seedResource(org.id, { title: 'Screening Checklist' });
+    const restricted = await seedResource(org.id, { title: 'Rights Review Draft' });
+    await agent.post('/api/rh2/library/move')
+      .send({ folderId: shelf.id, resourceIds: [open.id, restricted.id] });
+    await db.pool.query(
+      "UPDATE resources SET access_tier = 'admin', publication_state = 'rights-review' WHERE id = $1",
+      [restricted.id]);
+
+    const therapist = (await agentFor('therapist', org.id)).agent;
+    expect(await cardCount(therapist, 'Assessments')).toBe(1);
+    expect(await headerCount(therapist, shelf.id)).toBe(1);
+    expect(await openedIds(therapist, shelf.id)).toEqual([open.id]);
+
+    // And the correction did not hand the therapist anything new: the owner
+    // still sees both, so this is a narrower view, not a broader one.
+    expect(await cardCount(agent, 'Assessments')).toBe(2);
+  });
+
+  it('the folder header repeats the card, subfolders and all', async () => {
+    const parent = await makeFolder(agent, 'Therapy Resources');
+    const child = await makeFolder(agent, 'Handwriting', parent.id);
+    const atParent = await seedResource(org.id, { title: 'Session Planner' });
+    const atChild = await seedResource(org.id, { title: 'Letter Formation Sheet' });
+    await agent.post('/api/rh2/library/move').send({ folderId: parent.id, resourceIds: [atParent.id] });
+    await agent.post('/api/rh2/library/move').send({ folderId: child.id, resourceIds: [atChild.id] });
+
+    const detail = await agent.get(`/api/rh2/library/folders/${parent.id}`);
+    expect(detail.body.folder.count).toBe(2);       // its own plus the subfolder's
+    expect(detail.body.folder.directCount).toBe(1); // what sits at this level
+    expect(detail.body.children[0]).toMatchObject({ id: child.id, count: 1 });
+    expect(await cardCount(agent, 'Therapy Resources')).toBe(2);
+    expect(await openedIds(agent, parent.id)).toEqual([atParent.id, atChild.id].sort());
+  });
+
+  it('a removed subfolder takes its documents out of both at once', async () => {
+    // DELETE deactivates the folder and re-files its documents under Needs
+    // Review, so both numbers move for the same reason. The browse route's
+    // subfolder scan also matches the count's `kind='library' AND is_active`
+    // enumeration now — belt and braces for a deactivated shelf the re-filing
+    // ever failed to empty, which this test does not reach.
+    const parent = await makeFolder(agent, 'Therapy Resources');
+    const child = await makeFolder(agent, 'Handwriting', parent.id);
+    const doc = await seedResource(org.id, { title: 'Pencil Grip Guide' });
+    await agent.post('/api/rh2/library/move').send({ folderId: child.id, resourceIds: [doc.id] });
+    expect(await cardCount(agent, 'Therapy Resources')).toBe(1);
+
+    expect((await agent.delete(`/api/rh2/library/folders/${child.id}`)).status).toBe(200);
+
+    expect(await cardCount(agent, 'Therapy Resources')).toBe(0);
+    expect(await headerCount(agent, parent.id)).toBe(0);
+    expect(await openedIds(agent, parent.id)).toEqual([]);
+    // Nothing was destroyed — it is in Needs Review, and counted there.
+    expect(await cardCount(agent, 'Needs Review')).toBe(1);
+  });
+
+  it('does not leak another organisation\'s count through the folder route', async () => {
+    const stranger = await seedOrganisation();
+    const theirAgent = (await agentFor('owner', stranger.id)).agent;
+    const res = await theirAgent.get(`/api/rh2/library/folders/${shelf.id}`);
+    expect(res.status).toBe(404);
+    expect(res.body.count).toBeUndefined();
+  });
+});

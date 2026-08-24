@@ -642,12 +642,14 @@ describe('the server, not the button, is what protects this', () => {
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
     // These pins move whenever ANY feature changes the hub assets — the file
-    // is shared, so the version is shared. r25/r16 is this change: one
-    // unified catalogue, three actions, one induction renderer. Bump both
-    // this and the list in assessment-surface-guards.test.js together, or CI
-    // fails on the half that was forgotten.
+    // is shared, so the version is shared. r25/r16 was one unified catalogue,
+    // three actions, one induction renderer; r26 is the Library folder fix
+    // (no workflow tool inside a folder, and the folder's own count in its
+    // header), which touched the JS and not the CSS. Bump both this and the
+    // list in assessment-surface-guards.test.js together, or CI fails on the
+    // half that was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r16');
-    expect(SHELL).toContain('/resourcehub.js?v=r25');
+    expect(SHELL).toContain('/resourcehub.js?v=r26');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

@@ -3,10 +3,16 @@
 /**
  * LIBRARY FOLDER UI — STATIC GUARDS.
  *
- * resourcehub.js has no browser test harness, so these read the source and
- * assert the properties that a refactor would break silently. They are crude
- * on purpose: if a renderer is renamed, update the assertion beside it rather
- * than deleting it.
+ * resourcehub.js has no browser test harness, so most of these read the source
+ * and assert the properties that a refactor would break silently. They are
+ * crude on purpose: if a renderer is renamed, update the assertion beside it
+ * rather than deleting it.
+ *
+ * The two rules that decide what a folder actually shows — which cards may be
+ * added to a grid, and how a count reads — are the exception. The file loads
+ * cleanly against a stub window, so those are CALLED (see the last describe)
+ * rather than pattern-matched. A number a user is shown deserves a test that
+ * would notice if it changed.
  *
  * What is protected here is what a reviewer cannot see by reading a diff:
  *
@@ -260,8 +266,11 @@ describe('uploading (drag-and-drop and the button)', () => {
   });
 
   it('refreshes the counts and the open folder once uploading ends', () => {
+    // Both server-side numbers — the folder grid and the open folder's own
+    // header — go through libRefreshFolders, so an upload cannot leave the
+    // card saying one figure and the folder saying another.
     const up = JS.slice(JS.indexOf('async function libUploadFiles('), JS.indexOf('function libPickFiles('));
-    expect(up).toContain('loadFolders(true)');
+    expect(up).toContain('libRefreshFolders()');
     expect(up).toContain('loadLibrary()');
   });
 
@@ -387,5 +396,133 @@ describe('responsive layout (§53)', () => {
     for (const rule of ['.rh2-folder-open', '.rh2-folderform', '.rh2-dropzone']) {
       expect(blocks).toContain(rule);
     }
+  });
+});
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  A FOLDER SHOWS WHAT IS FILED IN IT — the rules, executed
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * THE REGRESSION.
+ *
+ * A folder card read "30 resources"; opening it showed one card, and that card
+ * was the Service Agreement — a workflow tool that is not filed anywhere,
+ * offered inside every folder because the filter that chose the tools never
+ * looked at which folder was open. As Templates grows, the FCA and Progress
+ * Note masters join it, and each one appears in Handwriting & Motor Skills as
+ * readily as in Reports & Documentation. An empty folder went furthest of all:
+ * it reported "1 resource" and showed a template instead of saying it was
+ * empty.
+ *
+ * Two properties are pinned here. A tool is never inside a folder — and is
+ * still everywhere else, because removing it from the Library altogether would
+ * be a different bug. And a count reads as a person writes it.
+ *
+ * The harness is a stub window, which is all the file needs at load time. If
+ * this block starts failing on the require rather than on an expectation,
+ * resourcehub.js has begun touching the DOM as it loads, and the stub — not
+ * the assertion — is what needs extending.
+ */
+describe('the rules a folder is rendered by', () => {
+  const vm = require('vm');
+
+  const sandbox = {
+    console,
+    setTimeout,
+    clearTimeout,
+    fetch: () => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }),
+    location: { hash: '' },
+    document: {
+      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }),
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+      body: {},
+    },
+    // The hub reads the signed-in user from APP_USER, as the shell supplies it.
+    // An owner holds every service-agreement permission implicitly, so this is
+    // the reader who sees the most tools — the hardest case for the folder gate.
+    APP_USER: { role: 'owner', permissions: ['service_agreements.access'] },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(JS, sandbox, { filename: 'resourcehub.js' });
+  const RH2 = sandbox.RH2;
+
+  it('offers the workflow tools when the reader is browsing the library', () => {
+    expect(RH2._toolsFor({}).length).toBeGreaterThan(0);
+  });
+
+  it('offers none of them inside a folder', () => {
+    // The whole defect in one assertion: a folder is not a place a tool lives.
+    expect(RH2._toolsFor({ folderId: '9f55dee8-c218-4e11-9ef5-d5328e31935a' })).toEqual([]);
+  });
+
+  it('offers none of them inside a folder however the reader got there', () => {
+    for (const extra of [{ q: 'agreement' }, { folderSearch: true }, { collection: 'templates' },
+      { sort: 'az' }, { type: 'template' }]) {
+      expect(RH2._toolsFor(Object.assign({ folderId: 'f0000000-0000-4000-8000-000000000000' }, extra)))
+        .toEqual([]);
+    }
+  });
+
+  it('still offers them in the Templates collection, which is where they belong', () => {
+    // Removing a tool from every folder must not remove it from the library.
+    expect(RH2._toolsFor({ collection: 'templates' }).length).toBeGreaterThan(0);
+  });
+
+  it('counts the way a person writes it', () => {
+    expect(RH2._countLabel(0)).toBe('0 resources');
+    expect(RH2._countLabel(1)).toBe('1 resource');
+    expect(RH2._countLabel(2)).toBe('2 resources');
+    expect(RH2._countLabel(451)).toBe('451 resources');
+  });
+});
+
+describe('the number a folder shows comes from the server', () => {
+  /**
+   * Source guards, because the tally is produced inside a renderer that needs
+   * a DOM. What they protect is that neither number is arithmetic on the page:
+   * the folder's comes from the folder route, the library's from the tree.
+   */
+  it('reads the folder count off the folder route, not off the rendered page', () => {
+    expect(JS).toContain('known = f.folderMeta.folder.count');
+    expect(JS).toContain('known = f.totalResources');
+    expect(JS).toContain('var tally = known !== null ? countLabel(known)');
+  });
+
+  it('keeps counting results while the reader is searching or filtering', () => {
+    // A search asks how many matched; only browsing asks how big the shelf is.
+    const tally = JS.slice(JS.indexOf('var known = null;'), JS.indexOf('var tally = known'));
+    expect(tally).toContain('!searching');
+    expect(tally).toContain('!f.saved');
+    expect(tally).toContain('!f.collection');
+  });
+
+  it('asks the server for the folder again whenever what is filed changes', () => {
+    expect(JS).toContain('function libRefreshFolders()');
+    expect(JS).toContain('if (S.lib.folderId) loadFolderMeta(S.lib.folderId);');
+    // Every mutation goes through the one refresh, so the card and the header
+    // can never be reloaded one without the other.
+    const body = JS.slice(JS.indexOf('function libUploadFiles('), JS.indexOf('// ── Rendering'));
+    expect(body).not.toContain('loadFolders(true)');
+  });
+
+  it('takes the subfolder counts from the folder route too', () => {
+    const subs = JS.slice(JS.indexOf('function renderSubfolders()'), JS.indexOf('var KINDS ='));
+    expect(subs).toContain('count: c.count || 0');
+    // The old lookup into a folder tree that may never have loaded is gone.
+    expect(subs).not.toContain('S.lib.folders');
+  });
+
+  it('leaves no filter behind when a folder is opened', () => {
+    const open = JS.slice(JS.indexOf('function libOpenFolder('), JS.indexOf('async function loadFolderMeta('));
+    for (const cleared of ["f.q = ''", "f.collection = ''", "f.authority = ''"]) {
+      expect(open).toContain(cleared);
+    }
+    expect(open).toContain('loadFolders();');
   });
 });

@@ -121,7 +121,7 @@ function visibilityFor(user, orgId, startIndex) {
   let where = `r.organisation_id IS NOT DISTINCT FROM $${startIndex}
     AND r.access_tier <> 'excluded-private'
     AND r.publication_state <> 'excluded-private'
-    AND r.status <> 'archived' AND r.archived_at IS NULL`;
+    AND ${governance.LIVE_RESOURCE_SQL}`;
 
   if (!canAuthor(user)) {
     params.push(governance.BROWSABLE_STATES);
@@ -137,6 +137,46 @@ function visibilityFor(user, orgId, startIndex) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
+ * How many resources THIS reader can open in each of these folders, counting
+ * only what is filed in the folder itself.
+ *
+ * The folder grid and the folder you then open are two different requests, and
+ * they used to arrive at their numbers by two different routes. One counting
+ * routine removes the possibility: a card that says thirty and a folder that
+ * shows one is exactly what two copies of an almost-identical query produce.
+ *
+ * Returns a Map keyed by folder id; a folder with nothing in it is absent, so
+ * read it with `counts.get(id) || 0`.
+ */
+async function directCounts(user, orgId, folderIds) {
+  const ids = (folderIds || []).filter(Boolean);
+  if (!ids.length) return new Map();
+  const vis = visibilityFor(user, orgId, 2); // $1 is the folder id array
+  const { rows } = await pool.query(
+    `SELECT a.folder_id, COUNT(*)::int AS n
+       FROM resource_folder_assignments a
+       JOIN resources r ON r.id = a.resource_id
+      WHERE a.folder_id = ANY($1::uuid[]) AND ${vis.where}
+      GROUP BY a.folder_id`,
+    [ids, ...vis.params]);
+  return new Map(rows.map((r) => [r.folder_id, r.n]));
+}
+
+/**
+ * What a folder reports: its own resources plus everything in its subfolders.
+ *
+ * "Therapy Resources · 446" is what a person expects before they open it, and
+ * the browse route's `folderScope=tree` returns exactly that set. Walking the
+ * children rather than folding one level means a folder deeper than the two
+ * the UI creates is still counted somewhere rather than nowhere.
+ */
+function rollUp(node) {
+  node.count = node.directCount + (node.children || [])
+    .reduce((n, child) => n + rollUp(child), 0);
+  return node.count;
+}
+
+/**
  * The folder tree, with a count on every folder.
  *
  * A parent reports its own resources AND everything in its subfolders, because
@@ -150,25 +190,22 @@ function visibilityFor(user, orgId, startIndex) {
  */
 router.get('/api/rh2/library/folders', safe(async (req, res) => {
   const orgId = orgOf(req);
-  const vis = visibilityFor(req.user, orgId, 2); // $1 is the folder org
 
   const { rows } = await pool.query(
     `SELECT f.id, f.name, f.description, f.slug, f.parent_id, f.sort_order,
-            f.is_review_bucket, f.source, f.name_locked,
-            (SELECT COUNT(*) FROM resource_folder_assignments a
-               JOIN resources r ON r.id = a.resource_id
-              WHERE a.folder_id = f.id AND ${vis.where})::int AS direct_count
+            f.is_review_bucket, f.source, f.name_locked
        FROM resource_folders f
       WHERE f.organisation_id IS NOT DISTINCT FROM $1
         AND f.kind = 'library' AND f.is_active
       ORDER BY f.sort_order, f.name`,
-    [orgId, ...vis.params]);
+    [orgId]);
 
+  const counts = await directCounts(req.user, orgId, rows.map((r) => r.id));
   const byId = new Map(rows.map((r) => [r.id, {
     id: r.id, name: r.name, description: r.description, slug: r.slug,
     parentId: r.parent_id, sortOrder: r.sort_order,
     isReviewBucket: r.is_review_bucket, source: r.source, nameLocked: r.name_locked,
-    directCount: r.direct_count, count: r.direct_count, children: [],
+    directCount: counts.get(r.id) || 0, count: counts.get(r.id) || 0, children: [],
   }]));
 
   const tree = [];
@@ -176,9 +213,7 @@ router.get('/api/rh2/library/folders', safe(async (req, res) => {
     if (node.parentId && byId.has(node.parentId)) byId.get(node.parentId).children.push(node);
     else tree.push(node);
   }
-  for (const parent of tree) {
-    parent.count = parent.directCount + parent.children.reduce((n, c) => n + c.count, 0);
-  }
+  for (const parent of tree) rollUp(parent);
 
   // Everything a reader may open, so "All Resources" can state its own size
   // without a second request. Built afresh at $1 rather than by rewriting the
@@ -201,7 +236,16 @@ router.get('/api/rh2/library/folders', safe(async (req, res) => {
   res.json({ folders: visible, totalResources: totalQ.rows[0].n, organised: rows.length > 0 });
 }));
 
-/** One folder by id or slug, with its breadcrumb trail (§20). */
+/**
+ * One folder by id or slug, with its breadcrumb trail (§20) and its count.
+ *
+ * The count is here, and not left to the client to find in the folder tree,
+ * because the folder header is the second place a number appears and the two
+ * must not be able to disagree. It is produced by the same `directCounts` the
+ * grid uses and rolled up the same way, so opening a folder restates the
+ * figure its card gave rather than recomputing one from whatever page of
+ * results happened to arrive.
+ */
 router.get('/api/rh2/library/folders/:idOrSlug', safe(async (req, res) => {
   const orgId = orgOf(req);
   const key = String(req.params.idOrSlug || '');
@@ -236,13 +280,28 @@ router.get('/api/rh2/library/folders/:idOrSlug', safe(async (req, res) => {
         AND kind = 'library' AND is_active ORDER BY sort_order, name`,
     [orgId, folder.id]);
 
+  const counts = await directCounts(
+    req.user, orgId, [folder.id, ...children.rows.map((c) => c.id)]);
+  const childNodes = children.rows.map((c) => ({
+    id: c.id, name: c.name, description: c.description, slug: c.slug,
+    directCount: counts.get(c.id) || 0, count: counts.get(c.id) || 0, children: [],
+  }));
+  const node = {
+    directCount: counts.get(folder.id) || 0, count: 0, children: childNodes,
+  };
+  rollUp(node);
+
   res.json({
     folder: {
       id: folder.id, name: folder.name, description: folder.description,
       slug: folder.slug, isReviewBucket: folder.is_review_bucket,
+      // What opening this folder will show: its own resources and its
+      // subfolders', the same set `folderScope=tree` returns from the browse
+      // route and the same figure the folder card carries.
+      count: node.count, directCount: node.directCount,
     },
     breadcrumb: trail,
-    children: children.rows,
+    children: childNodes,
   });
 }));
 

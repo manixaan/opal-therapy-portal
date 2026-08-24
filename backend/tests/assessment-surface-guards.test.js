@@ -601,7 +601,11 @@ describe('changed assets are cache-busted', () => {
       // collection shelves gone, .rh2-collection* deleted with them), the
       // item actions came down to Assign / Edit / Preview, and learner,
       // preview and edit modes moved onto one section-by-section renderer.
-      ['resourcehub.js', 'r25'], ['resourcehub.css', 'r16'],
+      // r26: a folder shows only what is filed in it — workflow tools no
+      // longer appear inside one — and its header states the server's folder
+      // count instead of counting the cards on the page. The CSS is untouched
+      // by that change and stays where Assign Learning left it.
+      ['resourcehub.js', 'r26'], ['resourcehub.css', 'r16'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],
