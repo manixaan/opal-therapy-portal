@@ -70,6 +70,17 @@
    */
   function canAdministerAssessment() { return isOwner() || role() === 'therapist'; }
 
+  /**
+   * Who sees Templates. Mirrors requireTemplateRead in backend/templates-routes.js,
+   * which is itself the FCA's clinical read guard: therapist and owner may
+   * complete a document, read_only may look, and ADMIN IS EXCLUDED — a template
+   * resolves client data, and /api/templates refuses admin exactly as /api/fca
+   * does. Showing admin the tab would offer a screen that 403s on open.
+   */
+  function canUseTemplates() {
+    return isOwner() || role() === 'therapist' || role() === 'read_only';
+  }
+
   function fmtDate(v) {
     if (!v) return '';
     var d = new Date(v);
@@ -416,6 +427,11 @@
     else if (S.view === 'detail') body = renderDetail();
     else if (S.view === 'learning') body = isOwner() ? renderAssignLearning() : renderLearning();
     else if (S.view === 'assignment') body = renderAssignment();
+    // Templates renders nothing here on purpose: resourcehub.js rebuilds this
+    // subtree wholesale on every keystroke, which would tear out a form the
+    // user is typing into. The surface lives in #templates-root, a sibling
+    // mount templates.js owns and this file never touches.
+    else if (S.view === 'templates') body = '';
     else if (S.view === 'pd') body = renderPd();
     else if (S.view === 'instruments') body = renderInstruments();
     else if (S.view === 'admin') body = renderAdmin();
@@ -451,6 +467,11 @@
     // the hub proper rather than behind Admin. It was previously only reachable
     // from the admin area, which hid it from the therapists who actually
     // administer these assessments.
+    // Templates sits between learning and PD: it is day-to-day document work,
+    // not reference material. It is a destination of its own rather than a
+    // Library collection — templates.js owns the surface, mounted outside
+    // #rh2-root for the same reason the FCA and letter builders are.
+    if (canUseTemplates()) items.push(['templates', 'Templates']);
     items.push(['pd', 'Professional development']);
     if (canSeeInstruments()) items.push(['instruments', 'Assessments']);
     if (canAdmin()) items.push(['admin', 'Admin']);

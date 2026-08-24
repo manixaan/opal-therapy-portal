@@ -598,7 +598,11 @@ describe('changed assets are cache-busted', () => {
       // r24: Browse by collection left Resource Hub Home; the Library folders
       // are where organised browsing lives. The CSS stays at r15 — Assign
       // Learning still renders the .rh2-collection cards.
-      ['resourcehub.js', 'r24'], ['resourcehub.css', 'r15'],
+      // r25: Templates joined the Resource Hub navigation between Assigned
+      // Learning and Professional development. The CSS stays at r15 — the tab
+      // is a nav entry plus an empty view branch; the surface's own styles
+      // ship in templates.css.
+      ['resourcehub.js', 'r25'], ['resourcehub.css', 'r15'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],
@@ -620,6 +624,11 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
+      // 1: templates.js / templates.css are new — the Resource Hub Templates
+      // destination. Same reason as the three above: a first pin is still a
+      // pin, because the proxy caches by URL and this is the version the next
+      // change has to bump.
+      ['templates.js', 1], ['templates.css', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

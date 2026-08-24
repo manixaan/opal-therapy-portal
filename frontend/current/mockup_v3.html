@@ -20,12 +20,13 @@
 <link rel="stylesheet" href="/casenotes.css?v=1" />
 <link rel="stylesheet" href="/fca.css?v=5" />
 <link rel="stylesheet" href="/letter.css?v=1" />
+<link rel="stylesheet" href="/templates.css?v=1" />
 <link rel="stylesheet" href="/whodas.css?v=3" />
 <link rel="stylesheet" href="/assessment.css?v=3" />
 <link rel="stylesheet" href="/induction.css?v=1" />
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=8" />
-<script src="/resourcehub.js?v=r24" defer></script>
+<script src="/resourcehub.js?v=r25" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
 <script src="/induction-modules.js?v=2" defer></script>
@@ -43,6 +44,9 @@
 <script src="/vendor/docx-preview.min.js" defer></script>
 <script src="/fca.js?v=5" defer></script>
 <script src="/letter.js?v=2" defer></script>
+<!-- Resource Hub → Templates. Loaded after docx-preview: the live preview
+     renders the composed document with it, exactly as the FCA wizard does. -->
+<script src="/templates.js?v=1" defer></script>
 <!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
      feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
 <script src="/whodas.js?v=5" defer></script>
@@ -5007,6 +5011,10 @@ window.opIcon = function (name, size) {
     <div id="fca-hub-entry" hidden></div>
     <!-- Progress note letter builder entry point (rendered by /letter.js). -->
     <div id="letter-hub-entry" hidden></div>
+    <!-- Templates destination (rendered by /templates.js). Outside #rh2-root
+         for the same reason the two builders above are: resourcehub.js rebuilds
+         that subtree wholesale, which would tear out a form mid-keystroke. -->
+    <div id="templates-root" hidden></div>
   </div>
 
   <!-- ── AI Resource Studio ── -->

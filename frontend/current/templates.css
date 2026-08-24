@@ -1,0 +1,175 @@
+/* ── Templates (Resource Hub) ─────────────────────────────────────────────────
+   Surface for completing an Opal master in the portal and exporting an
+   independent document. Mounted at #templates-root, a sibling of #rh2-root.
+
+   Tokens (--ink, --ink-soft, --accent, --accent-soft, --border, --panel) are
+   the app shell's; nothing here defines its own palette.
+
+   NO YELLOW. An outstanding field is marked with a neutral chip, never a
+   highlight: highlighting reads as a defect or a redaction on a document a
+   participant may be handed, and it is the one thing this feature must not do.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+#templates-root[hidden] { display: none; }
+
+/* ── Headings ── */
+.tpl-head { margin: 0 0 14px; }
+.tpl-h2 { margin: 0; font-size: 20px; color: var(--ink); }
+.tpl-h3 { margin: 0 0 10px; font-size: 15px; color: var(--ink); }
+.tpl-sub { margin: 6px 0 0; font-size: 13px; color: var(--ink-soft); max-width: 78ch; line-height: 1.5; }
+.tpl-quiet { color: var(--ink-soft); font-size: 12px; }
+.tpl-hint { margin: 2px 0 6px; font-size: 12px; color: var(--ink-soft); line-height: 1.45; }
+.tpl-error { color: #a3342b; font-size: 13px; margin: 8px 0; }
+.tpl-section { margin-top: 26px; }
+
+/* ── Template cards ── */
+.tpl-cards {
+  display: grid; gap: 14px; margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+}
+.tpl-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+  background: var(--panel); display: flex; flex-direction: column; gap: 8px;
+}
+.tpl-card-title { margin: 0; font-size: 15px; color: var(--ink); }
+.tpl-card-desc { margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.5; flex: 1; }
+.tpl-card-meta { margin: 0; font-size: 11.5px; color: var(--ink-soft); }
+
+/* ── Buttons ── */
+.tpl-btn {
+  border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+  border-radius: 7px; padding: 7px 13px; font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+}
+.tpl-btn:hover:not(:disabled) { background: var(--accent-soft); }
+.tpl-btn:disabled { opacity: 0.55; cursor: default; }
+.tpl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tpl-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tpl-btn-primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--accent); }
+.tpl-btn-quiet { border-color: transparent; background: none; color: var(--ink-soft); }
+.tpl-btn-quiet:hover:not(:disabled) { color: var(--ink); background: var(--accent-soft); }
+
+/* ── Document list ── */
+.tpl-doclist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tpl-docrow {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px 4px 4px;
+}
+.tpl-doclink {
+  flex: 1; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  background: none; border: none; cursor: pointer; font-family: inherit; padding: 8px 10px;
+  border-radius: 6px;
+}
+.tpl-doclink:hover { background: var(--accent-soft); }
+.tpl-doclink:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tpl-docname { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.tpl-docmeta { font-size: 11.5px; color: var(--ink-soft); }
+
+/* ── New-document dialog ── */
+.tpl-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 28, 26, 0.42);
+  display: flex; align-items: center; justify-content: center; z-index: 800; padding: 18px;
+}
+.tpl-modal {
+  background: var(--panel); border-radius: 12px; padding: 20px;
+  width: min(520px, 100%); max-height: 86vh; overflow: auto;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+.tpl-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.tpl-chosen { font-size: 13px; color: var(--ink); margin: 4px 0 0; }
+.tpl-results { max-height: 220px; overflow: auto; margin-top: 6px; }
+.tpl-result {
+  display: block; width: 100%; text-align: left; background: none;
+  border: 1px solid transparent; border-radius: 6px; padding: 7px 9px;
+  font-size: 13px; color: var(--ink); cursor: pointer; font-family: inherit;
+}
+.tpl-result:hover { background: var(--accent-soft); border-color: var(--border); }
+.tpl-result:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── Editor header ── */
+.tpl-head-editor { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.tpl-head-main { flex: 1; min-width: 220px; }
+.tpl-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tpl-savestate { font-size: 12px; color: var(--ink-soft); min-width: 62px; }
+.tpl-progress { margin-left: 4px; }
+.tpl-boundary-note {
+  margin: 0 0 12px; font-size: 12px; color: var(--ink-soft);
+  border-left: 3px solid var(--accent); padding: 8px 12px;
+  background: var(--accent-soft); border-radius: 0 6px 6px 0; line-height: 1.5;
+  max-width: 92ch;
+}
+
+/* ── Split: fields | preview ── */
+.tpl-split { display: grid; grid-template-columns: minmax(300px, 4fr) 6fr; gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .tpl-split { grid-template-columns: 1fr; } }
+
+.tpl-fields { max-height: 74vh; overflow: auto; padding-right: 4px; }
+.tpl-group { border: 1px solid var(--border); border-radius: 9px; margin-bottom: 8px; background: var(--panel); }
+.tpl-group-summary {
+  cursor: pointer; padding: 10px 13px; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  list-style: none;
+}
+.tpl-group-summary::-webkit-details-marker { display: none; }
+.tpl-group-summary::before { content: '▸ '; color: var(--ink-soft); }
+.tpl-group[open] > .tpl-group-summary::before { content: '▾ '; }
+.tpl-group-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tpl-group-body { padding: 4px 13px 13px; display: flex; flex-direction: column; gap: 12px; }
+
+.tpl-field { display: flex; flex-direction: column; gap: 4px; }
+.tpl-label { font-size: 12px; font-weight: 600; color: var(--ink); }
+.tpl-input {
+  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px;
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px;
+}
+.tpl-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.tpl-textarea { resize: vertical; min-height: 62px; line-height: 1.45; }
+
+/* Source chips. Neutral throughout — see the NO YELLOW note at the top. */
+.tpl-chip {
+  align-self: flex-start; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--ink-soft); background: none;
+}
+.tpl-chip-portal { border-color: var(--accent); color: var(--accent); }
+.tpl-chip-entered { border-color: var(--border); color: var(--ink); }
+.tpl-chip-missing { border-style: dashed; color: var(--ink-soft); }
+
+/* ── Preview pane ── */
+.tpl-previewpane { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.tpl-preview-bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.tpl-preview-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.tpl-preview-host {
+  max-height: 74vh; overflow: auto; background: #f3f4f3; padding: 14px;
+}
+
+/* docx-preview prefixes every class it emits with the `className` option, so
+   the wrapper is .tpl-docx-render-wrapper and each page is a direct-child
+   <section>. The pages are a vertical stack of separate sheets, exactly as the
+   FCA preview renders them — same renderer, same rules. */
+.tpl-preview-host .tpl-docx-render-wrapper {
+  background: transparent; padding: 0; margin: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 20px;
+}
+
+/* #templates-root is in the selector on purpose. docx-preview injects its own
+   stylesheet INTO the host when it renders, so an equally specific rule of ours
+   would lose on source order and the pages would keep the renderer's default
+   margin and heavy shadow. This outranks it. */
+#templates-root .tpl-preview-host .tpl-docx-render-wrapper > section {
+  margin: 0; color: #111;
+  /* A page colour the document declares arrives as an inline style and rightly
+     wins — the Opal masters' paper is a warm cream, and repainting it white
+     would show a page Word will not print. This is the fallback. */
+  background: #fff;
+  border: 1px solid #cfcec9;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10), 0 4px 14px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  /* docx-preview sets the real width and min-height from the document's own
+     page size; nothing here overrides them. */
+  box-sizing: border-box;
+  flex: none;
+}
