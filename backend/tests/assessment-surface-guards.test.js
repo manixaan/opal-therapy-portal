@@ -598,7 +598,7 @@ describe('changed assets are cache-busted', () => {
       // r24: Browse by collection left Resource Hub Home; the Library folders
       // are where organised browsing lives. The CSS stays at r15 — Assign
       // Learning still renders the .rh2-collection cards.
-      ['resourcehub.js', 'r24'], ['resourcehub.css', 'r15'],
+      ['resourcehub.js', 'r25'], ['resourcehub.css', 'r16'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],

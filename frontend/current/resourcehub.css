@@ -1181,10 +1181,6 @@ span.rh2-dochero-thumb { cursor: default; }
   font-size: 12.5px; color: var(--ink-soft);
   transition: border-color .12s ease, color .12s ease;
 }
-.rh2-dropzone.is-dropping {
-  border-color: var(--accent); border-width: 2px;
-  color: var(--accent); font-weight: 600;
-}
 
 /* ── upload progress ── */
 .rh2-uploads {
@@ -1239,4 +1235,87 @@ span.rh2-dochero-thumb { cursor: default; }
 @media (max-width: 640px) {
   .rh2-dropzone { padding: 14px 10px; }
   .rh2-folder-dropmsg { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE LIBRARY AS A WORKSPACE
+
+   Three additions, one idea: the Library should behave like the place files
+   live rather than a page about them. The actions look like actions, the whole
+   surface takes a dropped file, and the background answers a right-click.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── the toolbar reads as controls ──
+   Scoped to .rh2-libtools rather than changing .rh2-btn everywhere: the rest of
+   the Hub's buttons are fine as they are, and a task about the Library is not a
+   licence to restyle the Hub. */
+.rh2-libtools .rh2-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 7px 13px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .03);
+  transition: background var(--t-fast), border-color var(--t-fast),
+              box-shadow var(--t-fast), transform var(--t-fast);
+}
+.rh2-libtools .rh2-btn:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, .08); }
+/* The scoped shadow above matches .rh2-btn:focus-visible for specificity and
+   comes after it, so the focus ring has to be restated here or keyboard focus
+   would be invisible on exactly the buttons this change set out to clarify. */
+.rh2-libtools .rh2-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* Pressed: the button moves under the finger and the lift goes away. */
+.rh2-libtools .rh2-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+  background: var(--accent-soft);
+  border-color: var(--accent-deep);
+}
+.rh2-libtools .rh2-btn-primary:active { background: var(--accent-deep); }
+.rh2-libtools .rh2-btn[disabled] { opacity: .55; cursor: not-allowed; transform: none; }
+/* Selecting is a mode, not a one-shot, so the button says while it is on. */
+.rh2-libtools .rh2-btn[aria-pressed="true"] {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--ink);
+}
+.rh2-btn-icon { display: inline-flex; color: currentColor; }
+.rh2-libtools .rh2-libhint { flex: 1 1 220px; min-width: 180px; }
+@media (prefers-reduced-motion: reduce) {
+  .rh2-libtools .rh2-btn { transition: none; }
+  .rh2-libtools .rh2-btn:active { transform: none; }
+}
+
+/* ── the workspace drop overlay ──
+   Covers the workspace only while a file is actually over it. pointer-events
+   are off so the element underneath keeps receiving dragover — an overlay that
+   steals the events makes the drag flicker as it enters its own highlight. */
+.rh2-ws { position: relative; }
+.rh2-wsdrop {
+  position: absolute; inset: 0; z-index: 30;
+  display: none; align-items: center; justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: var(--radius-lg, 12px);
+  background: var(--accent-soft);
+}
+.rh2-ws.is-dropping .rh2-wsdrop { display: flex; }
+.rh2-wsdrop-face {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 22px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  font-size: 14px; font-weight: 600; color: var(--accent-deep);
+}
+
+/* ── menu items carry an icon ── */
+.rh2-menu-item { display: flex; align-items: center; gap: 9px; }
+.rh2-menu-icon { display: inline-flex; flex: 0 0 auto; color: var(--ink-soft); }
+.rh2-menu-item:hover .rh2-menu-icon { color: var(--accent-deep); }
+.rh2-menu-label { flex: 1 1 auto; }
+/* Present but refused, with the reason underneath — never silently missing. */
+.rh2-menu-item.is-disabled { color: var(--ink-soft); opacity: .55; cursor: default; }
+.rh2-menu-item.is-disabled:hover { background: none; }
+.rh2-menu-note {
+  margin: 3px 4px 2px; padding: 0 5px;
+  font-size: 11.5px; line-height: 1.4; color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .rh2-wsdrop-face { padding: 11px 16px; font-size: 13px; }
+  .rh2-libtools .rh2-libhint { flex-basis: 100%; }
 }
