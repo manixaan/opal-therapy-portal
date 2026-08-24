@@ -658,6 +658,47 @@ test('completing a resource item marks the hub resource complete (best-effort)',
   expect(rows).toHaveLength(1);
 });
 
+test('resource items carry the resource slug, org-scoped — learner detail and preview alike', async () => {
+  // The player opens a resource item's interactive walkthrough straight from
+  // the tile; the slug is how it finds the walkthrough. A resource outside the
+  // caller's organisation must contribute nothing.
+  const owner = await agentFor('owner', org.id);
+  const emp = await agentFor('therapist', org.id);
+
+  const { rows: [resource] } = await db.pool.query(
+    `INSERT INTO resources (organisation_id, title, status, resource_type, slug)
+     VALUES ($1, 'Getting started', 'approved', 'tutorial', 'portal-getting-started') RETURNING id`, [org.id]);
+  const { rows: [foreignOrg] } = await db.pool.query(
+    `INSERT INTO organisations (name) VALUES ('Elsewhere') RETURNING id`);
+  const { rows: [foreign] } = await db.pool.query(
+    `INSERT INTO resources (organisation_id, title, status, resource_type, slug)
+     VALUES ($1, 'Foreign tutorial', 'approved', 'tutorial', 'portal-foreign') RETURNING id`, [foreignOrg.id]);
+
+  const content = {
+    sections: [{
+      title: 'S',
+      items: [
+        { key: 'i-walk', type: 'resource', title: 'Walkthrough', resource_id: resource.id, required: true },
+        { key: 'i-far', type: 'resource', title: 'Foreign', resource_id: foreign.id, required: false },
+      ],
+    }],
+  };
+  const wf = await createWorkflow(owner, { content });
+
+  const prev = await owner.agent.get(`/api/learning/workflows/${wf.id}/preview`);
+  expect(prev.status).toBe(200);
+  const pItems = prev.body.content.sections[0].items;
+  expect(pItems.find((i) => i.key === 'i-walk').resource_slug).toBe('portal-getting-started');
+  expect(pItems.find((i) => i.key === 'i-far').resource_slug).toBeUndefined();
+
+  const out = await assign(owner, wf.id, [emp.user.id]);
+  const mine = await emp.agent.get(`/api/learning/my/${out.assigned[0].id}`);
+  expect(mine.status).toBe(200);
+  const mItems = mine.body.content.sections[0].items;
+  expect(mItems.find((i) => i.key === 'i-walk').resource_slug).toBe('portal-getting-started');
+  expect(mItems.find((i) => i.key === 'i-far').resource_slug).toBeUndefined();
+});
+
 // ═══ The assignment picker ═══════════════════════════════════════════════════
 //
 // GET /api/learning/staff is what the Owner's Assign dialog is built from, so

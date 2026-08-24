@@ -85,9 +85,10 @@ describe('the shell wires the surface', () => {
   });
 
   test('resourcehub.js is re-pinned, because this change edits it', () => {
-    // r26, not r25: the merge that landed Templates also landed the folder
-    // count fix, and the shell ships the union under the newest pin.
-    expect(SHELL).toContain('<script src="/resourcehub.js?v=r26" defer></script>');
+    // The pin is shared by every feature that edits the file — the shell
+    // ships the union under the newest version. r27 carries the induction
+    // learner-path simplification and the editor's click-to-edit together.
+    expect(SHELL).toContain('<script src="/resourcehub.js?v=r27" defer></script>');
   });
 });
 

@@ -760,6 +760,16 @@ span.rh2-dochero-thumb { cursor: default; }
 .rh2-learn-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .rh2-learn-card-actions .rh2-btn { min-height: 38px; }
 
+/* The learner's assignment card is ONE clickable tile: same card look, button
+   semantics, and a single obvious way in. */
+button.rh2-learn-tile {
+  appearance: none; font: inherit; color: inherit; text-align: left;
+  width: 100%; cursor: pointer;
+}
+button.rh2-learn-tile:hover { border-color: var(--accent); }
+button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-learn-tile-hint { color: var(--accent); font-weight: 600; font-size: 13px; }
+
 /* Player */
 .rh2-learn-player-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rh2-learn-item-body { padding: 4px 14px 14px 46px; }
@@ -1301,9 +1311,22 @@ span.rh2-dochero-thumb { cursor: default; }
   background: var(--accent-soft); color: var(--accent);
   font-size: 12px; font-weight: 700; margin-top: 1px;
 }
-/* The body sits under the number, not indented off the page on a phone. */
-.rh2-ind-item .rh2-learn-item-body { padding: 8px 0 0 34px; }
-@media (max-width: 560px) { .rh2-ind-item .rh2-learn-item-body { padding-left: 0; } }
+.rh2-ind-item .rh2-learn-item-body { padding: 8px 0 0; }
+
+/* A resource item is one launch tile: the whole surface is the click. */
+.rh2-ind-item-launch { padding: 0; }
+.rh2-ind-item-launch:hover { border-color: var(--accent); }
+.rh2-ind-launch {
+  appearance: none; font: inherit; color: inherit; text-align: left;
+  display: flex; flex-direction: column; gap: 8px; width: 100%;
+  background: none; border: none; padding: 12px 14px; cursor: pointer;
+  border-radius: var(--radius-md);
+}
+.rh2-ind-launch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-ind-launch .rh2-ind-item-head { width: 100%; }
+.rh2-ind-launch-hint { color: var(--accent); font-weight: 600; font-size: 13px; }
+.rh2-ind-item-launch .rh2-learn-item-body { padding: 0 14px 12px; }
+.rh2-ind-item-launch .rh2-learn-item-body:empty { display: none; }
 
 /* Contents / outstanding lists — the same row in every mode. */
 .rh2-ind-toc { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

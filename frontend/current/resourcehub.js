@@ -4501,6 +4501,15 @@
   // repaint the surfaces that show it without the engine reaching into our
   // render internals.
   doc.addEventListener('induction:progress', function () {
+    // A walkthrough opened from inside an induction hands control back the
+    // moment its overlay is gone — paused or finished, the reader lands back
+    // on the induction, in place.
+    if (pendingWalk && !doc.getElementById('ind-layer')) {
+      var p = pendingWalk;
+      pendingWalk = null;
+      alWalkReturn(p);
+      return;
+    }
     if (S.booted && (S.view === 'learning' || S.view === 'home')) render();
   });
 
@@ -4570,29 +4579,30 @@
     var total = pick(a, 'required_total') || 0;
     var done = pick(a, 'required_done') || 0;
     var pct = pick(a, 'progress_percent') || 0;
-    var actionLabel = a.status === 'completed' ? 'View'
+    var hint = a.status === 'completed' ? 'Revisit'
       : (a.status === 'in_progress' ? 'Continue' : 'Start');
     var dueTxt = pick(a, 'due_at') ? 'Due ' + fmtDate(pick(a, 'due_at')) : '';
-    return '<div class="rh2-learn-card' + (a.overdue ? ' rh2-learn-overdue' : '') + '">' +
-      '<div class="rh2-learn-card-head">' +
+    // ONE interaction: the whole card is the button, and it opens the
+    // induction. Starting, resuming and completing all live inside the player.
+    return '<button type="button" class="rh2-learn-card rh2-learn-tile' + (a.overdue ? ' rh2-learn-overdue' : '') + '" ' +
+      'onclick="RH2.openAssignment(\'' + esc(a.id) + '\')" ' +
+      'aria-label="' + esc(hint + ': ' + pick(a, 'title')) + '">' +
+      '<span class="rh2-learn-card-head">' +
         '<span class="rh2-row-title">' + esc(pick(a, 'title')) + '</span>' +
         laStatusChip(a) +
-      '</div>' +
-      '<div class="rh2-row-sub">' +
+      '</span>' +
+      '<span class="rh2-row-sub">' +
         esc(laCatLabel(pick(a, 'category'))) +
         (pick(a, 'mandatory') ? ' · Mandatory' : ' · Optional') +
-        (pick(a, 'version') ? ' · v' + esc(pick(a, 'version')) : '') +
-      '</div>' +
+      '</span>' +
       laBar(pct, pick(a, 'title') + ' progress') +
-      '<div class="rh2-row-sub">' + done + ' of ' + total + ' required modules · ' + pct + '%</div>' +
-      '<div class="rh2-row-sub">Assigned ' + esc(fmtDate(pick(a, 'assigned_at'))) +
+      '<span class="rh2-row-sub">' + done + ' of ' + total + ' required modules · ' + pct + '%' +
         (dueTxt ? ' · <span class="' + (a.overdue ? 'rh2-learn-due-warn' : '') + '">' + esc(dueTxt) + '</span>' : '') +
         (a.status === 'completed' ? ' · Completed ' + esc(fmtDate(pick(a, 'completed_at'))) : '') +
-      '</div>' +
-      (pick(a, 'owner_note') ? '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>' : '') +
-      '<div class="rh2-learn-card-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
-        'onclick="RH2.openAssignment(\'' + esc(a.id) + '\')">' + actionLabel + '</button></div>' +
-    '</div>';
+      '</span>' +
+      (pick(a, 'owner_note') ? '<span class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</span>' : '') +
+      '<span class="rh2-learn-tile-hint">' + hint + ' &rarr;</span>' +
+    '</button>';
   }
 
   function renderMyAssignments() {
@@ -4628,11 +4638,14 @@
   //  preview — the Owner; identical screens, nothing persists.
   //  edit    — the Owner; identical screens, the content directly editable.
   //
-  //  All three walk the SAME steps — an overview, one screen per section, and a
-  //  closing screen — moved through with Back / Next. There is deliberately no
-  //  second, administrative representation of a workflow: what the Owner edits
-  //  IS the screen the learner receives, which is the only arrangement in which
-  //  the two cannot drift apart.
+  //  All three walk the SAME steps — one screen per section and a closing
+  //  screen — moved through with Back / Next. Edit mode alone keeps a step 0
+  //  before the sections (the workflow's own title and description, which are
+  //  fields there); a reader has no settings, so the learner and the preview
+  //  open straight onto the first section. There is deliberately no second,
+  //  administrative representation of a workflow: what the Owner edits IS the
+  //  screen the learner receives, which is the only arrangement in which the
+  //  two cannot drift apart.
   //
   //  Mode is READ FROM THE RENDER PATH rather than stored: the assignment view
   //  is the learner (or its preview twin), and an open editor is edit mode. A
@@ -4653,13 +4666,16 @@
     return (d && d.content && d.content.sections) || [];
   }
 
-  /** Overview + one screen per section + the closing screen. */
+  /** Overview (edit only) + one screen per section + the closing screen. */
   function indStepCount(sections) { return (sections ? sections.length : 0) + 2; }
+
+  /** The first step a mode can stand on: readers have no overview to stand on. */
+  function indFirstStep(mode) { return (mode || indMode()) === 'edit' ? 0 : 1; }
 
   function indStep(mode, sections) {
     var st = indState(mode);
-    if (!st) return 0;
-    return Math.max(0, Math.min(indStepCount(sections) - 1, Number(st.step) || 0));
+    if (!st) return indFirstStep(mode);
+    return Math.max(indFirstStep(mode), Math.min(indStepCount(sections) - 1, Number(st.step) || 0));
   }
 
   /** A step change is a page change: start it at the top, not mid-paragraph. */
@@ -4675,7 +4691,17 @@
     var st = indState(mode);
     if (!st) return;
     var n = indStepCount(indSections(mode));
-    st.step = Math.max(0, Math.min(n - 1, (Number(st.step) || 0) + Number(delta || 0)));
+    var first = indFirstStep(mode);
+    var from = Math.max(first, Math.min(n - 1, Number(st.step) || 0));
+    var to = Math.max(first, Math.min(n - 1, from + Number(delta || 0)));
+    st.step = to;
+    if (st.choice) st.choice = null;
+    // Reading past a section IS doing it: one Next forward records the
+    // section's passive readings and tasks. Arriving at the closing screen
+    // never records anything — completing is that screen's own deliberate act.
+    if (mode === 'learner' && to === from + 1 && to <= indSections(mode).length) {
+      alAutoSection(from);
+    }
     indScrollTop();
     render();
   }
@@ -4684,7 +4710,8 @@
     var mode = indMode();
     var st = indState(mode);
     if (!st) return;
-    st.step = Math.max(0, Math.min(indStepCount(indSections(mode)) - 1, Number(i) || 0));
+    st.step = Math.max(indFirstStep(mode), Math.min(indStepCount(indSections(mode)) - 1, Number(i) || 0));
+    if (st.choice) st.choice = null;
     indScrollTop();
     render();
   }
@@ -4698,26 +4725,33 @@
   /** The rail: where the reader is, and every step they may jump to. */
   function indRail(mode, step, sections) {
     var last = sections.length + 1;
-    var labels = ['Overview'].concat(sections.map(function (s, i) {
-      return String((s && s.title) || ('Section ' + (i + 1)));
-    })).concat([mode === 'edit' ? 'Finish' : 'Complete']);
-    return '<ol class="rh2-ind-rail">' + labels.map(function (l, i) {
+    var entries = mode === 'edit' ? [{ i: 0, no: '&bull;', label: 'Overview' }] : [];
+    sections.forEach(function (s, i) {
+      entries.push({ i: i + 1, no: String(i + 1), label: String((s && s.title) || ('Section ' + (i + 1))) });
+    });
+    entries.push({ i: last, no: '&#10003;', label: mode === 'edit' ? 'Finish' : 'Complete' });
+    return '<ol class="rh2-ind-rail">' + entries.map(function (e) {
       return '<li class="rh2-ind-railitem"><button type="button" class="rh2-ind-railbtn' +
-        (i === step ? ' is-on' : '') + (i < step ? ' is-past' : '') + '"' +
-        (i === step ? ' aria-current="step"' : '') +
-        ' onclick="RH2.indJump(' + i + ')">' +
-        '<span class="rh2-ind-railno" aria-hidden="true">' +
-          (i === 0 ? '&bull;' : (i === last ? '&#10003;' : i)) + '</span>' +
-        '<span class="rh2-ind-raillbl">' + esc(l) + '</span></button></li>';
+        (e.i === step ? ' is-on' : '') + (e.i < step ? ' is-past' : '') + '"' +
+        (e.i === step ? ' aria-current="step"' : '') +
+        ' onclick="RH2.indJump(' + e.i + ')">' +
+        '<span class="rh2-ind-railno" aria-hidden="true">' + e.no + '</span>' +
+        '<span class="rh2-ind-raillbl">' + esc(e.label) + '</span></button></li>';
     }).join('') + '</ol>';
   }
 
   /** Back / where-am-I / Next. The same control in all three modes. */
   function indNav(mode, step, secCount) {
     var last = secCount + 1;
+    // A reader's Back always goes somewhere: from the first section it leaves
+    // the induction the way it was entered. Only the editor's settings step
+    // has nothing before it.
+    var backOut = mode !== 'edit' && step <= indFirstStep(mode);
+    var backClick = backOut ? 'RH2.alBack()' : 'RH2.indGo(-1)';
     return '<nav class="rh2-ind-nav" aria-label="Induction navigation">' +
-      '<button type="button" class="rh2-btn rh2-ind-back" ' + (step === 0 ? 'disabled ' : '') +
-        'onclick="RH2.indGo(-1)">&larr; Back</button>' +
+      '<button type="button" class="rh2-btn rh2-ind-back" ' +
+        (mode === 'edit' ? (step === 0 ? 'disabled ' : '') : '') +
+        'onclick="' + backClick + '">&larr; Back</button>' +
       '<span class="rh2-ind-count" role="status" aria-live="polite">' +
         esc(indStepLabel(step, secCount, mode)) + '</span>' +
       '<button type="button" class="rh2-btn rh2-btn-primary rh2-ind-next" ' + (step === last ? 'disabled ' : '') +
@@ -4757,11 +4791,38 @@
 
   // ── Employee: assigned learning, and the Owner's read-only twin ────────────
 
+  /** The items that count for completion — the server's countedKeys, mirrored:
+   *  the required items count, and when nothing is required, everything does. */
+  function alCountedItems(sections) {
+    var all = [];
+    (sections || []).forEach(function (s, si) {
+      ((s && s.items) || []).forEach(function (it) { all.push({ section: si + 1, item: it }); });
+    });
+    var req = all.filter(function (e) { return e.item.required !== false; });
+    return req.length ? req : all;
+  }
+
+  /** Where an in-progress reader left off: the first section still owing work. */
+  function alResumeStep(sections) {
+    var counted = alCountedItems(sections);
+    for (var i = 0; i < counted.length; i++) {
+      if (!alItemDone(counted[i].item.key)) return counted[i].section;
+    }
+    return (sections || []).length || 1;
+  }
+
   async function openAssignment(id) {
+    // Re-entering the induction that is already open — back from a resource,
+    // back from a walkthrough, a history restore — keeps the reader's place.
+    // A fresh open starts on the first section and may ask continue-or-restart.
+    var sameId = !!(S.assignment && !S.assignment.preview &&
+      S.assignment.id === String(id || '') && S.assignment.data);
     S.assignment = {
-      id: String(id || ''), data: null, loading: true, err: '', backView: 'learning',
-      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
-      busy: false, preview: false, previewDone: {}, celebrate: false,
+      id: String(id || ''), data: sameId ? S.assignment.data : null,
+      loading: !sameId, err: '', backView: 'learning',
+      step: sameId ? S.assignment.step : 1,
+      quizAnswers: sameId ? S.assignment.quizAnswers : {}, quizResult: null, ackArmed: false,
+      busy: false, preview: false, previewDone: {}, celebrate: false, choice: null,
     };
     S.view = 'assignment';
     render();
@@ -4777,6 +4838,13 @@
       return render();
     }
     S.assignment.data = d;
+    // A previously started induction asks ONCE: continue where you left off,
+    // or restart from the beginning. Never on re-entry, never for a fresh
+    // start, never for a completed one being revisited.
+    if (!sameId && d.assignment && d.assignment.status === 'in_progress') {
+      var resume = alResumeStep((d.content && d.content.sections) || []);
+      if (resume > 1) S.assignment.choice = { resume: resume };
+    }
     // Opening an untouched assignment starts it — deliberate, visible in the
     // owner's dashboard as In progress from the first real look.
     if (d.assignment && d.assignment.status === 'assigned') {
@@ -4792,6 +4860,17 @@
     render();
   }
 
+  /** The continue-or-restart answer. Restart replays from the first section —
+   *  it navigates; it never touches or resets the recorded progress. */
+  function alChoice(which) {
+    var st = S.assignment;
+    if (!st || !st.choice) return;
+    st.step = which === 'continue' ? st.choice.resume : 1;
+    st.choice = null;
+    indScrollTop();
+    render();
+  }
+
   /**
    * Owner preview — the learner's screens exactly, and nothing persisted.
    *
@@ -4801,16 +4880,26 @@
    * progress and no content can be changed from this screen.
    */
   async function laPreview(wfId) {
+    // Re-entering the SAME preview (back from a resource detour, a history
+    // restore) keeps the origin and the place. Recomputing backView mid-flight
+    // is what used to strand a Close in Hub administration.
+    var again = !!(S.assignment && S.assignment.preview &&
+      S.assignment.previewWfId === String(wfId || ''));
     S.assignment = {
       // Back goes where the Owner actually came from: Assign Learning or
       // the Admin > Learning tab.
-      id: null, data: null, loading: true, err: '', backView: S.view === 'learning' ? 'learning' : 'admin',
-      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
-      busy: false, preview: true, previewWfId: String(wfId || ''), previewDone: {}, celebrate: false,
+      id: null, data: null, loading: true, err: '',
+      backView: again ? S.assignment.backView : (S.view === 'learning' ? 'learning' : 'admin'),
+      step: again ? S.assignment.step : 1,
+      quizAnswers: {}, quizResult: null, ackArmed: false,
+      busy: false, preview: true, previewWfId: String(wfId || ''),
+      previewDone: again ? S.assignment.previewDone : {}, celebrate: false, choice: null,
     };
     S.view = 'assignment';
     render();
     var d = await api('/api/learning/workflows/' + encodeURIComponent(String(wfId || '')) + '/preview');
+    // Stale guard: a newer open (another preview, a real assignment) wins.
+    if (!S.assignment.preview || S.assignment.previewWfId !== String(wfId || '')) return;
     S.assignment.loading = false;
     if (!d.ok) { S.assignment.err = d.error || 'Preview failed.'; return render(); }
     S.assignment.data = {
@@ -4829,8 +4918,12 @@
 
   function alBack() {
     var back = S.assignment.backView === 'admin' ? 'admin' : 'learning';
+    // An Admin-launched preview closes onto the Learning console it came
+    // from — never whichever Hub administration tab happened to be open last.
+    if (back === 'admin') S.admin.tab = 'learning';
     S.assignment.id = null;
     S.assignment.preview = false;
+    S.assignment.previewWfId = null;
     // Through the PUBLIC nav, not the closure-local one: navigation.js wraps
     // RH2.nav to sync the URL/history, and leaving the player must move the
     // address off #resources/assignment/<id>.
@@ -4843,7 +4936,7 @@
     return !!(st.data && st.data.completed_items && st.data.completed_items[key]);
   }
 
-  async function alComplete(key, body) {
+  async function alComplete(key, body, opts) {
     var st = S.assignment;
     if (st.busy) return null;
     if (st.preview) {
@@ -4859,7 +4952,9 @@
     st.busy = false;
     if (!d.ok) {
       st.err = '';
-      alert(d.error || 'Saving your progress failed — please try again.');
+      // Background recording (reading past a section) fails silently — the
+      // closing screen's own completion still covers whatever was missed.
+      if (!(opts && opts.quiet)) alert(d.error || 'Saving your progress failed — please try again.');
       render();
       return null;
     }
@@ -4867,7 +4962,7 @@
       if (st.data.completed_items) st.data.completed_items[key] = new Date().toISOString();
       if (d.assignment) st.data.assignment = d.assignment;
       st.ackArmed = false;
-      if (d.assignment_completed) {
+      if (d.assignment_completed && !(opts && opts.stay)) {
         st.celebrate = true;
         // Finishing the last required step earns the closing screen rather
         // than leaving the reader on a section that has nothing left in it.
@@ -4879,7 +4974,54 @@
     return d;
   }
 
-  function alMarkComplete(key) { alComplete(key, {}); }
+  /**
+   * Reading past a section records its passive items — readings and tasks. No
+   * button asked for this; the reading itself was the work. Resources record
+   * when they are opened, walkthroughs when they finish, and acknowledgements
+   * and knowledge checks only ever through their own interactions.
+   */
+  function alAutoSection(sectionStep) {
+    var st = S.assignment;
+    if (!st || st.preview || !st.data) return;
+    var a = st.data.assignment;
+    if (!a || a.status === 'completed') return;
+    var s = (indSections('learner') || [])[sectionStep - 1];
+    if (!s) return;
+    var todo = (s.items || []).filter(function (it) {
+      return (it.type === 'content' || it.type === 'task') && !alItemDone(it.key);
+    });
+    if (!todo.length) return;
+    (async function () {
+      for (var i = 0; i < todo.length; i++) {
+        var d = await alComplete(todo[i].key, {}, { quiet: true, stay: true });
+        if (!d) break;
+      }
+    })();
+  }
+
+  /**
+   * The one deliberate completion: the closing screen's Mark as Complete. It
+   * records every counted reading, task and resource still open — the reader
+   * has been through the sections — and the server flips the assignment
+   * complete on the last one. Acknowledgements and knowledge checks are never
+   * swept up: those are the learner's own acts, and the closing screen lists
+   * them instead while any are outstanding.
+   */
+  async function alFinish() {
+    var st = S.assignment;
+    if (!st || st.preview || !st.data || st.busy) return;
+    var a = st.data.assignment;
+    if (!a || a.status === 'completed') return;
+    var todo = alCountedItems(indSections('learner')).filter(function (e) {
+      var t = e.item.type;
+      return (t === 'content' || t === 'task' || t === 'resource') && !alItemDone(e.item.key);
+    });
+    for (var i = 0; i < todo.length; i++) {
+      var d = await alComplete(todo[i].item.key, {}, { stay: true });
+      if (!d) return;
+    }
+    render();
+  }
 
   function alAckArm(key) { S.assignment.ackArmed = String(key); render(); }
   function alAckCancel() { S.assignment.ackArmed = false; render(); }
@@ -4922,20 +5064,91 @@
     render();
   }
 
+  // ── A walkthrough launched from inside the induction ───────────────────────
+  //
+  //  A resource item whose resource carries an interactive walkthrough IS that
+  //  walkthrough: the tile launches it directly — no resource detail page, no
+  //  separate completion button. When the overlay closes (paused or finished)
+  //  the reader lands back on the induction, in place, and a finished
+  //  walkthrough records the item by itself.
+
+  /** Who to tell when the overlay closes. Armed only once the overlay is
+   *  really up, so a refused launch can never yank the reader around later. */
+  var pendingWalk = null;
+
+  /** The interactive walkthrough behind a resource item, when there is one
+   *  this user can run. */
+  function alWalkModule(item) {
+    if (!item || item.type !== 'resource' || !item.resource_slug) return null;
+    if (typeof global.OpalInduction === 'undefined' || !global.OpalInduction.moduleForSlug) return null;
+    return global.OpalInduction.moduleForSlug(item.resource_slug) || null;
+  }
+
+  function alFindItem(key) {
+    var sections = indSections(indMode());
+    for (var i = 0; i < sections.length; i++) {
+      var items = (sections[i] && sections[i].items) || [];
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].key === key) return items[j];
+      }
+    }
+    return null;
+  }
+
+  /** The resource tile's one action: the walkthrough when there is one, the
+   *  resource itself otherwise. Opening it is doing it. */
+  function alOpenWalk(key) {
+    var st = S.assignment;
+    var item = alFindItem(key);
+    if (!st || !item) return;
+    if (st.preview) {
+      // The preview simulates the click: the tile ticks, nothing launches and
+      // nothing is saved — the Owner's own account is not walked through.
+      st.previewDone[key] = true;
+      render();
+      return;
+    }
+    var mod = alWalkModule(item);
+    if (!mod) {
+      if (!alItemDone(key) && st.data && st.data.assignment && st.data.assignment.status !== 'completed') {
+        alComplete(key, {}, { quiet: true, stay: true });
+      }
+      return openDetail(item.resource_id, 'assignment');
+    }
+    var launch = { itemKey: key, moduleKey: mod.key, assignmentId: st.id, step: st.step };
+    Promise.resolve(global.OpalInduction.start(mod.key)).then(function () {
+      if (doc.getElementById('ind-layer')) pendingWalk = launch;
+    });
+  }
+
+  /** Back from a walkthrough: restore the induction where the reader left it,
+   *  and record the item when the walkthrough was finished. */
+  async function alWalkReturn(p) {
+    var st = S.assignment;
+    if (!st || !st.id || st.preview || String(st.id) !== String(p.assignmentId)) return;
+    st.step = p.step;
+    try { if (typeof global.switchTab === 'function') global.switchTab('resources'); } catch (e) { /* the player renders regardless */ }
+    try { if (typeof global.rhSwitch === 'function') global.rhSwitch('shared'); } catch (e) { /* as above */ }
+    var mod = (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.moduleForSlug)
+      ? global.OpalInduction.moduleForSlug(p.moduleKey) : null;
+    var finished = mod && (mod.state === 'completed' || mod.state === 'updated');
+    var a = st.data && st.data.assignment;
+    if (finished && !alItemDone(p.itemKey) && a && a.status !== 'completed') {
+      await alComplete(p.itemKey, {}, { quiet: true });
+    }
+    S.view = 'assignment';
+    // Through the PUBLIC nav so the URL lands back on the player; re-entry of
+    // the same assignment keeps the step set above.
+    (global.RH2 && global.RH2.nav ? global.RH2.nav : nav)('assignment');
+  }
+
   function alItemBody(item, done) {
     var st = S.assignment;
     var key = item.key;
     var out = '<div class="rh2-learn-item-body">';
     if (item.body) out += '<div class="rh2-learn-prose">' + mdRender(item.body) + '</div>';
 
-    if (item.type === 'resource') {
-      out += '<div class="rh2-learn-actions">' +
-        '<button type="button" class="rh2-btn" onclick="RH2.openDetail(\'' + esc(item.resource_id) + '\',\'assignment\')">' +
-          'Open resource' + (item.resource_title ? ': ' + esc(item.resource_title) : '') + '</button>' +
-        (!done ? '<button type="button" class="rh2-btn rh2-btn-primary" ' + (st.busy ? 'disabled ' : '') +
-          'onclick="RH2.alMarkComplete(\'' + esc(key) + '\')">Mark complete</button>' : '') +
-      '</div>';
-    } else if (item.type === 'acknowledgement') {
+    if (item.type === 'acknowledgement') {
       out += '<blockquote class="rh2-learn-ack">' + mdRender(item.ack_statement || '') + '</blockquote>';
       if (!done) {
         if (st.ackArmed === key) {
@@ -4978,11 +5191,10 @@
           (st.busy ? 'disabled ' : '') +
           'onclick="RH2.alQuizSubmit(\'' + esc(key) + '\',' + (quiz.questions || []).length + ')">Submit answers</button></div>';
       }
-    } else if (!done) { // content / task
-      out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
-        (st.busy ? 'disabled ' : '') +
-        'onclick="RH2.alMarkComplete(\'' + esc(key) + '\')">Mark complete</button></div>';
     }
+    // content, task and resource items carry no completion buttons: reading
+    // past the section records readings and tasks, and a resource records
+    // itself when its tile is opened.
     if (done && !st.preview) {
       var when = st.data.completed_items && st.data.completed_items[key];
       out += '<p class="rh2-quiet">Completed' + (when ? ' ' + esc(fmtDate(when)) : '') + '.</p>';
@@ -4990,28 +5202,18 @@
     return out + '</div>';
   }
 
-  /** Step 0, read modes: what this is and what it contains. */
-  function indOverviewRead(a, sections, mode) {
-    var out = '<div class="rh2-ind-steplbl">Overview</div>' +
-      '<h2 class="rh2-ind-sectitle">What this covers</h2>';
-    if (pick(a, 'description')) {
-      out += '<div class="rh2-learn-prose">' + mdRender(String(pick(a, 'description'))) + '</div>';
-    }
-    out += '<p class="rh2-quiet">' + sections.length + ' section' + (sections.length === 1 ? '' : 's') +
-      ' — work through them in order with Next, and go back at any time.</p>';
-    out += '<ol class="rh2-ind-toc">' + sections.map(function (s, i) {
-      var items = (s && s.items) || [];
-      var doneN = items.filter(function (it) { return alItemDone(it.key); }).length;
-      return indTocRow(s.title, items.length + ' step' + (items.length === 1 ? '' : 's') +
-        (doneN ? ' · ' + doneN + ' done' : ''), i + 1, i + 1);
-    }).join('') + '</ol>';
-    if (a.status === 'completed') {
-      out += '<div class="rh2-learn-done-banner">&#10003; Completed ' + esc(fmtDate(pick(a, 'completed_at'))) + '</div>';
-    }
-    return out + '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
-      'onclick="RH2.indGo(1)">' +
-      (mode === 'preview' ? 'Start the preview' : ((pick(a, 'progress_percent') || 0) ? 'Continue' : 'Start')) +
-      ' &rarr;</button></div>';
+  /** The one question a previously started induction asks — then gets out of
+   *  the way. Both answers only move the cursor; nothing is reset. */
+  function indChoiceRead(a) {
+    var pct = pick(a, 'progress_percent') || 0;
+    return '<div class="rh2-ind-steplbl">Welcome back</div>' +
+      '<h2 class="rh2-ind-sectitle">Pick up where you left off?</h2>' +
+      '<p class="rh2-quiet">Your progress is saved' + (pct ? ' — ' + pct + '% done' : '') +
+        '. Restarting replays the induction from the first section; nothing you have done is lost.</p>' +
+      '<div class="rh2-learn-actions">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.alChoice(\'continue\')">Continue where you left off</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.alChoice(\'restart\')">Restart from beginning</button>' +
+      '</div>';
   }
 
   /** One section, one screen. The unit of an induction in every mode. */
@@ -5021,43 +5223,64 @@
     var out = '<div class="rh2-ind-steplbl">Section ' + step + ' of ' + secCount + '</div>' +
       '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>';
     if (!items.length) return out + '<p class="rh2-quiet">There is nothing in this section yet.</p>';
-    return out + '<ol class="rh2-ind-items">' + items.map(function (it, i) {
+    return out + '<ol class="rh2-ind-items">' + items.map(function (it) {
       var done = alItemDone(it.key);
-      var typeLabel = it.type !== 'content'
-        ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
+      // Only the interactions announce themselves; readings and resources are
+      // simply content, not labelled mechanics.
+      var typeLabel = (it.type === 'acknowledgement' || it.type === 'quiz')
+        ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type]) + '</span>' : '';
       var reqLabel = it.required === false ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
+      var head = '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
+        (it.minutes ? '<span class="rh2-row-sub">' + esc(it.minutes) + ' min</span>' : '') + '</span>' +
+        (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '');
+      if (it.type === 'resource') {
+        // The tile IS the action: click anywhere on it to run the interactive
+        // walkthrough, or to open the resource when there is no walkthrough.
+        var mod = alWalkModule(it);
+        var verb = mod
+          ? ((done ? 'Replay' : 'Open') + ' the interactive walkthrough')
+          : ('Open' + (it.resource_title ? ': ' + it.resource_title : ' the resource'));
+        return '<li class="rh2-ind-item rh2-ind-item-launch' + (done ? ' is-done' : '') + '">' +
+          '<button type="button" class="rh2-ind-launch" onclick="RH2.alOpenWalk(\'' + esc(it.key) + '\')">' +
+            '<span class="rh2-ind-item-head">' + head + '</span>' +
+            '<span class="rh2-ind-launch-hint">' + esc(verb) + ' &rarr;</span>' +
+          '</button>' + alItemBody(it, done) + '</li>';
+      }
       return '<li class="rh2-ind-item' + (done ? ' is-done' : '') + '">' +
-        '<div class="rh2-ind-item-head">' +
-          '<span class="rh2-ind-item-no">' + (i + 1) + '</span>' +
-          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
-          (it.minutes ? '<span class="rh2-row-sub">' + esc(it.minutes) + ' min</span>' : '') + '</span>' +
-          (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '') +
-        '</div>' + alItemBody(it, done) + '</li>';
+        '<div class="rh2-ind-item-head">' + head + '</div>' + alItemBody(it, done) + '</li>';
     }).join('') + '</ol>';
   }
 
-  /** The closing screen: what is left, or that nothing is. */
+  /** The closing screen: the deliberate completion, or what is still owed. */
   function indFinishRead(a, sections, mode) {
-    var outstanding = [];
-    sections.forEach(function (s, si) {
-      ((s && s.items) || []).forEach(function (it) {
-        if (it.required !== false && !alItemDone(it.key)) outstanding.push({ step: si + 1, item: it, section: s.title });
-      });
+    var outstanding = alCountedItems(sections).filter(function (e) { return !alItemDone(e.item.key); });
+    // Acknowledgements and knowledge checks are the learner's own acts —
+    // completion waits for them. Everything else the completion records.
+    var interactive = outstanding.filter(function (e) {
+      return e.item.type === 'acknowledgement' || e.item.type === 'quiz';
     });
     var out = '<div class="rh2-ind-steplbl">' + (mode === 'preview' ? 'End of preview' : 'Complete') + '</div>';
     if (mode === 'preview') {
       out += '<h2 class="rh2-ind-sectitle">That is the whole induction</h2>' +
         '<p class="rh2-quiet">This is exactly what the person you assign it to works through. ' +
         'Nothing on this screen has been saved, and no learner&rsquo;s progress has changed.</p>';
-    } else if (!outstanding.length) {
+    } else if (a.status === 'completed') {
       out += '<h2 class="rh2-ind-sectitle">All done &#127881;</h2>' +
-        '<p>You&rsquo;ve completed every required module. This learning is recorded as completed.</p>';
-    } else {
+        '<p>This learning is recorded as completed' +
+        (pick(a, 'completed_at') ? ' on ' + esc(fmtDate(pick(a, 'completed_at'))) : '') +
+        '. You can come back through it any time.</p>';
+    } else if (interactive.length) {
       out += '<h2 class="rh2-ind-sectitle">Nearly there</h2>' +
-        '<p class="rh2-quiet">' + outstanding.length + ' required step' + (outstanding.length === 1 ? '' : 's') +
-        ' still to finish:</p><ol class="rh2-ind-toc">' + outstanding.map(function (o, i) {
-          return indTocRow(o.item.title, o.section, o.step, i + 1);
+        '<p class="rh2-quiet">' + interactive.length + ' step' + (interactive.length === 1 ? ' needs' : 's need') +
+        ' you before this can be completed:</p><ol class="rh2-ind-toc">' + interactive.map(function (e, i) {
+          return indTocRow(e.item.title, (sections[e.section - 1] || {}).title || '', e.section, i + 1);
         }).join('') + '</ol>';
+    } else {
+      out += '<h2 class="rh2-ind-sectitle">That is the whole induction</h2>' +
+        '<p class="rh2-quiet">Marking it complete records it on your learning record — you can still revisit it any time.</p>' +
+        '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+          (S.assignment.busy ? 'disabled ' : '') +
+          'onclick="RH2.alFinish()">Mark as Complete</button></div>';
     }
     return out + '<div class="rh2-learn-actions"><button type="button" class="rh2-btn" onclick="RH2.alBack()">' +
       (mode === 'preview' ? 'Close preview' : 'Back to My Learning') + '</button></div>';
@@ -5105,12 +5328,13 @@
     }
 
     out += '<section class="rh2-card rh2-ind-stage">';
-    if (step === 0) out += indOverviewRead(a, sections, mode);
+    if (st.choice) out += indChoiceRead(a);
     else if (step > sections.length) out += indFinishRead(a, sections, mode);
     else out += indSectionRead(sections[step - 1], step, sections.length);
     out += '</section>';
 
-    return out + indNav(mode, step, sections.length) + '</div>';
+    // While the continue-or-restart question is up, it is the only control.
+    return out + (st.choice ? '' : indNav(mode, step, sections.length)) + '</div>';
   }
 
   // ── Owner: learning console (Admin → Learning) ─────────────────────────────
@@ -6324,10 +6548,13 @@
       'Edit the content of step ' + (ii + 1));
 
     if (it.type === 'resource') {
+      // The learner's resource item is ONE launch tile — mirror it inert.
+      // Opening is the learner's click, and opening records the step; there
+      // is no separate button to depict.
       out += '<div class="rh2-learn-actions">' +
-        '<button type="button" class="rh2-btn" disabled>Open resource' +
-          (it.resource_title ? ': ' + esc(it.resource_title) : '') + '</button>' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" disabled>Mark complete</button>' +
+        '<span class="rh2-ind-launch-hint">Opens' +
+          (it.resource_title ? ': ' + esc(it.resource_title) : ' the linked resource') +
+          ' &rarr;</span>' +
         (it.resource_id ? '' : '<span class="rh2-quiet">Link the resource in Settings.</span>') +
       '</div>';
     }
@@ -6394,7 +6621,9 @@
     }
 
     if (it.type === 'content' || it.type === 'task') {
-      out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" disabled>Mark complete</button></div>';
+      // The learner has no button here: reading past the section records the
+      // step. Say so rather than depicting a control that no longer exists.
+      out += '<p class="rh2-quiet rh2-learn-ed-hint">The learner has nothing to press here &mdash; reading past the section records this step.</p>';
     }
 
     out += '</div>';
@@ -7370,7 +7599,9 @@
     openAssignment: openAssignment,
     reloadMyLearning: function () { S.myl.rows = null; loadMyLearning(); },
     alBack: alBack,
-    alMarkComplete: alMarkComplete,
+    alChoice: alChoice,
+    alFinish: alFinish,
+    alOpenWalk: alOpenWalk,
     alAckArm: alAckArm,
     alAckCancel: alAckCancel,
     alAckConfirm: alAckConfirm,

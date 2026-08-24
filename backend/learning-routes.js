@@ -480,6 +480,36 @@ router.delete('/api/learning/workflows/:id', ownerOnly, safe(async (req, res) =>
   res.json({ deleted: true });
 }));
 
+/**
+ * Slugs for the resources an induction links. The player uses them to open a
+ * resource item's interactive walkthrough straight from the item tile, with
+ * no resource detail page in between. Additive and org-scoped: an item whose
+ * resource is gone (or foreign) simply carries no slug and falls back to the
+ * plain resource behaviour.
+ */
+async function attachResourceSlugs(content, org) {
+  const ids = [];
+  for (const s of (content && content.sections) || []) {
+    for (const it of s.items || []) {
+      if (it.type === 'resource' && isUuid(it.resource_id)) ids.push(String(it.resource_id));
+    }
+  }
+  if (!ids.length) return content;
+  const { rows } = await pool.query(
+    `SELECT id, slug FROM resources
+      WHERE organisation_id IS NOT DISTINCT FROM $1 AND id = ANY($2::uuid[]) AND slug IS NOT NULL`,
+    [org, ids]);
+  const slugById = Object.fromEntries(rows.map((r) => [String(r.id), r.slug]));
+  for (const s of (content && content.sections) || []) {
+    for (const it of s.items || []) {
+      if (it.type === 'resource' && slugById[String(it.resource_id)]) {
+        it.resource_slug = slugById[String(it.resource_id)];
+      }
+    }
+  }
+  return content;
+}
+
 /** Owner preview — the employee projection of the CURRENT DRAFT. Creates
  *  nothing and writes nothing. */
 router.get('/api/learning/workflows/:id/preview', ownerOnly, safe(async (req, res) => {
@@ -489,7 +519,7 @@ router.get('/api/learning/workflows/:id/preview', ownerOnly, safe(async (req, re
   res.json({
     preview: true,
     workflow: { id: wf.id, title: wf.title, description: wf.description, category: wf.category },
-    content: lc.serialiseForEmployee(wf.draft_content),
+    content: await attachResourceSlugs(lc.serialiseForEmployee(wf.draft_content), orgOf(req)),
     stats,
   });
 }));
@@ -1243,7 +1273,7 @@ router.get('/api/learning/my/:id', safe(async (req, res) => {
       WHERE assignment_id = $1`, [a.id]);
   res.json({
     assignment: { ...assignmentRow(a, { forEmployee: true }), assigned_by_name: a.assigned_by_name },
-    content: lc.serialiseForEmployee(a.content),
+    content: await attachResourceSlugs(lc.serialiseForEmployee(a.content), orgOf(req)),
     completed_items: Object.fromEntries(items.map((r) => [r.item_key, r.completed_at])),
   });
 }));
