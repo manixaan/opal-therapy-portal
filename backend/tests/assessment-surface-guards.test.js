@@ -596,9 +596,12 @@ describe('changed assets are cache-busted', () => {
       // r22/r15: the Library became a hand-managed filing cabinet — folder
       // upload, drag-and-drop and right-click in, automatic organisation out.
       // r24: Browse by collection left Resource Hub Home; the Library folders
-      // are where organised browsing lives. The CSS stays at r15 — Assign
-      // Learning still renders the .rh2-collection cards.
-      ['resourcehub.js', 'r24'], ['resourcehub.css', 'r15'],
+      // are where organised browsing lives.
+      // r25/r16: Assign Learning became one unified catalogue (its own
+      // collection shelves gone, .rh2-collection* deleted with them), the
+      // item actions came down to Assign / Edit / Preview, and learner,
+      // preview and edit modes moved onto one section-by-section renderer.
+      ['resourcehub.js', 'r25'], ['resourcehub.css', 'r16'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],

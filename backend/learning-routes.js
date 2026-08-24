@@ -517,6 +517,36 @@ router.get('/api/learning/workflows/:id/preview', ownerOnly, safe(async (req, re
  * Idempotent by title within the organisation: an import that has already
  * happened creates nothing, and an Owner's later edits are never overwritten.
  */
+/**
+ * Section titles for an imported learning path.
+ *
+ * A path is a flat ordered list; the induction is delivered one section per
+ * screen. content_type is the grouping the source data already carries, so it
+ * is what the importer divides on — and these are the names a reader would
+ * use for those groups. Anything unmapped keeps its own type as a title, and
+ * the Owner renames any of them inline while editing.
+ */
+const IMPORT_SECTION_LABELS = {
+  article: 'Orientation',
+  policy: 'Policies and standards',
+  procedure: 'Policies and standards',
+  learning_module: 'Learning modules',
+  tutorial: 'Using the portal',
+  ndis_guide: 'NDIS essentials',
+  guide: 'Guides',
+  form: 'Forms and templates',
+  template: 'Forms and templates',
+  checklist: 'Checklists',
+  video: 'Watch and listen',
+};
+
+function importSectionLabel(contentType) {
+  const key = String(contentType || '').trim().toLowerCase();
+  if (IMPORT_SECTION_LABELS[key]) return IMPORT_SECTION_LABELS[key];
+  if (!key) return 'Modules';
+  return key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
 router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) => {
   const org = orgOf(req);
   const created = [];
@@ -547,29 +577,34 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
 
   for (const p of paths) {
     const { rows: items } = await pool.query(
-      `SELECT r.id, r.title, r.estimated_minutes, r.learning_minutes, i.required
+      `SELECT r.id, r.title, r.content_type, r.estimated_minutes, r.learning_minutes, i.required
          FROM learning_path_items i
          JOIN resources r ON r.id = i.resource_id
         WHERE i.path_id = $1
         ORDER BY i.sort_order ASC`, [p.id]);
     if (!items.length) { skipped.push({ title: p.name, reason: 'no_items' }); continue; }
+    // The path is a flat list of up to twenty modules. Delivered as ONE
+    // section it is the long scrolling page the step flow replaced, so it is
+    // divided into screens at the boundaries the data already has. Order is
+    // preserved exactly — only the screen breaks are new.
     await insert(
       p.name,
       p.description || null,
       // target_role is advisory on a path; the workflow's category is a
       // vocabulary the Owner can change afterwards.
       /rural|remote/i.test(p.name) ? 'rural_remote' : 'induction',
-      [{
-        title: 'Modules',
-        items: items.map((r) => ({
+      lc.sectionsFromOrderedItems(items.map((r) => ({
+        group: String(r.content_type || ''),
+        label: importSectionLabel(r.content_type),
+        item: {
           type: 'resource',
           title: r.title,
           resource_id: r.id,
           resource_title: r.title,
           required: r.required !== false,
           minutes: Number(r.learning_minutes || r.estimated_minutes) || undefined,
-        })),
-      }]);
+        },
+      })), 'Modules'));
   }
 
   // ── The interactive portal induction ───────────────────────────────────────
@@ -589,16 +624,19 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
         'Opal Portal Induction',
         'The interactive walkthroughs of the portal itself: calendar, bookings, travel, resources and your profile.',
         'induction',
-        [{
-          title: 'Portal walkthroughs',
-          items: mods.map((m) => {
-            const hit = bySlug[m.key];
-            return hit
+        // One screen per handful of walkthroughs rather than the whole portal
+        // on a single page; the registry's order is kept exactly.
+        lc.sectionsFromOrderedItems(mods.map((m) => {
+          const hit = bySlug[m.key];
+          return {
+            group: 'walkthrough',
+            label: 'Portal walkthroughs',
+            item: hit
               ? { type: 'resource', title: m.title, resource_id: hit.id, resource_title: hit.title, required: true, minutes: m.minutes }
               : { type: 'task', title: m.title, required: true, minutes: m.minutes,
-                  body: (m.description || '') + '\n\nRun this walkthrough from the Resource Hub — My Learning, under the portal induction.' };
-          }),
-        }]);
+                  body: (m.description || '') + '\n\nRun this walkthrough from the Resource Hub — My Learning, under the portal induction.' },
+          };
+        }), 'Portal walkthroughs'));
     }
   }
 

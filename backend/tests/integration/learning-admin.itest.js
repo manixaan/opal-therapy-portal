@@ -342,11 +342,15 @@ async function seedPath(orgId, key, name, titles, opts = {}) {
      VALUES ($1,$2,$3,$4,$5) RETURNING id`,
     [orgId, key, name, opts.description || null, opts.targetRole || 'therapist']);
   let i = 0;
-  for (const t of titles) {
+  for (const entry of titles) {
+    // A title alone keeps the old shape; [title, content_type] carries the
+    // grouping the importer divides sections on.
+    const t = Array.isArray(entry) ? entry[0] : entry;
+    const contentType = Array.isArray(entry) ? entry[1] : null;
     const { rows: [r] } = await db.pool.query(
-      `INSERT INTO resources (organisation_id, title, status, resource_type, slug, estimated_minutes)
-       VALUES ($1,$2,'approved','guide',$3,$4) RETURNING id`,
-      [orgId, t, `${key}-${i}`, 10 + i]);
+      `INSERT INTO resources (organisation_id, title, status, resource_type, content_type, slug, estimated_minutes)
+       VALUES ($1,$2,'approved','guide',$3,$4,$5) RETURNING id`,
+      [orgId, t, contentType, `${key}-${i}`, 10 + i]);
     await db.pool.query(
       `INSERT INTO learning_path_items (path_id, resource_id, sort_order, required)
        VALUES ($1,$2,$3,$4)`, [path.id, r.id, i, i !== 1]); // one optional item
@@ -380,6 +384,41 @@ test('existing learning paths import as editable, assignable workflows', async (
   // Rural naming picks the rural category rather than defaulting to induction.
   const rural = await owner.agent.get(`/api/learning/workflows/${byTitle['Rural and Remote Starter'].id}`);
   expect(rural.body.workflow.category).toBe('rural_remote');
+});
+
+test('a long path imports as several screens, in its original order', async () => {
+  // This is the defect the step flow exists to prevent: eighteen modules
+  // delivered as one section is the long scrolling page again, wearing the
+  // new renderer.
+  const owner = await agentFor('owner', org.id);
+  await seedPath(org.id, 'long-ot-starter', 'New Starter — OT (long)', [
+    ['Welcome', 'article'], ['How we work', 'article'], ['First day', 'article'],
+    ['First week', 'article'], ['Who to ask', 'article'], ['Escalation', 'article'],
+    ['Privacy policy', 'policy'], ['Documentation standard', 'policy'],
+    ['AI module', 'learning_module'],
+    ['Portal basics', 'tutorial'], ['Calendar', 'tutorial'], ['Bookings', 'tutorial'],
+  ]);
+
+  const created = (await owner.agent.post('/api/learning/workflows/import')).body.created
+    .find((c) => c.title === 'New Starter — OT (long)');
+  const detail = await owner.agent.get(`/api/learning/workflows/${created.id}`);
+  const sections = detail.body.workflow.draft_content.sections;
+
+  // More than one screen, none of them longer than a screen.
+  expect(sections.length).toBeGreaterThan(1);
+  sections.forEach((sec) => expect(sec.items.length).toBeLessThanOrEqual(6));
+  // Divided at the boundaries the source data carries, not arbitrarily.
+  expect(sections[0].title).toBe('Orientation');
+  expect(sections.map((sec) => sec.title)).toContain('Policies and standards');
+  // Every item survives, in exactly the order the path curated.
+  expect(sections.flatMap((sec) => sec.items.map((i) => i.title))).toEqual([
+    'Welcome', 'How we work', 'First day', 'First week', 'Who to ask', 'Escalation',
+    'Privacy policy', 'Documentation standard', 'AI module',
+    'Portal basics', 'Calendar', 'Bookings',
+  ]);
+  // Every section key is distinct, which is what progress maps by.
+  const keys = sections.map((sec) => sec.key);
+  expect(new Set(keys).size).toBe(keys.length);
 });
 
 test('the Owner can edit an imported induction and add steps to it', async () => {

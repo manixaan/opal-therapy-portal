@@ -65,7 +65,10 @@ describe('the owner navigates to Assign Learning', () => {
   test('the owner heading and intro say what the page is for', () => {
     const page = fn('renderAssignLearning');
     expect(page).toContain('Assign Learning</h1>');
-    expect(page).toMatch(/browse|Browse/);
+    // It no longer promises browsing, because there is nothing to browse
+    // through — the intro names the three things the page does instead.
+    expect(page).toMatch(/Assign one to the people who need it/);
+    expect(page).toMatch(/edit it exactly as they will see it/);
     expect(page).toContain('rh2-page-intro');
   });
 });
@@ -121,12 +124,40 @@ describe('an owner has no personal learning panels', () => {
 //  THE THREE SECTIONS
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('the owner page shows the three required sections', () => {
+describe('the owner page is ONE catalogue, not a set of shelves', () => {
   const page = fn('renderAssignLearning');
 
-  test('Browse by collection', () => {
-    expect(page).toContain('Browse by collection');
-    expect(page).toContain('aslCollections');
+  test('nothing has to be opened before the library is visible', () => {
+    // Collections stood between the Owner and their own library: a shelf had
+    // to be chosen before anything could be seen, and an item filed under a
+    // category nobody thought to click was effectively invisible.
+    for (const gone of ['Browse by collection', 'rh2-collections', 'rh2-collection-name',
+      'aslCollections', 'aslOpenCollection', 'aslClearCollection']) {
+      expect(`${gone}:${page.includes(gone)}`).toBe(`${gone}:false`);
+    }
+    expect(VISIBLE).not.toContain('function aslCollections(');
+    expect(VISIBLE).not.toContain('aslOpenCollection:');
+  });
+
+  test('the shelves went, the records did not', () => {
+    // Removing a presentation must not remove content: the page still renders
+    // every workflow the API returns, archived ones included when asked for.
+    expect(page).toContain('var all = la.workflows || []');
+    expect(page).toContain('RH2.laToggleArchived');
+    expect(fn('aslVisible')).toContain('S.la.workflows || []');
+  });
+
+  test('category survives on the record, and stays searchable', () => {
+    // Only the browsing workflow built on top of the vocabulary is gone. The
+    // card still prints the category and search still matches it, so somebody
+    // who thinks in categories can still type "rural" and find the rural items.
+    expect(fn('laWorkflowCard')).toContain('aslCatLabel(w.category)');
+    expect(fn('aslVisible')).toContain('aslCatLabel(w.category).toLowerCase()');
+  });
+
+  test('the search box is filtered state, with no collection cursor behind it', () => {
+    expect(fn('aslResetFilters')).not.toContain('collection');
+    expect(VISIBLE).toContain("asl: { q: '' }");
   });
 
   test('Upcoming professional development', () => {
@@ -138,31 +169,64 @@ describe('the owner page shows the three required sections', () => {
     expect(page).toContain('ASL_RECENT_LIMIT');
   });
 
-  test('collections come from the DATA, not a hardcoded list', () => {
-    // The categories are a free vocabulary in the schema; a practice inventing
-    // its own must get a collection for it without a code change.
-    const group = fn('aslCollections');
-    expect(group).toContain('w.category');
-    expect(group).not.toMatch(/\[\s*'induction'\s*,\s*'clinical'/);
-  });
-
-  test('an item with no category still appears, in an honest bucket', () => {
-    expect(fn('aslCollections')).toContain("'uncategorised'");
+  test('Recently added reports; it is no longer a way into a collection', () => {
+    const recent = page.slice(page.indexOf('Recently added'));
+    expect(recent).not.toContain('aslOpenCollection');
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+//  THE CATALOGUE SEARCH
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the catalogue search sits in the header, not beside it', () => {
+  const page = fn('renderAssignLearning');
+
+  test('the field has its own full-width row under the heading', () => {
+    expect(page).toContain('rh2-learn-cat-search');
+    expect(CSS).toMatch(/\.rh2-learn-cat-search\s*\{[^}]*grid-column:\s*1 \/ -1/);
+  });
+
+  test('the header is a grid, so the heading and the actions cannot drift apart', () => {
+    // It used to be one flex row, where the field was pushed rightwards by
+    // whatever happened to sit beside it and settled at a different height
+    // from the heading it belongs to.
+    expect(CSS).toMatch(/\.rh2-learn-cat-head\s*\{[^}]*display:\s*grid/);
+    expect(CSS).toMatch(/\.rh2-learn-cat-head\s*\{[^}]*align-items:\s*center/);
+  });
+
+  test('it collapses to one column on a phone rather than overflowing', () => {
+    expect(CSS).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.rh2-learn-cat-head \{ grid-template-columns: 1fr; \}/);
+  });
+
+  test('search still filters, and can still be cleared', () => {
+    expect(page).toContain('RH2.aslSearch(this.value)');
+    expect(page).toContain('RH2.aslResetFilters()');
+    expect(page).toContain('id="asl-q"');
+  });
+
+  test('the field is labelled for a screen reader', () => {
+    expect(page).toContain('for="asl-q"');
+  });
+});
+// ═════════════════════════════════════════════════════════════════════════════
 //  ITEM ACTIONS
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('learning items keep every management action, and gain Assign', () => {
+describe('an item on Assign Learning offers three actions, and only three', () => {
   const card = fn('laWorkflowCard');
+  /** The half of the card every surface renders — everything outside the
+   *  `lifecycle` branch is what Assign Learning actually shows. */
+  const primary = card.slice(0, card.indexOf('(lifecycle'));
 
-  test('one card renderer is shared by both owner surfaces', () => {
+  test('one card renderer is still shared by both owner surfaces', () => {
     // Two copies would drift: an action added to one would silently be missing
-    // from the other.
-    expect(HUB).toContain('rows.map(laWorkflowCard).join');
-    expect(fn('renderAssignLearning')).toContain('rows.map(laWorkflowCard).join');
+    // from the other. What differs between the surfaces is WHICH actions are
+    // offered — never how the item itself is described.
+    expect(HUB).toContain('rows.map(aslWorkflowCard).join');
+    expect(HUB).toContain('rows.map(laLibraryCard).join');
+    expect(fn('aslWorkflowCard')).toContain("laWorkflowCard(w, { actions: 'primary' })");
+    expect(fn('laLibraryCard')).toContain("laWorkflowCard(w, { actions: 'lifecycle' })");
   });
 
   test('Assign is present and is the primary action', () => {
@@ -170,10 +234,36 @@ describe('learning items keep every management action, and gain Assign', () => {
     expect(card).toContain('rh2-btn-primary');
   });
 
-  test('the existing management actions survive', () => {
-    for (const action of ['laEdit', 'laPreview', 'laViewAssignments', 'laDuplicate', 'laArchive']) {
-      expect(`${action}:${card.includes(`RH2.${action}`)}`).toBe(`${action}:true`);
+  test('Assign, Edit and Preview are the actions this surface carries', () => {
+    for (const action of ['laAssignOpen', 'laEdit', 'laPreview']) {
+      expect(`${action}:${primary.includes(`RH2.${action}`)}`).toBe(`${action}:true`);
     }
+  });
+
+  test('the crowding actions are behind the lifecycle branch, not on this page', () => {
+    // Each of these sent the Owner somewhere other than the job in hand.
+    for (const action of ['laViewAssignments', 'laDuplicate', 'laArchive', 'laDelete']) {
+      expect(`${action}:${primary.includes(`RH2.${action}`)}`).toBe(`${action}:false`);
+    }
+  });
+
+  test('hiding them removed BUTTONS, not capability', () => {
+    // The Admin > Learning console still carries the whole lifecycle, and the
+    // handlers and the routes behind it are untouched. Simplifying one surface
+    // must never quietly become a data cleanup.
+    for (const action of ['laViewAssignments', 'laDuplicate', 'laArchive', 'laUnarchive', 'laDelete']) {
+      expect(`${action}:${card.includes(`RH2.${action}`)}`).toBe(`${action}:true`);
+      expect(`${action} exported:${HUB.includes(`${action}: ${action}`)}`).toBe(`${action} exported:true`);
+    }
+    for (const route of ['/duplicate', '/archive', '/unarchive']) {
+      expect(`${route}:${ROUTES.includes(route)}`).toBe(`${route}:true`);
+    }
+  });
+
+  test('an archived item can still be brought back from this surface', () => {
+    // The one lifecycle action that has to survive here: an archived row with
+    // no way out is unreachable content.
+    expect(primary).toContain('RH2.laUnarchive');
   });
 
   test('an item that cannot be assigned says why instead of offering a dead button', () => {
@@ -188,6 +278,173 @@ describe('learning items keep every management action, and gain Assign', () => {
     expect(card).toContain('aslDuration(w)');
     expect(card).toContain('w.updated_at');
     expect(card).not.toMatch(/audience|contentType/i);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ONE INDUCTION, THREE MODES
+//
+//  Learner, Owner preview and Owner edit are the SAME screens. That is the
+//  whole point of the change, and it is exactly the kind of thing that decays
+//  quietly: someone adds a control to the editor, the learner never sees it,
+//  and a year later the Owner is editing something nobody receives. These
+//  assertions pin the shared shell, and — more importantly — pin that edit
+//  capability is decided by the render path and the server, never by a flag a
+//  learner's page could carry.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('learner, preview and edit walk the same steps', () => {
+  const player = fn('renderAssignment');
+  const editor = fn('renderLaEditor');
+
+  test('both modes render through the shared header, rail and nav', () => {
+    for (const shared of ['indHeader(', 'indNav(', 'indStep(']) {
+      expect(`player ${shared}:${player.includes(shared)}`).toBe(`player ${shared}:true`);
+      expect(`editor ${shared}:${editor.includes(shared)}`).toBe(`editor ${shared}:true`);
+    }
+    expect(fn('indHeader')).toContain('indRail(');
+  });
+
+  test('the step model is identical: overview, each section, a close', () => {
+    expect(fn('indStepCount')).toContain('+ 2');
+    // Both dispatch the same three ways round the same cursor.
+    for (const body of [player, editor]) {
+      expect(body).toContain('if (step === 0)');
+      expect(body).toContain('step > sections.length');
+    }
+  });
+
+  test('Next and Back exist, are bounded, and are the same control', () => {
+    const nav = fn('indNav');
+    expect(nav).toContain('RH2.indGo(-1)');
+    expect(nav).toContain('RH2.indGo(1)');
+    expect(nav).toContain('Back');
+    expect(nav).toContain('Next');
+    // The first step cannot go back and the last cannot go on.
+    expect(nav).toContain("(step === 0 ? 'disabled ' : '')");
+    expect(nav).toContain("(step === last ? 'disabled ' : '')");
+    expect(fn('indGo')).toContain('Math.max(0, Math.min(n - 1');
+  });
+
+  test('a section is a SCREEN, not a card in a stack', () => {
+    // The old player rendered every section at once and hid the content in
+    // accordions. One section per step is the change; a forEach over all of
+    // them inside the renderer would be the regression.
+    expect(player).toContain('indSectionRead(sections[step - 1]');
+    expect(editor).toContain('indSectionEdit(sections[step - 1]');
+    expect(player).not.toMatch(/sections\s*\|\|\s*\[\]\)\.forEach/);
+    expect(VISIBLE).not.toContain('RH2.alToggle(');
+  });
+
+  test('every mode can jump to a named step, so nothing is a dead end', () => {
+    expect(fn('indRail')).toContain('RH2.indJump(');
+    expect(fn('indTocRow')).toContain('RH2.indJump(');
+  });
+
+  test('the rail marks the current step by more than colour', () => {
+    expect(fn('indRail')).toContain('aria-current="step"');
+    expect(CSS).toMatch(/\.rh2-ind-railbtn\.is-on\s*\{[^}]*border-color/);
+  });
+});
+
+describe('edit mode is the learner\'s screen with the fields exposed', () => {
+  const editor = fn('renderLaEditor');
+
+  test('opening Edit is already editing — there is no second control', () => {
+    // The failure this pins: an "Edit" button that opens something read-only
+    // with another "Edit" inside it.
+    expect(fn('laEdit')).toContain("api('/api/learning/workflows/'");
+    expect(editor).not.toMatch(/Enable editing|Edit content<|>Edit<\/button>/);
+    expect(fn('indSectionEdit')).toContain('RH2.laSecField(');
+    expect(fn('laEditorItemHtml')).toContain("\\'title\\',this.value");
+    expect(fn('laEditorItemHtml')).toContain("\\'body\\',this.value");
+  });
+
+  test('the heading is the input, in the place the learner reads it', () => {
+    expect(fn('indHeader')).toContain("mode === 'edit'");
+    expect(fn('indHeader')).toContain("RH2.laMeta(\\'title\\',this.value)");
+    expect(fn('indSectionEdit')).toContain('rh2-ind-sectitle-in');
+  });
+
+  test('every content element the model supports stays editable', () => {
+    const item = fn('laEditorItemHtml');
+    for (const editable of ['ack_statement', 'required', 'minutes', 'laQField(', 'laResPickOpen(']) {
+      expect(`${editable}:${item.includes(editable)}`).toBe(`${editable}:true`);
+    }
+  });
+
+  test('saving goes through the existing draft lifecycle, not a new one', () => {
+    // Draft is saved; a version is cut by Publish or by assigning. Nothing
+    // here may publish silently.
+    const save = fn('laSave');
+    expect(save).toContain("method: 'PUT'");
+    expect(save).toContain('expectedUpdatedAt');
+    expect(save).not.toContain('/publish');
+    expect(editor).toContain('RH2.laPublish(');
+    expect(editor).toContain('Learners receive v');
+  });
+
+  test('the step the Owner was on survives a save', () => {
+    // laSave re-opens from the server's normalised copy; being thrown back to
+    // the overview on every save is how an editor teaches people not to save.
+    expect(fn('laEdit')).toContain('keepStep');
+  });
+});
+
+describe('preview shows the learner experience and changes nothing', () => {
+  const prev = fn('laPreview');
+
+  test('it reads the owner preview endpoint, which writes nothing', () => {
+    expect(prev).toContain("/preview'");
+    expect(ROUTES).toMatch(/workflows\/:id\/preview[\s\S]{0,400}serialiseForEmployee/);
+  });
+
+  test('it renders through the learner renderer, not a copy of it', () => {
+    expect(prev).toContain("S.view = 'assignment'");
+    expect(prev).toContain('preview: true');
+  });
+
+  test('no completion is posted from a preview', () => {
+    // The guard is in alComplete itself, so every item type inherits it.
+    expect(fn('alComplete')).toMatch(/if \(st\.preview\) \{[\s\S]{0,200}return \{ ok: true, completed: true, preview: true \}/);
+    expect(fn('alQuizSubmit')).toContain('if (st.preview)');
+  });
+
+  test('and it says plainly that it is a preview', () => {
+    expect(fn('renderAssignment')).toContain('Preview &mdash; read only, nothing is saved');
+  });
+});
+
+describe('a learner cannot reach editing through the shared renderer', () => {
+  test('edit mode is inferred from the render path, not stored on the page', () => {
+    // A stored mode flag is something a learner's state could hold. This one
+    // is read from which view is open, and the editor only ever opens from an
+    // owner-only surface.
+    const mode = fn('indMode');
+    expect(mode).toContain("S.view === 'assignment'");
+    expect(mode).toContain("'edit'");
+    expect(VISIBLE).toContain("body = isOwner() ? renderAssignLearning() : renderLearning()");
+  });
+
+  test('the learner view never opens the editor', () => {
+    expect(fn('renderLearning')).not.toContain('laEdit');
+    expect(fn('renderLearning')).not.toContain('renderLaEditor');
+  });
+
+  test('and the server refuses regardless of what the browser renders', () => {
+    for (const route of [
+      "router.get('/api/learning/workflows/:id', ownerOnly",
+      "router.put('/api/learning/workflows/:id', ownerOnly",
+      "router.get('/api/learning/workflows/:id/preview', ownerOnly",
+      "router.post('/api/learning/workflows/:id/publish', ownerOnly",
+    ]) {
+      expect(`${route}:${ROUTES.includes(route)}`).toBe(`${route}:true`);
+    }
+  });
+
+  test('learner progress still posts to the user-scoped route only', () => {
+    expect(fn('alComplete')).toContain("'/api/learning/my/'");
+    expect(ROUTES).toMatch(/my\/:id\/items\/:itemKey\/complete[\s\S]{0,600}loadMyAssignment/);
   });
 });
 
@@ -385,19 +642,21 @@ describe('the server, not the button, is what protects this', () => {
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
     // These pins move whenever ANY feature changes the hub assets — the file
-    // is shared, so the version is shared. r22/r15 is the Library's
-    // hand-managed filing rewrite; bump both this and the list in
-    // assessment-surface-guards.test.js together, or CI fails on the half
-    // that was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r15');
-    expect(SHELL).toContain('/resourcehub.js?v=r24');
+    // is shared, so the version is shared. r25/r16 is this change: one
+    // unified catalogue, three actions, one induction renderer. Bump both
+    // this and the list in assessment-surface-guards.test.js together, or CI
+    // fails on the half that was forgotten.
+    expect(SHELL).toContain('/resourcehub.css?v=r16');
+    expect(SHELL).toContain('/resourcehub.js?v=r25');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
     for (const cls of [
       'rh2-dialog-backdrop', 'rh2-dialog', 'rh2-dialog-head', 'rh2-dialog-body',
       'rh2-dialog-foot', 'rh2-avatar', 'rh2-learn-staff-has', 'rh2-learn-assign-bar',
-      'rh2-page-intro', 'rh2-collection-on', 'rh2-learn-cannot', 'rh2-row-btn',
+      'rh2-page-intro', 'rh2-learn-cannot', 'rh2-row-btn',
+      'rh2-learn-cat-head', 'rh2-learn-cat-search', 'rh2-ind-rail', 'rh2-ind-nav',
+      'rh2-ind-item', 'rh2-ind-toc',
     ]) {
       expect(`${cls}:${CSS.includes('.' + cls)}`).toBe(`${cls}:true`);
     }
@@ -482,17 +741,12 @@ describe('the new learning item dialog', () => {
 describe('the empty library', () => {
   const page = fn('renderAssignLearning');
 
-  test('the collections section is skipped entirely when nothing exists', () => {
-    // It used to render an explanation plus its own "New learning item"
-    // button directly above a library header carrying the same button.
-    expect(page).toContain('if (all.length) {');
-    expect(page.indexOf('if (all.length) {')).toBeLessThan(page.indexOf('Browse by collection</h2>'));
-  });
-
   test('search and the archived toggle are not offered against an empty list', () => {
-    expect(page).toMatch(/\(all\.length[\s\S]{0,120}rh2-learn-lib-tools/);
+    // Controls that cannot do anything are noise: with nothing to filter, the
+    // empty state below carries the only call to action.
+    expect(page).toMatch(/\(all\.length[\s\S]{0,220}rh2-learn-cat-actions/);
+    expect(page).toMatch(/rh2-learn-cat-search[\s\S]{0,1200}: ''\)/);
   });
-
   test('the empty state offers the import as well as a fresh start', () => {
     // The practice's inductions already exist as Resource Hub learning paths
     // and portal walkthroughs, so an empty library is almost never "you have

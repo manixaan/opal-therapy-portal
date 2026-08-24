@@ -330,11 +330,12 @@
     home: null, homeLoading: false,
     // Owner-assigned learning (my own assignments; every role has these).
     myl: { rows: null, loading: false, err: '' },
-    // The assignment player. preview=true renders an Owner draft preview:
-    // nothing is posted, completion is simulated locally.
+    // The induction experience in read mode. preview=true is the Owner's
+    // read-only twin: nothing is posted, completion is simulated locally.
+    // `step` is the cursor into the section flow (0 = overview).
     assignment: {
       id: null, data: null, loading: false, err: '', backView: 'learning',
-      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
       busy: false, preview: false, previewDone: {}, celebrate: false,
     },
     // Owner learning console (Admin → Learning). Sub-tabs: library |
@@ -353,8 +354,9 @@
       openAssignment: null, openData: null, openLoading: false,
       resPick: null, // resource picker inside the editor: { q, rows, loading, forItem }
     },
-    // Owner-only: which collection is open on Assign Learning, and its search.
-    asl: { collection: null, q: '' },
+    // Owner-only: the Assign Learning catalogue search. There is no
+    // collection cursor — the catalogue is one unified list.
+    asl: { q: '' },
     // The Library. `folders`/`folderId` are the semantic shelving added in
     // migration 039; everything else is the flat-list state it was before, and
     // is still used unchanged by Saved, All Resources and every search.
@@ -4286,12 +4288,145 @@
     '</section>';
   }
 
-  // ── Employee: assignment player ────────────────────────────────────────────
+  // ── The induction experience: ONE renderer, three modes ────────────────────
+  //
+  //  learner — the assigned employee; progress persists.
+  //  preview — the Owner; identical screens, nothing persists.
+  //  edit    — the Owner; identical screens, the content directly editable.
+  //
+  //  All three walk the SAME steps — an overview, one screen per section, and a
+  //  closing screen — moved through with Back / Next. There is deliberately no
+  //  second, administrative representation of a workflow: what the Owner edits
+  //  IS the screen the learner receives, which is the only arrangement in which
+  //  the two cannot drift apart.
+  //
+  //  Mode is READ FROM THE RENDER PATH rather than stored: the assignment view
+  //  is the learner (or its preview twin), and an open editor is edit mode. A
+  //  stored mode flag could be set to 'edit' by anything on the page; this one
+  //  cannot, and the server refuses an unauthorised save regardless.
+
+  function indMode() {
+    if (S.view === 'assignment') return (S.assignment && S.assignment.preview) ? 'preview' : 'learner';
+    return 'edit';
+  }
+
+  /** The state object that owns the step cursor for the active mode. */
+  function indState(mode) { return (mode || indMode()) === 'edit' ? S.la.editor : S.assignment; }
+
+  function indSections(mode) {
+    if ((mode || indMode()) === 'edit') return (S.la.editor && S.la.editor.sections) || [];
+    var d = S.assignment && S.assignment.data;
+    return (d && d.content && d.content.sections) || [];
+  }
+
+  /** Overview + one screen per section + the closing screen. */
+  function indStepCount(sections) { return (sections ? sections.length : 0) + 2; }
+
+  function indStep(mode, sections) {
+    var st = indState(mode);
+    if (!st) return 0;
+    return Math.max(0, Math.min(indStepCount(sections) - 1, Number(st.step) || 0));
+  }
+
+  /** A step change is a page change: start it at the top, not mid-paragraph. */
+  function indScrollTop() {
+    try {
+      var el = root();
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+    } catch (e) { /* rendering must never depend on scrolling */ }
+  }
+
+  function indGo(delta) {
+    var mode = indMode();
+    var st = indState(mode);
+    if (!st) return;
+    var n = indStepCount(indSections(mode));
+    st.step = Math.max(0, Math.min(n - 1, (Number(st.step) || 0) + Number(delta || 0)));
+    indScrollTop();
+    render();
+  }
+
+  function indJump(i) {
+    var mode = indMode();
+    var st = indState(mode);
+    if (!st) return;
+    st.step = Math.max(0, Math.min(indStepCount(indSections(mode)) - 1, Number(i) || 0));
+    indScrollTop();
+    render();
+  }
+
+  function indStepLabel(step, secCount, mode) {
+    if (step === 0) return 'Overview';
+    if (step > secCount) return mode === 'edit' ? 'Finish' : 'Complete';
+    return 'Section ' + step + ' of ' + secCount;
+  }
+
+  /** The rail: where the reader is, and every step they may jump to. */
+  function indRail(mode, step, sections) {
+    var last = sections.length + 1;
+    var labels = ['Overview'].concat(sections.map(function (s, i) {
+      return String((s && s.title) || ('Section ' + (i + 1)));
+    })).concat([mode === 'edit' ? 'Finish' : 'Complete']);
+    return '<ol class="rh2-ind-rail">' + labels.map(function (l, i) {
+      return '<li class="rh2-ind-railitem"><button type="button" class="rh2-ind-railbtn' +
+        (i === step ? ' is-on' : '') + (i < step ? ' is-past' : '') + '"' +
+        (i === step ? ' aria-current="step"' : '') +
+        ' onclick="RH2.indJump(' + i + ')">' +
+        '<span class="rh2-ind-railno" aria-hidden="true">' +
+          (i === 0 ? '&bull;' : (i === last ? '&#10003;' : i)) + '</span>' +
+        '<span class="rh2-ind-raillbl">' + esc(l) + '</span></button></li>';
+    }).join('') + '</ol>';
+  }
+
+  /** Back / where-am-I / Next. The same control in all three modes. */
+  function indNav(mode, step, secCount) {
+    var last = secCount + 1;
+    return '<nav class="rh2-ind-nav" aria-label="Induction navigation">' +
+      '<button type="button" class="rh2-btn rh2-ind-back" ' + (step === 0 ? 'disabled ' : '') +
+        'onclick="RH2.indGo(-1)">&larr; Back</button>' +
+      '<span class="rh2-ind-count" role="status" aria-live="polite">' +
+        esc(indStepLabel(step, secCount, mode)) + '</span>' +
+      '<button type="button" class="rh2-btn rh2-btn-primary rh2-ind-next" ' + (step === last ? 'disabled ' : '') +
+        'onclick="RH2.indGo(1)">Next &rarr;</button>' +
+    '</nav>';
+  }
+
+  /**
+   * The head every mode shares: what this induction is, where the reader is in
+   * it, and — learner only — how much of it is done. In edit mode the title IS
+   * the input: a heading you type straight into is the whole point of opening
+   * the learner's own screen to edit rather than a form beside it.
+   */
+  function indHeader(mode, meta, sections, step) {
+    var title = mode === 'edit'
+      ? '<input class="rh2-input rh2-ind-title-in" id="la-ed-title" value="' + esc(meta.title || '') + '"' +
+        ' placeholder="Learning title" aria-label="Learning title" oninput="RH2.laMeta(\'title\',this.value)">'
+      : '<h1 class="rh2-h1 rh2-ind-title">' + esc(meta.title || '') + '</h1>';
+    return '<header class="rh2-card rh2-ind-head">' + title +
+      (meta.sub ? '<div class="rh2-row-sub">' + meta.sub + '</div>' : '') +
+      (meta.progress
+        ? laBar(meta.progress.percent, 'Overall progress') +
+          '<div class="rh2-row-sub">' + meta.progress.done + ' of ' + meta.progress.total +
+            ' required modules &middot; ' + meta.progress.percent + '%</div>'
+        : '') +
+      indRail(mode, step, sections) +
+    '</header>';
+  }
+
+  /** A section row in a contents list — used by every mode's overview. */
+  function indTocRow(title, sub, stepIndex, no) {
+    return '<li><button type="button" class="rh2-ind-tocbtn" onclick="RH2.indJump(' + stepIndex + ')">' +
+      '<span class="rh2-ind-item-no">' + no + '</span>' +
+      '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(title) + '</span>' +
+      '<span class="rh2-row-sub">' + esc(sub) + '</span></span></button></li>';
+  }
+
+  // ── Employee: assigned learning, and the Owner's read-only twin ────────────
 
   async function openAssignment(id) {
     S.assignment = {
       id: String(id || ''), data: null, loading: true, err: '', backView: 'learning',
-      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
       busy: false, preview: false, previewDone: {}, celebrate: false,
     };
     S.view = 'assignment';
@@ -4323,13 +4458,20 @@
     render();
   }
 
-  /** Owner draft preview — same player, nothing persisted. */
+  /**
+   * Owner preview — the learner's screens exactly, and nothing persisted.
+   *
+   * Preview is the same renderer in read mode: same sections, same Next/Back,
+   * same interactions. Ticking through an acknowledgement or a knowledge check
+   * here moves a flag in `previewDone` and posts nothing, so no learner's
+   * progress and no content can be changed from this screen.
+   */
   async function laPreview(wfId) {
     S.assignment = {
       // Back goes where the Owner actually came from: Assign Learning or
       // the Admin > Learning tab.
       id: null, data: null, loading: true, err: '', backView: S.view === 'learning' ? 'learning' : 'admin',
-      openItem: null, quizAnswers: {}, quizResult: null, ackArmed: false,
+      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
       busy: false, preview: true, previewWfId: String(wfId || ''), previewDone: {}, celebrate: false,
     };
     S.view = 'assignment';
@@ -4340,6 +4482,7 @@
     S.assignment.data = {
       assignment: {
         title: d.workflow.title, category: d.workflow.category, status: 'in_progress',
+        description: d.workflow.description || '',
         progress_percent: 0, required_done: 0,
         required_total: (d.stats && d.stats.countedTotal) || 0,
         mandatory: true,
@@ -4366,15 +4509,6 @@
     return !!(st.data && st.data.completed_items && st.data.completed_items[key]);
   }
 
-  function alToggle(key) {
-    var st = S.assignment;
-    st.openItem = st.openItem === key ? null : String(key);
-    st.quizResult = null;
-    st.ackArmed = false;
-    st.quizAnswers = {};
-    render();
-  }
-
   async function alComplete(key, body) {
     var st = S.assignment;
     if (st.busy) return null;
@@ -4399,7 +4533,12 @@
       if (st.data.completed_items) st.data.completed_items[key] = new Date().toISOString();
       if (d.assignment) st.data.assignment = d.assignment;
       st.ackArmed = false;
-      if (d.assignment_completed) st.celebrate = true;
+      if (d.assignment_completed) {
+        st.celebrate = true;
+        // Finishing the last required step earns the closing screen rather
+        // than leaving the reader on a section that has nothing left in it.
+        st.step = indStepCount(indSections('learner')) - 1;
+      }
       loadMyLearning();
     }
     render();
@@ -4517,64 +4656,127 @@
     return out + '</div>';
   }
 
+  /** Step 0, read modes: what this is and what it contains. */
+  function indOverviewRead(a, sections, mode) {
+    var out = '<div class="rh2-ind-steplbl">Overview</div>' +
+      '<h2 class="rh2-ind-sectitle">What this covers</h2>';
+    if (pick(a, 'description')) {
+      out += '<div class="rh2-learn-prose">' + mdRender(String(pick(a, 'description'))) + '</div>';
+    }
+    out += '<p class="rh2-quiet">' + sections.length + ' section' + (sections.length === 1 ? '' : 's') +
+      ' — work through them in order with Next, and go back at any time.</p>';
+    out += '<ol class="rh2-ind-toc">' + sections.map(function (s, i) {
+      var items = (s && s.items) || [];
+      var doneN = items.filter(function (it) { return alItemDone(it.key); }).length;
+      return indTocRow(s.title, items.length + ' step' + (items.length === 1 ? '' : 's') +
+        (doneN ? ' · ' + doneN + ' done' : ''), i + 1, i + 1);
+    }).join('') + '</ol>';
+    if (a.status === 'completed') {
+      out += '<div class="rh2-learn-done-banner">&#10003; Completed ' + esc(fmtDate(pick(a, 'completed_at'))) + '</div>';
+    }
+    return out + '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" ' +
+      'onclick="RH2.indGo(1)">' +
+      (mode === 'preview' ? 'Start the preview' : ((pick(a, 'progress_percent') || 0) ? 'Continue' : 'Start')) +
+      ' &rarr;</button></div>';
+  }
+
+  /** One section, one screen. The unit of an induction in every mode. */
+  function indSectionRead(s, step, secCount) {
+    if (!s) return '<div class="rh2-empty">This section is empty.</div>';
+    var items = s.items || [];
+    var out = '<div class="rh2-ind-steplbl">Section ' + step + ' of ' + secCount + '</div>' +
+      '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>';
+    if (!items.length) return out + '<p class="rh2-quiet">There is nothing in this section yet.</p>';
+    return out + '<ol class="rh2-ind-items">' + items.map(function (it, i) {
+      var done = alItemDone(it.key);
+      var typeLabel = it.type !== 'content'
+        ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
+      var reqLabel = it.required === false ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
+      return '<li class="rh2-ind-item' + (done ? ' is-done' : '') + '">' +
+        '<div class="rh2-ind-item-head">' +
+          '<span class="rh2-ind-item-no">' + (i + 1) + '</span>' +
+          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
+          (it.minutes ? '<span class="rh2-row-sub">' + esc(it.minutes) + ' min</span>' : '') + '</span>' +
+          (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '') +
+        '</div>' + alItemBody(it, done) + '</li>';
+    }).join('') + '</ol>';
+  }
+
+  /** The closing screen: what is left, or that nothing is. */
+  function indFinishRead(a, sections, mode) {
+    var outstanding = [];
+    sections.forEach(function (s, si) {
+      ((s && s.items) || []).forEach(function (it) {
+        if (it.required !== false && !alItemDone(it.key)) outstanding.push({ step: si + 1, item: it, section: s.title });
+      });
+    });
+    var out = '<div class="rh2-ind-steplbl">' + (mode === 'preview' ? 'End of preview' : 'Complete') + '</div>';
+    if (mode === 'preview') {
+      out += '<h2 class="rh2-ind-sectitle">That is the whole induction</h2>' +
+        '<p class="rh2-quiet">This is exactly what the person you assign it to works through. ' +
+        'Nothing on this screen has been saved, and no learner&rsquo;s progress has changed.</p>';
+    } else if (!outstanding.length) {
+      out += '<h2 class="rh2-ind-sectitle">All done &#127881;</h2>' +
+        '<p>You&rsquo;ve completed every required module. This learning is recorded as completed.</p>';
+    } else {
+      out += '<h2 class="rh2-ind-sectitle">Nearly there</h2>' +
+        '<p class="rh2-quiet">' + outstanding.length + ' required step' + (outstanding.length === 1 ? '' : 's') +
+        ' still to finish:</p><ol class="rh2-ind-toc">' + outstanding.map(function (o, i) {
+          return indTocRow(o.item.title, o.section, o.step, i + 1);
+        }).join('') + '</ol>';
+    }
+    return out + '<div class="rh2-learn-actions"><button type="button" class="rh2-btn" onclick="RH2.alBack()">' +
+      (mode === 'preview' ? 'Close preview' : 'Back to My Learning') + '</button></div>';
+  }
+
   function renderAssignment() {
     var st = S.assignment;
-    var out = '<div class="rh2-page rh2-learn-player">';
-    var backBtn = '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.alBack()">← ' +
-      (st.preview ? 'Back to Learning admin' : 'Back to My Learning') + '</button>';
+    var mode = st.preview ? 'preview' : 'learner';
+    var out = '<div class="rh2-page rh2-learn-player rh2-ind">';
+    var backBtn = '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.alBack()">&larr; ' +
+      (st.preview ? 'Back to Learning' : 'Back to My Learning') + '</button>';
     if (st.loading || (!st.data && !st.err)) return out + backBtn + '<div class="rh2-card">' + skel(4, 64) + '</div></div>';
     if (st.err) return out + backBtn + '<div class="rh2-empty">' + esc(st.err) + '</div></div>';
 
     var a = st.data.assignment || {};
-    var content = st.data.content || { sections: [] };
+    var sections = (st.data.content && st.data.content.sections) || [];
+    var step = indStep(mode, sections);
 
     out += '<div class="rh2-learn-player-top">' + backBtn +
-      (st.preview ? '<span class="rh2-chip rh2-chip-warn">Preview — progress is not saved</span>' : laStatusChip(a)) +
+      (st.preview
+        ? '<span class="rh2-chip rh2-chip-warn">Preview &mdash; read only, nothing is saved</span>'
+        : laStatusChip(a)) +
       '</div>';
 
-    out += '<section class="rh2-card">' +
-      '<h1 class="rh2-h1">' + esc(pick(a, 'title')) + '</h1>' +
-      '<div class="rh2-row-sub">' + esc(laCatLabel(pick(a, 'category'))) +
-        (pick(a, 'version') ? ' · Version ' + esc(pick(a, 'version')) : '') +
-        (pick(a, 'mandatory') === false ? ' · Optional' : ' · Mandatory') + '</div>' +
+    var sub = esc(laCatLabel(pick(a, 'category'))) +
+      (pick(a, 'version') ? ' &middot; Version ' + esc(pick(a, 'version')) : '') +
+      (pick(a, 'mandatory') === false ? ' &middot; Optional' : ' &middot; Mandatory') +
       (st.preview ? '' :
-        laBar(pick(a, 'progress_percent') || 0, 'Overall progress') +
-        '<div class="rh2-row-sub">' + (pick(a, 'required_done') || 0) + ' of ' + (pick(a, 'required_total') || 0) +
-          ' required modules · ' + (pick(a, 'progress_percent') || 0) + '%</div>' +
-        '<div class="rh2-row-sub">Assigned ' + esc(fmtDate(pick(a, 'assigned_at'))) +
-          (pick(a, 'assigned_by_name') ? ' by ' + esc(pick(a, 'assigned_by_name')) : '') +
-          (pick(a, 'due_at') ? ' · Due ' + esc(fmtDate(pick(a, 'due_at'))) : '') + '</div>' +
-        (pick(a, 'owner_note') ? '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>' : '')) +
-      (a.status === 'completed'
-        ? '<div class="rh2-learn-done-banner">✓ Completed ' + esc(fmtDate(pick(a, 'completed_at'))) + '</div>'
-        : '') +
-    '</section>';
+        ' &middot; Assigned ' + esc(fmtDate(pick(a, 'assigned_at'))) +
+        (pick(a, 'assigned_by_name') ? ' by ' + esc(pick(a, 'assigned_by_name')) : '') +
+        (pick(a, 'due_at') ? ' &middot; Due ' + esc(fmtDate(pick(a, 'due_at'))) : ''));
 
-    (content.sections || []).forEach(function (s) {
-      out += '<section class="rh2-card"><h2 class="rh2-h2">' + esc(s.title) + '</h2><ol class="rh2-modules">';
-      (s.items || []).forEach(function (it, i) {
-        var done = alItemDone(it.key);
-        var open = st.openItem === it.key;
-        var typeLabel = it.type !== 'content' ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
-        var reqLabel = it.required === false ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
-        out += '<li><button type="button" class="rh2-module" aria-expanded="' + open + '" onclick="RH2.alToggle(\'' + esc(it.key) + '\')">' +
-          '<span class="rh2-module-no">' + (i + 1) + '</span>' +
-          '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
-          '<span class="rh2-row-sub">' + (it.minutes ? esc(it.minutes) + ' min' : '') + '</span></span>' +
-          (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '') +
-          '</button>' +
-          (open ? alItemBody(it, done) : '') +
-        '</li>';
-      });
-      out += '</ol></section>';
-    });
+    out += indHeader(mode, {
+      title: pick(a, 'title'),
+      sub: sub,
+      progress: st.preview ? null : {
+        percent: pick(a, 'progress_percent') || 0,
+        done: pick(a, 'required_done') || 0,
+        total: pick(a, 'required_total') || 0,
+      },
+    }, sections, step);
 
-    if (st.celebrate) {
-      out += '<section class="rh2-card rh2-learn-celebrate"><h2 class="rh2-h2">All done 🎉</h2>' +
-        '<p>You’ve completed every required module. This learning is now recorded as completed.</p>' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.alBack()">Back to My Learning</button></section>';
+    if (!st.preview && pick(a, 'owner_note')) {
+      out += '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>';
     }
-    return out + '</div>';
+
+    out += '<section class="rh2-card rh2-ind-stage">';
+    if (step === 0) out += indOverviewRead(a, sections, mode);
+    else if (step > sections.length) out += indFinishRead(a, sections, mode);
+    else out += indSectionRead(sections[step - 1], step, sections.length);
+    out += '</section>';
+
+    return out + indNav(mode, step, sections.length) + '</div>';
   }
 
   // ── Owner: learning console (Admin → Learning) ─────────────────────────────
@@ -4686,22 +4888,32 @@
     if (!rows.length) {
       return out + '<div class="rh2-empty">No learning workflows yet. Create your first learning workflow to begin assigning staff learning.</div>';
     }
-    out += rows.map(laWorkflowCard).join('');
+    out += rows.map(laLibraryCard).join('');
     return out;
   }
 
   /**
-   * One learning item, with every management action the Owner already had.
+   * One learning item, rendered once for both Owner surfaces.
    *
-   * Shared by the Admin > Learning tab and by Assign Learning so the two
-   * surfaces cannot drift: an action added here appears in both, and an item
-   * that cannot be assigned says so in the same words wherever it is seen.
+   * `opts.actions` decides WHICH actions the card offers, never how the item
+   * is described — the title, state, counts and warnings are identical
+   * wherever it appears, so the two surfaces cannot drift.
+   *
+   *   'primary'   Assign Learning: the three things the Owner came to do —
+   *               Assign, Edit, Preview. Nothing else: the second-stage Edit,
+   *               Assignments, Duplicate, Archive and Delete draft each sent
+   *               the Owner somewhere other than the job in hand.
+   *   'lifecycle' Admin > Learning: the same three plus the lifecycle actions.
+   *               Removing them from Assign Learning hides the buttons, not
+   *               the capability — the routes, the records and the history are
+   *               untouched, and this console is still where they live.
    *
    * `Assign` leads because assigning is what the Owner came to do, but it is
    * withheld from an archived item and from one with nothing in it — a button
    * the server would refuse is worse than no button.
    */
-  function laWorkflowCard(w) {
+  function laWorkflowCard(w, opts) {
+    var lifecycle = !!(opts && opts.actions === 'lifecycle');
     var archived = w.status === 'archived';
     var empty = !(w.module_count || 0);
     var assignable = !archived && !empty;
@@ -4737,15 +4949,25 @@
           '" onclick="RH2.laAssignOpen(\'' + esc(w.id) + '\')">Assign</button>' : '') +
         (!archived ? '<button type="button" class="rh2-btn" onclick="RH2.laEdit(\'' + esc(w.id) + '\')">Edit</button>' : '') +
         '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(w.id) + '\')">Preview</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
-        (archived
-          ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>'
-          : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
-        (!w.active_assignments && !w.completed_assignments && !w.current_version
-          ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '') +
+        // An archived row needs a way back on EVERY surface — hiding both the
+        // archive action and its undo would leave the item unreachable.
+        (archived ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>' : '') +
+        (lifecycle
+          ? '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
+            '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
+            (archived ? ''
+              : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
+            (!w.active_assignments && !w.completed_assignments && !w.current_version
+              ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '')
+          : '') +
       '</div></section>';
   }
+
+  /** Assign Learning: Assign, Edit, Preview — nothing else. */
+  function aslWorkflowCard(w) { return laWorkflowCard(w, { actions: 'primary' }); }
+
+  /** Admin > Learning: the same card, plus the lifecycle actions. */
+  function laLibraryCard(w) { return laWorkflowCard(w, { actions: 'lifecycle' }); }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  OWNER: ASSIGN LEARNING
@@ -4760,10 +4982,10 @@
   //  thing this product tracks, and an empty personal panel shown to the person
   //  who assigns the work reads as a bug.
   //
-  //  Collections come from the categories the workflows actually carry, not
-  //  from a list in this file. The schema treats category as a free vocabulary,
-  //  so a practice that invents "graduate_foundations" gets a collection for it
-  //  without a code change.
+  //  The catalogue is ONE list. Category remains a free vocabulary on the
+  //  record and is printed on every card and searchable by name, but it no
+  //  longer groups the page into shelves the Owner has to open before they can
+  //  see their own library.
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** How many of the most recently updated items "Recently added" shows. */
@@ -4810,45 +5032,27 @@
   }
 
   /**
-   * Group the library by the category each workflow carries.
+   * The whole catalogue, narrowed only by the search box.
    *
-   * Anything without one lands in a single honest bucket rather than being
-   * dropped from the library — an item you cannot see is an item you cannot
-   * assign, and the Owner has no other way to reach it.
+   * Category is still on every record and still printed on every card; it no
+   * longer decides what the Owner is permitted to see. Search reads the title,
+   * the description AND the category label, so somebody who thinks in
+   * categories can still type "rural" and get the rural items — without a
+   * shelf standing between them and their own library.
    */
-  function aslCollections(rows) {
-    var by = {};
-    (rows || []).forEach(function (w) {
-      var key = w.category || 'uncategorised';
-      (by[key] = by[key] || []).push(w);
-    });
-    return Object.keys(by).sort(function (x, y) {
-      return aslCatLabel(x).localeCompare(aslCatLabel(y));
-    }).map(function (k) { return { key: k, label: aslCatLabel(k), items: by[k] }; });
-  }
-
-  /** The library, narrowed by the open collection and the search box. */
   function aslVisible() {
     var rows = (S.la.workflows || []).slice();
-    var a = S.asl;
-    if (a.collection) {
-      rows = rows.filter(function (w) { return (w.category || 'uncategorised') === a.collection; });
-    }
-    var q = String(a.q || '').trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(function (w) {
-        return String(w.title || '').toLowerCase().indexOf(q) !== -1 ||
-               String(w.description || '').toLowerCase().indexOf(q) !== -1 ||
-               aslCatLabel(w.category).toLowerCase().indexOf(q) !== -1;
-      });
-    }
-    return rows;
+    var q = String(S.asl.q || '').trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(function (w) {
+      return String(w.title || '').toLowerCase().indexOf(q) !== -1 ||
+             String(w.description || '').toLowerCase().indexOf(q) !== -1 ||
+             aslCatLabel(w.category).toLowerCase().indexOf(q) !== -1;
+    });
   }
 
-  function aslOpenCollection(key) { S.asl.collection = key || null; render(); }
-  function aslClearCollection() { S.asl.collection = null; render(); }
   function aslSearch(v) { S.asl.q = v; render(); }
-  function aslResetFilters() { S.asl.q = ''; S.asl.collection = null; render(); }
+  function aslResetFilters() { S.asl.q = ''; render(); }
   function aslReload() { loadLa(); }
 
   // ── Library multi-select (checkbox per card → one Assign for the batch) ────
@@ -4907,8 +5111,8 @@
     var a = S.asl;
     var out = '<div class="rh2-page">' +
       '<h1 class="rh2-h1">Assign Learning</h1>' +
-      '<p class="rh2-page-intro">Browse the practice&rsquo;s learning library, edit any item, and assign it ' +
-      'to the people who need it. Anything you assign appears in that person&rsquo;s own learning.</p>';
+      '<p class="rh2-page-intro">Every induction and learning item the practice holds, in one list. ' +
+      'Assign one to the people who need it, edit it exactly as they will see it, or preview it first.</p>';
 
     if (la.loading && !la.workflows) {
       return out + '<div class="rh2-card">' + skel(3, 72) + '</div></div>';
@@ -4917,62 +5121,48 @@
       return out + '<div class="rh2-empty">' + esc(la.err) +
         ' <button type="button" class="rh2-btn" onclick="RH2.aslReload()">Retry</button></div></div>';
     }
-    // The editor takes the whole page, as it does in Admin.
+    // Edit opens the induction itself, in place, and takes the whole page.
     if (la.editor) return out + renderLaEditor() + '</div>';
 
+    // ── The catalogue ───────────────────────────────────────────────────────
+    // One unified list. Collections used to stand between the Owner and their
+    // own library: a shelf had to be opened before anything could be seen, and
+    // an item filed under a category nobody thought to click was invisible.
+    // Category still exists on the record (and still shows on every card) —
+    // it just no longer decides what the Owner is allowed to look at.
     var all = la.workflows || [];
-    var collections = aslCollections(all.filter(function (w) { return w.status !== 'archived'; }));
-
-    // ── Browse by collection ────────────────────────────────────────────────
-    // With an empty library this whole section is noise: it would explain
-    // collections, and offer a "New learning item" button, immediately above a
-    // library header offering the SAME button and a search box with nothing to
-    // search. One empty state, one call to action — so the section is skipped
-    // entirely and the library below carries the invitation.
-    if (all.length) {
-    out += '<section aria-labelledby="asl-h-col"><h2 class="rh2-h2" id="asl-h-col">Browse by collection</h2>';
-    if (!collections.length) {
-      out += '<div class="rh2-empty">Nothing is grouped into a collection yet. Give a learning item a ' +
-        'category and it will appear here.</div>';
-    } else {
-      out += '<div class="rh2-collections">' + collections.map(function (c) {
-        var on = a.collection === c.key;
-        return '<button type="button" class="rh2-collection' + (on ? ' rh2-collection-on' : '') + '"' +
-          ' aria-pressed="' + (on ? 'true' : 'false') + '"' +
-          ' onclick="RH2.aslOpenCollection(\'' + esc(c.key) + '\')">' +
-          '<span class="rh2-collection-icn">' + icn('folder', 'folder', 18) + '</span>' +
-          '<span class="rh2-collection-name">' + esc(c.label) + '</span>' +
-          '<span class="rh2-collection-tag">' + c.items.length + ' item' +
-            (c.items.length === 1 ? '' : 's') + '</span>' +
-          '</button>';
-      }).join('') + '</div>';
-    }
-    out += '</section>';
-    }
-
-    // ── The library itself ──────────────────────────────────────────────────
     var rows = aslVisible();
-    var openLabel = a.collection ? aslCatLabel(a.collection) : 'All learning';
+
     out += '<section class="rh2-card" aria-labelledby="asl-h-lib">' +
-      '<div class="rh2-learn-lib-head">' +
-      '<h2 class="rh2-h2" id="asl-h-lib">' + esc(openLabel) + '</h2>' +
-      // Search, the archived toggle and "Show all" filter a list. With no
-      // items they are controls that cannot do anything, so only the create
-      // action survives — and on an empty library even that moves into the
-      // empty state, where the eye already is.
+      '<div class="rh2-learn-cat-head">' +
+      '<div class="rh2-learn-cat-heading">' +
+        '<h2 class="rh2-h2" id="asl-h-lib">All learning</h2>' +
+        (all.length
+          ? '<p class="rh2-row-sub">' + (a.q ? rows.length + ' of ' + all.length : all.length) +
+            ' item' + ((a.q ? rows.length : all.length) === 1 ? '' : 's') + '</p>'
+          : '') +
+      '</div>' +
+      // Search, the archived toggle and the create actions filter or add to a
+      // list. With no items they are controls that cannot do anything, so only
+      // the empty state below survives — where the eye already is.
       (all.length
-        ? '<div class="rh2-learn-lib-tools">' +
-          '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
-          '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
-            ' oninput="RH2.aslSearch(this.value)">' +
-          (a.collection ? '<button type="button" class="rh2-btn" onclick="RH2.aslClearCollection()">Show all</button>' : '') +
-          '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
-            'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
-          '<button type="button" class="rh2-btn" ' + (la.importing ? 'disabled ' : '') +
-            'onclick="RH2.laImport()" title="Bring the Resource Hub learning paths and the portal ' +
-            'induction in as editable, assignable items">' +
-            (la.importing ? 'Importing…' : 'Import existing') + '</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
+        ? '<div class="rh2-learn-cat-actions">' +
+            '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
+              'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+            '<button type="button" class="rh2-btn" ' + (la.importing ? 'disabled ' : '') +
+              'onclick="RH2.laImport()" title="Bring the Resource Hub learning paths and the portal ' +
+              'induction in as editable, assignable items">' +
+              (la.importing ? 'Importing…' : 'Import existing') + '</button>' +
+            '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
+          '</div>' +
+          // Its own full-width row beneath the heading, so the field lines up
+          // with the cards it filters instead of floating off to the right.
+          '<div class="rh2-learn-cat-search">' +
+            '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
+            '<span class="rh2-learn-cat-search-icn" aria-hidden="true">' + icn('search', 'search', 16) + '</span>' +
+            '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
+              ' oninput="RH2.aslSearch(this.value)">' +
+            (a.q ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.aslResetFilters()">Clear</button>' : '') +
           '</div>'
         : '') +
       '</div>' +
@@ -4993,10 +5183,8 @@
         '<button type="button" class="rh2-btn" onclick="RH2.laCreate()">+ New learning item</button>' +
         '</div></div>';
     } else if (!rows.length) {
-      out += '<div class="rh2-empty">' +
-        (a.q ? 'Nothing matches &ldquo;' + esc(a.q) + '&rdquo;' + (a.collection ? ' in this collection' : '') + '.'
-             : 'This collection is empty.') +
-        ' <button type="button" class="rh2-btn" onclick="RH2.aslResetFilters()">Clear filters</button></div>';
+      out += '<div class="rh2-empty">Nothing matches &ldquo;' + esc(a.q) + '&rdquo;.' +
+        ' <button type="button" class="rh2-btn" onclick="RH2.aslResetFilters()">Clear search</button></div>';
     } else {
       // Batch bar: tick several items, assign them all in one pass. Lives
       // above the cards so the count and the action stay in view together.
@@ -5016,15 +5204,15 @@
             '<button type="button" class="rh2-btn" onclick="RH2.aslClearSel()">Clear selection</button>'
           : '') +
         '</div>';
-      out += rows.map(laWorkflowCard).join('');
+      out += rows.map(aslWorkflowCard).join('');
     }
     out += '</section>';
 
     // ── Assignment status ───────────────────────────────────────────────────
     // The same monitor the Admin > Learning tab carries, rendered here in
     // place. Assigning and checking who is behind on what are one job, and
-    // splitting them across two tabs meant the "Assignments" button on a card
-    // could only answer by throwing the Owner out of this page.
+    // splitting them across two tabs meant the Owner had to leave this page to
+    // answer the obvious follow-up question.
     //
     // Shared renderer, shared `S.la` state, shared endpoint — deliberately no
     // second assignments view that could drift from this one.
@@ -5062,6 +5250,8 @@
     out += '</section>';
 
     // ── Recently added ──────────────────────────────────────────────────────
+    // A plain list, not a way in: the catalogue above already shows every item,
+    // so these rows report what changed rather than filtering anything.
     var recent = all.slice().sort(function (x, y) {
       return String(y.updated_at || '').localeCompare(String(x.updated_at || ''));
     }).slice(0, ASL_RECENT_LIMIT);
@@ -5069,11 +5259,10 @@
       '<h2 id="asl-h-recent">Recently added</h2>';
     if (!recent.length) out += '<p class="rh2-quiet">Nothing has been added yet.</p>';
     else out += recent.map(function (w) {
-      return '<button type="button" class="rh2-row rh2-row-btn" onclick="RH2.aslOpenCollection(\'' +
-        esc(w.category || 'uncategorised') + '\')">' +
-        '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(w.title) + '</span>' +
+      return '<div class="rh2-row"><span class="rh2-row-main">' +
+        '<span class="rh2-row-title">' + esc(w.title) + '</span>' +
         '<span class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
-        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</span></span></button>';
+        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</span></span></div>';
     }).join('');
     out += '</section></div>';
 
@@ -5239,12 +5428,23 @@
       '</div></section></div>';
   }
 
+  /**
+   * Open the induction in edit mode. There is no intermediate form and no
+   * second "enable editing" control — Edit lands the Owner on the learner's
+   * own screens with the fields already live.
+   *
+   * Saving re-opens from the server's normalised copy, so the step the Owner
+   * was working on is carried across: being thrown back to the overview every
+   * time you save is how an editor teaches people not to save.
+   */
   async function laEdit(id) {
+    var keepStep = (S.la.editor && S.la.editor.id === id) ? (Number(S.la.editor.step) || 0) : 0;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
     if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
     var w = d.workflow;
     S.la.editor = {
       id: w.id,
+      step: keepStep,
       title: w.title,
       description: w.description || '',
       category: w.category || 'induction',
@@ -5506,6 +5706,15 @@
     render();
   }
 
+  /**
+   * One learning item, editable in place.
+   *
+   * This is the learner's item with its text swapped for the fields that
+   * produce it: the title where the title is, the body where the prose is, and
+   * the type-specific parts (acknowledgement statement, knowledge-check
+   * questions, linked resource) directly beneath. The Owner never leaves the
+   * induction to change any of it.
+   */
   function laEditorItemHtml(it, si, ii, count) {
     var idp = 'la-ed-' + si + '-' + ii;
     var out = '<div class="rh2-learn-ed-item">' +
@@ -5514,12 +5723,12 @@
         '<input class="rh2-input rh2-learn-ed-title" id="' + idp + '-title" placeholder="Item title" value="' + esc(it.title) + '" ' +
           'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">' +
         '<span class="rh2-learn-ed-tools">' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">↑</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">↓</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove item" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">✕</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove item" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">&#10005;</button>' +
         '</span>' +
       '</div>' +
-      '<textarea class="rh2-input rh2-learn-ed-body" id="' + idp + '-body" rows="3" ' +
+      '<textarea class="rh2-input rh2-learn-ed-body" id="' + idp + '-body" rows="6" ' +
         'placeholder="Instructions / content (markdown: ## headings, **bold**, - bullets, links)" ' +
         'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>' +
       '<div class="rh2-learn-ed-row">' +
@@ -5570,7 +5779,7 @@
             '<div class="rh2-learn-ed-item-head">' +
               '<input class="rh2-input rh2-learn-ed-title" id="' + qid + '" placeholder="Question ' + (qi + 1) + '" value="' + esc(q.question) + '" ' +
                 'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">' +
-              '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove question" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">✕</button>' +
+              '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove question" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">&#10005;</button>' +
             '</div>' +
             '<textarea class="rh2-input" id="' + qid + '-opts" rows="3" placeholder="One answer option per line" ' +
               'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'optionsText\',this.value)">' + esc(q.optionsText) + '</textarea>' +
@@ -5585,17 +5794,114 @@
     return out + '</div>';
   }
 
+  /** Step 0, edit mode. The title lives in the shared header, where the
+   *  learner's title is; what is left is what the overview screen shows. */
+  function indOverviewEdit(ed) {
+    var cats = S.la.categories ||
+      ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    return '<div class="rh2-ind-steplbl">Overview</div>' +
+      '<h2 class="rh2-ind-sectitle">What this covers</h2>' +
+      '<textarea class="rh2-input rh2-ind-desc-in" id="la-ed-desc" rows="3" ' +
+        'placeholder="Describe this learning in a sentence — the learner reads it first" ' +
+        'aria-label="Description" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
+      '<div class="rh2-learn-ed-row">' +
+        '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
+        '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
+          cats.map(function (c) {
+            return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>';
+          }).join('') +
+        '</select>' +
+      '</div>' +
+      '<ol class="rh2-ind-toc">' + ed.sections.map(function (s, i) {
+        var n = (s.items || []).length;
+        return indTocRow(s.title || ('Section ' + (i + 1)), n + ' step' + (n === 1 ? '' : 's'), i + 1, i + 1);
+      }).join('') + '</ol>' +
+      '<div class="rh2-learn-actions">' +
+        (ed.sections.length
+          ? '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.indGo(1)">Edit section 1 &rarr;</button>'
+          : '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSecAdd()">+ Add the first section</button>') +
+      '</div>';
+  }
+
+  /** One section, one screen — the learner's screen with editable fields. */
+  function indSectionEdit(s, si, secCount) {
+    var items = s.items || [];
+    return '<div class="rh2-ind-steplbl">Section ' + (si + 1) + ' of ' + secCount + '</div>' +
+      '<div class="rh2-ind-sechead">' +
+        '<input class="rh2-input rh2-ind-sectitle-in" id="la-ed-s' + si + '" value="' + esc(s.title) + '" ' +
+          'placeholder="Section title" aria-label="Section ' + (si + 1) + ' title" ' +
+          'oninput="RH2.laSecField(' + si + ',this.value)">' +
+        '<span class="rh2-learn-ed-tools">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">&uarr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === secCount - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">&darr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove section" onclick="RH2.laSecRemove(' + si + ')">&#10005;</button>' +
+        '</span>' +
+      '</div>' +
+      '<ol class="rh2-ind-items">' + items.map(function (it, ii) {
+        return '<li class="rh2-ind-item rh2-ind-item-edit">' +
+          '<span class="rh2-ind-item-no">' + (ii + 1) + '</span>' +
+          laEditorItemHtml(it, si, ii, items.length) + '</li>';
+      }).join('') + '</ol>' +
+      (items.length ? '' : '<p class="rh2-quiet">There is nothing in this section yet — add the first step below.</p>') +
+      '<div class="rh2-learn-ed-additem">' +
+        '<label class="rh2-visually-hidden" for="la-ed-addtype-' + si + '">New step type</label>' +
+        '<select class="rh2-select" id="la-ed-addtype-' + si + '">' +
+          '<option value="content">Reading / content</option>' +
+          '<option value="resource">Hub resource</option>' +
+          '<option value="acknowledgement">Acknowledgement</option>' +
+          '<option value="quiz">Knowledge check</option>' +
+          '<option value="task">Task</option>' +
+        '</select>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laItemAdd(' + si + ',document.getElementById(\'la-ed-addtype-' + si + '\').value)">+ Add step</button>' +
+      '</div>';
+  }
+
+  /** The closing screen in edit mode: the shape of the whole thing, plus the
+   *  publish history the Owner needs to read draft state honestly. */
+  function indFinishEdit(ed) {
+    var out = '<div class="rh2-ind-steplbl">Finish</div>' +
+      '<h2 class="rh2-ind-sectitle">Sections</h2>' +
+      '<ol class="rh2-ind-toc">' + ed.sections.map(function (s, i) {
+        var n = (s.items || []).length;
+        return indTocRow(s.title || ('Section ' + (i + 1)), n + ' step' + (n === 1 ? '' : 's'), i + 1, i + 1);
+      }).join('') + '</ol>' +
+      '<div class="rh2-learn-actions">' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laSecAdd()">+ Add section</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') +
+          'onclick="RH2.laSave()">' + (S.la.editorSaving ? 'Saving…' : 'Save changes') + '</button>' +
+      '</div>';
+    if (ed.versions && ed.versions.length) {
+      out += '<h2 class="rh2-ind-sectitle">Published versions</h2>' +
+        ed.versions.map(function (v) {
+          return '<div class="rh2-row-sub">v' + esc(v.version) + ' — ' + esc(v.title) + ' · published ' + esc(fmtDate(v.published_at)) +
+            (v.published_by_name ? ' by ' + esc(v.published_by_name) : '') + ' · ' + esc(v.assignment_count) + ' assignment(s)</div>';
+        }).join('') +
+        '<p class="rh2-quiet">A new version is published automatically when you assign after making changes.</p>';
+    }
+    return out;
+  }
+
+  /**
+   * EDIT MODE — the learner's induction, with the fields exposed.
+   *
+   * Deliberately the same shell, the same step rail and the same Back / Next
+   * as renderAssignment: opening Edit puts the Owner INSIDE the induction with
+   * editing already on. There is no second "enable editing" control, and no
+   * separate administration form that could drift from what is delivered.
+   */
   function renderLaEditor() {
     var ed = S.la.editor;
-    var cats = S.la.categories || ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    var sections = ed.sections || [];
+    var step = indStep('edit', sections);
     // What learners receive right now, stated plainly next to Save/Publish so
     // the Owner can always tell draft state from published state.
     var pubLine = ed._currentVersion
       ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' · unpublished draft changes' : ' · up to date')
       : 'Never published — assigning (or Publish) creates version 1';
-    var out = '<div class="rh2-learn-ed">' +
+    var out = '<div class="rh2-learn-ed rh2-ind rh2-ind-edit">' +
       '<div class="rh2-learn-ed-bar">' +
-        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">← Library</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">&larr; Learning</button>' +
+        '<span class="rh2-chip rh2-chip-warn">Editing &mdash; this is the learner&rsquo;s own screen</span>' +
         '<span class="rh2-quiet">' +
           esc(pubLine) + ' · ' +
           (ed.counts.total ? ed.counts.total + ' assignment(s) pinned to published versions — saving edits never changes them' : 'nothing assigned yet') +
@@ -5616,53 +5922,19 @@
             ? ' <button type="button" class="rh2-btn" onclick="RH2.laEditorReload()">Reload latest version</button>'
             : '') + '</div>'
         : '') +
-      '<section class="rh2-card"><div class="rh2-form-grid">' +
-        '<label class="rh2-lbl" for="la-ed-title">Title</label>' +
-        '<input class="rh2-input" id="la-ed-title" value="' + esc(ed.title) + '" oninput="RH2.laMeta(\'title\',this.value)">' +
-        '<label class="rh2-lbl" for="la-ed-desc">Description</label>' +
-        '<textarea class="rh2-input" id="la-ed-desc" rows="2" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
-        '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
-        '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
-          cats.map(function (c) { return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>'; }).join('') +
-        '</select>' +
-      '</div></section>';
+      indHeader('edit', {
+        title: ed.title,
+        sub: esc(laCatLabel(ed.category)) + ' &middot; ' + sections.length + ' section' +
+          (sections.length === 1 ? '' : 's'),
+      }, sections, step) +
+      '<section class="rh2-card rh2-ind-stage">';
 
-    ed.sections.forEach(function (s, si) {
-      out += '<section class="rh2-card rh2-learn-ed-sec">' +
-        '<div class="rh2-learn-ed-item-head">' +
-          '<input class="rh2-input rh2-learn-ed-sectitle" id="la-ed-s' + si + '" value="' + esc(s.title) + '" ' +
-            'oninput="RH2.laSecField(' + si + ',this.value)" aria-label="Section ' + (si + 1) + ' title">' +
-          '<span class="rh2-learn-ed-tools">' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">↑</button>' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === ed.sections.length - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">↓</button>' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove section" onclick="RH2.laSecRemove(' + si + ')">✕</button>' +
-          '</span>' +
-        '</div>' +
-        s.items.map(function (it, ii) { return laEditorItemHtml(it, si, ii, s.items.length); }).join('') +
-        '<div class="rh2-learn-ed-additem">' +
-          '<select class="rh2-select" id="la-ed-addtype-' + si + '" aria-label="New item type">' +
-            '<option value="content">Reading / content</option>' +
-            '<option value="resource">Hub resource</option>' +
-            '<option value="acknowledgement">Acknowledgement</option>' +
-            '<option value="quiz">Knowledge check</option>' +
-            '<option value="task">Task</option>' +
-          '</select>' +
-          '<button type="button" class="rh2-btn" onclick="RH2.laItemAdd(' + si + ',document.getElementById(\'la-ed-addtype-' + si + '\').value)">+ Add item</button>' +
-        '</div>' +
-      '</section>';
-    });
+    if (step === 0) out += indOverviewEdit(ed);
+    else if (step > sections.length) out += indFinishEdit(ed);
+    else out += indSectionEdit(sections[step - 1], step - 1, sections.length);
 
-    out += '<button type="button" class="rh2-btn" onclick="RH2.laSecAdd()">+ Add section</button>';
-
-    if (ed.versions && ed.versions.length) {
-      out += '<section class="rh2-card"><h2 class="rh2-h2">Published versions</h2>' +
-        ed.versions.map(function (v) {
-          return '<div class="rh2-row-sub">v' + esc(v.version) + ' — ' + esc(v.title) + ' · published ' + esc(fmtDate(v.published_at)) +
-            (v.published_by_name ? ' by ' + esc(v.published_by_name) : '') + ' · ' + esc(v.assignment_count) + ' assignment(s)</div>';
-        }).join('') +
-        '<p class="rh2-quiet">A new version is published automatically when you assign after making changes.</p></section>';
-    }
-    return out + '</div>';
+    out += '</section>';
+    return out + indNav('edit', step, sections.length) + '</div>';
   }
 
   // ── Owner: assign panel ─────────────────────────────────────────────────────
@@ -6460,11 +6732,13 @@
     qlToggle: qlToggle,
 
     // ── Owner-controlled learning ────────────────────────────────────────────
+    // The shared induction experience — learner, preview and edit modes
+    indGo: indGo,
+    indJump: indJump,
     // Employee: assigned learning + player
     openAssignment: openAssignment,
     reloadMyLearning: function () { S.myl.rows = null; loadMyLearning(); },
     alBack: alBack,
-    alToggle: alToggle,
     alMarkComplete: alMarkComplete,
     alAckArm: alAckArm,
     alAckCancel: alAckCancel,
@@ -6528,8 +6802,6 @@
     laPublish: laPublish,
     laEditorReload: laEditorReload,
     // Owner: Assign Learning
-    aslOpenCollection: aslOpenCollection,
-    aslClearCollection: aslClearCollection,
     aslSearch: aslSearch,
     aslResetFilters: aslResetFilters,
     aslReload: aslReload,

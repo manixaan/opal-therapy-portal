@@ -155,19 +155,6 @@
 }
 .rh2-bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 
-.rh2-collections { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.rh2-collection {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: 13px 14px; cursor: pointer; font-family: inherit; text-align: left;
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
-}
-.rh2-collection:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
-.rh2-collection:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.rh2-collection-icn { color: var(--accent); }
-.rh2-collection-name { font-size: 13px; font-weight: 600; color: var(--ink); }
-.rh2-collection-tag { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
-
 .rh2-pd-row { padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .rh2-pd-row:last-child { border-bottom: none; }
 .rh2-pd-date { font-size: 11.5px; font-weight: 600; color: var(--accent-2-deep); }
@@ -880,17 +867,6 @@ span.rh2-dochero-thumb { cursor: default; }
   max-width: 68ch; line-height: 1.6;
 }
 
-/* The open collection. Carries a border AND a tint, so the selected tile is
-   distinguishable without relying on colour. aria-pressed carries it for a
-   screen reader. */
-.rh2-collection-on {
-  border-color: var(--accent); background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.rh2-learn-lib-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rh2-learn-lib-tools .rh2-input { min-width: 190px; }
-
 /* An item that cannot go out yet says why, next to the actions that are
    missing an Assign button. */
 .rh2-learn-cannot { color: var(--rh2-primary, #2F5651); font-size: 12.5px; margin: 6px 0 0; }
@@ -977,8 +953,6 @@ span.rh2-dochero-thumb { cursor: default; }
 @media (max-width: 640px) {
   .rh2-dialog-backdrop { padding: 0; }
   .rh2-dialog { max-width: none; max-height: 100vh; border-radius: 0; min-height: 100vh; }
-  .rh2-learn-lib-tools { width: 100%; }
-  .rh2-learn-lib-tools .rh2-input { min-width: 0; flex: 1; }
   .rh2-dialog-foot { flex-direction: column-reverse; }
   .rh2-dialog-foot .rh2-btn { width: 100%; }
 }
@@ -1239,4 +1213,143 @@ span.rh2-dochero-thumb { cursor: default; }
 @media (max-width: 640px) {
   .rh2-dropzone { padding: 14px 10px; }
   .rh2-folder-dropmsg { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE INDUCTION EXPERIENCE — one presentation, three modes
+
+   Learner, Owner preview and Owner edit render through the same shell, so
+   these rules are written once and never per-mode. Only `.rh2-ind-edit`
+   adds anything, and what it adds is the affordance that a field is a field:
+   the layout, the rail, the numbering and the Back / Next bar are identical
+   in all three, which is what makes "what the Owner edits is what the learner
+   sees" true on the screen rather than only in the data.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* align-items is declared, not inherited: the shell stylesheet centres bare
+   <header> elements, and a centred induction title reads as a different page
+   from the left-aligned stage beneath it. */
+.rh2-ind-head { display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: left; }
+.rh2-ind-title { margin: 0; }
+
+/* The step rail. A row of destinations on a wide screen; it wraps rather than
+   scrolls, because a step the reader cannot see is a step they cannot reach. */
+.rh2-ind-rail {
+  list-style: none; margin: 4px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.rh2-ind-railbtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px 5px 6px; cursor: pointer; font-family: inherit; font-size: 12.5px;
+  color: var(--ink-soft); max-width: 100%;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.rh2-ind-railbtn:hover { border-color: var(--accent); color: var(--ink); }
+.rh2-ind-railbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-ind-railno {
+  width: 20px; height: 20px; flex: 0 0 auto; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--border-soft); color: var(--ink-soft);
+  font-size: 11px; font-weight: 700;
+}
+.rh2-ind-raillbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+/* The current step carries a border, a tint AND the filled marker, so it is
+   never signalled by colour alone; aria-current carries it for a reader. */
+.rh2-ind-railbtn.is-on {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 600;
+}
+.rh2-ind-railbtn.is-on .rh2-ind-railno { background: var(--accent); color: #fff; }
+.rh2-ind-railbtn.is-past .rh2-ind-railno { background: var(--accent-soft); color: var(--accent-deep, var(--accent)); }
+
+/* One section = one screen. */
+.rh2-ind-stage { display: flex; flex-direction: column; align-items: stretch; gap: 12px; text-align: left; }
+.rh2-ind-steplbl {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.rh2-ind-sectitle { margin: 0; font-size: 19px; line-height: 1.3; }
+.rh2-ind-sechead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.rh2-ind-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.rh2-ind-item {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 12px 14px; background: var(--panel);
+}
+.rh2-ind-item.is-done { border-color: var(--ok, #2e7d5b); }
+.rh2-ind-item-head { display: flex; align-items: flex-start; gap: 10px; }
+.rh2-ind-item-no {
+  width: 24px; height: 24px; flex: 0 0 auto; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 700; margin-top: 1px;
+}
+/* The body sits under the number, not indented off the page on a phone. */
+.rh2-ind-item .rh2-learn-item-body { padding: 8px 0 0 34px; }
+@media (max-width: 560px) { .rh2-ind-item .rh2-learn-item-body { padding-left: 0; } }
+
+/* Contents / outstanding lists — the same row in every mode. */
+.rh2-ind-toc { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rh2-ind-tocbtn {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-md);
+  padding: 8px 10px; cursor: pointer; font-family: inherit;
+}
+.rh2-ind-tocbtn:hover { background: var(--accent-soft); border-color: var(--border); }
+.rh2-ind-tocbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* Back / where-am-I / Next. Sticky at the foot: on a long section the way
+   forward must not require scrolling back to find it. */
+.rh2-ind-nav {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 14px; padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.rh2-ind-nav .rh2-btn { min-height: 42px; }
+.rh2-ind-count { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); text-align: center; }
+
+/* ── Edit mode: the same screens, with the fields exposed ────────────────── */
+.rh2-ind-title-in { font-size: 21px; font-weight: 700; width: 100%; }
+.rh2-ind-sectitle-in { font-size: 19px; font-weight: 700; flex: 1 1 240px; min-width: 0; }
+.rh2-ind-desc-in { width: 100%; }
+.rh2-ind-item-edit { display: flex; align-items: flex-start; gap: 10px; }
+.rh2-ind-item-edit > .rh2-learn-ed-item { flex: 1 1 auto; min-width: 0; border: none; padding: 0; }
+.rh2-ind-edit .rh2-learn-ed-body { width: 100%; line-height: 1.55; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ASSIGN LEARNING — the unified catalogue header
+
+   Two rows, not one: heading and actions share the first, and the search box
+   takes the whole of the second. It used to be one flex row, where the field
+   was pushed to the right by whatever happened to be beside it and sat at a
+   different height from the heading it belonged to. A full-width row lines the
+   field up with the cards it filters, at every width, with no breakpoint doing
+   the work.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.rh2-learn-cat-head {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px 16px;
+  align-items: center; margin-bottom: 14px;
+}
+.rh2-learn-cat-heading { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.rh2-learn-cat-heading .rh2-h2 { margin: 0; }
+.rh2-learn-cat-heading .rh2-row-sub { margin: 0; }
+.rh2-learn-cat-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.rh2-learn-cat-search {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; position: relative;
+}
+.rh2-learn-cat-search .rh2-input { flex: 1 1 auto; min-width: 0; padding-left: 34px; }
+.rh2-learn-cat-search-icn {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; color: var(--muted); pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .rh2-learn-cat-head { grid-template-columns: 1fr; }
+  .rh2-learn-cat-actions { justify-content: flex-start; }
+  .rh2-ind-nav { flex-wrap: wrap; }
+  .rh2-ind-nav .rh2-btn { flex: 1 1 40%; }
+  .rh2-ind-count { order: -1; flex: 1 1 100%; }
 }

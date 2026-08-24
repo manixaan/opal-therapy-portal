@@ -172,13 +172,16 @@ describe('Home no longer browses by collection', () => {
     expect(JS).toContain("browse: 'folders'");
   });
 
-  it('leaves Assign Learning\'s own collection cards and their styles alone', () => {
-    // The .rh2-collection* rules are shared — deleting them with the Home
-    // section would have stripped the Owner's Assign Learning shelves.
-    expect(JS).toContain("RH2.aslOpenCollection(\\'");
-    for (const kept of ['.rh2-collections', '.rh2-collection-icn', '.rh2-collection-name',
+  it('takes the shared collection cards with it, now nothing renders them', () => {
+    // The .rh2-collection* rules were kept when Home's grid went, because
+    // Assign Learning still drew the same cards. It no longer does — its
+    // catalogue is one unified list — so the rules are dead CSS and the
+    // handlers are unreachable code.
+    expect(JS).not.toContain('RH2.aslOpenCollection(');
+    expect(JS).not.toContain('function aslOpenCollection(');
+    for (const gone of ['.rh2-collections', '.rh2-collection-icn', '.rh2-collection-name',
       '.rh2-collection-tag', '.rh2-collection-on']) {
-      expect(CSS).toContain(kept);
+      expect(`${gone}:${CSS.includes(gone)}`).toBe(`${gone}:false`);
     }
   });
 });

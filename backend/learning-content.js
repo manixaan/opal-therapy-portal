@@ -298,6 +298,92 @@ function stableStringify(v) {
   return JSON.stringify(v);
 }
 
+/**
+ * SECTION SIZING — how many learning items belong on one screen.
+ *
+ * The induction is delivered one section at a time (Back / Next), so a
+ * section IS a screen. Eighteen modules in a single section reproduces
+ * exactly the long scrolling page the step flow exists to replace.
+ */
+const SECTION_MAX = 6;
+const SECTION_MIN = 2;
+
+/**
+ * Group an ORDERED list of learning entries into screen-sized sections.
+ *
+ * Used by the importer, which receives a flat, ordered list (a Resource Hub
+ * learning path, the portal walkthroughs) and has to produce something a
+ * learner can step through. It divides at the boundaries the source data
+ * already carries — a change of resource kind — and never at more than
+ * SECTION_MAX items.
+ *
+ * ORDER IS NEVER REARRANGED: every section is a contiguous run of the
+ * original list, so the sequence the practice curated survives intact. A run
+ * too short to be a screen of its own is folded into the section beside it,
+ * keeping that section's title; a run longer than SECTION_MAX continues into
+ * a "(continued)" section.
+ *
+ * Titles are unique within the workflow — a kind that recurs later in the
+ * list, or a run too long for one screen, continues under the same name. Two
+ * sections called "Orientation" in one step rail is a reader's problem, not a
+ * data problem. All of them are a starting point rather than a decision: the
+ * Owner renames any section inline while editing.
+ *
+ * @param entries [{ group, label, item }] in delivery order
+ * @param fallbackLabel title for entries that carry no label of their own
+ */
+function sectionsFromOrderedItems(entries, fallbackLabel) {
+  const list = Array.isArray(entries) ? entries.filter(Boolean) : [];
+  if (!list.length) return [];
+  const fallback = cleanStr(fallbackLabel, LIMITS.sectionTitle) || 'Modules';
+
+  // 1. Contiguous runs of the same group.
+  const runs = [];
+  for (const e of list) {
+    const last = runs[runs.length - 1];
+    if (last && last.group === e.group) { last.items.push(e.item); continue; }
+    runs.push({
+      group: e.group,
+      label: cleanStr(e.label, LIMITS.sectionTitle) || fallback,
+      items: [e.item],
+    });
+  }
+
+  // 2. A run too short to be a screen joins the section beside it. Backwards
+  //    by preference; the first run has nothing behind it, so it folds forward.
+  const merged = [];
+  for (const run of runs) {
+    const prev = merged[merged.length - 1];
+    if (prev && run.items.length < SECTION_MIN && prev.items.length < SECTION_MAX) {
+      prev.items = prev.items.concat(run.items);
+    } else {
+      merged.push({ label: run.label, items: run.items.slice() });
+    }
+  }
+  if (merged.length > 1 && merged[0].items.length < SECTION_MIN &&
+      merged[1].items.length < SECTION_MAX) {
+    merged[1] = { label: merged[0].label, items: merged[0].items.concat(merged[1].items) };
+    merged.shift();
+  }
+
+  // 3. Nothing longer than a screen, and no two screens with the same name.
+  const used = new Map();
+  const uniqueTitle = (label) => {
+    const n = (used.get(label) || 0) + 1;
+    used.set(label, n);
+    const t = n === 1 ? label
+      : (n === 2 ? label + ' (continued)' : label + ' (continued ' + (n - 1) + ')');
+    return t.slice(0, LIMITS.sectionTitle);
+  };
+  const out = [];
+  for (const sec of merged) {
+    for (let i = 0; i < sec.items.length; i += SECTION_MAX) {
+      out.push({ title: uniqueTitle(sec.label), items: sec.items.slice(i, i + SECTION_MAX) });
+    }
+  }
+  return out;
+}
+
 function equalContent(a, b) {
   return stableStringify(a || null) === stableStringify(b || null);
 }
@@ -317,4 +403,7 @@ module.exports = {
   serialiseForEmployee,
   equalContent,
   stableStringify,
+  SECTION_MAX,
+  SECTION_MIN,
+  sectionsFromOrderedItems,
 };

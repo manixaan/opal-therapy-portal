@@ -188,3 +188,118 @@ test('equalContent is key-order independent and value sensitive', () => {
   b.sections[0].items[0].title = 'Read me v2';
   expect(lc.equalContent(a, b)).toBe(false);
 });
+
+// ── screen-sized sections (what the importer hands the step renderer) ─────────
+
+let _rid = 0;
+const entry = (group, label, title) => ({
+  group, label,
+  item: {
+    type: 'resource', title, required: true,
+    // A resource item is only valid with a linked resource, and the point of
+    // the last assertion here is that what the importer builds normalises.
+    resource_id: '00000000-0000-4000-8000-' + String(++_rid).padStart(12, '0'),
+    resource_title: title,
+  },
+});
+const titlesOf = (sections) => sections.map((s) => [s.title, s.items.map((i) => i.title)]);
+
+test('an empty list produces no sections at all', () => {
+  expect(lc.sectionsFromOrderedItems([], 'Modules')).toEqual([]);
+  expect(lc.sectionsFromOrderedItems(null, 'Modules')).toEqual([]);
+});
+
+test('a short single-kind list stays one section, named for its kind', () => {
+  const out = lc.sectionsFromOrderedItems([
+    entry('article', 'Orientation', 'Welcome'),
+    entry('article', 'Orientation', 'How we work'),
+  ], 'Modules');
+  expect(titlesOf(out)).toEqual([['Orientation', ['Welcome', 'How we work']]]);
+});
+
+test('it divides where the source data changes kind', () => {
+  const out = lc.sectionsFromOrderedItems([
+    entry('article', 'Orientation', 'A1'),
+    entry('article', 'Orientation', 'A2'),
+    entry('policy', 'Policies and standards', 'P1'),
+    entry('policy', 'Policies and standards', 'P2'),
+  ], 'Modules');
+  expect(titlesOf(out)).toEqual([
+    ['Orientation', ['A1', 'A2']],
+    ['Policies and standards', ['P1', 'P2']],
+  ]);
+});
+
+test('a run too short to be a screen joins the section beside it', () => {
+  const out = lc.sectionsFromOrderedItems([
+    entry('article', 'Orientation', 'A1'),
+    entry('article', 'Orientation', 'A2'),
+    entry('ndis_guide', 'NDIS essentials', 'G1'), // alone — folds backwards
+  ], 'Modules');
+  expect(titlesOf(out)).toEqual([['Orientation', ['A1', 'A2', 'G1']]]);
+});
+
+test('a lone FIRST run folds forwards, because nothing precedes it', () => {
+  const out = lc.sectionsFromOrderedItems([
+    entry('video', 'Watch and listen', 'V1'),
+    entry('policy', 'Policies and standards', 'P1'),
+    entry('policy', 'Policies and standards', 'P2'),
+  ], 'Modules');
+  expect(titlesOf(out)).toEqual([['Watch and listen', ['V1', 'P1', 'P2']]]);
+});
+
+test('nothing is longer than a screen; the overflow continues', () => {
+  const many = Array.from({ length: 9 }, (_, i) => entry('tutorial', 'Using the portal', 'T' + (i + 1)));
+  const out = lc.sectionsFromOrderedItems(many, 'Modules');
+  expect(out).toHaveLength(2);
+  expect(out[0].items).toHaveLength(lc.SECTION_MAX);
+  expect(out[1].title).toBe('Using the portal (continued)');
+  expect(out[1].items).toHaveLength(9 - lc.SECTION_MAX);
+});
+
+test('the original order survives exactly — only the screen breaks are new', () => {
+  const src = [
+    entry('article', 'Orientation', 'A1'), entry('article', 'Orientation', 'A2'),
+    entry('article', 'Orientation', 'A3'), entry('article', 'Orientation', 'A4'),
+    entry('article', 'Orientation', 'A5'), entry('article', 'Orientation', 'A6'),
+    entry('policy', 'Policies and standards', 'P1'), entry('policy', 'Policies and standards', 'P2'),
+    entry('tutorial', 'Using the portal', 'T1'), entry('tutorial', 'Using the portal', 'T2'),
+  ];
+  const out = lc.sectionsFromOrderedItems(src, 'Modules');
+  const flat = out.flatMap((s) => s.items.map((i) => i.title));
+  expect(flat).toEqual(src.map((e) => e.item.title));
+});
+
+test('entries with no label of their own fall back to the given one', () => {
+  const out = lc.sectionsFromOrderedItems([
+    { group: '', label: '', item: { type: 'task', title: 'X', required: true } },
+    { group: '', label: '', item: { type: 'task', title: 'Y', required: true } },
+  ], 'Portal walkthroughs');
+  expect(out[0].title).toBe('Portal walkthroughs');
+});
+
+test('what it produces is valid content the renderer can take', () => {
+  const out = lc.sectionsFromOrderedItems([
+    entry('article', 'Orientation', 'A1'), entry('article', 'Orientation', 'A2'),
+    entry('policy', 'Policies and standards', 'P1'), entry('policy', 'Policies and standards', 'P2'),
+  ], 'Modules');
+  const norm = lc.normaliseContent({ sections: out });
+  expect(norm.ok).toBe(true);
+  expect(norm.content.sections).toHaveLength(2);
+  expect(lc.contentStats(norm.content).items).toBe(4);
+});
+
+test('a kind that recurs later continues rather than repeating its name', () => {
+  // Order is preserved, so a list that returns to an earlier kind produces a
+  // second section of that kind. Two identically named steps in one rail is
+  // a reader's problem even when the data is right.
+  const out = lc.sectionsFromOrderedItems([
+    entry('article', 'Orientation', 'A1'), entry('article', 'Orientation', 'A2'),
+    entry('policy', 'Policies and standards', 'P1'), entry('policy', 'Policies and standards', 'P2'),
+    entry('article', 'Orientation', 'A3'), entry('article', 'Orientation', 'A4'),
+  ], 'Modules');
+  expect(out.map((s) => s.title)).toEqual([
+    'Orientation', 'Policies and standards', 'Orientation (continued)',
+  ]);
+  expect(new Set(out.map((s) => s.title)).size).toBe(out.length);
+});
