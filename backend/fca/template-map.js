@@ -204,7 +204,7 @@ const SCALAR_TAGS = [
   // ── Participant: durable facts the client profile owns ───────────────────
   { tag: 'OPAL_CLIENT_PREFERRED_NAME', label: 'Preferred name', layer: 'client_profile', profileField: 'preferred_name', occurrences: 2, parts: ['word/header6.xml'],
     note: 'Splose has no preferred-name field. A first name is NOT a preferred name and is never substituted.' },
-  { tag: 'OPAL_CLIENT_DATE_OF_BIRTH', label: 'Date of birth', layer: 'client_profile', profileField: 'date_of_birth', occurrences: 1 },
+  { tag: 'OPAL_CLIENT_DATE_OF_BIRTH', label: 'Date of birth', layer: 'client_profile', profileField: 'date_of_birth', isDate: true, occurrences: 1 },
   { tag: 'OPAL_CLIENT_PRONOUNS', label: 'Pronouns', layer: 'client_profile', profileField: 'pronouns', occurrences: 1 },
   { tag: 'OPAL_CLIENT_PRIMARY_DISABILITY', label: 'Primary disability', layer: 'client_profile', profileField: 'primary_disability', occurrences: 1 },
   { tag: 'OPAL_CLIENT_OTHER_CONDITIONS', label: 'Other conditions', layer: 'client_profile', profileField: 'other_conditions', occurrences: 1 },
@@ -214,8 +214,8 @@ const SCALAR_TAGS = [
     note: 'Suggested from the profile but genuinely report-specific in practice — referrals change, so the per-report override is expected to be used often.' },
 
   // ── Participant: current NDIS plan (versioned; never overwritten) ─────────
-  { tag: 'OPAL_CLIENT_NDIS_PLAN_START', label: 'NDIS plan start', layer: 'client_profile', profilePlanField: 'plan_start', occurrences: 1 },
-  { tag: 'OPAL_CLIENT_NDIS_PLAN_END', label: 'NDIS plan end', layer: 'client_profile', profilePlanField: 'plan_end', occurrences: 1 },
+  { tag: 'OPAL_CLIENT_NDIS_PLAN_START', label: 'NDIS plan start', layer: 'client_profile', profilePlanField: 'plan_start', isDate: true, occurrences: 1 },
+  { tag: 'OPAL_CLIENT_NDIS_PLAN_END', label: 'NDIS plan end', layer: 'client_profile', profilePlanField: 'plan_end', isDate: true, occurrences: 1 },
   { tag: 'OPAL_CLIENT_NDIS_GOAL_1', label: 'NDIS goal 1', layer: 'client_profile', profilePlanField: 'goal:0', occurrences: 1,
     note: 'The template exposes only two goal controls. Goals are stored unbounded and ordered by sort_order; goal 1 is the current plan\'s FIRST goal.' },
   { tag: 'OPAL_CLIENT_NDIS_GOAL_2', label: 'NDIS goal 2', layer: 'client_profile', profilePlanField: 'goal:1', occurrences: 1,
@@ -239,7 +239,7 @@ const SCALAR_TAGS = [
   // ── Report control: issued by Opal at draft creation ─────────────────────
   { tag: 'OPAL_REPORT_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 3, parts: ['word/footer6.xml'],
     note: 'Issued once, when the draft is created, and persisted. Regenerating a report never renumbers it.' },
-  { tag: 'OPAL_REPORT_DATE', label: 'Report date', layer: 'server', field: 'reportDate', occurrences: 2 },
+  { tag: 'OPAL_REPORT_DATE', label: 'Report date', layer: 'server', field: 'reportDate', isDate: true, occurrences: 2 },
   { tag: 'OPAL_REPORT_VERSION', label: 'Report version', layer: 'server', field: 'reportVersion', occurrences: 2 },
   { tag: 'OPAL_REPORT_STATUS', label: 'Report status', layer: 'server', field: 'reportStatus', occurrences: 1 },
 
@@ -247,7 +247,7 @@ const SCALAR_TAGS = [
   // Deliberately NOT auto-issued. Each of these is a fact about the world that
   // this portal genuinely does not hold, and a plausible-looking guess in a
   // clinical document is worse than a visible gap.
-  { tag: 'OPAL_REPORT_ISSUE_DATE', label: 'Issue date', layer: 'report', occurrences: 2,
+  { tag: 'OPAL_REPORT_ISSUE_DATE', label: 'Issue date', layer: 'report', isDate: true, occurrences: 2,
     note: 'The date the report is ISSUED to the participant is a real event that has not happened yet. It is never today\'s date by default.' },
   { tag: 'OPAL_REPORT_REVIEWER_NAME', label: 'Reviewer name', layer: 'report', occurrences: 1,
     note: 'A second clinician who reviewed the report. Never the author, and never assumed.' },

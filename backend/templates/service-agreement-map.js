@@ -2,21 +2,23 @@
 
 /**
  * SERVICE AGREEMENT TEMPLATE MAP — the static description of the Opal NDIS
- * Service Agreement master (service-agreement-v1.0.1.docx), written in the
- * same style as fca/template-map.js and fca/letter-template-map.js.
+ * Service Agreement master (service-agreement-v2.2.docx, the owner-supplied
+ * "Portal Integrated" edition of 24 Aug 2026), written in the same style as
+ * fca/template-map.js and fca/letter-template-map.js.
  *
- * The master shipped with the repository but had never been mapped: no module
- * referenced service-agreements/templates/, so its 106 content controls were
- * unreachable. Everything below was derived by unzipping the real .docx and
- * reading word/document.xml, word/header6.xml and word/footer6.xml, and is
- * asserted against the shipped file by tests/templates-service-agreement-map.test.js
- * so this file cannot silently drift from the document.
+ * Everything below was derived by unzipping the real .docx and reading
+ * word/document.xml, word/header3.xml and word/footer1.xml, and is asserted
+ * against the shipped file by tests/templates-service-agreement-map.test.js
+ * so this file cannot silently drift from the document. The v2.2 master uses
+ * `[PORTAL: …]` / `[OWNER: …]` prompt syntax (colon, not em dash); the export
+ * boundary's prompt pattern matches both.
  *
- * VERIFIED MASTER FACTS (service-agreement-v1.0.1.docx)
- *   106 unique w:tag content controls, 124 occurrences in total.
- *   word/header6.xml carries OPAL_AGREEMENT_ID; word/footer6.xml carries
+ * VERIFIED MASTER FACTS (service-agreement-v2.2.docx)
+ *   121 unique w:tag content controls, 138 occurrences in total.
+ *   word/header3.xml carries OPAL_AGREEMENT_ID; word/footer1.xml carries
  *   OPAL_AGREEMENT_VERSION — a body-only implementation would ship a blank
  *   header and footer, which is why both parts are listed in CONTROL_PARTS.
+ *   Two sections (cover with titlePg + body); A4; no w:updateFields.
  *
  * ── DATA REALITY ────────────────────────────────────────────────────────────
  * Identical to the FCA's: there is no clients table in this database. Client
@@ -44,15 +46,15 @@
 const path = require('path');
 
 const TEMPLATE_ID = 'service_agreement';
-const TEMPLATE_VERSION = 'v1.0.1';
+const TEMPLATE_VERSION = 'v2.2';
 const TEMPLATE_NAME = 'Opal Therapy NDIS Service Agreement';
-const TEMPLATE_FILENAME = 'service-agreement-v1.0.1.docx';
+const TEMPLATE_FILENAME = 'service-agreement-v2.2.docx';
 const TEMPLATE_FILE = path.join(
   __dirname, '..', 'service-agreements', 'templates', TEMPLATE_FILENAME
 );
 
 // Parts that may carry content controls. Only these are ever read or modified.
-const CONTROL_PARTS = ['word/document.xml', 'word/header6.xml', 'word/footer6.xml'];
+const CONTROL_PARTS = ['word/document.xml', 'word/header3.xml', 'word/footer1.xml'];
 
 /**
  * Controls holding Opal's own governance prose and the master hash. Removed
@@ -68,12 +70,12 @@ const INTERNAL_TAGS = [
 // The master's published clause and schedule blocks. These are the agreement's
 // own wording; a document instance never edits them, so they are not fields.
 const CLAUSE_TAGS = [
-  'OPAL_BLOCK_AT_A_GLANCE',
   'OPAL_CLAUSE_PARTIES_AUTHORITY',
   'OPAL_CLAUSE_SUPPORTS',
   'OPAL_CLAUSE_TERM_REVIEW',
   'OPAL_CLAUSE_PRICING_PAYMENT',
   'OPAL_CLAUSE_CANCELLATIONS',
+  'OPAL_CLAUSE_CHANGES',
   'OPAL_CLAUSE_PROVIDER_RESPONSIBILITIES',
   'OPAL_CLAUSE_PARTICIPANT_RESPONSIBILITIES',
   'OPAL_CLAUSE_PRIVACY_RECORDS',
@@ -104,7 +106,7 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_PARTICIPANT_ADDRESS', label: 'Participant address', group: 'Participant',
     layer: 'splose', field: 'formattedAddress', occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_COMMUNICATION_SUPPORTS', label: 'Communication supports', group: 'Participant',
-    layer: 'report', occurrences: 2, multiline: true },
+    layer: 'report', occurrences: 1, multiline: true },
   { tag: 'OPAL_PARTICIPANT_DATE_OF_BIRTH', label: 'Date of birth', group: 'Participant',
     layer: 'client_profile', profileField: 'date_of_birth', isDate: true, occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_EMAIL', label: 'Participant email', group: 'Participant',
@@ -122,7 +124,7 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_PARTICIPANT_PLAN_START_DATE', label: 'Plan start date', group: 'Participant',
     layer: 'client_profile', profilePlanField: 'plan_start', isDate: true, occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_PREFERRED_COMMUNICATION', label: 'Preferred communication', group: 'Participant',
-    layer: 'report', occurrences: 2 },
+    layer: 'report', occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_PREFERRED_NAME', label: 'Preferred name', group: 'Participant',
     layer: 'client_profile', profileField: 'preferred_name', occurrences: 1 },
 
@@ -148,7 +150,7 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_AGREEMENT_END_DATE', label: 'Agreement end date', group: 'Agreement period',
     layer: 'report', isDate: true, occurrences: 2 },
   { tag: 'OPAL_AGREEMENT_ID', label: 'Agreement ID', group: 'Agreement period',
-    layer: 'server', field: 'documentReference', occurrences: 3, parts: ["word/header6.xml"] },
+    layer: 'server', field: 'documentReference', occurrences: 3, parts: ["word/header3.xml"] },
   { tag: 'OPAL_AGREEMENT_ISSUE_DATE', label: 'Issue date', group: 'Agreement period',
     layer: 'server', field: 'reportDate', isDate: true, occurrences: 2 },
   { tag: 'OPAL_AGREEMENT_REVIEW_DATE', label: 'Review date', group: 'Agreement period',
@@ -162,7 +164,7 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_AGREEMENT_STATUS', label: 'Publication status', group: 'Agreement period',
     layer: 'report', occurrences: 3 },
   { tag: 'OPAL_AGREEMENT_VERSION', label: 'Published version', group: 'Agreement period',
-    layer: 'report', occurrences: 3, parts: ["word/footer6.xml"] },
+    layer: 'report', occurrences: 3, parts: ["word/footer1.xml"] },
 
   // ── Provider details ──────────────────────────────────────────
   { tag: 'OPAL_ORG_ABN', label: 'ABN', group: 'Provider details',
@@ -172,21 +174,24 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_ORG_COMPLAINTS_CONTACT', label: 'Complaints contact', group: 'Provider details',
     layer: 'report', occurrences: 2 },
   { tag: 'OPAL_ORG_EMAIL', label: 'Business email', group: 'Provider details',
-    layer: 'organisation', field: 'businessEmail', occurrences: 2 },
+    layer: 'organisation', field: 'businessEmail', occurrences: 1 },
   { tag: 'OPAL_ORG_LEGAL_NAME', label: 'Legal entity name', group: 'Provider details',
-    layer: 'organisation', field: 'organisationName', occurrences: 1 },
+    layer: 'organisation', field: 'organisationName', occurrences: 2 },
   { tag: 'OPAL_ORG_NDIS_REGISTRATION_NUMBER', label: 'NDIS registration number', group: 'Provider details',
     layer: 'report', occurrences: 1 },
   { tag: 'OPAL_ORG_PHONE', label: 'Business phone', group: 'Provider details',
-    layer: 'organisation', field: 'businessPhone', occurrences: 2 },
+    layer: 'organisation', field: 'businessPhone', occurrences: 1 },
   { tag: 'OPAL_ORG_PRIVACY_CONTACT', label: 'Privacy contact', group: 'Provider details',
     layer: 'report', occurrences: 1 },
   { tag: 'OPAL_ORG_TRADING_NAME', label: 'Trading name', group: 'Provider details',
-    layer: 'organisation', field: 'organisationName', occurrences: 2 },
+    layer: 'organisation', field: 'organisationName', occurrences: 1 },
   { tag: 'OPAL_ORG_WEBSITE', label: 'Website', group: 'Provider details',
     layer: 'organisation', field: 'website', occurrences: 1 },
+  { tag: 'OPAL_RECORD_RETENTION_PERIOD', label: 'Record retention period', group: 'Provider details',
+    layer: 'report', occurrences: 1,
+    note: 'An [OWNER: …] prompt in the master. Opal stores no approved retention period, so it is user-entered.' },
   { tag: 'OPAL_PAYMENT_TERMS_DAYS', label: 'Payment terms in days', group: 'Provider details',
-    layer: 'report', occurrences: 1 },
+    layer: 'report', occurrences: 2 },
 
   // ── Funding and invoicing ─────────────────────────────────────
   { tag: 'OPAL_FUNDING_MANAGEMENT_TYPE', label: 'NDIA / plan / self managed', group: 'Funding and invoicing',
@@ -207,6 +212,12 @@ const SCALAR_TAGS = [
     layer: 'report', occurrences: 1 },
   { tag: 'OPAL_SUPPORT_DESCRIPTION', label: 'Support description', group: 'Schedule A — agreed supports',
     layer: 'report', occurrences: 1, multiline: true },
+  { tag: 'OPAL_SUPPORT_ADDITIONAL_EXPENSES', label: 'Additional expenses and responsibility', group: 'Schedule A — agreed supports',
+    layer: 'report', occurrences: 1, multiline: true },
+  { tag: 'OPAL_SUPPORT_ENDING_NOTICE', label: 'Notice period to end agreement', group: 'Schedule A — agreed supports',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_SUPPORT_GST_TREATMENT', label: 'GST treatment', group: 'Schedule A — agreed supports',
+    layer: 'report', occurrences: 1 },
   { tag: 'OPAL_SUPPORT_ESTIMATED_QUANTITY', label: 'Estimated quantity', group: 'Schedule A — agreed supports',
     layer: 'report', occurrences: 1 },
   { tag: 'OPAL_SUPPORT_ESTIMATED_TOTAL', label: 'Estimated total', group: 'Schedule A — agreed supports',
@@ -235,7 +246,19 @@ const SCALAR_TAGS = [
     layer: 'report', occurrences: 1, multiline: true },
   { tag: 'OPAL_INTERPRETER_REQUIREMENTS', label: 'Interpreter requirements', group: 'Schedule B — preferences and access',
     layer: 'report', occurrences: 1, multiline: true },
+  { tag: 'OPAL_PEEP_REQUIRED', label: 'Emergency preparation plan required — yes / no / not applicable', group: 'Schedule B — preferences and access',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_PEEP_ATTACHED', label: 'Emergency plan attached — yes / no / not applicable', group: 'Schedule B — preferences and access',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_PEEP_TEST_DATE', label: 'Emergency plan test date', group: 'Schedule B — preferences and access',
+    layer: 'report', isDate: true, occurrences: 1 },
+  { tag: 'OPAL_PEEP_REVIEW_DATE', label: 'Emergency plan review date', group: 'Schedule B — preferences and access',
+    layer: 'report', isDate: true, occurrences: 1 },
   { tag: 'OPAL_SERVICE_LOCATION_PREFERENCES', label: 'Service location preferences', group: 'Schedule B — preferences and access',
+    layer: 'report', occurrences: 1, multiline: true },
+  { tag: 'OPAL_SOLE_WORKER_APPLICABLE', label: 'Sole worker clause applies — yes / no / not applicable', group: 'Schedule B — preferences and access',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_SOLE_WORKER_MONITORING', label: 'Sole worker monitoring arrangements', group: 'Schedule B — preferences and access',
     layer: 'report', occurrences: 1, multiline: true },
 
   // ── Schedule C — consents ─────────────────────────────────────
@@ -245,6 +268,10 @@ const SCALAR_TAGS = [
     layer: 'report', occurrences: 1 },
   { tag: 'OPAL_CONSENT_MARKETING', label: 'Yes / no', group: 'Schedule C — consents',
     layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_CONSENT_NDIS_AUDIT', label: 'NDIS audit access — yes / no / discuss', group: 'Schedule C — consents',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_CONSENT_REVIEW_DATE', label: 'Consent review date', group: 'Schedule C — consents',
+    layer: 'report', isDate: true, occurrences: 1 },
   { tag: 'OPAL_CONSENT_NOTES', label: 'Consent notes or conditions', group: 'Schedule C — consents',
     layer: 'report', occurrences: 1, multiline: true },
   { tag: 'OPAL_CONSENT_SHARE_EXCLUSIONS', label: 'Sharing limits or exclusions', group: 'Schedule C — consents',
@@ -259,6 +286,12 @@ const SCALAR_TAGS = [
   // ── Schedule D — signing and document control ─────────────────
   { tag: 'OPAL_ATTACHED_DOCUMENTS', label: 'Attached documents or none', group: 'Schedule D — signing and document control',
     layer: 'report', occurrences: 1, multiline: true },
+  { tag: 'OPAL_NDIS_PLAN_ATTACHED', label: 'NDIS plan attached — yes / no', group: 'Schedule D — signing and document control',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_PARTICIPANT_COPY_DECLINED', label: 'Completed copy declined — yes / no', group: 'Schedule D — signing and document control',
+    layer: 'report', occurrences: 1 },
+  { tag: 'OPAL_PARTICIPANT_COPY_DECLINED_REASON', label: 'Reason copy declined, if known', group: 'Schedule D — signing and document control',
+    layer: 'report', occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_RECEIPT_DATE', label: 'Signed copy provided date', group: 'Schedule D — signing and document control',
     layer: 'report', isDate: true, occurrences: 1 },
   { tag: 'OPAL_PARTICIPANT_RECEIPT_METHOD', label: 'Email / download / print', group: 'Schedule D — signing and document control',

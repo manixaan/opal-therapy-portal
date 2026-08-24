@@ -66,15 +66,15 @@ describe('Resource Hub navigation', () => {
 
 describe('the shell wires the surface', () => {
   test('templates.js and templates.css are loaded, with cache-bust pins', () => {
-    // js v=3: A4 preview pagination, custom sections, heading levels and
-    // remove/restore controls. css v=4: the panel's new controls.
+    // js v=4: date fields render as calendar pickers (d/mm/yyyy round-trip).
+    // css v=4: the section panel's controls.
     expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=4" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=3" defer></script>');
+    expect(SHELL).toContain('<script src="/templates.js?v=4" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=3'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=4'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {

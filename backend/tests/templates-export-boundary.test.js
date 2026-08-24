@@ -96,8 +96,10 @@ describe('export boundary — the portal-bound document still carries its bindin
     const xml = parts['word/document.xml'];
 
     // If this ever stops being true the boundary is testing nothing.
+    // v2.2 masters prompt with "[PORTAL: …]", the v1 masters with
+    // "[PORTAL — …]" — either proves the document is still portal-bound.
     expect(xml).toMatch(/OPAL_[A-Z0-9_]+/);
-    expect(xml).toMatch(/\[PORTAL —/);
+    expect(xml).toMatch(/\[PORTAL[:\s—]/);
     expect(xml).toContain('Jane Smith');
   });
 });

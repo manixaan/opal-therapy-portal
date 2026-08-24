@@ -40,8 +40,8 @@ beforeAll(async () => {
 describe('the shipped master', () => {
   test('is present and is the version the map names', () => {
     expect(fs.existsSync(sam.TEMPLATE_FILE)).toBe(true);
-    expect(sam.TEMPLATE_FILENAME).toBe('service-agreement-v1.0.1.docx');
-    expect(sam.TEMPLATE_VERSION).toBe('v1.0.1');
+    expect(sam.TEMPLATE_FILENAME).toBe('service-agreement-v2.2.docx');
+    expect(sam.TEMPLATE_VERSION).toBe('v2.2');
   });
 
   test('is committed, not a local-only file', () => {
@@ -49,15 +49,15 @@ describe('the shipped master', () => {
     // as fca-v1.docx and progress-note-letter-v1.docx are. Without this the
     // feature runs on one laptop and nowhere else.
     const sha = crypto.createHash('sha256').update(fs.readFileSync(sam.TEMPLATE_FILE)).digest('hex');
-    // Re-pinned after the layout-only top-margin fix (893 → 1800 twips) that
-    // stops the header band overlapping the body in margin-trusting renderers.
-    expect(sha).toBe('b73916c8f3b07e8a796505e1896afa1adfb62716cd4f052babf1fed4c81dde26');
+    // The owner-supplied Portal Integrated v2.2 master of 24 Aug 2026,
+    // committed byte-for-byte as delivered.
+    expect(sha).toBe('b5129a7e815fb64b6a4b9ff245b8aab37605cb2c781132e4675ad70dfe69da29');
   });
 
   test('carries controls in the header and footer, not only the body', () => {
     // A body-only implementation would ship a blank header and footer.
-    expect(masterParts).toContain('word/header6.xml');
-    expect(masterParts).toContain('word/footer6.xml');
+    expect(masterParts).toContain('word/header3.xml');
+    expect(masterParts).toContain('word/footer1.xml');
   });
 });
 
@@ -161,7 +161,7 @@ describe('the catalogue exposes exactly the three required templates', () => {
     expect(catalogue.getTemplate('progress_note').file)
       .toMatch(/fca\/templates\/progress-note-letter-v1\.docx$/);
     expect(catalogue.getTemplate('service_agreement').file)
-      .toMatch(/service-agreements\/templates\/service-agreement-v1\.0\.1\.docx$/);
+      .toMatch(/service-agreements\/templates\/service-agreement-v2\.2\.docx$/);
   });
 
   test('every field is grouped, and no group is empty', () => {

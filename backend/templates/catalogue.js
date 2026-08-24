@@ -95,14 +95,10 @@ const TEMPLATES = [
     internalTags: saMap.INTERNAL_TAGS,
     anchorTags: saMap.ANCHOR_TAGS,
     customSectionAnchor: null,
-    // Sentences inside published clauses that instruct the PORTAL rather than
-    // the reader. Clause wording is otherwise untouchable, so these are exact
-    // strings — a drifted master stops matching and the export fails loudly.
-    internalSentences: [
-      ' If an NDIS price limit applies, the portal must use the current NDIS'
-        + ' Pricing Arrangements and Price Limits rather than a hard-coded annual amount.',
-      'The portal repeats the prototype row below. ',
-    ],
+    // v2.2 keeps every portal-facing instruction inside the tagged internal
+    // governance blocks, which are removed whole at export — the v1 master's
+    // two stray clause sentences no longer exist, so nothing is declared here.
+    internalSentences: [],
     participantTag: 'OPAL_PARTICIPANT_FULL_NAME',
     filenameStem: 'Service-Agreement',
     footer: 'Opal Therapy · NDIS Service Agreement',

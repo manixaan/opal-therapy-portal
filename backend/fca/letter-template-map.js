@@ -7,7 +7,7 @@
  *
  * ── VERIFIED TEMPLATE CONTRACT ──────────────────────────────────────────────
  * progress-note-letter-v1.docx, sha256
- *   63c9da6409841da6c98d09de45278ec316a86808b242f0ae990d0ea6580aa1ed
+ *   7eb27b282e00036746172e253dfdbf2eaaebe6809845df6620b2b4173932ed2b
  *
  *   30 unique w:tag content controls across 32 occurrences, made up of
  *     24 unique SCALAR tags across 26 occurrences,
@@ -59,12 +59,12 @@ const LETTER_TEMPLATE_FILENAME = 'progress-note-letter-v1.docx';
 const LETTER_TEMPLATE_STORAGE_PATH = `fca/templates/${LETTER_TEMPLATE_FILENAME}`;
 
 /** Pinned so a swapped template file fails a test instead of shipping quietly. */
-// Re-pinned after the layout-only margin fix of 24 Aug 2026: the master's
-// declared top margin (1037 twips) was smaller than its own letterhead header,
-// so renderers that trust the declaration started the body under the logo.
-// Now 2160 twips; no text, control or clause changed.
+// Re-pinned twice on 24 Aug 2026, both layout-only: the top margin was raised
+// to clear the letterhead (1037 → 2160 twips), then the recipient block and
+// REGARDING spacing were rebalanced so the bordered address box stops at its
+// text. No text, control or clause changed.
 const LETTER_TEMPLATE_SHA256 =
-  '63c9da6409841da6c98d09de45278ec316a86808b242f0ae990d0ea6580aa1ed';
+  '7eb27b282e00036746172e253dfdbf2eaaebe6809845df6620b2b4173932ed2b';
 
 const LETTER_CUSTOM_SECTION_ANCHOR = 'OPAL_ANCHOR_LETTER_CUSTOM_SECTIONS';
 

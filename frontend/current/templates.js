@@ -298,6 +298,27 @@
   }
 
   /**
+   * Date values: shown and stored as the Australian d/mm/yyyy the document
+   * prints, converted to ISO only for the browser's own date input. A value
+   * that is neither (someone typed free text under the old UI) keeps a text
+   * box rather than silently vanishing inside a picker.
+   */
+  function toIsoDate(v) {
+    v = String(v == null ? '' : v).trim();
+    if (!v) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    var m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    return null;
+  }
+
+  function fromIsoDate(iso) {
+    var m = String(iso == null ? '' : iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(iso == null ? '' : iso);
+    return m[3] + '/' + m[2] + '/' + m[1];
+  }
+
+  /**
    * The fields, built once. `data-tag` is how an input finds its own field on
    * the way back in; it is an ordinary DOM hook, and no binding syntax is ever
    * put on screen.
@@ -310,11 +331,19 @@
         var shown = f.entered ? v : (f.value == null ? '' : f.value);
         var isOverride = f.entered;
         var placeholder = f.source === 'missing' && !isOverride ? 'Not yet completed' : '';
-        var input = f.multiline
-          ? '<textarea class="tpl-input tpl-textarea" rows="3" data-tag="' + esc(f.tag) + '" ' +
-            'id="tplf-' + esc(f.tag) + '" placeholder="' + esc(placeholder) + '">' + esc(shown) + '</textarea>'
-          : '<input class="tpl-input" type="text" data-tag="' + esc(f.tag) + '" ' +
+        var iso = f.isDate ? toIsoDate(shown) : null;
+        var input;
+        if (f.isDate && iso !== null) {
+          // A real calendar picker; the value round-trips as d/mm/yyyy.
+          input = '<input class="tpl-input tpl-date" type="date" data-tag="' + esc(f.tag) + '" ' +
+            'id="tplf-' + esc(f.tag) + '" value="' + esc(iso) + '">';
+        } else if (f.multiline) {
+          input = '<textarea class="tpl-input tpl-textarea" rows="3" data-tag="' + esc(f.tag) + '" ' +
+            'id="tplf-' + esc(f.tag) + '" placeholder="' + esc(placeholder) + '">' + esc(shown) + '</textarea>';
+        } else {
+          input = '<input class="tpl-input" type="text" data-tag="' + esc(f.tag) + '" ' +
             'id="tplf-' + esc(f.tag) + '" value="' + esc(shown) + '" placeholder="' + esc(placeholder) + '">';
+        }
         return '' +
           '<div class="tpl-field">' +
             '<label class="tpl-label" for="tplf-' + esc(f.tag) + '">' + esc(f.label) + '</label>' +
@@ -535,7 +564,9 @@
     if (!t || !t.getAttribute) return;
     var tag = t.getAttribute('data-tag');
     if (!tag) return;
-    S.values[tag] = t.value;
+    // A date picker yields ISO; the document (and the stored value) speak
+    // Australian d/mm/yyyy.
+    S.values[tag] = t.type === 'date' ? (t.value ? fromIsoDate(t.value) : '') : t.value;
     S.dirty = true;
     setSaveState('Saving…');
     scheduleSave();
