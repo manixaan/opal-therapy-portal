@@ -801,15 +801,36 @@ span.rh2-dochero-thumb { cursor: default; }
 .rh2-learn-ed-bar-actions { display: flex; gap: 8px; }
 .rh2-learn-ed-sec { display: flex; flex-direction: column; gap: 10px; }
 .rh2-learn-ed-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.rh2-learn-ed-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rh2-learn-ed-title { flex: 1 1 200px; min-width: 0; }
 .rh2-learn-ed-sectitle { flex: 1 1 240px; min-width: 0; font-weight: 600; }
 .rh2-learn-ed-tools { display: flex; gap: 4px; margin-left: auto; }
 .rh2-learn-ed-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .rh2-learn-ed-mins { width: 84px; }
-.rh2-learn-ed-quiz { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
-.rh2-learn-ed-q { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .rh2-learn-ed-additem { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Click-to-edit: the learner's rendering until a click, the field after. The
+   affordance stays quiet — a dashed border only on hover/focus — so the screen
+   reads as the tutorial being written, never as the form that produces it. */
+.rh2-ind-editable {
+  border: 1px dashed transparent; border-radius: 8px;
+  padding: 2px 4px; margin: -2px -4px;
+  cursor: text; min-width: 0; flex: 1 1 auto;
+}
+.rh2-ind-editable:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rh2-ind-editable:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-ind-ed-empty { color: var(--muted); font-style: italic; font-weight: 400; }
+
+/* The secondary settings strip a step or section opens on demand —
+   configuration lives here, off the primary editing surface. */
+.rh2-learn-ed-set {
+  display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+  border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px;
+}
+.rh2-learn-ed-set .rh2-learn-ed-tools { flex-wrap: wrap; }
+.rh2-learn-ed-set > .rh2-learn-ed-row { flex: 1 1 100%; }
+.rh2-learn-ed-setbtn { flex: 0 0 auto; margin-left: auto; }
+.rh2-learn-ed-qtools { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.rh2-learn-ed-hint { margin: 0; }
 .rh2-learn-ed-respick { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .rh2-learn-ed-resrow { text-align: left; background: none; border: none; cursor: pointer; padding: 7px 8px; border-radius: 8px; font-family: inherit; }
 .rh2-learn-ed-resrow:hover { background: var(--accent-soft); }

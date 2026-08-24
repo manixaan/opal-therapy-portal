@@ -607,11 +607,12 @@ describe('changed assets are cache-busted', () => {
       // Hub navigation between Assigned Learning and Professional development
       // (a nav entry plus a view branch; the surface's own styles ship in
       // templates.css).
-      // r26: a folder shows only what is filed in it — workflow tools no
-      // longer appear inside one — and its header states the server's folder
-      // count instead of counting the cards on the page. The CSS is untouched
-      // by that change and stays where the workspace release left it.
-      ['resourcehub.js', 'r26'], ['resourcehub.css', 'r16'],
+      // r27: the induction editor edits the learner's own rendering — content
+      // opens inline on a click, and configuration (required, minutes,
+      // ordering, the linked resource, the pass mark) moved behind a per-step
+      // Settings toggle. The CSS carries the click-to-edit affordance and the
+      // settings strip.
+      ['resourcehub.js', 'r27'], ['resourcehub.css', 'r17'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       ['induction-modules.js', 2],

@@ -5779,6 +5779,10 @@
     S.la.editor = {
       id: w.id,
       step: keepStep,
+      // Click-to-edit state: `editing` names the ONE region currently open as
+      // a field; `settingsOpen` names the one step/section settings strip.
+      editing: null,
+      settingsOpen: null,
       title: w.title,
       description: w.description || '',
       category: w.category || 'induction',
@@ -5953,7 +5957,10 @@
     var ed = S.la.editor;
     ed.sections.push({ key: '', title: 'New section', items: [] });
     ed._dirty = true;
-    render();
+    // Land ON the new section's screen with its title open: adding a section
+    // is the start of writing it, not a row appended to a list somewhere.
+    ed.step = ed.sections.length;
+    laEditStart('s-' + (ed.sections.length - 1));
   }
   function laSecRemove(si) {
     var ed = S.la.editor;
@@ -5961,6 +5968,9 @@
     if (!s) return;
     if (s.items.length && !confirm('Remove the section "' + s.title + '" and its ' + s.items.length + ' item(s)?')) return;
     ed.sections.splice(si, 1);
+    // Editing/settings keys are positional; a removal renumbers everything after it.
+    ed.editing = null;
+    ed.settingsOpen = null;
     ed._dirty = true;
     render();
   }
@@ -5970,6 +5980,13 @@
     if (to < 0 || to >= ed.sections.length) return;
     var s = ed.sections.splice(si, 1)[0];
     ed.sections.splice(to, 0, s);
+    // The screen and the open settings strip both follow the section they
+    // belong to — a move must not leave the Owner looking at the neighbour.
+    if (Number(ed.step) === si + 1) ed.step = to + 1;
+    else if (Number(ed.step) === to + 1) ed.step = si + 1;
+    if (ed.settingsOpen === 's-' + si) ed.settingsOpen = 's-' + to;
+    else if (ed.settingsOpen === 's-' + to) ed.settingsOpen = 's-' + si;
+    ed.editing = null;
     ed._dirty = true;
     render();
   }
@@ -5980,12 +5997,15 @@
     if (type === 'quiz') it.quiz = { passThreshold: 80, questions: [{ question: '', optionsText: '', correctIndex: 0 }] };
     ed.sections[si].items.push(it);
     ed._dirty = true;
-    render();
+    // A new step starts with its title open — the first thing it needs.
+    laEditStart('i-' + si + '-' + (ed.sections[si].items.length - 1) + '-title');
   }
   function laItemRemove(si, ii) {
     var ed = S.la.editor;
     if (!ed.sections[si]) return;
     ed.sections[si].items.splice(ii, 1);
+    ed.editing = null;
+    ed.settingsOpen = null;
     ed._dirty = true;
     render();
   }
@@ -5997,16 +6017,187 @@
     if (to < 0 || to >= items.length) return;
     var it = items.splice(ii, 1)[0];
     items.splice(to, 0, it);
+    // The open settings strip follows the step it belongs to.
+    if (ed.settingsOpen === 'i-' + si + '-' + ii) ed.settingsOpen = 'i-' + si + '-' + to;
+    else if (ed.settingsOpen === 'i-' + si + '-' + to) ed.settingsOpen = 'i-' + si + '-' + ii;
+    ed.editing = null;
     ed._dirty = true;
     render();
   }
   function laQAdd(si, ii) {
     var it = S.la.editor.sections[si].items[ii];
-    if (it.quiz) { it.quiz.questions.push({ question: '', optionsText: '', correctIndex: 0 }); S.la.editor._dirty = true; render(); }
+    if (!it.quiz) return;
+    it.quiz.questions.push({ question: '', optionsText: '', correctIndex: 0 });
+    S.la.editor._dirty = true;
+    laEditStart('i-' + si + '-' + ii + '-q' + (it.quiz.questions.length - 1));
   }
   function laQRemove(si, ii, qi) {
     var it = S.la.editor.sections[si].items[ii];
     if (it.quiz) { it.quiz.questions.splice(qi, 1); S.la.editor._dirty = true; render(); }
+  }
+
+  // ── Click-to-edit: the learner's rendering until a click, the field after ──
+  //
+  // `editing` names the ONE region currently open as a field ('i-0-2-body',
+  // 's-1', 'desc', a quiz question or option). Everything else on the screen
+  // renders exactly as the learner receives it, so what the Owner reads while
+  // editing IS what will be shipped. Closing a field is blur (or Enter/Escape
+  // on a one-line field); the value is already in state from oninput, so the
+  // close only swaps the field back to the learner's rendering of it.
+
+  function laEditing(key) { var ed = S.la.editor; return !!(ed && ed.editing === String(key)); }
+
+  function laEditStart(key) {
+    var ed = S.la.editor;
+    if (!ed) return;
+    ed.editing = String(key);
+    render();
+    var el = doc.getElementById('la-in-' + ed.editing);
+    if (el) {
+      try {
+        el.focus();
+        // A one-line field opens selected (renaming replaces); prose opens
+        // with the caret at the end (writing continues).
+        if (el.setSelectionRange) {
+          if (el.tagName === 'TEXTAREA') el.setSelectionRange(el.value.length, el.value.length);
+          else el.setSelectionRange(0, el.value.length);
+        }
+      } catch (e) { /* focus is a courtesy, not a contract */ }
+    }
+  }
+
+  /** Deferred, so a click that OPENS another region wins over this blur —
+   *  otherwise the blur's re-render swallows the click and every move between
+   *  two fields takes two clicks. */
+  function laEditStop(key) {
+    setTimeout(function () {
+      var ed = S.la.editor;
+      if (!ed || ed.editing !== String(key)) return;
+      // The user came straight back to the same field: a blur-and-refocus
+      // inside the window must not close it under their caret.
+      var el = doc.getElementById('la-in-' + String(key));
+      if (el && doc.activeElement === el) return;
+      ed.editing = null;
+      // The close re-renders the screen; whatever ELSE the user has since
+      // focused (a settings field, say) is rebuilt by that render, so put
+      // their focus back where it was rather than dropping their keystrokes.
+      var focusId = doc.activeElement && doc.activeElement.id;
+      render();
+      if (focusId) {
+        var back = doc.getElementById(focusId);
+        if (back) { try { back.focus(); } catch (e) { /* gone */ } }
+      }
+    }, 200);
+  }
+
+  /** One settings strip open at a time: 's-<si>' or 'i-<si>-<ii>'. */
+  function laSettings(key) {
+    var ed = S.la.editor;
+    if (!ed) return;
+    ed.settingsOpen = ed.settingsOpen === String(key) ? null : String(key);
+    render();
+  }
+
+  /** Checkbox edits re-render immediately — there is no caret to fight, and
+   *  the learner-facing chips beside them must stay honest. */
+  function laItemFlag(si, ii, field, value) { laItemField(si, ii, field, value); render(); }
+
+  // Quiz options live as one newline-joined string (optionsText) — the shape
+  // laEditorContentForApi already ships. Inline editing addresses one line.
+  function laQOption(si, ii, qi, oi, value) {
+    var ed = S.la.editor;
+    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
+    if (!it || !it.quiz || !it.quiz.questions[qi]) return;
+    var q = it.quiz.questions[qi];
+    var lines = String(q.optionsText || '').split('\n');
+    lines[oi] = value;
+    q.optionsText = lines.join('\n');
+    ed._dirty = true;
+  }
+
+  /** Closing an option's field drops emptied lines — clearing an option IS
+   *  removing it, the way deleting a paragraph removes it from a document.
+   *  The tick follows its answer down; clearing the TICKED option itself
+   *  resets the tick to the first option rather than letting it slide onto a
+   *  neighbour. Dropping lines renumbers every option, so that close renders
+   *  NOW: the usual deferred close would leave the on-screen radios carrying
+   *  stale indexes for a beat, and a tick landed in that window would mark
+   *  the wrong answer. */
+  function laQOptionDone(si, ii, qi, key) {
+    var ed = S.la.editor;
+    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
+    var dropped = false;
+    if (it && it.quiz && it.quiz.questions[qi]) {
+      var q = it.quiz.questions[qi];
+      var lines = String(q.optionsText || '').split('\n');
+      var ci0 = Number(q.correctIndex) || 0;
+      var ci = ci0;
+      var ciDropped = false;
+      var kept = [];
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].trim()) kept.push(lines[i]);
+        else if (i === ci0) ciDropped = true;
+        else if (i < ci0) ci -= 1;
+      }
+      if (ciDropped || ci >= kept.length) ci = 0;
+      dropped = kept.length !== lines.length;
+      if (dropped) {
+        q.optionsText = kept.join('\n');
+        q.correctIndex = ci;
+        ed._dirty = true;
+      }
+    }
+    if (dropped && ed && ed.editing === String(key)) {
+      ed.editing = null;
+      render();
+      return;
+    }
+    laEditStop(key);
+  }
+
+  function laQOptionAdd(si, ii, qi) {
+    var ed = S.la.editor;
+    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
+    if (!it || !it.quiz || !it.quiz.questions[qi]) return;
+    var q = it.quiz.questions[qi];
+    var lines = String(q.optionsText || '').split('\n').filter(function (l) { return l.trim(); });
+    lines.push('');
+    q.optionsText = lines.join('\n');
+    ed._dirty = true;
+    laEditStart('i-' + si + '-' + ii + '-q' + qi + '-o' + (lines.length - 1));
+  }
+
+  /** The ticked radio IS the correct answer — configured by answering the
+   *  question, the way the learner will. */
+  function laQCorrect(si, ii, qi, oi) {
+    laQField(si, ii, qi, 'correctIndex', Number(oi));
+    render();
+  }
+
+  /**
+   * A click-to-edit region. Until it is clicked it shows `viewHtml` — the
+   * learner's own rendering of the value; clicked, it swaps to `inputHtml`,
+   * which must carry id="la-in-<key>" and close itself through laEditStop.
+   * The region is keyboard-reachable: Enter or Space opens it.
+   */
+  function laEditable(key, viewHtml, inputHtml, label) {
+    if (laEditing(key)) return inputHtml;
+    // A link inside the rendered prose stays a link: clicking it to check it
+    // must not also dump the region into its editor.
+    return '<div class="rh2-ind-editable" role="button" tabindex="0" title="Click to edit" ' +
+      'aria-label="' + esc(label || 'Edit') + '" ' +
+      'onclick="if(event.target&&event.target.closest&&event.target.closest(\'a\'))return;RH2.laEditStart(\'' + key + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();RH2.laEditStart(\'' + key + '\')}">' +
+      viewHtml + '</div>';
+  }
+
+  /** The attributes every inline field shares: its identity, commit-on-blur,
+   *  and — one-line fields — Enter/Escape closing it. */
+  function laInAttrs(key, oneLine) {
+    return 'id="la-in-' + key + '" onblur="RH2.laEditStop(\'' + key + '\')"' +
+      (oneLine
+        ? ' onkeydown="if(event.key===\'Enter\'||event.key===\'Escape\'){event.preventDefault();this.blur();}"'
+        : ' onkeydown="if(event.key===\'Escape\'){this.blur();}"');
   }
 
   // Resource picker: inline search against the hub catalogue.
@@ -6043,88 +6234,170 @@
   /**
    * One learning item, editable in place.
    *
-   * This is the learner's item with its text swapped for the fields that
-   * produce it: the title where the title is, the body where the prose is, and
-   * the type-specific parts (acknowledgement statement, knowledge-check
-   * questions, linked resource) directly beneath. The Owner never leaves the
-   * induction to change any of it.
+   * This is the LEARNER'S OWN RENDERING of the step — the rendered prose, the
+   * acknowledgement blockquote, the knowledge-check options, the resource
+   * button — where every piece of content opens as a field when clicked
+   * (laEditable). Configuration — required, minutes, ordering, removal, the
+   * linked resource, the pass mark — sits behind the step's Settings toggle so
+   * the screen reads as the tutorial, never as the form that produces it. The
+   * learner's action buttons appear where the learner will see them, inert:
+   * this surface edits content, it does not complete it.
    */
   function laEditorItemHtml(it, si, ii, count) {
-    var idp = 'la-ed-' + si + '-' + ii;
+    var k = 'i-' + si + '-' + ii;
+    var setOpen = S.la.editor.settingsOpen === k;
+    var typeChip = it.type !== 'content'
+      ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
+    var reqChip = !it.required ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
+    var mins = parseInt(it.minutes, 10) > 0
+      ? '<span class="rh2-row-sub">' + parseInt(it.minutes, 10) + ' min</span>' : '';
+
     var out = '<div class="rh2-learn-ed-item">' +
-      '<div class="rh2-learn-ed-item-head">' +
-        '<span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' +
-        '<input class="rh2-input rh2-learn-ed-title" id="' + idp + '-title" placeholder="Item title" value="' + esc(it.title) + '" ' +
-          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">' +
-        '<span class="rh2-learn-ed-tools">' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove item" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">&#10005;</button>' +
-        '</span>' +
-      '</div>' +
-      '<textarea class="rh2-input rh2-learn-ed-body" id="' + idp + '-body" rows="6" ' +
-        'placeholder="Instructions / content (markdown: ## headings, **bold**, - bullets, links)" ' +
-        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>' +
-      '<div class="rh2-learn-ed-row">' +
-        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (it.required ? 'checked ' : '') +
-          'onchange="RH2.laItemField(' + si + ',' + ii + ',\'required\',this.checked)"> Required</label>' +
-        '<label class="rh2-lbl">Minutes <input type="number" min="1" max="600" class="rh2-input rh2-learn-ed-mins" id="' + idp + '-mins" value="' + esc(it.minutes) + '" ' +
-          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'minutes\',this.value)"></label>' +
+      '<div class="rh2-ind-item-head">' +
+        laEditable(k + '-title',
+          '<span class="rh2-row-main"><span class="rh2-row-title">' +
+            (it.title ? esc(it.title) : '<span class="rh2-ind-ed-empty">Untitled step &mdash; click to name it</span>') +
+            typeChip + reqChip + '</span>' + mins + '</span>',
+          '<input class="rh2-input rh2-learn-ed-title" ' + laInAttrs(k + '-title', true) +
+            ' placeholder="Step title" value="' + esc(it.title) + '" ' +
+            'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">',
+          'Edit the title of step ' + (ii + 1)) +
+        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-learn-ed-setbtn" ' +
+          'aria-expanded="' + (setOpen ? 'true' : 'false') + '" ' +
+          'onclick="RH2.laSettings(\'' + k + '\')">Settings</button>' +
       '</div>';
 
-    if (it.type === 'resource') {
-      var rp = S.la.resPick;
-      out += '<div class="rh2-learn-ed-row">' +
-        (it.resource_id
-          ? '<span class="rh2-chip rh2-chip-ok">Linked: ' + esc(it.resource_title || it.resource_id) + '</span>'
-          : '<span class="rh2-chip rh2-chip-warn">No resource linked yet</span>') +
-        '<button type="button" class="rh2-btn" onclick="RH2.laResPickOpen(' + si + ',' + ii + ')">' +
-          (it.resource_id ? 'Change resource' : 'Choose resource') + '</button></div>';
-      if (rp && rp.si === si && rp.ii === ii) {
-        out += '<div class="rh2-learn-ed-respick">' +
-          '<input class="rh2-input" id="la-respick-q" placeholder="Search the Resource Hub…" value="' + esc(rp.q) + '" ' +
-            'oninput="RH2.laResSearch(this.value)">' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laResPickClose()">Close</button>';
-        if (rp.loading) out += skel(2, 34);
-        else if (rp.rows && !rp.rows.length) out += '<div class="rh2-empty">No matching resources.</div>';
-        else if (rp.rows) {
-          out += rp.rows.slice(0, 8).map(function (r, ri) {
-            return '<button type="button" class="rh2-row rh2-learn-ed-resrow" onclick="RH2.laResChoose(' + ri + ')">' +
-              '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
-              '<span class="rh2-row-sub">' + esc(pick(r, 'content_type') || pick(r, 'resource_type') || '') + '</span></span></button>';
-          }).join('');
+    // The secondary settings strip — configuration, off the primary surface.
+    if (setOpen) {
+      out += '<div class="rh2-learn-ed-set">' +
+        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (it.required ? 'checked ' : '') +
+          'onchange="RH2.laItemFlag(' + si + ',' + ii + ',\'required\',this.checked)"> Required</label>' +
+        '<label class="rh2-lbl">Minutes <input type="number" min="1" max="600" class="rh2-input rh2-learn-ed-mins" id="la-set-' + k + '-mins" value="' + esc(it.minutes) + '" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'minutes\',this.value)"></label>' +
+        (it.type === 'quiz' && it.quiz
+          ? '<label class="rh2-lbl">Pass mark % <input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="la-set-' + k + '-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
+              'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)"></label>'
+          : '') +
+        '<span class="rh2-learn-ed-tools">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move step up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move step down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">Remove step</button>' +
+        '</span>';
+      if (it.type === 'resource') {
+        var rp = S.la.resPick;
+        out += '<div class="rh2-learn-ed-row">' +
+          (it.resource_id
+            ? '<span class="rh2-chip rh2-chip-ok">Linked: ' + esc(it.resource_title || it.resource_id) + '</span>'
+            : '<span class="rh2-chip rh2-chip-warn">No resource linked yet</span>') +
+          '<button type="button" class="rh2-btn" onclick="RH2.laResPickOpen(' + si + ',' + ii + ')">' +
+            (it.resource_id ? 'Change resource' : 'Choose resource') + '</button></div>';
+        if (rp && rp.si === si && rp.ii === ii) {
+          out += '<div class="rh2-learn-ed-respick">' +
+            '<input class="rh2-input" id="la-respick-q" placeholder="Search the Resource Hub…" value="' + esc(rp.q) + '" ' +
+              'oninput="RH2.laResSearch(this.value)">' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laResPickClose()">Close</button>';
+          if (rp.loading) out += skel(2, 34);
+          else if (rp.rows && !rp.rows.length) out += '<div class="rh2-empty">No matching resources.</div>';
+          else if (rp.rows) {
+            out += rp.rows.slice(0, 8).map(function (r, ri) {
+              return '<button type="button" class="rh2-row rh2-learn-ed-resrow" onclick="RH2.laResChoose(' + ri + ')">' +
+                '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
+                '<span class="rh2-row-sub">' + esc(pick(r, 'content_type') || pick(r, 'resource_type') || '') + '</span></span></button>';
+            }).join('');
+          }
+          out += '</div>';
         }
-        out += '</div>';
       }
+      out += '</div>';
+    }
+
+    out += '<div class="rh2-learn-item-body">';
+
+    // The prose the learner reads — click it to write it.
+    out += laEditable(k + '-body',
+      it.body
+        ? '<div class="rh2-learn-prose">' + mdRender(it.body) + '</div>'
+        : '<p class="rh2-ind-ed-empty">No content yet &mdash; click to write it.</p>',
+      '<textarea class="rh2-input rh2-learn-ed-body" rows="6" ' + laInAttrs(k + '-body', false) +
+        ' placeholder="Instructions / content (markdown: ## headings, **bold**, - bullets, links)" ' +
+        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>',
+      'Edit the content of step ' + (ii + 1));
+
+    if (it.type === 'resource') {
+      out += '<div class="rh2-learn-actions">' +
+        '<button type="button" class="rh2-btn" disabled>Open resource' +
+          (it.resource_title ? ': ' + esc(it.resource_title) : '') + '</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" disabled>Mark complete</button>' +
+        (it.resource_id ? '' : '<span class="rh2-quiet">Link the resource in Settings.</span>') +
+      '</div>';
     }
 
     if (it.type === 'acknowledgement') {
-      out += '<textarea class="rh2-input" id="' + idp + '-ack" rows="2" placeholder="The statement the employee must acknowledge" ' +
-        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>';
+      out += laEditable(k + '-ack',
+        '<blockquote class="rh2-learn-ack">' +
+          (it.ack_statement
+            ? mdRender(it.ack_statement)
+            : '<span class="rh2-ind-ed-empty">No statement yet &mdash; click to write what the employee must acknowledge.</span>') +
+        '</blockquote>',
+        '<textarea class="rh2-input" rows="2" ' + laInAttrs(k + '-ack', false) +
+          ' placeholder="The statement the employee must acknowledge" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>',
+        'Edit the acknowledgement statement') +
+        '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" disabled>I acknowledge</button></div>';
     }
 
     if (it.type === 'quiz' && it.quiz) {
-      out += '<div class="rh2-learn-ed-quiz">' +
-        '<label class="rh2-lbl">Pass mark % <input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="' + idp + '-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
-          'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)"></label>' +
-        it.quiz.questions.map(function (q, qi) {
-          var qid = idp + '-q' + qi;
-          return '<div class="rh2-learn-ed-q">' +
-            '<div class="rh2-learn-ed-item-head">' +
-              '<input class="rh2-input rh2-learn-ed-title" id="' + qid + '" placeholder="Question ' + (qi + 1) + '" value="' + esc(q.question) + '" ' +
-                'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">' +
-              '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove question" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">&#10005;</button>' +
-            '</div>' +
-            '<textarea class="rh2-input" id="' + qid + '-opts" rows="3" placeholder="One answer option per line" ' +
-              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'optionsText\',this.value)">' + esc(q.optionsText) + '</textarea>' +
-            '<label class="rh2-lbl">Correct option # (1 = first line) ' +
-              '<input type="number" min="1" max="8" class="rh2-input rh2-learn-ed-mins" id="' + qid + '-ci" value="' + (Number(q.correctIndex) + 1) + '" ' +
-              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'correctIndex\',(parseInt(this.value,10)||1)-1)"></label>' +
-          '</div>';
-        }).join('') +
+      out += it.quiz.questions.map(function (q, qi) {
+        var qk = k + '-q' + qi;
+        var lines = q.optionsText ? String(q.optionsText).split('\n') : [];
+        // A question's FIRST option: '' cannot hold "one empty line" (the
+        // join of [''] is ''), so while that option's field is open the line
+        // is synthesised here — the text typed lands in state via laQOption.
+        if (laEditing(qk + '-o' + lines.length)) lines.push('');
+        var ci = Number(q.correctIndex) || 0;
+        return '<fieldset class="rh2-learn-q">' +
+          '<legend>' + laEditable(qk,
+            (qi + 1) + '. ' + (q.question ? esc(q.question) : '<span class="rh2-ind-ed-empty">Click to write question ' + (qi + 1) + '</span>'),
+            '<input class="rh2-input rh2-learn-ed-title" ' + laInAttrs(qk, true) +
+              ' placeholder="Question ' + (qi + 1) + '" value="' + esc(q.question) + '" ' +
+              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">',
+            'Edit question ' + (qi + 1)) + '</legend>' +
+          lines.map(function (opt, oi) {
+            var ok = qk + '-o' + oi;
+            return '<div class="rh2-learn-opt">' +
+              '<input type="radio" name="la-ed-q-' + si + '-' + ii + '-' + qi + '" ' + (ci === oi ? 'checked ' : '') +
+                'aria-label="Mark option ' + (oi + 1) + ' as the correct answer" ' +
+                'onchange="RH2.laQCorrect(' + si + ',' + ii + ',' + qi + ',' + oi + ')">' +
+              laEditable(ok,
+                opt.trim() ? '<span>' + esc(opt) + '</span>' : '<span class="rh2-ind-ed-empty">Empty option</span>',
+                '<input class="rh2-input" id="la-in-' + ok + '" value="' + esc(opt) + '" ' +
+                  'placeholder="Answer option &mdash; leave empty to remove" ' +
+                  'onblur="RH2.laQOptionDone(' + si + ',' + ii + ',' + qi + ',\'' + ok + '\')" ' +
+                  'onkeydown="if(event.key===\'Enter\'||event.key===\'Escape\'){event.preventDefault();this.blur();}" ' +
+                  'oninput="RH2.laQOption(' + si + ',' + ii + ',' + qi + ',' + oi + ',this.value)">',
+                'Edit answer option ' + (oi + 1)) +
+            '</div>';
+          }).join('') +
+          '<div class="rh2-learn-ed-qtools">' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laQOptionAdd(' + si + ',' + ii + ',' + qi + ')">+ Add option</button>' +
+            (setOpen
+              ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">Remove question</button>'
+              : '') +
+          '</div>' +
+        '</fieldset>';
+      }).join('') +
+      '<p class="rh2-quiet rh2-learn-ed-hint">The ticked option is the correct answer &mdash; learners see the options unticked.</p>' +
+      '<div class="rh2-learn-actions">' +
         '<button type="button" class="rh2-btn" onclick="RH2.laQAdd(' + si + ',' + ii + ')">+ Add question</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" disabled>Submit answers</button>' +
       '</div>';
     }
+
+    if (it.type === 'content' || it.type === 'task') {
+      out += '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" disabled>Mark complete</button></div>';
+    }
+
+    out += '</div>';
     return out + '</div>';
   }
 
@@ -6135,9 +6408,14 @@
       ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
     return '<div class="rh2-ind-steplbl">Overview</div>' +
       '<h2 class="rh2-ind-sectitle">What this covers</h2>' +
-      '<textarea class="rh2-input rh2-ind-desc-in" id="la-ed-desc" rows="3" ' +
-        'placeholder="Describe this learning in a sentence — the learner reads it first" ' +
-        'aria-label="Description" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
+      laEditable('desc',
+        ed.description
+          ? '<div class="rh2-learn-prose">' + mdRender(ed.description) + '</div>'
+          : '<p class="rh2-ind-ed-empty">No description yet &mdash; click to write the sentence the learner reads first.</p>',
+        '<textarea class="rh2-input rh2-ind-desc-in" rows="3" ' + laInAttrs('desc', false) +
+          ' placeholder="Describe this learning in a sentence — the learner reads it first" ' +
+          'aria-label="Description" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>',
+        'Edit the description') +
       '<div class="rh2-learn-ed-row">' +
         '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
         '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
@@ -6157,20 +6435,34 @@
       '</div>';
   }
 
-  /** One section, one screen — the learner's screen with editable fields. */
+  /** One section, one screen — the learner's screen; the title opens on a
+   *  click, and the section's ordering/removal sits behind its own Settings
+   *  toggle rather than dominating the head of every screen. */
   function indSectionEdit(s, si, secCount) {
     var items = s.items || [];
+    var sk = 's-' + si;
+    var setOpen = S.la.editor.settingsOpen === sk;
     return '<div class="rh2-ind-steplbl">Section ' + (si + 1) + ' of ' + secCount + '</div>' +
       '<div class="rh2-ind-sechead">' +
-        '<input class="rh2-input rh2-ind-sectitle-in" id="la-ed-s' + si + '" value="' + esc(s.title) + '" ' +
-          'placeholder="Section title" aria-label="Section ' + (si + 1) + ' title" ' +
-          'oninput="RH2.laSecField(' + si + ',this.value)">' +
-        '<span class="rh2-learn-ed-tools">' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">&uarr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === secCount - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">&darr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" aria-label="Remove section" onclick="RH2.laSecRemove(' + si + ')">&#10005;</button>' +
-        '</span>' +
+        laEditable(sk,
+          '<h2 class="rh2-ind-sectitle">' +
+            (s.title ? esc(s.title) : '<span class="rh2-ind-ed-empty">Untitled section &mdash; click to name it</span>') +
+          '</h2>',
+          '<input class="rh2-input rh2-ind-sectitle-in" ' + laInAttrs(sk, true) + ' value="' + esc(s.title) + '" ' +
+            'placeholder="Section title" aria-label="Section ' + (si + 1) + ' title" ' +
+            'oninput="RH2.laSecField(' + si + ',this.value)">',
+          'Edit the title of section ' + (si + 1)) +
+        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-learn-ed-setbtn" ' +
+          'aria-expanded="' + (setOpen ? 'true' : 'false') + '" ' +
+          'onclick="RH2.laSettings(\'' + sk + '\')">Section settings</button>' +
       '</div>' +
+      (setOpen
+        ? '<div class="rh2-learn-ed-set"><span class="rh2-learn-ed-tools">' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">&uarr;</button>' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === secCount - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">&darr;</button>' +
+            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laSecRemove(' + si + ')">Remove section</button>' +
+          '</span></div>'
+        : '') +
       '<ol class="rh2-ind-items">' + items.map(function (it, ii) {
         return '<li class="rh2-ind-item rh2-ind-item-edit">' +
           '<span class="rh2-ind-item-no">' + (ii + 1) + '</span>' +
@@ -7104,6 +7396,15 @@
     laItemMove: laItemMove,
     laQAdd: laQAdd,
     laQRemove: laQRemove,
+    // Click-to-edit: the learner's rendering until a click, the field after
+    laEditStart: laEditStart,
+    laEditStop: laEditStop,
+    laSettings: laSettings,
+    laItemFlag: laItemFlag,
+    laQCorrect: laQCorrect,
+    laQOption: laQOption,
+    laQOptionAdd: laQOptionAdd,
+    laQOptionDone: laQOptionDone,
     laResPickOpen: laResPickOpen,
     laResPickClose: laResPickClose,
     laResSearch: laResSearch,

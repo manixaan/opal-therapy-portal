@@ -391,6 +391,100 @@ describe('edit mode is the learner\'s screen with the fields exposed', () => {
   });
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  CLICK-TO-EDIT — edit mode reads as the learner's screen until a click
+//
+//  The regression these pin: edit mode sliding back into a form. A step is the
+//  learner's own rendering (prose, blockquote, options, buttons); clicking a
+//  piece of content opens THAT field in place, and configuration — required,
+//  minutes, ordering, removal, the linked resource, the pass mark — lives
+//  behind a Settings toggle instead of dominating every step.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('edit mode reads as the learner\'s screen until a click', () => {
+  const item = fn('laEditorItemHtml');
+
+  test('content is the learner\'s rendering, not a permanent field', () => {
+    // The body renders through the same markdown renderer the learner gets;
+    // an always-open textarea is the configuration editor this replaced.
+    expect(item).toContain('mdRender(it.body)');
+    for (const region of ["laEditable(k + '-title'", "laEditable(k + '-body'", "laEditable(k + '-ack'"]) {
+      expect(`${region}:${item.includes(region)}`).toBe(`${region}:true`);
+    }
+  });
+
+  test('a click opens the field in place; closing it is blur', () => {
+    expect(fn('laEditable')).toContain('RH2.laEditStart(');
+    expect(fn('laInAttrs')).toContain('RH2.laEditStop(');
+    // One region open at a time — everything else stays the learner's screen.
+    expect(fn('laEditStart')).toContain('ed.editing = String(key)');
+    // A field the user is still in never closes under their caret: the
+    // deferred close checks focus before it fires.
+    expect(fn('laEditStop')).toContain('doc.activeElement === el');
+    // A link inside the rendered prose stays a link — clicking it to check
+    // it must not also open the region's editor.
+    expect(fn('laEditable')).toContain("closest(\\'a\\')");
+  });
+
+  test('configuration sits behind the Settings toggle, off the primary surface', () => {
+    const gate = item.indexOf('if (setOpen)');
+    const body = item.indexOf('rh2-learn-item-body');
+    expect(gate).toBeGreaterThan(-1);
+    // Required, minutes, ordering, removal and the resource link render only
+    // inside the settings strip — between the gate and the learner's body.
+    for (const cfg of ['laItemFlag(', 'laItemMove(', 'laItemRemove(', 'laResPickOpen(']) {
+      const at = item.indexOf(cfg);
+      expect(`${cfg} gated:${at > gate && at < body}`).toBe(`${cfg} gated:true`);
+    }
+    expect(item).toContain('RH2.laSettings(');
+  });
+
+  test('the learner\'s interactive elements are shown, inert', () => {
+    // The Owner sees the buttons where the learner will press them; none of
+    // them can complete anything from the editor.
+    for (const btn of ['disabled>Mark complete', 'disabled>I acknowledge', 'disabled>Submit answers']) {
+      expect(`${btn}:${item.includes(btn)}`).toBe(`${btn}:true`);
+    }
+    expect(item).not.toContain('alMarkComplete');
+  });
+
+  test('the quiz is edited as the learner answers it', () => {
+    // The ticked radio IS the correct answer, and options open inline — no
+    // correct-option number field, no one-line-per-option textarea.
+    expect(item).toContain('RH2.laQCorrect(');
+    expect(item).toContain('RH2.laQOptionAdd(');
+    expect(item).not.toContain('Correct option #');
+    expect(item).not.toContain('One answer option per line');
+  });
+
+  test('a new question can receive its first option', () => {
+    // optionsText '' cannot hold "one empty line" (the join of [''] is ''),
+    // so the renderer synthesises that line while its field is open. Without
+    // it, + Add option is a no-op on a fresh question and the quiz is stuck
+    // at zero options forever.
+    expect(item).toContain("laEditing(qk + '-o' + lines.length)");
+  });
+
+  test('dropping an option renumbers the screen before the next click', () => {
+    // laQOptionDone rewrites the option lines on blur. The usual DEFERRED
+    // close would leave the rendered radios carrying pre-drop indexes for a
+    // beat, and a tick landed in that window would silently mark the wrong
+    // answer — so a close that dropped lines renders immediately. Clearing
+    // the ticked option itself resets the tick to the first option rather
+    // than letting it slide onto a neighbour.
+    const done = fn('laQOptionDone');
+    expect(done).toContain('ciDropped');
+    expect(done).toMatch(/if \(dropped && ed && ed\.editing === String\(key\)\) \{\s*\n\s*ed\.editing = null;\s*\n\s*render\(\);/);
+  });
+
+  test('the section title is the learner\'s heading until clicked', () => {
+    const sec = fn('indSectionEdit');
+    expect(sec).toContain('rh2-ind-sectitle');
+    expect(sec).toContain('laEditable(sk');
+    expect(sec).toContain('Section settings');
+  });
+});
+
 describe('preview shows the learner experience and changes nothing', () => {
   const prev = fn('laPreview');
 
@@ -642,14 +736,14 @@ describe('the server, not the button, is what protects this', () => {
 describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
     // These pins move whenever ANY feature changes the hub assets — the file
-    // is shared, so the version is shared. r25/r16 was one unified catalogue,
-    // three actions, one induction renderer; r26 is the Library folder fix
-    // (no workflow tool inside a folder, and the folder's own count in its
-    // header), which touched the JS and not the CSS. Bump both this and the
-    // list in assessment-surface-guards.test.js together, or CI fails on the
-    // half that was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r16');
-    expect(SHELL).toContain('/resourcehub.js?v=r26');
+    // is shared, so the version is shared. r26/r16 was the Library folder fix;
+    // r27/r17 is click-to-edit in the induction editor (the learner's own
+    // rendering until a click, configuration behind a Settings toggle), which
+    // touched both the JS and the CSS. Bump both this and the list in
+    // assessment-surface-guards.test.js together, or CI fails on the half
+    // that was forgotten.
+    expect(SHELL).toContain('/resourcehub.css?v=r17');
+    expect(SHELL).toContain('/resourcehub.js?v=r27');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
