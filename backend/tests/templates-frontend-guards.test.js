@@ -66,13 +66,15 @@ describe('Resource Hub navigation', () => {
 
 describe('the shell wires the surface', () => {
   test('templates.js and templates.css are loaded, with cache-bust pins', () => {
-    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=1" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=1" defer></script>');
+    // v=2: the FCA section panel, participant-named documents and
+    // server-named downloads (the standalone-export fixes).
+    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=2" />');
+    expect(SHELL).toContain('<script src="/templates.js?v=2" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=1'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=2'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {

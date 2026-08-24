@@ -69,6 +69,15 @@ function groupFor(scalar) {
  *                 template designer). Templates renders the complete master.
  * `internalTags`  removed outright at export
  * `anchorTags`    insertion points removed outright at export
+ * `internalBlocks`     heading-bounded template-guide blocks removed at export
+ * `internalSentences`  exact portal-instruction sentences deleted at export
+ * `textReplacements`   template-facing header/footer wording rewritten at export
+ * `participantTag`     the scalar whose resolved value names the participant,
+ *                      used to put participant context into the exported
+ *                      document's title and filename
+ * `sectionCatalogue`   present only where a therapist may shape the document's
+ *                      section structure before export (the FCA); carries the
+ *                      map's own SECTIONS table and dependent-row rules
  */
 const TEMPLATES = [
   {
@@ -86,6 +95,15 @@ const TEMPLATES = [
     internalTags: saMap.INTERNAL_TAGS,
     anchorTags: saMap.ANCHOR_TAGS,
     customSectionAnchor: null,
+    // Sentences inside published clauses that instruct the PORTAL rather than
+    // the reader. Clause wording is otherwise untouchable, so these are exact
+    // strings — a drifted master stops matching and the export fails loudly.
+    internalSentences: [
+      ' If an NDIS price limit applies, the portal must use the current NDIS'
+        + ' Pricing Arrangements and Price Limits rather than a hard-coded annual amount.',
+      'The portal repeats the prototype row below. ',
+    ],
+    participantTag: 'OPAL_PARTICIPANT_FULL_NAME',
     filenameStem: 'Service-Agreement',
     footer: 'Opal Therapy · NDIS Service Agreement',
   },
@@ -109,6 +127,7 @@ const TEMPLATES = [
     anchorTags: [letterMap.LETTER_CUSTOM_SECTION_ANCHOR].filter(Boolean),
     customSectionAnchor: letterMap.LETTER_CUSTOM_SECTION_ANCHOR,
     optionalLineTags: letterMap.LETTER_OPTIONAL_LINE_TAGS,
+    participantTag: 'OPAL_CLIENT_FULL_NAME',
     filenameStem: 'Progress-Note',
     footer: 'Opal Therapy · Progress Note',
   },
@@ -131,6 +150,31 @@ const TEMPLATES = [
     internalTags: [],
     anchorTags: [fcaMap.CUSTOM_SECTION_ANCHOR].filter(Boolean),
     customSectionAnchor: fcaMap.CUSTOM_SECTION_ANCHOR,
+    // The master's own "how to use this template" page. Guidance for the
+    // portal editor, never content for an issued report.
+    internalBlocks: [
+      { startHeading: 'Using this FCA template', endHeading: 'Contents' },
+    ],
+    // The template-control header band and footer line of the master's front
+    // matter, reworded into document language.
+    textReplacements: [
+      { find: 'TEMPLATE CONTROL | CONFIDENTIAL', replace: 'CONFIDENTIAL' },
+      {
+        find: 'Opal Therapy | Functional Assessment Report Template | Confidential',
+        replace: 'Opal Therapy | Functional Assessment Report | Confidential',
+      },
+    ],
+    participantTag: 'OPAL_CLIENT_FULL_NAME',
+    // The FCA is the one template whose section structure a therapist may
+    // shape before export: preview, drop an optional section, restore it,
+    // reorder among siblings. Required sections are not negotiable and the
+    // composer enforces that independently of any route validation.
+    sectionCatalogue: {
+      SECTIONS: fcaMap.SECTIONS,
+      SECTION_BY_TAG: fcaMap.SECTION_BY_TAG,
+      REQUIRED_SECTION_TAGS: fcaMap.REQUIRED_SECTION_TAGS,
+      SECTION_DEPENDENT_ROWS: fcaMap.SECTION_DEPENDENT_ROWS,
+    },
     filenameStem: 'Functional-Capacity-Assessment',
     footer: 'Opal Therapy · Functional Capacity Assessment',
   },

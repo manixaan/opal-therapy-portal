@@ -19,7 +19,7 @@ const { PDFDocument, PDFName } = require('pdf-lib');
 
 const catalogue = require('../templates/catalogue');
 const { resolveDocument, exportDocument, composePortalDocx } = require('../templates/compose');
-const { severDocx, FILL_RULE } = require('../templates/export-boundary');
+const { severDocx } = require('../templates/export-boundary');
 const { readDocumentModel } = require('../templates/document-model');
 
 jest.setTimeout(60000);
@@ -168,6 +168,29 @@ describe.each([
     expect(core).not.toMatch(/Master Template|Controlled|Not for participant issue/i);
   });
 
+  test('Word will not prompt to update fields — no w:updateFields, no attached template', () => {
+    const settings = docxParts['word/settings.xml'] || '';
+    expect(settings).not.toMatch(/<w:updateFields\b/);
+    expect(settings).not.toMatch(/<w:attachedTemplate\b/);
+  });
+
+  test('no underline placeholder anywhere — an unfinished field exports EMPTY', () => {
+    // The old boundary wrote "__________" into every unfinished control and
+    // swept prompt. A printed page full of underscores reads as a defect; the
+    // requirement is a clean blank the reader completes naturally.
+    expect(visibleText(allXml(docxParts))).not.toContain('_____');
+  });
+
+  test('no template-instruction language survives in visible text', () => {
+    const visible = visibleText(allXml(docxParts));
+    expect(visible).not.toContain('Using this FCA template');
+    expect(visible).not.toContain('PORTAL PRE-FILL');
+    expect(visible).not.toContain('PORTAL COMPOSITION');
+    expect(visible).not.toContain('TEMPLATE CONTROL');
+    expect(visible).not.toContain('Report Template');
+    expect(visible).not.toMatch(/the portal (?:must|may|repeats)/i);
+  });
+
   test('nothing is highlighted — no yellow anywhere', () => {
     const xml = allXml(docxParts);
     expect(xml).not.toMatch(/<w:highlight\b/);
@@ -217,17 +240,33 @@ describe('regression case — populated portal value, manual value, unfinished f
     const parts = await partsOf(docx.buffer);
     const xml = parts['word/document.xml'];
 
-    // A plain-text content control named for the field, with a visible rule to
-    // type over. Nothing about it refers to Opal.
+    // A content control named for the field, empty and ready to complete.
+    // UNFINISHED_TAG is a DATE, so the control is Word's own calendar picker
+    // rather than a bare text box. Nothing about it refers to Opal.
     const label = catalogue.getTemplate('service_agreement')
       .catalogue.SCALAR_BY_TAG.get(UNFINISHED_TAG).label;
     expect(xml).toContain(`<w:alias w:val="${label}"`);
 
     const sdt = xml.split('<w:sdt>').find((chunk) => chunk.includes(`w:val="${label}"`));
     expect(sdt).toBeDefined();
-    expect(sdt).toContain('<w:text/>');          // it is a text field
-    expect(sdt).toContain(FILL_RULE);            // and it is visible on the page
+    expect(sdt).toContain('<w:date>');
+    expect(sdt).toContain('<w:dateFormat w:val="d/MM/yyyy"/>');
+    expect(sdt).toContain('<w:lid w:val="en-AU"/>');
+    expect(sdt).not.toContain('__________');      // empty, not an underline rule
     expect(sdt.slice(0, sdt.indexOf('</w:sdtPr>'))).not.toContain('<w:tag');
+  });
+
+  test('WORD — an unfinished NON-date field is a plain-text control, empty', async () => {
+    const parts = await partsOf(docx.buffer);
+    const xml = parts['word/document.xml'];
+    // The regression case leaves the plan manager (a text field) unresolved.
+    const meta = catalogue.getTemplate('service_agreement')
+      .catalogue.SCALAR_BY_TAG.get('OPAL_PARTICIPANT_COMMUNICATION_SUPPORTS');
+    const sdt = xml.split('<w:sdt>').find((chunk) => chunk.includes(`w:val="${meta.label}"`));
+    expect(sdt).toBeDefined();
+    expect(sdt).toContain('<w:text/>');
+    expect(sdt).not.toContain('<w:date>');
+    expect(sdt).not.toContain('__________');
   });
 
   test('WORD — a resolved field is plain text, no control left around it', async () => {
@@ -354,6 +393,101 @@ describe('the reusable master is untouched by completing a document', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 //  4. The verifier fails closed
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  3b. Participant context and section structure
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('the exported document identifies its participant', () => {
+  test('title and filename carry the participant name, never an identifier', async () => {
+    const out = await exportDocument(stateFor('fca', { title: 'Functional Capacity Assessment' }), 'docx');
+    expect(out.filename).toContain('Jane-Smith');
+    expect(out.filename).not.toContain('430000123');
+
+    const parts = await partsOf(out.buffer);
+    expect(parts['docProps/core.xml']).toContain('Functional Capacity Assessment — Jane Smith');
+    expect(parts['docProps/core.xml']).not.toContain('430000123');
+  });
+
+  test('a title that already names the participant is not doubled', async () => {
+    const out = await exportDocument(
+      stateFor('fca', { title: 'FCA — Jane Smith' }), 'docx'
+    );
+    const parts = await partsOf(out.buffer);
+    expect(parts['docProps/core.xml']).toContain('FCA — Jane Smith');
+    expect(parts['docProps/core.xml']).not.toContain('Jane Smith — Jane Smith');
+  });
+
+  test('an unbound document keeps its own title unchanged', async () => {
+    const state = resolveDocument({
+      template: catalogue.getTemplate('fca'),
+      row: { ...ROW, title: 'Blank working copy', field_values: {} },
+      client: { splose: null, profile: null, currentPlan: null, goals: [] },
+      portal: null,
+      organisation: null,
+    });
+    const out = await exportDocument(state, 'docx');
+    const parts = await partsOf(out.buffer);
+    expect(parts['docProps/core.xml']).toContain('Blank working copy');
+  });
+});
+
+describe('FCA section structure flows through preview and both exports', () => {
+  const SECTIONS = {
+    // Drop the MoCA (optional, has a dependent results row) and Appendices;
+    // move Cognition ahead of Mobility.
+    selected: catalogue.getTemplate('fca').sectionCatalogue.SECTIONS
+      .map((s) => s.tag)
+      .filter((t) => t !== 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA' && t !== 'OPAL_SECTION_APPENDICES'),
+    order: (() => {
+      const tags = catalogue.getTemplate('fca').sectionCatalogue.SECTIONS.map((s) => s.tag);
+      const cog = tags.indexOf('OPAL_SECTION_DOMAIN_COGNITION');
+      const mob = tags.indexOf('OPAL_SECTION_DOMAIN_MOBILITY');
+      [tags[cog], tags[mob]] = [tags[mob], tags[cog]];
+      return tags;
+    })(),
+  };
+
+  let parts;
+  let visible;
+
+  beforeAll(async () => {
+    const out = await exportDocument(stateFor('fca', { sections: SECTIONS }), 'docx');
+    parts = await partsOf(out.buffer);
+    visible = visibleText(parts['word/document.xml']);
+  });
+
+  test('an excluded optional section is absent, and its results row goes with it', () => {
+    expect(visible).not.toContain('Montreal Cognitive Assessment');
+    // The results table's own "MoCA" row travels with the excluded section.
+    // The Cognition domain's clinical prompt legitimately still says
+    // "…relevant WHODAS/MoCA findings…" — that is guidance, not the section.
+    expect(visible.replace(/WHODAS\/MoCA/g, '')).not.toMatch(/\bMoCA\b/);
+    expect(visible).not.toContain('Appendices');
+  });
+
+  test('required sections survive whatever the stored value says', async () => {
+    const hostile = await exportDocument(stateFor('fca', {
+      sections: { selected: [], order: [] },   // a value the route would refuse
+    }), 'docx');
+    const text = visibleText((await partsOf(hostile.buffer))['word/document.xml']);
+    expect(text).toContain('Referral Information');
+    expect(text).toContain('Professional Declaration');
+  });
+
+  test('reordering swaps siblings in the document flow', () => {
+    expect(visible.indexOf('Cognition')).toBeGreaterThan(-1);
+    expect(visible.indexOf('Cognition')).toBeLessThan(visible.indexOf('Mobility'));
+  });
+
+  test('the preview composition is the same structure the export severs', async () => {
+    const preview = await composePortalDocx(stateFor('fca', { sections: SECTIONS }));
+    const previewText = visibleText((await partsOf(preview))['word/document.xml']);
+    expect(previewText).not.toContain('Montreal Cognitive Assessment');
+    expect(previewText.replace(/WHODAS\/MoCA/g, '')).not.toMatch(/\bMoCA\b/);
+    expect(previewText.indexOf('Cognition')).toBeLessThan(previewText.indexOf('Mobility'));
+  });
+});
 
 describe('verification refuses to ship a leak', () => {
   test('a binding the severing pass missed fails the export instead of shipping', async () => {

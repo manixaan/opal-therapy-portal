@@ -81,7 +81,7 @@ beforeAll(async () => { found = await discover(); });
 describe('template file', () => {
   test('is the exact template the map was written against', () => {
     const sha = crypto.createHash('sha256').update(templateBuffer).digest('hex');
-    expect(sha).toBe('f686096730a793d44316f9e73aa329dd36ebe2583699df0ee80d0ece583ed5c5');
+    expect(sha).toBe('63c9da6409841da6c98d09de45278ec316a86808b242f0ae990d0ea6580aa1ed');
     expect(sha).toBe(ltm.LETTER_TEMPLATE_SHA256);
   });
 });

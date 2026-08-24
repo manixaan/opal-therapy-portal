@@ -304,6 +304,66 @@ describe('a document instance cannot be used to write arbitrary content', () => 
     }
   });
 
+  test('an unknown section tag is refused, and nothing is written', async () => {
+    const agent = await loginAs(THERAPIST);
+    db.pool.query.mockResolvedValueOnce({ rows: [ROW], rowCount: 1 });
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ sections: { selected: ['NOT_A_SECTION'] } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('unknown_section');
+    expect(db.pool.query.mock.calls.filter((c) => /UPDATE/i.test(c[0]))).toHaveLength(0);
+  });
+
+  test('dropping a REQUIRED section is refused with its name, and nothing is written', async () => {
+    const agent = await loginAs(THERAPIST);
+    db.pool.query.mockResolvedValueOnce({ rows: [ROW], rowCount: 1 });
+    const fcaSections = require('../fca/template-map').SECTIONS;
+    const withoutReferral = fcaSections.map((s) => s.tag)
+      .filter((t) => t !== 'OPAL_SECTION_REFERRAL_INFORMATION');
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ sections: { selected: withoutReferral } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('required_section');
+    expect(res.body.message).toContain('Referral Information');
+    expect(db.pool.query.mock.calls.filter((c) => /UPDATE/i.test(c[0]))).toHaveLength(0);
+  });
+
+  test('sections on a template with a fixed structure are refused', async () => {
+    const agent = await loginAs(THERAPIST);
+    db.pool.query.mockResolvedValueOnce({
+      rows: [{ ...ROW, template_id: 'service_agreement', template_version: 'v1.0.1' }],
+      rowCount: 1,
+    });
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ sections: { selected: [] } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('sections_not_supported');
+  });
+
+  test('a legitimate section choice is stored parameterised and echoed back normalised', async () => {
+    const agent = await loginAs(THERAPIST);
+    const fcaSections = require('../fca/template-map').SECTIONS.map((s) => s.tag);
+    const selected = fcaSections.filter((t) => t !== 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA');
+    const stored = { selected, order: fcaSections };
+    db.pool.query
+      .mockResolvedValueOnce({ rows: [ROW], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ ...ROW, sections: stored }], rowCount: 1 });
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ sections: { selected, order: fcaSections } });
+    expect(res.status).toBe(200);
+
+    const update = db.pool.query.mock.calls.find((c) => /UPDATE template_documents/i.test(c[0]));
+    expect(update).toBeDefined();
+    expect(update[0]).toContain('sections = $4::jsonb');
+
+    // The document echoes the EFFECTIVE structure: MoCA out, required in.
+    const sections = res.body.document.sections;
+    expect(Array.isArray(sections)).toBe(true);
+    const moca = sections.find((s) => s.tag === 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA');
+    expect(moca.included).toBe(false);
+    expect(sections.find((s) => s.tag === 'OPAL_SECTION_REFERRAL_INFORMATION').included).toBe(true);
+  });
+
   test('a legitimate tag is accepted and stored parameterised', async () => {
     const agent = await loginAs(THERAPIST);
     db.pool.query

@@ -49,7 +49,9 @@ describe('the shipped master', () => {
     // as fca-v1.docx and progress-note-letter-v1.docx are. Without this the
     // feature runs on one laptop and nowhere else.
     const sha = crypto.createHash('sha256').update(fs.readFileSync(sam.TEMPLATE_FILE)).digest('hex');
-    expect(sha).toBe('afb1e1e8ae5dafde60e3cf04220f00ec557cc3cc87ce21ff11d27c6b8a334d14');
+    // Re-pinned after the layout-only top-margin fix (893 → 1800 twips) that
+    // stops the header band overlapping the body in margin-trusting renderers.
+    expect(sha).toBe('b73916c8f3b07e8a796505e1896afa1adfb62716cd4f052babf1fed4c81dde26');
   });
 
   test('carries controls in the header and footer, not only the body', () => {

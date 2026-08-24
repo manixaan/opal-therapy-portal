@@ -34,6 +34,7 @@
 
 const { resolveScalars } = require('../fca/resolve-scalars');
 const { composeDocx } = require('../fca/docx-engine');
+const { normaliseSelection, buildManifest } = require('../fca/manifest');
 const { readMaster } = require('./catalogue');
 const { severDocx } = require('./export-boundary');
 const { readDocumentModel } = require('./document-model');
@@ -84,23 +85,56 @@ function resolveDocument({ template, row, client = {}, portal = null, organisati
 }
 
 /**
+ * The section structure this document composes with.
+ *
+ * Templates with no section catalogue render the complete master, untouched.
+ * The FCA carries one, so its stored selection/order — `row.sections`, shaped
+ * `{ selected: [tags], order: [tags] }` — is normalised through the SAME
+ * helpers the FCA wizard uses: unknown tags are dropped, required sections are
+ * re-added whatever was stored, order falls back to the master's own, and the
+ * dependent results-table rows of an excluded assessment travel with it.
+ */
+function sectionStructure(template, row) {
+  if (!template.sectionCatalogue) return { sections: [], dependentRows: [] };
+
+  const stored = (row && row.sections && typeof row.sections === 'object'
+    && !Array.isArray(row.sections)) ? row.sections : {};
+
+  // fca/manifest's default catalogue IS the FCA — the only template that
+  // declares a sectionCatalogue.
+  const { selectedSections, sectionOrder } = normaliseSelection({
+    selectedSections: Array.isArray(stored.selected) ? stored.selected : undefined,
+    sectionOrder: Array.isArray(stored.order) ? stored.order : undefined,
+  });
+  const manifest = buildManifest({
+    selectedSections,
+    sectionOrder,
+    customSections: [],
+    scalarData: {},
+    scalarSources: {},
+    excludedFields: [],
+  });
+  return { sections: manifest.sections, dependentRows: manifest.dependentRows };
+}
+
+/**
  * The in-portal document: still bound, still carrying the master's own prompts
  * for anything outstanding. This is what the live preview renders, and it is
- * the input the export boundary severs.
+ * the input the export boundary severs — so a section choice made in the
+ * editor is visible in the preview AND in both exports, because all three are
+ * this one composition.
  */
 async function composePortalDocx(state) {
-  const { template, scalarData } = state;
+  const { template, row, scalarData } = state;
+  const structure = sectionStructure(template, row);
   const composed = await composeDocx({
     templateBuffer: readMaster(template),
     manifest: {
       scalarData,
       scalarSources: state.scalarSources,
-      // Every section, in the master's own order. Templates renders the
-      // complete document; choosing which optional sections appear is the FCA
-      // wizard's clinical decision, not this capability's.
-      sections: [],
+      sections: structure.sections,
       excludedTags: [],
-      dependentRows: [],
+      dependentRows: structure.dependentRows,
     },
     options: {
       controlParts: template.controlParts,
@@ -108,7 +142,9 @@ async function composePortalDocx(state) {
       buildCustomSection: null,
       multilineTags: template.multilineTags,
       dropParagraphWhenEmpty: template.optionalLineTags || new Set(),
-      rebuildToc: false,
+      // A template whose sections can change must keep its cached contents
+      // list honest; the others ship the master's own TOC untouched.
+      rebuildToc: Boolean(template.sectionCatalogue),
       label: `template:${template.id}`,
     },
   });
@@ -121,9 +157,42 @@ function safePart(value, fallback) {
   return s || fallback;
 }
 
+/** The participant this document resolves against, when the template names one. */
+function participantName(state) {
+  const tag = state.template.participantTag;
+  const v = tag ? state.scalarData[tag] : null;
+  const s = v === null || v === undefined ? '' : String(v).trim();
+  return s || null;
+}
+
+/**
+ * The exported document's own title: the instance title, with the participant
+ * appended when the document is about one — "Functional Capacity Assessment —
+ * Jane Smith", never just the generic template name. Nothing beyond the name
+ * is added: an NDIS number in a filename or a title bar is disclosure, not
+ * context.
+ */
+function exportTitle(state) {
+  const base = String(state.row.title || state.template.name).trim() || state.template.name;
+  const name = participantName(state);
+  if (!name) return base;
+  if (base.toLowerCase().includes(name.toLowerCase())) return base;
+  return `${base} — ${name}`;
+}
+
 function exportFilename(state, extension) {
   const { template, row } = state;
-  return `${template.filenameStem}-${safePart(row.title, 'Document')}.${extension}`;
+  const name = participantName(state);
+  const title = String(row.title || '').trim();
+
+  const parts = [template.filenameStem];
+  // The instance title, when it says more than the template's own name does.
+  if (title && title !== template.name) parts.push(safePart(title, ''));
+  // The participant, unless the title already names them.
+  if (name && !parts.some((p) => p.toLowerCase().includes(safePart(name, '').toLowerCase()))) {
+    parts.push(safePart(name, ''));
+  }
+  return `${parts.filter(Boolean).join('-')}.${extension}`;
 }
 
 /**
@@ -149,7 +218,11 @@ async function exportDocument(state, format) {
     tag: s.tag,
     label: s.label,
     resolved: resolvedSet.has(s.tag),
+    // An unfinished date exports as Word's own calendar picker, not a text box.
+    isDate: Boolean(s.isDate),
   }));
+
+  const title = exportTitle(state);
 
   const severed = await severDocx({
     buffer: portalDocx,
@@ -157,7 +230,10 @@ async function exportDocument(state, format) {
     controlParts: template.controlParts,
     internalTags: template.internalTags,
     anchorTags: template.anchorTags,
-    documentTitle: row.title || template.name,
+    internalBlocks: template.internalBlocks || [],
+    internalSentences: template.internalSentences || [],
+    textReplacements: template.textReplacements || [],
+    documentTitle: title,
   });
 
   if (format === 'docx') {
@@ -173,7 +249,7 @@ async function exportDocument(state, format) {
   const model = await readDocumentModel(severed.buffer);
   const buffer = await renderTemplatePdf({
     model,
-    title: row.title || template.name,
+    title,
     footer: template.footer,
   });
 
@@ -191,6 +267,8 @@ module.exports = {
   composePortalDocx,
   exportDocument,
   documentReference,
+  sectionStructure,
+  exportTitle,
   DOCX_MIME,
   PDF_MIME,
 };

@@ -143,6 +143,56 @@ test('a document is created, completed, previewed and listed', async () => {
   expect(list.body.documents.map((d) => d.id)).toContain(id);
 });
 
+test('FCA section structure: shape, store, export, and return to default (migration 044)', async () => {
+  const { agent } = await agentFor(app, 'therapist', orgA);
+  const fcaMap = require('../../fca/template-map');
+  const allTags = fcaMap.SECTIONS.map((s) => s.tag);
+
+  const created = await agent.post('/api/templates/documents')
+    .send({ templateId: 'fca', title: 'Sectioned FCA' });
+  expect(created.status).toBe(201);
+  const id = created.body.document.id;
+
+  // The document carries its section structure — every section in, by default.
+  const initial = created.body.document.sections;
+  expect(initial.map((s) => s.tag)).toEqual(allTags);
+  expect(initial.every((s) => s.included)).toBe(true);
+
+  // Drop an optional section; the stored row survives a re-read (the column
+  // exists and round-trips — the thing migration 044 has to prove).
+  const selected = allTags.filter((t) => t !== 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA');
+  const shaped = await agent.patch(`/api/templates/documents/${id}`)
+    .send({ sections: { selected, order: allTags } });
+  expect(shaped.status).toBe(200);
+  expect(shaped.body.document.sections.find((s) => s.tag === 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA').included).toBe(false);
+
+  const reread = await agent.get(`/api/templates/documents/${id}`);
+  expect(reread.body.document.sections.find((s) => s.tag === 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA').included).toBe(false);
+
+  // The export composes without the excluded section.
+  const exported = await agent.get(`/api/templates/documents/${id}/export.docx`)
+    .buffer(true).parse((r, cb) => {
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+  expect(exported.status).toBe(200);
+  const zip = await JSZip.loadAsync(exported.body);
+  const xml = await zip.file('word/document.xml').async('string');
+  expect(xml).not.toContain('Montreal Cognitive Assessment');
+
+  // A required section cannot be dropped.
+  const refused = await agent.patch(`/api/templates/documents/${id}`)
+    .send({ sections: { selected: selected.filter((t) => t !== 'OPAL_SECTION_REFERRAL_INFORMATION') } });
+  expect(refused.status).toBe(400);
+  expect(refused.body.error).toBe('required_section');
+
+  // null returns the document to the master's own structure.
+  const reset = await agent.patch(`/api/templates/documents/${id}`).send({ sections: null });
+  expect(reset.status).toBe(200);
+  expect(reset.body.document.sections.every((s) => s.included)).toBe(true);
+});
+
 test('clearing a field returns it to the resolved value rather than blanking the document', async () => {
   const { agent } = await agentFor(app, 'therapist', orgA);
   const created = await agent.post('/api/templates/documents')

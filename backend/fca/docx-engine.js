@@ -466,6 +466,19 @@ const TOC_LEVEL_BY_STYLE = new Map([
   [STYLE.HEADING3, 3],
 ]);
 
+/**
+ * Word's own "exclude from table of contents" marker: a heading whose
+ * paragraph sets `w:outlineLvl w:val="9"` (Body Text level) is styled as a
+ * heading but deliberately kept out of the TOC. The FCA master uses it on its
+ * template-guide heading; honouring it is what Word itself does.
+ */
+function excludedFromToc(p) {
+  const pPr = directChild(p, 'w:pPr');
+  if (!pPr) return false;
+  const lvl = directChild(pPr, 'w:outlineLvl');
+  return Boolean(lvl && lvl.getAttribute('w:val') === '9');
+}
+
 function runsWithFieldChars(p) {
   return ownDescendants(p, 'w:r').filter((r) => (
     directChild(r, 'w:fldChar') || directChild(r, 'w:instrText')
@@ -617,6 +630,7 @@ function rebuildToc(doc, warnings) {
     if (inToc.has(p)) continue;
     const level = TOC_LEVEL_BY_STYLE.get(paragraphStyle(p));
     if (!level) continue;
+    if (excludedFromToc(p)) continue;
     const text = paragraphText(p);
     if (text) headings.push({ level, text });
   }

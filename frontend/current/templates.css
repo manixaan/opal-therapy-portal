@@ -115,6 +115,19 @@
 .tpl-group-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tpl-group-body { padding: 4px 13px 13px; display: flex; flex-direction: column; gap: 12px; }
 
+/* ── Section structure panel (templates that offer one — the FCA) ─────────── */
+.tpl-sectionrow {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 2px 0; font-size: 13px; color: var(--ink);
+}
+.tpl-section-child { padding-left: 22px; }
+.tpl-section-main { display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
+.tpl-section-main input[type="checkbox"] { accent-color: var(--accent); flex: none; }
+.tpl-section-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-section-off .tpl-section-label { color: var(--ink-soft); text-decoration: line-through; }
+.tpl-section-move { display: flex; gap: 2px; flex: none; }
+.tpl-section-move .tpl-btn { padding: 1px 7px; line-height: 1.3; }
+
 .tpl-field { display: flex; flex-direction: column; gap: 4px; }
 .tpl-label { font-size: 12px; font-weight: 600; color: var(--ink); }
 .tpl-input {
@@ -172,4 +185,18 @@
      page size; nothing here overrides them. */
   box-sizing: border-box;
   flex: none;
+}
+
+/* The shell styles its OWN top bar with a bare `header { position: sticky;
+   background; border-bottom; padding; display: flex }` element rule — and a
+   rendered document's letterhead is also a real <header> element, so without
+   this it inherits the app bar's look: it sticks over the page, paints a
+   panel background band that clips, flexes its logo and text into one row and
+   collides with the body. This is the defect that read as "the header
+   overlaps the document". docx-preview's own inline margin/min-height are
+   inline styles and still win, as they should. */
+#templates-root .tpl-preview-host .tpl-docx-render-wrapper > section > header {
+  position: static; top: auto; z-index: auto;
+  display: block; align-items: normal; gap: 0;
+  padding: 0; background: transparent; border-bottom: 0;
 }

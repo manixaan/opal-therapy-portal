@@ -47,7 +47,9 @@ const {
 const { paginateForPreview } = require('./fca/preview-pagination');
 
 const catalogue = require('./templates/catalogue');
-const { resolveDocument, composePortalDocx, exportDocument, DOCX_MIME } = require('./templates/compose');
+const {
+  resolveDocument, composePortalDocx, exportDocument, sectionStructure, DOCX_MIME,
+} = require('./templates/compose');
 
 const orgOf = (req) => req.user?.organisation_id || null;
 
@@ -172,6 +174,33 @@ async function loadState(req, row) {
   return resolveDocument({ template, row, client, portal, organisation });
 }
 
+/**
+ * The section structure as the editor shows it — the EFFECTIVE state after
+ * normalisation, never the raw stored value, so what the user sees is exactly
+ * what the preview and both exports will compose with.
+ */
+function sectionsDescriptor(template, row) {
+  if (!template.sectionCatalogue) return null;
+  const byTag = template.sectionCatalogue.SECTION_BY_TAG;
+  return sectionStructure(template, row).sections
+    .filter((s) => s.kind !== 'custom')
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((s) => {
+      const meta = byTag.get(s.tag) || {};
+      return {
+        tag: s.tag,
+        label: meta.label || s.title,
+        description: meta.description || '',
+        group: meta.group || 'core',
+        parent: meta.parent || null,
+        required: Boolean(meta.required),
+        included: s.included !== false,
+        order: s.order,
+      };
+    });
+}
+
 /** The wire shape of a document instance. */
 function serialiseDocument(state) {
   const { template, row, scalarData, scalarSources, missingFields } = state;
@@ -198,6 +227,74 @@ function serialiseDocument(state) {
     missingCount: missingFields.length,
     completedCount: template.scalars.length - missingFields.length,
     fieldCount: template.scalars.length,
+    // Present only for templates whose structure the editor may shape (the
+    // FCA); null elsewhere so the frontend renders no section panel.
+    sections: sectionsDescriptor(template, row),
+  };
+}
+
+/**
+ * Validate a client's section request against the template's own catalogue.
+ *
+ * Explicit rejection, not silent correction: an unknown tag or an attempt to
+ * drop a required section is a 400 with the reason, exactly as the letter
+ * routes treat a required-section removal — the composer would overrule it
+ * anyway, but the user deserves to be told rather than quietly ignored.
+ *
+ * @returns {{ ok: true, value: object|null } | { ok: false, error, message }}
+ */
+function validateSections(template, body) {
+  if (body === null) return { ok: true, value: null };   // back to the default
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, error: 'invalid_sections', message: 'Sections must be an object.' };
+  }
+  const cat = template.sectionCatalogue;
+  if (!cat) {
+    return {
+      ok: false,
+      error: 'sections_not_supported',
+      message: 'This template has a fixed structure.',
+    };
+  }
+
+  const readTags = (v, name) => {
+    if (v === undefined) return { ok: true, tags: null };
+    if (!Array.isArray(v)) return { ok: false, error: 'invalid_sections', message: `${name} must be an array of section tags.` };
+    const tags = [];
+    for (const raw of v) {
+      const tag = typeof raw === 'string' ? raw.trim() : '';
+      if (!cat.SECTION_BY_TAG.has(tag)) {
+        return { ok: false, error: 'unknown_section', message: `This template has no section named ${String(raw).slice(0, 80)}.` };
+      }
+      if (!tags.includes(tag)) tags.push(tag);
+    }
+    return { ok: true, tags };
+  };
+
+  const selected = readTags(body.selected, 'selected');
+  if (!selected.ok) return selected;
+  const order = readTags(body.order, 'order');
+  if (!order.ok) return order;
+
+  if (selected.tags) {
+    for (const required of cat.REQUIRED_SECTION_TAGS) {
+      if (!selected.tags.includes(required)) {
+        const meta = cat.SECTION_BY_TAG.get(required);
+        return {
+          ok: false,
+          error: 'required_section',
+          message: `${meta ? meta.label : required} is a required section and cannot be removed.`,
+        };
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      selected: selected.tags || cat.SECTIONS.map((s) => s.tag),
+      order: order.tags || cat.SECTIONS.map((s) => s.tag),
+    },
   };
 }
 
@@ -352,16 +449,31 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
     ? (str(req.body.title, MAX_TITLE_CHARS) || row.title)
     : row.title;
 
+  // Section structure, only for templates that offer one (the FCA). The
+  // stored value is re-normalised on every compose, so even a value written
+  // past this validation could not remove a required section — this check
+  // exists to tell the user, not to be the only guard.
+  let sections = row.sections || null;
+  if (req.body?.sections !== undefined) {
+    const checked = validateSections(template, req.body.sections);
+    if (!checked.ok) {
+      return res.status(400).json({ error: checked.error, message: checked.message });
+    }
+    sections = checked.value;
+  }
+
   const { rows } = await pool.query(
     `UPDATE template_documents
-        SET field_values = $2::jsonb, title = $3, updated_at = NOW()
+        SET field_values = $2::jsonb, title = $3, sections = $4::jsonb, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
-    [row.id, JSON.stringify(next), title]
+    [row.id, JSON.stringify(next), title, sections === null ? null : JSON.stringify(sections)]
   );
 
   await audit(req, 'template.document_updated', row.id, {
-    templateId: row.template_id, fieldsHeld: Object.keys(next).length,
+    templateId: row.template_id,
+    fieldsHeld: Object.keys(next).length,
+    sectionsShaped: sections !== null,
   });
 
   try {

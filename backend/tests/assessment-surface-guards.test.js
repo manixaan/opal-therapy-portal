@@ -632,11 +632,9 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
-      // 1: templates.js / templates.css are new — the Resource Hub Templates
-      // destination. Same reason as the three above: a first pin is still a
-      // pin, because the proxy caches by URL and this is the version the next
-      // change has to bump.
-      ['templates.js', 1], ['templates.css', 1],
+      // 2: the FCA section-structure panel, participant-named documents and
+      // server-named downloads (the standalone-export fixes).
+      ['templates.js', 2], ['templates.css', 2],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

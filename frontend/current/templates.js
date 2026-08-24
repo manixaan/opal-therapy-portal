@@ -47,6 +47,7 @@
     clientsLoading: false,
     docu: null,              // the open document
     values: {},              // tag → user-entered value, the live model
+    sections: null,          // section rows, present only when the template has them
     dirty: false,
     saving: false,
     saveErr: '',
@@ -282,7 +283,10 @@
         'anything outstanding becomes a standalone field you can complete in Word or a PDF reader, ' +
         'with no connection back to Opal.</p>' +
       '<div class="tpl-split">' +
-        '<section class="tpl-fields" aria-label="Document fields"><div id="tpl-fieldhost"></div></section>' +
+        '<section class="tpl-fields" aria-label="Document fields">' +
+          '<div id="tpl-sectionhost"></div>' +
+          '<div id="tpl-fieldhost"></div>' +
+        '</section>' +
         '<section class="tpl-previewpane" aria-label="Document preview">' +
           '<div class="tpl-preview-bar">' +
             '<span class="tpl-preview-title">Document preview</span>' +
@@ -333,6 +337,94 @@
     if (!host) return;
     host.innerHTML = fieldsHtml();
     host.addEventListener('input', onFieldInput);
+  }
+
+  // ── Section structure (templates that offer it — the FCA) ─────────────────
+
+  /**
+   * The rows live in S.sections, seeded from the server's EFFECTIVE state and
+   * replaced by it after every save — the panel always shows what the preview
+   * and the exports will actually compose with.
+   */
+  function seedSections() {
+    S.sections = (S.docu && S.docu.sections) ? S.docu.sections.map(function (s) {
+      return {
+        tag: s.tag, label: s.label, description: s.description, parent: s.parent,
+        required: s.required, included: s.included,
+      };
+    }) : null;
+  }
+
+  function parentIncluded(row) {
+    if (!row.parent) return true;
+    var p = (S.sections || []).filter(function (x) { return x.tag === row.parent; })[0];
+    return !p || p.included;
+  }
+
+  function sectionsHtml() {
+    var rows = (S.sections || []).map(function (s, i) {
+      var dimmed = !parentIncluded(s);
+      var effectiveOff = dimmed || !s.included;
+      return '' +
+        '<div class="tpl-sectionrow' + (s.parent ? ' tpl-section-child' : '') +
+          (effectiveOff ? ' tpl-section-off' : '') + '">' +
+          '<label class="tpl-section-main" title="' + esc(s.description) + '">' +
+            '<input type="checkbox"' + (s.included ? ' checked' : '') +
+              (s.required || dimmed ? ' disabled' : '') +
+              ' onchange="OpalTemplates.toggleSection(\'' + esc(s.tag) + '\', this.checked)">' +
+            '<span class="tpl-section-label">' + esc(s.label) + '</span>' +
+            (s.required ? '<span class="tpl-quiet"> · required</span>' : '') +
+          '</label>' +
+          '<span class="tpl-section-move">' +
+            '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move up" aria-label="Move ' + esc(s.label) + ' up" ' +
+              'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', -1)">↑</button>' +
+            '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move down" aria-label="Move ' + esc(s.label) + ' down" ' +
+              'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', 1)">↓</button>' +
+          '</span>' +
+        '</div>';
+    }).join('');
+    return '' +
+      '<details class="tpl-group" open>' +
+        '<summary class="tpl-group-summary">Report sections' +
+          ' <span class="tpl-quiet">(' + (S.sections || []).length + ')</span></summary>' +
+        '<p class="tpl-hint">Untick an optional section to leave it out of this report, and use the arrows ' +
+          'to reorder. Required sections always stay. The preview and both downloads follow this structure.</p>' +
+        '<div class="tpl-group-body">' + rows + '</div>' +
+      '</details>';
+  }
+
+  function mountSections() {
+    var host = el('tpl-sectionhost');
+    if (!host) return;
+    host.innerHTML = S.sections ? sectionsHtml() : '';
+  }
+
+  /** Persist the panel's state; the response is the server's effective view. */
+  async function saveSections() {
+    if (!S.docu || !S.sections) return;
+    var body = {
+      sections: {
+        selected: S.sections.filter(function (s) { return s.included; }).map(function (s) { return s.tag; }),
+        order: S.sections.map(function (s) { return s.tag; }),
+      },
+    };
+    setSaveState('Saving…');
+    var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id), {
+      method: 'PATCH', body: body,
+    });
+    if (!r.ok) {
+      setSaveState('Not saved');
+      toast('Could not update sections', r.error);
+      seedSections();       // fall back to the last server state
+      mountSections();
+      return;
+    }
+    S.docu = r.document;
+    seedSections();
+    mountSections();
+    setSaveState('Saved');
+    repaintChips();
+    refreshPreview();
   }
 
   function onFieldInput(e) {
@@ -479,6 +571,7 @@
     if (!host || host.hidden) return;
     if (S.view === 'editor' && S.docu) {
       host.innerHTML = renderEditorShell();
+      mountSections();
       mountFields();
       refreshPreview();
       return;
@@ -531,13 +624,23 @@
 
     confirmNew: async function () {
       if (!S.creating) return;
-      var body = { templateId: S.creating.templateId, title: S.creating.title };
+      var tpl = (S.templates || []).filter(function (x) { return x.id === S.creating.templateId; })[0];
+      var title = S.creating.title;
+      // A document about a participant is named for them from the start —
+      // "Functional Capacity Assessment (FCA) — Jane Smith" — unless the user
+      // already typed their own name for it.
+      if (S.creating.clientId && tpl && (!title || title === tpl.name)) {
+        var clientName = String(S.creating.clientLabel || '').split(' · ')[0].trim();
+        if (clientName && clientName !== 'Unnamed') title = tpl.name + ' — ' + clientName;
+      }
+      var body = { templateId: S.creating.templateId, title: title };
       if (S.creating.clientId) body.clientId = S.creating.clientId;
       var r = await api(API + '/documents', { method: 'POST', body: body });
       if (!r.ok) { toast('Could not create', r.error); return; }
       S.creating = null;
       S.docu = r.document;
       S.values = {};
+      seedSections();
       S.view = 'editor';
       render();
       loadDocuments();
@@ -553,8 +656,61 @@
       (r.document.groups || []).forEach(function (g) {
         g.fields.forEach(function (f) { if (f.entered) S.values[f.tag] = f.value || ''; });
       });
+      seedSections();
       S.view = 'editor';
       render();
+    },
+
+    toggleSection: function (tag, on) {
+      var rows = S.sections;
+      if (!rows) return;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].tag !== tag) continue;
+        if (rows[i].required) return;          // not negotiable, mirror the server
+        rows[i].included = !!on;
+        break;
+      }
+      mountSections();
+      saveSections();
+    },
+
+    /**
+     * Move a section among its own siblings, carrying its child rows with it.
+     * Crossing a parent boundary would be silently overruled by the composer
+     * (sections reorder within their parent), so the panel only offers moves
+     * that will actually happen.
+     */
+    moveSection: function (tag, dir) {
+      var rows = S.sections;
+      if (!rows) return;
+      var i = -1;
+      var k;
+      for (k = 0; k < rows.length; k++) if (rows[k].tag === tag) { i = k; break; }
+      if (i < 0) return;
+
+      // A block is a row plus its contiguous children (the server keeps
+      // children directly after their parent).
+      function blockEnd(start) {
+        var end = start + 1;
+        while (end < rows.length && rows[end].parent === rows[start].tag) end++;
+        return end;
+      }
+
+      var sibs = [];
+      for (k = 0; k < rows.length; k++) if (rows[k].parent === rows[i].parent) sibs.push(k);
+      var pos = sibs.indexOf(i);
+      var target = pos + dir;
+      if (target < 0 || target >= sibs.length) return;
+      var j = sibs[target];
+
+      var aStart = Math.min(i, j); var aEnd = blockEnd(aStart);
+      var bStart = Math.max(i, j); var bEnd = blockEnd(bStart);
+
+      S.sections = rows.slice(0, aStart)
+        .concat(rows.slice(bStart, bEnd), rows.slice(aEnd, bStart),
+          rows.slice(aStart, aEnd), rows.slice(bEnd));
+      mountSections();
+      saveSections();
     },
 
     remove: async function (id) {
@@ -570,6 +726,7 @@
       S.view = 'catalogue';
       S.docu = null;
       S.values = {};
+      S.sections = null;
       render();
       loadDocuments();
     },
@@ -595,10 +752,19 @@
           return;
         }
         var blob = await res.blob();
-        var name = S.docu.title.replace(/[^A-Za-z0-9 _-]/g, '').trim() || 'Document';
+        // The server names the file — template, title and participant — so the
+        // saved document identifies itself; fall back to the title if the
+        // header is unreadable.
+        var name = '';
+        var cd = res.headers.get('Content-Disposition') || '';
+        var m = cd.match(/filename="([^"]+)"/);
+        if (m) { try { name = decodeURIComponent(m[1]); } catch (_) { name = m[1]; } }
+        if (!name) {
+          name = (S.docu.title.replace(/[^A-Za-z0-9 _-]/g, '').trim() || 'Document') + '.' + format;
+        }
         var a = doc.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = name + '.' + format;
+        a.download = name;
         doc.body.appendChild(a);
         a.click();
         doc.body.removeChild(a);

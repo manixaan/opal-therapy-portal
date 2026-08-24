@@ -540,6 +540,17 @@
   flex: none;
 }
 
+/* The shell styles its OWN top bar with a bare `header { position: sticky;
+   background; border-bottom; padding; display: flex }` element rule — and the
+   document's letterhead docx-preview renders is also a real <header> element,
+   so without this it inherits the app bar's look and sticks over the page,
+   colliding with the body. Same fix as templates.css carries for its preview. */
+.fca-preview-stage .fca-docx .fca-docx-render-wrapper > section > header {
+  position: static; top: auto; z-index: auto;
+  display: block; align-items: normal; gap: 0;
+  padding: 0; background: transparent; border-bottom: 0;
+}
+
 .fca-preview-overlay { position: absolute; inset: 0; pointer-events: none; }
 .fca-preview-updating {
   position: absolute; top: 10px; right: 14px;

@@ -49,10 +49,15 @@
  *      · `w:tag` (the Opal binding) is deleted outright;
  *      · `w:alias` is rewritten to the human label, so Word and screen readers
  *        announce "Plan end date" rather than an identifier;
- *      · `<w:text/>` is asserted, making it unambiguously a text field;
+ *      · `<w:text/>` is asserted, making it unambiguously a text field — or,
+ *        for a field the map declares `isDate`, `<w:date>` with an Australian
+ *        format, so Word offers its own calendar picker;
  *      · `w:showingPlcHdr` goes, because it points at a glossary placeholder
  *        the exported package does not carry;
- *      · the `[PORTAL — …]` prompt is replaced by a fill rule.
+ *      · the `[PORTAL — …]` prompt is deleted: the field exports EMPTY. A
+ *        printed document shows a clean blank, not a row of underscores that
+ *        reads as a defect (the PDF's matching AcroForm field stays visible
+ *        because it draws its own bordered box).
  *    The result is an ordinary Word field: click it, type, done. Deliberately
  *    NOT highlighted — see NO_HIGHLIGHT below.
  *
@@ -64,6 +69,34 @@
  *
  * Anything else (a published clause, a schedule) is unwrapped like case 1: its
  * wording is the agreement and must survive verbatim; only the identifier goes.
+ *
+ * ── Master language that is not document content ────────────────────────────
+ * The masters also carry text addressed to the PORTAL or to the template's
+ * maintainer rather than to the document's reader — the FCA's "Using this FCA
+ * template" page, a "TEMPLATE CONTROL" header band, and sentences inside
+ * published clauses that instruct the portal ("the portal repeats the
+ * prototype row below"). A completed document that still explains how its own
+ * template works is a template-engine artefact, so each catalogue entry may
+ * declare:
+ *
+ *   internalBlocks     [{ startHeading, endHeading }] — every block-level
+ *                      element from the paragraph whose text is startHeading
+ *                      (inclusive) to the one whose text is endHeading
+ *                      (exclusive) is removed from word/document.xml;
+ *   internalSentences  exact sentences deleted wherever they appear in a run;
+ *   textReplacements   [{ find, replace }] — exact in-run rewording, used to
+ *                      turn template-facing header/footer wording into
+ *                      document wording.
+ *
+ * All three are verified after the fact: a declared string that still appears
+ * in the finished package fails the export rather than shipping.
+ *
+ * ── Word's "update fields?" prompt ──────────────────────────────────────────
+ * The masters set `<w:updateFields w:val="true"/>` so Word refreshes their TOC
+ * while the TEMPLATE is being maintained. On a downloaded document that flag
+ * is what makes Word open with "This document contains fields that may refer
+ * to other files…" — so it is stripped, along with any `w:attachedTemplate`,
+ * from word/settings.xml. The TOC itself is a native Word field and stays.
  *
  * ── NO_HIGHLIGHT ────────────────────────────────────────────────────────────
  * An unfinished field is given no shading and no highlight. A yellow field
@@ -85,11 +118,13 @@ const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 /**
- * The fill rule shown where a value is still outstanding. Underscores, because
- * an empty content control is invisible on the page and on paper: someone
- * completing this document has to be able to SEE that something is missing.
+ * Word's date-picker declaration for a neutralised date field. The format is
+ * the Australian short date; Word shows its own calendar drop-down when the
+ * control is clicked, which is the "proper date-entry mechanism" the exported
+ * document owes its reader.
  */
-const FILL_RULE = '__________';
+const DATE_FORMAT = 'd/MM/yyyy';
+const DATE_LID = 'en-AU';
 
 /**
  * Bracketed prompts the masters use for values the portal, the owner, the
@@ -148,8 +183,8 @@ function el(doc, name, attrs) {
 function setTextNode(t, value) {
   while (t.firstChild) t.removeChild(t.firstChild);
   t.appendChild(t.ownerDocument.createTextNode(value));
-  // Without this, Word eats a leading or trailing space — and a fill rule or a
-  // resolved value that loses its spacing runs into the word beside it.
+  // Without this, Word eats a leading or trailing space — and a resolved or
+  // reworded value that loses its spacing runs into the word beside it.
   t.setAttribute('xml:space', 'preserve');
 }
 
@@ -193,10 +228,13 @@ function removeSdt(sdt) {
 }
 
 /**
- * Turn a bound, unresolved control into a standalone Word text field.
+ * Turn a bound, unresolved control into a standalone Word field — a text field
+ * by default, a calendar date-picker when the map says the value is a date.
+ * The master's prompt is deleted outright: the field exports EMPTY, so the
+ * printed page shows a clean blank rather than an underline placeholder.
  * Returns the label it was given, for the PDF's matching field.
  */
-function neutraliseSdt(doc, sdt, label) {
+function neutraliseSdt(doc, sdt, label, isDate) {
   const pr = directChild(sdt, 'w:sdtPr');
   if (pr) {
     // The binding itself.
@@ -213,9 +251,19 @@ function neutraliseSdt(doc, sdt, label) {
     const alias = el(doc, 'w:alias', { 'w:val': label });
     pr.insertBefore(alias, pr.firstChild);
 
-    // Assert a plain-text control: this is what makes it a field rather than a
-    // rich container, and it is what Word offers as a fill-in.
-    if (!directChild(pr, 'w:text')) pr.appendChild(el(doc, 'w:text'));
+    // One control, one kind: whichever kind this field is, the other's
+    // declaration must not survive alongside it.
+    for (const t of directChildren(pr, 'w:text')) pr.removeChild(t);
+    for (const d of directChildren(pr, 'w:date')) pr.removeChild(d);
+    if (isDate) {
+      const date = el(doc, 'w:date');
+      date.appendChild(el(doc, 'w:dateFormat', { 'w:val': DATE_FORMAT }));
+      date.appendChild(el(doc, 'w:lid', { 'w:val': DATE_LID }));
+      date.appendChild(el(doc, 'w:calendar', { 'w:val': 'gregorian' }));
+      pr.appendChild(date);
+    } else {
+      pr.appendChild(el(doc, 'w:text'));
+    }
   }
 
   const content = directChild(sdt, 'w:sdtContent');
@@ -223,34 +271,97 @@ function neutraliseSdt(doc, sdt, label) {
 
   const texts = ownTexts(content);
   if (texts.length === 0) {
-    // No run to write into: build the minimum one, inheriting nothing rather
-    // than inventing styling.
+    // No run at all: build the minimum empty one so the control has a place
+    // for the reader's own value, inheriting nothing rather than inventing
+    // styling.
     const para = content.getElementsByTagName('w:p')[0];
     const host = para || content;
     const r = el(doc, 'w:r');
     const t = el(doc, 'w:t');
-    setTextNode(t, FILL_RULE);
+    setTextNode(t, '');
     r.appendChild(t);
     host.appendChild(r);
     return label;
   }
 
-  // The master's prompt lives in the first text node; the rest are blanked so a
-  // multi-run prompt cannot leave half of itself behind.
-  setTextNode(texts[0], FILL_RULE);
-  for (let i = 1; i < texts.length; i++) setTextNode(texts[i], '');
+  // Every text node is blanked, so no fragment of a multi-run prompt survives.
+  for (const t of texts) setTextNode(t, '');
   return label;
 }
 
 // ── Part rewriting ───────────────────────────────────────────────────────────
 
+/** A block-level element's visible text, whitespace-normalised. */
+function blockText(node) {
+  const texts = node.getElementsByTagName('w:t');
+  let out = '';
+  for (let i = 0; i < texts.length; i++) out += texts[i].textContent || '';
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Remove every direct child of w:body from the paragraph whose text equals
+ * `startHeading` (inclusive) to the one whose text equals `endHeading`
+ * (exclusive). A start that is never found removes nothing — and the
+ * verification pass then fails the export, because the declared text is still
+ * on the page.
+ */
+function removeInternalBlocks(doc, internalBlocks, report) {
+  const body = doc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  for (const block of internalBlocks) {
+    const doomed = [];
+    let removing = false;
+    for (let n = body.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType !== 1) continue;
+      const text = blockText(n);
+      if (!removing && text === block.startHeading) removing = true;
+      else if (removing && text === block.endHeading) break;
+      if (removing) doomed.push(n);
+    }
+    for (const n of doomed) body.removeChild(n);
+    if (doomed.length) report.removedBlocks.push(block.startHeading);
+  }
+}
+
+/**
+ * Delete declared internal sentences and apply declared rewordings, inside
+ * text runs only. Exact string matching — a sentence that drifts in the master
+ * stops matching, and the verifier then fails the export loudly rather than
+ * shipping it.
+ */
+function scrubTexts(doc, internalSentences, textReplacements, report) {
+  const texts = doc.getElementsByTagName('w:t');
+  for (let i = 0; i < texts.length; i++) {
+    const t = texts[i];
+    let value = t.textContent || '';
+    let changed = false;
+    for (const sentence of internalSentences) {
+      if (value.includes(sentence)) {
+        value = value.split(sentence).join('');
+        report.scrubbedSentences += 1;
+        changed = true;
+      }
+    }
+    for (const r of textReplacements) {
+      if (value.includes(r.find)) {
+        value = value.split(r.find).join(r.replace);
+        report.reworded += 1;
+        changed = true;
+      }
+    }
+    if (changed) setTextNode(t, value.replace(/[ \t]{2,}/g, ' ').replace(/^ (?=\S)/, ''));
+  }
+}
+
 /**
  * @param {string} xml           the part
- * @param {Map}    fields        tag → { label, resolved }
+ * @param {Map}    fields        tag → { label, resolved, isDate }
  * @param {Set}    internalTags
  * @param {Set}    anchorTags
  */
-function severPart(xml, fields, internalTags, anchorTags, report) {
+function severPart(xml, fields, internalTags, anchorTags, report, language) {
   const doc = parse(xml);
 
   // Snapshot before mutating: the live NodeList shifts under removal, and a
@@ -269,7 +380,7 @@ function severPart(xml, fields, internalTags, anchorTags, report) {
 
     const field = fields.get(tag);
     if (field && !field.resolved) {
-      neutraliseSdt(doc, sdt, field.label);
+      neutraliseSdt(doc, sdt, field.label, Boolean(field.isDate));
       report.neutralised.push(tag);
       continue;
     }
@@ -279,12 +390,17 @@ function severPart(xml, fields, internalTags, anchorTags, report) {
     if (unwrapSdt(sdt)) report.unwrapped.push(tag);
   }
 
+  // Master language addressed to the portal or the template maintainer, not
+  // to the document's reader.
+  removeInternalBlocks(doc, language.internalBlocks, report);
+  scrubTexts(doc, language.internalSentences, language.textReplacements, report);
+
   let out = serialise(doc);
 
   // Literal prompts the masters carry as ordinary paragraph text, outside any
   // control. There is nothing to neutralise here — no control means nothing to
-  // type into — so the prompt becomes the same fill rule.
-  out = out.replace(MASTER_PROMPT_RE, () => { report.sweptPrompts += 1; return FILL_RULE; });
+  // type into — so the prompt is simply deleted and the space stays blank.
+  out = out.replace(MASTER_PROMPT_RE, () => { report.sweptPrompts += 1; return ''; });
 
   return out;
 }
@@ -326,7 +442,7 @@ function severCoreProps(xml, documentTitle) {
  * TOC, PAGE and NUMPAGES field codes are native Word features that resolve
  * offline, so they are explicitly not portal dependencies and are left alone.
  */
-async function verifySevered(buffer) {
+async function verifySevered(buffer, forbiddenTexts = []) {
   const zip = await JSZip.loadAsync(buffer);
   const problems = [];
 
@@ -346,6 +462,26 @@ async function verifySevered(buffer) {
     if (/<w:dataBinding\b/.test(xml)) {
       problems.push(`${name}: an XML data binding survived`);
     }
+
+    // The flag behind Word's "fields that may refer to other files" prompt,
+    // and a template attachment neither of which a standalone document may
+    // carry.
+    if (/<w:updateFields\b/.test(xml)) {
+      problems.push(`${name}: w:updateFields survived — Word would prompt to update fields on open`);
+    }
+    if (/<w:attachedTemplate\b/.test(xml)) {
+      problems.push(`${name}: w:attachedTemplate survived`);
+    }
+
+    // Declared internal language: if any of it is still VISIBLE text, the
+    // scrub missed and the export must not ship.
+    if (forbiddenTexts.length && /^word\//.test(name)) {
+      const visible = (xml.match(/<w:t(?:\s[^>]*)?>[^<]*<\/w:t>/g) || [])
+        .map((t) => t.replace(/<[^>]+>/g, '')).join(' ').replace(/\s+/g, ' ');
+      for (const text of forbiddenTexts) {
+        if (visible.includes(text)) problems.push(`${name}: internal wording "${text.slice(0, 60)}" survived`);
+      }
+    }
   }
 
   if (problems.length) {
@@ -359,12 +495,16 @@ async function verifySevered(buffer) {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
- * @param {Buffer} buffer         a composed, portal-bound DOCX
- * @param {Array}  fields         [{ tag, label, resolved }] every mapped control
- * @param {Array}  controlParts   parts that may carry controls
- * @param {Array}  internalTags   controls removed outright
- * @param {Array}  anchorTags     insertion points removed outright
- * @param {string} documentTitle  replaces the master's own title
+ * @param {Buffer} buffer            a composed, portal-bound DOCX
+ * @param {Array}  fields            [{ tag, label, resolved, isDate }] every mapped control
+ * @param {Array}  controlParts      parts that may carry controls
+ * @param {Array}  internalTags      controls removed outright
+ * @param {Array}  anchorTags        insertion points removed outright
+ * @param {Array}  internalBlocks    [{ startHeading, endHeading }] template-guide
+ *                                   blocks removed whole from the body
+ * @param {Array}  internalSentences exact sentences deleted wherever they appear
+ * @param {Array}  textReplacements  [{ find, replace }] exact rewordings
+ * @param {string} documentTitle     replaces the master's own title
  * @returns {{ buffer: Buffer, unfinished: Array, report: object }}
  */
 async function severDocx({
@@ -373,6 +513,9 @@ async function severDocx({
   controlParts = [],
   internalTags = [],
   anchorTags = [],
+  internalBlocks = [],
+  internalSentences = [],
+  textReplacements = [],
   documentTitle = 'Document',
 } = {}) {
   const zip = await JSZip.loadAsync(buffer);
@@ -380,8 +523,12 @@ async function severDocx({
   const byTag = new Map(fields.map((f) => [f.tag, f]));
   const internal = new Set(internalTags);
   const anchors = new Set(anchorTags);
+  const language = { internalBlocks, internalSentences, textReplacements };
 
-  const report = { unwrapped: [], neutralised: [], removed: [], sweptPrompts: 0 };
+  const report = {
+    unwrapped: [], neutralised: [], removed: [], removedBlocks: [],
+    sweptPrompts: 0, scrubbedSentences: 0, reworded: 0,
+  };
 
   for (const part of controlParts) {
     const file = zip.file(part);
@@ -390,7 +537,19 @@ async function severDocx({
     // createFolders:false throughout — JSZip otherwise adds implicit "word/"
     // and "docProps/" directory entries the master does not have, and the
     // exported package should differ from it only where we meant it to.
-    zip.file(part, severPart(xml, byTag, internal, anchors, report), { createFolders: false });
+    zip.file(part, severPart(xml, byTag, internal, anchors, report, language), { createFolders: false });
+  }
+
+  // The settings flag behind Word's field-update prompt on open, and any
+  // attached-template pointer. Both refer outside the document; neither may
+  // travel with it.
+  const settings = zip.file('word/settings.xml');
+  if (settings) {
+    const xml = await settings.async('string');
+    zip.file('word/settings.xml', xml
+      .replace(/<w:updateFields\b[^/>]*\/>/g, '')
+      .replace(/<w:updateFields\b[^>]*>[\s\S]*?<\/w:updateFields>/g, '')
+      .replace(/<w:attachedTemplate\b[^/>]*\/>/g, ''), { createFolders: false });
   }
 
   const core = zip.file('docProps/core.xml');
@@ -414,7 +573,11 @@ async function severDocx({
     compressionOptions: { level: 6 },
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
-  await verifySevered(out);
+  await verifySevered(out, [
+    ...internalBlocks.map((b) => b.startHeading),
+    ...internalSentences,
+    ...textReplacements.map((r) => r.find),
+  ]);
 
   // The order the fields appear in the map is the order the portal shows them,
   // which is the order the PDF's fields are laid out in.
@@ -426,8 +589,10 @@ async function severDocx({
 module.exports = {
   severDocx,
   verifySevered,
-  FILL_RULE,
   MASTER_PROMPT_RE,
   OPAL_IDENTIFIER_RE,
-  _internals: { severPart, severCoreProps, unwrapSdt, neutraliseSdt, ownTag },
+  _internals: {
+    severPart, severCoreProps, unwrapSdt, neutraliseSdt, ownTag,
+    removeInternalBlocks, scrubTexts,
+  },
 };

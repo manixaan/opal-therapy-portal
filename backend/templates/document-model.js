@@ -115,7 +115,7 @@ function readParagraph(p, fields) {
       if (n === 'w:sdt') {
         const content = directChild(child, 'w:sdtContent');
         // A control that survived severing is a standalone input. Its own
-        // content is the fill rule, which the PDF replaces with a real field.
+        // content is empty by design, and the PDF draws a real field for it.
         const label = fieldLabel(child);
         segments.push({ type: 'field', label });
         fields.push(label);
