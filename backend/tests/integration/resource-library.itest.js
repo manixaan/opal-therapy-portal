@@ -512,6 +512,121 @@ describe('permissions', () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * THE DESTINATION IS THE SERVER'S TO DECIDE.
+ *
+ * The Library workspace now offers three ways to put something in a folder —
+ * drag a file onto the page, pick Upload from the right-click menu, or start a
+ * New document and let it be filed where it was started. All three send a
+ * folder id the browser chose, so what matters is that the browser choosing a
+ * different one buys nothing.
+ *
+ * These pin the refusals for a caller who edits the id before it is sent:
+ * another organisation's folder, a folder that is not a folder, and a role
+ * that may author a resource but may not file one.
+ */
+describe('a folder id the client picked is still checked', () => {
+  let org; let owner; let folder;
+
+  beforeEach(async () => {
+    org = await seedOrganisation();
+    owner = (await agentFor('owner', org.id)).agent;
+    folder = await makeFolder(owner, 'Assessments');
+  });
+
+  it('refuses a move into another organisation\'s folder', async () => {
+    const theirs = await seedOrganisation('Theirs');
+    const theirOwner = (await agentFor('owner', theirs.id)).agent;
+    const theirFolder = await makeFolder(theirOwner, 'Their Assessments');
+    const mine = await seedResource(org.id, { title: 'Mine' });
+
+    const res = await owner.post('/api/rh2/library/move')
+      .send({ folderId: theirFolder.id, resourceIds: [mine.id] });
+    expect(res.status).toBe(404);
+
+    const { rows } = await db.pool.query(
+      'SELECT 1 FROM resource_folder_assignments WHERE resource_id = $1', [mine.id]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('refuses an upload into another organisation\'s folder, and stores nothing', async () => {
+    const theirs = await seedOrganisation('Theirs');
+    const theirOwner = (await agentFor('owner', theirs.id)).agent;
+    const theirFolder = await makeFolder(theirOwner, 'Their Assessments');
+
+    const res = await owner.post(`/api/rh2/library/folders/${theirFolder.id}/upload`)
+      .send({ fileName: 'worksheet.pdf', fileData: samplePdf() });
+    expect(res.status).toBe(404);
+
+    const { rows } = await db.pool.query(
+      "SELECT 1 FROM resources WHERE title = 'worksheet'");
+    expect(rows).toHaveLength(0);
+  });
+
+  it('refuses a folder id that is not a uuid rather than reading it', async () => {
+    // A path segment is not a path: '../../etc/passwd' is a 404, not a lookup.
+    for (const bad of ['..', '../../etc/passwd', 'null', '1 OR 1=1']) {
+      const up = await owner.post(`/api/rh2/library/folders/${encodeURIComponent(bad)}/upload`)
+        .send({ fileName: 'x.pdf', fileData: samplePdf() });
+      expect(up.status).toBe(404);
+    }
+    const mv = await owner.post('/api/rh2/library/move')
+      .send({ folderId: '../../etc/passwd', resourceIds: [(await seedResource(org.id)).id] });
+    expect(mv.status).toBe(400);
+  });
+
+  it('lets an admin author a resource but not file one', async () => {
+    // The New document flow is create-then-file. An admin may do the first
+    // half (POST /api/rh2/resources) and must be refused the second, because
+    // filing is a change to the library's structure.
+    const admin = (await agentFor('admin', org.id)).agent;
+    const created = await admin.post('/api/rh2/resources')
+      .send({ title: 'Sensory Diet Handout', contentType: 'guide', content: '## Notes' });
+    expect(created.status).toBe(201);
+    const id = (created.body.resource || created.body).id;
+
+    const filed = await admin.post('/api/rh2/library/move')
+      .send({ folderId: folder.id, resourceIds: [id] });
+    expect(filed.status).toBe(403);
+    expect(filed.body.code).toBe('library_structure_forbidden');
+
+    const { rows } = await db.pool.query(
+      'SELECT 1 FROM resource_folder_assignments WHERE resource_id = $1', [id]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('files an owner\'s new document into the folder it was started from', async () => {
+    // The whole New document chain, end to end, as the client performs it.
+    const created = await owner.post('/api/rh2/resources')
+      .send({ title: 'Handwriting Warm Ups', contentType: 'guide', content: '## Warm ups' });
+    expect(created.status).toBe(201);
+    const id = (created.body.resource || created.body).id;
+
+    const filed = await owner.post('/api/rh2/library/move')
+      .send({ folderId: folder.id, resourceIds: [id] });
+    expect(filed.status).toBe(200);
+    expect(filed.body.folder).toBe('Assessments');
+
+    const { rows } = await db.pool.query(
+      'SELECT folder_id, manual_lock FROM resource_folder_assignments WHERE resource_id = $1', [id]);
+    expect(rows[0].folder_id).toBe(folder.id);
+    expect(rows[0].manual_lock).toBe(true);
+  });
+
+  it('refuses an upload to a therapist even when the folder is their own organisation\'s', async () => {
+    const therapist = (await agentFor('therapist', org.id)).agent;
+    const res = await therapist.post(`/api/rh2/library/folders/${folder.id}/upload`)
+      .send({ fileName: 'worksheet.pdf', fileData: samplePdf() });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('library_structure_forbidden');
+
+    const { rows } = await db.pool.query('SELECT 1 FROM resource_files');
+    expect(rows).toHaveLength(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+
 describe('browsing, search and deep links', () => {
   let org; let agent; let policies; let therapy; let sub; let therapyDocs;
 

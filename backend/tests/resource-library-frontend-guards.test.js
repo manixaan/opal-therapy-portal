@@ -266,10 +266,13 @@ describe('uploading (drag-and-drop and the button)', () => {
   });
 
   it('shows a drop target before the file lands', () => {
+    // The strip stays as the resting explanation of what may be dropped; the
+    // live affordance is the folder card on the grid and, inside a folder, the
+    // workspace overlay (see 'the workspace is a drop target' below).
     expect(JS).toContain('rh2-dropzone');
     expect(JS).toContain('Drop to upload');
     expect(CSS).toContain('.rh2-folder.is-dropping');
-    expect(CSS).toContain('.rh2-dropzone.is-dropping');
+    expect(CSS).toContain('.rh2-ws.is-dropping .rh2-wsdrop');
   });
 
   it('signals a drop target by more than colour (§54)', () => {
@@ -331,6 +334,199 @@ describe('renaming', () => {
   it('shows the server\'s refusal rather than swallowing it', () => {
     const save = JS.slice(JS.indexOf('async function libRenameSave()'), JS.indexOf('function renameDialog()'));
     expect(save).toContain('r.err = d.error');
+  });
+});
+
+describe('the workspace is a drop target, not just the strip', () => {
+  it('accepts a drag on the whole workspace, and only inside a folder', () => {
+    // Attached to the library page element itself, and only when the reader is
+    // standing in a folder — on the grid there is no one destination.
+    expect(JS).toContain('function libWsCanDrop() { return isOwner() && !!S.lib.folderId; }');
+    expect(JS).toContain('RH2.libWsDragOver(event)');
+    expect(JS).toContain('RH2.libWsDragLeave(event)');
+    expect(JS).toContain('RH2.libWsDrop(event)');
+    const ws = JS.slice(JS.indexOf('var ws = isOwner()'), JS.indexOf('out += renderMenu();'));
+    expect(ws).toContain('inFolder');
+  });
+
+  it('drops into the folder that is open, through the one upload path', () => {
+    const drop = JS.slice(JS.indexOf('function libWsDrop('), JS.indexOf('function uploadPanel()'));
+    expect(drop).toContain('if (!libWsCanDrop()) return;');
+    expect(drop).toContain('libUploadFiles(S.lib.folderId, dt.files)');
+    // No second upload implementation: the workspace, the folder cards and the
+    // button all end in libUploadFiles.
+    expect(JS.match(/api\('\/api\/rh2\/library\/folders\/' \+ encodeURIComponent\(folderId\) \+ '\/upload'/g))
+      .toHaveLength(1);
+  });
+
+  it('ignores a drag that is not carrying files', () => {
+    // Dragging text or a card across the workspace must not raise an upload
+    // affordance the drop could never satisfy.
+    expect(JS).toContain('function dragHasFiles(dt)');
+    expect(JS).toContain("if (types[i] === 'Files') return true;");
+    expect(JS).toContain('if (!libWsCanDrop() || !dragHasFiles(ev.dataTransfer)) return;');
+    expect(JS).toContain('if (!isOwner() || !dragHasFiles(ev.dataTransfer)) return;');
+  });
+
+  it('only ends the drag when the pointer really left the workspace', () => {
+    // dragleave fires at every child boundary; a naive handler flickers the
+    // overlay off as the pointer crosses between two cards.
+    const leave = JS.slice(JS.indexOf('function libWsDragLeave('), JS.indexOf('function libWsDrop('));
+    expect(leave).toContain('host.contains(to)');
+  });
+
+  it('does not re-render the page while a file is over it', () => {
+    // render() replaces the whole subtree, which would tear out the element the
+    // pointer is on mid-drag. The class is written straight onto the node.
+    const mark = JS.slice(JS.indexOf('function libWsMark('), JS.indexOf('function libWsDragOver('));
+    expect(mark).toContain("doc.getElementById('rh2-lib-ws')");
+    expect(mark).toContain("classList.toggle('is-dropping'");
+    expect(mark).not.toContain('render()');
+  });
+
+  it('announces the drop by border and words, not colour alone (§54)', () => {
+    expect(JS).toContain('Drop files here to upload');
+    expect(CSS).toContain('.rh2-ws.is-dropping .rh2-wsdrop');
+    expect(CSS).toContain('border: 2px dashed var(--accent)');
+    // The overlay must not eat the events of the element beneath it.
+    const overlay = CSS.slice(CSS.indexOf('.rh2-wsdrop {'), CSS.indexOf('.rh2-ws.is-dropping'));
+    expect(overlay).toContain('pointer-events: none');
+  });
+});
+
+describe('right-clicking the workspace', () => {
+  it('offers exactly New document, New folder and Upload', () => {
+    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('The open menu owns the keyboard'));
+    const ws = menu.slice(menu.indexOf("m.kind === 'workspace'"), menu.indexOf("m.kind === 'folder'"));
+    expect(ws).toContain("['New document', 'RH2.libNewDocument()'");
+    expect(ws).toContain("['New folder', 'RH2.libFolderForm(true)'");
+    expect(ws).toContain('RH2.libPickFiles(');
+  });
+
+  it('leaves fields, links and the menu itself to the browser', () => {
+    expect(JS).toContain("var MENU_KEEP_NATIVE = 'input, textarea, select, a[href], .rh2-menu, .rh2-menu-veil';");
+    const wsm = JS.slice(JS.indexOf('function libWorkspaceMenu('), JS.indexOf('/** The name of the place'));
+    expect(wsm).toContain('if (!isOwner()) return true;');
+    expect(wsm).toContain('t.closest(MENU_KEEP_NATIVE)');
+  });
+
+  it('lets a folder or a document win over the background', () => {
+    // Both item handlers stop the event, so it never reaches the workspace.
+    const lm = JS.slice(JS.indexOf('function libMenu(ev, kind, id, name, review)'), JS.indexOf('The background menu'));
+    expect(lm).toContain('ev.stopPropagation();');
+  });
+
+  it('says why Upload is unavailable rather than hiding it', () => {
+    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('The open menu owns the keyboard'));
+    expect(menu).toContain("note = 'Open a folder to upload into it.'");
+    expect(menu).toContain('aria-disabled="true"');
+  });
+
+  it('closes on Escape and walks with the arrows', () => {
+    const keys = JS.slice(JS.indexOf('The open menu owns the keyboard'), JS.indexOf('── Renaming'));
+    expect(keys).toContain("if (e.key === 'Escape') { e.preventDefault(); libMenuClose(); return; }");
+    expect(keys).toContain("e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab'");
+    expect(keys).toContain('items[at].focus');
+  });
+
+  it('moves focus onto the menu when it opens', () => {
+    const lm = JS.slice(JS.indexOf('function libMenu(ev, kind, id, name, review)'), JS.indexOf('The background menu'));
+    expect(lm).toContain(".rh2-menu .rh2-menu-item:not([aria-disabled=\"true\"])");
+    expect(lm).toContain('first.focus(');
+  });
+
+  it('measures the menu instead of guessing its size', () => {
+    expect(JS).toContain('function libMenuPlace()');
+    expect(JS).toContain('el.getBoundingClientRect()');
+    // The old hard-coded clamp is gone.
+    expect(JS).not.toContain('(global.innerWidth || 1200) - 210');
+  });
+
+  it('does not survive a move between folders', () => {
+    const open = JS.slice(JS.indexOf('function libOpenFolder(id)'), JS.indexOf('async function loadFolderMeta('));
+    expect(open).toContain('f.menu = null;');
+    const browse = JS.slice(JS.indexOf('function libBrowse(mode)'), JS.indexOf('/** Search this folder instead'));
+    expect(browse).toContain('S.lib.menu = null;');
+  });
+
+  it('stops offering Remove on the folder the server refuses to remove', () => {
+    // libMenu now carries the flag renderMenu was already testing; before this
+    // it was always undefined, so Needs Review was offered a button that could
+    // only ever come back 400.
+    expect(JS).toContain('function libMenu(ev, kind, id, name, review)');
+    expect(JS).toContain('review: !!review');
+    expect(JS).toContain("(node.isReviewBucket ? 'true' : 'false')");
+  });
+});
+
+describe('new document is the existing author, not a second one', () => {
+  it('opens the resource form that Admin already uses', () => {
+    const nd = JS.slice(JS.indexOf('function libNewDocument()'), JS.indexOf('function libFolderForm('));
+    expect(nd).toContain("nav('admin')");
+    expect(nd).toContain('adminNew()');
+    // No new create route, no new document type.
+    expect(JS).not.toContain('/api/rh2/library/documents');
+  });
+
+  it('files it into the folder it was started from, through the move route', () => {
+    const nd = JS.slice(JS.indexOf('function libNewDocument()'), JS.indexOf('function libFolderForm('));
+    expect(nd).toContain('S.admin.fileInto = S.lib.folderId');
+    const save = JS.slice(JS.indexOf('async function adminSave('), JS.indexOf('async function adminAction('));
+    expect(save).toContain("api('/api/rh2/library/move'");
+    expect(save).toContain('resourceIds: [id]');
+    // Only a NEW resource is filed, and the destination is consumed once.
+    expect(save).toContain("var into = !editing ? S.admin.fileInto : '';");
+    expect(save).toContain("S.admin.fileInto = ''; S.admin.fileIntoName = '';");
+  });
+
+  it('forgets the destination when the form is abandoned', () => {
+    const close = JS.slice(JS.indexOf('function adminFormClose()'), JS.indexOf('function renderResourceForm('));
+    expect(close).toContain("S.admin.fileInto = ''");
+  });
+
+  it('says a refusal rather than swallowing it', () => {
+    const save = JS.slice(JS.indexOf('async function adminSave('), JS.indexOf('async function adminAction('));
+    expect(save).toContain('It could not be filed into that folder');
+  });
+});
+
+describe('the Library actions read as controls', () => {
+  it('gives New folder and Select resources a button surface', () => {
+    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
+    // rh2-btn-quiet is a transparent border on the page background — correct
+    // for a Cancel, wrong for the only two things you can do to a folder.
+    expect(bar).not.toContain('rh2-btn-quiet');
+    expect(bar).toContain("class=\"rh2-btn\" onclick=\"RH2.libFolderForm(true)\"");
+    expect(bar).toContain('RH2.libSelectMode(');
+  });
+
+  it('gives them hover, focus and pressed states', () => {
+    expect(CSS).toContain('.rh2-libtools .rh2-btn:hover');
+    expect(CSS).toContain('.rh2-libtools .rh2-btn:active');
+    expect(CSS).toContain('.rh2-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }');
+    // The scoped shadow rules tie with .rh2-btn:focus-visible on specificity and
+    // come later, so the ring must be restated inside the scope or keyboard
+    // focus goes invisible on the very buttons this made visible.
+    expect(CSS).toContain('.rh2-libtools .rh2-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }');
+    expect(CSS).toContain('.rh2-libtools .rh2-btn[aria-pressed="true"]');
+  });
+
+  it('keeps a text label beside every icon', () => {
+    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
+    expect(bar).toContain('New folder</button>');
+    expect(bar).toContain('rh2-btn-icon');
+    expect(bar).toContain('aria-hidden="true"');
+    expect(bar).toContain("role=\"group\" aria-label=\"Library actions\"");
+  });
+
+  it('says the selection mode is on', () => {
+    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
+    expect(bar).toContain("aria-pressed=\"' + (f.selMode ? 'true' : 'false') + '\"");
+  });
+
+  it('respects a reduced-motion preference', () => {
+    const rm = CSS.slice(CSS.indexOf('THE LIBRARY AS A WORKSPACE'));
+    expect(rm).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });
 

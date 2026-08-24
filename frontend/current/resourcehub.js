@@ -368,7 +368,7 @@
       orgErr: '', busy: '',
       selMode: false, sel: {}, moveOpen: false, moveErr: '', moveNote: '', folderForm: null,
       // Uploading, right-click and renaming.
-      uploads: null, dropTarget: '', menu: null, renaming: null,
+      uploads: null, dropTarget: '', wsDrop: false, menu: null, renaming: null,
     },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
@@ -376,6 +376,11 @@
       tab: 'content', status: '', q: '', list: null, loading: false,
       editing: null, // resource being edited (object) or {} for new
       formOpen: false,
+      // Set only by RH2.libNewDocument: the Library folder a new resource
+      // should be filed into once it saves. Cleared the moment it is used or
+      // the form is abandoned, so it can never attach itself to an unrelated
+      // resource authored later in the same session.
+      fileInto: '', fileIntoName: '',
       sources: null, pd: null, pdEditing: null, feedback: null, links: null, analytics: null,
       induction: null, // owner/admin induction-completion overview
       // Ingestion register: the 650-record source-vault accounting.
@@ -477,7 +482,7 @@
         sort: 'relevant', saved: true, rows: null, loading: false, offset: 0, hasMore: false,
         folderId: '', folderMeta: null, folderSearch: false, browse: 'folders',
         selMode: false, sel: {}, moveOpen: false, folderForm: null,
-        menu: null, renaming: null, uploads: null, dropTarget: '',
+        menu: null, renaming: null, uploads: null, dropTarget: '', wsDrop: false,
       });
       view = 'library';
     } else if (view === 'library' && S.lib.saved) {
@@ -1049,6 +1054,7 @@
 
     S.lib.uploads = files.map(function (f) { return { name: f.name, state: 'waiting' }; });
     S.lib.dropTarget = '';
+    S.lib.wsDrop = false;
     render();
 
     for (var i = 0; i < files.length; i++) {
@@ -1107,13 +1113,29 @@
 
   function libUploadsDismiss() { S.lib.uploads = null; render(); }
 
+  /**
+   * A drag only counts when it is carrying files from outside the browser.
+   *
+   * Dragging selected text, an image already on the page or a card across the
+   * workspace must not raise an upload affordance the drop could never
+   * satisfy — the promise has to be one the drop can keep.
+   */
+  function dragHasFiles(dt) {
+    if (!dt) return false;
+    var types = dt.types;
+    if (!types) return false;
+    for (var i = 0; i < types.length; i++) if (types[i] === 'Files') return true;
+    return false;
+  }
+
   /* Drag state is kept as the id of the folder currently under the pointer, so
      only that card highlights. dragleave is unreliable across child elements,
      so entering another card simply replaces the value. */
   function libDragOver(ev, folderId) {
-    if (!isOwner()) return;
+    if (!isOwner() || !dragHasFiles(ev.dataTransfer)) return;
     ev.preventDefault();
     ev.stopPropagation();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
     if (S.lib.dropTarget !== folderId) { S.lib.dropTarget = folderId; render(); }
   }
 
@@ -1129,6 +1151,57 @@
     var dt = ev.dataTransfer;
     if (dt && dt.files && dt.files.length) libUploadFiles(folderId, dt.files);
     else render();
+  }
+
+  /* ── The workspace itself as a drop target ────────────────────────────────
+     Inside a folder the whole page takes a file, not just the strip: somebody
+     dragging a PDF out of Finder aims at the window, not at a band of it. The
+     destination is still the folder they are looking at and the route is still
+     libUploadFiles, so widening the target widens nothing else — the server
+     decides exactly as it did before.
+
+     On the folder grid there is no single destination, so the workspace does
+     not invent one; the cards keep their own drop handlers and each names the
+     folder it would file into.
+
+     Unlike every other state on this surface, the drag class is written
+     straight onto the node instead of going through render(). Re-rendering
+     replaces the whole subtree, which would tear out the element the pointer
+     is currently over mid-drag; the flag is mirrored into S.lib.wsDrop so a
+     render triggered by something else still paints the right state. */
+
+  function libWsCanDrop() { return isOwner() && !!S.lib.folderId; }
+
+  function libWsMark(on) {
+    S.lib.wsDrop = !!on;
+    var el = doc.getElementById('rh2-lib-ws');
+    if (el && el.classList) el.classList.toggle('is-dropping', !!on);
+  }
+
+  function libWsDragOver(ev) {
+    if (!libWsCanDrop() || !dragHasFiles(ev.dataTransfer)) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
+    if (!S.lib.wsDrop) libWsMark(true);
+  }
+
+  /* dragleave fires at every child boundary. Only a leave whose destination is
+     outside the workspace is a real one; anything else is the pointer crossing
+     between two cards inside it. */
+  function libWsDragLeave(ev) {
+    if (!S.lib.wsDrop) return;
+    var to = ev.relatedTarget;
+    var host = ev.currentTarget;
+    if (to && host && host.contains && host.contains(to)) return;
+    libWsMark(false);
+  }
+
+  function libWsDrop(ev) {
+    if (!libWsCanDrop()) return;
+    ev.preventDefault();
+    libWsMark(false);
+    var dt = ev.dataTransfer;
+    if (dt && dt.files && dt.files.length) libUploadFiles(S.lib.folderId, dt.files);
   }
 
   function uploadPanel() {
@@ -1157,21 +1230,66 @@
   }
 
   /* ── Right-click ──────────────────────────────────────────────────────────
-     One menu, two kinds of target. It is Owner-only because every action on it
-     is: a therapist right-clicking gets their browser's own menu, which is the
-     correct outcome rather than a menu of buttons that would all be refused. */
+     One menu, three kinds of target: a folder, a document, and the workspace
+     behind them. It is Owner-only because every action on it is: a therapist
+     right-clicking gets their browser's own menu, which is the correct outcome
+     rather than a menu of buttons that would all be refused.
 
-  function libMenu(ev, kind, id, name) {
+     Nothing on the menu is an authority. Every entry calls the handler its
+     toolbar equivalent already calls, so the menu can do nothing the surface
+     could not do without it, and the server refuses the same things either
+     way. */
+
+  /* Where a right-click still belongs to the browser: copy, paste and
+     spell-check on a field are not ours to take away, and the menu's own
+     surfaces must not re-open it on top of itself. */
+  var MENU_KEEP_NATIVE = 'input, textarea, select, a[href], .rh2-menu, .rh2-menu-veil';
+
+  function libMenu(ev, kind, id, name, review) {
     if (!isOwner()) return true;
     ev.preventDefault();
     ev.stopPropagation();
-    S.lib.menu = {
-      kind: kind, id: id, name: name,
-      x: Math.min(ev.clientX, (global.innerWidth || 1200) - 210),
-      y: Math.min(ev.clientY, (global.innerHeight || 800) - 190),
-    };
+    S.lib.menu = { kind: kind, id: id, name: name, review: !!review, x: ev.clientX, y: ev.clientY };
     render();
+    // Measured, not guessed: the workspace menu is a different height from the
+    // folder one, so one fixed clamp would put one of them off the short edge.
+    libMenuPlace();
+    var first = doc.querySelector('.rh2-menu .rh2-menu-item:not([aria-disabled="true"])');
+    if (first) { try { first.focus({ preventScroll: true }); } catch (e) { /* gone */ } }
     return false;
+  }
+
+  /**
+   * The background menu: what can be made HERE.
+   *
+   * Only blank workspace opens it. A folder or a document stops the event on
+   * its own handler long before it reaches here, so an item's menu always wins
+   * over the room's — right-clicking a folder still offers the folder's actions.
+   */
+  function libWorkspaceMenu(ev) {
+    if (!isOwner()) return true;
+    var t = ev.target;
+    if (t && t.closest && t.closest(MENU_KEEP_NATIVE)) return true;
+    return libMenu(ev, 'workspace', S.lib.folderId || '', libHereName(), false);
+  }
+
+  /** The name of the place the reader is standing in. */
+  function libHereName() {
+    var meta = S.lib.folderMeta;
+    if (S.lib.folderId && meta && meta.folder) return meta.folder.name;
+    return 'Library';
+  }
+
+  /** Keep the whole menu on screen, whichever edge the pointer was near. */
+  function libMenuPlace() {
+    var m = S.lib.menu;
+    var el = doc.querySelector('.rh2-menu');
+    if (!m || !el) return;
+    var box = el.getBoundingClientRect();
+    var vw = global.innerWidth || 1200;
+    var vh = global.innerHeight || 800;
+    el.style.left = Math.round(Math.max(8, Math.min(m.x, vw - box.width - 8))) + 'px';
+    el.style.top = Math.round(Math.max(8, Math.min(m.y, vh - box.height - 8))) + 'px';
   }
 
   function libMenuClose() { S.lib.menu = null; render(); }
@@ -1179,27 +1297,75 @@
   function renderMenu() {
     var m = S.lib.menu;
     if (!m) return '';
+    // Each entry is [label, handler, icon, disabled].
     var items = [];
-    if (m.kind === 'folder') {
-      items.push(['Open', "RH2.libOpenFolder('" + esc(m.id) + "')"]);
-      items.push(['Rename…', "RH2.libRenameStart('folder','" + esc(m.id) + "')"]);
-      items.push(['Upload files here…', "RH2.libPickFiles('" + esc(m.id) + "')"]);
-      if (!m.review) items.push(['Remove folder…', "RH2.libFolderArchive('" + esc(m.id) + "','" + esc(String(m.name).replace(/'/g, '')) + "')"]);
+    var note = '';
+    if (m.kind === 'workspace') {
+      var here = S.lib.folderId || '';
+      items.push(['New document', 'RH2.libNewDocument()', 'doc', false]);
+      items.push(['New folder', 'RH2.libFolderForm(true)', 'folder', false]);
+      items.push(['Upload…', here ? "RH2.libPickFiles('" + esc(here) + "')" : '', 'plus', !here]);
+      // Said rather than hidden. On the folder grid there is no one folder to
+      // upload into; a greyed entry with the reason beats a menu that quietly
+      // changes shape depending on where it was opened.
+      if (!here) note = 'Open a folder to upload into it.';
+    } else if (m.kind === 'folder') {
+      items.push(['Open', "RH2.libOpenFolder('" + esc(m.id) + "')", 'forward', false]);
+      items.push(['Rename…', "RH2.libRenameStart('folder','" + esc(m.id) + "')", 'edit', false]);
+      items.push(['Upload files here…', "RH2.libPickFiles('" + esc(m.id) + "')", 'plus', false]);
+      // Needs Review is fixed — the server refuses to remove it (400
+      // review_bucket_fixed) — so the menu stops offering it. Until libMenu
+      // carried the flag this test could never be true and the entry always
+      // showed, on a folder where it could only ever fail.
+      if (!m.review) items.push(['Remove folder…', "RH2.libFolderArchive('" + esc(m.id) + "','" + esc(String(m.name).replace(/'/g, '')) + "')", 'trash', false]);
     } else {
-      items.push(['Open', "RH2.openDetail('" + esc(m.id) + "','library')"]);
-      items.push(['Rename…', "RH2.libRenameStart('resource','" + esc(m.id) + "')"]);
-      items.push(['Move to folder…', "RH2.libMoveOne('" + esc(m.id) + "')"]);
+      items.push(['Open', "RH2.openDetail('" + esc(m.id) + "','library')", 'forward', false]);
+      items.push(['Rename…', "RH2.libRenameStart('resource','" + esc(m.id) + "')", 'edit', false]);
+      items.push(['Move to folder…', "RH2.libMoveOne('" + esc(m.id) + "')", 'folder', false]);
     }
     return '<div class="rh2-menu-veil" onclick="RH2.libMenuClose()" oncontextmenu="RH2.libMenuClose();return false;"></div>'
       + '<div class="rh2-menu" role="menu" aria-label="Actions for ' + esc(m.name) + '" '
       + 'style="left:' + Math.round(m.x) + 'px; top:' + Math.round(m.y) + 'px;">'
       + '<div class="rh2-menu-title">' + esc(m.name) + '</div>'
-      + items.map(function (it) {
-        return '<button type="button" role="menuitem" class="rh2-menu-item" '
-          + 'onclick="RH2.libMenuClose();' + it[1] + '">' + esc(it[0]) + '</button>';
+      + items.map(function (it, i) {
+        var face = '<span class="rh2-menu-icon" aria-hidden="true">' + icn(it[2], 'doc', 15) + '</span>'
+          + '<span class="rh2-menu-label">' + esc(it[0]) + '</span>';
+        if (it[3]) {
+          return '<span class="rh2-menu-item is-disabled" role="menuitem" aria-disabled="true">' + face + '</span>';
+        }
+        return '<button type="button" role="menuitem" class="rh2-menu-item" id="rh2-menu-i' + i + '" '
+          + 'onclick="RH2.libMenuClose();' + it[1] + '">' + face + '</button>';
       }).join('')
+      + (note ? '<p class="rh2-menu-note">' + esc(note) + '</p>' : '')
       + '</div>';
   }
+
+  /**
+   * The open menu owns the keyboard.
+   *
+   * One document-level listener rather than a per-render binding, for the same
+   * reason the learning dialogs give further down: this module replaces its
+   * whole subtree on every render, so a handler attached to the menu would be
+   * thrown away and rebuilt constantly. Escape closes it, the arrows walk it,
+   * and Tab cannot wander off and leave it hanging over the page.
+   */
+  doc.addEventListener('keydown', function (e) {
+    if (!S.lib || !S.lib.menu) return;
+    if (e.key === 'Escape') { e.preventDefault(); libMenuClose(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab') return;
+    var menu = doc.querySelector('.rh2-menu');
+    if (!menu) return;
+    var items = menu.querySelectorAll('.rh2-menu-item:not([aria-disabled="true"])');
+    if (!items.length) return;
+    var at = -1;
+    for (var i = 0; i < items.length; i++) if (items[i] === doc.activeElement) at = i;
+    e.preventDefault();
+    var back = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
+    at = back ? at - 1 : at + 1;
+    if (at < 0) at = items.length - 1;
+    if (at >= items.length) at = 0;
+    try { items[at].focus({ preventScroll: true }); } catch (err) { /* gone */ }
+  });
 
   /* ── Renaming ─────────────────────────────────────────────────────────────
      An inline panel rather than window.prompt: prompt cannot be styled, cannot
@@ -1275,7 +1441,7 @@
     f.q = ''; f.kind = ''; f.type = ''; f.topic = ''; f.cost = '';
     f.population = ''; f.setting = ''; f.authority = '';
     f.sel = {}; f.selMode = false;
-    f.menu = null; f.renaming = null;
+    f.menu = null; f.renaming = null; f.wsDrop = false;
     if (id) loadFolderMeta(id);
     loadLibrary();
   }
@@ -1292,6 +1458,9 @@
     S.lib.folderId = '';
     S.lib.folderMeta = null;
     S.lib.sel = {}; S.lib.selMode = false;
+    // Moving is leaving: a menu opened in the old place must not survive into
+    // the new one, where its target may no longer be on screen.
+    S.lib.menu = null; S.lib.wsDrop = false;
     loadLibrary();
   }
 
@@ -1353,6 +1522,31 @@
   }
 
   // ── Owner: folder management ────────────────────────────────────────────
+
+  /**
+   * New document — the Library's door onto the resource author that already
+   * exists, not a second one.
+   *
+   * Admin → Content is where a document with no file is written (title, type,
+   * markdown body, classification, review state). Nothing about that changes
+   * here: this opens it, and remembers the folder the person was standing in
+   * so the finished resource lands there instead of making them walk back and
+   * move it by hand.
+   *
+   * Creating and filing stay two separate server-enforced steps — POST
+   * /api/rh2/resources then POST /api/rh2/library/move — because that is what
+   * they already were. The remembered folder is a convenience the server never
+   * trusts: move re-checks the owner role, the organisation and the folder, so
+   * a tampered value buys nothing a hand-typed one would not have.
+   */
+  function libNewDocument() {
+    S.lib.menu = null;
+    S.admin.fileInto = S.lib.folderId || '';
+    S.admin.fileIntoName = libHereName();
+    S.admin.tab = 'content';
+    nav('admin');
+    adminNew();
+  }
 
   function libFolderForm(open, folder) {
     S.lib.folderForm = open ? {
@@ -1431,7 +1625,7 @@
         + ' ondragleave="RH2.libDragLeave(event,\'' + esc(node.id) + '\')"'
         + ' ondrop="RH2.libDrop(event,\'' + esc(node.id) + '\')"'
         + ' oncontextmenu="return RH2.libMenu(event,\'folder\',\'' + esc(node.id) + '\',\''
-        + esc(String(node.name).replace(/'/g, '')) + '\')"'
+        + esc(String(node.name).replace(/'/g, '')) + '\',' + (node.isReviewBucket ? 'true' : 'false') + ')"'
       : '';
     return '<div class="rh2-folder' + (node.isReviewBucket ? ' rh2-folder-review' : '')
       + (dropping ? ' is-dropping' : '') + '"' + dnd + '>'
@@ -1478,22 +1672,33 @@
    * "Upload files" inside Assessments puts them in Assessments. On the folder
    * grid there is no single target, so uploading is offered per folder instead
    * — by dropping onto a card or right-clicking it.
+   *
+   * These read as buttons and not as prose. They used to be rh2-btn-quiet,
+   * which is a transparent border on the page's own background and muted text:
+   * correct for a Cancel sitting beside a primary action, wrong for the only
+   * two things you can do to a folder. They now carry the standard button
+   * surface, an icon, and a pressed state, because a control nobody recognises
+   * as a control is not a control.
    */
   function libOwnerBar() {
     if (!isOwner()) return '';
     var f = S.lib;
-    var out = '<div class="rh2-libtools">';
+    var out = '<div class="rh2-libtools" role="group" aria-label="Library actions">';
 
     if (f.folderId) {
       out += '<button type="button" class="rh2-btn rh2-btn-primary" '
-        + 'onclick="RH2.libPickFiles(\'' + esc(f.folderId) + '\')">Upload files</button>';
+        + 'onclick="RH2.libPickFiles(\'' + esc(f.folderId) + '\')">'
+        + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('plus', 'doc', 15) + '</span>Upload files</button>';
     }
-    out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(true)">New folder</button>';
+    out += '<button type="button" class="rh2-btn" onclick="RH2.libFolderForm(true)">'
+      + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('folder', 'doc', 15) + '</span>New folder</button>';
     if ((f.folders || []).length) {
-      out += '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(' + (f.selMode ? 'false' : 'true') + ')">'
+      out += '<button type="button" class="rh2-btn" aria-pressed="' + (f.selMode ? 'true' : 'false') + '" '
+        + 'onclick="RH2.libSelectMode(' + (f.selMode ? 'false' : 'true') + ')">'
+        + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('check', 'doc', 15) + '</span>'
         + (f.selMode ? 'Done selecting' : 'Select resources') + '</button>';
     }
-    out += '<span class="rh2-libhint">Right-click a folder or document to rename, move or upload.</span>';
+    out += '<span class="rh2-libhint">Right-click the workspace to add something here, or a folder or document to act on it.</span>';
 
     if (f.orgErr) out += '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(f.orgErr) + '</p>';
     if (f.moveNote) out += '<p class="rh2-libnote" role="status">' + esc(f.moveNote) + '</p>';
@@ -1634,7 +1839,26 @@
     else if (f.browse === 'all' && !searching) title = 'All Resources';
     else if (inFolder && f.folderMeta && !searching) title = f.folderMeta.folder.name;
 
-    var out = '<div class="rh2-page rh2-library">';
+    /* The workspace.
+       Right-click anywhere blank in here offers what can be made here, and —
+       once the reader is inside a folder — the whole surface accepts a dropped
+       file rather than only the strip below the filters. Both are Owner-only,
+       both end in handlers that already existed, and neither is attached
+       outside this element, so a drag across the nav or another tab does
+       nothing. */
+    var ws = isOwner()
+      ? ' oncontextmenu="return RH2.libWorkspaceMenu(event)"'
+        + (inFolder
+          ? ' ondragover="RH2.libWsDragOver(event)" ondragleave="RH2.libWsDragLeave(event)"'
+            + ' ondrop="RH2.libWsDrop(event)"'
+          : '')
+      : '';
+    var out = '<div id="rh2-lib-ws" class="rh2-page rh2-library'
+      + (isOwner() ? ' rh2-ws' : '') + (f.wsDrop ? ' is-dropping' : '') + '"' + ws + '>';
+    if (isOwner() && inFolder) {
+      out += '<div class="rh2-wsdrop" aria-hidden="true"><span class="rh2-wsdrop-face">'
+        + icn('plus', 'doc', 22) + 'Drop files here to upload</span></div>';
+    }
     out += renderMenu();
     out += '<h1 class="rh2-h1">' + esc(title) + '</h1>';
 
@@ -1710,15 +1934,16 @@
 
     // ── a list of resources ───────────────────────────────────────────────
     if (inFolder && !searching) out += renderSubfolders();
+    /* The strip stays as the resting explanation — what may be dropped, and
+       the way in for anyone not dragging anything. It no longer carries its
+       own drag handlers: the workspace around it does, so there is one drop
+       state instead of two competing ones, and no flicker as the pointer
+       crosses the strip's edge. Its highlight comes from the workspace class
+       in CSS. */
     if (inFolder && isOwner()) {
-      var over = S.lib.dropTarget === f.folderId;
-      out += '<div class="rh2-dropzone' + (over ? ' is-dropping' : '') + '"'
-        + ' ondragover="RH2.libDragOver(event,\'' + esc(f.folderId) + '\')"'
-        + ' ondragleave="RH2.libDragLeave(event,\'' + esc(f.folderId) + '\')"'
-        + ' ondrop="RH2.libDrop(event,\'' + esc(f.folderId) + '\')">'
-        + (over ? 'Drop to upload into this folder'
-          : 'Drop files here, or <button type="button" class="rh2-linkbtn" onclick="RH2.libPickFiles(\''
-            + esc(f.folderId) + '\')">choose files</button> — PDF, Word, Excel, PowerPoint or images')
+      out += '<div class="rh2-dropzone">'
+        + 'Drop files here, or <button type="button" class="rh2-linkbtn" onclick="RH2.libPickFiles(\''
+        + esc(f.folderId) + '\')">choose files</button> — PDF, Word, Excel, PowerPoint or images'
         + '</div>';
     }
 
@@ -3686,7 +3911,12 @@
     var el = doc.getElementById('rh2-form-title');
     if (el) el.focus();
   }
-  function adminFormClose() { S.admin.formOpen = false; S.admin.editing = null; render(); }
+  function adminFormClose() {
+    S.admin.formOpen = false;
+    S.admin.editing = null;
+    S.admin.fileInto = ''; S.admin.fileIntoName = '';
+    render();
+  }
 
   function renderResourceForm() {
     var r = S.admin.editing || {};
@@ -3701,6 +3931,12 @@
     var authOpts = Object.keys(AUTHORITY);
     var out = '<section class="rh2-card rh2-form" aria-label="' + (editing ? 'Edit resource' : 'New resource') + '">' +
       '<h2>' + (editing ? 'Edit resource' : 'New resource') + '</h2>' +
+      // Started from a Library folder: say so, so nobody wonders later where
+      // it went, and so the destination is visible before they commit to it.
+      (!editing && S.admin.fileInto
+        ? '<p class="rh2-quiet" role="status">This will be filed in <strong>'
+          + esc(S.admin.fileIntoName || 'the folder you came from') + '</strong> when you save it.</p>'
+        : '') +
       '<label class="rh2-lbl" for="rh2-form-title">Title</label>' +
       '<input type="text" id="rh2-form-title" class="rh2-input" maxlength="300" value="' + esc(pick(r, 'title') || '') + '">' +
       '<div class="rh2-form-grid">' +
@@ -3895,7 +4131,29 @@
     var id = pick(r, 'id') || pick(d.resource || d, 'id');
     if (then === 'submit' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/submit', { method: 'POST' });
     if (then === 'approve' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/approve', { method: 'POST' });
-    toast('Saved', then === 'approve' ? 'Resource approved. It remains unpublished.' : then === 'submit' ? 'Submitted for review.' : 'Saved.');
+
+    /* A document started from a Library folder belongs in it.
+       Filing is the existing owner-only move route, unchanged and unwidened:
+       if it refuses — not the owner, wrong organisation, folder gone — the
+       resource still exists and is said to be unfiled, rather than the failure
+       being swallowed and the person left believing it landed somewhere. */
+    var into = !editing ? S.admin.fileInto : '';
+    S.admin.fileInto = ''; S.admin.fileIntoName = '';
+    var filed = '';
+    if (into && id) {
+      var mv = await api('/api/rh2/library/move', {
+        method: 'POST', body: { folderId: into, resourceIds: [id] },
+      });
+      if (mv.ok) {
+        filed = ' Filed in ' + mv.folder + '.';
+        loadFolders(true);
+        S.lib.rows = null;
+      } else {
+        filed = ' It could not be filed into that folder — it is in the Library, unfiled.';
+      }
+    }
+
+    toast('Saved', (then === 'approve' ? 'Resource approved. It remains unpublished.' : then === 'submit' ? 'Submitted for review.' : 'Saved.') + filed);
     S.admin.formOpen = false; S.admin.editing = null;
     loadAdminContent();
   }
@@ -6688,6 +6946,11 @@
     libRenameSave: libRenameSave,
     libMoveOne: libMoveOne,
     libSelectMode: libSelectMode,
+    libWorkspaceMenu: libWorkspaceMenu,
+    libWsDragOver: libWsDragOver,
+    libWsDragLeave: libWsDragLeave,
+    libWsDrop: libWsDrop,
+    libNewDocument: libNewDocument,
     libToggleSel: libToggleSel,
     libMoveOpen: libMoveOpen,
     libMoveTo: libMoveTo,

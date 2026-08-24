@@ -601,6 +601,9 @@ describe('changed assets are cache-busted', () => {
       // collection shelves gone, .rh2-collection* deleted with them), the
       // item actions came down to Assign / Edit / Preview, and learner,
       // preview and edit modes moved onto one section-by-section renderer.
+      // The same release made the Library a real file workspace — the toolbar
+      // reads as controls, the whole surface takes a dropped file, and the
+      // background answers a right-click.
       ['resourcehub.js', 'r25'], ['resourcehub.css', 'r16'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
