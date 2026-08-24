@@ -32,13 +32,17 @@
  * document instance cannot alter anything it was resolved from.
  */
 
+const crypto = require('crypto');
+
 const { resolveScalars } = require('../fca/resolve-scalars');
-const { composeDocx } = require('../fca/docx-engine');
-const { normaliseSelection, buildManifest } = require('../fca/manifest');
+const { composeDocx, FCA_OPTIONS } = require('../fca/docx-engine');
+const { normaliseSelection, normaliseCustomSections, buildManifest } = require('../fca/manifest');
 const { readMaster } = require('./catalogue');
-const { severDocx } = require('./export-boundary');
+const { severDocx, scrubPortalSurface } = require('./export-boundary');
 const { readDocumentModel } = require('./document-model');
 const { renderTemplatePdf } = require('./pdf-export');
+
+const HEADING_LEVELS = [1, 2, 3];
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PDF_MIME = 'application/pdf';
@@ -106,15 +110,44 @@ function sectionStructure(template, row) {
     selectedSections: Array.isArray(stored.selected) ? stored.selected : undefined,
     sectionOrder: Array.isArray(stored.order) ? stored.order : undefined,
   });
+
+  // Clinician-created sections, rendered at the master's custom-section
+  // anchor. Ids are server-minted at save time, so the derived tag is stable
+  // across composes; the fallback factory only fires for a legacy row.
+  const storedCustom = Array.isArray(stored.custom) ? stored.custom.filter(Boolean) : [];
+  const customSections = normaliseCustomSections(
+    storedCustom.map((c) => ({ id: c.id, title: c.title, guidance: c.guidance })),
+    () => crypto.randomUUID()
+  );
+
   const manifest = buildManifest({
     selectedSections,
     sectionOrder,
-    customSections: [],
+    customSections,
     scalarData: {},
     scalarSources: {},
     excludedFields: [],
   });
-  return { sections: manifest.sections, dependentRows: manifest.dependentRows };
+
+  // Heading-level overrides: master sections are keyed by tag, custom
+  // sections by their stored id (their tag is derived, so the id is the
+  // stable key the editor holds).
+  const levels = (stored.levels && typeof stored.levels === 'object') ? stored.levels : {};
+  const levelById = new Map(storedCustom
+    .filter((c) => c.id !== undefined)
+    .map((c) => [String(c.id), c.level]));
+  const levelByCustomTag = new Map();
+  for (const c of customSections) {
+    const lv = levelById.get(String(c.id));
+    if (HEADING_LEVELS.includes(lv)) levelByCustomTag.set(c.tag, lv);
+  }
+
+  const sections = manifest.sections.map((s) => {
+    const lv = s.kind === 'custom' ? levelByCustomTag.get(s.tag) : levels[s.tag];
+    return HEADING_LEVELS.includes(lv) ? { ...s, headingLevel: lv } : s;
+  });
+
+  return { sections, dependentRows: manifest.dependentRows };
 }
 
 /**
@@ -139,7 +172,10 @@ async function composePortalDocx(state) {
     options: {
       controlParts: template.controlParts,
       customSectionAnchor: template.customSectionAnchor,
-      buildCustomSection: null,
+      // Clinician-created sections use the FCA's own builder — the only
+      // template with a section catalogue is the FCA, and its custom
+      // sections must look identical whichever surface composed them.
+      buildCustomSection: template.sectionCatalogue ? FCA_OPTIONS.buildCustomSection : null,
       multilineTags: template.multilineTags,
       dropParagraphWhenEmpty: template.optionalLineTags || new Set(),
       // A template whose sections can change must keep its cached contents
@@ -148,7 +184,19 @@ async function composePortalDocx(state) {
       label: `template:${template.id}`,
     },
   });
-  return Buffer.isBuffer(composed) ? composed : composed.buffer;
+  const buffer = Buffer.isBuffer(composed) ? composed : composed.buffer;
+
+  // The master's template-maintainer language ("Using this FCA template",
+  // the TEMPLATE CONTROL header band) is for people MAINTAINING the master,
+  // not for a clinician completing a document — so it never reaches the
+  // portal surface either. The export boundary keeps its own removal and
+  // verification as the backstop.
+  return scrubPortalSurface({
+    buffer,
+    controlParts: template.controlParts,
+    internalBlocks: template.internalBlocks || [],
+    textReplacements: template.textReplacements || [],
+  });
 }
 
 /** Filename stem, safe for a Content-Disposition and for a filesystem. */

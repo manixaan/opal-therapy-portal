@@ -9,7 +9,8 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 bf918d21…5b2782)
+ * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 0c7ab702…90318d — re-hashed
+ * 24 Aug 2026 after the layout-only Letter→A4 pgSz fix; controls unchanged)
  *   58 unique w:tag content controls, 84 occurrences in total.
  *   25 of them are section/anchor controls, 33 are scalar (text) controls.
  *   15 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).

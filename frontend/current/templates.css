@@ -139,8 +139,21 @@
 .tpl-section-main input[type="checkbox"] { accent-color: var(--accent); flex: none; }
 .tpl-section-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tpl-section-off .tpl-section-label { color: var(--ink-soft); text-decoration: line-through; }
-.tpl-section-move { display: flex; gap: 2px; flex: none; }
+.tpl-section-move { display: flex; gap: 2px; flex: none; align-items: center; }
 .tpl-section-move .tpl-btn { padding: 1px 7px; line-height: 1.3; }
+.tpl-section-remove { color: #a04545; }
+.tpl-level {
+  font-family: inherit; font-size: 11.5px; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px 4px; max-width: 130px;
+}
+.tpl-level:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.tpl-section-actions {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
+  padding-top: 8px; border-top: 1px dashed var(--border);
+}
+.tpl-section-addrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.tpl-newsec-title { flex: 1; min-width: 160px; }
 
 .tpl-field { display: flex; flex-direction: column; gap: 4px; }
 .tpl-label { font-size: 12px; font-weight: 600; color: var(--ink); }

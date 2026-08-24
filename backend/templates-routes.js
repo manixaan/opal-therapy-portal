@@ -33,6 +33,7 @@
 
 const express = require('express');
 const fs = require('fs');
+const crypto = require('crypto');
 const router = express.Router();
 
 const db = require('./database');
@@ -175,6 +176,12 @@ async function loadState(req, row) {
 }
 
 /**
+ * The section the FCA master's custom anchor sits inside — clinician-created
+ * sections render there, and the editor shows them under it.
+ */
+const CUSTOM_ANCHOR_PARENT = 'OPAL_SECTION_ASSESSMENT_RESULTS';
+
+/**
  * The section structure as the editor shows it — the EFFECTIVE state after
  * normalisation, never the raw stored value, so what the user sees is exactly
  * what the preview and both exports will compose with.
@@ -182,8 +189,18 @@ async function loadState(req, row) {
 function sectionsDescriptor(template, row) {
   if (!template.sectionCatalogue) return null;
   const byTag = template.sectionCatalogue.SECTION_BY_TAG;
-  return sectionStructure(template, row).sections
-    .filter((s) => s.kind !== 'custom')
+  const stored = (row && row.sections && typeof row.sections === 'object'
+    && !Array.isArray(row.sections)) ? row.sections : {};
+  const levels = (stored.levels && typeof stored.levels === 'object') ? stored.levels : {};
+  const customById = new Map(
+    (Array.isArray(stored.custom) ? stored.custom : [])
+      .filter((c) => c && c.id !== undefined)
+      .map((c) => [String(c.id), c])
+  );
+
+  const all = sectionStructure(template, row).sections;
+
+  const templateRows = all.filter((s) => s.kind !== 'custom')
     .slice()
     .sort((a, b) => a.order - b.order)
     .map((s) => {
@@ -195,10 +212,51 @@ function sectionsDescriptor(template, row) {
         group: meta.group || 'core',
         parent: meta.parent || null,
         required: Boolean(meta.required),
+        custom: false,
         included: s.included !== false,
+        headingLevel: levels[s.tag] || null,
         order: s.order,
       };
     });
+
+  const customRows = all.filter((s) => s.kind === 'custom')
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((s) => {
+      // The derived tag ends in the id with dashes stripped — recover the
+      // stored entry so the editor gets the stable id back.
+      const entry = [...customById.values()].find(
+        (c) => s.tag.endsWith(String(c.id).toUpperCase().replace(/-/g, ''))
+      ) || {};
+      return {
+        tag: s.tag,
+        id: entry.id || null,
+        label: s.title,
+        description: entry.guidance || '',
+        group: 'custom',
+        // Custom sections render at the master's anchor, inside Assessment
+        // Results — the panel shows them there so it mirrors the document.
+        parent: CUSTOM_ANCHOR_PARENT,
+        required: false,
+        custom: true,
+        included: true,
+        headingLevel: s.headingLevel || null,
+        order: s.order,
+      };
+    });
+
+  // Splice customs where they actually render: after the last row belonging
+  // to Assessment Results (the parent itself when it has no children shown).
+  let at = templateRows.length;
+  for (let i = templateRows.length - 1; i >= 0; i--) {
+    const r = templateRows[i];
+    if (r.tag === CUSTOM_ANCHOR_PARENT || r.parent === CUSTOM_ANCHOR_PARENT) {
+      at = i + 1;
+      break;
+    }
+  }
+  templateRows.splice(at, 0, ...customRows);
+  return templateRows;
 }
 
 /** The wire shape of a document instance. */
@@ -230,6 +288,10 @@ function serialiseDocument(state) {
     // Present only for templates whose structure the editor may shape (the
     // FCA); null elsewhere so the frontend renders no section panel.
     sections: sectionsDescriptor(template, row),
+    // Where clinician-created sections render: the section that hosts the
+    // master's custom anchor. Supplied by the server so the frontend never
+    // carries a binding identifier of its own.
+    customParent: template.sectionCatalogue ? CUSTOM_ANCHOR_PARENT : null,
   };
 }
 
@@ -289,11 +351,74 @@ function validateSections(template, body) {
     }
   }
 
+  // Clinician-created sections. Ids are server-minted: a client may echo an
+  // id it was previously given (so the section stays the same section), but
+  // may not invent one.
+  let custom = [];
+  if (body.custom !== undefined) {
+    if (!Array.isArray(body.custom)) {
+      return { ok: false, error: 'invalid_sections', message: 'custom must be an array.' };
+    }
+    if (body.custom.length > cat.MAX_CUSTOM_SECTIONS) {
+      return {
+        ok: false,
+        error: 'too_many_sections',
+        message: `A document may carry at most ${cat.MAX_CUSTOM_SECTIONS} custom sections.`,
+      };
+    }
+    for (const raw of body.custom) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return { ok: false, error: 'invalid_sections', message: 'Each custom section must be an object.' };
+      }
+      const title = str(raw.title, cat.MAX_CUSTOM_TITLE_CHARS);
+      if (!title) {
+        return { ok: false, error: 'invalid_sections', message: 'A custom section needs a title.' };
+      }
+      if (raw.id !== undefined && raw.id !== null && !isUuid(raw.id)) {
+        return { ok: false, error: 'invalid_sections', message: 'Unrecognised custom section id.' };
+      }
+      const level = raw.level === undefined || raw.level === null ? null : Number(raw.level);
+      if (level !== null && ![1, 2, 3].includes(level)) {
+        return { ok: false, error: 'invalid_sections', message: 'Heading level must be 1, 2 or 3.' };
+      }
+      custom.push({
+        id: raw.id || crypto.randomUUID(),
+        title,
+        guidance: str(raw.guidance, cat.MAX_CUSTOM_GUIDANCE_CHARS) || null,
+        level,
+      });
+    }
+  }
+
+  // Heading-level overrides for the master's own sections.
+  let levels = {};
+  if (body.levels !== undefined) {
+    if (!body.levels || typeof body.levels !== 'object' || Array.isArray(body.levels)) {
+      return { ok: false, error: 'invalid_sections', message: 'levels must be an object of section → level.' };
+    }
+    for (const [tag, raw] of Object.entries(body.levels)) {
+      if (!cat.SECTION_BY_TAG.has(tag)) {
+        return { ok: false, error: 'unknown_section', message: `This template has no section named ${tag.slice(0, 80)}.` };
+      }
+      if (raw === null) continue;               // back to the master's own level
+      const level = Number(raw);
+      if (![1, 2, 3].includes(level)) {
+        return { ok: false, error: 'invalid_sections', message: 'Heading level must be 1, 2 or 3.' };
+      }
+      levels[tag] = level;
+    }
+  }
+
+  // A field the client did not send stays null here; the PATCH handler keeps
+  // the stored value for it, so saving a heading level cannot silently reset
+  // the section selection (and vice versa).
   return {
     ok: true,
     value: {
-      selected: selected.tags || cat.SECTIONS.map((s) => s.tag),
-      order: order.tags || cat.SECTIONS.map((s) => s.tag),
+      selected: selected.tags,
+      order: order.tags,
+      custom: body.custom !== undefined ? custom : null,
+      levels: body.levels !== undefined ? levels : null,
     },
   };
 }
@@ -459,15 +584,48 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
     if (!checked.ok) {
       return res.status(400).json({ error: checked.error, message: checked.message });
     }
-    sections = checked.value;
+    if (checked.value === null) {
+      sections = null;                            // back to the master's default
+    } else {
+      // Field-wise merge: an omitted field keeps what the document already
+      // holds, so one panel's save cannot reset another's.
+      const prior = (row.sections && typeof row.sections === 'object') ? row.sections : {};
+      const allTags = template.sectionCatalogue.SECTIONS.map((s) => s.tag);
+      sections = {
+        selected: checked.value.selected ?? prior.selected ?? allTags,
+        order: checked.value.order ?? prior.order ?? allTags,
+        custom: checked.value.custom ?? prior.custom ?? [],
+        levels: checked.value.levels ?? prior.levels ?? {},
+      };
+    }
+  }
+
+  // Write ONLY the columns this request carried. Two saves can overlap — the
+  // debounced field autosave and a section change land on separate
+  // connections — and a full-row rewrite would let whichever commits last
+  // revert the other's column from its stale read. Column-scoped SETs make
+  // overlapping single-column saves commute.
+  const sets = ['updated_at = NOW()'];
+  const params = [row.id];
+  if (req.body?.fieldValues !== undefined) {
+    params.push(JSON.stringify(next));
+    sets.push(`field_values = $${params.length}::jsonb`);
+  }
+  if (req.body?.title !== undefined) {
+    params.push(title);
+    sets.push(`title = $${params.length}`);
+  }
+  if (req.body?.sections !== undefined) {
+    params.push(sections === null ? null : JSON.stringify(sections));
+    sets.push(`sections = $${params.length}::jsonb`);
   }
 
   const { rows } = await pool.query(
     `UPDATE template_documents
-        SET field_values = $2::jsonb, title = $3, sections = $4::jsonb, updated_at = NOW()
+        SET ${sets.join(', ')}
       WHERE id = $1
       RETURNING *`,
-    [row.id, JSON.stringify(next), title, sections === null ? null : JSON.stringify(sections)]
+    params
   );
 
   await audit(req, 'template.document_updated', row.id, {

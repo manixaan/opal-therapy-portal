@@ -458,6 +458,55 @@ function applyCustomSections(doc, customSections, idAllocator, warnings, anchorT
   return customSections.length;
 }
 
+// ── 4b. Heading levels ───────────────────────────────────────────────────────
+
+const HEADING_STYLE_BY_LEVEL = new Map([
+  [1, STYLE.HEADING1],
+  [2, STYLE.HEADING2],
+  [3, STYLE.HEADING3],
+]);
+
+/**
+ * Restyle a section's own heading to a requested level (1–3). A manifest
+ * section may carry `headingLevel`; the section control's FIRST heading-styled
+ * paragraph — never one belonging to a nested section — takes the matching
+ * OPAL heading style, and its explicit outline level follows, so the rebuilt
+ * TOC lists the section at its new depth. Runs after custom sections are
+ * built, so a clinician-created section restyles exactly like a master one.
+ */
+function applyHeadingLevels(doc, levelByTag, warnings) {
+  if (!levelByTag || levelByTag.size === 0) return 0;
+  const headingStyles = new Set(HEADING_STYLE_BY_LEVEL.values());
+  let restyled = 0;
+
+  for (const sdt of allSdts(doc)) {
+    const tag = ownTag(sdt);
+    if (!tag || !levelByTag.has(tag)) continue;
+    const styleId = HEADING_STYLE_BY_LEVEL.get(levelByTag.get(tag));
+    if (!styleId) continue;
+
+    const content = directChild(sdt, 'w:sdtContent');
+    if (!content) continue;
+    const heading = ownDescendants(content, 'w:p')
+      .find((p) => headingStyles.has(paragraphStyle(p)));
+    if (!heading) {
+      warnings.push(`Heading level requested for ${tag} but the section has no heading paragraph.`);
+      continue;
+    }
+
+    const pPr = directChild(heading, 'w:pPr');
+    const pStyle = pPr && directChild(pPr, 'w:pStyle');
+    if (!pStyle) continue;
+    pStyle.setAttribute('w:val', styleId);
+    const lvl = pPr && directChild(pPr, 'w:outlineLvl');
+    if (lvl && lvl.getAttribute('w:val') !== '9') {
+      lvl.setAttribute('w:val', String(levelByTag.get(tag) - 1));
+    }
+    restyled += 1;
+  }
+  return restyled;
+}
+
 // ── 5. Table of contents ─────────────────────────────────────────────────────
 
 const TOC_LEVEL_BY_STYLE = new Map([
@@ -906,6 +955,13 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     opts.customSectionAnchor, opts.buildCustomSection
   );
 
+  // ── Heading levels (after customs exist, before the TOC reads styles) ─────
+  const levelByTag = new Map();
+  for (const s of sections) {
+    if (s && s.tag && Number.isFinite(s.headingLevel)) levelByTag.set(s.tag, s.headingLevel);
+  }
+  const restyledHeadings = applyHeadingLevels(docDoc, levelByTag, warnings);
+
   // ── Scalars, across every part that carries controls ──────────────────────
   // Deliberately BEFORE the TOC rebuild: the cover-page title is a heading
   // whose text is a content control, so a TOC built first would list the
@@ -957,6 +1013,7 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     excludedAsEmptyControl: Array.from(excludedTags).filter((t) => !optionalLineTags.has(t)),
     excludedAsRemovedLine: Array.from(excludedTags).filter((t) => optionalLineTags.has(t)),
     customSections: customWritten,
+    restyledHeadings,
     tocEntries: toc.entries,
     warnings,
   };
@@ -979,5 +1036,6 @@ module.exports = {
   _internals: {
     ownTag, directChild, ownDescendants, countPageFields, paragraphStyle, paragraphText,
     setMultilineTextNode, removeParagraphsContaining, styledParagraph, el, allSdts,
+    applyHeadingLevels,
   },
 };

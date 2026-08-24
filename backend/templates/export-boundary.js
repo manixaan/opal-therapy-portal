@@ -492,6 +492,50 @@ async function verifySevered(buffer, forbiddenTexts = []) {
   }
 }
 
+// ── Portal-surface scrub ─────────────────────────────────────────────────────
+
+/**
+ * Remove the master's template-maintainer language from the IN-PORTAL
+ * document: the declared internal blocks ("Using this FCA template") and the
+ * template-facing header/footer wording. Everything else — bindings, tags,
+ * [PORTAL — …] prompts — is left exactly as composed, because the portal
+ * surface legitimately shows a clinician what is still outstanding.
+ *
+ * Running this at compose time means the preview never shows the guide page,
+ * and the export path receives a document it no longer needs to remove the
+ * block from — severDocx's own removal and verification stay as the backstop.
+ */
+async function scrubPortalSurface({
+  buffer,
+  controlParts = [],
+  internalBlocks = [],
+  textReplacements = [],
+} = {}) {
+  if (!internalBlocks.length && !textReplacements.length) return buffer;
+
+  const zip = await JSZip.loadAsync(buffer);
+  const report = {
+    unwrapped: [], neutralised: [], removed: [], removedBlocks: [],
+    sweptPrompts: 0, scrubbedSentences: 0, reworded: 0,
+  };
+
+  for (const part of controlParts) {
+    const file = zip.file(part);
+    if (!file) continue;
+    const doc = parse(await file.async('string'));
+    removeInternalBlocks(doc, internalBlocks, report);
+    scrubTexts(doc, [], textReplacements, report);
+    zip.file(part, serialise(doc), { createFolders: false });
+  }
+
+  return zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
@@ -588,6 +632,7 @@ async function severDocx({
 
 module.exports = {
   severDocx,
+  scrubPortalSurface,
   verifySevered,
   MASTER_PROMPT_RE,
   OPAL_IDENTIFIER_RE,

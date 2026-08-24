@@ -354,7 +354,11 @@ describe('a document instance cannot be used to write arbitrary content', () => 
 
     const update = db.pool.query.mock.calls.find((c) => /UPDATE template_documents/i.test(c[0]));
     expect(update).toBeDefined();
-    expect(update[0]).toContain('sections = $4::jsonb');
+    // Column-scoped SET: only sections travelled, so only sections is written
+    // (plus the timestamp) — a fieldValues save cannot clobber this column.
+    expect(update[0]).toContain('sections = $2::jsonb');
+    expect(update[0]).not.toContain('field_values =');
+    expect(update[0]).not.toContain('title =');
 
     // The document echoes the EFFECTIVE structure: MoCA out, required in.
     const sections = res.body.document.sections;
@@ -362,6 +366,46 @@ describe('a document instance cannot be used to write arbitrary content', () => 
     const moca = sections.find((s) => s.tag === 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA');
     expect(moca.included).toBe(false);
     expect(sections.find((s) => s.tag === 'OPAL_SECTION_REFERRAL_INFORMATION').included).toBe(true);
+  });
+
+  test('a custom section needs a real title, a real id and a real level', async () => {
+    const agent = await loginAs(THERAPIST);
+    const bads = [
+      [{ custom: [{ title: '' }] }, 'invalid_sections'],
+      [{ custom: [{ title: 'Ok', id: 'not-a-uuid' }] }, 'invalid_sections'],
+      [{ custom: [{ title: 'Ok', level: 9 }] }, 'invalid_sections'],
+      [{ custom: 'nope' }, 'invalid_sections'],
+      [{ levels: { NOT_A_SECTION: 2 } }, 'unknown_section'],
+      [{ levels: { OPAL_SECTION_DOMAIN_MOBILITY: 7 } }, 'invalid_sections'],
+    ];
+    for (const [sections, code] of bads) {
+      db.pool.query.mockClear();
+      db.pool.query.mockResolvedValueOnce({ rows: [ROW], rowCount: 1 });
+      const res = await agent.patch(`/api/templates/documents/${DOC_ID}`).send({ sections });
+      expect([JSON.stringify(sections), res.status]).toEqual([JSON.stringify(sections), 400]);
+      expect(res.body.error).toBe(code);
+      expect(db.pool.query.mock.calls.filter((c) => /UPDATE/i.test(c[0]))).toHaveLength(0);
+    }
+  });
+
+  test('saving heading levels alone does not reset a stored section selection', async () => {
+    const agent = await loginAs(THERAPIST);
+    const fcaTags = require('../fca/template-map').SECTIONS.map((s) => s.tag);
+    const priorSelected = fcaTags.filter((t) => t !== 'OPAL_SECTION_ASSESSMENT_TOOL_MOCA');
+    const rowWithSections = {
+      ...ROW,
+      sections: { selected: priorSelected, order: fcaTags, custom: [], levels: {} },
+    };
+    db.pool.query
+      .mockResolvedValueOnce({ rows: [rowWithSections], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [rowWithSections], rowCount: 1 });
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ sections: { levels: { OPAL_SECTION_DOMAIN_MOBILITY: 1 } } });
+    expect(res.status).toBe(200);
+    const update = db.pool.query.mock.calls.find((c) => /UPDATE template_documents/i.test(c[0]));
+    const stored = JSON.parse(update[1][1]);
+    expect(stored.selected).toEqual(priorSelected);           // untouched
+    expect(stored.levels).toEqual({ OPAL_SECTION_DOMAIN_MOBILITY: 1 });
   });
 
   test('a legitimate tag is accepted and stored parameterised', async () => {

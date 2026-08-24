@@ -198,22 +198,23 @@ describe('the renderer produces a stack of separate pages', () => {
   });
 
   test('every page carries the document\'s real page size, in full', () => {
-    // The shipped template is US Letter (8.5 × 11in = 612 × 792pt); the
-    // assertion is that the page keeps the DOCUMENT'S geometry, whatever it is,
-    // rather than being stretched to the panel.
+    // The shipped template is A4 (210 × 297mm = 595.3 × 841.9pt) since the
+    // layout-only Letter→A4 fix of 24 Aug 2026 — an Australian practice
+    // prints A4. The assertion is that the page keeps the DOCUMENT'S
+    // geometry, whatever it is, rather than being stretched to the panel.
     const first = pageBox(rendered.pages[0]);
-    expect(parseFloat(first.width)).toBeCloseTo(612, 2);
-    expect(parseFloat(first.minHeight)).toBeCloseTo(792, 2);
+    expect(parseFloat(first.width)).toBeCloseTo(595.3, 1);
+    expect(parseFloat(first.minHeight)).toBeCloseTo(841.9, 1);
     rendered.pages.forEach((p) => {
-      expect(parseFloat(pageBox(p).width)).toBeCloseTo(612, 2);
-      expect(parseFloat(pageBox(p).minHeight)).toBeCloseTo(792, 2);
+      expect(parseFloat(pageBox(p).width)).toBeCloseTo(595.3, 1);
+      expect(parseFloat(pageBox(p).minHeight)).toBeCloseTo(841.9, 1);
     });
   });
 
   test('the page keeps its proportions — nothing stretches it to the panel', () => {
     const w = parseFloat(rendered.pages[0].style.width);
     const h = parseFloat(rendered.pages[0].style.minHeight);
-    expect(w / h).toBeCloseTo(612 / 792, 4);
+    expect(w / h).toBeCloseTo(595.3 / 841.9, 4);
     expect(FCA_CSS).not.toMatch(/render-wrapper > section\s*\{[^}]*width:\s*100%/);
     expect(FCA_CSS).not.toMatch(/render-wrapper > section\s*\{[^}]*height:\s*(?!auto)/);
   });

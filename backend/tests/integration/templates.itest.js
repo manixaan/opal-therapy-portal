@@ -193,6 +193,44 @@ test('FCA section structure: shape, store, export, and return to default (migrat
   expect(reset.body.document.sections.every((s) => s.included)).toBe(true);
 });
 
+test('custom sections and heading levels round-trip and reach the export', async () => {
+  const { agent } = await agentFor(app, 'therapist', orgA);
+
+  const created = await agent.post('/api/templates/documents')
+    .send({ templateId: 'fca', title: 'Custom-section FCA' });
+  const id = created.body.document.id;
+
+  const shaped = await agent.patch(`/api/templates/documents/${id}`)
+    .send({ sections: {
+      custom: [{ title: 'Sensory Profile Observations', level: 3 }],
+      levels: { OPAL_SECTION_DOMAIN_MOBILITY: 1 },
+    } });
+  expect(shaped.status).toBe(200);
+
+  const rows = shaped.body.document.sections;
+  const custom = rows.find((s) => s.custom);
+  expect(custom).toBeDefined();
+  expect(custom.label).toBe('Sensory Profile Observations');
+  expect(custom.headingLevel).toBe(3);
+  expect(custom.id).toMatch(/^[0-9a-f-]{36}$/);           // server-minted
+  expect(rows.find((s) => s.tag === 'OPAL_SECTION_DOMAIN_MOBILITY').headingLevel).toBe(1);
+
+  // Survives a re-read with the SAME id, and reaches the Word export.
+  const reread = await agent.get(`/api/templates/documents/${id}`);
+  expect(reread.body.document.sections.find((s) => s.custom).id).toBe(custom.id);
+
+  const exported = await agent.get(`/api/templates/documents/${id}/export.docx`)
+    .buffer(true).parse((r, cb) => {
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+  const zip = await JSZip.loadAsync(exported.body);
+  const xml = await zip.file('word/document.xml').async('string');
+  expect(xml).toContain('Sensory Profile Observations');
+  expect(xml).not.toMatch(/OPAL_[A-Z0-9_]+/);
+});
+
 test('clearing a field returns it to the resolved value rather than blanking the document', async () => {
   const { agent } = await agentFor(app, 'therapist', orgA);
   const created = await agent.post('/api/templates/documents')

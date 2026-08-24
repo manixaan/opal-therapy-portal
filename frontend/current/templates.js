@@ -344,74 +344,177 @@
   /**
    * The rows live in S.sections, seeded from the server's EFFECTIVE state and
    * replaced by it after every save — the panel always shows what the preview
-   * and the exports will actually compose with.
+   * and the exports will actually compose with. Custom sections carry
+   * `custom: true` and a server-minted id.
    */
   function seedSections() {
     S.sections = (S.docu && S.docu.sections) ? S.docu.sections.map(function (s) {
       return {
-        tag: s.tag, label: s.label, description: s.description, parent: s.parent,
-        required: s.required, included: s.included,
+        tag: s.tag, id: s.id || null, label: s.label, description: s.description,
+        parent: s.parent, required: s.required, custom: Boolean(s.custom),
+        included: s.included, headingLevel: s.headingLevel || null,
       };
     }) : null;
   }
 
-  function parentIncluded(row) {
-    if (!row.parent) return true;
-    var p = (S.sections || []).filter(function (x) { return x.tag === row.parent; })[0];
-    return !p || p.included;
+  var LEVEL_OPTIONS = [
+    ['', 'Default'], ['1', 'Heading'], ['2', 'Subheading'], ['3', 'Minor heading'],
+  ];
+
+  function levelSelectHtml(row) {
+    var opts = LEVEL_OPTIONS.map(function (o) {
+      var sel = String(row.headingLevel || '') === o[0] ? ' selected' : '';
+      return '<option value="' + o[0] + '"' + sel + '>' + o[1] + '</option>';
+    }).join('');
+    return '<select class="tpl-level" title="Heading size in the report" ' +
+      'aria-label="Heading size for ' + esc(row.label) + '" ' +
+      'onchange="OpalTemplates.setSectionLevel(\'' + esc(row.tag) + '\', this.value)">' + opts + '</select>';
   }
 
   function sectionsHtml() {
-    var rows = (S.sections || []).map(function (s, i) {
-      var dimmed = !parentIncluded(s);
-      var effectiveOff = dimmed || !s.included;
+    var all = S.sections || [];
+    var shown = all.filter(function (s) { return s.included; });
+    var removed = all.filter(function (s) { return !s.included && !s.required; });
+
+    var rows = shown.map(function (s) {
       return '' +
-        '<div class="tpl-sectionrow' + (s.parent ? ' tpl-section-child' : '') +
-          (effectiveOff ? ' tpl-section-off' : '') + '">' +
-          '<label class="tpl-section-main" title="' + esc(s.description) + '">' +
-            '<input type="checkbox"' + (s.included ? ' checked' : '') +
-              (s.required || dimmed ? ' disabled' : '') +
-              ' onchange="OpalTemplates.toggleSection(\'' + esc(s.tag) + '\', this.checked)">' +
+        '<div class="tpl-sectionrow' + (s.parent ? ' tpl-section-child' : '') + '">' +
+          '<span class="tpl-section-main" title="' + esc(s.description) + '">' +
             '<span class="tpl-section-label">' + esc(s.label) + '</span>' +
             (s.required ? '<span class="tpl-quiet"> · required</span>' : '') +
-          '</label>' +
+            (s.custom ? '<span class="tpl-quiet"> · yours</span>' : '') +
+          '</span>' +
           '<span class="tpl-section-move">' +
+            levelSelectHtml(s) +
             '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move up" aria-label="Move ' + esc(s.label) + ' up" ' +
               'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', -1)">↑</button>' +
             '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move down" aria-label="Move ' + esc(s.label) + ' down" ' +
               'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', 1)">↓</button>' +
+            (s.required
+              ? ''
+              : '<button type="button" class="tpl-btn tpl-btn-quiet tpl-section-remove" ' +
+                'title="Remove from this report" aria-label="Remove ' + esc(s.label) + '" ' +
+                'onclick="OpalTemplates.removeSection(\'' + esc(s.tag) + '\')">✕</button>') +
           '</span>' +
         '</div>';
     }).join('');
+
+    var restore = '';
+    if (removed.length) {
+      restore = '<div class="tpl-section-addrow">' +
+        '<select id="tpl-restore-pick" class="tpl-level" aria-label="Removed sections">' +
+          removed.map(function (s) {
+            return '<option value="' + esc(s.tag) + '">' + esc(s.label) + '</option>';
+          }).join('') +
+        '</select>' +
+        '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.restoreSection()">Put back</button>' +
+      '</div>';
+    }
+
+    var adder = S.addingSection
+      ? '<div class="tpl-section-addrow">' +
+          '<input type="text" id="tpl-newsec-title" class="tpl-input tpl-newsec-title" maxlength="120" ' +
+            'placeholder="Section title, e.g. Sensory Profile">' +
+          '<select id="tpl-newsec-level" class="tpl-level" aria-label="Heading size">' +
+            '<option value="2">Subheading</option><option value="1">Heading</option>' +
+            '<option value="3">Minor heading</option></select>' +
+          '<button type="button" class="tpl-btn tpl-btn-primary" onclick="OpalTemplates.addSectionConfirm()">Add</button>' +
+          '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.addSectionCancel()">Cancel</button>' +
+        '</div>'
+      : '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.addSectionStart()">+ Add a section</button>';
+
     return '' +
       '<details class="tpl-group" open>' +
         '<summary class="tpl-group-summary">Report sections' +
-          ' <span class="tpl-quiet">(' + (S.sections || []).length + ')</span></summary>' +
-        '<p class="tpl-hint">Untick an optional section to leave it out of this report, and use the arrows ' +
-          'to reorder. Required sections always stay. The preview and both downloads follow this structure.</p>' +
-        '<div class="tpl-group-body">' + rows + '</div>' +
+          ' <span class="tpl-quiet">(' + shown.length + ')</span></summary>' +
+        '<p class="tpl-hint">Remove an optional section with ✕, put it back below, reorder with the arrows, ' +
+          'and pick each section’s heading size. Your own sections are added inside Assessment Results. ' +
+          'Required sections always stay. The preview and both downloads follow this structure.</p>' +
+        '<div class="tpl-group-body">' + rows +
+          '<div class="tpl-section-actions">' + restore + adder + '</div>' +
+        '</div>' +
       '</details>';
   }
 
+  /**
+   * Re-render the panel WITHOUT losing what the user is mid-way through: the
+   * add-section form's typed title and the restore picker's selection are
+   * plain DOM state, so they are carried across the rebuild by hand.
+   */
   function mountSections() {
     var host = el('tpl-sectionhost');
     if (!host) return;
+    var titleBox = el('tpl-newsec-title');
+    var levelBox = el('tpl-newsec-level');
+    var pick = el('tpl-restore-pick');
+    var keepTitle = titleBox ? titleBox.value : null;
+    var keepLevel = levelBox ? levelBox.value : null;
+    var keepPick = pick ? pick.value : null;
+    var hadFocus = titleBox && doc.activeElement === titleBox;
+
     host.innerHTML = S.sections ? sectionsHtml() : '';
+
+    titleBox = el('tpl-newsec-title');
+    levelBox = el('tpl-newsec-level');
+    pick = el('tpl-restore-pick');
+    if (titleBox && keepTitle !== null) titleBox.value = keepTitle;
+    if (levelBox && keepLevel !== null) levelBox.value = keepLevel;
+    if (pick && keepPick !== null) {
+      for (var i = 0; i < pick.options.length; i++) {
+        if (pick.options[i].value === keepPick) { pick.value = keepPick; break; }
+      }
+    }
+    if (titleBox && hadFocus) {
+      titleBox.focus();
+      titleBox.setSelectionRange(titleBox.value.length, titleBox.value.length);
+    }
   }
 
-  /** Persist the panel's state; the response is the server's effective view. */
+  /**
+   * Persist the panel's state; the response is the server's effective view.
+   *
+   * SERIALISED: one section save in flight at a time. A click that lands
+   * while one is pending marks the panel dirty, and the pending save re-runs
+   * with the LATEST panel state when it completes — so rapid clicks cannot
+   * race each other, and the last click always wins.
+   */
+  var sectionsSaving = false;
+  var sectionsDirty = false;
+
   async function saveSections() {
     if (!S.docu || !S.sections) return;
+    if (sectionsSaving) { sectionsDirty = true; return; }
+    sectionsSaving = true;
+    sectionsDirty = false;
+    var tpl = S.sections.filter(function (s) { return !s.custom; });
+    var customs = S.sections.filter(function (s) { return s.custom; });
+    var levels = {};
+    tpl.forEach(function (s) { levels[s.tag] = s.headingLevel || null; });
     var body = {
       sections: {
-        selected: S.sections.filter(function (s) { return s.included; }).map(function (s) { return s.tag; }),
-        order: S.sections.map(function (s) { return s.tag; }),
+        selected: tpl.filter(function (s) { return s.included; }).map(function (s) { return s.tag; }),
+        order: tpl.map(function (s) { return s.tag; }),
+        custom: customs.map(function (c) {
+          return {
+            id: c.id || undefined,
+            title: c.label,
+            guidance: c.description || undefined,
+            level: c.headingLevel || undefined,
+          };
+        }),
+        levels: levels,
       },
     };
     setSaveState('Saving…');
     var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id), {
       method: 'PATCH', body: body,
     });
+    sectionsSaving = false;
+
+    // A click landed while this save was in flight: the panel state has moved
+    // on, so save THAT rather than showing the reader a stale echo.
+    if (sectionsDirty) { saveSections(); return; }
+
     if (!r.ok) {
       setSaveState('Not saved');
       toast('Could not update sections', r.error);
@@ -504,9 +607,88 @@
   }
 
   /**
+   * A4 PAGINATION — docx-preview only starts a new page at an explicit break,
+   * so a long section renders as one page that keeps growing and the preview
+   * stops matching what a Word page holds. This pass measures each rendered
+   * page and moves the blocks that fall past the A4 content area onto
+   * continuation pages (cloned shell, same header and footer), then fixes
+   * every completed page at exact A4 height so the page gaps are honest.
+   *
+   * Block-level fidelity: a block is moved whole, where Word may split a long
+   * paragraph or table across the page edge — so a boundary can differ by up
+   * to one block. A single block taller than a page keeps its own tall page.
+   */
+  function paginateA4(root) {
+    var wrapper = root.querySelector('.tpl-docx-render-wrapper') || root;
+    var pages = Array.prototype.slice.call(wrapper.children).filter(function (n) {
+      return n.tagName === 'SECTION';
+    });
+    pages.forEach(function (page) { splitPage(page); });
+  }
+
+  function splitPage(sec) {
+    var guard = 60;                               // hard stop for a runaway loop
+    var current = sec;
+    while (guard-- > 0) {
+      var cs = getComputedStyle(current);
+      // Computed style first: it is always resolved to px, while the inline
+      // value docx-preview writes is in pt and would understate the page.
+      var target = parseFloat(cs.minHeight) || parseFloat(current.style.minHeight);
+      if (!target) return;
+      var limit = target - (parseFloat(cs.paddingBottom) || 0);
+
+      var article = current.querySelector(':scope > article');
+      if (!article) return;
+      var secTop = current.getBoundingClientRect().top;
+      var kids = Array.prototype.slice.call(article.children);
+
+      var splitAt = -1;
+      for (var i = 0; i < kids.length; i++) {
+        var r = kids[i].getBoundingClientRect();
+        if (r.height === 0) continue;
+        if (r.bottom - secTop > limit) { splitAt = i; break; }
+      }
+
+      if (splitAt === -1) {                       // fits: pin to exact A4
+        current.style.height = target + 'px';
+        current.style.overflow = 'hidden';
+        return;
+      }
+      if (splitAt === 0) return;                  // one block taller than a page
+
+      var next = current.cloneNode(false);        // shell: class + inline geometry
+      var header = current.querySelector(':scope > header');
+      if (header) next.appendChild(header.cloneNode(true));
+      var nextArticle = article.cloneNode(false);
+      next.appendChild(nextArticle);
+      for (var k = splitAt; k < kids.length; k++) nextArticle.appendChild(kids[k]);
+      var footer = current.querySelector(':scope > footer');
+      if (footer) next.appendChild(footer.cloneNode(true));
+      current.parentNode.insertBefore(next, current.nextSibling);
+
+      current.style.height = target + 'px';
+      current.style.overflow = 'hidden';
+      current = next;
+    }
+  }
+
+  /** Wait for images (and fonts) so measurement sees real heights. */
+  function settled(root) {
+    var imgs = Array.prototype.slice.call(root.querySelectorAll('img')).map(function (img) {
+      if (img.complete) return Promise.resolve();
+      if (img.decode) return img.decode().catch(function () {});
+      return new Promise(function (r) { img.onload = img.onerror = r; });
+    });
+    if (doc.fonts && doc.fonts.ready) imgs.push(doc.fonts.ready.catch(function () {}));
+    return Promise.all(imgs);
+  }
+
+  /**
    * The composed document, rendered by the vendored docx-preview. Staged
-   * off-screen and swapped in one step, under the reader's scroll position, so
-   * a refresh never blanks the pane or jumps a long FCA back to page one.
+   * off-screen (attached but invisible, so it lays out and can be measured
+   * for A4 pagination) and swapped in one step, under the reader's scroll
+   * position, so a refresh never blanks the pane or jumps a long FCA back to
+   * page one.
    */
   async function refreshPreview() {
     if (!S.docu) return;
@@ -533,32 +715,53 @@
       var buf = await res.arrayBuffer();
       if (rev !== S.preview.rev) return;
 
+      // Attached but invisible: pagination has to MEASURE the rendered
+      // blocks, and a detached tree has no layout to measure. Crucially it is
+      // staged INSIDE #templates-root with the preview host's own class, so
+      // the exact rules that will govern the final render — the letterhead
+      // counter-rule, the page border and box-sizing — already apply while
+      // measuring. Staged under document.body, the shell's bare `header`
+      // rule styled the letterheads differently and every split point and
+      // pinned page height was computed against geometry the reader never
+      // sees.
       var staged = doc.createElement('div');
-      await global.docx.renderAsync(buf, staged, null, {
-        className: 'tpl-docx-render',
-        inWrapper: true,
-        breakPages: true,
-        ignoreLastRenderedPageBreak: false,
-        renderHeaders: true,
-        renderFooters: true,
-        renderFootnotes: true,
-        renderEndnotes: true,
-        renderChanges: false,
-        experimental: true,
-        useBase64URL: true,
-      });
-      if (rev !== S.preview.rev) return;
+      staged.className = 'tpl-preview-host';
+      staged.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;max-height:none;overflow:visible;';
+      (root() || doc.body).appendChild(staged);
+      try {
+        await global.docx.renderAsync(buf, staged, null, {
+          className: 'tpl-docx-render',
+          inWrapper: true,
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+          renderEndnotes: true,
+          renderChanges: false,
+          experimental: true,
+          useBase64URL: true,
+        });
+        if (rev !== S.preview.rev) return;
+        await settled(staged);
+        if (rev !== S.preview.rev) return;
+        paginateA4(staged);
+      } finally {
+        if (staged.parentNode && rev !== S.preview.rev) staged.parentNode.removeChild(staged);
+      }
       clearTimeout(timer);
 
       var host = el('tpl-preview-host');
-      if (!host) return;
+      if (!host) { staged.parentNode.removeChild(staged); return; }
       var top = host.scrollTop;
       host.innerHTML = '';
       while (staged.firstChild) host.appendChild(staged.firstChild);
+      staged.parentNode.removeChild(staged);
       host.scrollTop = top;
       previewState('Up to date');
     } catch (err) {
       clearTimeout(timer);
+      if (staged && staged.parentNode) staged.parentNode.removeChild(staged);
       if (rev !== S.preview.rev) return;
       previewState('Preview could not be updated.');
     }
@@ -641,6 +844,7 @@
       S.docu = r.document;
       S.values = {};
       seedSections();
+      S.addingSection = false;
       S.view = 'editor';
       render();
       loadDocuments();
@@ -657,19 +861,78 @@
         g.fields.forEach(function (f) { if (f.entered) S.values[f.tag] = f.value || ''; });
       });
       seedSections();
+      S.addingSection = false;
       S.view = 'editor';
       render();
     },
 
-    toggleSection: function (tag, on) {
+    /** Remove a section from this report. A custom section is deleted; a
+     *  template section is set aside and can be put back from the list. */
+    removeSection: function (tag) {
       var rows = S.sections;
       if (!rows) return;
       for (var i = 0; i < rows.length; i++) {
         if (rows[i].tag !== tag) continue;
         if (rows[i].required) return;          // not negotiable, mirror the server
-        rows[i].included = !!on;
+        if (rows[i].custom) rows.splice(i, 1);
+        else rows[i].included = false;
         break;
       }
+      mountSections();
+      saveSections();
+    },
+
+    /** Put a removed template section back where it was. */
+    restoreSection: function () {
+      var pick = el('tpl-restore-pick');
+      if (!pick || !pick.value || !S.sections) return;
+      for (var i = 0; i < S.sections.length; i++) {
+        if (S.sections[i].tag === pick.value) { S.sections[i].included = true; break; }
+      }
+      mountSections();
+      saveSections();
+    },
+
+    setSectionLevel: function (tag, value) {
+      var rows = S.sections;
+      if (!rows) return;
+      var level = value === '' ? null : parseInt(value, 10);
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].tag === tag) { rows[i].headingLevel = level; break; }
+      }
+      saveSections();
+    },
+
+    addSectionStart: function () { S.addingSection = true; mountSections(); var t = el('tpl-newsec-title'); if (t) t.focus(); },
+    addSectionCancel: function () { S.addingSection = false; mountSections(); },
+
+    /** Add a clinician-created section; the server mints its identity. */
+    addSectionConfirm: function () {
+      var title = (el('tpl-newsec-title') || {}).value || '';
+      var levelRaw = (el('tpl-newsec-level') || {}).value || '2';
+      title = title.trim();
+      if (!title) { toast('Section needs a title', 'Give the new section a name first.'); return; }
+      // The section that hosts custom content is named by the SERVER — the
+      // frontend never carries a binding identifier of its own.
+      var anchorParent = (S.docu && S.docu.customParent) || null;
+      var row = {
+        tag: 'tpl-pending-' + Date.now(), id: null, label: title, description: '',
+        parent: anchorParent, required: false, custom: true,
+        included: true, headingLevel: parseInt(levelRaw, 10) || 2,
+      };
+      // In place: after the last row of the anchor-parent family, which is
+      // where the document will actually render it.
+      var rows = S.sections;
+      var at = rows.length;
+      for (var i = rows.length - 1; i >= 0; i--) {
+        var r = rows[i];
+        if (anchorParent && (r.tag === anchorParent || r.parent === anchorParent)) {
+          at = i + 1;
+          break;
+        }
+      }
+      rows.splice(at, 0, row);
+      S.addingSection = false;
       mountSections();
       saveSections();
     },
@@ -696,8 +959,15 @@
         return end;
       }
 
+      // Siblings share a parent AND a kind: a custom section renders at the
+      // document's custom anchor, so it can only reorder among customs. A
+      // removed (hidden) sibling is skipped — swapping with an invisible row
+      // would look like the button did nothing.
       var sibs = [];
-      for (k = 0; k < rows.length; k++) if (rows[k].parent === rows[i].parent) sibs.push(k);
+      for (k = 0; k < rows.length; k++) {
+        if (!rows[k].included) continue;
+        if (rows[k].parent === rows[i].parent && rows[k].custom === rows[i].custom) sibs.push(k);
+      }
       var pos = sibs.indexOf(i);
       var target = pos + dir;
       if (target < 0 || target >= sibs.length) return;
@@ -727,6 +997,7 @@
       S.docu = null;
       S.values = {};
       S.sections = null;
+      S.addingSection = false;
       render();
       loadDocuments();
     },

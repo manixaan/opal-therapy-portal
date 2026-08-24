@@ -489,6 +489,63 @@ describe('FCA section structure flows through preview and both exports', () => {
   });
 });
 
+describe('the portal surface never shows template-maintainer language', () => {
+  test('the preview compose drops the guide page and the control band, but stays portal-bound', async () => {
+    const parts = await partsOf(await composePortalDocx(stateFor('fca')));
+    const visible = visibleText(parts['word/document.xml']);
+    expect(visible).not.toContain('Using this FCA template');
+    expect(visible).not.toContain('PORTAL PRE-FILL');
+    expect(parts['word/header5.xml']).not.toContain('TEMPLATE CONTROL');
+    // Still the IN-PORTAL document: bindings and prompts are its job.
+    expect(parts['word/document.xml']).toMatch(/OPAL_[A-Z0-9_]+/);
+    expect(parts['word/document.xml']).toMatch(/\[PORTAL —/);
+  });
+});
+
+describe('clinician-created sections and heading levels', () => {
+  const CUSTOM_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const SECTIONS = {
+    custom: [{ id: CUSTOM_ID, title: 'Sensory Profile Observations', guidance: 'Describe findings.', level: 3 }],
+    levels: { OPAL_SECTION_DOMAIN_MOBILITY: 1 },
+  };
+
+  let previewXml;
+  let exportParts;
+
+  beforeAll(async () => {
+    previewXml = await (async () => {
+      const parts = await partsOf(await composePortalDocx(stateFor('fca', { sections: SECTIONS })));
+      return parts['word/document.xml'];
+    })();
+    exportParts = await partsOf(
+      (await exportDocument(stateFor('fca', { sections: SECTIONS }), 'docx')).buffer
+    );
+  });
+
+  test('a custom section renders in the preview, at its chosen heading level', () => {
+    expect(visibleText(previewXml)).toContain('Sensory Profile Observations');
+    // Its rebuilt TOC entry sits at the chosen depth — proof the level took.
+    const tocIdx = previewXml.indexOf('Sensory Profile Observations');
+    expect(previewXml.slice(tocIdx - 300, tocIdx)).toContain('TOC3');
+  });
+
+  test('a master section can be promoted, and the TOC follows', () => {
+    const mob = previewXml.indexOf('OPAL_SECTION_DOMAIN_MOBILITY');
+    expect(previewXml.slice(mob, mob + 900)).toContain('OPAL–Heading1');
+  });
+
+  test('the custom section survives export with its wording and no identifier', () => {
+    const xml = exportParts['word/document.xml'];
+    expect(visibleText(xml)).toContain('Sensory Profile Observations');
+    expect(xml).not.toMatch(/OPAL_[A-Z0-9_]+/);
+  });
+
+  test('an ordinary document without custom sections is unchanged by the capability', async () => {
+    const parts = await partsOf(await composePortalDocx(stateFor('fca')));
+    expect(visibleText(parts['word/document.xml'])).not.toContain('Sensory Profile');
+  });
+});
+
 describe('verification refuses to ship a leak', () => {
   test('a binding the severing pass missed fails the export instead of shipping', async () => {
     const state = stateFor('service_agreement');
