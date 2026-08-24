@@ -48,41 +48,42 @@ async function resetModule(page, key) {
 }
 
 test.describe('induction dashboard', () => {
-  test('My Learning leads with the induction: progress, modules, thumbnails', async ({ page }) => {
+  test('the Owner\'s learning view is the Assign Learning catalogue, not a learner dashboard', async ({ page }) => {
+    // Since the unified-catalogue redesign the Owner administers learning
+    // (assign / edit / preview); the personal induction dashboard belongs to
+    // the people the Owner assigns it to.
     need(OWNER);
     await login(page, OWNER);
+    await page.evaluate(() => window.OpalNav.go({ tab: 'resources', view: 'learning' }));
+    await expect(page.getByRole('heading', { name: 'Assign Learning' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'All learning' })).toBeVisible();
+    await expect(page.locator('.ind-dash')).toHaveCount(0);
+  });
+
+  test('the learner dashboard leads with the induction: progress, modules, thumbnails — role-filtered', async ({ page }) => {
+    need(THERAPIST);
+    await login(page, THERAPIST);
     await openMyLearning(page);
-
     const dash = page.locator('.ind-dash');
-    await expect(dash.getByText('Opal Portal induction')).toBeVisible();
+    await expect(dash.getByText('Getting Started with the Opal Portal')).toBeVisible();
     await expect(dash.getByText(/of \d+/).first()).toBeVisible();
-
-    // Owner sees every module, including the owner-only one.
-    const items = dash.locator('.ind-dash-item');
-    expect(await items.count()).toBeGreaterThanOrEqual(11);
-    await expect(dash.getByText('Inviting Therapists')).toBeVisible();
+    await expect(dash.getByText('Inviting Therapists')).toHaveCount(0);
+    await expect(dash.getByText('The Master Scheduler')).toHaveCount(0);
 
     // Card imagery is real: every dashboard thumbnail decodes to pixels.
     const broken = await page.$$eval('.ind-dash-thumb', (imgs) =>
       imgs.filter((i) => i.complete && i.naturalWidth === 0).length);
     expect(broken).toBe(0);
   });
-
-  test('therapist dashboard is role-filtered', async ({ page }) => {
-    need(THERAPIST);
-    await login(page, THERAPIST);
-    await openMyLearning(page);
-    const dash = page.locator('.ind-dash');
-    await expect(dash.getByText('Getting Started with the Opal Portal')).toBeVisible();
-    await expect(dash.getByText('Inviting Therapists')).toHaveCount(0);
-    await expect(dash.getByText('The Master Scheduler')).toHaveCount(0);
-  });
 });
 
 test.describe('walkthrough lifecycle', () => {
+  // The lifecycle is the LEARNER's: since the unified-catalogue redesign the
+  // Owner's learning view is Assign Learning, so the therapist is the account
+  // that reaches the induction dashboard these flows start from.
   test.beforeEach(async ({ page }) => {
-    need(OWNER);
-    await login(page, OWNER);
+    need(THERAPIST);
+    await login(page, THERAPIST);
     await resetModule(page, 'portal-getting-started');
   });
 
@@ -126,7 +127,7 @@ test.describe('walkthrough lifecycle', () => {
     // Resume survives logout/login (server-side persistence, not this browser).
     await page.evaluate(() => window.signOut());
     await page.waitForURL(/\/login/, { timeout: 20000 });
-    await login(page, OWNER);
+    await login(page, THERAPIST);
     await openMyLearning(page);
     await expect(page.locator('.ind-dash-item', { hasText: 'Getting Started' }).getByText('Step 3 of')).toBeVisible();
   });
