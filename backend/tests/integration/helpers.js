@@ -75,6 +75,9 @@ const ALL_TABLES = [
   // Credential scans (migration 042). Before credentials and pd_documents,
   // both of which it references; both are listed further up.
   'credential_extractions',
+  // Resource Hub → Templates document instances (migration 043). References
+  // users and organisations, so it truncates before both.
+  'template_documents',
   'users', 'organisations',
 ];
 

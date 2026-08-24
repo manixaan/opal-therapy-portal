@@ -179,6 +179,12 @@ app.use('/api/onboarding', bodyParser.json({ limit: '16mb' }));
 // several times the largest interview anyone could type.
 app.use('/api/interviews', bodyParser.json({ limit: '4mb' }));
 
+// A template document holds one answer per control the master declares — the
+// Service Agreement has 82, each accepting up to 4,000 characters. A fully
+// completed agreement therefore exceeds the 100kb default and would 413 on
+// save before the route could validate a single field.
+app.use('/api/templates', bodyParser.json({ limit: '4mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -592,6 +598,13 @@ app.use('/', require('./fca-routes'));
 // Progress note letters — the same composition machinery as the FCA report,
 // pointed at the progress-note-letter template (own-only drafts, no external AI)
 app.use('/', require('./letter-routes'));
+
+// Resource Hub → Templates. Completes an Opal master in the portal, then
+// exports a document that no longer depends on it: templates/export-boundary.js
+// strips every OPAL_ binding and master prompt, keeps the resolved values, and
+// leaves anything unfinished as a standalone Word/PDF field. Same clinical
+// guards and the same client readers as /api/fca — own-only, org-scoped.
+app.use('/', require('./templates-routes'));
 
 // WHODAS 2.0 (36-item) digital assessment. Every route 404s unless
 // ENABLE_WHODAS_ASSESSMENT === 'true' — the instrument is WHO copyright and

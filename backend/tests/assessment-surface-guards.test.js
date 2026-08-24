@@ -603,7 +603,10 @@ describe('changed assets are cache-busted', () => {
       // preview and edit modes moved onto one section-by-section renderer.
       // The same release made the Library a real file workspace — the toolbar
       // reads as controls, the whole surface takes a dropped file, and the
-      // background answers a right-click.
+      // background answers a right-click — and Templates joined the Resource
+      // Hub navigation between Assigned Learning and Professional development
+      // (a nav entry plus a view branch; the surface's own styles ship in
+      // templates.css).
       // r26: a folder shows only what is filed in it — workflow tools no
       // longer appear inside one — and its header states the server's folder
       // count instead of counting the cards on the page. The CSS is untouched
@@ -630,6 +633,11 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
+      // 1: templates.js / templates.css are new — the Resource Hub Templates
+      // destination. Same reason as the three above: a first pin is still a
+      // pin, because the proxy caches by URL and this is the version the next
+      // change has to bump.
+      ['templates.js', 1], ['templates.css', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
