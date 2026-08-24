@@ -4220,7 +4220,9 @@
       });
       if (mv.ok) {
         filed = ' Filed in ' + mv.folder + '.';
-        loadFolders(true);
+        // The folder and the grid refresh together (§ libRefreshFolders):
+        // a still-open folder's header must not read one short of its card.
+        libRefreshFolders();
         S.lib.rows = null;
       } else {
         filed = ' It could not be filed into that folder — it is in the Library, unfiled.';
