@@ -4988,7 +4988,10 @@
     var s = (indSections('learner') || [])[sectionStep - 1];
     if (!s) return;
     var todo = (s.items || []).filter(function (it) {
-      return (it.type === 'content' || it.type === 'task') && !alItemDone(it.key);
+      // A task that carries a walkthrough records like a resource — when its
+      // walkthrough finishes, or at the deliberate closing sweep — never by
+      // merely paging past it.
+      return (it.type === 'content' || it.type === 'task') && !it.walkthrough_key && !alItemDone(it.key);
     });
     if (!todo.length) return;
     (async function () {
@@ -5076,12 +5079,20 @@
    *  really up, so a refused launch can never yank the reader around later. */
   var pendingWalk = null;
 
-  /** The interactive walkthrough behind a resource item, when there is one
-   *  this user can run. */
+  /** The interactive walkthrough behind an item, when there is one this user
+   *  can run. A resource item finds it through its hub slug; a task item may
+   *  name one directly with `walkthrough_key` (the Splose lessons — external
+   *  system, no hub page to link). */
   function alWalkModule(item) {
-    if (!item || item.type !== 'resource' || !item.resource_slug) return null;
+    if (!item) return null;
     if (typeof global.OpalInduction === 'undefined' || !global.OpalInduction.moduleForSlug) return null;
-    return global.OpalInduction.moduleForSlug(item.resource_slug) || null;
+    if (item.type === 'resource' && item.resource_slug) {
+      return global.OpalInduction.moduleForSlug(item.resource_slug) || null;
+    }
+    if (item.type === 'task' && item.walkthrough_key) {
+      return global.OpalInduction.moduleForSlug(item.walkthrough_key) || null;
+    }
+    return null;
   }
 
   function alFindItem(key) {
@@ -5110,6 +5121,9 @@
     }
     var mod = alWalkModule(item);
     if (!mod) {
+      // A task's launch tile only renders when its walkthrough resolves, so a
+      // task landing here has nothing to open — a resource opens its hub page.
+      if (item.type !== 'resource') return;
       if (!alItemDone(key) && st.data && st.data.assignment && st.data.assignment.status !== 'completed') {
         alComplete(key, {}, { quiet: true, stay: true });
       }
@@ -5233,10 +5247,12 @@
       var head = '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(it.title) + typeLabel + reqLabel + '</span>' +
         (it.minutes ? '<span class="rh2-row-sub">' + esc(it.minutes) + ' min</span>' : '') + '</span>' +
         (done ? '<span class="rh2-module-done" aria-label="Completed">' + icn('check', 'check') + '</span>' : '');
-      if (it.type === 'resource') {
-        // The tile IS the action: click anywhere on it to run the interactive
-        // walkthrough, or to open the resource when there is no walkthrough.
-        var mod = alWalkModule(it);
+      // The tile IS the action: click anywhere on it to run the interactive
+      // walkthrough, or to open the resource when there is no walkthrough.
+      // Tasks join the launch-tile club only when they name a walkthrough
+      // this user can actually run; otherwise a task is plain content.
+      var mod = alWalkModule(it);
+      if (it.type === 'resource' || mod) {
         var verb = mod
           ? ((done ? 'Replay' : 'Open') + ' the interactive walkthrough')
           : ('Open' + (it.resource_title ? ': ' + it.resource_title : ' the resource'));
@@ -6019,6 +6035,7 @@
               key: it.key, type: it.type, title: it.title, body: it.body || '',
               minutes: it.minutes || '', required: it.required !== false,
               resource_id: it.resource_id || '', resource_title: it.resource_title || '',
+              walkthrough_key: it.walkthrough_key || '',
               ack_statement: it.ack_statement || '',
               quiz: q ? {
                 passThreshold: q.passThreshold || 80,
@@ -6068,6 +6085,9 @@
             var mins = parseInt(it.minutes, 10);
             if (mins > 0) out.minutes = mins;
             if (it.type === 'resource') { out.resource_id = it.resource_id; out.resource_title = it.resource_title; }
+            // Not edited anywhere in the editor UI — carried so an Owner's
+            // save never severs a task from its walkthrough.
+            if (it.type === 'task' && it.walkthrough_key) out.walkthrough_key = it.walkthrough_key;
             if (it.type === 'acknowledgement') out.ack_statement = it.ack_statement;
             if (it.type === 'quiz' && it.quiz) {
               out.quiz = {

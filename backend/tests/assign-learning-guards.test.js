@@ -601,6 +601,24 @@ describe('the induction is one clear interaction path', () => {
     expect(fn('alWalkReturn')).toContain("('assignment')");
   });
 
+  test('a task that names a walkthrough is a launch tile too, recording on finish', () => {
+    // The Splose lessons: task items carrying walkthrough_key. Reverting any
+    // of these branches would strand all eight lessons as plain text that the
+    // closing sweep still marks complete — an induction nobody actually took.
+    expect(fn('alWalkModule')).toContain("item.type === 'task' && item.walkthrough_key");
+    expect(fn('indSectionRead')).toContain("it.type === 'resource' || mod");
+    // Paging past a section never records a walkthrough task — only its
+    // walkthrough finishing, or the deliberate closing sweep, does.
+    expect(fn('alAutoSection')).toContain('!it.walkthrough_key');
+    // A non-resource tile with no resolvable walkthrough opens nothing,
+    // rather than a phantom resource page.
+    expect(fn('alOpenWalk')).toContain("if (item.type !== 'resource') return;");
+    // And the Owner's editor never severs the link: the field survives the
+    // load model and the save projection, though no editor control shows it.
+    expect(fn('laEdit')).toContain("walkthrough_key: it.walkthrough_key || ''");
+    expect(fn('laEditorContentForApi')).toContain('out.walkthrough_key = it.walkthrough_key');
+  });
+
   test('completion is the closing screen\'s one deliberate act', () => {
     const finish = fn('indFinishRead');
     expect(finish).toContain('Mark as Complete');
@@ -847,13 +865,14 @@ describe('the shell', () => {
   test('the changed hub assets are cache-busted', () => {
     // These pins move whenever ANY feature changes the hub assets — the file
     // is shared, so the version is shared. r26/r16 was the Library folder fix;
-    // r27/r17 is click-to-edit in the induction editor (the learner's own
-    // rendering until a click, configuration behind a Settings toggle), which
-    // touched both the JS and the CSS. Bump both this and the list in
-    // assessment-surface-guards.test.js together, or CI fails on the half
-    // that was forgotten.
+    // r27/r17 was click-to-edit in the induction editor; r28 lets a task item
+    // carry a walkthrough_key so the Splose lessons launch from the
+    // assignment player (JS only — the CSS stays at r17). The resourcehub.js
+    // pin lives in THREE files: here, assessment-surface-guards.test.js and
+    // templates-frontend-guards.test.js — bump all of them together, or CI
+    // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r17');
-    expect(SHELL).toContain('/resourcehub.js?v=r27');
+    expect(SHELL).toContain('/resourcehub.js?v=r28');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

@@ -75,8 +75,11 @@
   display: block; max-width: 100%; border-radius: 10px;
   border: 1px solid var(--border, #dfe7e5);
 }
+.ind-fig-link { display: block; border-radius: 10px; }
+.ind-fig-link:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 2px; }
 .ind-fig-fallback { display: none; font-size: 12px; color: var(--muted, #6b7f7b); padding: 8px 0; }
 .ind-fig-broken img { display: none; }
+.ind-fig-broken .ind-fig-link { pointer-events: none; }
 .ind-fig-broken .ind-fig-fallback { display: block; }
 
 .ind-try { font-size: 12.5px; font-weight: 600; color: var(--accent, #0f7c6c); margin: 10px 0 0; }
@@ -140,6 +143,9 @@
 .ind-chip-warn { background: #fdf3e3; color: #8a5a13; }
 
 .ind-home-card { margin-bottom: 14px; }
+
+/* Two grouped dashboard cards stack with breathing room between them. */
+.ind-dash + .ind-dash { margin-top: 14px; }
 
 /* ── Responsive ── */
 @media (max-width: 700px) {

@@ -104,6 +104,30 @@ test('acknowledgement items need a statement; resource items need a uuid', () =>
   expect(lc.normaliseContent(okRes).ok).toBe(true);
 });
 
+test('a task may carry a walkthrough key; anything else may not', () => {
+  // The Splose lessons: a task item names its interactive walkthrough and the
+  // player renders a launch tile. The key lives on the item — not derived
+  // from the item's own key — so duplication (fresh keys) never severs it.
+  const mk = (item) => ({ sections: [{ title: 'S', items: [item] }] });
+  const ok = lc.normaliseContent(mk({ type: 'task', title: 'T', walkthrough_key: 'splose-booking' }));
+  expect(ok.ok).toBe(true);
+  expect(ok.content.sections[0].items[0].walkthrough_key).toBe('splose-booking');
+
+  // An invalid key is dropped, not refused — the task still stands as words.
+  const bad = lc.normaliseContent(mk({ type: 'task', title: 'T', walkthrough_key: 'has spaces!' }));
+  expect(bad.ok).toBe(true);
+  expect(bad.content.sections[0].items[0].walkthrough_key).toBeUndefined();
+
+  // On any other type it is an unknown field, dropped like the rest.
+  const onContent = lc.normaliseContent(mk({ type: 'content', title: 'C', walkthrough_key: 'splose-booking' }));
+  expect(onContent.ok).toBe(true);
+  expect(onContent.content.sections[0].items[0].walkthrough_key).toBeUndefined();
+
+  // The employee projection keeps it — the player launches from it.
+  const emp = lc.serialiseForEmployee(ok.content);
+  expect(emp.sections[0].items[0].walkthrough_key).toBe('splose-booking');
+});
+
 test('quiz validation: needs questions, 2+ options, a sane correctIndex', () => {
   const mk = (q) => ({ sections: [{ title: 'S', items: [{ type: 'quiz', title: 'Q', quiz: q }] }] });
   expect(lc.normaliseContent(mk(null)).ok).toBe(false);

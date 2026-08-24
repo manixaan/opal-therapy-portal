@@ -181,7 +181,101 @@ describe('anchor drift detection', () => {
   });
 });
 
-// ── 3. Engine pure helpers ──────────────────────────────────────────────────
+// ── 3. The Splose induction group ───────────────────────────────────────────
+
+describe('the Splose induction group', () => {
+  const SPLOSE_KEYS = [
+    'splose-at-opal', 'splose-account-setup', 'splose-booking',
+    'splose-appointments', 'splose-progress-notes', 'splose-teams-outlook',
+    'splose-performance', 'splose-daily-workflow',
+  ];
+  const splose = registry.MODULES.filter((m) => m.group === 'splose');
+
+  test('the eight Splose lessons exist, in curriculum order', () => {
+    expect(splose.map((m) => m.key)).toEqual(SPLOSE_KEYS);
+  });
+
+  test('portal modules carry no group — the default group stays portal', () => {
+    registry.MODULES.filter((m) => m.key.startsWith('portal-'))
+      .forEach((m) => expect(m.group).toBeUndefined());
+  });
+
+  test('Splose steps never target a live anchor — it is an external system', () => {
+    // A highlight or action step would point the spotlight at an Opal Portal
+    // element while teaching Splose; screenshots are the honest medium here.
+    for (const m of splose) {
+      m.steps.forEach((s) => {
+        expect(s.type).not.toBe('highlight');
+        expect(s.type).not.toBe('action');
+        expect(s.target).toBeUndefined();
+      });
+    }
+  });
+
+  test('every Splose image and thumbnail exists on disk', () => {
+    // The failure this prevents: an image path that drifts from the file on
+    // disk ships a silently broken picture — no build step catches it.
+    const missing = [];
+    for (const m of splose) {
+      const paths = [m.thumb].concat(
+        m.steps.filter((s) => s.image && s.image.src).map((s) => s.image.src));
+      for (const p of paths) {
+        if (!fs.existsSync(path.join(FRONTEND, p.replace(/^\//, '')))) {
+          missing.push(`${m.key}: ${p}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  test('every Splose lesson checks knowledge and explains its answers', () => {
+    for (const m of splose) {
+      const quizzes = m.steps.filter((s) => s.type === 'quiz');
+      expect(quizzes.length).toBeGreaterThanOrEqual(3);
+      quizzes.forEach((s) => {
+        expect(typeof s.quiz.explain).toBe('string');
+        expect(s.quiz.explain.length).toBeGreaterThan(10);
+      });
+    }
+  });
+
+  test('unfinalised Opal policy is flagged, never invented', () => {
+    // The content contract with the source curriculum: where an Opal rule is
+    // not final, the lesson says so and points at administration. The six
+    // modules whose source spec carries VERIFY items each show the marker.
+    const flagged = splose.filter((m) =>
+      m.steps.some((s) => s.type === 'callout' && /still being finalised/i.test(s.title)));
+    expect(flagged.length).toBeGreaterThanOrEqual(6);
+  });
+
+  test('manager-only performance content is gated to owner and admin', () => {
+    const perf = registry.moduleByKey('splose-performance');
+    const managerSteps = perf.steps.filter((s) => s.roles);
+    expect(managerSteps.length).toBeGreaterThanOrEqual(1);
+    managerSteps.forEach((s) => expect([...s.roles].sort()).toEqual(['admin', 'owner']));
+    // A therapist's run of the lesson never shows the manager overview.
+    const therapistSteps = registry.stepsForRole(perf, 'therapist');
+    expect(therapistSteps.some((s) => s.image && /performance-overview/.test(s.image.src))).toBe(false);
+  });
+
+  test('the lessons chain: each complete step suggests the next', () => {
+    for (let i = 0; i < splose.length - 1; i++) {
+      const complete = splose[i].steps[splose[i].steps.length - 1];
+      expect(`${splose[i].key} -> ${complete.next}`).toBe(`${splose[i].key} -> ${splose[i + 1].key}`);
+    }
+  });
+
+  test('a step screenshot links to its full size, and a broken image disarms the link', () => {
+    // Dense Splose captures need the full-size view; the same onerror that
+    // reveals the text fallback must also take the dead link out of the tab
+    // order, or keyboard users land on an invisible anchor to a 404.
+    const src = fs.readFileSync(path.join(FRONTEND, 'induction.js'), 'utf8');
+    expect(src).toContain('class="ind-fig-link"');
+    expect(src).toMatch(/onerror="[^"]*ind-fig-broken[^"]*removeAttribute\(\\'href\\'\)[^"]*tabIndex=-1/);
+  });
+});
+
+// ── 4. Engine pure helpers ──────────────────────────────────────────────────
 
 describe('indFormat', () => {
   test('escapes HTML before formatting', () => {

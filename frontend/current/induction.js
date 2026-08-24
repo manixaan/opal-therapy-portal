@@ -425,9 +425,16 @@
     html += '<h2 id="ind-title" class="ind-title">' + indEsc(step.title || '') + '</h2>';
 
     if ((step.type === 'screenshot' || S.fallback) && step.image && step.image.src) {
+      // The image is also a link to itself: dense screenshots (the Splose
+      // lessons especially) deserve a full-size view, and a new tab keeps the
+      // walkthrough's place intact.
       html += '<figure class="ind-fig">' +
+        '<a class="ind-fig-link" href="' + indEsc(step.image.src) + '" target="_blank" rel="noopener" ' +
+        'aria-label="Open the full-size screenshot in a new tab">' +
         '<img src="' + indEsc(step.image.src) + '" alt="' + indEsc(step.image.alt || '') + '" loading="lazy" ' +
-        'onerror="this.closest(\'figure\').classList.add(\'ind-fig-broken\')">' +
+        'onerror="this.closest(\'figure\').classList.add(\'ind-fig-broken\');' +
+        'var a=this.closest(\'a\');if(a){a.removeAttribute(\'href\');a.tabIndex=-1;}">' +
+        '</a>' +
         '<figcaption class="ind-fig-fallback">The picture for this step could not load — the description below still applies.</figcaption>' +
         '</figure>';
     }
@@ -804,23 +811,46 @@
 
   var dashConfirmRestart = null; // module key awaiting restart confirmation
 
+  /**
+   * The dashboard delivers the catalogue as one card per module group: the
+   * portal's own walkthroughs, then the Splose induction. Groups are a
+   * presentation concern only — progress, resume and completion never care
+   * which group a module belongs to.
+   */
+  var DASH_GROUPS = [
+    { key: 'portal', heading: 'Opal Portal induction',
+      blurb: 'Interactive walkthroughs of the portal itself — pause any time, continue on any device.' },
+    { key: 'splose', heading: 'Splose induction',
+      blurb: 'How Opal uses Splose: appointments, notes, Teams and your reports — screenshot-led lessons, with your place saved as you go.' },
+  ];
+
+  function moduleGroup(m) { return m.group || 'portal'; }
+
   function dashboardHtml() {
     var r = role();
-    var mods = MODS.modulesForRole(r);
-    if (!mods.length) return '';
-    var sum = indSummary(MODS.MODULES, r, P.byKey, MODS.moduleState);
+    if (!MODS.modulesForRole(r).length) return '';
+    return DASH_GROUPS.map(dashGroupHtml).join('');
+  }
 
-    var out = '<section class="rh2-card ind-dash" aria-labelledby="ind-dash-h">' +
+  function dashGroupHtml(g) {
+    var r = role();
+    var mods = MODS.modulesForRole(r).filter(function (m) { return moduleGroup(m) === g.key; });
+    if (!mods.length) return '';
+    var groupMods = MODS.MODULES.filter(function (m) { return moduleGroup(m) === g.key; });
+    var sum = indSummary(groupMods, r, P.byKey, MODS.moduleState);
+    var hid = 'ind-dash-h-' + g.key;
+
+    var out = '<section class="rh2-card ind-dash" aria-labelledby="' + hid + '">' +
       '<div class="ind-dash-head">' +
-      '<div><h2 id="ind-dash-h">Opal Portal induction</h2>' +
-      '<p class="rh2-quiet">Interactive walkthroughs of the portal itself — pause any time, continue on any device.</p></div>';
+      '<div><h2 id="' + hid + '">' + indEsc(g.heading) + '</h2>' +
+      '<p class="rh2-quiet">' + indEsc(g.blurb) + '</p></div>';
 
     if (sum.total) {
       out += '<div class="ind-dash-sum"><span class="ind-dash-count">' + sum.done + ' of ' + sum.total + '</span>' +
         '<span class="rh2-row-sub">modules complete</span></div>';
     }
     out += '</div>';
-    out += '<div class="rh2-bar" role="progressbar" aria-valuenow="' + sum.percent + '" aria-valuemin="0" aria-valuemax="100" aria-label="Induction progress">' +
+    out += '<div class="rh2-bar" role="progressbar" aria-valuenow="' + sum.percent + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + indEsc(g.heading) + ' progress">' +
       '<span style="width:' + sum.percent + '%"></span></div>' +
       '<div class="rh2-row-sub" style="margin:4px 0 12px;">' + sum.percent + '% complete</div>';
 

@@ -1665,6 +1665,897 @@
         }
       ],
     },
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       SPLOSE INDUCTION (group: 'splose')
+
+       Splose is an external system, so these lessons are screenshot-led:
+       intro / screenshot / callout / warning / quiz / complete steps only —
+       never highlight or action, because there is no live Splose control on
+       an Opal Portal screen to anchor to. `start` simply parks the learner on
+       the Resources tab, which is where the Learning dashboard lives.
+
+       Content contract: the Opal Splose Interactive Training Package
+       (2026-08-24-draft-1) is the authority for every rule taught here. Where
+       that package marks an Opal policy as not yet final, the lesson says so
+       and points at Opal administration instead of inventing the rule.
+       Screenshots come from a Splose demo workspace; demo participant
+       details, contact information and calendar-feed tokens are masked in
+       the shipped images.
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    // ── S1. Splose at Opal — the big picture ────────────────────────────────
+    {
+      key: 'splose-at-opal',
+      version: 1,
+      group: 'splose',
+      title: 'Splose at Opal: The Big Picture',
+      minutes: 6,
+      roles: ALL_ROLES,
+      description: 'The three systems Opal runs on, what belongs in each, and the one rule that keeps them honest.',
+      thumb: '/assets/tutorials/splose-at-opal.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Three systems, one practice',
+          body: 'Opal runs its day across three systems, and each has one job.\n\n**Splose** is the clinical practice-management system: participant appointments, attendance, cases and progress notes.\n\n**Outlook and Teams** are the communication layer: email, internal meetings and meeting infrastructure.\n\n**The Opal Portal** — where you are now — is the operational layer: travel, invoicing, resources and this learning.\n\nThis short lesson gives you the map. The rest of the Splose induction fills in each area.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Where does each job belong?',
+          image: { src: '/assets/tutorials/splose-at-opal/systems-map.png', alt: 'Decision table of the three systems: Splose holds participant appointments, telehealth bookings, status changes, cases and progress notes, and your performance report. Outlook and Teams hold email, internal and staff meetings, supervision and MDT invites, Teams meeting links, and a view-only copy of the Splose calendar. The Opal Portal holds travel calculation, invoicing workflow, internal resources, and learning.' },
+          body: 'Keep this decision table in mind whenever you are unsure which system to open.\n\nIf a task involves a **participant’s appointment or clinical record**, it belongs in Splose. If it is **email or an internal meeting**, it belongs in Outlook or Teams. If it is **travel, invoicing, resources or learning**, it belongs in the Opal Portal.',
+        },
+        {
+          type: 'callout',
+          title: 'The source-of-truth rule',
+          body: 'Splose is the **source of truth for participant appointments**.\n\nYour Outlook calendar can display a subscribed copy of your Splose calendar — that is a convenience view. Any change to a participant appointment — booking, moving, cancelling — is made **in Splose**, never by editing the Outlook copy.\n\nA later lesson shows exactly how that one-way calendar feed works.',
+        },
+        {
+          type: 'callout',
+          title: 'Telehealth and meetings',
+          body: 'Participant **telehealth appointments are booked in Splose**. Where the service is configured for it, Splose creates the Microsoft Teams meeting link for you.\n\n**Internal meetings** — team meetings, supervision, general Teams meetings — are created in Outlook/Teams, not booked as appointments in Splose.\n\nAn MDT or case conference may have its meeting invite in Outlook/Teams, and still be clinically documented in Splose where Opal procedure requires it.',
+        },
+        {
+          type: 'quiz',
+          title: 'Which system? — appointments',
+          quiz: {
+            question: 'A participant emails asking to move tomorrow’s session to the afternoon. Where do you make the change?',
+            options: [
+              'Drag the appointment in the subscribed Outlook calendar',
+              'Reschedule the appointment in Splose',
+              'Reply by email and update it wherever is quickest',
+            ],
+            correctIndex: 1,
+            explain: 'Splose is the source of truth for participant appointments. You read and answer the email in Outlook, but the appointment itself moves in Splose — the Outlook view catches up on its own.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Which system? — meetings',
+          quiz: {
+            question: 'You need to set up a fortnightly supervision meeting with your supervisor. Where does it go?',
+            options: [
+              'Book it as an appointment in Splose',
+              'Create it in Outlook/Teams',
+              'Add it as busy time in Splose only',
+            ],
+            correctIndex: 1,
+            explain: 'Internal meetings — including supervision — live in Outlook/Teams. Splose appointments are for participant work.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Which system? — operations',
+          quiz: {
+            question: 'You drove to a home visit and need the travel recorded and invoiced correctly. Which system owns that workflow?',
+            options: [
+              'Splose',
+              'Outlook',
+              'The Opal Portal',
+            ],
+            correctIndex: 2,
+            explain: 'Travel calculation and invoicing workflow belong to the Opal Portal, even when the underlying appointment data starts in Splose.',
+          },
+        },
+        {
+          type: 'complete',
+          title: 'You have the map',
+          body: 'Three systems, each with one job — and one rule above them all: **Splose is the source of truth for participant appointments**.\n\nNext, set your own Splose account up properly.',
+          next: 'splose-account-setup',
+        },
+      ],
+    },
+
+    // ── S2. Practitioner account setup ──────────────────────────────────────
+    {
+      key: 'splose-account-setup',
+      version: 1,
+      group: 'splose',
+      title: 'Set Up Your Splose Account',
+      minutes: 10,
+      roles: ALL_ROLES,
+      description: 'Your practitioner profile, the locations and services attached to it, and why a missing service is never solved by picking a different one.',
+      thumb: '/assets/tutorials/splose-account-setup.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Why your profile matters',
+          body: 'Your practitioner profile controls three things: **where** you work, **which services** appear when a booking is made with you, and **when** you are available.\n\nIf any of those are wrong, bookings go wrong quietly — a service missing from a list, an appointment in the wrong location.\n\nBy the end of this lesson you can open My Account, check your locations and services, understand availability, and know exactly what to do when a service you need is not there.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Locations and services',
+          image: { src: '/assets/tutorials/splose-account-setup/practitioner-settings.png', alt: 'Splose practitioner settings showing a Locations you work at checklist and a Services provided by you checklist with a search box; several services are ticked and others left unticked. The organisation shown is a Splose demo workspace.' },
+          body: 'Click your **profile icon**, then open **My Account** and review your practitioner profile.\n\nTwo lists do the heavy lifting:\n\n**Locations you work at** — the clinics and sites you can be booked into.\n\n**Services provided by you** — the services that appear when someone books an appointment with you. A service only shows during booking when it is enabled for **both** you and the selected location.\n\nThe screenshot is from a Splose demo workspace — your real account shows Opal’s locations and service names.',
+        },
+        {
+          type: 'callout',
+          title: 'Availability',
+          body: 'Availability is when you are ordinarily open for work and bookings — it is **not** an appointment.\n\nSplose availability can support recurring weekly patterns, fortnightly patterns, one-off days and custom hours. Review yours and set it according to your **Opal-approved work pattern**, then save and check the configuration.',
+        },
+        {
+          type: 'warning',
+          title: 'Missing service? Never substitute',
+          body: 'Do not tick every service just because the settings screen offers it — only use services appropriate to your profession, role and authorised configuration.\n\nAnd if the service you need is **missing when you book**, never select a similar-looking service to make the booking work. A near-match creates wrong clinical and billing records.\n\nInstead: check the selected **location**, check the service is assigned to **you**, and if it is still missing, contact **Opal administration**.',
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: the missing service',
+          quiz: {
+            question: 'You are booking a session and cannot find Telehealth OT in the service list. What do you do first?',
+            options: [
+              'Pick the closest similar service so the booking goes through',
+              'Check the selected location and your practitioner service assignment, then escalate to admin if it is still missing',
+              'Create the appointment as busy time and fix it later',
+            ],
+            correctIndex: 1,
+            explain: 'Service visibility depends on the service + practitioner + location relationship. Check those first; if the right service still is not there, Opal administration fixes the assignment — a substitute service is never the answer.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: substitution',
+          quiz: {
+            question: 'True or false: when the correct service is missing, selecting another similar service is acceptable.',
+            options: ['True', 'False'],
+            correctIndex: 1,
+            explain: 'False — a wrong service means wrong records. Check the assignment, then escalate.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: availability',
+          quiz: {
+            question: 'What does your practitioner availability represent?',
+            options: [
+              'The appointments already booked with you',
+              'When you are ordinarily available for work and bookings',
+              'Your leave calendar',
+            ],
+            correctIndex: 1,
+            explain: 'Availability is your ordinary working pattern — the frame bookings go into, not the bookings themselves.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Your setup checklist',
+          body: 'Before you move on, you should be able to tick every line:\n\n✓ Splose login works\n✓ Profile details reviewed\n✓ Correct work locations visible\n✓ Correct services for your role visible\n✓ Availability reviewed against your approved pattern\n\nAnything you cannot tick — raise it with Opal administration now, not on the morning of your first booking.',
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'A few profile rules are still being settled and are **not** covered by this lesson: which profile fields you may edit yourself versus manager-controlled fields, who owns availability changes after onboarding, and Opal’s exact location and service naming.\n\nUntil those are published, check with Opal administration before changing profile settings beyond what this lesson covers.',
+        },
+        {
+          type: 'complete',
+          title: 'Your account is in order',
+          body: 'Profile, locations, services, availability — checked. You also know the golden rule: a missing service is an assignment problem for admin, never a reason to pick a near-match.\n\nNext: booking appointments on the Splose calendar.',
+          next: 'splose-booking',
+        },
+      ],
+    },
+
+    // ── S3. Calendar, booking and client access ─────────────────────────────
+    {
+      key: 'splose-booking',
+      version: 1,
+      group: 'splose',
+      title: 'Book a Client Appointment',
+      minutes: 12,
+      roles: ALL_ROLES,
+      description: 'The Splose calendar, the three booking types, completing a booking properly, and how practitioner–client access really works.',
+      thumb: '/assets/tutorials/splose-booking.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Booking, done properly',
+          body: 'Booking in Splose is quick — the skill is doing it **accurately**: the right client, the right service, linked to the right case.\n\nBy the end of this lesson you can navigate the calendar, tell an Appointment from a Support activity and Busy time, complete a booking with the correct details, and get access to a new client’s record before their first appointment.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Pick the time slot',
+          image: { src: '/assets/tutorials/splose-booking/calendar-choose-appointment.png', alt: 'Splose calendar in week view for a demo clinic, with practitioner columns across the top. A clicked 11:00 am time slot shows a small menu offering Support activity, Busy time and Appointment, with Appointment about to be selected.' },
+          body: 'Open **Calendar**, find the correct **location** and your **practitioner column**, and click the time slot you want.\n\nA small menu appears with three choices. For a therapy session with a client, choose **Appointment**.\n\nEverything in this screenshot is demo data — the layout is what matters.',
+        },
+        {
+          type: 'screenshot',
+          title: 'The three booking types',
+          image: { src: '/assets/tutorials/splose-booking/calendar-choose-support-activity.png', alt: 'Close-up of the Splose slot menu showing the three booking types: Support activity with a clock icon, Busy time with a blocked icon, and Appointment with a calendar icon.' },
+          body: '**Appointment** — a client-facing therapy or clinical session. Your default for participant work.\n\n**Support activity** — a client-related activity that is not a standard session, where Opal procedure allows it: report writing or billable communication are typical examples, depending on final Opal policy.\n\n**Busy time** — blocks your availability without representing any client work.\n\nChoosing the right type matters: it drives attendance records, reporting and, ultimately, billing.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Complete the booking',
+          image: { src: '/assets/tutorials/splose-booking/create-appointment-client.png', alt: 'The Splose Create appointment dialog with location and practitioner filled in, a client search underway with a demo client result (date of birth hidden), and fields below for service, case, date and time.' },
+          body: 'The Create appointment dialog walks you down the details:\n\n1. **Client** — search and select. Only create a new client where that is appropriate and you are authorised to.\n2. **Service** — choose the correct one. Only services enabled for you at this location appear.\n3. **Case** — link the appointment to the appropriate existing case where one is available. This is what keeps the clinical record tidy.\n4. **Date, time, duration** — confirm them; assign a room or resource if needed.\n5. Turn on **Provider Travel** when the appointment requires travel and the configured workflow expects it.\n6. Click **Create**.',
+        },
+        {
+          type: 'callout',
+          title: 'How client access works',
+          body: 'Booking an appointment **or** a support activity with a client links that client to you.\n\nBy default, you generally see the clients you have an appointment or support activity with — that link is what opens the record to you.',
+        },
+        {
+          type: 'callout',
+          title: 'A referral you cannot see yet',
+          body: 'New referral arrives. You need to review the record **before** the first session — but the client is not linked to you yet, so you cannot see it.\n\nThe supplied workflow: create a **support activity linked to that client**. The link now exists, you can review the record, and later you book the real therapy appointment. If Opal procedure allows, the temporary activity can be archived afterwards.',
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: booking type',
+          quiz: {
+            question: 'A regular one-hour therapy session with a participant — which booking type?',
+            options: ['Appointment', 'Support activity', 'Busy time'],
+            correctIndex: 0,
+            explain: 'A client-facing therapy session is always an Appointment. Support activities are for non-session client work, and busy time holds space with no client attached.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: the missing service, again',
+          quiz: {
+            question: 'Why might a service not appear in the Create appointment dialog?',
+            options: [
+              'Splose hides services at busy times',
+              'It is not enabled for the selected location or for you as the practitioner',
+              'The client has not consented to that service',
+            ],
+            correctIndex: 1,
+            explain: 'Service visibility is the service + practitioner + location relationship — the same rule you learned in account setup. Wrong location or missing assignment: check both, then escalate.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: early record access',
+          quiz: {
+            question: 'A new referral is not visible to you yet, and you need to review the client’s information before the first session. What is the correct path?',
+            options: [
+              'Ask a colleague to read the record to you',
+              'Create a support activity linked to the client, which establishes your access',
+              'Book a placeholder appointment for tomorrow and cancel it later',
+            ],
+            correctIndex: 1,
+            explain: 'A client-linked support activity creates the practitioner–client link, which is what opens the record. A placeholder appointment pollutes the appointment history and cancellation records.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: cases',
+          quiz: {
+            question: 'What is the recommended way to make sure a session is tracked correctly against the clinical record?',
+            options: [
+              'Put the case name in the appointment note',
+              'Link the appointment to the appropriate case',
+              'Email admin after each session',
+            ],
+            correctIndex: 1,
+            explain: 'Linking the appointment to its case at booking time is what keeps sessions, notes and reporting connected.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'The following are not final yet, so this lesson does not state rules for them: the exact allowed uses of Support activity, whether practitioners or only administrators create new clients, the Provider Travel field expectations once Opal’s travel automation is final, and who archives temporary linking activities.\n\nWhen one of these matters to your work, ask Opal administration rather than guessing.',
+        },
+        {
+          type: 'complete',
+          title: 'You can book cleanly',
+          body: 'Right slot, right type, right client, right service, linked case — and the support-activity trick for records you cannot see yet.\n\nNext: what happens when appointments change.',
+          next: 'splose-appointments',
+        },
+      ],
+    },
+
+    // ── S4. Appointment management ──────────────────────────────────────────
+    {
+      key: 'splose-appointments',
+      version: 1,
+      group: 'splose',
+      title: 'Reschedule, Cancel and Status',
+      minutes: 10,
+      roles: ALL_ROLES,
+      description: 'Moving appointments safely, recording cancellations and no-shows through Status, and why Archive is never a cancellation.',
+      thumb: '/assets/tutorials/splose-appointments.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Appointments change — records should not suffer',
+          body: 'Sessions move, participants cancel, sometimes nobody shows up. Splose records each of those differently, and the differences carry through to clinical history and billing.\n\nBy the end of this lesson you can reschedule with confidence, record a cancellation properly, tell **Cancelled** from **Did not arrive**, and explain why **Archive** is not how you cancel anything.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Reschedule',
+          image: { src: '/assets/tutorials/splose-appointments/rescheduling-mode.png', alt: 'Splose calendar in rescheduling mode: a banner at the top reads Rescheduling for, with the client name hidden, and the calendar waits for a new time slot to be clicked.' },
+          body: 'Click the appointment, select **Reschedule**, then click the new time slot. Splose shows a confirmation before anything changes.\n\nThe faster alternative: **drag** the appointment to its new day or time. The same confirmation appears — the speed never skips the check.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Read before you confirm',
+          image: { src: '/assets/tutorials/splose-appointments/reschedule-confirm.png', alt: 'A Splose confirmation dialog asking Are you sure?, describing the appointment change with its new time, date, clinic location and practitioner, with Cancel and Confirm buttons.' },
+          body: 'The confirmation sentence contains everything that is about to change. Before clicking Confirm, deliberately check all four:\n\n**Date** — the right day?\n**Time** — the right slot?\n**Location** — the right clinic?\n**Practitioner** — still the right person?\n\nDrag-and-drop makes it easy to be one column or one row off — this dialog is where you catch it.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Cancellations go through Status',
+          image: { src: '/assets/tutorials/splose-appointments/status-cancelled-dna.png', alt: 'A Splose appointment panel with the Status dropdown open showing No status, Arrived, Did not arrive and Cancelled. The client name is hidden. Below the panel are Book another, Edit, Reschedule and Archive buttons and a View change log link.' },
+          body: 'To record a cancellation: click the appointment, open the **Status** dropdown, select **Cancelled**, choose the applicable cancellation option, add a reason where required, and confirm.\n\nThe status vocabulary:\n\n**No status** — not yet marked.\n**Arrived** — the participant attended.\n**Did not arrive** — expected, did not attend, had not cancelled.\n**Cancelled** — the appointment was called off.',
+        },
+        {
+          type: 'warning',
+          title: 'Cancel is not Archive',
+          body: 'The **Archive** button on the appointment panel is a record-management action — it is **not** how you cancel.\n\nA cancellation recorded through Status **preserves** the appointment and its history, which the practice needs for reporting and billing. Archive records no cancellation at all — it is a separate action for managing records, and it is never the normal way to handle a cancelled appointment.\n\nIf you remember one thing from this lesson: **status records what happened; Archive is not a cancellation shortcut.**',
+        },
+        {
+          type: 'callout',
+          title: 'The change log',
+          body: 'The appointment panel may offer **View change log** — the appointment’s history of edits and status changes.\n\nYou will not need it daily, but when something looks wrong — a session that moved unexpectedly, a status you did not set — the change log is where you look before escalating.',
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: the sick child',
+          quiz: {
+            question: 'A parent emails before the session: their child is unwell and cannot attend today. How is the appointment recorded?',
+            options: [
+              'Status → Did not arrive',
+              'Status → Cancelled, with the applicable cancellation option',
+              'Archive the appointment',
+            ],
+            correctIndex: 1,
+            explain: 'The family cancelled before the session — that is a cancellation, recorded through Status with the applicable option and reason. Did not arrive is only for unannounced absences, and Archive is never a cancellation.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: the empty waiting room',
+          quiz: {
+            question: 'You wait at the scheduled time; the participant never attends and nobody cancelled beforehand. Which status fits?',
+            options: ['Cancelled', 'No status', 'Did not arrive'],
+            correctIndex: 2,
+            explain: 'Expected, absent, no prior cancellation — that is exactly what Did not arrive records. The distinction from Cancelled matters for reporting and any applicable billing rules.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: the moved session',
+          quiz: {
+            question: 'A participant asks to move tomorrow’s 10am session to 2pm. Where does the move happen?',
+            options: [
+              'In Splose, using Reschedule or drag-and-drop',
+              'In the subscribed Outlook calendar',
+              'Cancel in Splose and rebook fresh',
+            ],
+            correctIndex: 0,
+            explain: 'Reschedule in Splose — it is the source of truth. Outlook only displays a copy, and cancel-plus-rebook fabricates a cancellation that never happened.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: before you confirm',
+          quiz: {
+            question: 'What must you verify in the confirmation dialog after dragging an appointment to a new slot?',
+            options: [
+              'Just the new time',
+              'Date, time, location and practitioner',
+              'That the client was notified',
+            ],
+            correctIndex: 1,
+            explain: 'All four, every time — drag-and-drop mistakes are usually one column (practitioner) or one row (time) off, and the confirmation sentence is where you catch them.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'Not covered here because Opal has not finalised them: whether clients are automatically notified after a reschedule or cancellation, the cancellation reason categories, late-cancellation invoicing, who may archive appointments and when, and exactly when the Arrived status must be applied.\n\nUntil those are published, ask Opal administration when a case in front of you depends on one.',
+        },
+        {
+          type: 'complete',
+          title: 'Changes, recorded honestly',
+          body: 'Reschedule with the four-point check, cancellations through Status, Did not arrive for unannounced absences — and Archive left alone.\n\nNext: documenting the session itself.',
+          next: 'splose-progress-notes',
+        },
+      ],
+    },
+
+    // ── S5. Progress notes and AI documentation ─────────────────────────────
+    {
+      key: 'splose-progress-notes',
+      version: 1,
+      group: 'splose',
+      title: 'Document the Session',
+      minutes: 15,
+      roles: ALL_ROLES,
+      description: 'Progress notes from the appointment, structuring a defensible clinical note, and using Splose’s AI drafting without ever letting it write the record for you.',
+      thumb: '/assets/tutorials/splose-progress-notes.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'The note is the clinical record',
+          body: 'A session is not finished until it is documented — and the note you write **is** the clinical record.\n\nBy the end of this lesson you can start a progress note from the right appointment, structure it clearly, keep reported information separate from what you observed, and use Splose’s AI drafting tools the safe way: as a drafting hand, never as the author of record.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Start from the appointment',
+          image: { src: '/assets/tutorials/splose-progress-notes/add-progress-note.png', alt: 'A Splose appointment panel with client contact details hidden and the Add progress note link circled. The panel also shows the appointment time, service and note field.' },
+          body: 'Notes for a session start **from that session’s appointment** — that is what ties the note to the right client, date, service and practitioner.\n\nIn the Calendar, click the appointment, confirm those details are the ones you expect, then select **Add progress note**. Pick the appropriate progress-note template and the editor opens.',
+        },
+        {
+          type: 'screenshot',
+          title: 'The editor and slash commands',
+          image: { src: '/assets/tutorials/splose-progress-notes/editor-slash-menu.png', alt: 'The Splose note editor with a slash-command menu open, offering Heading 1, Heading 2, Heading 3, Text, Bullet list and Numbered list blocks.' },
+          body: 'The note editor builds from blocks. Type **/** to open the insert menu — headings, text, bullet lists, numbered lists, and depending on configuration, tables, images and signatures.\n\nUse headings to give the note a visible clinical structure rather than one long paragraph.',
+        },
+        {
+          type: 'callout',
+          title: 'Structure the note',
+          body: 'Use the note structure Opal provides in the template — do not invent your own per note.\n\nA classic **SOAP** structure is Subjective, Objective, Assessment, Plan. Opal may instead configure a practical OT structure along the lines of: presentation and reported information, intervention, observations of occupational performance, clinical interpretation, participant response, and plan.\n\nWhichever template Opal supplies: same structure, every note — that consistency is what makes records readable across the team.',
+        },
+        {
+          type: 'callout',
+          title: 'Reported. Observed. Interpreted.',
+          body: 'A defensible note keeps three kinds of statement visibly distinct:\n\n**Reported** — “Mother reported difficulty with morning routines.”\n**Observed** — “OT observed the participant complete the task with verbal prompting.”\n**Clinical interpretation** — “This suggests reduced task initiation.”\n\nNever convert a collateral report into a direct observation. What a parent, teacher or support worker told you stays labelled as reported — however plausible it sounds.',
+        },
+        {
+          type: 'screenshot',
+          title: 'AI blocks',
+          image: { src: '/assets/tutorials/splose-progress-notes/ai-blocks.png', alt: 'The Splose note editor slash menu showing two AI options — Load AI block, which inserts a prompt from the library, and Insert AI block, which creates an empty custom prompt — above an example AI prompt block for writing a behaviour section from a session transcript.' },
+          body: 'Where Opal has AI enabled, the slash menu offers two AI options:\n\n**Load AI block** — inserts a preconfigured prompt from the library. When Opal publishes approved prompts, this is the one you use.\n\n**Insert AI block** — creates an empty block for a custom prompt.\n\nTypical uses: summarising, drafting a structured section, extracting actions, or tidying rough notes. Splose can also use a session transcript as context and draft a note with **Write Progress Note**, where that capability is enabled.',
+        },
+        {
+          type: 'warning',
+          title: 'AI output is a draft. You are the author.',
+          body: 'Every AI-generated sentence is a **draft** until you have verified it. The working rule:\n\ngenerate → **read all of it** → compare against the session → correct anything unsupported → add the clinical reasoning only you can supply → then finalise.\n\nNever auto-finalise AI output. The treating practitioner remains responsible for the record — the tool never is.\n\nWatch for the classic leap: a parent reported difficulty brushing teeth, and the draft asserts “requires moderate assistance with oral hygiene.” An assistance level belongs in the note only if it was actually established, observed or assessed.',
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: where notes start',
+          quiz: {
+            question: 'Where should a progress note for a specific session normally be started?',
+            options: [
+              'From the client’s file, whenever convenient',
+              'From that session’s appointment in the calendar',
+              'In a separate document, pasted in later',
+            ],
+            correctIndex: 1,
+            explain: 'Starting from the appointment ties the note to the right client, date, service and practitioner automatically — the links that make it findable and auditable later.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: evidence types',
+          quiz: {
+            question: '“Support worker reported the participant refused breakfast.” What kind of evidence is this?',
+            options: [
+              'Direct observation',
+              'Clinical interpretation',
+              'Collateral / reported information',
+            ],
+            correctIndex: 2,
+            explain: 'You did not see it — someone told you. It stays labelled as reported, and must never drift into the note as an observation.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: the two AI options',
+          quiz: {
+            question: 'Which option inserts an approved prompt from the library, rather than a custom one?',
+            options: ['Insert AI block', 'Load AI block'],
+            correctIndex: 1,
+            explain: 'Load AI block loads from the library — the home of approved prompts. Insert AI block creates an empty custom block.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: check the draft',
+          quiz: {
+            question: 'Your session record says: “Parent reported difficulty brushing teeth.” The AI draft says: “Participant requires moderate assistance with oral hygiene.” What do you do?',
+            options: [
+              'Keep it — it is a reasonable clinical summary',
+              'Correct it: the assistance level was never established, so it cannot stand as written',
+              'Delete the whole draft and refuse to use AI',
+            ],
+            correctIndex: 1,
+            explain: 'The draft turned a parent’s report into an assessed assistance level — a claim nothing in the session supports. Fix the unsupported statement and keep drafting; the discipline is verification, not avoidance.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'Not settled yet, so not taught here: Opal’s final progress-note template, consent requirements for recording or transcribing sessions, audio retention rules, exactly which AI functions are enabled and approved, whether custom AI prompts are permitted, and note finalisation and amendment rules in Splose.\n\nUntil Opal publishes these, ask before recording any session audio and before relying on an AI feature this lesson has not covered.',
+        },
+        {
+          type: 'complete',
+          title: 'Documentation you can stand behind',
+          body: 'Notes start from the appointment, follow the practice structure, keep reported and observed apart — and AI drafts only ever leave your hands after you have verified every line.\n\nNext: connecting Splose to Teams and Outlook.',
+          next: 'splose-teams-outlook',
+        },
+      ],
+    },
+
+    // ── S6. Teams and Outlook integration ───────────────────────────────────
+    {
+      key: 'splose-teams-outlook',
+      version: 1,
+      group: 'splose',
+      title: 'Connect Splose to Microsoft 365',
+      minutes: 12,
+      roles: ALL_ROLES,
+      description: 'Your personal Teams connection, telehealth links, the one-way calendar feed into Outlook, and the private URL you must never share.',
+      thumb: '/assets/tutorials/splose-teams-outlook.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Two systems, connected carefully',
+          body: 'Splose and Microsoft 365 meet in two places: **Teams** creates the meeting links for telehealth, and **Outlook** can display your Splose calendar alongside your email and meetings.\n\nThe theme of this lesson is direction: Splose pushes **out** to Microsoft. Nothing you do in Outlook ever changes a Splose appointment.',
+        },
+        {
+          type: 'screenshot',
+          title: 'Connect Microsoft Teams — you, personally',
+          image: { src: '/assets/tutorials/splose-teams-outlook/integrations-teams-feed.png', alt: 'The Splose My Account Integrations page showing Microsoft Teams with its Connect button circled, and below it the Calendar feed section with a privacy warning and a feed URL whose private token is hidden.' },
+          body: 'In Splose: **My Account → Integrations → Microsoft Teams → Connect**, then sign in with your **Opal Microsoft 365 business account** — never a personal Microsoft account. Return to Splose and check it shows as connected.\n\nThis connection is **per practitioner**: every therapist connects their own work account.',
+        },
+        {
+          type: 'screenshot',
+          title: 'How telehealth gets its Teams link',
+          image: { src: '/assets/tutorials/splose-teams-outlook/service-telehealth-toggles.png', alt: 'A Splose service’s Telehealth settings with three toggles — Create meeting with Zoom, Create meeting with Google Meet, and Create meeting with Microsoft Teams, with only the Microsoft Teams toggle switched on.' },
+          body: 'Where Opal has configured it, the telehealth service carries **Create meeting with Microsoft Teams**. Book that service and Splose creates the Teams meeting link for the appointment.\n\nService configuration may be admin-only — what matters day-to-day is simply: book the **correct telehealth service** and the link takes care of itself.',
+        },
+        {
+          type: 'screenshot',
+          title: 'The manual fallback',
+          image: { src: '/assets/tutorials/splose-teams-outlook/manual-teams-meeting.png', alt: 'A Splose appointment panel with the client name hidden and the Create Microsoft Teams meeting link underlined, next to a calendar showing a telehealth session.' },
+          body: 'No link on a telehealth appointment? Open the appointment and use **Create Microsoft Teams meeting** to add one manually.\n\nIf there is still no link, walk this checklist:\n\n1. Is Microsoft Teams connected under My Account → Integrations?\n2. Was the correct telehealth service selected?\n3. Is that service configured to create Teams meetings?\n4. Use the manual Create Microsoft Teams meeting if appropriate.\n5. Still stuck — escalate to Opal administration.',
+        },
+        {
+          type: 'screenshot',
+          title: 'See Splose in Outlook — step 1',
+          image: { src: '/assets/tutorials/splose-teams-outlook/outlook-add-calendar.png', alt: 'Outlook on the web with the calendar open and the Add calendar option circled in the left sidebar.' },
+          body: 'To see your Splose appointments alongside your Outlook commitments:\n\nFirst, in **Splose**: My Account → Integrations → **Calendar Feed** → Enable, then copy the private feed link.\n\nThen, in **Outlook**: open the Calendar and choose **Add calendar**.',
+        },
+        {
+          type: 'screenshot',
+          title: 'See Splose in Outlook — step 2',
+          image: { src: '/assets/tutorials/splose-teams-outlook/outlook-subscribe-web.png', alt: 'Outlook’s Add calendar dialog on the Subscribe from web tab, with the Splose feed URL pasted (its token hidden), the calendar named Splose, and the Import button circled.' },
+          body: 'Choose **Subscribe from web**, paste the Splose feed link, name the calendar **Splose**, and click **Import**.\n\nYour Splose appointments and support activities now appear in Outlook, refreshed automatically.',
+        },
+        {
+          type: 'screenshot',
+          title: 'The feed is one-way. Always.',
+          image: { src: '/assets/tutorials/splose-teams-outlook/one-way-feed.png', alt: 'Diagram of a one-way arrow from Splose to Outlook labelled calendar feed, view only, with the reverse direction crossed out in red and labelled: changes made in Outlook never update Splose.' },
+          body: 'The subscribed calendar is a **view**, not a second copy you can edit.\n\nSplose → Outlook: appointments appear. Outlook → Splose: **nothing flows back**. Moving, editing or deleting the Outlook copy changes nothing in Splose — it just makes your view wrong.\n\nSo the working pattern for an emailed change request: read and reply in **Outlook**, reschedule in **Splose**, and let the Outlook view catch up on its own.',
+        },
+        {
+          type: 'warning',
+          title: 'The feed link is private',
+          body: 'Anyone who has your calendar-feed URL can see your Splose appointments, support activities and busy times — no password asked.\n\nNever share it, post it, or paste it anywhere other than your own Outlook subscription. If it is ever shared by mistake, **disable the feed and generate a new link** in Splose, then resubscribe.\n\nThat is also why the URLs in this lesson’s screenshots have their tokens hidden.',
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: where changes happen',
+          quiz: {
+            question: 'Your subscribed Splose calendar shows tomorrow’s session at the wrong time — the participant agreed to move it. Where do you fix it?',
+            options: [
+              'Drag the event in Outlook',
+              'Reschedule the appointment in Splose',
+              'Delete the Outlook copy so it re-syncs',
+            ],
+            correctIndex: 1,
+            explain: 'The feed is one-way. Only rescheduling in Splose changes the appointment; the Outlook view then updates itself.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: the feed’s direction',
+          quiz: {
+            question: 'Is the Splose-to-Outlook calendar feed two-way?',
+            options: [
+              'Yes — edits sync in both directions',
+              'No — Splose publishes to Outlook, and nothing flows back',
+            ],
+            correctIndex: 1,
+            explain: 'One-way, by design. Outlook displays; Splose decides.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: which account',
+          quiz: {
+            question: 'Which Microsoft account do you connect to Splose for Teams?',
+            options: [
+              'Any Microsoft account you already have',
+              'Your approved Opal Microsoft 365 business account',
+              'A shared practice account admin gives you',
+            ],
+            correctIndex: 1,
+            explain: 'Each practitioner connects their own approved Opal Microsoft 365 business account — personal and shared accounts do not belong in the clinical workflow.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: internal meetings',
+          quiz: {
+            question: 'Where are ordinary internal Teams meetings — team catch-ups, supervision — created?',
+            options: [
+              'In Splose, so they appear in the feed',
+              'In Outlook/Teams',
+            ],
+            correctIndex: 1,
+            explain: 'Internal meetings live in Outlook/Teams. Splose’s Teams integration exists for participant telehealth appointments.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'Not yet final, so not stated as rules here: exactly what clients are sent when a Teams link is created, which Opal services have Teams creation enabled, whether service configuration is owner/admin-only, and the final wording on documenting MDT meetings and support activities.\n\nWhen in doubt, ask Opal administration — especially before assuming a client was automatically notified of anything.',
+        },
+        {
+          type: 'complete',
+          title: 'Connected, in the right direction',
+          body: 'Teams connected with your own work account, telehealth links flowing from the right service, Splose visible in Outlook — and the feed treated as what it is: a private, one-way view.\n\nNext: what Splose can tell you about your own work.',
+          next: 'splose-performance',
+        },
+      ],
+    },
+
+    // ── S7. Performance and utilisation ─────────────────────────────────────
+    {
+      key: 'splose-performance',
+      version: 1,
+      group: 'splose',
+      title: 'Your Performance Report',
+      minutes: 8,
+      roles: ALL_ROLES,
+      description: 'Reading your own Splose performance report: utilisation, what the numbers do and do not mean, and why incomplete notes come first.',
+      thumb: '/assets/tutorials/splose-performance.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'Your numbers, read properly',
+          body: 'Splose can show you an honest picture of your own working week: sessions delivered, time utilised, travel, and — most importantly — any sessions still missing their notes.\n\nBy the end of this lesson you can open your own performance report, read each metric for what it actually measures, and act on the one number that is really a clinical follow-up list in disguise.',
+        },
+        {
+          type: 'callout',
+          title: 'Find your report',
+          body: 'In Splose: **Reports → Performance**.\n\nSet the **date range** you want to look at, select **your own practitioner name**, and review the metrics for that period.',
+        },
+        {
+          type: 'callout',
+          title: 'What the metrics measure',
+          body: '**1:1 Appointments** — one-on-one sessions marked as arrived.\n**Appointments Utilisation** — the share of your available time spent in arrived appointments.\n**Group attendees** — participants seen in group sessions.\n**Support activities** — hours in support and non-clinical activity, depending on configuration.\n**Travel** — provider travel hours.\n**Total hours / Total Utilisation** — the broader picture across recognised service activity.\n**Revenue** — invoiced revenue from appointments, support activities and travel.\n**Cancellations** and **Incomplete notes** — the follow-up signals.',
+        },
+        {
+          type: 'callout',
+          title: 'The utilisation sum',
+          body: 'Utilisation is a simple fraction of your available time.\n\nAvailable time this week: **40 hours**. Time in arrived appointments: **28 hours**. Appointment utilisation: 28 ÷ 40 = **70%**.\n\nAppointment utilisation and Total Utilisation can differ, because broader utilisation may also count other recognised service time — support activities or travel, depending on configuration.\n\nAnd a caution built into the metric: utilisation measures **workload**, not clinical quality. A higher number is not a better therapist.',
+        },
+        {
+          type: 'callout',
+          title: 'Incomplete notes come first',
+          body: '**Incomplete notes** is not a KPI to admire — it is a list of sessions whose clinical documentation is missing.\n\nYou finished six sessions yesterday and the report shows 2 incomplete notes? That is two clinical records currently incomplete: identify which sessions they are, and complete or review the documentation promptly.',
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: the sum',
+          quiz: {
+            question: 'Available time 40 hours; arrived appointment time 28 hours. Appointment utilisation?',
+            options: ['40%', '70%', '82%'],
+            correctIndex: 1,
+            explain: '28 ÷ 40 = 0.70 — seventy percent of available time in arrived appointments.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: what the number means',
+          quiz: {
+            question: 'Does high utilisation automatically mean high-quality clinical work?',
+            options: [
+              'Yes — more sessions means better care',
+              'No — utilisation measures workload, not clinical quality',
+            ],
+            correctIndex: 1,
+            explain: 'Utilisation is an operational measure of how available time was used. Clinical quality lives in the work itself and its documentation.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Scenario: two missing notes',
+          quiz: {
+            question: 'Your report shows Incomplete notes: 2. What is the practical response?',
+            options: [
+              'Note it and move on — it is only a statistic',
+              'Identify the sessions missing notes and complete or review the documentation promptly',
+              'Ask admin to clear the counter',
+            ],
+            correctIndex: 1,
+            explain: 'Incomplete notes are outstanding clinical records. Find the sessions, finish the documentation — promptly, while the session is still fresh.',
+          },
+        },
+        {
+          type: 'screenshot',
+          title: 'Manager view: Performance Overview',
+          roles: ['owner', 'admin'],
+          image: { src: '/assets/tutorials/splose-performance/performance-overview.png', alt: 'The Splose Performance overview dashboard comparing utilisation and revenue over a date range, with a download menu circled offering PNG image, JPG image and CSV data export.' },
+          body: 'Managers and owners may have access to the broader **Performance Overview**: practitioner comparisons, utilisation and revenue charts over time, and PNG / JPG / CSV export for reporting.\n\nUse it as an operational lens across the practice. Practitioners are not expected to compare colleagues — this view is a management tool, and this step of the lesson only appears for management roles.',
+        },
+        {
+          type: 'quiz',
+          title: 'Quick check: comparing colleagues',
+          quiz: {
+            question: 'Should a practitioner normally use performance data to compare themselves against other staff?',
+            options: [
+              'Yes — friendly competition helps',
+              'No — not unless their role and permissions specifically require it',
+            ],
+            correctIndex: 1,
+            explain: 'Your report is for your own work. Cross-practitioner comparison is a management function, used with the care any staff-level data deserves.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'Still being finalised at Opal',
+          body: 'Treat the metric definitions here as the supplied Splose descriptions, not Opal’s final word: exact calculation logic in Opal’s configuration, which metrics practitioners can see under current permissions, how managers will use targets, and how Splose revenue relates to the Opal Portal’s finance dashboards are all still to be confirmed.',
+        },
+        {
+          type: 'complete',
+          title: 'Numbers in perspective',
+          body: 'You can find your report, do the utilisation sum, and read every metric for what it measures — with incomplete notes treated as the clinical to-do list it really is.\n\nOne module left: the whole workflow, end to end.',
+          next: 'splose-daily-workflow',
+        },
+      ],
+    },
+
+    // ── S8. First day and daily workflow — capstone ─────────────────────────
+    {
+      key: 'splose-daily-workflow',
+      version: 1,
+      group: 'splose',
+      title: 'Your Splose Workflow at Opal',
+      minutes: 12,
+      roles: ALL_ROLES,
+      description: 'The capstone: a full day across Splose, Outlook and the Opal Portal, the decision drill, and the first-day checklist.',
+      thumb: '/assets/tutorials/splose-daily-workflow.png',
+      start: { tab: 'resources' },
+      steps: [
+        {
+          type: 'intro',
+          title: 'One mental model',
+          body: 'You have covered setup, booking, appointment changes, documentation, the Microsoft connection and your report. This capstone folds it into a single habit: for any task, you know **which system to open** without thinking.\n\nWork through the day, drill the decisions, and finish with the first-day checklist.',
+        },
+        {
+          type: 'screenshot',
+          title: 'A day at Opal',
+          image: { src: '/assets/tutorials/splose-daily-workflow/day-at-opal.png', alt: 'Timeline of a working day: 8:00 check Outlook then open Splose; 9:00 home visit with a progress note in Splose; 11:00 telehealth in Splose with a Teams link; 1:00 team meeting in Outlook and Teams; 2:30 email in Outlook leading to a reschedule in Splose; end of day, notes in Splose and travel in the Opal Portal.' },
+          body: '**8:00** — Review Outlook for organisational meetings, with the subscribed Splose calendar alongside. Open Splose to confirm the authoritative participant appointments.\n\n**9:00** — Home OT visit, booked in Splose. Attend, then complete the progress note in Splose; the Opal Portal handles the travel and invoice workflow.\n\n**11:00** — Telehealth session booked in Splose; the Teams link was created through Splose. Deliver, then note in Splose.\n\n**1:00** — Internal team meeting: Outlook/Teams.\n\n**2:30** — A participant emails to move tomorrow’s session: reply in Outlook, reschedule in Splose, and the Outlook view catches up.\n\n**End of day** — Check attendance statuses and incomplete notes in Splose; deal with travel and invoice tasks in the Opal Portal.',
+        },
+        {
+          type: 'screenshot',
+          title: 'The decision table, one last time',
+          image: { src: '/assets/tutorials/splose-at-opal/systems-map.png', alt: 'Decision table of the three systems: Splose for participant appointments and clinical records, Outlook and Teams for email and meetings, the Opal Portal for travel, invoicing, resources and learning.' },
+          body: 'Every card in the next drill is answered by this table. Take ten seconds to read it once more — then no peeking.',
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 1 of 8',
+          quiz: {
+            question: 'Booking a participant’s therapy appointment — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 0,
+            explain: 'Participant therapy appointments live in Splose — it is the source of truth for them.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 2 of 8',
+          quiz: {
+            question: 'A case note after this morning’s session — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 0,
+            explain: 'Clinical documentation is Splose — progress notes live with the participant record.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 3 of 8',
+          quiz: {
+            question: 'Sending and answering email — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 1,
+            explain: 'Email is Outlook — the communication layer. What the email asks for may then happen in Splose or the Portal.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 4 of 8',
+          quiz: {
+            question: 'An internal staff meeting for Thursday — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 1,
+            explain: 'Internal meetings are created in Outlook/Teams — they are never Splose appointments.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 5 of 8',
+          quiz: {
+            question: 'Booking a participant telehealth session — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 0,
+            explain: 'Participant telehealth is booked in Splose; where configured, Splose creates the Teams link itself.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 6 of 8',
+          quiz: {
+            question: 'Calculating travel for a home visit — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 2,
+            explain: 'Travel calculation belongs to the Opal Portal, even when the visit itself was booked in Splose.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 7 of 8',
+          quiz: {
+            question: 'The invoicing workflow for last week’s sessions — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 2,
+            explain: 'Invoicing workflow belongs to the Opal Portal, the operational layer — even though the session data originates in Splose.',
+          },
+        },
+        {
+          type: 'quiz',
+          title: 'Decision drill 8 of 8',
+          quiz: {
+            question: 'Rescheduling a participant appointment after an email request — which system?',
+            options: ['Splose', 'Outlook/Teams', 'Opal Portal'],
+            correctIndex: 0,
+            explain: 'Email in Outlook, change in Splose. The subscribed calendar is a view — the appointment moves at its source of truth.',
+          },
+        },
+        {
+          type: 'callout',
+          title: 'The five capstone rules',
+          body: '1. **Splose** is the clinical participant workflow and the source of truth for participant appointments.\n2. **Outlook/Teams** is communication and meeting infrastructure.\n3. **The Opal Portal** is the operational layer: travel, invoicing, resources, learning.\n4. Never manage the same appointment in two systems.\n5. When a workflow is unclear, do **not** invent a workaround that changes billing or clinical records — escalate to Opal administration or management.',
+        },
+        {
+          type: 'callout',
+          title: 'The first-day checklist',
+          body: 'Before your first full week, every line should be true:\n\n**Splose** — workspace invite accepted · login works · profile reviewed · correct locations visible · correct services visible · availability reviewed.\n\n**Microsoft** — Opal Microsoft account working · Outlook working · Teams working.\n\n**Splose + Microsoft** — Teams integration connected · calendar feed enabled if Opal requires it · Splose calendar subscribed in Outlook · and you understand the one-way sync.\n\n**Opal Portal** — login works · Learning opens · travel, invoice and resource access as appropriate to your role.\n\nIf Opal has assigned you the Splose induction in Assigned Learning, its final knowledge check and checklist acknowledgement make this completion formal.',
+        },
+        {
+          type: 'complete',
+          title: 'You know the Opal way',
+          body: 'That is the whole Splose induction: the right system for every task, appointments honest at their source of truth, documentation you stand behind, and a connected Microsoft setup that never confuses a view with the record.\n\nEverything here stays available for review — and when a real case does not fit a rule you learned, that is a question for Opal administration, not a workaround.',
+        },
+      ],
+    },
   ];
 
   // ── Pure helpers ──────────────────────────────────────────────────────────

@@ -87,7 +87,7 @@ describe('the shell wires the surface', () => {
     // The pin is shared by every feature that edits the file — the shell
     // ships the union under the newest version. r27 carries the induction
     // learner-path simplification and the editor's click-to-edit together.
-    expect(SHELL).toContain('<script src="/resourcehub.js?v=r27" defer></script>');
+    expect(SHELL).toContain('<script src="/resourcehub.js?v=r28" defer></script>');
   });
 });
 

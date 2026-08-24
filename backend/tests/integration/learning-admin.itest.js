@@ -497,6 +497,54 @@ test('the portal induction imports as its own workflow', async () => {
   expect(items.map((i) => i.title)).toContain('Getting Started with the Opal Portal');
 });
 
+test('the Splose induction imports with launchable lessons and a formal close', async () => {
+  const owner = await agentFor('owner', org.id);
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  const splose = res.body.created.find((c) => c.title === 'Splose Induction');
+  expect(splose).toBeTruthy();
+
+  const detail = await owner.agent.get(`/api/learning/workflows/${splose.id}`);
+  const sections = detail.body.workflow.draft_content.sections;
+  const items = sections.flatMap((s) => s.items);
+
+  // Eight walkthrough lessons, each a task carrying its registry key — the
+  // player's launch tiles. Splose has no hub pages, so nothing is a resource.
+  const tasks = items.filter((i) => i.type === 'task');
+  expect(tasks).toHaveLength(8);
+  tasks.forEach((t) => expect(t.walkthrough_key).toMatch(/^splose-/));
+  expect(tasks.map((t) => t.walkthrough_key)).toContain('splose-daily-workflow');
+
+  // The portal workflow stays portal-only — the Splose lessons never leak
+  // into it (they would arrive as unlaunchable tasks with misleading text).
+  const portal = res.body.created.find((c) => c.title === 'Opal Portal Induction');
+  const pDetail = await owner.agent.get(`/api/learning/workflows/${portal.id}`);
+  const pItems = pDetail.body.workflow.draft_content.sections.flatMap((s) => s.items);
+  expect(pItems.some((i) => i.walkthrough_key || /^Splose/.test(i.title))).toBe(false);
+
+  // The formal close the curriculum asks for: a server-scored knowledge
+  // check at the 80% pass mark, and the first-day checklist acknowledgement.
+  const quiz = items.find((i) => i.type === 'quiz');
+  expect(quiz.quiz.passThreshold).toBe(80);
+  expect(quiz.quiz.questions).toHaveLength(10);
+  const ack = items.find((i) => i.type === 'acknowledgement');
+  expect(ack.ack_statement).toMatch(/source of truth/);
+
+  // What a learner receives keeps the walkthrough key (the player needs it)
+  // and never the answer key.
+  const emp = await agentFor('therapist', org.id);
+  const assign = await owner.agent.post('/api/learning/assign')
+    .send({ pairs: [{ workflowId: splose.id, userId: emp.user.id }] });
+  expect(assign.body.assigned).toHaveLength(1);
+  const mine = await emp.agent.get('/api/learning/my');
+  const my = mine.body.assignments.find((a) => a.title === 'Splose Induction');
+  const view = await emp.agent.get(`/api/learning/my/${my.id}`);
+  const empItems = view.body.content.sections.flatMap((s) => s.items);
+  empItems.filter((i) => i.type === 'task')
+    .forEach((t) => expect(t.walkthrough_key).toMatch(/^splose-/));
+  const empQuiz = empItems.find((i) => i.type === 'quiz');
+  empQuiz.quiz.questions.forEach((q) => expect(q.correctIndex).toBeUndefined());
+});
+
 test('a path whose resources are gone is reported, not silently dropped', async () => {
   const owner = await agentFor('owner', org.id);
   await db.pool.query(

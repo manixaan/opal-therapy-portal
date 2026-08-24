@@ -24,6 +24,10 @@
  *         minutes:  5,               // optional honest estimate
  *         required: true,            // counts toward completion
  *         resource_id:   '<uuid>',   // type 'resource' only
+ *         walkthrough_key: 'splose-booking',
+ *                                    // type 'task' only, optional: names an
+ *                                    // interactive walkthrough module the
+ *                                    // player offers as the task's action
  *         ack_statement: '…',        // type 'acknowledgement' only
  *         quiz: {                    // type 'quiz' only
  *           passThreshold: 80,       // percent
@@ -146,6 +150,15 @@ function normaliseContent(raw) {
         const stmt = cleanStr(it.ack_statement, LIMITS.ackStatement);
         if (!stmt) return { ok: false, error: `acknowledgement "${itemTitle}" needs a statement to acknowledge` };
         out.ack_statement = stmt;
+      }
+
+      if (type === 'task') {
+        // Optional: the registry key of an interactive walkthrough this task
+        // runs. Kept on the item (not derived from its key) so duplication —
+        // which regenerates keys — never severs the link. An invalid value is
+        // dropped rather than refused: the task still stands as instructions.
+        const wk = cleanStr(it.walkthrough_key, LIMITS.key);
+        if (wk && /^[a-z0-9][a-z0-9-]*$/i.test(wk)) out.walkthrough_key = wk;
       }
 
       if (type === 'quiz') {

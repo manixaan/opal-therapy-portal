@@ -32,11 +32,11 @@ async function openMyLearning(page) {
   for (let i = 0; i < 4; i++) {
     await page.evaluate(() => window.OpalNav.go({ tab: 'resources', view: 'learning' }));
     try {
-      await expect(page.locator('.ind-dash')).toBeVisible({ timeout: 4000 });
+      await expect(page.locator('.ind-dash').first()).toBeVisible({ timeout: 4000 });
       return;
     } catch (e) { /* retry */ }
   }
-  await expect(page.locator('.ind-dash')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('.ind-dash').first()).toBeVisible({ timeout: 8000 });
 }
 
 /** Reset the walkthrough state for a module via the API (test isolation). */
@@ -64,7 +64,7 @@ test.describe('induction dashboard', () => {
     need(THERAPIST);
     await login(page, THERAPIST);
     await openMyLearning(page);
-    const dash = page.locator('.ind-dash');
+    const dash = page.locator('.ind-dash').first();
     await expect(dash.getByText('Getting Started with the Opal Portal')).toBeVisible();
     await expect(dash.getByText(/of \d+/).first()).toBeVisible();
     await expect(dash.getByText('Inviting Therapists')).toHaveCount(0);
@@ -74,6 +74,10 @@ test.describe('induction dashboard', () => {
     const broken = await page.$$eval('.ind-dash-thumb', (imgs) =>
       imgs.filter((i) => i.complete && i.naturalWidth === 0).length);
     expect(broken).toBe(0);
+
+    // The Splose induction renders as its own group card below the portal's.
+    await expect(page.locator('#ind-dash-h-splose')).toBeVisible();
+    await expect(page.locator('.ind-dash').nth(1).getByText('Splose at Opal: The Big Picture')).toBeVisible();
   });
 });
 

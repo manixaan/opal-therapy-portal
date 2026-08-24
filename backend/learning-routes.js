@@ -640,8 +640,12 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
   // ── The interactive portal induction ───────────────────────────────────────
   const modules = requireInductionRegistry();
   if (modules) {
-    const mods = modules.modulesForRole('therapist').concat(
-      modules.modulesForRole('owner').filter((m) => !m.roles.includes('therapist')));
+    // Portal walkthroughs only: the registry also carries the Splose lessons
+    // (group 'splose'), which import as their own workflow below — a role
+    // filter alone would absorb them here, duplicated and unlaunchable.
+    const portalOnly = (list) => list.filter((m) => m.group !== 'splose');
+    const mods = portalOnly(modules.modulesForRole('therapist')).concat(
+      portalOnly(modules.modulesForRole('owner')).filter((m) => !m.roles.includes('therapist')));
     if (mods.length) {
       // Where the hub carries the matching tutorial page, link it; the module
       // key is that resource's slug by the registry's own contract.
@@ -667,6 +671,75 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
                   body: (m.description || '') + '\n\nRun this walkthrough from the Resource Hub — My Learning, under the portal induction.' },
           };
         }), 'Portal walkthroughs'));
+    }
+  }
+
+  // ── The Splose induction ───────────────────────────────────────────────────
+  // The Splose walkthrough lessons (registry group 'splose') plus the formal
+  // close the source curriculum asks for: a server-scored knowledge check at
+  // an 80% pass mark and the first-day checklist as an acknowledgement.
+  // Splose is an external system, so there are no hub tutorial pages to link
+  // — each lesson is a `task` item carrying its walkthrough key, which the
+  // player renders as a launch tile. Questions restate the curriculum's own
+  // knowledge-check bank; no Opal policy is asserted beyond it.
+  if (modules && Array.isArray(modules.MODULES)) {
+    const sploseMods = modules.MODULES.filter((m) => m.group === 'splose');
+    if (sploseMods.length) {
+      const sections = lc.sectionsFromOrderedItems(sploseMods.map((m) => ({
+        group: 'splose-walkthrough',
+        label: 'Splose walkthroughs',
+        item: {
+          type: 'task', title: m.title, required: true, minutes: m.minutes,
+          walkthrough_key: m.key,
+          body: (m.description || '') + '\n\nOpen the walkthrough below — your place in it is saved as you go.',
+        },
+      })), 'Splose walkthroughs');
+      sections.push({
+        title: 'Make it formal',
+        items: [
+          {
+            type: 'quiz', title: 'Splose knowledge check', required: true, minutes: 5,
+            body: 'Ten questions across the whole Splose induction. The pass mark is 80% — you can retry as often as you need.',
+            quiz: {
+              passThreshold: 80,
+              questions: [
+                { question: 'A participant asks to move tomorrow’s appointment to a new time. Where is the appointment moved?',
+                  options: ['In Splose', 'In the subscribed Outlook calendar', 'Wherever is quickest'], correctIndex: 0 },
+                { question: 'A service is missing from your booking screen. What do you do?',
+                  options: ['Select a similar service so the booking goes through',
+                    'Check the selected location and your practitioner service assignment, then escalate to admin if needed',
+                    'Book it as busy time and fix it later'], correctIndex: 1 },
+                { question: 'Which booking type is used for a normal therapy session?',
+                  options: ['Appointment', 'Support activity', 'Busy time'], correctIndex: 0 },
+                { question: 'What can create the practitioner–client link before the first appointment?',
+                  options: ['A support activity linked to the client', 'Emailing the client', 'Opening the waitlist'], correctIndex: 0 },
+                { question: 'Should a cancelled appointment normally be archived?',
+                  options: ['Yes — archive keeps the calendar tidy', 'No — the status records the cancellation and the history is preserved'], correctIndex: 1 },
+                { question: 'A participant was expected, never attended, and had not cancelled. Which status fits?',
+                  options: ['Cancelled', 'Did not arrive', 'No status'], correctIndex: 1 },
+                { question: 'True or false: AI-generated note text can be saved as long as it reads professionally.',
+                  options: ['True', 'False — every AI draft is verified against the session before finalising'], correctIndex: 1 },
+                { question: 'Is the Splose-to-Outlook calendar feed two-way?',
+                  options: ['Yes', 'No — Splose publishes to Outlook and nothing flows back'], correctIndex: 1 },
+                { question: 'What must never be shared with anyone?',
+                  options: ['Your private Splose calendar-feed URL', 'Your practitioner column colour', 'The clinic street address'], correctIndex: 0 },
+                { question: 'Available time 40 hours; arrived appointment time 28 hours. Appointment utilisation?',
+                  options: ['40%', '70%', '82%'], correctIndex: 1 },
+              ],
+            },
+          },
+          {
+            type: 'acknowledgement', title: 'First-day setup checklist', required: true, minutes: 2,
+            body: 'The walkthroughs covered every line of this checklist. Confirm it honestly — anything you cannot confirm goes to Opal administration first.',
+            ack_statement: 'I confirm my Splose first-day setup is complete: my workspace invite is accepted and my login works; my profile, work locations, services and availability are reviewed and correct; my Opal Microsoft account, Outlook and Teams are working; my Microsoft Teams integration is connected in Splose; the Splose calendar feed is enabled and subscribed in Outlook where Opal requires it, and I understand that sync is one-way; my Opal Portal login and Learning access work, with travel, invoice and resource access available as appropriate to my role. I understand Splose is the source of truth for participant appointments.',
+          },
+        ],
+      });
+      await insert(
+        'Splose Induction',
+        'The Splose induction for Opal practitioners: account setup, booking, appointment management, progress notes and AI documentation, the Microsoft 365 connection, performance — closed out by a knowledge check and the first-day checklist.',
+        'induction',
+        sections);
     }
   }
 
