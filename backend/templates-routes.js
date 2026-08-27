@@ -208,6 +208,9 @@ function sectionsDescriptor(template, row) {
       return {
         tag: s.tag,
         label: meta.label || s.title,
+        // The heading text the document itself prints — the editor shows this
+        // so its outline reads exactly as the contents page does.
+        title: meta.title || s.title,
         description: meta.description || '',
         group: meta.group || 'core',
         parent: meta.parent || null,
@@ -215,6 +218,9 @@ function sectionsDescriptor(template, row) {
         custom: false,
         included: s.included !== false,
         headingLevel: levels[s.tag] || null,
+        // The size the master's own heading renders at when no override is
+        // stored: top-level sections are Heading 1, nested ones Heading 2.
+        defaultLevel: meta.parent ? 2 : 1,
         order: s.order,
       };
     });
@@ -232,6 +238,7 @@ function sectionsDescriptor(template, row) {
         tag: s.tag,
         id: entry.id || null,
         label: s.title,
+        title: s.title,
         description: entry.guidance || '',
         group: 'custom',
         // Custom sections render at the master's anchor, inside Assessment
@@ -241,6 +248,7 @@ function sectionsDescriptor(template, row) {
         custom: true,
         included: true,
         headingLevel: s.headingLevel || null,
+        defaultLevel: 2,
         order: s.order,
       };
     });
@@ -298,10 +306,10 @@ function serialiseDocument(state) {
 /**
  * Validate a client's section request against the template's own catalogue.
  *
- * Explicit rejection, not silent correction: an unknown tag or an attempt to
- * drop a required section is a 400 with the reason, exactly as the letter
- * routes treat a required-section removal — the composer would overrule it
- * anyway, but the user deserves to be told rather than quietly ignored.
+ * Explicit rejection, not silent correction: an unknown tag is a 400 with the
+ * reason rather than quietly dropped. The required-section loop below is kept
+ * generic, but the Templates catalogue declares NO required sections — in this
+ * editor every part of the master is negotiable (catalogue.js has the note).
  *
  * @returns {{ ok: true, value: object|null } | { ok: false, error, message }}
  */

@@ -36,7 +36,9 @@ const crypto = require('crypto');
 
 const { resolveScalars } = require('../fca/resolve-scalars');
 const { composeDocx, FCA_OPTIONS } = require('../fca/docx-engine');
-const { normaliseSelection, normaliseCustomSections, buildManifest } = require('../fca/manifest');
+const {
+  normaliseSelection, normaliseCustomSections, buildManifest, DEFAULT_CATALOGUE,
+} = require('../fca/manifest');
 const { readMaster } = require('./catalogue');
 const { severDocx, scrubPortalSurface } = require('./export-boundary');
 const { readDocumentModel } = require('./document-model');
@@ -94,22 +96,36 @@ function resolveDocument({ template, row, client = {}, portal = null, organisati
  * Templates with no section catalogue render the complete master, untouched.
  * The FCA carries one, so its stored selection/order — `row.sections`, shaped
  * `{ selected: [tags], order: [tags] }` — is normalised through the SAME
- * helpers the FCA wizard uses: unknown tags are dropped, required sections are
- * re-added whatever was stored, order falls back to the master's own, and the
- * dependent results-table rows of an excluded assessment travel with it.
+ * helpers the FCA wizard uses: unknown tags are dropped, order falls back to
+ * the master's own, and the dependent results-table rows of an excluded
+ * assessment travel with it. The helpers are given the TEMPLATE'S OWN
+ * catalogue rather than the wizard's default, because the Templates editor
+ * treats no section as required — a stored removal is honoured, not overruled.
  */
+function manifestCatalogue(template) {
+  const sc = template.sectionCatalogue;
+  return {
+    ...DEFAULT_CATALOGUE,
+    SECTIONS: sc.SECTIONS,
+    SECTION_BY_TAG: sc.SECTION_BY_TAG,
+    REQUIRED_SECTION_TAGS: sc.REQUIRED_SECTION_TAGS,
+    MAX_CUSTOM_SECTIONS: sc.MAX_CUSTOM_SECTIONS,
+    MAX_CUSTOM_TITLE_CHARS: sc.MAX_CUSTOM_TITLE_CHARS,
+    MAX_CUSTOM_GUIDANCE_CHARS: sc.MAX_CUSTOM_GUIDANCE_CHARS,
+  };
+}
+
 function sectionStructure(template, row) {
   if (!template.sectionCatalogue) return { sections: [], dependentRows: [] };
 
   const stored = (row && row.sections && typeof row.sections === 'object'
     && !Array.isArray(row.sections)) ? row.sections : {};
 
-  // fca/manifest's default catalogue IS the FCA — the only template that
-  // declares a sectionCatalogue.
+  const cat = manifestCatalogue(template);
   const { selectedSections, sectionOrder } = normaliseSelection({
     selectedSections: Array.isArray(stored.selected) ? stored.selected : undefined,
     sectionOrder: Array.isArray(stored.order) ? stored.order : undefined,
-  });
+  }, cat);
 
   // Clinician-created sections, rendered at the master's custom-section
   // anchor. Ids are server-minted at save time, so the derived tag is stable
@@ -117,7 +133,8 @@ function sectionStructure(template, row) {
   const storedCustom = Array.isArray(stored.custom) ? stored.custom.filter(Boolean) : [];
   const customSections = normaliseCustomSections(
     storedCustom.map((c) => ({ id: c.id, title: c.title, guidance: c.guidance })),
-    () => crypto.randomUUID()
+    () => crypto.randomUUID(),
+    cat
   );
 
   const manifest = buildManifest({
@@ -127,7 +144,7 @@ function sectionStructure(template, row) {
     scalarData: {},
     scalarSources: {},
     excludedFields: [],
-  });
+  }, cat);
 
   // Heading-level overrides: master sections are keyed by tag, custom
   // sections by their stored id (their tag is derived, so the id is the

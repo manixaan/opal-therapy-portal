@@ -648,9 +648,10 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
-      // js 4: date fields become calendar pickers, server-named SA v2.2
-      // master, spacing-fixed letter. css 4: the section panel's controls.
-      ['templates.js', 4], ['templates.css', 4],
+      // js 5: two-step editor panel, contents-mirroring outline with
+      // drag-to-reorder, multi-article A4 pagination fix. css 5: the
+      // stepper and outline styles.
+      ['templates.js', 5], ['templates.css', 5],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

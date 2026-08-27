@@ -314,18 +314,32 @@ describe('a document instance cannot be used to write arbitrary content', () => 
     expect(db.pool.query.mock.calls.filter((c) => /UPDATE/i.test(c[0]))).toHaveLength(0);
   });
 
-  test('dropping a REQUIRED section is refused with its name, and nothing is written', async () => {
+  test('NO section is required — dropping a wizard-required one is accepted and echoed', async () => {
+    // The Templates editor deliberately diverges from the FCA wizard: its
+    // catalogue declares no required sections, so a section the wizard treats
+    // as fixed (Referral Information) can be removed from a document here.
     const agent = await loginAs(THERAPIST);
-    db.pool.query.mockResolvedValueOnce({ rows: [ROW], rowCount: 1 });
-    const fcaSections = require('../fca/template-map').SECTIONS;
-    const withoutReferral = fcaSections.map((s) => s.tag)
+    const fcaSections = require('../fca/template-map').SECTIONS.map((s) => s.tag);
+    const withoutReferral = fcaSections
       .filter((t) => t !== 'OPAL_SECTION_REFERRAL_INFORMATION');
+    const stored = { selected: withoutReferral, order: fcaSections };
+    db.pool.query
+      .mockResolvedValueOnce({ rows: [ROW], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ ...ROW, sections: stored }], rowCount: 1 });
     const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
       .send({ sections: { selected: withoutReferral } });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('required_section');
-    expect(res.body.message).toContain('Referral Information');
-    expect(db.pool.query.mock.calls.filter((c) => /UPDATE/i.test(c[0]))).toHaveLength(0);
+    expect(res.status).toBe(200);
+    const referral = res.body.document.sections
+      .find((s) => s.tag === 'OPAL_SECTION_REFERRAL_INFORMATION');
+    expect(referral.included).toBe(false);
+
+    // The descriptor tells the editor what the document itself prints and at
+    // what size, so the panel can read exactly as the contents page does.
+    const whodas = res.body.document.sections
+      .find((s) => s.tag === 'OPAL_SECTION_ASSESSMENT_TOOL_WHODAS');
+    expect(whodas.title).toBe('WHODAS Assessment Schedule 2.0');
+    expect(whodas.defaultLevel).toBe(2);
+    expect(referral.defaultLevel).toBe(1);
   });
 
   test('sections on a template with a fixed structure are refused', async () => {

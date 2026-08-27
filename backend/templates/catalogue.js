@@ -33,6 +33,27 @@ const letterMap = require('../fca/letter-template-map');
 const saMap = require('./service-agreement-map');
 
 const FCA_TEMPLATE_FILE = path.join(__dirname, '..', 'fca', 'templates', 'fca-v1.docx');
+
+/**
+ * The FCA wizard's section catalogue, with the required flags withdrawn.
+ *
+ * In the Templates editor NOTHING is required: the master is a starting point
+ * and every section of it is negotiable, so the same catalogue that the FCA
+ * wizard treats as partly fixed is offered here fully editable. The composer
+ * receives THIS catalogue (compose.js passes it through to the manifest
+ * helpers), so a removal the route accepts is also honoured at composition —
+ * the wizard's own catalogue, and its required sections, are untouched.
+ */
+const TEMPLATE_FCA_SECTIONS = fcaMap.SECTIONS.map((s) => ({ ...s, required: false }));
+const TEMPLATE_FCA_SECTION_CATALOGUE = {
+  SECTIONS: TEMPLATE_FCA_SECTIONS,
+  SECTION_BY_TAG: new Map(TEMPLATE_FCA_SECTIONS.map((s) => [s.tag, s])),
+  REQUIRED_SECTION_TAGS: [],
+  SECTION_DEPENDENT_ROWS: fcaMap.SECTION_DEPENDENT_ROWS,
+  MAX_CUSTOM_SECTIONS: fcaMap.MAX_CUSTOM_SECTIONS,
+  MAX_CUSTOM_TITLE_CHARS: fcaMap.MAX_CUSTOM_TITLE_CHARS,
+  MAX_CUSTOM_GUIDANCE_CHARS: fcaMap.MAX_CUSTOM_GUIDANCE_CHARS,
+};
 const LETTER_TEMPLATE_FILE = path.join(
   __dirname, '..', 'fca', 'templates', letterMap.LETTER_TEMPLATE_FILENAME
 );
@@ -162,18 +183,9 @@ const TEMPLATES = [
     ],
     participantTag: 'OPAL_CLIENT_FULL_NAME',
     // The FCA is the one template whose section structure a therapist may
-    // shape before export: preview, drop an optional section, restore it,
-    // reorder among siblings. Required sections are not negotiable and the
-    // composer enforces that independently of any route validation.
-    sectionCatalogue: {
-      SECTIONS: fcaMap.SECTIONS,
-      SECTION_BY_TAG: fcaMap.SECTION_BY_TAG,
-      REQUIRED_SECTION_TAGS: fcaMap.REQUIRED_SECTION_TAGS,
-      SECTION_DEPENDENT_ROWS: fcaMap.SECTION_DEPENDENT_ROWS,
-      MAX_CUSTOM_SECTIONS: fcaMap.MAX_CUSTOM_SECTIONS,
-      MAX_CUSTOM_TITLE_CHARS: fcaMap.MAX_CUSTOM_TITLE_CHARS,
-      MAX_CUSTOM_GUIDANCE_CHARS: fcaMap.MAX_CUSTOM_GUIDANCE_CHARS,
-    },
+    // shape before export: preview, drop a section, restore it, reorder
+    // among siblings. Nothing is required here — see the catalogue's note.
+    sectionCatalogue: TEMPLATE_FCA_SECTION_CATALOGUE,
     filenameStem: 'Functional-Capacity-Assessment',
     footer: 'Opal Therapy · Functional Capacity Assessment',
   },

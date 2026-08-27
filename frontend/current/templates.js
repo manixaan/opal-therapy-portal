@@ -48,6 +48,7 @@
     docu: null,              // the open document
     values: {},              // tag → user-entered value, the live model
     sections: null,          // section rows, present only when the template has them
+    step: 'details',         // editor side panel: 'details' first, then 'content'
     dirty: false,
     saving: false,
     saveErr: '',
@@ -283,9 +284,34 @@
         'anything outstanding becomes a standalone field you can complete in Word or a PDF reader, ' +
         'with no connection back to Opal.</p>' +
       '<div class="tpl-split">' +
-        '<section class="tpl-fields" aria-label="Document fields">' +
-          '<div id="tpl-sectionhost"></div>' +
-          '<div id="tpl-fieldhost"></div>' +
+        '<section class="tpl-fields" aria-label="Document editor">' +
+          (d.sections
+            ? '<div class="tpl-steps" role="tablist" aria-label="Editor steps">' +
+                '<button type="button" class="tpl-step" id="tpl-step-details" role="tab" ' +
+                  'onclick="OpalTemplates.setStep(\'details\')">' +
+                  '<span class="tpl-step-num">1</span>Document details</button>' +
+                '<span class="tpl-step-sep" aria-hidden="true">›</span>' +
+                '<button type="button" class="tpl-step" id="tpl-step-content" role="tab" ' +
+                  'onclick="OpalTemplates.setStep(\'content\')">' +
+                  '<span class="tpl-step-num">2</span>Content</button>' +
+              '</div>'
+            : '') +
+          '<div id="tpl-pane-details" class="tpl-steppane">' +
+            '<div id="tpl-fieldhost"></div>' +
+            (d.sections
+              ? '<div class="tpl-stepnav">' +
+                  '<button type="button" class="tpl-btn tpl-btn-primary" ' +
+                    'onclick="OpalTemplates.setStep(\'content\')">Next: Content →</button>' +
+                '</div>'
+              : '') +
+          '</div>' +
+          '<div id="tpl-pane-content" class="tpl-steppane" hidden>' +
+            '<div id="tpl-sectionhost"></div>' +
+            '<div class="tpl-stepnav tpl-stepnav-back">' +
+              '<button type="button" class="tpl-btn tpl-btn-quiet" ' +
+                'onclick="OpalTemplates.setStep(\'details\')">← Back to document details</button>' +
+            '</div>' +
+          '</div>' +
         '</section>' +
         '<section class="tpl-previewpane" aria-label="Document preview">' +
           '<div class="tpl-preview-bar">' +
@@ -379,20 +405,32 @@
   function seedSections() {
     S.sections = (S.docu && S.docu.sections) ? S.docu.sections.map(function (s) {
       return {
-        tag: s.tag, id: s.id || null, label: s.label, description: s.description,
-        parent: s.parent, required: s.required, custom: Boolean(s.custom),
+        tag: s.tag, id: s.id || null, label: s.label,
+        title: s.title || s.label, description: s.description,
+        parent: s.parent, custom: Boolean(s.custom),
         included: s.included, headingLevel: s.headingLevel || null,
+        defaultLevel: s.defaultLevel || (s.parent ? 2 : 1),
       };
     }) : null;
   }
 
+  /**
+   * The size a section's heading actually renders at: the user's choice when
+   * one is stored, otherwise the master's own. The select always shows a real
+   * size — never a "Default" the reader would have to resolve in their head.
+   */
+  function effectiveLevel(row) {
+    return row.headingLevel || row.defaultLevel || (row.parent ? 2 : 1);
+  }
+
   var LEVEL_OPTIONS = [
-    ['', 'Default'], ['1', 'Heading'], ['2', 'Subheading'], ['3', 'Minor heading'],
+    ['1', 'Heading'], ['2', 'Subheading'], ['3', 'Minor heading'],
   ];
 
   function levelSelectHtml(row) {
+    var eff = String(effectiveLevel(row));
     var opts = LEVEL_OPTIONS.map(function (o) {
-      var sel = String(row.headingLevel || '') === o[0] ? ' selected' : '';
+      var sel = eff === o[0] ? ' selected' : '';
       return '<option value="' + o[0] + '"' + sel + '>' + o[1] + '</option>';
     }).join('');
     return '<select class="tpl-level" title="Heading size in the report" ' +
@@ -403,37 +441,37 @@
   function sectionsHtml() {
     var all = S.sections || [];
     var shown = all.filter(function (s) { return s.included; });
-    var removed = all.filter(function (s) { return !s.included && !s.required; });
+    var removed = all.filter(function (s) { return !s.included; });
 
     var rows = shown.map(function (s) {
+      var lvl = effectiveLevel(s);
       return '' +
-        '<div class="tpl-sectionrow' + (s.parent ? ' tpl-section-child' : '') + '">' +
-          '<span class="tpl-section-main" title="' + esc(s.description) + '">' +
-            '<span class="tpl-section-label">' + esc(s.label) + '</span>' +
-            (s.required ? '<span class="tpl-quiet"> · required</span>' : '') +
-            (s.custom ? '<span class="tpl-quiet"> · yours</span>' : '') +
+        '<div class="tpl-secrow tpl-secrow-l' + lvl + '" data-tag="' + esc(s.tag) + '">' +
+          '<button type="button" class="tpl-grip" title="Drag to reorder" ' +
+            'aria-label="Reorder ' + esc(s.label) + ' — arrow keys move it among its siblings" ' +
+            'onkeydown="OpalTemplates.gripKey(event, \'' + esc(s.tag) + '\')"></button>' +
+          '<span class="tpl-secrow-title" title="' + esc(s.description || s.title) + '">' +
+            esc(s.title) +
+            (s.custom ? '<span class="tpl-secrow-yours">yours</span>' : '') +
           '</span>' +
-          '<span class="tpl-section-move">' +
-            levelSelectHtml(s) +
-            '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move up" aria-label="Move ' + esc(s.label) + ' up" ' +
-              'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', -1)">↑</button>' +
-            '<button type="button" class="tpl-btn tpl-btn-quiet" title="Move down" aria-label="Move ' + esc(s.label) + ' down" ' +
-              'onclick="OpalTemplates.moveSection(\'' + esc(s.tag) + '\', 1)">↓</button>' +
-            (s.required
-              ? ''
-              : '<button type="button" class="tpl-btn tpl-btn-quiet tpl-section-remove" ' +
-                'title="Remove from this report" aria-label="Remove ' + esc(s.label) + '" ' +
-                'onclick="OpalTemplates.removeSection(\'' + esc(s.tag) + '\')">✕</button>') +
-          '</span>' +
+          levelSelectHtml(s) +
+          '<button type="button" class="tpl-secrow-remove" ' +
+            'title="Remove from this report" aria-label="Remove ' + esc(s.label) + '" ' +
+            'onclick="OpalTemplates.removeSection(\'' + esc(s.tag) + '\')">✕</button>' +
         '</div>';
     }).join('');
+
+    if (!shown.length) {
+      rows = '<p class="tpl-quiet">Every section is removed — the document is just its cover ' +
+        'and contents. Put sections back below.</p>';
+    }
 
     var restore = '';
     if (removed.length) {
       restore = '<div class="tpl-section-addrow">' +
         '<select id="tpl-restore-pick" class="tpl-level" aria-label="Removed sections">' +
           removed.map(function (s) {
-            return '<option value="' + esc(s.tag) + '">' + esc(s.label) + '</option>';
+            return '<option value="' + esc(s.tag) + '">' + esc(s.title) + '</option>';
           }).join('') +
         '</select>' +
         '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.restoreSection()">Put back</button>' +
@@ -453,16 +491,17 @@
       : '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.addSectionStart()">+ Add a section</button>';
 
     return '' +
-      '<details class="tpl-group" open>' +
-        '<summary class="tpl-group-summary">Report sections' +
-          ' <span class="tpl-quiet">(' + shown.length + ')</span></summary>' +
-        '<p class="tpl-hint">Remove an optional section with ✕, put it back below, reorder with the arrows, ' +
-          'and pick each section’s heading size. Your own sections are added inside Assessment Results. ' +
-          'Required sections always stay. The preview and both downloads follow this structure.</p>' +
-        '<div class="tpl-group-body">' + rows +
-          '<div class="tpl-section-actions">' + restore + adder + '</div>' +
-        '</div>' +
-      '</details>';
+      '<div class="tpl-group tpl-contents-card">' +
+        '<div class="tpl-contents-head">Report contents' +
+          ' <span class="tpl-quiet">(' + shown.length + ')</span></div>' +
+        '<p class="tpl-hint">The document follows this outline — its contents page reads the same way. ' +
+          'Drag a section to move it among its neighbours (what belongs to it travels with it), ' +
+          'choose each heading’s size, remove anything with ✕ and put it back below. ' +
+          'Your own sections are added inside Assessment Results. ' +
+          'The preview and both downloads follow this structure.</p>' +
+        '<div id="tpl-outline" class="tpl-outline">' + rows + '</div>' +
+        '<div class="tpl-section-actions">' + restore + adder + '</div>' +
+      '</div>';
   }
 
   /**
@@ -497,6 +536,206 @@
       titleBox.focus();
       titleBox.setSelectionRange(titleBox.value.length, titleBox.value.length);
     }
+
+    // The drag handler lives on the persistent host, once — the outline
+    // inside is rebuilt on every mount, the listener is not.
+    if (!host.dataset.dragWired) {
+      host.dataset.dragWired = '1';
+      host.addEventListener('pointerdown', onGripDown);
+    }
+  }
+
+  /** Show the pane the user is on; both stay mounted so nothing typed is lost. */
+  function syncStep() {
+    var details = el('tpl-pane-details');
+    var content = el('tpl-pane-content');
+    if (!details || !content) return;
+    var onContent = S.step === 'content' && !!S.sections;
+    details.hidden = onContent;
+    content.hidden = !onContent;
+    var a = el('tpl-step-details');
+    var b = el('tpl-step-content');
+    if (a) {
+      a.classList.toggle('tpl-step-active', !onContent);
+      a.setAttribute('aria-selected', String(!onContent));
+    }
+    if (b) {
+      b.classList.toggle('tpl-step-active', onContent);
+      b.setAttribute('aria-selected', String(onContent));
+    }
+  }
+
+  // ── Reordering by drag ────────────────────────────────────────────────────
+  //
+  // A section moves among its SIBLINGS — same parent, template rows among
+  // template rows and custom rows among customs, exactly the moves the
+  // composer will honour — and its child rows travel with it. While a block
+  // is dragged the other sibling blocks slide out of its way with a short
+  // transform transition, so the new order is visible before it is dropped.
+
+  var drag = null;
+
+  function shownSections() {
+    return (S.sections || []).filter(function (s) { return s.included; });
+  }
+
+  function onGripDown(e) {
+    if (drag || !S.sections) return;
+    var grip = e.target && e.target.closest && e.target.closest('.tpl-grip');
+    if (!grip) return;
+    var rowEl = grip.closest('.tpl-secrow');
+    var outline = el('tpl-outline');
+    if (!rowEl || !outline || rowEl.parentNode !== outline) return;
+    e.preventDefault();
+
+    var list = shownSections();
+    var els = Array.prototype.slice.call(outline.children).filter(function (n) {
+      return n.classList && n.classList.contains('tpl-secrow');
+    });
+    if (els.length !== list.length) return;      // outline mid-rebuild; bail
+
+    var tag = rowEl.getAttribute('data-tag');
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].tag === tag) { idx = i; break; }
+    if (idx < 0) return;
+    var row = list[idx];
+
+    // Sibling blocks: each starts at a row sharing the dragged row's parent
+    // and kind, and runs to the end of that row's own children.
+    var units = [];
+    for (var k = 0; k < list.length; k++) {
+      if (list[k].parent !== row.parent || list[k].custom !== row.custom) continue;
+      var end = k + 1;
+      while (end < list.length && list[end].parent === list[k].tag) end++;
+      units.push({ start: k, end: end });
+    }
+    if (units.length < 2) return;                // nowhere to move it
+
+    var pos = -1;
+    units.forEach(function (u, n) { if (u.start === idx) pos = n; });
+    if (pos < 0) return;
+
+    units.forEach(function (u) {
+      u.els = els.slice(u.start, u.end);
+      var first = u.els[0].getBoundingClientRect();
+      var last = u.els[u.els.length - 1].getBoundingClientRect();
+      u.top = first.top;
+      u.height = last.bottom - first.top;
+    });
+
+    drag = { tag: tag, startY: e.clientY, units: units, pos: pos, target: pos, moved: false };
+    outline.classList.add('tpl-outline-dragging');
+    doc.addEventListener('pointermove', onGripMove);
+    doc.addEventListener('pointerup', onGripUp);
+    doc.addEventListener('pointercancel', onGripUp);
+  }
+
+  function onGripMove(e) {
+    if (!drag) return;
+    var dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.abs(dy) < 4) return; // a click is not yet a drag
+    if (!drag.moved) {
+      drag.moved = true;
+      drag.units.forEach(function (u, n) {
+        u.els.forEach(function (x) {
+          x.classList.add(n === drag.pos ? 'tpl-secrow-drag' : 'tpl-secrow-shift');
+        });
+      });
+    }
+    var d = drag.units[drag.pos];
+    d.els.forEach(function (n) { n.style.transform = 'translateY(' + dy + 'px)'; });
+
+    // Insertion slot among the other blocks, by the dragged block's centre.
+    var centre = d.top + d.height / 2 + dy;
+    var others = drag.units.filter(function (_, n) { return n !== drag.pos; });
+    var t = 0;
+    for (var i = 0; i < others.length; i++) {
+      if (centre > others[i].top + others[i].height / 2) t = i + 1;
+    }
+    drag.target = t;
+
+    // Blocks between the old and new slot make room; the rest sit still.
+    others.forEach(function (u, o) {
+      var shift = 0;
+      if (o < drag.pos && t <= o) shift = d.height;        // was above, now below
+      if (o >= drag.pos && t > o) shift = -d.height;       // was below, now above
+      u.els.forEach(function (n) { n.style.transform = shift ? 'translateY(' + shift + 'px)' : ''; });
+    });
+  }
+
+  function onGripUp() {
+    if (!drag) return;
+    var d = drag;
+    drag = null;
+    doc.removeEventListener('pointermove', onGripMove);
+    doc.removeEventListener('pointerup', onGripUp);
+    doc.removeEventListener('pointercancel', onGripUp);
+    var outline = el('tpl-outline');
+    if (outline) outline.classList.remove('tpl-outline-dragging');
+    d.units.forEach(function (u) {
+      u.els.forEach(function (n) {
+        n.style.transform = '';
+        n.classList.remove('tpl-secrow-drag', 'tpl-secrow-shift');
+      });
+    });
+    if (!d.moved || d.target === d.pos) return;
+    moveBlockToSlot(d.tag, d.target);
+  }
+
+  /**
+   * Re-place a section block at slot `t` among its sibling blocks (slots are
+   * counted over the OTHER blocks, the way the drag computed them), in the
+   * full rows array — hidden children stay glued to their parents.
+   */
+  function moveBlockToSlot(tag, t) {
+    var rows = S.sections;
+    if (!rows) return;
+    var i = -1;
+    for (var k = 0; k < rows.length; k++) if (rows[k].tag === tag) { i = k; break; }
+    if (i < 0) return;
+    var row = rows[i];
+
+    function fullBlockEnd(start) {
+      var end = start + 1;
+      while (end < rows.length && rows[end].parent === rows[start].tag) end++;
+      return end;
+    }
+
+    // Sibling block starts, in the full array, matching the drag's units —
+    // the same parent-and-kind rule, restricted to included rows.
+    var starts = [];
+    for (var k2 = 0; k2 < rows.length; k2++) {
+      if (!rows[k2].included) continue;
+      if (rows[k2].parent === row.parent && rows[k2].custom === row.custom) starts.push(k2);
+    }
+
+    var iEnd = fullBlockEnd(i);
+    var block = rows.slice(i, iEnd);
+    var rest = rows.slice(0, i).concat(rows.slice(iEnd));
+
+    var otherStarts = starts.filter(function (s2) { return s2 !== i; });
+    var at;
+    if (t >= otherStarts.length) {
+      // After the last sibling block.
+      var lastStart = otherStarts[otherStarts.length - 1];
+      var lastEnd = fullBlockEnd(lastStart);
+      var anchorTag = rows[lastEnd - 1].tag;
+      at = rest.length;
+      for (var m = 0; m < rest.length; m++) {
+        if (rest[m].tag === anchorTag) { at = m + 1; break; }
+      }
+    } else {
+      // Before the block that will follow it.
+      var beforeTag = rows[otherStarts[t]].tag;
+      at = rest.length;
+      for (var m2 = 0; m2 < rest.length; m2++) {
+        if (rest[m2].tag === beforeTag) { at = m2; break; }
+      }
+    }
+
+    S.sections = rest.slice(0, at).concat(block, rest.slice(at));
+    mountSections();
+    saveSections();
   }
 
   /**
@@ -668,16 +907,45 @@
       if (!target) return;
       var limit = target - (parseFloat(cs.paddingBottom) || 0);
 
-      var article = current.querySelector(':scope > article');
-      if (!article) return;
+      // EVERY article on the page is part of its flow. docx-preview emits a
+      // second <article> where the document's section properties change — the
+      // FCA's Contents page carries the rebuilt TOC in one article and the
+      // Participant Details block in the next. Splitting only the first left
+      // the second stranded below the pinned A4 edge, invisible under
+      // overflow: hidden — the defect that read as "page two is glitched".
+      var articles = Array.prototype.slice.call(current.children).filter(function (n) {
+        return n.tagName === 'ARTICLE';
+      });
+      if (!articles.length) return;
       var secTop = current.getBoundingClientRect().top;
-      var kids = Array.prototype.slice.call(article.children);
+
+      var flow = [];                              // every block, in page order
+      articles.forEach(function (art, ai) {
+        Array.prototype.slice.call(art.children).forEach(function (kid) {
+          flow.push({ el: kid, art: ai });
+        });
+      });
 
       var splitAt = -1;
-      for (var i = 0; i < kids.length; i++) {
-        var r = kids[i].getBoundingClientRect();
+      for (var i = 0; i < flow.length; i++) {
+        var r = flow[i].el.getBoundingClientRect();
         if (r.height === 0) continue;
         if (r.bottom - secTop > limit) { splitAt = i; break; }
+      }
+
+      // A tail of empty spacer paragraphs past the fold is not a page: pin,
+      // and let overflow: hidden absorb it — a continuation holding nothing
+      // would render as a blank sheet after the cover.
+      if (splitAt !== -1) {
+        var tailHasContent = false;
+        for (var t2 = splitAt; t2 < flow.length; t2++) {
+          var tEl = flow[t2].el;
+          if ((tEl.textContent || '').trim() !== '' || tEl.querySelector('img, table')) {
+            tailHasContent = true;
+            break;
+          }
+        }
+        if (!tailHasContent) splitAt = -1;
       }
 
       if (splitAt === -1) {                       // fits: pin to exact A4
@@ -690,9 +958,21 @@
       var next = current.cloneNode(false);        // shell: class + inline geometry
       var header = current.querySelector(':scope > header');
       if (header) next.appendChild(header.cloneNode(true));
-      var nextArticle = article.cloneNode(false);
-      next.appendChild(nextArticle);
-      for (var k = splitAt; k < kids.length; k++) nextArticle.appendChild(kids[k]);
+
+      // The article holding the split keeps its head; its tail moves into a
+      // cloned shell. Whole articles after it move as the elements they are.
+      var ai2 = flow[splitAt].art;
+      var srcArticle = articles[ai2];
+      var within = Array.prototype.indexOf.call(srcArticle.children, flow[splitAt].el);
+      if (within > 0) {
+        var nextArticle = srcArticle.cloneNode(false);
+        next.appendChild(nextArticle);
+        var kids = Array.prototype.slice.call(srcArticle.children);
+        for (var k = within; k < kids.length; k++) nextArticle.appendChild(kids[k]);
+        ai2 += 1;
+      }
+      for (var a = ai2; a < articles.length; a++) next.appendChild(articles[a]);
+
       var footer = current.querySelector(':scope > footer');
       if (footer) next.appendChild(footer.cloneNode(true));
       current.parentNode.insertBefore(next, current.nextSibling);
@@ -807,6 +1087,7 @@
       host.innerHTML = renderEditorShell();
       mountSections();
       mountFields();
+      syncStep();
       refreshPreview();
       return;
     }
@@ -876,6 +1157,7 @@
       S.values = {};
       seedSections();
       S.addingSection = false;
+      S.step = 'details';
       S.view = 'editor';
       render();
       loadDocuments();
@@ -893,8 +1175,28 @@
       });
       seedSections();
       S.addingSection = false;
+      S.step = 'details';
       S.view = 'editor';
       render();
+    },
+
+    /** Switch the side panel between its two steps. */
+    setStep: function (step) {
+      S.step = step === 'content' ? 'content' : 'details';
+      syncStep();
+    },
+
+    /** Keyboard reordering on a row's grip — the drag, without a pointer. */
+    gripKey: function (e, tag) {
+      if (!e) return;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        PUBLIC.moveSection(tag, e.key === 'ArrowUp' ? -1 : 1);
+        // The outline re-renders; put focus back on the row's grip.
+        var outline = el('tpl-outline');
+        var moved = outline && outline.querySelector('[data-tag="' + tag + '"] .tpl-grip');
+        if (moved) moved.focus();
+      }
     },
 
     /** Remove a section from this report. A custom section is deleted; a
@@ -904,7 +1206,6 @@
       if (!rows) return;
       for (var i = 0; i < rows.length; i++) {
         if (rows[i].tag !== tag) continue;
-        if (rows[i].required) return;          // not negotiable, mirror the server
         if (rows[i].custom) rows.splice(i, 1);
         else rows[i].included = false;
         break;
@@ -927,10 +1228,14 @@
     setSectionLevel: function (tag, value) {
       var rows = S.sections;
       if (!rows) return;
-      var level = value === '' ? null : parseInt(value, 10);
+      var level = parseInt(value, 10);
+      if (level !== 1 && level !== 2 && level !== 3) return;
       for (var i = 0; i < rows.length; i++) {
         if (rows[i].tag === tag) { rows[i].headingLevel = level; break; }
       }
+      // The row's indent and weight follow its level — repaint the outline
+      // so the hierarchy is visible immediately, not after the save echoes.
+      mountSections();
       saveSections();
     },
 
@@ -947,9 +1252,9 @@
       // frontend never carries a binding identifier of its own.
       var anchorParent = (S.docu && S.docu.customParent) || null;
       var row = {
-        tag: 'tpl-pending-' + Date.now(), id: null, label: title, description: '',
-        parent: anchorParent, required: false, custom: true,
-        included: true, headingLevel: parseInt(levelRaw, 10) || 2,
+        tag: 'tpl-pending-' + Date.now(), id: null, label: title, title: title,
+        description: '', parent: anchorParent, custom: true,
+        included: true, headingLevel: parseInt(levelRaw, 10) || 2, defaultLevel: 2,
       };
       // In place: after the last row of the anchor-parent family, which is
       // where the document will actually render it.
@@ -1029,6 +1334,7 @@
       S.values = {};
       S.sections = null;
       S.addingSection = false;
+      S.step = 'details';
       render();
       loadDocuments();
     },

@@ -66,15 +66,16 @@ describe('Resource Hub navigation', () => {
 
 describe('the shell wires the surface', () => {
   test('templates.js and templates.css are loaded, with cache-bust pins', () => {
-    // js v=4: date fields render as calendar pickers (d/mm/yyyy round-trip).
-    // css v=4: the section panel's controls.
-    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=4" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=4" defer></script>');
+    // js v=5: two-step editor panel, contents-mirroring outline with
+    // drag-to-reorder, multi-article A4 pagination fix.
+    // css v=5: the stepper and outline styles.
+    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=5" />');
+    expect(SHELL).toContain('<script src="/templates.js?v=5" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=4'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=5'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {
@@ -193,6 +194,33 @@ describe('the preview pane matches the renderer it actually uses', () => {
     expect(CSS).toMatch(/#templates-root \.tpl-preview-host \.tpl-docx-render-wrapper > section/);
     const rule = CSS.slice(CSS.indexOf('#templates-root .tpl-preview-host'));
     expect(rule.slice(0, rule.indexOf('}'))).toMatch(/margin: 0/);
+  });
+});
+
+describe('the content panel is the outline the contents page prints', () => {
+  test('heading sizes are always concrete — no "Default" the reader must resolve', () => {
+    const options = TPL.slice(TPL.indexOf('var LEVEL_OPTIONS'), TPL.indexOf('function levelSelectHtml'));
+    expect(options).not.toContain('Default');
+    expect(options).toContain('Heading');
+    expect(options).toContain('Subheading');
+    expect(options).toContain('Minor heading');
+  });
+
+  test('rows are reordered by pointer drag, with a keyboard fallback on the grip', () => {
+    expect(TPL).toMatch(/addEventListener\('pointerdown', onGripDown\)/);
+    expect(TPL).toMatch(/'pointermove', onGripMove/);
+    expect(TPL).toMatch(/gripKey/);
+    // The blocks making room slide, the held block does not.
+    expect(CSS).toMatch(/\.tpl-secrow-shift \{ transition: transform/);
+  });
+
+  test('the A4 splitter walks EVERY article on a page, not only the first', () => {
+    // docx-preview emits a second <article> where section properties change —
+    // the Contents page carries the TOC in one and Participant Details in the
+    // next. Splitting only the first clipped the second under the pinned page.
+    const fn = TPL.slice(TPL.indexOf('function splitPage'), TPL.indexOf('/** Wait for images'));
+    expect(fn).toMatch(/tagName === 'ARTICLE'/);
+    expect(fn).not.toMatch(/querySelector\(':scope > article'\)/);
   });
 });
 

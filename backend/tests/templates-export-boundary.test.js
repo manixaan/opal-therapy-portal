@@ -468,13 +468,19 @@ describe('FCA section structure flows through preview and both exports', () => {
     expect(visible).not.toContain('Appendices');
   });
 
-  test('required sections survive whatever the stored value says', async () => {
-    const hostile = await exportDocument(stateFor('fca', {
-      sections: { selected: [], order: [] },   // a value the route would refuse
+  test('NO section is required here — an empty selection strips them all', async () => {
+    // The Templates editor deliberately diverges from the FCA wizard: its
+    // catalogue declares no required sections, and the composer receives that
+    // same catalogue — so a stored removal is honoured, never resurrected.
+    const bare = await exportDocument(stateFor('fca', {
+      sections: { selected: [], order: [] },
     }), 'docx');
-    const text = visibleText((await partsOf(hostile.buffer))['word/document.xml']);
-    expect(text).toContain('Referral Information');
-    expect(text).toContain('Professional Declaration');
+    const text = visibleText((await partsOf(bare.buffer))['word/document.xml']);
+    expect(text).not.toContain('Referral Information');
+    expect(text).not.toContain('Professional Declaration');
+    // The document itself survives: cover and front matter are the master's
+    // own, not sections.
+    expect(text).toContain('FUNCTIONAL ASSESSMENT REPORT');
   });
 
   test('reordering swaps siblings in the document flow', () => {
