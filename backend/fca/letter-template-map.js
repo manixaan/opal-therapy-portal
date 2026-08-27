@@ -62,9 +62,11 @@ const LETTER_TEMPLATE_STORAGE_PATH = `fca/templates/${LETTER_TEMPLATE_FILENAME}`
 // Re-pinned twice on 24 Aug 2026, both layout-only: the top margin was raised
 // to clear the letterhead (1037 → 2160 twips), then the recipient block and
 // REGARDING spacing were rebalanced so the bordered address box stops at its
-// text. No text, control or clause changed.
+// text. Re-pinned 27 Aug 2026, layout-only: the recipient block's left indent
+// (216 twips) and green left border were removed so the recipient lines sit
+// flush with the rest of the letter. No text, control or clause changed.
 const LETTER_TEMPLATE_SHA256 =
-  '7eb27b282e00036746172e253dfdbf2eaaebe6809845df6620b2b4173932ed2b';
+  '8afd6d96d013f31624a58ed6df95797a5891dc1ff899550c55c1d229e959174a';
 
 const LETTER_CUSTOM_SECTION_ANCHOR = 'OPAL_ANCHOR_LETTER_CUSTOM_SECTIONS';
 
