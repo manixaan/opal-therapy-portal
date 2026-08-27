@@ -594,8 +594,13 @@ describe('the induction is one clear interaction path', () => {
   test('a resource item is a launch tile: the walkthrough directly, or the resource', () => {
     expect(fn('indSectionRead')).toContain('RH2.alOpenWalk');
     expect(fn('alOpenWalk')).toContain('OpalInduction.start');
-    // In preview the tile ticks locally and launches nothing.
-    expect(fn('alOpenWalk')).toMatch(/if \(st\.preview\) \{[\s\S]{0,200}previewDone\[key\] = true/);
+    // In preview the tile launches the walkthrough for real — in the engine's
+    // own preview mode, so nothing is saved, not even the Owner's place.
+    expect(fn('alOpenWalk')).toContain("OpalInduction.start(mod.key, { preview: true })");
+    // The preview tick is earned, never assumed: it lands only from the
+    // return path, and only when the engine says the preview run finished.
+    expect(fn('alOpenWalk')).not.toMatch(/if \(st\.preview\) \{[\s\S]{0,300}previewDone\[key\] = true[\s\S]{0,100}render\(\)/);
+    expect(fn('alWalkReturn')).toContain('detail.finished) st.previewDone[p.itemKey] = true');
     // The walkthrough hands back to the induction when its overlay closes.
     expect(HUB).toContain('pendingWalk');
     expect(fn('alWalkReturn')).toContain("('assignment')");
@@ -867,12 +872,13 @@ describe('the shell', () => {
     // is shared, so the version is shared. r26/r16 was the Library folder fix;
     // r27/r17 was click-to-edit in the induction editor; r28 lets a task item
     // carry a walkthrough_key so the Splose lessons launch from the
-    // assignment player (JS only — the CSS stays at r17). The resourcehub.js
+    // assignment player; r29 makes the Owner's preview launch tiles for real
+    // (JS only — the CSS stays at r17). The resourcehub.js
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r17');
-    expect(SHELL).toContain('/resourcehub.js?v=r28');
+    expect(SHELL).toContain('/resourcehub.js?v=r29');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

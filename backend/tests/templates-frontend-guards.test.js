@@ -85,9 +85,9 @@ describe('the shell wires the surface', () => {
 
   test('resourcehub.js is re-pinned, because this change edits it', () => {
     // The pin is shared by every feature that edits the file — the shell
-    // ships the union under the newest version. r27 carries the induction
-    // learner-path simplification and the editor's click-to-edit together.
-    expect(SHELL).toContain('<script src="/resourcehub.js?v=r28" defer></script>');
+    // ships the union under the newest version. r29 makes the Owner's
+    // preview launch its walkthrough tiles for real.
+    expect(SHELL).toContain('<script src="/resourcehub.js?v=r29" defer></script>');
   });
 });
 

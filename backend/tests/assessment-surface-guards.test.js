@@ -615,7 +615,10 @@ describe('changed assets are cache-busted', () => {
       // r28: a task item can carry a walkthrough_key — the Splose induction's
       // lessons render as launch tiles in the assignment player, record on
       // finish rather than on paging past, and survive the Owner's editor.
-      ['resourcehub.js', 'r28'], ['resourcehub.css', 'r17'],
+      // r29: the Owner's preview launches tiles for real — walkthroughs run
+      // in the engine's preview mode and plain resources open their detail
+      // page; the tick lands in previewDone only when the run finishes.
+      ['resourcehub.js', 'r29'], ['resourcehub.css', 'r17'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -624,7 +627,10 @@ describe('changed assets are cache-busted', () => {
       // 2: the dashboard renders one card per module group (portal, then
       // Splose), and every step screenshot links to its full-size image. The
       // CSS carries the figure link and the stacked-card spacing.
-      ['induction.js', 2], ['induction.css', 2],
+      // 3: start() takes a preview option — the whole module, nothing saved
+      // (no step saves, no completion, no localStorage), and the close/finish
+      // event carries {preview, key, finished} so the launcher can react.
+      ['induction.js', 3], ['induction.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

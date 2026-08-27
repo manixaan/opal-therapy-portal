@@ -4500,15 +4500,23 @@
   // Induction progress changes (module completed, restarted, paused) should
   // repaint the surfaces that show it without the engine reaching into our
   // render internals.
-  doc.addEventListener('induction:progress', function () {
+  doc.addEventListener('induction:progress', function (e) {
     // A walkthrough opened from inside an induction hands control back the
     // moment its overlay is gone — paused or finished, the reader lands back
     // on the induction, in place.
     if (pendingWalk && !doc.getElementById('ind-layer')) {
       var p = pendingWalk;
+      var d = e && e.detail;
+      // The event must belong to the armed run: a preview arm is answered
+      // only by that module's preview event, a learner arm only by a bare
+      // one. A mismatch means the armed run was silently torn down by a
+      // later start() — drop the stale arm rather than hijack the run that
+      // actually just ended.
+      var match = p.preview
+        ? !!(d && d.preview && String(d.key) === String(p.moduleKey))
+        : !(d && d.preview);
       pendingWalk = null;
-      alWalkReturn(p);
-      return;
+      if (match) { alWalkReturn(p, d); return; }
     }
     if (S.booted && (S.view === 'learning' || S.view === 'home')) render();
   });
@@ -4891,7 +4899,8 @@
       id: null, data: null, loading: true, err: '',
       backView: again ? S.assignment.backView : (S.view === 'learning' ? 'learning' : 'admin'),
       step: again ? S.assignment.step : 1,
-      quizAnswers: {}, quizResult: null, ackArmed: false,
+      // Un-submitted quiz picks survive a detour, exactly as the learner's do.
+      quizAnswers: again ? S.assignment.quizAnswers : {}, quizResult: null, ackArmed: false,
       busy: false, preview: true, previewWfId: String(wfId || ''),
       previewDone: again ? S.assignment.previewDone : {}, celebrate: false, choice: null,
     };
@@ -5112,14 +5121,22 @@
     var st = S.assignment;
     var item = alFindItem(key);
     if (!st || !item) return;
-    if (st.preview) {
-      // The preview simulates the click: the tile ticks, nothing launches and
-      // nothing is saved — the Owner's own account is not walked through.
-      st.previewDone[key] = true;
-      render();
-      return;
-    }
     var mod = alWalkModule(item);
+    if (st.preview) {
+      // The preview opens the real thing, read-only: the walkthrough runs in
+      // its own preview mode (nothing saved — not even the Owner's place),
+      // and the tile ticks only when it is finished, the learner's contract.
+      if (mod) {
+        var pLaunch = { preview: true, itemKey: key, moduleKey: mod.key, wfId: st.previewWfId, step: st.step };
+        Promise.resolve(global.OpalInduction.start(mod.key, { preview: true })).then(function () {
+          if (doc.getElementById('ind-layer')) pendingWalk = pLaunch;
+        });
+        return;
+      }
+      if (item.type !== 'resource') return;
+      st.previewDone[key] = true;
+      return openDetail(item.resource_id, 'assignment');
+    }
     if (!mod) {
       // A task's launch tile only renders when its walkthrough resolves, so a
       // task landing here has nothing to open — a resource opens its hub page.
@@ -5136,23 +5153,34 @@
   }
 
   /** Back from a walkthrough: restore the induction where the reader left it,
-   *  and record the item when the walkthrough was finished. */
-  async function alWalkReturn(p) {
+   *  and record the item when the walkthrough was finished. A preview return
+   *  is the same journey with nothing recorded — the engine's event says
+   *  whether the preview run finished, and the tick lands in previewDone. */
+  async function alWalkReturn(p, detail) {
     var st = S.assignment;
-    if (!st || !st.id || st.preview || String(st.id) !== String(p.assignmentId)) return;
+    if (!st) return;
+    if (p.preview) {
+      if (!st.preview || String(st.previewWfId) !== String(p.wfId)) return;
+    } else if (!st.id || st.preview || String(st.id) !== String(p.assignmentId)) {
+      return;
+    }
     st.step = p.step;
     try { if (typeof global.switchTab === 'function') global.switchTab('resources'); } catch (e) { /* the player renders regardless */ }
     try { if (typeof global.rhSwitch === 'function') global.rhSwitch('shared'); } catch (e) { /* as above */ }
-    var mod = (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.moduleForSlug)
-      ? global.OpalInduction.moduleForSlug(p.moduleKey) : null;
-    var finished = mod && (mod.state === 'completed' || mod.state === 'updated');
-    var a = st.data && st.data.assignment;
-    if (finished && !alItemDone(p.itemKey) && a && a.status !== 'completed') {
-      await alComplete(p.itemKey, {}, { quiet: true });
+    if (p.preview) {
+      if (detail && detail.preview && detail.finished) st.previewDone[p.itemKey] = true;
+    } else {
+      var mod = (typeof global.OpalInduction !== 'undefined' && global.OpalInduction.moduleForSlug)
+        ? global.OpalInduction.moduleForSlug(p.moduleKey) : null;
+      var finished = mod && (mod.state === 'completed' || mod.state === 'updated');
+      var a = st.data && st.data.assignment;
+      if (finished && !alItemDone(p.itemKey) && a && a.status !== 'completed') {
+        await alComplete(p.itemKey, {}, { quiet: true });
+      }
     }
     S.view = 'assignment';
     // Through the PUBLIC nav so the URL lands back on the player; re-entry of
-    // the same assignment keeps the step set above.
+    // the same assignment (or the same preview) keeps the step set above.
     (global.RH2 && global.RH2.nav ? global.RH2.nav : nav)('assignment');
   }
 

@@ -206,8 +206,10 @@
     return P.loading;
   }
 
-  function progressChanged() {
-    try { doc.dispatchEvent(new CustomEvent('induction:progress')); } catch (e) { /* old browser */ }
+  function progressChanged(detail) {
+    // detail is only ever set for a preview run's close/finish — real progress
+    // events stay bare, and listeners that ignore detail keep working.
+    try { doc.dispatchEvent(new CustomEvent('induction:progress', detail ? { detail: detail } : undefined)); } catch (e) { /* old browser */ }
   }
 
   var saveTimer = null;
@@ -363,6 +365,7 @@
     quiz: {},           // per-step quiz state: idx → {chosen, checked, correct}
     clickHandler: null, // advance-on-click listener to detach
     lastFocus: null,    // element to restore focus to on close
+    preview: false,     // preview run: full walkthrough, nothing persisted
   };
 
   // ── Overlay DOM ───────────────────────────────────────────────────────────
@@ -411,7 +414,8 @@
       '<span class="ind-module">' + indEsc(mod.title) + '</span>' +
       '<span class="ind-counter" aria-live="polite">' + indEsc(stepCounterText()) + '</span>' +
       '</div>' +
-      '<button type="button" class="ind-x" onclick="OpalInduction.close()" aria-label="Save my place and close the walkthrough">&times;</button>' +
+      '<button type="button" class="ind-x" onclick="OpalInduction.close()" aria-label="' +
+      (S.preview ? 'Close the walkthrough preview' : 'Save my place and close the walkthrough') + '">&times;</button>' +
       '<div class="ind-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + S.steps.length + '" aria-valuenow="' + (S.idx + 1) + '" aria-label="Walkthrough progress">' +
       '<span style="width:' + Math.round((S.idx + 1) / S.steps.length * 100) + '%"></span></div>' +
       '</header>';
@@ -645,8 +649,8 @@
     var card = doc.getElementById('ind-card');
     if (card) card.focus({ preventScroll: true });
 
-    // 6. Persist the position.
-    scheduleSave(S.key, { current_step: S.idx, status: 'in_progress' });
+    // 6. Persist the position (a preview run leaves no trace).
+    if (!S.preview) scheduleSave(S.key, { current_step: S.idx, status: 'in_progress' });
   }
 
   function next() {
@@ -679,8 +683,11 @@
     S.steps = steps;
     S.quiz = {};
     S.lastFocus = doc.activeElement;
+    S.preview = !!opts.preview;
 
-    var row = P.byKey[key];
+    // A preview run shows the module as a first-timer sees it: no resume, no
+    // saved place touched, nothing written — not even for the previewer.
+    var row = S.preview ? null : P.byKey[key];
     var resumeAt = 0;
     if (!opts.restart && row && row.status === 'in_progress' &&
         Number(row.version) === Number(mod.version)) {
@@ -708,12 +715,19 @@
     if (restoreFocus && S.lastFocus && doc.contains(S.lastFocus)) {
       try { S.lastFocus.focus(); } catch (e) { /* ok */ }
     }
-    S.key = null; S.mod = null; S.steps = []; S.el = null;
+    S.key = null; S.mod = null; S.steps = []; S.el = null; S.preview = false;
   }
 
-  /** Pause: keep the saved place, close cleanly. */
+  /** Pause: keep the saved place, close cleanly. A preview pause has no place
+   *  to keep — it only hands control back to whoever launched it. */
   function close() {
     if (!S.active) return;
+    if (S.preview) {
+      var pkey = S.key;
+      closeOverlay(true);
+      progressChanged({ preview: true, key: pkey, finished: false });
+      return;
+    }
     scheduleSave(S.key, { current_step: S.idx, status: 'in_progress' }, true);
     var title = S.mod ? S.mod.title : '';
     closeOverlay(true);
@@ -723,8 +737,15 @@
 
   async function finish() {
     if (!S.active) return;
-    var key = S.key, mod = S.mod;
+    var key = S.key, mod = S.mod, preview = S.preview;
     closeOverlay(true);
+
+    if (preview) {
+      // A finished preview records nothing anywhere; the launcher is told so
+      // its own unsaved tick can reflect the finish.
+      progressChanged({ preview: true, key: key, finished: true });
+      return;
+    }
 
     var row = P.byKey[key] || { tutorial_key: key };
     row.status = 'completed';
