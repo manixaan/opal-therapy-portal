@@ -48,7 +48,17 @@ const crypto = require('crypto');
 
 const STEP_TYPES = [
   'intro', 'highlight', 'action', 'screenshot', 'callout', 'warning', 'quiz', 'complete',
+  // Phase 3 blocks. A walkthrough is not only a tour any more: it can carry a
+  // page to read, a checkpoint that will not let a learner past, and a
+  // statement to sign — the same pieces the learning layer has, usable inline.
+  'page', 'checkpoint', 'acknowledgement',
 ];
+
+/** Steps that record something a learner did, not merely something they saw. */
+const EVIDENCE_TYPES = ['checkpoint', 'acknowledgement'];
+
+/** Steps a learner may not simply page past. */
+const BLOCKING_TYPES = ['checkpoint', 'acknowledgement'];
 
 const KNOWN_ROLES = ['owner', 'admin', 'therapist', 'read_only'];
 
@@ -57,6 +67,7 @@ const TARGETED_TYPES = ['highlight', 'action'];
 
 const LIMITS = {
   steps: 200,
+  ackStatement: 2000,
   key: 80,
   title: 200,
   stepTitle: 200,
@@ -169,6 +180,18 @@ function normaliseSteps(raw, moduleRoles) {
   }
   const allowed = cleanRoles(moduleRoles);
 
+  // Stable per-step keys. Evidence (a passed checkpoint, a signed statement)
+  // is recorded against the KEY, so reordering or inserting steps must not
+  // move somebody's record onto a different step — which an index would.
+  const seenKeys = new Set();
+  const takeKey = (v) => {
+    let k = cleanStr(v, LIMITS.key);
+    if (!/^[a-z0-9][a-z0-9-]*$/i.test(k)) k = '';
+    while (!k || seenKeys.has(k)) k = newKey('s');
+    seenKeys.add(k);
+    return k;
+  };
+
   const steps = [];
   for (let i = 0; i < raw.length; i++) {
     const s = raw[i];
@@ -182,12 +205,24 @@ function normaliseSteps(raw, moduleRoles) {
     const title = cleanText(s.title, LIMITS.stepTitle);
     if (!title) return { ok: false, error: `${at} needs a title` };
 
-    const out = { type, title };
+    const out = { key: takeKey(s.key), type, title };
 
-    if (type === 'quiz') {
+    if (type === 'quiz' || type === 'checkpoint') {
       const q = normaliseQuiz(s.quiz);
       if (!q.ok) return { ok: false, error: `${at}: ${q.error}` };
       out.quiz = q.quiz;
+      // A checkpoint's whole point is that it blocks. Storing the flag rather
+      // than inferring it from the type keeps the player's gate explicit.
+      if (type === 'checkpoint') out.blocking = true;
+    } else if (type === 'acknowledgement') {
+      const statement = cleanText(s.ack_statement, LIMITS.ackStatement);
+      if (!statement) {
+        return { ok: false, error: `${at} is a sign-here step and needs the statement being agreed to` };
+      }
+      out.ack_statement = statement;
+      out.blocking = true;
+      const body = cleanText(s.body, LIMITS.body);
+      if (body) out.body = body;
     } else {
       const body = cleanText(s.body, LIMITS.body);
       if (!body) return { ok: false, error: `${at} needs body text` };
@@ -282,6 +317,23 @@ function normaliseModuleMeta(raw) {
   return { ok: true, meta };
 }
 
+/**
+ * The learner-safe projection of a step list.
+ *
+ * A checkpoint BLOCKS, so its answer must not travel with it — a gate whose
+ * key ships in the payload is decoration. The server grades the attempt
+ * (POST /api/tutorials/:key/evidence) and returns the explanation with the
+ * verdict. Ordinary quiz steps are unchanged: they are formative, they never
+ * gate anything, and they have always been graded in the browser.
+ */
+function learnerSteps(steps) {
+  return (steps || []).map((s) => {
+    if (s.type !== 'checkpoint' || !s.quiz) return s;
+    const quiz = { question: s.quiz.question, options: s.quiz.options };
+    return Object.assign({}, s, { quiz });
+  });
+}
+
 /** Steps of a module a role actually sees (per-step roles narrow further). */
 function stepsForRole(steps, role) {
   const r = String(role || '');
@@ -333,12 +385,15 @@ function fromRegistryModule(m) {
 
 module.exports = {
   STEP_TYPES,
+  EVIDENCE_TYPES,
+  BLOCKING_TYPES,
   KNOWN_ROLES,
   LIMITS,
   DESTRUCTIVE_TARGET,
   normaliseSteps,
   normaliseModuleMeta,
   stepsForRole,
+  learnerSteps,
   moduleState,
   fromRegistryModule,
 };

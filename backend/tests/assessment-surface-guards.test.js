@@ -639,10 +639,17 @@ describe('changed assets are cache-busted', () => {
       // 5: start() accepts { module, at } so the workshop can play an
       // UNSAVED draft from a chosen step, and each painted step dispatches
       // induction:step so the author dock can follow the player.
-      ['induction.js', 5], ['induction.css', 2],
+      // 6: the phase-3 blocks — a page to read, a checkpoint the SERVER
+      // grades (the answer is stripped from the payload, so the gate is real)
+      // and a sign-here recorded against the published wording. Neither can
+      // be paged, arrowed or skipped past. The CSS carries the quoted
+      // statement and its tick.
+      ['induction.js', 6], ['induction.css', 3],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
-      ['workshop.js', 1], ['workshop.css', 1],
+      // 2: the palette offers Page, Checkpoint and Sign here, and the editor
+      // grew the statement field.
+      ['workshop.js', 2], ['workshop.css', 1],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

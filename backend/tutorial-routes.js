@@ -32,6 +32,7 @@
  * Audit: completion/restart only, ids-only metadata. No external calls.
  */
 
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
@@ -86,6 +87,7 @@ function serialiseRow(r) {
     completed_at: r.completed_at,
     completed_version: r.completed_version,
     restart_count: r.restart_count,
+    evidence: r.evidence || {},
   };
 }
 
@@ -100,7 +102,9 @@ function serialiseRow(r) {
 router.get('/api/tutorials/catalogue', safe(async (req, res) => {
   const mine = await catalogue.modulesForRole(orgOf(req), req.user.role);
   const mods = mine.map((m) => {
-    const steps = catalogue.stepsForRole(m.steps, req.user.role);
+    // Role-narrowed, then stripped of anything a learner must not hold — a
+    // checkpoint's answer above all.
+    const steps = catalogue.learnerSteps(catalogue.stepsForRole(m.steps, req.user.role));
     return {
       key: m.key,
       version: m.version,
@@ -259,6 +263,101 @@ router.post('/api/tutorials/:key/restart', safe(async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });
   await audit(req, 'tutorial.restarted', mod.key, {});
   res.json({ progress: serialiseRow(rows[0]) });
+}));
+
+// ── Evidence: checkpoints and signatures ────────────────────────────────────
+
+/**
+ * Record what a learner DID inside a walkthrough (migration 046).
+ *
+ * Two kinds, both graded or witnessed HERE rather than in the browser:
+ *
+ *   checkpoint      — the client sends the option it chose; the server checks
+ *                     it against the published step and answers with the
+ *                     verdict and the explanation. The answer never leaves
+ *                     the server, so the gate cannot be walked around by
+ *                     reading the payload.
+ *   acknowledgement — the client says it was agreed; the server records the
+ *                     statement it actually published, with a hash, so what
+ *                     was signed is answerable later. It never trusts the
+ *                     client's copy of the wording.
+ *
+ * Only successes are stored: a wrong attempt increments a counter and nothing
+ * else. This is a record that an obligation was met, not surveillance of how
+ * a member of staff got there.
+ *
+ * A preview run sends nothing; read_only accounts are blocked from writing by
+ * the choke point in requireAuth, exactly as their progress writes are.
+ */
+router.post('/api/tutorials/:key/evidence', safe(async (req, res) => {
+  const mod = await moduleFor(req, req.params.key);
+  if (!mod) return res.status(404).json({ error: 'Not found' });
+
+  const b = req.body || {};
+  const stepKey = String(b.stepKey || '');
+  const steps = catalogue.stepsForRole(mod.steps, req.user.role);
+  const step = steps.find((s) => s.key === stepKey);
+  // A step the caller's role cannot see is indistinguishable from one that
+  // does not exist — the same rule the module gate follows.
+  if (!step) return res.status(400).json({ error: 'That step is not part of this walkthrough' });
+
+  let record;
+  let response;
+
+  if (step.type === 'checkpoint') {
+    const chosen = typeof b.chosen === 'number' ? b.chosen : NaN;
+    if (!Number.isInteger(chosen) || chosen < 0 || chosen >= (step.quiz.options || []).length) {
+      return res.status(400).json({ error: 'chosen must be one of the answers offered' });
+    }
+    const passed = chosen === step.quiz.correctIndex;
+    response = { passed, explain: step.quiz.explain || '' };
+    if (!passed) {
+      // Count the attempt, record nothing about it.
+      await pool.query(
+        `UPDATE tutorial_progress
+            SET evidence = jsonb_set(evidence, ARRAY[$3::text],
+                  COALESCE(evidence -> $3, '{}'::jsonb) ||
+                  jsonb_build_object('type', 'checkpoint', 'attempts',
+                    COALESCE((evidence -> $3 ->> 'attempts')::int, 0) + 1), true)
+          WHERE user_id = $1 AND tutorial_key = $2`,
+        [req.user.id, mod.key, stepKey]).catch(() => {});
+      return res.json(response);
+    }
+    record = { type: 'checkpoint', passed: true, at: new Date().toISOString() };
+  } else if (step.type === 'acknowledgement') {
+    if (b.agreed !== true) {
+      return res.status(400).json({ error: 'An acknowledgement has to be agreed to' });
+    }
+    // The statement recorded is the PUBLISHED one, never the client's copy.
+    record = {
+      type: 'acknowledgement',
+      statement: step.ack_statement,
+      hash: crypto.createHash('sha256').update(String(step.ack_statement)).digest('hex'),
+      at: new Date().toISOString(),
+    };
+    response = { recorded: true };
+  } else {
+    return res.status(400).json({ error: 'That step does not record anything' });
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO tutorial_progress
+       (organisation_id, user_id, tutorial_key, version, status, current_step,
+        furthest_step, started_at, last_viewed_at, evidence)
+     VALUES ($1, $2, $3, $4, 'in_progress', 0, 0, NOW(), NOW(),
+             jsonb_build_object($5::text, $6::jsonb))
+     ON CONFLICT (user_id, tutorial_key) DO UPDATE SET
+       evidence = COALESCE(tutorial_progress.evidence, '{}'::jsonb) ||
+                  jsonb_build_object($5::text, COALESCE(tutorial_progress.evidence -> $5, '{}'::jsonb) || $6::jsonb),
+       last_viewed_at = NOW()
+     RETURNING *`,
+    [orgOf(req), req.user.id, mod.key, Number(mod.version) || 1,
+     stepKey, JSON.stringify(record)]);
+
+  await audit(req, 'tutorial.evidence_recorded', mod.key, {
+    stepKey, kind: record.type,
+  });
+  res.json(Object.assign({ progress: serialiseRow(rows[0]) }, response));
 }));
 
 // ── Owner/admin completion overview ─────────────────────────────────────────

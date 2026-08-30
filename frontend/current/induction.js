@@ -406,6 +406,7 @@
     el: null,           // resolved target of the current step (or null)
     fallback: false,    // current step degraded (anchor missing)
     quiz: {},           // per-step quiz state: idx → {chosen, checked, correct}
+    ack: {},            // per-step acknowledgement state: idx → true once signed
     clickHandler: null, // advance-on-click listener to detach
     lastFocus: null,    // element to restore focus to on close
     preview: false,     // preview run: full walkthrough, nothing persisted
@@ -488,7 +489,16 @@
 
     html += '<div id="ind-body" class="ind-body">' + indFormat(step.body || '') + '</div>';
 
-    if (step.type === 'quiz' && step.quiz) {
+    if (step.type === 'acknowledgement') {
+      html += '<div class="ind-ack">' +
+        '<p class="ind-ack-statement">' + indEsc(step.ack_statement || '') + '</p>' +
+        '<label class="ind-ack-check"><input type="checkbox"' + (S.ack[S.idx] ? ' checked disabled' : '') +
+        ' onchange="OpalInduction._ackSign(this.checked)"> I have read and understood this.</label>' +
+        (S.ack[S.idx] ? '<p class="ind-q-explain ok" role="status">Recorded.</p>' : '') +
+        '</div>';
+    }
+
+    if ((step.type === 'quiz' || step.type === 'checkpoint') && step.quiz) {
       var qz = step.quiz;
       html += '<fieldset class="ind-quiz"><legend>' + indEsc(qz.question) + '</legend>';
       (qz.options || []).forEach(function (opt, j) {
@@ -502,8 +512,11 @@
       });
       html += '</fieldset>';
       if (q.checked) {
+        // A checkpoint's explanation comes back from the server with the
+        // verdict, because the answer itself never reached the browser.
+        var explain = step.type === 'checkpoint' ? (q.explain || '') : (qz.explain || '');
         html += '<p class="ind-q-explain ' + (q.correct ? 'ok' : 'no') + '" role="status">' +
-          (q.correct ? 'Correct. ' : 'Not quite. ') + indEsc(qz.explain || '') + '</p>';
+          (q.correct ? 'Correct. ' : 'Not quite — try again. ') + indEsc(explain) + '</p>';
       }
     }
 
@@ -515,9 +528,16 @@
     html += '<footer class="ind-foot">';
     html += '<button type="button" class="ind-btn ind-btn-quiet" onclick="OpalInduction.prev()"' + (isFirst ? ' disabled' : '') + '>Back</button>';
     html += '<span class="ind-foot-spring"></span>';
-    if (step.type === 'quiz' && !q.checked) {
+    if (step.type === 'checkpoint' && !(q.checked && q.correct)) {
+      // No Skip: a checkpoint is the one step a learner cannot page past.
+      html += '<button type="button" class="ind-btn ind-btn-primary" onclick="OpalInduction._quizCheck()"' +
+        (q.chosen == null || q.pending ? ' disabled' : '') + '>' +
+        (q.pending ? 'Checking…' : 'Check answer') + '</button>';
+    } else if (step.type === 'quiz' && !q.checked) {
       html += '<button type="button" class="ind-btn" onclick="OpalInduction.next()">Skip</button>';
       html += '<button type="button" class="ind-btn ind-btn-primary" onclick="OpalInduction._quizCheck()"' + (q.chosen == null ? ' disabled' : '') + '>Check answer</button>';
+    } else if (step.type === 'acknowledgement' && !S.ack[S.idx]) {
+      html += '<button type="button" class="ind-btn ind-btn-primary" disabled>Next</button>';
     } else if (isLast) {
       html += '<button type="button" class="ind-btn ind-btn-primary" onclick="OpalInduction.finish()">Finish module</button>';
     } else {
@@ -704,8 +724,23 @@
     if (!S.preview) scheduleSave(S.key, { current_step: S.idx, status: 'in_progress' });
   }
 
+  /** A blocking step (checkpoint, sign-here) holds the learner where they are
+   *  until it is satisfied. The server is the real gate for a checkpoint —
+   *  this is the honest UI in front of it. */
+  function blocked() {
+    var step = S.steps[S.idx];
+    if (!step) return false;
+    if (step.type === 'checkpoint') {
+      var q = S.quiz[S.idx];
+      return !(q && q.checked && q.correct);
+    }
+    if (step.type === 'acknowledgement') return !S.ack[S.idx];
+    return false;
+  }
+
   function next() {
     if (!S.active) return;
+    if (blocked()) return;
     if (S.idx >= S.steps.length - 1) return finish();
     showStep(S.idx + 1, 1);
   }
@@ -746,6 +781,7 @@
     S.mod = mod;
     S.steps = steps;
     S.quiz = {};
+    S.ack = {};
     S.lastFocus = doc.activeElement;
     S.preview = !!opts.preview;
 
@@ -863,16 +899,69 @@
     renderCard();
     positionOverlay();
   }
-  function _quizCheck() {
+  async function _quizCheck() {
     var step = S.steps[S.idx];
     var q = S.quiz[S.idx];
-    if (!step || !step.quiz || !q || q.chosen == null) return;
-    q.checked = true;
-    q.correct = q.chosen === step.quiz.correctIndex;
+    if (!step || !step.quiz || !q || q.chosen == null || q.pending) return;
+
+    if (step.type === 'checkpoint') {
+      // The answer is not in the payload — ask the server. A preview grades
+      // nothing and records nothing, so it simply lets the author through.
+      if (S.preview) {
+        q.checked = true; q.correct = true; q.explain = '';
+      } else {
+        q.pending = true;
+        renderCard();
+        var idx = S.idx, chosen = q.chosen;
+        var d = await api('/api/tutorials/' + encodeURIComponent(S.key) + '/evidence', {
+          method: 'POST', body: { stepKey: step.key, chosen: chosen },
+        });
+        if (S.idx !== idx || !S.active) return; // moved on while waiting
+        q.pending = false;
+        if (!d.ok) {
+          toast('Could not check that', 'The answer could not be checked just now — try again.', 'error');
+          renderCard();
+          return;
+        }
+        // api() flattens the payload onto the result and adds .ok — there is
+        // no nested data object here.
+        q.checked = true;
+        q.correct = !!d.passed;
+        q.explain = d.explain || '';
+        if (!q.correct) q.chosen = null; // make them choose again, deliberately
+      }
+    } else {
+      q.checked = true;
+      q.correct = q.chosen === step.quiz.correctIndex;
+    }
+
     renderCard();
     positionOverlay();
     var card = doc.getElementById('ind-card');
     if (card) card.focus({ preventScroll: true });
+  }
+
+  /** Sign a statement inside the walkthrough. Recorded server-side against
+   *  the PUBLISHED wording — the browser's copy is never what is stored. */
+  async function _ackSign(on) {
+    if (!on) return;
+    var step = S.steps[S.idx];
+    if (!step || step.type !== 'acknowledgement') return;
+    if (!S.preview) {
+      var idx = S.idx;
+      var d = await api('/api/tutorials/' + encodeURIComponent(S.key) + '/evidence', {
+        method: 'POST', body: { stepKey: step.key, agreed: true },
+      });
+      if (S.idx !== idx || !S.active) return;
+      if (!d.ok) {
+        toast('Not recorded', 'That could not be recorded just now — try again.', 'error');
+        renderCard();
+        return;
+      }
+    }
+    S.ack[S.idx] = true;
+    renderCard();
+    positionOverlay();
   }
 
   // ── Keyboard ──────────────────────────────────────────────────────────────
@@ -884,6 +973,7 @@
       var step = S.steps[S.idx];
       var q = S.quiz[S.idx];
       if (step && step.type === 'quiz' && !(q && q.checked)) return; // don't skip past an unchecked quiz by accident
+      if (blocked()) return; // a checkpoint or a signature is not arrow-past-able
       e.preventDefault(); next();
     }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
@@ -1072,6 +1162,7 @@
     loadCatalogue: loadCatalogue,
     _quizPick: _quizPick,
     _quizCheck: _quizCheck,
+    _ackSign: _ackSign,
     _restartAsk: _restartAsk,
     _restartCancel: _restartCancel,
     _state: S, // exposed for Playwright assertions, like OpalScheduler._state

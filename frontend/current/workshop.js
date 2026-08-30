@@ -39,6 +39,9 @@
     { type: 'warning',    name: 'Warning',   hint: 'A note that reads as “be careful here”.' },
     { type: 'screenshot', name: 'Picture',   hint: 'A screenshot, for what cannot be shown live.' },
     { type: 'quiz',       name: 'Question',  hint: 'Multiple choice, with why the answer is right.' },
+    { type: 'page',       name: 'Page',      hint: 'A short read. No spotlight, no control.' },
+    { type: 'checkpoint', name: 'Checkpoint', hint: 'A question they cannot get past until it is right.' },
+    { type: 'acknowledgement', name: 'Sign here', hint: 'A statement they agree to. Recorded against their name.' },
     { type: 'complete',   name: 'Finish',    hint: 'Ends the walkthrough. Exactly one, at the end.' },
   ];
   var BLOCK_BY_TYPE = {};
@@ -397,7 +400,7 @@
     h += '<div class="wk-field"><label>Heading</label>' +
       '<input type="text" value="' + esc(s.title || '') + '" onchange="OpalWorkshop._step(\'title\', this.value)"></div>';
 
-    if (s.type === 'quiz') {
+    if (s.type === 'quiz' || s.type === 'checkpoint') {
       var q = s.quiz || { question: '', options: ['', ''], correctIndex: 0, explain: '' };
       h += '<div class="wk-field"><label>Question</label>' +
         '<textarea rows="2" onchange="OpalWorkshop._quiz(\'question\', this.value)">' + esc(q.question) + '</textarea></div>';
@@ -413,7 +416,19 @@
       });
       h += '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop._quizAdd()">Add an answer</button></div>';
       h += '<div class="wk-field"><label>Why that answer</label>' +
-        '<textarea rows="2" onchange="OpalWorkshop._quiz(\'explain\', this.value)">' + esc(q.explain || '') + '</textarea></div>';
+        '<textarea rows="2" onchange="OpalWorkshop._quiz(\'explain\', this.value)">' + esc(q.explain || '') + '</textarea>' +
+        (s.type === 'checkpoint'
+          ? '<p class="wk-hint">A checkpoint is marked by the server, so the answer never travels to the ' +
+            'browser and the gate is real. They cannot move on until they get it right.</p>' : '') +
+        '</div>';
+    } else if (s.type === 'acknowledgement') {
+      h += '<div class="wk-field"><label>The statement they agree to</label>' +
+        '<textarea rows="4" onchange="OpalWorkshop._step(\'ack_statement\', this.value)">' +
+        esc(s.ack_statement || '') + '</textarea>' +
+        '<p class="wk-hint">Recorded against their name with the date. The wording that is stored is the ' +
+        'wording you publish, so say exactly what is being agreed to.</p></div>';
+      h += '<div class="wk-field"><label>Anything to read first (optional)</label>' +
+        '<textarea rows="3" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea></div>';
     } else {
       h += '<div class="wk-field"><label>What it says</label>' +
         '<textarea rows="6" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea>' +
@@ -515,9 +530,13 @@
   function addStep(type) {
     var block = BLOCK_BY_TYPE[type] || {};
     var step = { type: type, title: block.name || 'New step', body: 'Say what this step is for.' };
-    if (type === 'quiz') {
+    if (type === 'quiz' || type === 'checkpoint') {
       delete step.body;
       step.quiz = { question: 'Ask something.', options: ['First answer', 'Second answer'], correctIndex: 0, explain: '' };
+    }
+    if (type === 'acknowledgement') {
+      delete step.body;
+      step.ack_statement = 'I have read and understood this.';
     }
     if (type === 'screenshot') step.image = { src: '', alt: '' };
     W.steps.splice(W.idx + 1, 0, step);
@@ -553,11 +572,16 @@
     if (!s) return;
     if (field === 'type' && value !== s.type) {
       s.type = value;
-      if (value === 'quiz' && !s.quiz) {
+      var wantsQuiz = value === 'quiz' || value === 'checkpoint';
+      if (wantsQuiz && !s.quiz) {
         s.quiz = { question: 'Ask something.', options: ['First answer', 'Second answer'], correctIndex: 0, explain: '' };
         delete s.body;
       }
-      if (value !== 'quiz' && !s.body) s.body = 'Say what this step is for.';
+      if (value === 'acknowledgement' && !s.ack_statement) {
+        s.ack_statement = 'I have read and understood this.';
+        delete s.body;
+      }
+      if (!wantsQuiz && value !== 'acknowledgement' && !s.body) s.body = 'Say what this step is for.';
       if (!TARGETED[value]) { delete s.target; delete s.advance; }
       touch(true);
       return;

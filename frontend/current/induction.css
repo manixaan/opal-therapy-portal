@@ -92,6 +92,19 @@
 .ind-q-opt input { margin-top: 2px; accent-color: var(--accent, #0f7c6c); }
 .ind-q-right { background: #e8f5ee; }
 .ind-q-wrong { background: #fdecea; }
+/* Sign-here: the statement is quoted, so what was agreed to is unmistakable
+   and visually separate from the walkthrough's own voice. */
+.ind-ack { margin: 10px 0 0; }
+.ind-ack-statement {
+  border-left: 3px solid var(--accent, #2f6f4f);
+  background: var(--bg, #f6f8f7);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 12px; margin: 0 0 10px;
+  font-size: 13px; line-height: 1.5;
+}
+.ind-ack-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.ind-ack-check input { margin-top: 2px; flex-shrink: 0; }
+
 .ind-q-explain { font-size: 12.5px; margin: 8px 0 0; }
 .ind-q-explain.ok { color: #14683c; }
 .ind-q-explain.no { color: #99442b; }

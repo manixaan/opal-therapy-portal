@@ -215,3 +215,76 @@ describe('the shipped registry seeds cleanly', () => {
     }
   });
 });
+
+// ── Phase 3 blocks ──────────────────────────────────────────────────────────
+
+describe('page, checkpoint and sign-here', () => {
+  test('a page is a plain read with no target', () => {
+    const r = content.normaliseSteps([{ type: 'page', title: 'Read this', body: 'Words.' }], ROLES);
+    expect(r.ok).toBe(true);
+    expect(r.steps[0].target).toBeUndefined();
+    expect(r.steps[0].blocking).toBeUndefined();
+  });
+
+  test('a checkpoint carries a quiz and is marked blocking', () => {
+    const r = content.normaliseSteps([{
+      type: 'checkpoint', title: 'Check',
+      quiz: { question: 'q', options: ['a', 'b'], correctIndex: 1, explain: 'because' },
+    }], ROLES);
+    expect(r.ok).toBe(true);
+    expect(r.steps[0].blocking).toBe(true);
+    expect(r.steps[0].quiz.correctIndex).toBe(1);
+  });
+
+  test('a checkpoint without a valid quiz is refused', () => {
+    expect(content.normaliseSteps([{ type: 'checkpoint', title: 'Check' }], ROLES).ok).toBe(false);
+  });
+
+  test('a sign-here needs the statement being agreed to, and blocks', () => {
+    expect(content.normaliseSteps([{ type: 'acknowledgement', title: 'Sign' }], ROLES).ok).toBe(false);
+    const r = content.normaliseSteps(
+      [{ type: 'acknowledgement', title: 'Sign', ack_statement: '<b>I agree</b> to this.' }], ROLES);
+    expect(r.ok).toBe(true);
+    expect(r.steps[0].ack_statement).toBe('I agree to this.');
+    expect(r.steps[0].blocking).toBe(true);
+  });
+});
+
+describe('stable step keys', () => {
+  test('every step gets a key, and authored keys survive a round trip', () => {
+    const first = content.normaliseSteps([step(), step({ title: 'Two' })], ROLES);
+    expect(first.steps.every((s) => /^[a-z0-9-]+$/.test(s.key))).toBe(true);
+    const second = content.normaliseSteps(first.steps, ROLES);
+    expect(second.steps.map((s) => s.key)).toEqual(first.steps.map((s) => s.key));
+  });
+
+  test('duplicate keys are broken apart — evidence must not land on two steps', () => {
+    const r = content.normaliseSteps(
+      [step({ key: 'same' }), step({ key: 'same', title: 'Other' })], ROLES);
+    expect(r.steps[0].key).toBe('same');
+    expect(r.steps[1].key).not.toBe('same');
+  });
+});
+
+describe('learnerSteps', () => {
+  test("a checkpoint's answer never travels with the step", () => {
+    const authored = content.normaliseSteps([{
+      type: 'checkpoint', title: 'Check',
+      quiz: { question: 'q', options: ['a', 'b'], correctIndex: 1, explain: 'because' },
+    }], ROLES).steps;
+    const sent = content.learnerSteps(authored);
+    expect(sent[0].quiz.options).toEqual(['a', 'b']);
+    expect(sent[0].quiz.correctIndex).toBeUndefined();
+    expect(sent[0].quiz.explain).toBeUndefined();
+    // The authored copy is untouched — the server still knows the answer.
+    expect(authored[0].quiz.correctIndex).toBe(1);
+  });
+
+  test('an ordinary quiz is unchanged — it gates nothing and always graded client-side', () => {
+    const authored = content.normaliseSteps([{
+      type: 'quiz', title: 'Q',
+      quiz: { question: 'q', options: ['a', 'b'], correctIndex: 0, explain: 'why' },
+    }], ROLES).steps;
+    expect(content.learnerSteps(authored)[0].quiz.correctIndex).toBe(0);
+  });
+});

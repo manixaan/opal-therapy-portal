@@ -200,6 +200,7 @@ module.exports = {
   invalidate,
   builtInCatalogue,
   stepsForRole: content.stepsForRole,
+  learnerSteps: content.learnerSteps,
   moduleState: content.moduleState,
   CACHE_TTL_MS,
 };

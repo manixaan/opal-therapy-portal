@@ -1,0 +1,32 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 046 — Evidence recorded inside a walkthrough
+--
+-- Additive: one column on tutorial_progress (032).
+--
+-- Phase 3 of docs/INDUCTION_WORKSHOP.md adds two step types that record what
+-- a learner DID rather than what they were shown:
+--
+--   checkpoint      — a question they cannot page past until they answer it
+--                     correctly. The server grades it (the published step's
+--                     correctIndex never reaches the browser), so the gate is
+--                     real rather than decorative.
+--   acknowledgement — a statement they sign inside the walkthrough.
+--
+-- Shape, keyed by the STABLE step key (walkthrough-content.js assigns one to
+-- every step) so inserting or reordering steps cannot move a record onto a
+-- different question:
+--
+--   { "<step key>": { "type": "checkpoint",
+--                     "passed": true, "attempts": 2,
+--                     "at": "2026-08-30T…" },
+--     "<step key>": { "type": "acknowledgement",
+--                     "statement": "…", "hash": "<sha256>",
+--                     "at": "2026-08-30T…" } }
+--
+-- Only passes and signatures are stored — never a wrong answer, and never
+-- anything the learner typed. This is a record that an obligation was met,
+-- not behavioural detail about a member of staff.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE tutorial_progress
+  ADD COLUMN IF NOT EXISTS evidence JSONB NOT NULL DEFAULT '{}'::jsonb;

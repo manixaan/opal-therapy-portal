@@ -115,7 +115,7 @@ spotlight; the learner card is swapped for an author dock.
 A tour built here is written to the shelf on first save, and referenced by the
 induction rather than embedded.
 
-### Phase 3 — the new blocks
+### Phase 3 — the new blocks — DONE
 
 Checkpoint, Page, Sign here. Schema additions plus player rendering.
 
