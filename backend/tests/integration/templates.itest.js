@@ -181,11 +181,20 @@ test('FCA section structure: shape, store, export, and return to default (migrat
   const xml = await zip.file('word/document.xml').async('string');
   expect(xml).not.toContain('Montreal Cognitive Assessment');
 
-  // A required section cannot be dropped.
-  const refused = await agent.patch(`/api/templates/documents/${id}`)
+  // NO section is required here. The Templates catalogue withdraws the FCA
+  // wizard's required flags, so even Referral Information is negotiable: the
+  // route stores the removal instead of refusing it, and a re-read agrees.
+  const bare = await agent.patch(`/api/templates/documents/${id}`)
     .send({ sections: { selected: selected.filter((t) => t !== 'OPAL_SECTION_REFERRAL_INFORMATION') } });
-  expect(refused.status).toBe(400);
-  expect(refused.body.error).toBe('required_section');
+  expect(bare.status).toBe(200);
+  expect(bare.body.document.sections.find((s) => s.tag === 'OPAL_SECTION_REFERRAL_INFORMATION').included).toBe(false);
+
+  // The guard that IS real: a tag this template has never heard of is refused
+  // with its reason, not quietly dropped from the selection.
+  const unknown = await agent.patch(`/api/templates/documents/${id}`)
+    .send({ sections: { selected: [...selected, 'OPAL_SECTION_NOT_A_REAL_SECTION'] } });
+  expect(unknown.status).toBe(400);
+  expect(unknown.body.error).toBe('unknown_section');
 
   // null returns the document to the master's own structure.
   const reset = await agent.patch(`/api/templates/documents/${id}`).send({ sections: null });
