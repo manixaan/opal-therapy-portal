@@ -539,6 +539,7 @@ app.use('/', require('./store-search-routes'));
 // Interactive induction — per-user tutorial progress (module catalogue is
 // code-owned in frontend/current/induction-modules.js, required directly)
 app.use('/', require('./tutorial-routes'));
+app.use('/', require('./walkthrough-routes'));
 
 // Owner-controlled learning: workflow library, versioned assignments,
 // per-employee progress (owner admin surface + employee My Learning)
