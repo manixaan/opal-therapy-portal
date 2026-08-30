@@ -621,7 +621,10 @@ describe('changed assets are cache-busted', () => {
       // r30: Admin > Learning offers the walkthrough workshop beside the
       // learning items — a tour is a sibling of the inductions that use it,
       // not a child of any one of them.
-      ['resourcehub.js', 'r30'], ['resourcehub.css', 'r17'],
+      // r31: a task step in an EXISTING induction names its walkthrough and
+      // opens the same side-panel editor from the step's own settings —
+      // editing a pop-up should not mean leaving the induction that uses it.
+      ['resourcehub.js', 'r31'], ['resourcehub.css', 'r17'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -652,7 +655,10 @@ describe('changed assets are cache-busted', () => {
       // 3/2: recording (click the portal, get a skeleton to write into) and
       // the target report — which spotlights point at nothing any more. The
       // CSS carries the recording banner and the report panel.
-      ['workshop.js', 3], ['workshop.css', 2],
+      // 4: recording notices when a click OPENS a pop-up — that step becomes
+      // a real click-through and the steps inside carry route.open, so a
+      // recorded tour no longer points at a panel it never opened.
+      ['workshop.js', 4], ['workshop.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

@@ -6049,6 +6049,13 @@
     var keepStep = (S.la.editor && S.la.editor.id === id) ? (Number(S.la.editor.step) || 0) : 0;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
     if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
+    // The walkthrough shelf, so a task step in an EXISTING induction can name
+    // one and open its editor. Fetched once per editor session and never
+    // fatal: an induction stays editable if the shelf is unavailable.
+    if (!S.la.walkthroughs) {
+      var wl = await api('/api/walkthroughs');
+      S.la.walkthroughs = (wl.ok && wl.walkthroughs) || [];
+    }
     var w = d.workflow;
     S.la.editor = {
       id: w.id,
@@ -6216,6 +6223,51 @@
   // Every mutation flags _dirty so closing the editor can warn honestly.
   function laMeta(field, value) { if (S.la.editor) { S.la.editor[field] = value; S.la.editor._dirty = true; } }
   function laSecField(si, value) { var ed = S.la.editor; if (ed && ed.sections[si]) { ed.sections[si].title = value; ed._dirty = true; } }
+  /**
+   * The walkthrough row inside a task step's settings: which walkthrough this
+   * step runs, and the way into its editor. The editor is the same side panel
+   * used to build one from scratch — one place to edit a walkthrough, reached
+   * from wherever you happen to be.
+   */
+  function laItemWalkthroughHtml(it, si, ii) {
+    var shelf = S.la.walkthroughs || [];
+    var current = it.walkthrough_key || '';
+    var known = shelf.some(function (w) { return w.key === current; });
+
+    var opts = '<option value="">— no walkthrough —</option>';
+    shelf.forEach(function (w) {
+      opts += '<option value="' + esc(w.key) + '"' + (w.key === current ? ' selected' : '') + '>' +
+        esc(w.title) + '</option>';
+    });
+    // A key the shelf does not know is kept and shown rather than silently
+    // dropped: the built-ins are not on the shelf until they are imported.
+    if (current && !known) {
+      opts += '<option value="' + esc(current) + '" selected>' + esc(current) + ' (not imported)</option>';
+    }
+
+    return '<label class="rh2-lbl">Walkthrough ' +
+      '<select class="rh2-input" onchange="RH2.laItemField(' + si + ',' + ii + ',\'walkthrough_key\',this.value)">' +
+      opts + '</select></label>' +
+      (current
+        ? '<button type="button" class="rh2-btn rh2-btn-quiet" ' +
+          'onclick="RH2.laEditWalkthrough(\'' + esc(current) + '\')">Edit this walkthrough</button>'
+        : '<button type="button" class="rh2-btn rh2-btn-quiet" ' +
+          'onclick="OpalWorkshop.open()">Build one</button>');
+  }
+
+  /** Open the walkthrough editor for a key named by a learning step. */
+  function laEditWalkthrough(key) {
+    var shelf = S.la.walkthroughs || [];
+    var found = shelf.filter(function (w) { return w.key === String(key || ''); })[0];
+    if (!found) {
+      alert('That walkthrough is not on the shelf yet.\n\nOpen Walkthroughs and import the built-in ' +
+            'walkthroughs to make it editable.');
+      return;
+    }
+    if (!global.OpalWorkshop) return;
+    global.OpalWorkshop.edit(found.id);
+  }
+
   function laItemField(si, ii, field, value) {
     var ed = S.la.editor;
     if (ed && ed.sections[si] && ed.sections[si].items[ii]) { ed.sections[si].items[ii][field] = value; ed._dirty = true; }
@@ -6556,6 +6608,11 @@
           ? '<label class="rh2-lbl">Pass mark % <input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="la-set-' + k + '-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
               'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)"></label>'
           : '') +
+        // A task step can BE an interactive walkthrough. Editing that
+        // walkthrough belongs here, next to the step that uses it — sending
+        // the Owner off to a separate console to change a pop-up in the
+        // induction they already have open is the long way round.
+        (it.type === 'task' ? laItemWalkthroughHtml(it, si, ii) : '') +
         '<span class="rh2-learn-ed-tools">' +
           '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move step up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
           '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move step down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
@@ -7716,6 +7773,7 @@
     laCreateField: laCreateField,
     laCreateSubmit: laCreateSubmit,
     laCreateBackdrop: laCreateBackdrop,
+    laEditWalkthrough: laEditWalkthrough,
     laImport: laImport,
     laImportDismiss: laImportDismiss,
     // Batch assignment + review step + reassignment

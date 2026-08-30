@@ -442,6 +442,15 @@
 
     if (TARGETED[s.type]) h += targetFieldHtml(s);
 
+    // Where the step runs. Recording fills this in, and it is the difference
+    // between a spotlight that lands and one that finds an empty screen.
+    if (s.route && (s.route.tab || s.route.open)) {
+      h += '<p class="wk-hint wk-tone-ok">Runs on the <strong>' + esc(s.route.tab || 'current') +
+        '</strong> tab' +
+        (s.route.open ? ', and opens the <strong>' + esc(s.route.open) + '</strong> panel first' : '') +
+        '.</p>';
+    }
+
     if (s.type === 'action') {
       h += '<div class="wk-field wk-check">' +
         '<label><input type="checkbox" ' + (s.advance === 'click' ? 'checked' : '') +
@@ -892,11 +901,69 @@
    */
   var RECORD_CAP = 60;
 
+  /**
+   * Anything that behaves like a pop-up. Deliberately broad and shape-based
+   * rather than a list of known panels: the portal has modals, slide-overs,
+   * drawers and detail panels built by several different features, and a
+   * hand-kept list would miss the next one somebody adds.
+   */
+  var OVERLAY_SEL = '[role="dialog"], [class*="modal"], [class*="panel"], [class*="popup"],' +
+    '[class*="pop-up"], [class*="overlay"], [class*="drawer"], [class*="slide"], [class*="sheet"]';
+
+  /**
+   * Panels the PLAYER knows how to open by itself (induction.js OPENERS). A
+   * step inside one of these can carry route.open and be reached cold — a
+   * learner resuming mid-walkthrough still gets the panel opened for them.
+   * Anything else relies on the click-through step that opens it.
+   */
+  var OPENER_HINTS = [
+    [/booking/i, 'booking'],
+    [/notif/i, 'notifications'],
+    [/invite-modal/i, 'invite-modal'],
+    [/(^|[^a-z])opa([^a-z]|$)/i, 'opa'],
+  ];
+
+  /**
+   * Mirrors DESTRUCTIVE_TARGET in backend/walkthrough-content.js. Recording
+   * must not mark a send/delete/disconnect control as click-through: the
+   * server would refuse the save, and the author would be left holding a
+   * recording they cannot store. Those steps stay as spotlights.
+   */
+  var RECORD_NO_CLICK =
+    /(disconnect|delete|remove|revoke|send|submit|publish|deactivate|suspend|approve|reject|mark-all|sign-?out|logout)/i;
+
+  function overlayKeyFor(el) {
+    return (el.getAttribute && el.getAttribute('data-help')) || el.id ||
+      ('c:' + String(el.className || '').trim().split(/\s+/)[0]);
+  }
+
+  /** Which pop-ups are open right now, by identity. */
+  function openOverlays() {
+    var out = {};
+    var nodes = doc.querySelectorAll(OVERLAY_SEL);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!pickableFrom(el)) continue;              // the editor is not the subject
+      var r = el.getBoundingClientRect();
+      if (r.width < 60 || r.height < 60) continue;  // a sliver is not a pop-up
+      if (r.right <= 4 || r.left >= (global.innerWidth || 0) - 4) continue; // parked off-canvas
+      out[overlayKeyFor(el)] = el;
+    }
+    return out;
+  }
+
+  function openerKeyFor(identity) {
+    for (var i = 0; i < OPENER_HINTS.length; i++) {
+      if (OPENER_HINTS[i][0].test(identity)) return OPENER_HINTS[i][1];
+    }
+    return null;
+  }
+
   function startRecording() {
     if (W.recording) return stopRecording();
     if (global.OpalInduction) global.OpalInduction.close();
     stopPicking();
-    W.recording = { steps: [] };
+    W.recording = { steps: [], inside: null };
 
     var banner = doc.createElement('div');
     banner.className = 'wk-rec-banner';
@@ -943,13 +1010,56 @@
     };
     var tab = currentTab();
     if (tab) step.route = { tab: tab };
-    W.recording.steps.push(step);
-
-    var count = doc.getElementById('wk-rec-count');
-    if (count) {
-      count.textContent = 'Recording — ' + W.recording.steps.length + ' step' +
-        (W.recording.steps.length === 1 ? '' : 's') + ' captured.';
+    // Still inside the pop-up the last click opened? Then say so, if it is one
+    // the player can open by itself. Without this, a learner who resumes on
+    // this step gets a spotlight with nothing under it.
+    if (W.recording.inside && !isInsideOverlay(el, W.recording.inside)) W.recording.inside = null;
+    if (W.recording.inside && W.recording.inside.opener) {
+      step.route = step.route || {};
+      step.route.open = W.recording.inside.opener;
     }
+    W.recording.steps.push(step);
+    updateRecordCount();
+
+    // Did this click OPEN something? The listener runs in the capture phase,
+    // before the page reacts, so the comparison has to wait for the reaction.
+    // This is the whole reason a recorded tour used to walk to a button that
+    // opens a pop-up, point at it, and move on with the pop-up never opening.
+    var before = openOverlays();
+    global.setTimeout(function () {
+      if (!W.recording || W.recording.steps.indexOf(step) === -1) return;
+      var after = openOverlays();
+      var appeared = Object.keys(after).filter(function (k) { return !before[k]; });
+      if (!appeared.length) return;
+
+      var identity = appeared[0];
+      if (RECORD_NO_CLICK.test(target)) {
+        // A control that sends or deletes is never clicked through. Say what
+        // it opens; do not make a learner press it.
+        step.body = 'Say what this control does. It opens something, but a learner is not asked ' +
+                    'to press it here.';
+      } else {
+        step.type = 'action';
+        step.advance = 'click';
+        step.body = 'Say what to click. The walkthrough waits until they do.';
+      }
+      W.recording.inside = { key: identity, el: after[identity], opener: openerKeyFor(identity) };
+      updateRecordCount();
+    }, 450);
+  }
+
+  function isInsideOverlay(el, inside) {
+    if (!inside || !inside.el || !doc.contains(inside.el)) return false;
+    return inside.el.contains(el);
+  }
+
+  function updateRecordCount() {
+    var count = doc.getElementById('wk-rec-count');
+    if (!count || !W.recording) return;
+    var n = W.recording.steps.length;
+    var opens = W.recording.steps.filter(function (s) { return s.advance === 'click'; }).length;
+    count.textContent = 'Recording — ' + n + ' step' + (n === 1 ? '' : 's') + ' captured' +
+      (opens ? (', ' + opens + ' that open something') : '') + '.';
   }
 
   function teardownRecording() {
