@@ -298,12 +298,12 @@ describe('cross-client leakage', () => {
 
     const dx = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${dx.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_PRIMARY_DISABILITY: 'XDISABILITY' },
+      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_NOMINEE_DETAILS: 'XDISABILITY' },
     });
     const saved = await agent.post(`/api/fca/drafts/${dx.id}/save-to-profile`)
-      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
+      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_NOMINEE_DETAILS'] });
     expect(saved.status).toBe(200);
-    expect(saved.body.savedFields.sort()).toEqual(['OPAL_CLIENT_PRIMARY_DISABILITY', 'OPAL_CLIENT_PRONOUNS']);
+    expect(saved.body.savedFields.sort()).toEqual(['OPAL_CLIENT_NOMINEE_DETAILS', 'OPAL_CLIENT_PRONOUNS']);
 
     const yProfile = await agent.get(`/api/fca/clients/${CLIENT_Y.id}/profile`);
     expect(yProfile.body.profile).toBeNull();
@@ -534,17 +534,17 @@ describe('save-to-profile', () => {
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
       scalarOverrides: {
         OPAL_CLIENT_PRONOUNS: 'xe/xem',
-        OPAL_CLIENT_PRIMARY_DISABILITY: 'Multiple sclerosis',
+        OPAL_CLIENT_NOMINEE_DETAILS: 'Multiple sclerosis',
       },
     });
 
     const res = await agent.post(`/api/fca/drafts/${draft.id}/save-to-profile`)
-      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
+      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_NOMINEE_DETAILS'] });
 
     expect(res.status).toBe(200);
-    expect(res.body.savedFields.sort()).toEqual(['OPAL_CLIENT_PRIMARY_DISABILITY', 'OPAL_CLIENT_PRONOUNS']);
+    expect(res.body.savedFields.sort()).toEqual(['OPAL_CLIENT_NOMINEE_DETAILS', 'OPAL_CLIENT_PRONOUNS']);
     expect(res.body.profile.pronouns).toBe('xe/xem');
-    expect(res.body.profile.primaryDisability).toBe('Multiple sclerosis');
+    expect(res.body.profile.nomineeDetails).toBe('Multiple sclerosis');
   });
 
   test('rejects report-specific fields and writes NOTHING', async () => {
@@ -626,7 +626,7 @@ describe('save-to-profile', () => {
 
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_PRIMARY_DISABILITY: 'Implicit' },
+      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_NOMINEE_DETAILS: 'Implicit' },
     });
 
     const profile = await agent.get(`/api/fca/clients/${CLIENT_X.id}/profile`);
@@ -962,7 +962,7 @@ describe('template registry', () => {
     expect(body.template.id).toBe(tm.TEMPLATE_ID);
     expect(body.template.version).toBe(tm.TEMPLATE_VERSION);
     expect(body.template.sections).toHaveLength(tm.SECTIONS.length);
-    expect(body.template.scalarTags).toHaveLength(33);
+    expect(body.template.scalarTags).toHaveLength(31);
     expect(new Set(body.template.profileEligibleTags)).toEqual(new Set(tm.PROFILE_ELIGIBLE_TAGS));
     for (const s of body.template.sections) {
       expect(s).toHaveProperty('group');

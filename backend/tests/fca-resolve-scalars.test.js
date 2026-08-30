@@ -38,7 +38,7 @@ const PROFILE = {
   preferred_name: 'Janey',
   pronouns: 'she/her',
   date_of_birth: '1990-05-07',
-  primary_disability: 'Multiple sclerosis',
+  
   other_conditions: 'Chronic fatigue',
   nominee_details: 'Pat Citizen (mother)',
   support_coordinator_details: 'Coordinator Co',
@@ -77,15 +77,15 @@ const full = (overrides = {}) => resolveScalars({
 // ── Layer classification ─────────────────────────────────────────────────────
 
 describe('layer classification', () => {
-  test('every one of the 33 scalar tags belongs to exactly one layer', () => {
+  test('every one of the 31 scalar tags belongs to exactly one layer', () => {
     const layers = ['splose', 'client_profile', 'portal', 'report', 'server'];
     const counts = Object.fromEntries(layers.map((l) => [l, 0]));
     for (const meta of tm.SCALAR_TAGS) {
       expect(layers).toContain(meta.layer);
       counts[meta.layer] += 1;
     }
-    expect(tm.SCALAR_TAGS.length).toBe(33);
-    expect(counts).toEqual({ splose: 5, client_profile: 12, portal: 6, report: 6, server: 4 });
+    expect(tm.SCALAR_TAGS.length).toBe(31);
+    expect(counts).toEqual({ splose: 5, client_profile: 10, portal: 6, report: 6, server: 4 });
   });
 
   test('profile eligibility is derived from the layer, not a hand-written list', () => {
@@ -155,7 +155,6 @@ describe('four-layer precedence', () => {
     expect(scalarData.OPAL_CLIENT_PREFERRED_NAME).toBe('Janey');
     expect(scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('client_profile');
     expect(scalarData.OPAL_CLIENT_PRONOUNS).toBe('she/her');
-    expect(scalarData.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('Multiple sclerosis');
     expect(scalarSources.OPAL_CLIENT_REFERRER_DETAILS).toBe('client_profile');
   });
 
@@ -272,7 +271,7 @@ describe('NDIS plan and goals', () => {
 describe('missing data', () => {
   test('with nothing but Splose, every non-Splose tag is flagged missing', () => {
     const { scalarData, scalarSources, missingFields } = resolveScalars({ splose: SPLOSE });
-    expect(missingFields.length).toBe(33 - 5);
+    expect(missingFields.length).toBe(31 - 5);
     for (const tag of tm.SPLOSE_AUTHORITATIVE_TAGS) expect(scalarSources[tag]).toBe('splose');
     for (const tag of missingFields) expect(scalarData[tag]).toBeNull();
   });

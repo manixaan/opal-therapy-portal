@@ -11,8 +11,8 @@
  *
  * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 0c7ab702…90318d — re-hashed
  * 24 Aug 2026 after the layout-only Letter→A4 pgSz fix; controls unchanged)
- *   58 unique w:tag content controls, 84 occurrences in total.
- *   25 of them are section/anchor controls, 33 are scalar (text) controls.
+ *   56 unique w:tag content controls, 82 occurrences in total.
+ *   25 of them are section/anchor controls, 31 are scalar (text) controls.
  *   15 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).
  *   Parts carrying controls: word/document.xml (81), word/header6.xml (2:
  *   OPAL_CLIENT_PREFERRED_NAME, OPAL_CLIENT_NDIS_NUMBER), word/footer6.xml
@@ -80,10 +80,10 @@ const SECTIONS = [
     description: 'Reason for referral, purpose and scope, consent, report recipients.' },
   { tag: 'OPAL_SECTION_PARTICIPANT_INFORMATION', group: 'core', parent: null, required: true,
     label: 'Participant Information', title: 'Participant Information',
-    description: 'Background, living situation, supports, disability, conditions, goals.' },
+    description: 'Background, living situation, supports, goals.' },
   { tag: 'OPAL_SECTION_ASSESSMENT_METHOD', group: 'core', parent: null, required: true,
     label: 'Assessment Method', title: 'Assessment Method',
-    description: 'Assessment activities, information sources, reports reviewed, limitations.' },
+    description: 'Assessment activities, information sources, reports reviewed.' },
 
   { tag: 'OPAL_SECTION_ASSESSMENT_TOOL_WHODAS', group: 'assessment_tool', parent: 'OPAL_SECTION_ASSESSMENT_METHOD', required: false,
     label: 'WHODAS 2.0', title: 'WHODAS Assessment Schedule 2.0',
@@ -206,8 +206,6 @@ const SCALAR_TAGS = [
     note: 'Splose has no preferred-name field. A first name is NOT a preferred name and is never substituted.' },
   { tag: 'OPAL_CLIENT_DATE_OF_BIRTH', label: 'Date of birth', layer: 'client_profile', profileField: 'date_of_birth', isDate: true, occurrences: 1 },
   { tag: 'OPAL_CLIENT_PRONOUNS', label: 'Pronouns', layer: 'client_profile', profileField: 'pronouns', occurrences: 1 },
-  { tag: 'OPAL_CLIENT_PRIMARY_DISABILITY', label: 'Primary disability', layer: 'client_profile', profileField: 'primary_disability', occurrences: 1 },
-  { tag: 'OPAL_CLIENT_OTHER_CONDITIONS', label: 'Other conditions', layer: 'client_profile', profileField: 'other_conditions', occurrences: 1 },
   { tag: 'OPAL_CLIENT_NOMINEE_DETAILS', label: 'Nominee or guardian', layer: 'client_profile', profileField: 'nominee_details', occurrences: 1 },
   { tag: 'OPAL_CLIENT_SUPPORT_COORDINATOR_DETAILS', label: 'Support coordinator', layer: 'client_profile', profileField: 'support_coordinator_details', occurrences: 1 },
   { tag: 'OPAL_CLIENT_REFERRER_DETAILS', label: 'Referrer', layer: 'client_profile', profileField: 'referrer_details', occurrences: 1,

@@ -167,29 +167,29 @@ describe('fca-v1.docx template facts', () => {
     footer6 = parts['word/footer6.xml'];
   });
 
-  test('carries 58 unique controls across 84 occurrences', () => {
+  test('carries 56 unique controls across 82 occurrences', () => {
     const all = new Map();
     for (const xml of [doc, header6, footer6]) {
       for (const [tag, n] of tagCounts(xml)) all.set(tag, (all.get(tag) || 0) + n);
     }
-    expect(all.size).toBe(58);
-    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(84);
+    expect(all.size).toBe(56);
+    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(82);
   });
 
-  test('splits into 25 section-or-anchor and 33 scalar controls', () => {
+  test('splits into 25 section-or-anchor and 31 scalar controls', () => {
     // Discovered from the template, never hard-coded from a count elsewhere.
     const tags = [...tagCounts(doc).keys()];
     const sectionish = tags.filter((t) => t.startsWith('OPAL_SECTION_') || t.startsWith('OPAL_ANCHOR_'));
     expect(sectionish.length).toBe(25);
     expect(tm.SECTIONS.length + 1).toBe(sectionish.length);
-    expect(tm.SCALAR_TAG_LIST.length).toBe(33);
+    expect(tm.SCALAR_TAG_LIST.length).toBe(31);
   });
 
   test('the client tag count is discovered, not assumed', () => {
     const clientTags = tm.SCALAR_TAG_LIST.filter((t) => t.startsWith('OPAL_CLIENT_'));
     const inTemplate = [...tagCounts(doc).keys()].filter((t) => t.startsWith('OPAL_CLIENT_'));
     expect(new Set(clientTags)).toEqual(new Set(inTemplate));
-    expect(clientTags.length).toBe(17);
+    expect(clientTags.length).toBe(15);
   });
 
   test('header6 and footer6 carry controls a body-only build would miss', () => {
@@ -280,7 +280,7 @@ describe('scalar population', () => {
     // The NDIS number is not in a heading: 4 occurrences, 1 of them in header6.
     expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_NDIS_NUMBER').length - 1).toBe(3);
 
-    expect(buffer.fcaStats.scalarsWritten).toBe(59); // 84 − 25 section/anchor controls
+    expect(buffer.fcaStats.scalarsWritten).toBe(57); // 82 − 25 section/anchor controls
   });
 
   test('a null value leaves the template placeholder and never prints "null"', async () => {
