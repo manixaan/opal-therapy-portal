@@ -235,3 +235,57 @@ test('recording evidence is audited without the answer', async () => {
   expect(rows[0].metadata.kind).toBe('checkpoint');
   expect(JSON.stringify(rows[0].metadata)).not.toContain('chosen');
 });
+
+// ── Completion depends on the evidence, not on the player ───────────────────
+
+test('a module with checkpoints cannot be completed until they are done', async () => {
+  const fx = await publishFixture(owner.agent);
+  const cp = fx.steps.find((s) => s.type === 'checkpoint');
+  const ack = fx.steps.find((s) => s.type === 'acknowledgement');
+  const { agent } = await agentFor('therapist', org.id);
+
+  // Claiming completion without ever opening the walkthrough is the case the
+  // player's gate cannot cover — completion is a POST.
+  const bare = await agent.post('/api/tutorials/safety-tour/complete').send({ version: 1 });
+  expect(bare.status).toBe(409);
+  expect(bare.body.outstanding).toBe(2);
+
+  await agent.post('/api/tutorials/safety-tour/evidence').send({ stepKey: cp.key, chosen: 0 });
+  const stillWrong = await agent.post('/api/tutorials/safety-tour/complete').send({ version: 1 });
+  expect(stillWrong.status).toBe(409);
+  expect(stillWrong.body.outstanding).toBe(2); // a failed attempt is not evidence
+
+  await agent.post('/api/tutorials/safety-tour/evidence').send({ stepKey: cp.key, chosen: 1 });
+  expect((await agent.post('/api/tutorials/safety-tour/complete').send({ version: 1 })).status).toBe(409);
+
+  await agent.post('/api/tutorials/safety-tour/evidence').send({ stepKey: ack.key, agreed: true });
+  const done = await agent.post('/api/tutorials/safety-tour/complete').send({ version: 1 });
+  expect(done.status).toBe(200);
+  expect(done.body.progress.status).toBe('completed');
+});
+
+test('a walkthrough with no blocking steps completes as it always did', async () => {
+  const created = await owner.agent.post('/api/walkthroughs').send({
+    key: 'plain-tour', title: 'Plain', roles: ['owner', 'therapist'],
+    steps: [{ type: 'callout', title: 'A note', body: 'Words.' }],
+  });
+  await owner.agent.post(`/api/walkthroughs/${created.body.walkthrough.id}/publish`);
+  const { agent } = await agentFor('therapist', org.id);
+  expect((await agent.post('/api/tutorials/plain-tour/complete').send({ version: 1 })).status).toBe(200);
+});
+
+test('a blocking step the role never sees does not block that role', async () => {
+  const created = await owner.agent.post('/api/walkthroughs').send({
+    key: 'gated-tour', title: 'Gated', roles: ['owner', 'therapist'],
+    steps: [
+      { type: 'callout', title: 'A note', body: 'Words.' },
+      { type: 'acknowledgement', title: 'Owners sign', ack_statement: 'I own this.', roles: ['owner'] },
+    ],
+  });
+  await owner.agent.post(`/api/walkthroughs/${created.body.walkthrough.id}/publish`);
+
+  const { agent } = await agentFor('therapist', org.id);
+  expect((await agent.post('/api/tutorials/gated-tour/complete').send({ version: 1 })).status).toBe(200);
+  // The owner, who does see it, is still held.
+  expect((await owner.agent.post('/api/tutorials/gated-tour/complete').send({ version: 1 })).status).toBe(409);
+});

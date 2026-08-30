@@ -160,6 +160,67 @@ router.get('/api/walkthroughs', ownerOnly, safe(async (req, res) => {
   });
 }));
 
+/**
+ * "Check my walkthroughs still work" — every step whose spotlight points at
+ * something the portal no longer offers, or at something fragile enough that
+ * it might stop working without warning.
+ *
+ * Reported against the PUBLISHED steps wherever there are any, because that
+ * is what a new employee actually meets today; a walkthrough that was never
+ * published is checked as a draft and says so. The whole point is that a
+ * broken tour surfaces in a report rather than in front of somebody's first
+ * week.
+ *
+ * Static classification against the portal map — it cannot know whether an
+ * anchor is on screen at this moment (that depends on tab, role and state),
+ * only whether it exists at all. That is exactly the drift this catches.
+ */
+router.get('/api/walkthroughs/report', ownerOnly, safe(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT m.id, m.key, m.title, m.current_version, m.draft_steps,
+            latest.steps AS published_steps
+       FROM walkthrough_modules m
+       LEFT JOIN LATERAL (
+         SELECT v.steps FROM walkthrough_module_versions v
+          WHERE v.module_id = m.id AND v.version = m.current_version LIMIT 1
+       ) latest ON TRUE
+      WHERE m.organisation_id IS NOT DISTINCT FROM $1 AND m.status = 'active'
+      ORDER BY m.group_key ASC, m.created_at ASC`,
+    [orgOf(req)]);
+
+  let broken = 0;
+  let fragile = 0;
+  const walkthroughs = rows.map((r) => {
+    const published = Array.isArray(r.published_steps) ? r.published_steps : null;
+    const steps = published || (Array.isArray(r.draft_steps) ? r.draft_steps : []);
+    const issues = [];
+    steps.forEach((s, i) => {
+      if (!s.target) return;
+      const stability = anchors.stabilityOf(s.target);
+      if (stability === 'anchor' || stability === 'id') return;
+      if (stability === 'unknown') broken++; else fragile++;
+      issues.push({
+        index: i, stepKey: s.key || null, title: s.title || '',
+        target: s.target, stability,
+      });
+    });
+    return {
+      id: r.id, key: r.key, title: r.title,
+      checked: published ? 'published' : 'draft',
+      version: Number(r.current_version),
+      stepCount: steps.length,
+      issues,
+    };
+  });
+
+  res.json({
+    walkthroughs: walkthroughs.filter((w) => w.issues.length),
+    checkedCount: walkthroughs.length,
+    broken,
+    fragile,
+  });
+}));
+
 /** The portal map: everything a spotlight can point at, grouped for picking. */
 router.get('/api/walkthroughs/anchors', ownerOnly, safe(async (req, res) => {
   res.json({ anchors: anchors.anchors() });

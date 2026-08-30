@@ -306,3 +306,68 @@ test('publishing is audited with the version it cut', async () => {
   expect(rows[0].metadata.version).toBe(1);
   expect(rows[0].metadata.key).toBe('my-tour');
 });
+
+// ── The target report ───────────────────────────────────────────────────────
+
+test('the report names every spotlight pointing at nothing, and the fragile ones', async () => {
+  const created = await createWalkthrough(owner.agent, {
+    steps: [
+      STEP({ type: 'highlight', title: 'Fine', target: 'cal-view-week' }),
+      STEP({ type: 'highlight', title: 'By id', target: '#stg-user-list' }),
+      STEP({ type: 'highlight', title: 'Fragile', target: '.settings-nav-item' }),
+      STEP({ type: 'highlight', title: 'Gone', target: 'renamed-last-year' }),
+    ],
+  });
+  const res = await owner.agent.get('/api/walkthroughs/report');
+  expect(res.status).toBe(200);
+  expect(res.body.checkedCount).toBe(1);
+  expect(res.body.broken).toBe(1);
+  expect(res.body.fragile).toBe(1);
+
+  const w = res.body.walkthroughs[0];
+  expect(w.id).toBe(created.body.walkthrough.id);
+  // A never-published walkthrough is checked as a draft, and says so.
+  expect(w.checked).toBe('draft');
+  // Anchors and ids are healthy and are not reported at all.
+  expect(w.issues.map((i) => i.title)).toEqual(['Fragile', 'Gone']);
+  expect(w.issues.map((i) => i.stability)).toEqual(['css', 'unknown']);
+  expect(w.issues[1].index).toBe(3);
+});
+
+test('the report checks what staff actually see, not the draft', async () => {
+  const created = await createWalkthrough(owner.agent, {
+    steps: [STEP({ type: 'highlight', title: 'Fine', target: 'cal-view-week' })],
+  });
+  const id = created.body.walkthrough.id;
+  await owner.agent.post(`/api/walkthroughs/${id}/publish`);
+
+  // The draft breaks; the published version staff are taking is still fine.
+  await owner.agent.put(`/api/walkthroughs/${id}`).send({
+    key: 'my-tour', title: 'My tour', roles: ['owner', 'therapist'],
+    steps: [STEP({ type: 'highlight', title: 'Broken now', target: 'gone-away' })],
+  });
+
+  const res = await owner.agent.get('/api/walkthroughs/report');
+  expect(res.body.walkthroughs).toEqual([]);
+  expect(res.body.broken).toBe(0);
+
+  await owner.agent.post(`/api/walkthroughs/${id}/publish`);
+  const after = await owner.agent.get('/api/walkthroughs/report');
+  expect(after.body.broken).toBe(1);
+  expect(after.body.walkthroughs[0].checked).toBe('published');
+});
+
+test('an archived walkthrough is not reported — nobody is being shown it', async () => {
+  const created = await createWalkthrough(owner.agent, {
+    steps: [STEP({ type: 'highlight', title: 'Gone', target: 'not-there' })],
+  });
+  expect((await owner.agent.get('/api/walkthroughs/report')).body.broken).toBe(1);
+  await owner.agent.post(`/api/walkthroughs/${created.body.walkthrough.id}/archive`);
+  expect((await owner.agent.get('/api/walkthroughs/report')).body.broken).toBe(0);
+});
+
+test('the report is owner-only', async () => {
+  const { agent } = await agentFor('therapist', org.id);
+  expect((await agent.get('/api/walkthroughs/report')).status).toBe(403);
+  expect((await request(app).get('/api/walkthroughs/report')).status).toBe(401);
+});

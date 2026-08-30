@@ -66,6 +66,7 @@
     anchors: null,      // the portal map, loaded once
     dirty: false,
     picking: null,      // live target picker state
+    recording: null,    // { steps: [], banner } while recording a skeleton
     hidden: false,      // dock hidden for "as a new starter sees it"
   };
 
@@ -147,6 +148,7 @@
          '<div><h2 class="wk-h2">Walkthroughs</h2>' +
          '<p class="wk-muted">Built once, reusable in any induction. Editing changes nothing for staff until you publish.</p></div>' +
          '<div class="wk-head-actions">' +
+         '<button type="button" class="wk-btn" onclick="OpalWorkshop.report()">Check my walkthroughs</button>' +
          '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.createNew()">New walkthrough</button>' +
          '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.closeShelf()">Close</button>' +
          '</div></div>';
@@ -159,6 +161,8 @@
            '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.seed()">Import the built-in walkthroughs</button>' +
            '</div>';
     }
+
+    if (W.report) h += reportHtml(W.report);
 
     if (list.length) {
       var groups = {};
@@ -346,6 +350,7 @@
         (W.dirty ? '' : ' disabled') + '>Save</button>' +
       '<button type="button" class="wk-btn" onclick="OpalWorkshop.publish()">Publish to staff</button>' +
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.previewAsLearner()">As a new starter sees it</button>' +
+      '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.startRecording()">Record steps</button>' +
     '</div>';
 
     h += '<div class="wk-rail">';
@@ -821,6 +826,163 @@
     }
   });
 
+  // ═════════════════════════════════════════════════════════════════════════
+  //  THE TARGET REPORT
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * "Check my walkthroughs": which spotlights point at something the portal
+   * no longer offers. The answer belongs in a report the Owner reads, not in
+   * front of a new employee on their first morning.
+   */
+  async function report() {
+    var res = await api('/api/walkthroughs/report');
+    if (!res.ok) { fail(res, 'The check could not be run.'); return; }
+    W.report = res.data;
+    renderShelf();
+  }
+
+  function reportHtml(r) {
+    var h = '<div class="wk-report">';
+    h += '<div class="wk-report-head"><h3 class="wk-h3">Checked ' + r.checkedCount +
+      ' walkthrough' + (r.checkedCount === 1 ? '' : 's') + '</h3>' +
+      '<button type="button" class="wk-mini" onclick="OpalWorkshop.dismissReport()" ' +
+      'aria-label="Dismiss the check">×</button></div>';
+
+    if (!r.walkthroughs.length) {
+      h += '<p class="wk-tone-ok">Every spotlight points at something that exists. Nothing to fix.</p></div>';
+      return h;
+    }
+
+    h += '<p class="wk-muted">' +
+      (r.broken ? '<strong class="wk-tone-bad">' + r.broken + ' pointing at nothing.</strong> ' : '') +
+      (r.fragile ? '<span class="wk-tone-warn">' + r.fragile + ' fragile.</span>' : '') +
+      '</p>';
+
+    r.walkthroughs.forEach(function (w) {
+      h += '<div class="wk-report-item"><h4>' + esc(w.title) +
+        ' <span class="wk-muted">(' + esc(w.checked === 'published' ? 'v' + w.version : 'unpublished draft') + ')</span></h4><ul>';
+      w.issues.forEach(function (i) {
+        var info = STABILITY[i.stability] || STABILITY.unknown;
+        h += '<li class="wk-tone-' + info.tone + '">Step ' + (i.index + 1) + ' — ' +
+          esc(i.title || '(untitled)') + ' → <code>' + esc(i.target) + '</code><br>' +
+          '<span class="wk-hint">' + esc(info.text) + '</span></li>';
+      });
+      h += '</ul><button type="button" class="wk-btn" onclick="OpalWorkshop.edit(\'' + esc(w.id) + '\')">Fix it</button></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  function dismissReport() { W.report = null; renderShelf(); }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  //  RECORDING
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Building a walkthrough from an empty screen means thinking of every step
+   * in advance. Recording removes that half: use the portal the way you would
+   * show a new therapist over your shoulder, and each control you click
+   * becomes a step pointing at it, in order.
+   *
+   * It writes the SKELETON, never the words — every captured step carries a
+   * placeholder the author replaces. A recording that invented copy would be
+   * worse than none.
+   */
+  var RECORD_CAP = 60;
+
+  function startRecording() {
+    if (W.recording) return stopRecording();
+    if (global.OpalInduction) global.OpalInduction.close();
+    stopPicking();
+    W.recording = { steps: [] };
+
+    var banner = doc.createElement('div');
+    banner.className = 'wk-rec-banner';
+    banner.innerHTML = '<span class="wk-rec-dot" aria-hidden="true"></span>' +
+      '<span id="wk-rec-count">Recording — use the portal. Nothing captured yet.</span>' +
+      '<button type="button" class="wk-btn wk-btn-quiet" id="wk-rec-stop">Stop</button>';
+    doc.body.appendChild(banner);
+    banner.querySelector('#wk-rec-stop').onclick = stopRecording;
+    W.recording.banner = banner;
+
+    doc.addEventListener('click', onRecordClick, true);
+    doc.addEventListener('keydown', onRecordKey, true);
+    renderDock();
+  }
+
+  function onRecordKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); cancelRecording(); }
+  }
+
+  function currentTab() {
+    var active = doc.querySelector('.tab.active[data-tab]');
+    return active ? active.getAttribute('data-tab') : null;
+  }
+
+  function onRecordClick(e) {
+    if (!W.recording) return;
+    var el = e.target;
+    // The dock, the banner and the shelf are the tools, not the subject.
+    if (!pickableFrom(el)) return;
+    if (W.recording.steps.length >= RECORD_CAP) return;
+
+    var target = selectorFor(el);
+    if (!target) return;
+
+    var last = W.recording.steps[W.recording.steps.length - 1];
+    if (last && last.target === target) return; // a double-click is one step
+
+    var label = String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    var step = {
+      type: 'highlight',
+      title: label || 'This control',
+      body: 'Say what this step shows.',
+      target: target,
+    };
+    var tab = currentTab();
+    if (tab) step.route = { tab: tab };
+    W.recording.steps.push(step);
+
+    var count = doc.getElementById('wk-rec-count');
+    if (count) {
+      count.textContent = 'Recording — ' + W.recording.steps.length + ' step' +
+        (W.recording.steps.length === 1 ? '' : 's') + ' captured.';
+    }
+  }
+
+  function teardownRecording() {
+    if (!W.recording) return null;
+    doc.removeEventListener('click', onRecordClick, true);
+    doc.removeEventListener('keydown', onRecordKey, true);
+    if (W.recording.banner) W.recording.banner.remove();
+    var steps = W.recording.steps;
+    W.recording = null;
+    return steps;
+  }
+
+  function cancelRecording() {
+    teardownRecording();
+    renderDock();
+    toast('Recording discarded', 'Nothing was added.');
+  }
+
+  function stopRecording() {
+    var steps = teardownRecording();
+    if (!steps) return;
+    if (!steps.length) { renderDock(); toast('Nothing captured', 'No controls were clicked.'); return; }
+    // Recorded steps land AFTER the step that was selected, so a recording
+    // extends a walkthrough where the author was working rather than at the end.
+    var at = W.idx + 1;
+    W.steps.splice.apply(W.steps, [at, 0].concat(steps));
+    W.idx = at;
+    W.dirty = true;
+    renderDock();
+    playCurrent();
+    toast('Captured', steps.length + ' steps added — now write what each one says.');
+  }
+
   // ── Public surface ────────────────────────────────────────────────────────
 
   global.OpalWorkshop = {
@@ -840,6 +1002,11 @@
     removeStep: removeStep,
     togglePalette: togglePalette,
     pickTarget: pickTarget,
+    report: report,
+    dismissReport: dismissReport,
+    startRecording: startRecording,
+    stopRecording: stopRecording,
+    cancelRecording: cancelRecording,
     playCurrent: playCurrent,
     previewAsLearner: previewAsLearner,
     save: save,

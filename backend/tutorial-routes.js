@@ -204,6 +204,31 @@ router.post('/api/tutorials/:key/complete', safe(async (req, res) => {
     return res.status(400).json({ error: 'version must be a known version of this tutorial' });
   }
 
+  // A blocking step is an obligation, not a screen: a module carrying
+  // checkpoints or signatures is not complete until this user has evidence
+  // for every one of them. The player already refuses to page past them, but
+  // the player is not the gate — completion is claimed by a POST, and a POST
+  // can be made without ever opening the walkthrough.
+  const blocking = catalogue.stepsForRole(mod.steps, req.user.role)
+    .filter((s) => s.blocking && s.key);
+  if (blocking.length) {
+    const { rows: prior } = await pool.query(
+      `SELECT evidence FROM tutorial_progress WHERE user_id = $1 AND tutorial_key = $2`,
+      [req.user.id, mod.key]);
+    const evidence = (prior[0] && prior[0].evidence) || {};
+    const outstanding = blocking.filter((s) => {
+      const rec = evidence[s.key];
+      if (!rec) return true;
+      return s.type === 'checkpoint' ? rec.passed !== true : rec.type !== 'acknowledgement';
+    });
+    if (outstanding.length) {
+      return res.status(409).json({
+        error: 'This walkthrough has checkpoints that are not finished yet',
+        outstanding: outstanding.length,
+      });
+    }
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO tutorial_progress
        (organisation_id, user_id, tutorial_key, version, status, current_step,

@@ -649,7 +649,10 @@ describe('changed assets are cache-busted', () => {
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
       // grew the statement field.
-      ['workshop.js', 2], ['workshop.css', 1],
+      // 3/2: recording (click the portal, get a skeleton to write into) and
+      // the target report — which spotlights point at nothing any more. The
+      // CSS carries the recording banner and the report panel.
+      ['workshop.js', 3], ['workshop.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

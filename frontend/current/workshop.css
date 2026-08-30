@@ -230,3 +230,46 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 @media (max-width: 900px) {
   :root { --wk-dock-w: 320px; }
 }
+
+/* ── The target report ───────────────────────────────────────────────────── */
+
+.wk-report {
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px; padding: 16px; margin-bottom: 20px;
+}
+.wk-report-head { display: flex; align-items: center; justify-content: space-between; }
+.wk-report-head .wk-h3 { margin: 0; }
+.wk-report-item { margin-top: 14px; }
+.wk-report-item h4 { margin: 0 0 6px; font-size: 14px; font-weight: 620; }
+.wk-report-item ul { margin: 0 0 10px; padding-left: 18px; }
+.wk-report-item li { margin-bottom: 8px; font-size: 13px; }
+.wk-report-item code {
+  font-size: 12px; background: var(--bg, #f3f4f6);
+  padding: 1px 5px; border-radius: 4px;
+}
+
+/* ── Recording ───────────────────────────────────────────────────────────── */
+
+.wk-rec-banner {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 10001;
+  display: flex; align-items: center; gap: 10px;
+  background: #111827; color: #fff; font-size: 12px;
+  padding: 7px 10px 7px 14px; border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28);
+}
+.wk-rec-banner .wk-btn {
+  border-color: rgba(255,255,255,.35); color: #fff; background: transparent;
+}
+.wk-rec-banner .wk-btn:hover { background: rgba(255,255,255,.12); }
+
+.wk-rec-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #ef4444;
+  animation: wk-rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes wk-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-rec-dot { animation: none; }
+}

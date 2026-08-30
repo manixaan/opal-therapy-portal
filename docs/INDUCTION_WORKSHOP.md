@@ -119,7 +119,7 @@ induction rather than embedded.
 
 Checkpoint, Page, Sign here. Schema additions plus player rendering.
 
-### Phase 4 — recording and the target report
+### Phase 4 — recording and the target report — DONE
 
 **Recording.** Record, use the portal normally, Stop. Returns a skeleton: an empty
 pop-up at each stop, in order, pointing at the right targets. The Owner supplies
