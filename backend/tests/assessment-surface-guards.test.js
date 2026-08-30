@@ -618,7 +618,10 @@ describe('changed assets are cache-busted', () => {
       // r29: the Owner's preview launches tiles for real — walkthroughs run
       // in the engine's preview mode and plain resources open their detail
       // page; the tick lands in previewDone only when the run finishes.
-      ['resourcehub.js', 'r29'], ['resourcehub.css', 'r17'],
+      // r30: Admin > Learning offers the walkthrough workshop beside the
+      // learning items — a tour is a sibling of the inductions that use it,
+      // not a child of any one of them.
+      ['resourcehub.js', 'r30'], ['resourcehub.css', 'r17'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -633,7 +636,13 @@ describe('changed assets are cache-busted', () => {
       // 4: the catalogue is fetched from /api/tutorials/catalogue (migration
       // 045) instead of read from the bundled registry, which stays as the
       // offline fallback — stale JS here would ignore every authored edit.
-      ['induction.js', 4], ['induction.css', 2],
+      // 5: start() accepts { module, at } so the workshop can play an
+      // UNSAVED draft from a chosen step, and each painted step dispatches
+      // induction:step so the author dock can follow the player.
+      ['induction.js', 5], ['induction.css', 2],
+      // 1: the walkthrough workshop — the shelf, the author dock, the block
+      // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
+      ['workshop.js', 1], ['workshop.css', 1],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

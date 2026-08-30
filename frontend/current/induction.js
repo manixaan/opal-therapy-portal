@@ -682,6 +682,14 @@
     // 4. Paint.
     renderCard();
     positionOverlay();
+    // The workshop dock follows the player: which step, and whether its
+    // anchor actually resolved — the honest signal that a target has drifted.
+    try {
+      doc.dispatchEvent(new CustomEvent('induction:step', { detail: {
+        key: S.key, index: S.idx, total: S.steps.length,
+        target: step.target || null, resolved: !!(S.el && !S.fallback),
+      } }));
+    } catch (e) { /* old browser */ }
     if (S.el && !S.fallback) {
       try { S.el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) { /* ok */ }
       setTimeout(positionOverlay, reducedMotion() ? 0 : 320);
@@ -706,15 +714,28 @@
     if (S.idx > 0) showStep(S.idx - 1, -1);
   }
 
+  /**
+   * opts:
+   *   preview  — show it as a first-timer sees it, saving nothing
+   *   restart  — ignore the saved place
+   *   module   — play THIS module object instead of looking the key up. The
+   *              workshop passes an unsaved draft so an author can watch an
+   *              edit run before publishing it. Always a preview, and always
+   *              role-ungated: the author is watching, not taking, the module.
+   *   at       — start at this step index (the workshop's "play from here")
+   */
   async function start(key, opts) {
     opts = opts || {};
-    var mod = MODS.moduleByKey(key);
+    var authored = opts.module || null;
+    if (authored) opts = Object.assign({}, opts, { preview: true, restart: true });
+
+    var mod = authored || MODS.moduleByKey(key);
     if (!mod) { toast('Tutorial unavailable', 'This module could not be found.'); return; }
-    if (mod.roles.indexOf(role()) === -1) {
+    if (!authored && mod.roles.indexOf(role()) === -1) {
       toast('Not available for your role', 'This module covers tools your account does not use.');
       return;
     }
-    var steps = MODS.stepsForRole(mod, role());
+    var steps = authored ? (mod.steps || []) : MODS.stepsForRole(mod, role());
     if (!steps.length) { toast('Coming soon', 'This module has no content yet.'); return; }
 
     await loadProgress();
@@ -740,6 +761,10 @@
     // the remembered step number no longer means the same thing.
     if (row && row.status === 'in_progress' && Number(row.version) !== Number(mod.version) && !opts.restart) {
       toast('This tutorial was updated', 'It starts from the beginning so nothing is missed.');
+    }
+
+    if (typeof opts.at === 'number') {
+      resumeAt = Math.max(0, Math.min(Math.round(opts.at), steps.length - 1));
     }
 
     ensureLayer();

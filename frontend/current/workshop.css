@@ -1,0 +1,232 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE WALKTHROUGH WORKSHOP — the shelf and the author dock.
+
+   The dock sits BESIDE the portal, never over it: a walkthrough is authored
+   against the real screen, so the screen has to stay visible and usable while
+   the editor is open. body.wk-open insets the app by the dock's width.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --wk-dock-w: 380px;
+}
+
+/* ── The shelf ───────────────────────────────────────────────────────────── */
+
+.wk-shelf {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  overflow-y: auto;
+  background: var(--bg, #f6f7f9);
+}
+
+.wk-shelf-inner { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+
+.wk-shelf-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 24px;
+}
+.wk-head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.wk-h2 { font-size: 22px; font-weight: 650; margin: 0 0 4px; }
+.wk-h3 { font-size: 13px; font-weight: 650; text-transform: uppercase;
+         letter-spacing: .04em; color: var(--text-muted, #6b7280);
+         margin: 28px 0 12px; }
+.wk-muted { color: var(--text-muted, #6b7280); font-size: 13px; margin: 0; }
+.wk-meta  { color: var(--text-muted, #6b7280); font-size: 12px; margin: 8px 0 0; }
+
+.wk-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+
+.wk-card {
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.wk-card-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.wk-card h4 { margin: 0; font-size: 15px; font-weight: 620; }
+.wk-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.wk-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.wk-pill-ok    { background: #e8f5ee; color: #1c6b45; }
+.wk-pill-draft { background: #fdf3e0; color: #8a5a12; }
+.wk-pill-muted { background: #eef0f3; color: #6b7280; }
+
+.wk-empty {
+  background: var(--card, #fff);
+  border: 1px dashed var(--border, #d1d5db);
+  border-radius: 10px; padding: 20px; margin-bottom: 8px;
+}
+.wk-empty p { margin: 0 0 8px; }
+
+/* ── The dock ────────────────────────────────────────────────────────────── */
+
+body.wk-open { padding-right: var(--wk-dock-w); }
+body.wk-open .wk-dock { display: flex; }
+body.wk-hidden { padding-right: 0; }
+body.wk-hidden .wk-dock { display: none; }
+
+.wk-dock {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: var(--wk-dock-w);
+  z-index: 9500;             /* under the player's overlay, beside the portal */
+  display: flex; flex-direction: column;
+  background: var(--card, #fff);
+  border-left: 1px solid var(--border, #e5e7eb);
+  box-shadow: -2px 0 12px rgba(0,0,0,.06);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.wk-dock-head {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 14px 14px 10px; border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.wk-dock-title { flex: 1; min-width: 0; }
+.wk-title-input {
+  box-sizing: border-box;
+  width: 100%; font-size: 15px; font-weight: 620;
+  border: 1px solid transparent; border-radius: 6px;
+  padding: 4px 6px; margin: -4px 0 0 -6px; background: transparent;
+  color: inherit;
+}
+.wk-title-input:hover  { border-color: var(--border, #e5e7eb); }
+.wk-title-input:focus  { border-color: var(--accent, #2f6f4f); outline: none; background: var(--bg, #f9fafb); }
+.wk-state { font-size: 11px; color: var(--text-muted, #6b7280); margin: 4px 0 0; }
+
+.wk-x {
+  border: 0; background: transparent; font-size: 20px; line-height: 1;
+  cursor: pointer; color: var(--text-muted, #6b7280); padding: 2px 4px;
+}
+
+.wk-dock-bar {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+/* The rail is the walkthrough at a glance; the editor below is one step. */
+.wk-rail { max-height: 38%; overflow-y: auto; border-bottom: 1px solid var(--border, #e5e7eb); }
+.wk-rail-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px; cursor: pointer; border-left: 3px solid transparent;
+}
+.wk-rail-row:hover { background: var(--bg, #f6f7f9); }
+.wk-rail-row.is-current { background: var(--bg, #f1f5f2); border-left-color: var(--accent, #2f6f4f); }
+.wk-rail-n { font-size: 11px; color: var(--text-muted, #9ca3af); width: 18px; flex-shrink: 0; }
+.wk-rail-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wk-rail-type { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #9ca3af); }
+.wk-rail-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rail-tools { display: flex; gap: 2px; opacity: 0; flex-shrink: 0; }
+.wk-rail-row:hover .wk-rail-tools,
+.wk-rail-row.is-current .wk-rail-tools { opacity: 1; }
+.wk-rail-add { padding: 8px 14px; }
+
+.wk-palette { padding: 4px 14px 12px; display: grid; gap: 4px; }
+.wk-palette-item {
+  text-align: left; border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+  background: var(--card, #fff); padding: 8px 10px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wk-palette-item:hover { border-color: var(--accent, #2f6f4f); background: var(--bg, #f6f7f9); }
+.wk-palette-item strong { font-size: 12px; }
+.wk-palette-item span   { font-size: 11px; color: var(--text-muted, #6b7280); }
+
+.wk-editor { flex: 1; overflow-y: auto; padding: 14px; }
+.wk-field { margin-bottom: 14px; }
+.wk-field > label {
+  display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text-muted, #6b7280); margin-bottom: 4px;
+}
+.wk-field input[type="text"],
+.wk-field textarea,
+.wk-field select {
+  /* The shell does not set a global border-box, so width:100% plus padding
+     would push every field past the dock's right edge. */
+  box-sizing: border-box;
+  width: 100%; font: inherit; font-size: 13px;
+  border: 1px solid var(--border, #d1d5db); border-radius: 6px;
+  padding: 6px 8px; background: var(--card, #fff); color: inherit;
+}
+.wk-field textarea { resize: vertical; line-height: 1.45; }
+.wk-field input[type="text"] + input[type="text"] { margin-top: 6px; }
+.wk-field input:focus, .wk-field textarea:focus, .wk-field select:focus {
+  outline: none; border-color: var(--accent, #2f6f4f);
+}
+.wk-hint { font-size: 11px; color: var(--text-muted, #6b7280); margin: 4px 0 0; }
+.wk-hint-inline { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.wk-tone-ok   { color: #1c6b45; }
+.wk-tone-warn { color: #8a5a12; }
+.wk-tone-bad  { color: #a1332b; }
+
+.wk-check label { display: flex; align-items: center; gap: 6px; font-size: 13px;
+                  text-transform: none; letter-spacing: 0; font-weight: 400;
+                  color: inherit; }
+
+.wk-opt { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.wk-opt input[type="text"] { flex: 1; }
+
+.wk-target-row { display: flex; gap: 6px; margin-top: 6px; }
+.wk-target-row input[type="text"] { flex: 1; }
+
+.wk-roles { display: flex; flex-wrap: wrap; gap: 10px; }
+.wk-role { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.wk-role.is-off { opacity: .45; }
+
+.wk-editor-actions { display: flex; gap: 6px; padding-top: 4px; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.wk-btn {
+  font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border, #d1d5db); background: var(--card, #fff);
+  color: inherit; cursor: pointer;
+}
+.wk-btn:hover:not(:disabled) { background: var(--bg, #f6f7f9); }
+.wk-btn:disabled { opacity: .5; cursor: default; }
+.wk-btn-primary {
+  background: var(--accent, #2f6f4f); border-color: var(--accent, #2f6f4f); color: #fff;
+}
+.wk-btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+.wk-btn-quiet { background: transparent; }
+
+.wk-mini {
+  font: inherit; font-size: 11px; line-height: 1; width: 20px; height: 20px;
+  border: 1px solid var(--border, #e5e7eb); border-radius: 4px;
+  background: var(--card, #fff); cursor: pointer; color: var(--text-muted, #6b7280);
+}
+.wk-mini:disabled { opacity: .35; cursor: default; }
+
+.wk-return {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  z-index: 10050;             /* above the player's overlay — the way back */
+  font: inherit; font-size: 13px; padding: 8px 16px; border-radius: 999px;
+  border: 0; background: #111827; color: #fff; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28);
+}
+
+/* ── The live target picker ──────────────────────────────────────────────── */
+
+body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
+
+.wk-pick-box {
+  position: fixed; z-index: 10000; pointer-events: none; display: none;
+  border: 2px solid var(--accent, #2f6f4f);
+  background: rgba(47, 111, 79, .12);
+  border-radius: 4px;
+}
+
+.wk-pick-banner {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 10001; pointer-events: none;
+  background: #111827; color: #fff; font-size: 12px;
+  padding: 7px 14px; border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-pick-box { transition: none; }
+}
+
+@media (max-width: 900px) {
+  :root { --wk-dock-w: 320px; }
+}

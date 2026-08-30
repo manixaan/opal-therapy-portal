@@ -5755,6 +5755,12 @@
               'onclick="RH2.laImport()" title="Bring the Resource Hub learning paths and the portal ' +
               'induction in as editable, assignable items">' +
               (la.importing ? 'Importing…' : 'Import existing') + '</button>' +
+            // The walkthrough workshop is a sibling of this console, not a
+            // child of any one learning item: a tour built here goes on the
+            // shelf and can be used by any induction.
+            '<button type="button" class="rh2-btn" onclick="OpalWorkshop.open()" ' +
+              'title="Build and edit the interactive walkthroughs — the pop-ups and spotlights">' +
+              'Walkthroughs</button>' +
             '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
           '</div>' +
           // Its own full-width row beneath the heading, so the field lines up
