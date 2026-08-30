@@ -12,6 +12,16 @@
       "autoPort": false
     },
     {
+      "name": "opal-induction-5021",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "PORT=5021 NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5021,http://127.0.0.1:5021 APP_BASE_URL=http://localhost:5021 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5021,
+      "autoPort": false
+    },
+    {
       "name": "opal-synthetic-5008",
       "runtimeExecutable": "sh",
       "runtimeArgs": [
@@ -99,6 +109,16 @@
         "PORT=5013 DB_NAME=therapy_scheduler_onbwf_dev NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5013,http://127.0.0.1:5013 APP_BASE_URL=http://localhost:5013 ONBOARDING_ENCRYPTION_KEY=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
       ],
       "port": 5013,
+      "autoPort": false
+    },
+    {
+      "name": "opal-onb3tab-5018",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd \"/Users/antonyxavier/Documents/Claude/Projects/Therapy Scheduling Application/.claude/worktrees/onboarding-three-tab\" && PORT=5018 DB_NAME=therapy_scheduler_onb3tab_dev NODE_ENV=development ALLOWED_ORIGINS=http://localhost:5018,http://127.0.0.1:5018 APP_BASE_URL=http://localhost:5018 ONBOARDING_ENCRYPTION_KEY=cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5018,
       "autoPort": false
     },
     {
