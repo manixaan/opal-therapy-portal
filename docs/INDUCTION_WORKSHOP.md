@@ -76,7 +76,7 @@ picker resolves to the best of the three.
 
 Each phase is independently shippable.
 
-### Phase 1 — tours into the database  (CRITICAL)
+### Phase 1 — tours into the database  (CRITICAL) — DONE (17b4967)
 
 Migration mirroring 033: `walkthrough_modules` (`draft_steps` JSONB,
 `current_version`) and `walkthrough_module_versions` (immutable snapshots).
@@ -98,7 +98,7 @@ destructive or externally visible action. Once non-engineers author `action`
 steps this cannot rely on author judgement: denylist `advance: 'click'` against
 send / delete / disconnect / invite targets.
 
-### Phase 2 — the workshop
+### Phase 2 — the workshop — DONE (516d1b1 API, adb3977 surface)
 
 "New induction" button. One editor, one list of blocks, drag to reorder.
 
