@@ -93,8 +93,16 @@ const AI_POLICIES = {
     outputTypes: [outputTypes.ASSISTANT_RESPONSE, outputTypes.CLINICAL_DOCUMENT],
     defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
     allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
-    allowedModels: ['clinical_standard', 'mock'],
-    defaultModel: 'clinical_standard',
+    /**
+     * assistant_fast is the interactive default: chat latency is a usability
+     * property, and portal-help answers do not need report-grade fidelity.
+     * It resolves through BEDROCK_MODEL_ID_ASSISTANT_FAST and falls back to
+     * the base BEDROCK_MODEL_ID, so a deployment that has not configured the
+     * fast tier invokes exactly the model it did before. clinical_standard
+     * stays allowed for the clinical_document output path.
+     */
+    allowedModels: ['assistant_fast', 'clinical_standard', 'mock'],
+    defaultModel: 'assistant_fast',
     region: 'australia',
     mayReceiveClinicalData: true,
     auditCategory: 'assistant',

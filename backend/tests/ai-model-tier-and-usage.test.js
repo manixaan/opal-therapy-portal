@@ -109,13 +109,23 @@ describe('model tiers resolve independently', () => {
     expect(decision.model.id).toBe(COMPLEX_PROFILE);
   });
 
-  test('Opa uses the standard tier, not whatever the clinical path uses', () => {
+  test('Opa uses the fast assistant tier, not whatever the clinical path uses', () => {
+    // Chat latency is a usability property; Opa's default moved from
+    // clinical_standard to assistant_fast (its own AU profile, falling back
+    // to the base). The property that must hold is unchanged: Opa's tier is
+    // never coupled to the clinical documentation tiers.
     process.env.BEDROCK_MODEL_ID_CLINICAL_STANDARD = STANDARD_PROFILE;
     process.env.BEDROCK_MODEL_ID_CLINICAL_COMPLEX = COMPLEX_PROFILE;
-    const decision = gateway.evaluate({ feature: OPA_FEATURE });
-    expect(decision.ok).toBe(true);
-    expect(decision.modelKey).toBe('clinical_standard');
-    expect(decision.model.id).toBe(STANDARD_PROFILE);
+    process.env.BEDROCK_MODEL_ID_ASSISTANT_FAST = 'au.anthropic.test-fast-synthetic';
+    try {
+      const decision = gateway.evaluate({ feature: OPA_FEATURE });
+      expect(decision.ok).toBe(true);
+      expect(decision.modelKey).toBe('assistant_fast');
+      expect(decision.model.id).toBe('au.anthropic.test-fast-synthetic');
+      expect(decision.model.id).not.toBe(COMPLEX_PROFILE);
+    } finally {
+      delete process.env.BEDROCK_MODEL_ID_ASSISTANT_FAST;
+    }
   });
 
   test('BACKWARD COMPATIBLE: with no tier overrides, every tier uses the base', () => {

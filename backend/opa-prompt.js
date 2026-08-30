@@ -68,9 +68,13 @@ function serialiseRecord(rec) {
  * @param {object} opts.user       req.user (role read from here, never client)
  * @param {object} opts.context    validated {route, module, pageTitle}
  * @param {Array}  opts.knowledge  retrieved opa_feature_knowledge rows
+ * @param {string} [opts.format]   'json' (default) or 'text'. The streaming
+ *   route uses 'text': a JSON envelope cannot be rendered incrementally, so
+ *   streamed replies answer in plain prose and carry no NAVIGATE actions —
+ *   that trade is deliberate.
  * @returns {string}
  */
-function buildSystemPrompt({ user, context, knowledge } = {}) {
+function buildSystemPrompt({ user, context, knowledge, format } = {}) {
   const role = user?.role || 'therapist';
   const ctx = context || {};
   const records = Array.isArray(knowledge) ? knowledge : [];
@@ -136,6 +140,14 @@ function buildSystemPrompt({ user, context, knowledge } = {}) {
   );
 
   // ── Response contract ──
+  if (format === 'text') {
+    sections.push(
+      'RESPONSE CONTRACT\n' +
+      'Reply in plain prose only — no JSON, no code fences, no metadata. Answer the ' +
+      'question directly; use short numbered lists for steps. Do not describe or offer ' +
+      'navigation actions in any structured form.'
+    );
+  } else {
   sections.push(
     'RESPONSE CONTRACT\n' +
     'Reply as JSON only — a single JSON object, no markdown fences, no prose outside it:\n' +
@@ -146,6 +158,7 @@ function buildSystemPrompt({ user, context, knowledge } = {}) {
     'genuinely helps.\n' +
     '- "confidence" reflects how well the APPLICATION KNOWLEDGE supports your answer.'
   );
+  }
 
   // ── Application knowledge ──
   sections.push(

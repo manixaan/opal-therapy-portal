@@ -538,10 +538,140 @@ async function invoke({
   }
 }
 
+/**
+ * ── Streaming invocation ─────────────────────────────────────────────────────
+ *
+ * invoke() above refuses `stream: true`, and that guard is untouched: the
+ * hazard it documents is real. AWS emits the guardrail intervention marker as
+ * a trailing chunk with no `type` field, and the SDK's high-level event
+ * ACCUMULATOR drops chunks it cannot type — so a stream assembled by the SDK
+ * helper fails OPEN on an intervention.
+ *
+ * This function exists because the hazard is in the accumulator, not in
+ * streaming itself. It iterates the RAW decoded events and inverts the
+ * failure direction: every event must be one of the known Anthropic stream
+ * event types AND carry no guardrail marker, or the whole response is treated
+ * as a guardrail intervention. The chunk the accumulator silently drops is
+ * exactly the chunk this loop refuses on. Unknown-and-harmless therefore
+ * costs one refused generation; unknown-and-guardrail is caught. That is the
+ * only direction of error this file accepts.
+ *
+ * SCOPE: the gateway only routes assistant_response output here — never a
+ * clinical document. A briefly-displayed answer later replaced by a refusal
+ * is tolerable in a staff chat; a masked fragment composed into a clinical
+ * record is not, and clinical generation stays on the non-streaming path
+ * where the response is inspected before any caller sees it.
+ *
+ * Deltas that have already been forwarded through `onText` may have been
+ * shown before a trailing intervention arrives. The caller MUST discard the
+ * partial text when this rejects — the gateway surfaces that as
+ * 'guardrail_intervened' exactly as the non-streaming path does.
+ */
+const SAFE_STREAM_EVENT_TYPES = new Set([
+  'message_start', 'content_block_start', 'content_block_delta',
+  'content_block_stop', 'message_delta', 'message_stop', 'ping',
+]);
+
+/** Any guardrail marker on the event itself or its nested payloads? */
+function streamEventIntervened(event) {
+  return guardrailIntervened(event)
+    || guardrailIntervened(event.delta)
+    || guardrailIntervened(event.message);
+}
+
+async function invokeStream({
+  model, region, system, messages, maxTokens, timeoutMs, guardInputScope, onText,
+} = {}) {
+  if (typeof onText !== 'function') throw new Error('stream_requires_onText');
+
+  const body = { model, max_tokens: maxTokens, messages, stream: true };
+  if (system) body.system = system;
+
+  // Same policy-driven input tagging as invoke() — see the comments there.
+  if (guardInputScope === 'current_user_message') {
+    if (hasTaggableCurrentUserText(messages)) {
+      const suffix = freshTagSuffix();
+      body.messages = withGuardedCurrentUserMessage(messages, suffix);
+      body['amazon-bedrock-guardrailConfig'] = { tagSuffix: suffix };
+    } else {
+      console.warn('[bedrock-provider] current_user_message scope requested with no taggable text '
+        + '— falling back to full-request input evaluation');
+    }
+  }
+
+  // Identical fail-closed rule to invoke(): no resolved guardrail, no call.
+  const guardrail = bedrockConfig.resolveGuardrail();
+  if (!guardrail.ok) {
+    console.warn(`[bedrock-provider] refusing to stream — guardrail unresolved (reason: ${guardrail.reason})`);
+    throw new Error('guardrail_not_configured');
+  }
+
+  let stageReached = STAGES.MANAGED_IDENTITY;
+
+  try {
+    const client = await getClient(region, timeoutMs, (s) => { stageReached = s; });
+    stageReached = STAGES.SIGNED_REQUEST;
+    const stream = await client.messages.create(body, {
+      headers: {
+        [GUARDRAIL_ID_HEADER]: guardrail.id,
+        [GUARDRAIL_VERSION_HEADER]: guardrail.version,
+      },
+    });
+    stageReached = STAGES.RESPONSE;
+
+    let text = '';
+    const usage = { inputTokens: null, outputTokens: null };
+
+    for await (const event of stream) {
+      // FAIL CLOSED. An event with no recognised type is either the guardrail
+      // marker chunk or something this code was not written for; both refuse.
+      if (!event || typeof event !== 'object'
+          || !SAFE_STREAM_EVENT_TYPES.has(event.type)
+          || streamEventIntervened(event)) {
+        console.warn('[bedrock-provider] guardrail intervened (or unrecognised chunk) during stream '
+          + `(type: ${String(event?.type || 'none').slice(0, 40)}, `
+          + `action: ${guardrailActionOf(event) || guardrailActionOf(event?.delta) || 'none'})`);
+        throw new Error('guardrail_intervened');
+      }
+      if (event.type === 'message_start') {
+        const t = event.message?.usage?.input_tokens;
+        usage.inputTokens = Number.isFinite(t) ? t : null;
+      } else if (event.type === 'content_block_delta'
+          && event.delta?.type === 'text_delta'
+          && typeof event.delta.text === 'string') {
+        text += event.delta.text;
+        onText(event.delta.text);
+      } else if (event.type === 'message_delta') {
+        const t = event.usage?.output_tokens;
+        if (Number.isFinite(t)) usage.outputTokens = t;
+      }
+    }
+
+    return {
+      text: text.trim() || null,
+      toolUse: null,
+      usage,
+      // The raw stream does not expose the response headers the request id
+      // lives in; the audit row tolerates null and CloudTrail still records
+      // the invocation.
+      providerRequestId: null,
+      sourceRegion: region,
+    };
+  } catch (err) {
+    if (err?.message === 'guardrail_intervened') throw err;
+    if (guardrailError(err)) throw new Error('guardrail_intervened');
+    const d = diagnose(err, stageReached);
+    console.warn(`[bedrock-diag] ${JSON.stringify({ region, ...d })}`);
+    const failure = new Error('provider_error');
+    failure.diagnostic = d;
+    throw failure;
+  }
+}
+
 /** Drop the cached client — used by tests that change region between cases. */
 function _resetForTests() {
   _client = null;
   _clientKey = null;
 }
 
-module.exports = { PROVIDER_ID, invoke, expectedBaseUrl, _resetForTests };
+module.exports = { PROVIDER_ID, invoke, invokeStream, expectedBaseUrl, _resetForTests };

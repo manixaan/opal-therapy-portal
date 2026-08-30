@@ -126,6 +126,44 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
 }
 
 /**
+ * Streaming variant: identical policy, audit and error mapping — the gateway
+ * confines streaming to assistant_response output and the provider fails
+ * CLOSED on any chunk it cannot recognise. Deltas arrive through `onText`;
+ * if this rejects with 'content_blocked' after deltas were delivered, the
+ * caller must discard every delta it forwarded and show the refusal instead.
+ */
+async function generateOpaResponseStream({ system, messages, maxTokens, timeoutMs, userId, organisationId, onText } = {}) {
+  if (typeof onText !== 'function') throw new Error('provider_error');
+  if (_providerOverride) {
+    return _providerOverride({ system, messages, maxTokens, timeoutMs, onText });
+  }
+
+  try {
+    const res = await gateway.generate({
+      feature: FEATURE,
+      userId,
+      organisationId,
+      system,
+      messages,
+      maxTokens: maxOutputTokens(maxTokens),
+      timeoutMs: requestTimeoutMs(timeoutMs),
+      onText,
+    });
+
+    const text = (res.text || '').trim();
+    if (!text) throw new Error('empty_response');
+    return { text };
+  } catch (err) {
+    if (err instanceof gateway.AiPolicyError) throw new Error('provider_error');
+    if (err?.message === 'guardrail_intervened') throw new Error('content_blocked');
+    if (err?.message === 'guardrail_not_configured') throw new Error('provider_error');
+    if (err?.message === 'provider_error') throw err;
+    console.warn(`[opa-provider] stream request failed (reason: ${err?.message || 'unknown'})`);
+    throw new Error('provider_error');
+  }
+}
+
+/**
  * Replace the generate implementation for tests. Pass a function to override,
  * or null to restore the real provider.
  */
@@ -133,4 +171,6 @@ function _setProviderForTests(fn) {
   _providerOverride = typeof fn === 'function' ? fn : null;
 }
 
-module.exports = { FEATURE, generateOpaResponse, isEnabled, configError, _setProviderForTests };
+module.exports = {
+  FEATURE, generateOpaResponse, generateOpaResponseStream, isEnabled, configError, _setProviderForTests,
+};

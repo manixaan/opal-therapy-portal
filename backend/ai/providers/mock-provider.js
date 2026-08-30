@@ -51,9 +51,27 @@ async function invoke({ model, region, system, messages, tools, toolChoice } = {
   };
 }
 
+/**
+ * Streaming mirror of invoke(): resolves the same response, but delivers the
+ * text through `onText` in two chunks first, so callers genuinely exercise
+ * their incremental path rather than receiving one blob that happens to work.
+ */
+async function invokeStream(opts = {}) {
+  const { onText } = opts;
+  if (typeof onText !== 'function') throw new Error('stream_requires_onText');
+  const res = await invoke(opts);
+  const text = res.text || '';
+  if (text) {
+    const mid = Math.ceil(text.length / 2);
+    onText(text.slice(0, mid));
+    onText(text.slice(mid));
+  }
+  return res;
+}
+
 /** Supply a deterministic response for a specific test. */
 function _setHandlerForTests(fn) {
   _handler = typeof fn === 'function' ? fn : null;
 }
 
-module.exports = { PROVIDER_ID, invoke, _setHandlerForTests };
+module.exports = { PROVIDER_ID, invoke, invokeStream, _setHandlerForTests };

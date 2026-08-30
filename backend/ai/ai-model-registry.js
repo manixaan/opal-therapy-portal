@@ -72,6 +72,23 @@ const APPROVED_MODELS = Object.freeze({
     description: 'Australian geo inference profile supplied by BEDROCK_MODEL_ID.',
   }),
 
+  /**
+   * Low-latency assistant tier for interactive chat (Opa). Same provider,
+   * same Australian residency rules, same guardrail — only the profile is
+   * expected to point at a faster model. Resolved via
+   * BEDROCK_MODEL_ID_ASSISTANT_FAST, falling back to the base
+   * BEDROCK_MODEL_ID when a deployment has not separated them, so declaring
+   * this tier never weakens or changes anything until an operator supplies
+   * the dedicated profile.
+   */
+  assistant_fast: Object.freeze({
+    id: null,
+    provider: PROVIDER_BEDROCK,
+    regions: AU_REGIONS,
+    residency: 'australia',
+    description: 'Australian geo inference profile supplied by BEDROCK_MODEL_ID_ASSISTANT_FAST (falls back to BEDROCK_MODEL_ID).',
+  }),
+
   /** Report-grade fidelity where omission risk matters most. */
   clinical_complex: Object.freeze({
     id: null,

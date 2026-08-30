@@ -263,6 +263,13 @@ function unavailableReason(feature) {
  * @param {number}  [opts.timeoutMs]
  * @param {Array}   [opts.tools]
  * @param {object}  [opts.toolChoice]
+ * @param {Function} [opts.onText]   stream text deltas as they arrive.
+ *   Streaming is permitted ONLY for assistant_response output — a clinical
+ *   document must be inspected whole before any caller sees it, so a request
+ *   that combines onText with clinical output (or with tools) is DENIED, not
+ *   downgraded. If the provider rejects the stream after deltas were
+ *   delivered (a guardrail intervening on a trailing chunk), the caller MUST
+ *   discard everything it forwarded and surface the refusal instead.
  * @returns {Promise<{text, toolUse, metadata}>}
  * @throws {AiPolicyError} when policy refuses
  * @throws {Error} 'provider_error' on transport failure
@@ -270,8 +277,9 @@ function unavailableReason(feature) {
 async function generate(opts = {}) {
   const {
     feature, messages, system, userId, organisationId,
-    maxTokens, timeoutMs, tools, toolChoice,
+    maxTokens, timeoutMs, tools, toolChoice, onText,
   } = opts;
+  const streaming = typeof onText === 'function';
 
   const deny = async (reason, policy) => {
     await audit.record({
@@ -290,6 +298,25 @@ async function generate(opts = {}) {
 
   const decision = evaluate(opts);
   if (!decision.ok) return deny(decision.reason, decision.policy);
+
+  // Streaming is a narrower privilege than generation, decided here and not
+  // by callers. A clinical document must be inspected whole before anyone
+  // sees a word of it (the provider checks the guardrail marker before the
+  // content is read), so streaming is confined to assistant responses; tool
+  // use has no incremental form worth the added surface. Deny, never
+  // silently fall back to buffering — a caller that asked to stream and
+  // didn't would ship the confusion forward.
+  if (streaming) {
+    if (decision.outputType !== outputTypes.ASSISTANT_RESPONSE) {
+      return deny('streaming_not_permitted_for_output_type', decision.policy);
+    }
+    if (tools || toolChoice) {
+      return deny('streaming_not_permitted_with_tools', decision.policy);
+    }
+    if (typeof PROVIDERS[decision.model.provider].invokeStream !== 'function') {
+      return deny('streaming_not_supported_by_provider', decision.policy);
+    }
+  }
 
   // The database kill switch — an operator can stop every AI call in seconds
   // during an incident, with no redeploy.
@@ -331,7 +358,7 @@ async function generate(opts = {}) {
 
   let result;
   try {
-    result = await provider.invoke({
+    const invokeOpts = {
       model: decision.model.id,
       region: decision.region,
       system,
@@ -341,7 +368,10 @@ async function generate(opts = {}) {
       tools,
       toolChoice,
       guardInputScope: decision.guardrailInputScope,
-    });
+    };
+    result = streaming
+      ? await provider.invokeStream({ ...invokeOpts, onText })
+      : await provider.invoke(invokeOpts);
   } catch (err) {
     // A guardrail refusal, and a refusal to call an unguarded model, are
     // DENIALS — a control did its job. Recording them as provider_error would

@@ -393,3 +393,98 @@ describe('suggestions', () => {
     expect(res.body.suggestions).toContain('Show me around Opal Portal');
   });
 });
+
+// ── Streaming chat ───────────────────────────────────────────────────────────
+
+/** Buffer the SSE body into a string so supertest can assert on it. */
+const sseText = (req) => req
+  .buffer(true)
+  .parse((res, cb) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => cb(null, data));
+  });
+
+/** Parse a buffered SSE body into [{event, data}] in arrival order. */
+function sseEvents(body) {
+  return String(body).split('\n\n').filter(Boolean).map((block) => {
+    let event = null; let data = '';
+    block.split('\n').forEach((line) => {
+      if (line.startsWith('event: ')) event = line.slice(7).trim();
+      else if (line.startsWith('data: ')) data += line.slice(6);
+    });
+    return { event, data: data ? JSON.parse(data) : {} };
+  }).filter((e) => e.event);
+}
+
+describe('streaming chat', () => {
+  test('deltas arrive, done carries the conversation, and the exchange persists', async () => {
+    await seedKnowledge();
+    provider._setProviderForTests(async ({ onText }) => {
+      onText('Open Settings, ');
+      onText('then Integrations.');
+      return { text: 'Open Settings, then Integrations.' };
+    });
+    const app = buildApp();
+    const { agent } = await agentFor(app, 'therapist');
+
+    const res = await sseText(agent.post('/api/opa/chat/stream'))
+      .send({ message: 'How do I connect Outlook?', context: { route: '/settings', module: 'settings' } });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+
+    const events = sseEvents(res.body);
+    const deltas = events.filter((e) => e.event === 'delta').map((e) => e.data.t);
+    expect(deltas.join('')).toBe('Open Settings, then Integrations.');
+    const done = events.find((e) => e.event === 'done');
+    expect(done).toBeTruthy();
+    expect(done.data.answer).toBe('Open Settings, then Integrations.');
+    expect(done.data.status).toBe('grounded');
+    expect(done.data.conversationId).toBeTruthy();
+
+    const { rows } = await db.pool.query(
+      "SELECT role, content FROM opa_messages ORDER BY id");
+    expect(rows.map((r) => r.role)).toEqual(['user', 'assistant']);
+    expect(rows[1].content).toBe('Open Settings, then Integrations.');
+  });
+
+  test('a mid-stream guardrail refusal sends blocked and persists NOTHING', async () => {
+    // The provider can refuse on a trailing chunk after deltas have gone out.
+    // The client is told to discard what it showed; the server must not file
+    // the partial text as a real exchange.
+    provider._setProviderForTests(async ({ onText }) => {
+      onText('Something the guardrail later ');
+      throw new Error('content_blocked');
+    });
+    const app = buildApp();
+    const { agent } = await agentFor(app, 'therapist');
+
+    const res = await sseText(agent.post('/api/opa/chat/stream')).send({ message: 'hello' });
+    expect(res.status).toBe(200);
+    const events = sseEvents(res.body);
+    const blocked = events.find((e) => e.event === 'blocked');
+    expect(blocked).toBeTruthy();
+    expect(blocked.data.answer).toMatch(/can't help with that one/);
+    expect(events.find((e) => e.event === 'done')).toBeUndefined();
+
+    const { rows } = await db.pool.query('SELECT COUNT(*)::int AS n FROM opa_conversations');
+    expect(rows[0].n).toBe(0);
+  });
+
+  test('disabled provider answers plain JSON, so the client can fall back', async () => {
+    delete process.env.OPA_AI_ENABLED;
+    const app = buildApp();
+    const { agent } = await agentFor(app, 'therapist');
+    const res = await agent.post('/api/opa/chat/stream').send({ message: 'hi' });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.body.status).toBe('unavailable');
+  });
+
+  test('the stream route is 401 unauthenticated and validates the message', async () => {
+    const app = buildApp();
+    expect((await request(app).post('/api/opa/chat/stream').send({ message: 'hi' })).status).toBe(401);
+    const { agent } = await agentFor(app, 'therapist');
+    expect((await agent.post('/api/opa/chat/stream').send({ message: '' })).status).toBe(400);
+  });
+});

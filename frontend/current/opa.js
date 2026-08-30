@@ -267,6 +267,8 @@
     }
     body.innerHTML = OPA.messages.map(function (m) {
       if (m.role === 'user') return '<div class="opa-msg opa-msg-user">' + esc(m.text) + '</div>';
+      // A streaming reply with no text yet — the thinking indicator stands in.
+      if (!m.text && OPA.busy) return '';
       var extras = '';
       if (m.sources && m.sources.length) {
         extras += '<div class="opa-srcs">Based on: ' + m.sources.slice(0, 3).map(function (s) {
@@ -378,39 +380,135 @@
 
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     OPA.abort = ctrl;
-    fetch('/api/opa/chat', {
+    var payload = JSON.stringify({
+      conversationId: OPA.conversationId,
+      message: text,
+      context: chatContext(),
+    });
+    var opts = {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       signal: ctrl ? ctrl.signal : undefined,
-      body: JSON.stringify({
-        conversationId: OPA.conversationId,
-        message: text,
-        context: chatContext(),
-      }),
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
-      .then(function (res) {
-        OPA.busy = false; OPA.abort = null;
-        var j = res.j || {};
-        if (!res.ok && res.status === 429) {
-          pushOpa({ text: j.answer || 'Please wait a moment before sending more messages.', copy: false });
-        } else if (j.answer) {
-          if (j.conversationId) OPA.conversationId = j.conversationId;
-          pushOpa({ text: j.answer, sources: j.sources || [], actions: j.actions || [] });
-        } else {
-          pushOpa({ text: "I couldn't retrieve that just now. You can try again, or open the Resource Hub directly.", retry: true, copy: false });
+      body: payload,
+    };
+    var canStream = typeof TextDecoder !== 'undefined' && typeof ReadableStream !== 'undefined';
+    if (!canStream) return sendLegacy(opts);
+
+    fetch('/api/opa/chat/stream', opts)
+      .then(function (r) {
+        var ctype = (r.headers.get('Content-Type') || '');
+        // Anything that is not an event stream (unavailable, 400, 429) comes
+        // back as ordinary JSON — handle it exactly like the legacy route.
+        if (ctype.indexOf('text/event-stream') === -1 || !r.body || !r.body.getReader) {
+          return r.json().then(function (j) { finishChat(r.ok, r.status, j); });
         }
-        renderBody();
+        return readSse(r, ctrl);
       })
-      .catch(function (err) {
-        OPA.busy = false; OPA.abort = null;
-        if (err && err.name === 'AbortError') {
-          pushOpa({ text: 'Stopped.', copy: false });
-        } else {
-          pushOpa({ text: "I couldn't retrieve that just now. You can try again, or open the Resource Hub directly.", retry: true, copy: false });
+      .catch(chatError);
+  }
+
+  // Non-streaming fallback for browsers without stream support.
+  function sendLegacy(opts) {
+    fetch('/api/opa/chat', opts)
+      .then(function (r) { return r.json().then(function (j) { finishChat(r.ok, r.status, j); }); })
+      .catch(chatError);
+  }
+
+  function finishChat(ok, status, j) {
+    OPA.busy = false; OPA.abort = null;
+    j = j || {};
+    if (!ok && status === 429) {
+      pushOpa({ text: j.answer || 'Please wait a moment before sending more messages.', copy: false });
+    } else if (j.answer) {
+      if (j.conversationId) OPA.conversationId = j.conversationId;
+      pushOpa({ text: j.answer, sources: j.sources || [], actions: j.actions || [] });
+    } else {
+      pushOpa({ text: "I couldn't retrieve that just now. You can try again, or open the Resource Hub directly.", retry: true, copy: false });
+    }
+    renderBody();
+  }
+
+  function chatError(err) {
+    OPA.busy = false; OPA.abort = null;
+    if (err && err.name === 'AbortError') {
+      pushOpa({ text: 'Stopped.', copy: false });
+    } else {
+      pushOpa({ text: "I couldn't retrieve that just now. You can try again, or open the Resource Hub directly.", retry: true, copy: false });
+    }
+    renderBody();
+  }
+
+  // Coalesce per-delta re-renders into one per frame.
+  var renderQueued = false;
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () { renderQueued = false; renderBody(); });
+  }
+
+  /**
+   * Consume the SSE body. Deltas append into one live message; `blocked` and
+   * `unavailable` REPLACE everything already shown — a guardrail can refuse
+   * on a trailing chunk after text has streamed, and the discarded text is
+   * the point of the event.
+   */
+  function readSse(r, ctrl) {
+    var live = { role: 'opa', text: '', sources: [], actions: [], i: OPA.messages.length };
+    OPA.messages.push(live);
+    var reader = r.body.getReader();
+    var dec = new TextDecoder();
+    var buf = '';
+    var sawTerminal = false;
+
+    function handleEvent(ev, data) {
+      if (ev === 'delta') {
+        live.text += (data.t || '');
+        scheduleRender();
+      } else if (ev === 'done') {
+        sawTerminal = true;
+        if (data.conversationId) OPA.conversationId = data.conversationId;
+        if (data.answer) live.text = data.answer;
+        live.sources = data.sources || [];
+      } else if (ev === 'blocked' || ev === 'unavailable') {
+        sawTerminal = true;
+        live.text = data.answer || "I couldn't retrieve that just now.";
+        live.copy = false;
+        if (ev === 'unavailable') live.retry = true;
+      }
+    }
+
+    function pump() {
+      return reader.read().then(function (step) {
+        if (step.done) {
+          OPA.busy = false; OPA.abort = null;
+          if (!sawTerminal && !live.text) {
+            live.text = "I couldn't retrieve that just now. You can try again, or open the Resource Hub directly.";
+            live.retry = true; live.copy = false;
+          }
+          renderBody();
+          return;
         }
-        renderBody();
+        buf += dec.decode(step.value, { stream: true });
+        var blocks = buf.split('\n\n');
+        buf = blocks.pop();
+        blocks.forEach(function (block) {
+          var ev = null, data = '';
+          block.split('\n').forEach(function (line) {
+            if (line.indexOf('event: ') === 0) ev = line.slice(7).trim();
+            else if (line.indexOf('data: ') === 0) data += line.slice(6);
+          });
+          if (ev) {
+            try { handleEvent(ev, JSON.parse(data || '{}')); } catch (e) { /* skip malformed */ }
+          }
+        });
+        return pump();
       });
+    }
+    return pump().catch(function (err) {
+      // Drop the live bubble before the shared error handler adds its own.
+      if (OPA.messages[OPA.messages.length - 1] === live && !live.text) OPA.messages.pop();
+      chatError(err);
+    });
   }
 
   function cancelGeneration() {

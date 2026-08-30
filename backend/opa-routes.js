@@ -285,6 +285,134 @@ router.post('/api/opa/chat', chatRateLimit, safe(async (req, res) => {
   });
 }));
 
+// ── POST /api/opa/chat/stream ────────────────────────────────────────────────
+//
+// Server-sent events over a POST body. Same validation, ownership, grounding,
+// persistence and audit as /api/opa/chat — the differences are the transport
+// (deltas as they arrive) and the response contract (plain prose: a JSON
+// envelope cannot render incrementally, so streamed replies carry no NAVIGATE
+// actions by design).
+//
+// Failure shape: anything wrong BEFORE the stream opens answers as ordinary
+// JSON (the frontend falls back to the non-streaming route on a non-SSE
+// content type). Once the stream is open, refusals arrive as events — and a
+// `blocked` event means the client MUST discard every delta already shown:
+// the guardrail can intervene on a trailing chunk after text has streamed.
+
+function sseSend(res, event, data) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+router.post('/api/opa/chat/stream', chatRateLimit, safe(async (req, res) => {
+  if (!provider.isEnabled()) {
+    return res.json({ status: 'unavailable', answer: UNAVAILABLE_DISABLED });
+  }
+
+  const body = req.body || {};
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
+  if (!message || message.length > MAX_MESSAGE_CHARS) {
+    return res.status(400).json({
+      error: 'invalid_message',
+      answer: `Please send a message between 1 and ${MAX_MESSAGE_CHARS} characters.`,
+    });
+  }
+
+  let conversation = null;
+  if (body.conversationId !== undefined && body.conversationId !== null) {
+    if (!isUuid(body.conversationId)) return res.status(404).json({ error: 'Conversation not found' });
+    const { rows } = await pool.query(
+      'SELECT * FROM opa_conversations WHERE id = $1 AND user_id = $2',
+      [body.conversationId, req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Conversation not found' });
+    conversation = rows[0];
+  }
+
+  const ctx = await validateContext(pool, body.context);
+  const knowledge = await searchOpaKnowledge(pool, {
+    query: message,
+    route: ctx.route,
+    module: ctx.module,
+    role: req.user.role,
+    limit: 6,
+  });
+
+  // Under the plain-prose contract, stored assistant answers ARE the format
+  // the model is asked for — replayed verbatim, no JSON reconstruction.
+  let history = [];
+  if (conversation) {
+    const { rows } = await pool.query(
+      `SELECT role, content FROM opa_messages
+        WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`,
+      [conversation.id]);
+    history = rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+  }
+
+  const system = buildSystemPrompt({ user: req.user, context: ctx, knowledge, format: 'text' });
+
+  res.status(200).set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  let answer;
+  try {
+    const result = await provider.generateOpaResponseStream({
+      system,
+      messages: [...history, { role: 'user', content: message }],
+      userId: req.user.id,
+      organisationId: orgOf(req),
+      onText: (t) => sseSend(res, 'delta', { t }),
+    });
+    answer = String(result.text || '').slice(0, MAX_ANSWER_CHARS);
+  } catch (err) {
+    if (err?.message === 'content_blocked') {
+      sseSend(res, 'blocked', { answer: BLOCKED_ANSWER });
+    } else {
+      sseSend(res, 'unavailable', { answer: UNAVAILABLE_ERROR });
+    }
+    return res.end();
+  }
+
+  if (!conversation) {
+    const { rows } = await pool.query(
+      `INSERT INTO opa_conversations (user_id, organisation_id, title)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [req.user.id, orgOf(req), message.slice(0, 60)]);
+    conversation = rows[0];
+  } else {
+    await pool.query('UPDATE opa_conversations SET updated_at = NOW() WHERE id = $1', [conversation.id]);
+  }
+  const sources = knowledge.map((k) => ({ type: 'application', id: k.id, title: k.feature }));
+  await pool.query(
+    `INSERT INTO opa_messages (conversation_id, role, content) VALUES ($1, 'user', $2)`,
+    [conversation.id, message]);
+  await pool.query(
+    `INSERT INTO opa_messages (conversation_id, role, content, sources, actions)
+     VALUES ($1, 'assistant', $2, $3, $4)`,
+    [conversation.id, answer, JSON.stringify(sources), JSON.stringify([])]);
+
+  await db.logAuditEvent({
+    actorUserId: req.user.id,
+    action: 'opa.chat',
+    targetType: 'opa_conversation',
+    targetId: conversation.id,
+    metadata: { module: ctx.module, knowledgeCount: knowledge.length, actionCount: 0, streamed: true },
+    ipAddress: req.ip,
+    organisationId: orgOf(req),
+  }).catch(() => {});
+
+  sseSend(res, 'done', {
+    conversationId: conversation.id,
+    answer,
+    sources,
+    status: knowledge.length ? 'grounded' : 'limited',
+  });
+  res.end();
+}));
+
 // ── Conversation continuity ──────────────────────────────────────────────────
 
 router.get('/api/opa/conversations', safe(async (req, res) => {

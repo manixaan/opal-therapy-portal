@@ -681,6 +681,11 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
+      // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
+      // SSE deltas rendered incrementally, with the JSON route kept as the
+      // fallback. Stale JS here would post to the old route and lose the
+      // streamed UX the new backend exists for.
+      ['opa.js', 2],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
