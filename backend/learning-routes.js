@@ -577,8 +577,11 @@ function importSectionLabel(contentType) {
   return key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
 
-router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) => {
-  const org = orgOf(req);
+/**
+ * The import itself, free of Express so a restore/seed script can run exactly
+ * what the button runs. Idempotent by title within the organisation.
+ */
+async function importExistingInductions(org, createdBy) {
   const created = [];
   const skipped = [];
 
@@ -594,7 +597,7 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
     const { rows } = await pool.query(
       `INSERT INTO learning_workflows (organisation_id, title, description, category, draft_content, created_by)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title`,
-      [org, title, description, category, JSON.stringify(norm.content), req.user.id]);
+      [org, title, description, category, JSON.stringify(norm.content), createdBy]);
     haveTitle.add(title.trim().toLowerCase());
     created.push({ id: rows[0].id, title: rows[0].title, items: lc.contentStats(norm.content).items });
   };
@@ -743,6 +746,11 @@ router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) =
     }
   }
 
+  return { created, skipped };
+}
+
+router.post('/api/learning/workflows/import', ownerOnly, safe(async (req, res) => {
+  const { created, skipped } = await importExistingInductions(orgOf(req), req.user.id);
   if (created.length) {
     await audit(req, 'learning.workflows_imported', null, {
       created: created.map((c) => c.id), count: created.length,
@@ -1502,3 +1510,4 @@ router.post('/api/learning/my/:id/items/:itemKey/complete', safe(async (req, res
 }));
 
 module.exports = router;
+module.exports.importExistingInductions = importExistingInductions;
