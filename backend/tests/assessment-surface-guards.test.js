@@ -630,7 +630,10 @@ describe('changed assets are cache-busted', () => {
       // 3: start() takes a preview option — the whole module, nothing saved
       // (no step saves, no completion, no localStorage), and the close/finish
       // event carries {preview, key, finished} so the launcher can react.
-      ['induction.js', 3], ['induction.css', 2],
+      // 4: the catalogue is fetched from /api/tutorials/catalogue (migration
+      // 045) instead of read from the bundled registry, which stays as the
+      // offline fallback — stale JS here would ignore every authored edit.
+      ['induction.js', 4], ['induction.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       ['navigation.js', 7],

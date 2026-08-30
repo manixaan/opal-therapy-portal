@@ -47,6 +47,8 @@ const ALL_TABLES = [
   'whodas_generated_documents', 'whodas_assessments', 'whodas_templates',
   // Interactive induction (migration 032)
   'tutorial_progress',
+  // Owner-authorable walkthrough catalogue (045) — children before parents
+  'walkthrough_module_versions', 'walkthrough_modules',
   // Owner-controlled learning (migration 033) — children before parents
   'learning_item_progress', 'learning_assignments',
   'learning_workflow_versions', 'learning_workflows',

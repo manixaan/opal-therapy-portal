@@ -3,10 +3,15 @@
 /**
  * INTERACTIVE INDUCTION — per-user tutorial progress.
  *
- * The module catalogue (keys, versions, step counts, role gates) is
- * code-owned in frontend/current/induction-modules.js and require()d here,
- * so the client and server can never disagree about what exists. The
- * database stores only per-user state (backend/migrations/032).
+ * The module catalogue (keys, versions, step counts, role gates) now lives
+ * in the database (migration 045) behind backend/walkthrough-catalogue.js,
+ * so the Owner can author walkthroughs without a deploy. The shipped
+ * registry (frontend/current/induction-modules.js) is its seed and its
+ * fallback. Per-user state stays in tutorial_progress (migration 032).
+ *
+ * The client no longer needs its own copy of the registry: the catalogue
+ * endpoint returns the role-filtered steps the caller may actually see, so
+ * client and server cannot disagree about what exists or what it contains.
  *
  * STRICTLY user-scoped: every read and write filters WHERE user_id =
  * req.user.id. The single exception is GET /api/tutorials/overview —
@@ -31,10 +36,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 const { pool } = require('./database');
-const { requireAuth } = require('./permissions');
 const log = require('./logger').createLogger('tutorials');
 
-const modules = require('../frontend/current/induction-modules.js');
+const { requireAuth, requireRole } = require('./permissions');
+const catalogue = require('./walkthrough-catalogue');
 
 const orgOf = (req) => req.user?.organisation_id || null;
 
@@ -49,10 +54,10 @@ const safe = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => 
  * Resolve a module the CALLER may take, or null (→ 404). Unknown keys and
  * role-blocked modules answer identically.
  */
-function moduleFor(req, key) {
-  const mod = modules.moduleByKey(String(key || ''));
+async function moduleFor(req, key) {
+  const mod = await catalogue.moduleByKey(orgOf(req), String(key || ''));
   if (!mod) return null;
-  if (!mod.roles.includes(String(req.user.role || ''))) return null;
+  if (!(mod.roles || []).includes(String(req.user.role || ''))) return null;
   return mod;
 }
 
@@ -86,19 +91,42 @@ function serialiseRow(r) {
 
 // ── Catalogue ────────────────────────────────────────────────────────────────
 
-/** The modules the CALLER's role can take (metadata only — steps live in
- *  the frontend bundle; there is nothing secret in them, this endpoint
- *  simply saves the client a second copy of the registry). */
+/**
+ * The modules the CALLER's role can take, WITH the steps that role sees.
+ * The steps are the authored catalogue the player renders — role-narrowed
+ * here, so a therapist's payload never carries an owner-gated step even
+ * though the module admits them both.
+ */
 router.get('/api/tutorials/catalogue', safe(async (req, res) => {
-  const mods = modules.modulesForRole(req.user.role).map((m) => ({
-    key: m.key,
-    version: m.version,
-    title: m.title,
-    minutes: m.minutes,
-    description: m.description,
-    stepCount: modules.stepsForRole(m, req.user.role).length,
-  }));
+  const mine = await catalogue.modulesForRole(orgOf(req), req.user.role);
+  const mods = mine.map((m) => {
+    const steps = catalogue.stepsForRole(m.steps, req.user.role);
+    return {
+      key: m.key,
+      version: m.version,
+      title: m.title,
+      minutes: m.minutes,
+      description: m.description,
+      group: m.group_key,
+      roles: m.roles,
+      thumb: m.thumb,
+      start: m.start_context,
+      stepCount: steps.length,
+      steps,
+    };
+  });
   res.json({ modules: mods });
+}));
+
+/**
+ * Seed the shipped built-ins into this organisation's catalogue so they
+ * become editable. Owner only, idempotent, and it never overwrites a module
+ * that already exists — an Owner's edits to a built-in survive re-seeding.
+ */
+router.post('/api/tutorials/seed', requireRole('owner'), safe(async (req, res) => {
+  const { created, skipped } = await catalogue.seedBuiltIns(orgOf(req), req.user.id);
+  if (created.length) await audit(req, 'walkthroughs.seeded', null, { created, count: created.length });
+  res.json({ created, skipped });
 }));
 
 // ── Own progress ─────────────────────────────────────────────────────────────
@@ -109,12 +137,14 @@ router.get('/api/tutorials/progress', safe(async (req, res) => {
     [req.user.id]);
   // Rows for modules the role can no longer take (role changed, module
   // retired) are filtered out rather than surfaced.
-  const visible = rows.filter((r) => moduleFor(req, r.tutorial_key));
+  const mine = await catalogue.modulesForRole(orgOf(req), req.user.role);
+  const allowed = new Set(mine.map((m) => m.key));
+  const visible = rows.filter((r) => allowed.has(r.tutorial_key));
   res.json({ progress: visible.map(serialiseRow) });
 }));
 
 router.put('/api/tutorials/:key/progress', safe(async (req, res) => {
-  const mod = moduleFor(req, req.params.key);
+  const mod = await moduleFor(req, req.params.key);
   if (!mod) return res.status(404).json({ error: 'Not found' });
 
   const b = req.body || {};
@@ -161,7 +191,7 @@ router.put('/api/tutorials/:key/progress', safe(async (req, res) => {
 }));
 
 router.post('/api/tutorials/:key/complete', safe(async (req, res) => {
-  const mod = moduleFor(req, req.params.key);
+  const mod = await moduleFor(req, req.params.key);
   if (!mod) return res.status(404).json({ error: 'Not found' });
 
   const rawVersion = (req.body || {}).version;
@@ -209,7 +239,7 @@ router.post('/api/tutorials/:key/complete', safe(async (req, res) => {
 }));
 
 router.post('/api/tutorials/:key/restart', safe(async (req, res) => {
-  const mod = moduleFor(req, req.params.key);
+  const mod = await moduleFor(req, req.params.key);
   if (!mod) return res.status(404).json({ error: 'Not found' });
 
   const { rows } = await pool.query(
@@ -258,12 +288,13 @@ router.get('/api/tutorials/overview', safe(async (req, res) => {
     byUser.get(String(r.user_id))[r.tutorial_key] = r;
   });
 
+  const all = await catalogue.catalogueFor(org);
   const staff = users.map((u) => {
-    const mods = modules.modulesForRole(u.role);
+    const mods = all.filter((m) => (m.roles || []).indexOf(String(u.role || '')) !== -1);
     const mine = byUser.get(String(u.id)) || {};
     let completed = 0, inProgress = 0, lastActivity = null;
     mods.forEach((m) => {
-      const st = modules.moduleState(m, mine[m.key]);
+      const st = catalogue.moduleState(m, mine[m.key]);
       if (st === 'completed' || st === 'updated') completed++;
       else if (st === 'in_progress') inProgress++;
     });

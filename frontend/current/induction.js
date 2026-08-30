@@ -124,6 +124,49 @@
   var MODS = global.OpalInductionModules;
   if (!MODS) return; // definitions failed to load — engine stays dormant
 
+  /**
+   * ── The catalogue ────────────────────────────────────────────────────────
+   * The bundled registry above is now the FALLBACK, not the source of truth.
+   * The authored catalogue lives in the database (migration 045) and arrives
+   * from /api/tutorials/catalogue, already narrowed to this role — so the
+   * engine renders exactly what the server would validate a completion
+   * against, and an Owner's edit reaches every learner without a deploy.
+   *
+   * If the fetch fails or returns nothing, MODS stays as the shipped
+   * registry: an induction that still works offline beats a blank dashboard.
+   */
+  function serverCatalogue(mods) {
+    var byKey = {};
+    mods.forEach(function (m) { byKey[m.key] = m; });
+    return {
+      MODULES: mods,
+      moduleByKey: function (k) { return byKey[String(k || '')] || null; },
+      modulesForRole: function (r) {
+        var rr = String(r || '');
+        return mods.filter(function (m) { return (m.roles || []).indexOf(rr) !== -1; });
+      },
+      // The server already applied per-step role gating, so this is identity
+      // over the delivered steps rather than a second filter — the signature
+      // is kept so every call site reads the same either way.
+      stepsForRole: function (mod) { return (mod && mod.steps) || []; },
+      moduleState: MODS.moduleState,
+    };
+  }
+
+  var catalogueAsked = false;
+  function loadCatalogue() {
+    if (catalogueAsked) return Promise.resolve(MODS);
+    catalogueAsked = true;
+    return api('/api/tutorials/catalogue').then(function (d) {
+      var mods = d && d.ok && d.modules;
+      if (!mods || !mods.length) return MODS;
+      MODS = serverCatalogue(mods);
+      // A dashboard painted from the bundled registry is now stale.
+      progressChanged();
+      return MODS;
+    }).catch(function () { return MODS; });
+  }
+
   // ── Utilities ─────────────────────────────────────────────────────────────
 
   function user() { return global.APP_USER || {}; }
@@ -976,7 +1019,7 @@
   // Load progress once the signed-in user is known, so the hub can render
   // accurate induction state on first paint of My Learning.
   function bootWhenReady(tries) {
-    if (user().id) { loadProgress(); return; }
+    if (user().id) { loadCatalogue(); loadProgress(); return; }
     if (tries > 60) return;
     setTimeout(function () { bootWhenReady(tries + 1); }, 250);
   }
@@ -1001,6 +1044,7 @@
     moduleForSlug: moduleForSlug,
     thumbFor: thumbFor,
     loadProgress: loadProgress,
+    loadCatalogue: loadCatalogue,
     _quizPick: _quizPick,
     _quizCheck: _quizCheck,
     _restartAsk: _restartAsk,
