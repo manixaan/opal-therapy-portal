@@ -1328,6 +1328,18 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-ind-item-launch .rh2-learn-item-body { padding: 0 14px 12px; }
 .rh2-ind-item-launch .rh2-learn-item-body:empty { display: none; }
 
+/* The editor's walkthrough strip: the learner's launch tile, in the place the
+   learner sees it, but it opens the walkthrough editor instead of running it.
+   Bordered rather than bare so it reads as a way OUT of this screen. */
+.rh2-learn-ed-walk {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 8px 0 4px; padding: 4px 6px;
+  border: 1px dashed var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2, transparent);
+}
+.rh2-learn-ed-walk .rh2-ind-launch { width: auto; padding: 6px 8px; }
+.rh2-learn-ed-walk:hover { border-color: var(--accent); }
+
 /* Contents / outstanding lists — the same row in every mode. */
 .rh2-ind-toc { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rh2-ind-tocbtn {

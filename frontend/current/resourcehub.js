@@ -6224,6 +6224,39 @@
   function laMeta(field, value) { if (S.la.editor) { S.la.editor[field] = value; S.la.editor._dirty = true; } }
   function laSecField(si, value) { var ed = S.la.editor; if (ed && ed.sections[si]) { ed.sections[si].title = value; ed._dirty = true; } }
   /**
+   * The editor's counterpart of the learner's launch tile. A task step that
+   * runs an interactive walkthrough says so here, and opens the side-panel
+   * editor for it — the pop-ups, spotlights and questions are edited in the
+   * induction that uses them, not in a separate console.
+   *
+   * A key the shelf does not know yet (a built-in nobody has imported) still
+   * gets a tile: it offers the import rather than pretending the walkthrough
+   * is not there.
+   */
+  function laItemWalkHtml(it) {
+    if (it.type !== 'task' || !it.walkthrough_key) return '';
+    var key = it.walkthrough_key;
+    var shelf = S.la.walkthroughs || [];
+    var known = shelf.some(function (w) { return w.key === key; });
+
+    return '<div class="rh2-learn-ed-walk">' +
+      '<button type="button" class="rh2-ind-launch" ' +
+        'onclick="RH2.laEditWalkthrough(\'' + esc(key) + '\')">' +
+        '<span class="rh2-ind-launch-hint">' +
+        (known ? 'Edit the interactive walkthrough' : 'Import to edit the interactive walkthrough') +
+        ' &rarr;</span></button>' +
+      '<button type="button" class="rh2-btn rh2-btn-quiet" ' +
+        'onclick="RH2.laPlayWalkthrough(\'' + esc(key) + '\')">Play it as a learner</button>' +
+      '</div>';
+  }
+
+  /** Run the walkthrough exactly as a new starter meets it. Nothing recorded. */
+  function laPlayWalkthrough(key) {
+    if (!global.OpalInduction) return;
+    global.OpalInduction.start(String(key || ''), { preview: true });
+  }
+
+  /**
    * The walkthrough row inside a task step's settings: which walkthrough this
    * step runs, and the way into its editor. The editor is the same side panel
    * used to build one from scratch — one place to edit a walkthrough, reached
@@ -6255,15 +6288,37 @@
           'onclick="OpalWorkshop.open()">Build one</button>');
   }
 
-  /** Open the walkthrough editor for a key named by a learning step. */
-  function laEditWalkthrough(key) {
-    var shelf = S.la.walkthroughs || [];
-    var found = shelf.filter(function (w) { return w.key === String(key || ''); })[0];
+  /**
+   * Open the walkthrough editor for a key named by a learning step.
+   *
+   * The nine walkthroughs that ship with the portal are served from code
+   * until they are imported, so the first time an Owner tries to edit one
+   * there is nothing on the shelf to open. Offer the import here rather than
+   * sending them to another screen to find a button — importing changes
+   * nothing about what staff see.
+   */
+  async function laEditWalkthrough(key) {
+    key = String(key || '');
+    var found = (S.la.walkthroughs || []).filter(function (w) { return w.key === key; })[0];
+
     if (!found) {
-      alert('That walkthrough is not on the shelf yet.\n\nOpen Walkthroughs and import the built-in ' +
-            'walkthroughs to make it editable.');
-      return;
+      if (!confirm('The walkthroughs that ship with the portal have not been imported yet, so this one ' +
+                   'cannot be edited.\n\nImport them now? Nothing changes for staff — they carry on ' +
+                   'seeing exactly what they see today.')) return;
+      var d = await api('/api/tutorials/seed', { method: 'POST' });
+      if (!d.ok) { alert(d.error || 'The walkthroughs could not be imported.'); return; }
+      var wl = await api('/api/walkthroughs');
+      S.la.walkthroughs = (wl.ok && wl.walkthroughs) || [];
+      found = S.la.walkthroughs.filter(function (w) { return w.key === key; })[0];
+      if (!found) {
+        alert('Imported, but "' + key + '" was not among them — the step may name a walkthrough that no ' +
+              'longer exists. Its Settings can point it at another one.');
+        render();
+        return;
+      }
+      render();
     }
+
     if (!global.OpalWorkshop) return;
     global.OpalWorkshop.edit(found.id);
   }
@@ -6595,7 +6650,12 @@
         '<button type="button" class="rh2-btn rh2-btn-quiet rh2-learn-ed-setbtn" ' +
           'aria-expanded="' + (setOpen ? 'true' : 'false') + '" ' +
           'onclick="RH2.laSettings(\'' + k + '\')">Settings</button>' +
-      '</div>';
+      '</div>' +
+      // The learner's own screen shows a launch tile for a task that carries a
+      // walkthrough; the editor showed text boxes and nothing else, so the
+      // pop-ups were invisible in the one place they are meant to be edited.
+      // Same tile, same position — it opens the walkthrough EDITOR instead.
+      laItemWalkHtml(it);
 
     // The secondary settings strip — configuration, off the primary surface.
     if (setOpen) {
@@ -7774,6 +7834,7 @@
     laCreateSubmit: laCreateSubmit,
     laCreateBackdrop: laCreateBackdrop,
     laEditWalkthrough: laEditWalkthrough,
+    laPlayWalkthrough: laPlayWalkthrough,
     laImport: laImport,
     laImportDismiss: laImportDismiss,
     // Batch assignment + review step + reassignment

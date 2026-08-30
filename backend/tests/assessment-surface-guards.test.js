@@ -624,7 +624,12 @@ describe('changed assets are cache-busted', () => {
       // r31: a task step in an EXISTING induction names its walkthrough and
       // opens the same side-panel editor from the step's own settings —
       // editing a pop-up should not mean leaving the induction that uses it.
-      ['resourcehub.js', 'r31'], ['resourcehub.css', 'r17'],
+      // r32/r18: the editor shows the learner's own launch tile for a task
+      // that runs a walkthrough — editing the pop-ups was invisible on the
+      // one screen meant to edit them. It opens the side-panel editor, offers
+      // the built-in import when the shelf has not got it yet, and plays the
+      // walkthrough as a learner. The CSS carries the strip.
+      ['resourcehub.js', 'r32'], ['resourcehub.css', 'r18'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
