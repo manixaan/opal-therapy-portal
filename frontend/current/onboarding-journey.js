@@ -291,16 +291,15 @@
     if (r.complete) bits.push('<span class="oj-chip is-done">Complete</span>');
     if (r.closed) bits.push('<span class="oj-chip is-quiet">' + esc(titleCase(r.status)) + '</span>');
 
-    return '<article class="oj-row' + (r.next.actor === 'admin' ? ' needs-you' : '') + '">'
+    return '<article class="oj-row oj-tile-link' + (r.next.actor === 'admin' ? ' needs-you' : '') + '" role="link" tabindex="0" onclick="OnboardingJourney.openRecord(\'' + jsq(r.id) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();OnboardingJourney.openRecord(\'' + jsq(r.id) + '\');}">'
       + '<div class="oj-row-main">'
-      + '  <h3><a href="#onboarding/record/' + esc(r.id) + '" onclick="OnboardingJourney.openRecord(\'' + jsq(r.id) + '\');return false;">' + esc(r.applicantName) + '</a></h3>'
+      + '  <h3>' + esc(r.applicantName) + '</h3>'
       + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType)) + (r.startDate ? ' · commencement ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(r.daysToStart)) + ')' : '') + '</p>'
       + (r.summary ? summaryLines(r.summary) : stageTrack(r))
       + '</div>'
       + '<div class="oj-row-side">'
       + nextLine(r.next)
       + '<div class="oj-chips">' + bits.join('') + '</div>'
-      + '<button type="button" class="oj-btn" onclick="OnboardingJourney.openRecord(\'' + jsq(r.id) + '\')">Open</button>'
       + '</div>'
       + '</article>';
   }
@@ -318,9 +317,9 @@
       if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'; return; }
       pane.innerHTML = '<p class="oj-quiet">Each package is the default an onboarding starts from. Open one to walk through its three phases and tweak the documents; every new onboarding for that package inherits the tweak.</p>'
         + '<div class="oj-list">' + res.packages.map(function (p) {
-          return '<article class="oj-row"><div class="oj-row-main"><h3><a href="#onboarding/defaults/' + esc(p.id) + '" onclick="OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\');return false;">' + esc(p.title) + '</a></h3>'
+          return '<article class="oj-row oj-tile-link" role="link" tabindex="0" onclick="OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\');}"><div class="oj-row-main"><h3>' + esc(p.title) + '</h3>'
             + '<p class="oj-quiet">' + esc(titleCase(p.roleCategory || '')) + ' · ' + esc(titleCase(p.employmentType || '')) + (p.tweaks ? ' · ' + p.tweaks + ' tweak' + (p.tweaks === 1 ? '' : 's') : '') + (p.published ? '' : ' · not published') + '</p></div>'
-            + '<div class="oj-row-side">' + btn('Open', 'OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\')') + '</div></article>';
+            + '<div class="oj-row-side"><span class="oj-tile-arrow" aria-hidden="true">→</span></div></article>';
         }).join('') + '</div>';
       return;
     }
