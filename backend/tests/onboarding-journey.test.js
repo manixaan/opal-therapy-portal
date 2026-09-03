@@ -191,10 +191,12 @@ describe('Stage 3 — Internal Induction & Access', () => {
     expect(j.overdue.map((o) => o.label)).toContain('Create work email');
   });
 
-  test('a failed task is surfaced for review before the next open one', () => {
+  test('a failed task is the next thing to resolve; Requires Your Attention carries it', () => {
     const tasks = [task({ code: 'portal_access', status: 'failed', note: 'blocked', sort_order: 10 }), task({ code: 'x', sort_order: 20 })];
-    const j = journey.projectJourney({ assignment: assignment({ status: 'activated' }), offer: accepted, tasks, now: NOW });
+    const j = journey.projectJourney({ assignment: assignment({ status: 'activated' }), offer: accepted, tasks, now: NOW,
+      attention: [{ kind: 'account_setup_failed', title: 'Activate portal access failed', detail: 'blocked', severity: 'high', action: { type: 'open_task', taskCode: 'portal_access' } }] });
     expect(j.counts.adminReview).toBe(1);
+    expect(j.adminReview[0].attentionKind).toBe('account_setup_failed');
     expect(j.next.taskCode).toBe('portal_access');
   });
 

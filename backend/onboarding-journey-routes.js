@@ -181,11 +181,15 @@ function termsFromAssignment(a, manager) {
  * Generate the induction checklist the first time a record reaches Stage 3.
  * Idempotent — codes are unique per assignment.
  */
-async function ensureInduction(assignment, tasks) {
+async function ensureInduction(assignment, tasks, { force = false } = {}) {
+  // Internal setup starts the moment Phase 1 settles (force, from the pack),
+  // and in any case once the record reaches the induction statuses.
   const stage3 = ['ready_to_activate', 'activated', 'completed'].includes(assignment.status);
-  if (!stage3 || (tasks && tasks.length)) return tasks || [];
+  if ((!stage3 && !force) || (tasks && tasks.length)) return tasks || [];
   const list = journey.buildInductionTasks(assignment);
   await jdb.ensureTasks(assignment.organisation_id, assignment.id, list);
+  // The portal account itself exists as soon as the profile does.
+  if (assignment.user_id) await jdb.setTaskStatus(assignment.id, 'portal_account', { status: 'done', actorId: null, note: 'Pre-employee account created with the profile' }).catch(() => {});
   const { rows } = await odb.pool.query(
     `UPDATE onboarding_assignments SET induction_started_at = COALESCE(induction_started_at, NOW())
       WHERE id = $1 RETURNING induction_started_at`,
@@ -231,7 +235,18 @@ async function recordDetail(req, assignment) {
 
   const packRoutes = require('./onboarding-pack-routes');
   const packDetail = await packRoutes._internals.packDetail(req, assignment);
-  const j = journey.projectJourney({ assignment, offer, requirements, tasks, pack: packSummary(assignment, packDetail.counts) });
+  const returns = require('./onboarding-returns-routes')._internals;
+  const attentionList = await returns.attentionFor(assignment);
+  const profile = await require('./onboarding-profile-sync').profileSummary(assignment.user_id);
+  const returnedDocs = (await require('./onboarding-returns-db').listReturns(assignment.id, { includeArchived: true })).map((d) => ({
+    id: d.id, title: d.title, fileName: d.file_name, mime: d.file_mime, size: d.file_size_bytes, status: d.status, uploadedAt: d.uploaded_at,
+    textStatus: d.text_status, packItemId: d.pack_item_id || null, matchStatus: d.match_status || 'pending', documentKind: d.document_kind || null,
+    signatureStatus: d.signature_status || 'unknown',
+    previewKind: d.file_mime === 'application/pdf' ? 'pdf' : String(d.file_mime || '').includes('wordprocessingml') ? 'docx' : null,
+    previewUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/preview`,
+    downloadUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/download`,
+  }));
+  const j = journey.projectJourney({ assignment, offer, requirements, tasks, pack: packSummary(assignment, packDetail.counts), attention: attentionList });
   const s = shape();
   const [editedLetter, signed] = offer
     ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed')])
@@ -275,6 +290,9 @@ async function recordDetail(req, assignment) {
     } : null,
     journey: j,
     pack: packDetail,
+    attention: attentionList,
+    profile,
+    returnedDocuments: returnedDocs,
     sections: s.groupSections(requirements),
     tasks: tasks.map(taskRow),
     dispatches: dispatches.map((d) => ({
@@ -317,6 +335,8 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
       assignment: a, offer: offers.get(a.id) || null,
       requirements: reqMap.get(a.id) || [], tasks,
       pack: packSummary(a, packCounts.get(a.id) || {}),
+      attention: ['documents_received', 'starter_pack_sent', 'details_extracted'].includes(a.status)
+        ? await require('./onboarding-returns-routes')._internals.attentionFor(a) : [],
     });
     const offer = offers.get(a.id) || null;
     records.push({

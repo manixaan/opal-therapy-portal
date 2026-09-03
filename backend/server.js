@@ -561,6 +561,7 @@ app.use('/', require('./onboarding-workflow-routes'));
 // The three-stage journey (offer → documentation → induction).
 app.use('/', require('./onboarding-journey-routes'));
 app.use('/', require('./onboarding-pack-routes'));
+app.use('/', require('./onboarding-returns-routes'));
 app.use('/', require('./onboarding-package-docs-routes'));
 app.use('/', require('./onboarding-assignment-routes'));
 app.use('/', require('./onboarding-library-routes'));

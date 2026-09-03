@@ -131,7 +131,34 @@ const FIELDS = Object.freeze({
   first_aid_expiry:          { group: 'credentials', label: 'First aid expiry',          target: null, kind: 'date' },
   cpr_expiry:                { group: 'credentials', label: 'CPR expiry',                target: null, kind: 'date' },
   insurance_policy_expiry:   { group: 'credentials', label: 'Professional indemnity expiry', target: null, kind: 'date' },
+
+  // ── Added by the return leg (050) ─────────────────────────────────────────
+  salary_annual:             { group: 'employment', label: 'Annual salary',       target: 'employment', column: 'pay_rate',  kind: 'money' },
+  hourly_rate:               { group: 'employment', label: 'Hourly rate',         target: 'employment', column: 'pay_rate',  kind: 'money' },
+  end_date:                  { group: 'employment', label: 'Fixed-term end date', target: 'employment', column: 'end_date',  kind: 'date' },
+  emergency_email:           { group: 'emergency',  label: 'Emergency contact email', target: null, kind: 'email' },
+  passport_number:           { group: 'identity',   label: 'Passport number',     target: null, kind: 'text', sensitive: true },
+  passport_country:          { group: 'identity',   label: 'Passport country',    target: null, kind: 'text' },
+  passport_expiry:           { group: 'identity',   label: 'Passport expiry',     target: null, kind: 'date' },
+  visa_subclass:             { group: 'identity',   label: 'Visa subclass',       target: null, kind: 'text' },
+  visa_expiry:               { group: 'identity',   label: 'Visa expiry',         target: null, kind: 'date' },
+  drivers_licence_state:     { group: 'credentials', label: 'Driver licence state', target: null, kind: 'text' },
+  first_aid_issue_date:      { group: 'credentials', label: 'First aid issue date', target: null, kind: 'date' },
+  cpr_issue_date:            { group: 'credentials', label: 'CPR issue date',      target: null, kind: 'date' },
+  police_check_reference:    { group: 'credentials', label: 'Police check reference', target: null, kind: 'text' },
+  vehicle_registration:      { group: 'other', label: 'Vehicle registration',     target: null, kind: 'text' },
+  vehicle_make:              { group: 'other', label: 'Vehicle make',             target: null, kind: 'text' },
+  vehicle_model:             { group: 'other', label: 'Vehicle model',            target: null, kind: 'text' },
+  vehicle_registration_expiry: { group: 'other', label: 'Vehicle registration expiry', target: null, kind: 'date' },
+  vehicle_insurance_expiry:  { group: 'other', label: 'Vehicle insurance expiry', target: null, kind: 'date' },
 });
+
+/** What a returned document IS. The vocabulary the pack items are matched on. */
+const DOCUMENT_KINDS = [
+  'contract', 'new_employee_details', 'super_choice', 'tax_summary', 'fair_work_statement',
+  'passport', 'visa', 'drivers_licence', 'police_check', 'ndis_screening', 'wwcc', 'ahpra',
+  'first_aid', 'cpr', 'vehicle', 'insurance', 'identity_other', 'policy_acknowledgement', 'other', 'unrecognised',
+];
 
 const FIELD_KEYS = Object.freeze(Object.keys(FIELDS));
 
@@ -278,8 +305,11 @@ const SYSTEM_PROMPT = [
   '     medium - legible but with some doubt, or reconstructed from layout',
   '     low    - hard to read, conflicting copies, or a guess at the label',
   '7. Cite the document number and page each value came from.',
-  '8. If the same field appears twice with different values, return the one on',
-  '   the most complete form and mark it low confidence.',
+  '8. If the same field appears in more than one document, return EVERY',
+  '   occurrence as its own entry, each citing its document. Do not choose.',
+  '9. For each DOCUMENT, say what it is (contract, employee details form,',
+  '   super choice form, passport, licence, a check or certificate, and so on)',
+  '   and whether it is signed where a signature is asked for.',
   '',
   'Return your answer only through the record_employee_details tool.',
 ].join('\n');
@@ -305,6 +335,20 @@ function buildTool() {
               page: { type: 'integer', description: 'The page number within that document.' },
             },
             required: ['key', 'value', 'confidence'],
+          },
+        },
+        documents: {
+          type: 'array',
+          description: 'One entry per DOCUMENT number: what it is and whether it has been signed.',
+          items: {
+            type: 'object',
+            properties: {
+              documentIndex: { type: 'integer' },
+              kind: { type: 'string', enum: DOCUMENT_KINDS, description: 'What the document is. unrecognised when unsure.' },
+              confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+              signed: { type: 'string', enum: ['yes', 'no', 'unknown'], description: 'Whether a signature (or a typed name and date in a signature block) is present where one is asked for.' },
+            },
+            required: ['documentIndex', 'kind', 'confidence'],
           },
         },
         notes: {
@@ -351,6 +395,7 @@ async function callModel({ corpus, userId, organisationId }) {
   return {
     fields: Array.isArray(call.input.fields) ? call.input.fields : [],
     notes: typeof call.input.notes === 'string' ? call.input.notes.slice(0, 500) : '',
+    documents: Array.isArray(call.input.documents) ? call.input.documents : [],
     meta: result?.metadata || {},
   };
 }
@@ -402,6 +447,10 @@ function normaliseValue(key, raw) {
     case 'account': {
       const digits = value.replace(/\D/g, '');
       return digits.length >= 5 && digits.length <= 12 ? digits : null;
+    }
+    case 'money': {
+      const n = Number(value.replace(/[^0-9.]/g, ''));
+      return Number.isFinite(n) && n > 0 && n < 10000000 ? String(Math.round(n * 100) / 100) : null;
     }
     case 'number': {
       const n = Number(value.replace(/[^\d.]/g, ''));
@@ -497,6 +546,52 @@ function normaliseFields(rawFields, documentsByIndex) {
   return { fields: out, dropped };
 }
 
+/**
+ * Every occurrence, per document — the return leg reconciles them. Unlike
+ * normaliseFields, the same key may appear once per source document.
+ */
+function normaliseCandidates(rawFields, documentsByIndex) {
+  const out = [];
+  const seen = new Set();
+  let dropped = 0;
+  for (const item of rawFields || []) {
+    if (!item || typeof item !== 'object') { dropped += 1; continue; }
+    const key = String(item.key || '');
+    const def = FIELDS[key];
+    if (!def) { dropped += 1; continue; }
+    const value = normaliseValue(key, item.value);
+    if (value === null) { dropped += 1; continue; }
+    if (looksLikeTfn(key, value)) { log.warn('extraction dropped a value resembling a tax file number', { field: key }); dropped += 1; continue; }
+    const source = documentsByIndex.get(Number(item.documentIndex)) || null;
+    const dedupe = `${key}|${source ? source.id : ''}`;
+    if (seen.has(dedupe)) { dropped += 1; continue; }
+    seen.add(dedupe);
+    out.push({
+      key, group: def.group, label: def.label, sensitive: def.sensitive === true, value,
+      confidence: ['high', 'medium', 'low'].includes(item.confidence) ? item.confidence : 'low',
+      sourceDocumentId: source ? source.id : null, sourceLabel: source ? source.title : null,
+      sourcePage: Number.isInteger(item.page) && item.page > 0 && item.page < 2000 ? item.page : null,
+    });
+  }
+  return { fields: out, dropped };
+}
+
+/** The model's view of each document, keyed by returned document id. */
+function normaliseClassifications(rawDocuments, documentsByIndex) {
+  const out = new Map();
+  for (const d of rawDocuments || []) {
+    if (!d || typeof d !== 'object') continue;
+    const source = documentsByIndex.get(Number(d.documentIndex));
+    if (!source) continue;
+    out.set(source.id, {
+      kind: DOCUMENT_KINDS.includes(d.kind) ? d.kind : 'unrecognised',
+      confidence: ['high', 'medium', 'low'].includes(d.confidence) ? d.confidence : 'low',
+      signed: d.signed === 'yes' ? 'present' : d.signed === 'no' ? 'missing' : 'unknown',
+    });
+  }
+  return out;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 //  MASKS
 // ═════════════════════════════════════════════════════════════════════════════
@@ -518,6 +613,9 @@ function maskValue(key, value) {
 }
 
 module.exports = {
+  DOCUMENT_KINDS,
+  normaliseCandidates,
+  normaliseClassifications,
   AI_FEATURE,
   FIELDS,
   FIELD_KEYS,

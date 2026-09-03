@@ -460,11 +460,13 @@
       + '</div>'
       + stageTrack({ stages: j.stages })
       + nextBanner(d)
+      + attentionHtml(d)
       + groupsHtml(j)
       + '<div class="oj-stages">'
       + offerPanel(d)
       + documentationPanel(d)
       + inductionPanel(d)
+      + profilePanel(d)
       + '</div>'
       + emailsPanel(d);
   }
@@ -514,6 +516,67 @@
     return '<button type="button" class="oj-btn ' + (cls || '') + '" onclick="' + onclick + '">' + esc(label) + '</button>';
   }
 
+  var ATTENTION_ICONS = { conflict: '⚖', low_confidence: '?', unrecognised_document: '📄', missing_signature: '✍', missing_required_document: '⏳', expired_credential: '⌛', incorrect_document: '✕', payroll_approval: '$', account_setup_failed: '⚠', register_check: '🔍' };
+
+  /** Requires Your Attention — only exceptions. */
+  function attentionHtml(d) {
+    var items = d.attention || [];
+    var stageAsks = (d.journey.adminReview || []).filter(function (i) { return !i.attentionKind; });
+    var out = '<section class="oj-panel oj-attention" id="oj-attention"><header><h2>Requires Your Attention <span class="oj-count">' + (items.length + stageAsks.length) + '</span></h2></header>';
+    if (!items.length && !stageAsks.length) {
+      out += '<p class="oj-quiet">Nothing needs you. The portal is handling the normal items.</p></section>';
+      return out;
+    }
+    out += '<ul class="oj-attn">';
+    items.forEach(function (a, n) { out += attentionItem(a, n, d); });
+    stageAsks.forEach(function (i) { out += '<li class="oj-attn-item is-normal"><span class="oj-attn-ico">→</span><div><strong>' + esc(i.label) + '</strong></div></li>'; });
+    out += '</ul></section>';
+    return out;
+  }
+
+  function attentionItem(a, n, d) {
+    var c = d.can || {};
+    var act = a.action || {};
+    var body = '<strong>' + esc(a.title) + '</strong>' + (a.detail && a.kind !== 'conflict' ? '<p class="oj-quiet">' + esc(a.detail) + '</p>' : '');
+    var acts = '';
+    switch (act.type) {
+      case 'resolve_conflict':
+        body += '<div class="oj-conflict">' + (a.options || []).map(function (o, k) {
+          var id = 'oj-cf-' + n + '-' + k;
+          return '<label class="oj-conflict-opt" for="' + id + '"><input type="radio" name="oj-cf-' + n + '" id="' + id + '" value="' + esc(o.candidateId || '') + '" data-value="' + esc(o.display || '') + '">'
+            + '<span class="oj-conflict-src">' + esc(o.sourceLabel) + '</span><span class="oj-conflict-val">' + esc(o.display || '') + '</span>'
+            + (o.confidence ? '<span class="oj-quiet">' + esc(o.confidence) + ' confidence</span>' : '') + '</label>';
+        }).join('') + '</div>';
+        if (c.review) acts = btn('Use the selected value', 'OnboardingJourney.resolveConflict(\'' + jsq(act.fieldId) + '\',' + n + ')', 'oj-btn-primary oj-btn-small') + btn('Type a different value', 'OnboardingJourney.correctField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small') + btn('Ignore', 'OnboardingJourney.rejectField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small oj-btn-quiet');
+        break;
+      case 'confirm_field':
+        if (c.review) acts = btn('Looks right', 'OnboardingJourney.acceptField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Correct it', 'OnboardingJourney.correctField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small') + btn('Ignore', 'OnboardingJourney.rejectField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small oj-btn-quiet');
+        break;
+      case 'assign_document': {
+        var opts = ((d.pack && d.pack.items) || []).filter(function (i) { return i.status === 'included' && i.employeeReturns; }).map(function (i) { return [i.id, i.title]; });
+        body += '<div class="oj-inline-row">' + select('oj-asg-' + n, [['', '— Which document is this? —']].concat(opts), '') + '</div>';
+        var rd = (d.returnedDocuments || []).filter(function (x) { return x.id === act.returnedDocumentId; })[0];
+        if (rd && rd.previewKind) acts += btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(rd.id) + '\')', 'oj-btn-small');
+        if (c.review) acts += btn('Assign', 'OnboardingJourney.assignReturn(\'' + jsq(act.returnedDocumentId) + '\',' + n + ')', 'oj-btn-primary oj-btn-small') + btn('Not one of ours', 'OnboardingJourney.archiveReturn(\'' + jsq(act.returnedDocumentId) + '\')', 'oj-btn-small oj-btn-quiet');
+        break;
+      }
+      case 'verify_item':
+        if (c.verify) acts = btn('Checked the register — verify', 'OnboardingJourney.verifyItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-small oj-btn-quiet');
+        break;
+      case 'approve_payroll':
+        if (c.payroll !== false) acts = btn('Approve for payroll', 'OnboardingJourney.approvePayroll()', 'oj-btn-primary oj-btn-small');
+        break;
+      case 'request_again': case 'chase':
+        acts = btn('Open the pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-small');
+        break;
+      case 'open_task':
+        acts = btn('Go to internal setup', 'OnboardingJourney.scrollTo(\'oj-task-' + jsq(act.taskCode) + '\')', 'oj-btn-small');
+        break;
+      default: break;
+    }
+    return '<li class="oj-attn-item is-' + esc(a.severity || 'normal') + '"><span class="oj-attn-ico">' + (ATTENTION_ICONS[a.kind] || '!') + '</span><div>' + body + (acts ? '<div class="oj-actions oj-actions-tight">' + acts + '</div>' : '') + '</div></li>';
+  }
+
   function groupsHtml(j) {
     var item = function (i) {
       var due = i.dueAt ? '<span class="oj-due' + (i.overdue ? ' is-overdue' : '') + '">' + (i.overdue ? 'overdue · ' : 'due ') + esc(fmtDate(i.dueAt)) + '</span>' : '';
@@ -526,7 +589,6 @@
         + (items.length ? '<ul>' + items.map(item).join('') + '</ul>' : '<p class="oj-quiet">' + esc(emptyText) + '</p>') + '</div>';
     };
     return '<div class="oj-groups">'
-      + group('Needs your review', j.adminReview, 'is-you', 'Nothing waiting on you.')
       + group('Waiting on the employee', j.waitingOnEmployee, 'is-employee', 'Nothing with the employee.')
       + group('Internal set-up', j.internalOpen, 'is-internal', 'No internal tasks open.')
       + group('Completed', j.completed, 'is-done', 'Nothing completed yet.')
@@ -687,7 +749,7 @@
   function stagePanel(n, title, st, body) {
     return '<section class="oj-panel oj-stage is-' + esc(st.state) + '" id="oj-stage-' + n + '">'
       + '<header><h2><span class="oj-stage-n">' + n + '</span>' + esc(title) + '</h2>'
-      + '<span class="oj-chip is-' + esc(st.state) + '">' + esc(titleCase(st.state)) + '</span></header>'
+      + '<span class="oj-chip is-' + esc(st.state) + '">' + esc(st.state === 'parallel' ? 'Under way alongside' : titleCase(st.state)) + '</span></header>'
       + '<p class="oj-stage-summary">' + esc(st.summary) + '</p>'
       + body + '</section>';
   }
@@ -773,10 +835,20 @@
       + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) marked as sent have no file behind them yet — upload a file, or remove them before preparing the email.</span>' : '') + '</div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen()') + '</div>' : '') + '</div>';
 
-    out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
+    if (sent && c.review) {
+      out += '<div class="oj-returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back; the portal reads it, matches it to the pack and fills the profile.</span>'
+        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
+        + btn('Re-read everything', 'OnboardingJourney.processReturns()', 'oj-btn-quiet') + '</div>'
+        + ((d.returnedDocuments || []).filter(function (x) { return x.status === 'active'; }).length ? '<ul class="oj-returns-list">' + d.returnedDocuments.filter(function (x) { return x.status === 'active'; }).map(function (x) {
+          var item = P.items.filter(function (i) { return i.id === x.packItemId; })[0];
+          return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">' + (item ? '→ ' + esc(item.title) : x.matchStatus === 'unrecognised' ? 'not recognised' : 'reading…') + (x.signatureStatus === 'missing' ? ' · <span class="oj-warn">no signature</span>' : '') + '</span> '
+            + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>') + '</li>';
+        }).join('') + '</ul>' : '') + '</div>';
+    }
+    out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
-      out += '<tr class="oj-pack-section"><td colspan="6">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
-      groups[k].forEach(function (i) { out += packRow(i, editable); });
+      out += '<tr class="oj-pack-section"><td colspan="7">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      groups[k].forEach(function (i) { out += packRow(i, editable, sent); });
     });
     out += '</tbody></table></div>';
     if (removed.length) {
@@ -819,7 +891,13 @@
     return out;
   }
 
-  function packRow(i, editable) {
+  var PROGRESS_LABELS = { awaiting_return: 'Awaiting return', received: 'Received', verified: 'Verified', attention: 'Needs attention', sent: 'Sent', 'n/a': '—', removed: 'Removed' };
+  function progressChip(i) {
+    var cls = i.progress === 'verified' ? 'is-done' : i.progress === 'received' ? 'is-employee' : i.progress === 'attention' ? 'is-danger' : i.progress === 'awaiting_return' ? 'is-you' : 'is-quiet';
+    return '<span class="oj-chip ' + cls + '">' + esc(PROGRESS_LABELS[i.progress] || titleCase(i.progress)) + '</span>' + (i.verificationMode === 'auto' && i.progress === 'verified' ? '<br><span class="oj-quiet">by the portal</span>' : '');
+  }
+
+  function packRow(i, editable, sent) {
     var f = i.file || {};
     var fileCell;
     if (f.previewUrl) {
@@ -846,6 +924,7 @@
     };
     return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + '">'
       + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+      + (sent ? '<td>' + progressChip(i) + (i.progress === 'received' && i.requiresVerification && S.record && S.record.can && S.record.can.verify ? '<div class="oj-actions oj-actions-tight">' + btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small') + '</div>' : '') + '</td>' : '')
       + '<td>' + flag('required', i.required) + '</td>'
       + '<td>' + flag('employeeReturns', i.employeeReturns) + '</td>'
       + '<td>' + flag('requiresVerification', i.requiresVerification) + '</td>'
@@ -863,9 +942,11 @@
 
   // ── Stage 3 panel ─────────────────────────────────────────────────────────
 
+  var TASK_STATE = { pending: 'Preparing', in_progress: 'In progress', done: 'Ready', skipped: 'Skipped', failed: 'Failed' };
+
   function inductionPanel(d) {
     var st = d.journey.stages[2];
-    if (st.state === 'pending') return stagePanel(3, 'Internal Induction & Access', st, '');
+    if (st.state === 'pending') return stagePanel(3, 'Internal Setup & Induction', st, '');
     var c = d.can;
     var staff = [['', 'Unassigned']].concat(((S.options && S.options.staff) || []).map(function (u) { return [u.id, u.name]; }));
     var body = d.tasks.length ? '<ul class="oj-tasks">' + d.tasks.map(function (t) {
@@ -888,7 +969,7 @@
         : (t.assigneeName ? '<span class="oj-quiet">' + esc(t.assigneeName) + '</span>' : '');
       return '<li class="oj-task is-' + esc(t.status) + (t.overdue ? ' is-overdue' : '') + '" id="oj-task-' + esc(t.code) + '">'
         + '<div class="oj-task-main"><strong>' + esc(t.title) + '</strong>'
-        + '<span class="oj-chip is-' + esc(t.status) + '">' + esc(titleCase(t.status)) + (t.automation ? ' · portal' : '') + '</span>'
+        + '<span class="oj-chip is-' + esc(t.status) + '">' + esc(TASK_STATE[t.status] || titleCase(t.status)) + (t.automation ? ' · portal' : '') + '</span>'
         + '<p class="oj-quiet">' + esc(t.description || '') + '</p>'
         + (t.note ? '<p class="oj-quiet">Note: ' + esc(t.note) + '</p>' : '')
         + (t.dueAt ? '<span class="oj-due' + (t.overdue ? ' is-overdue' : '') + '">' + (t.overdue ? 'overdue · ' : 'due ') + esc(fmtDate(t.dueAt)) + '</span>' : '')
@@ -897,7 +978,28 @@
         + '<div class="oj-task-side">' + assign + '<div class="oj-actions">' + acts.join('') + '</div></div>'
         + '</li>';
     }).join('') + '</ul>' : '<p class="oj-quiet">The checklist is being generated.</p>';
-    return stagePanel(3, 'Internal Induction & Access', st, body);
+    return stagePanel(3, 'Internal Setup & Induction', st, body);
+  }
+
+  /** The employee profile — the source of truth every register reads. */
+  function profilePanel(d) {
+    var p = d.profile;
+    if (!p) return '';
+    var row = function (k, v) { return v ? '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>' : ''; };
+    var dl = function (rows) { return rows ? '<dl class="oj-terms">' + rows + '</dl>' : '<p class="oj-quiet">Nothing yet.</p>'; };
+    var pe = p.personal || {}; var em = p.emergency; var e = p.employment || {}; var pay = p.payroll; var v = p.vehicle;
+    var body = '<div class="oj-profile">'
+      + '<div><h3>Personal details</h3>' + dl(row('Name', pe.name) + row('Preferred', pe.preferredName) + row('Date of birth', pe.dateOfBirth ? fmtDate(pe.dateOfBirth) : '') + row('Mobile', pe.mobile) + row('Email', pe.email) + row('Address', pe.address)) + '</div>'
+      + '<div><h3>Emergency contact</h3>' + dl(em ? row('Name', em.name) + row('Relationship', em.relationship) + row('Phone', em.phone) + row('Email', em.email) : '') + '</div>'
+      + '<div><h3>Employment</h3>' + dl(row('Position', e.position) + row('Type', e.employmentType ? titleCase(e.employmentType) : '') + row('Commences', e.startDate ? fmtDate(e.startDate) : '') + row('Ends', e.endDate ? fmtDate(e.endDate) : '') + row('Hours / week', e.hoursPerWeek != null ? String(e.hoursPerWeek) : '') + row(e.payBasis === 'hourly' ? 'Hourly rate' : 'Salary', e.payRate != null ? money(e.payRate) : '')) + '</div>'
+      + '<div><h3>Payroll</h3>' + dl(pay ? row('Bank', pay.bsbMasked ? 'BSB ' + pay.bsbMasked + ' · acct ••••' + (pay.accountLast4 || '') : '') + row('Status', pay.bankStatus ? (pay.bankStatus === 'verified' ? 'Approved' : titleCase(pay.bankStatus)) : '') + row('Super fund', pay.superFund) : '') + '</div>'
+      + '<div><h3>Identification &amp; credentials</h3>' + ((p.credentials || []).length || (p.identity || []).length ? '<ul class="oj-creds">'
+        + (p.identity || []).map(function (i) { return '<li><span>' + esc(titleCase(i.evidenceType)) + (i.numberLast4 ? ' ••••' + esc(i.numberLast4) : '') + '</span><span class="oj-quiet">' + (i.expiryDate ? 'expires ' + esc(fmtDate(i.expiryDate)) : '') + (i.documentId ? ' · original attached' : '') + '</span></li>'; }).join('')
+        + (p.credentials || []).map(function (c) { var exp = c.expiryDate ? new Date(c.expiryDate) < new Date() : false; return '<li><span>' + esc(c.name) + (c.number ? ' <span class="oj-quiet">' + esc(c.number) + '</span>' : '') + '</span><span class="' + (exp ? 'oj-warn' : 'oj-quiet') + '">' + (c.expiryDate ? (exp ? 'EXPIRED ' : 'expires ') + esc(fmtDate(c.expiryDate)) : 'no expiry') + ' · ' + esc(c.status === 'verified' ? 'verified' : 'pending verification') + (c.documentId ? ' · original attached' : '') + '</span></li>'; }).join('')
+        + '</ul>' : '<p class="oj-quiet">Nothing yet.</p>') + '</div>'
+      + '<div><h3>Vehicle</h3>' + dl(v ? row('Registration', v.registration) + row('Vehicle', [v.make, v.model].filter(Boolean).join(' ')) + row('Registration expiry', v.registrationExpiry ? fmtDate(v.registrationExpiry) : '') + row('Insurance expiry', v.insuranceExpiry ? fmtDate(v.insuranceExpiry) : '') : '') + '</div>'
+      + '</div><p class="oj-quiet">Filled from verified onboarding documents. The Compliance Register, profile page and expiry reminders read these same records.</p>';
+    return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2><span class="oj-chip is-quiet">Source of truth</span></header>' + body + '</section>';
   }
 
   function emailsPanel(d) {
@@ -1166,6 +1268,80 @@
   }
   function packUnmarkSent() { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.')); }
 
+  // ── The return leg ──
+  async function returnsAct(rest, body, okMessage, method) {
+    if (S.busy) return null;
+    S.busy = true;
+    var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + rest, { method: method || 'POST', body: body || {} });
+    S.busy = false;
+    if (!res.ok) { toast(res.error, true); return res; }
+    if (okMessage) toast(typeof okMessage === 'function' ? okMessage(res) : okMessage);
+    return refreshRecordAfter(Promise.resolve(res));
+  }
+  async function uploadReturns(input) {
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) return;
+    var payload = [];
+    for (var i = 0; i < files.length; i += 1) {
+      var f = files[i];
+      if (f.size > 10 * 1024 * 1024) { toast(f.name + ' is larger than 10 MB.', true); continue; }
+      var ext = String(f.name).split('.').pop().toLowerCase();
+      var mime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : ext === 'txt' ? 'text/plain' : f.type);
+      try { payload.push({ fileName: f.name, fileMime: mime, fileData: await readFileAsBase64(f) }); } catch (_) { toast(f.name + ' could not be read.', true); }
+    }
+    input.value = '';
+    if (!payload.length) return;
+    toast('Reading ' + payload.length + ' document(s)…');
+    return returnsAct('/returns', { files: payload }, function (r) {
+      var p = r.processed || {};
+      return (r.stored || []).length + ' stored · ' + (p.matched || 0) + ' matched · ' + (p.reliable || 0) + ' values applied · ' + ((p.conflict || 0) + (p.review || 0)) + ' for you to check';
+    });
+  }
+  function processReturns() { return returnsAct('/returns/process', {}, 'Re-read.'); }
+  function previewReturn(id) {
+    var x = (S.record && S.record.returnedDocuments || []).filter(function (r) { return r.id === id; })[0];
+    if (!x) return;
+    if (x.previewKind && global.DocPreview) global.DocPreview.open({ kind: x.previewKind, url: x.previewUrl + '?rev=' + Date.now(), downloadUrl: x.downloadUrl, title: x.title || x.fileName });
+    else global.open(x.downloadUrl, '_blank', 'noopener');
+  }
+  function assignReturn(docId, n) {
+    var sel = doc.getElementById('oj-asg-' + n);
+    var itemId = sel ? sel.value : '';
+    if (!itemId) return toast('Choose which document this is.', true);
+    return returnsAct('/returns/' + encodeURIComponent(docId) + '/assign', { packItemId: itemId }, 'Assigned and re-read.');
+  }
+  function archiveReturn(docId) {
+    if (!global.confirm('Archive this document as not part of the onboarding pack?')) return;
+    return returnsAct('/returns/' + encodeURIComponent(docId) + '/archive', {}, 'Archived.');
+  }
+  function resolveConflict(fieldId, n) {
+    var picked = doc.querySelector('input[name="oj-cf-' + n + '"]:checked');
+    if (!picked) return toast('Select which value is correct.', true);
+    if (!picked.value) return correctField(fieldId, picked.getAttribute('data-value'));
+    return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'choose', candidateId: picked.value }, 'Applied to the profile.');
+  }
+  function acceptField(fieldId) { return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'accept' }, 'Confirmed and applied.'); }
+  function correctField(fieldId, seed) {
+    var value = global.prompt('Enter the correct value:', seed || '');
+    if (value === null || !value.trim()) return;
+    return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'correct', value: value.trim() }, 'Corrected and applied.');
+  }
+  function rejectField(fieldId) { return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'reject' }, 'Ignored.'); }
+  function verifyItem(itemId) {
+    var ref = global.prompt('Verified against the register. Reference (optional):');
+    if (ref === null) return;
+    return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/verify', { reference: ref || undefined }, 'Verified.');
+  }
+  function rejectItem(itemId) {
+    var reason = global.prompt('Reject this document. Reason:');
+    if (reason === null) return;
+    return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/reject', { reason: reason || undefined }, 'Rejected.');
+  }
+  function approvePayroll() {
+    if (!global.confirm('Approve these bank details for payroll?')) return;
+    return returnsAct('/payroll/approve', {}, 'Approved for payroll.');
+  }
+
   /** Pack changes move the record's stage/next line: reload the record after them. */
   async function refreshRecordAfter(p) {
     var res = await p;
@@ -1214,6 +1390,9 @@
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
     packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
+    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, archiveReturn: archiveReturn,
+    resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
+    verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll,
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,

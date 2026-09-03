@@ -95,6 +95,14 @@ function itemRow(row, assignmentId) {
     returnedAt: row.returned_at || null, returnedDocumentId: row.returned_document_id || null,
     verifiedAt: row.verified_at || null, verifiedByName: row.verified_by_name || null,
     verificationNote: row.verification_note || null,
+    verificationStatus: row.verification_status || 'pending', verificationMode: row.verification_mode || null,
+    attentionReason: row.attention_reason || null,
+    // The one word the table shows.
+    progress: row.status !== 'included' ? 'removed'
+      : !row.employee_returns ? (row.sends_document ? 'sent' : 'n/a')
+      : row.verification_status === 'verified' ? 'verified'
+      : row.verification_status === 'attention' || row.verification_status === 'rejected' ? 'attention'
+      : row.returned_at ? 'received' : 'awaiting_return',
   };
 }
 
@@ -119,6 +127,10 @@ async function packDetail(req, assignment) {
       returns: included.filter((i) => i.employeeReturns).length,
       verifies: included.filter((i) => i.requiresVerification).length,
       removed: items.length - included.length,
+      awaitingReturn: included.filter((i) => i.progress === 'awaiting_return').length,
+      received: included.filter((i) => i.progress === 'received').length,
+      verified: included.filter((i) => i.progress === 'verified').length,
+      attention: included.filter((i) => i.progress === 'attention').length,
     },
     zip: zip ? {
       id: zip.id, fileName: zip.file_name, size: zip.file_size_bytes, documentCount: zip.document_count,
@@ -143,6 +155,10 @@ async function packDetail(req, assignment) {
  * engine facts, once. Called when Phase 1 settles; safe to call again.
  */
 async function preparePack(assignment) {
+  // The profile is the source of truth from here on, so the person it belongs
+  // to exists now: a pre-employee account with no password (the invitation,
+  // when it comes, is what sets one) and an employment profile from the offer.
+  await ensureProfileOwner(assignment);
   const existing = await pdb.listItems(assignment.id);
   if (existing.length) { await pdb.setPackPrepared(assignment.id); return { inserted: 0, total: existing.length }; }
   const version = await odb.getPackageVersion(assignment.package_version_id);
@@ -152,6 +168,33 @@ async function preparePack(assignment) {
   const inserted = await pdb.insertDefaults(assignment.organisation_id, assignment.id, items);
   await pdb.setPackPrepared(assignment.id);
   return { inserted, total: items.length };
+}
+
+/** A users row for the record, created once; the employment profile from the offer terms. */
+async function ensureProfileOwner(assignment) {
+  if (!assignment.user_id) {
+    const { rows } = await odb.pool.query(
+      `INSERT INTO users (email, name, role, organisation_id, is_active, account_status, email_verified, profile_completed, is_treating_therapist)
+       VALUES (LOWER($1), $2, 'pre_employee', $3, TRUE, 'active', FALSE, TRUE, $4)
+       ON CONFLICT (email) DO UPDATE SET role = CASE WHEN users.role = 'pre_employee' THEN 'pre_employee' ELSE users.role END, organisation_id = COALESCE(users.organisation_id, $3)
+       RETURNING id, role`,
+      [assignment.applicant_email, assignment.applicant_name, assignment.organisation_id, assignment.is_treating_therapist === true]
+    );
+    await odb.pool.query('UPDATE onboarding_assignments SET user_id = $2, updated_at = NOW() WHERE id = $1 AND user_id IS NULL', [assignment.id, rows[0].id]);
+    assignment.user_id = rows[0].id;
+  }
+  await odb.upsertEmploymentProfile(assignment.user_id, assignment.organisation_id, {
+    assignmentId: assignment.id, jobTitle: assignment.job_title, employmentType: assignment.employment_type, roleCategory: assignment.role_category,
+    startDate: assignment.start_date, endDate: assignment.end_date, hoursPerWeek: assignment.hours_per_week ?? undefined,
+    awardClassification: assignment.award_classification ?? undefined, managerUserId: assignment.manager_user_id, workLocation: assignment.work_location,
+    childRelatedWork: assignment.facts?.child_related_work || 'assessment_required', ndisRiskAssessedRole: assignment.facts?.ndis_risk_assessed_role || 'requires_determination',
+    mobileCommunityRole: assignment.facts?.mobile_community_role === true, usesOwnVehicle: assignment.facts?.uses_own_vehicle === true, status: 'onboarding',
+  });
+  if (assignment.pay_basis && assignment.pay_rate != null) {
+    await require('./onboarding-returns-db').setEmploymentPay(assignment.user_id, { payBasis: assignment.pay_basis, payRate: assignment.pay_rate });
+  }
+  // Internal setup begins now, alongside the documentation — not after it.
+  await require('./onboarding-journey-routes')._internals.ensureInduction(assignment, [], { force: true });
 }
 
 /** Resolve every included, sendable item to bytes and build the ZIP. */
@@ -490,4 +533,4 @@ router.post('/api/onboarding/journey/records/:id/pack/unmark-sent', requirePermi
 }));
 
 module.exports = router;
-module.exports._internals = { preparePack, packDetail, buildZipForRecord, itemRow, readUpload, packEditable };
+module.exports._internals = { preparePack, ensureProfileOwner, packDetail, buildZipForRecord, itemRow, readUpload, packEditable };

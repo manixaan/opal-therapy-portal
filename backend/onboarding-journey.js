@@ -18,7 +18,7 @@
 const STAGES = [
   { key: 'offer', number: 1, label: 'Letter of Offer' },
   { key: 'documentation', number: 2, label: 'Onboarding Documentation' },
-  { key: 'induction', number: 3, label: 'Internal Induction & Access' },
+  { key: 'induction', number: 3, label: 'Internal Setup & Induction' },
 ];
 
 const OFFER_STATUSES = ['draft', 'email_drafted', 'sent', 'signed_received', 'accepted', 'declined', 'withdrawn', 'not_required'];
@@ -72,6 +72,13 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
     || assignment.role_category === 'occupational_therapist';
 
   const tasks = [
+    {
+      code: 'portal_account', sortOrder: 5,
+      title: 'Opal Portal account',
+      description: 'The pre-employee account and employment profile, created with the document pack. Portal access (the staff role) is granted at activation.',
+      automation: 'portal_account',
+      dueAt: soonest(beforeStart(14)),
+    },
     {
       code: 'portal_access', sortOrder: 10,
       title: 'Activate portal access',
@@ -261,10 +268,14 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
       out.next = { actor: 'employee', action: null, label: 'Waiting for the completed onboarding documentation to come back' };
       return out;
     }
-    // documents_received: the return leg (verification) — the next phase.
-    out.summary = 'Returned documents are in — waiting for review.';
-    out.items.push({ kind: 'review', label: 'Review the returned onboarding documentation', at: assignment.documents_received_at });
-    out.next = { actor: 'admin', action: 'review_returns', label: 'Review the returned documents' };
+    // documents_received: read, reconciled and applied by the portal; what is
+    // left is whatever Requires Your Attention holds, or the outstanding returns.
+    const returnsOpen = (c.returns || 0) - (c.received || 0) - (c.verified || 0);
+    out.summary = `Returned documents are in — ${c.verified || 0} verified, ${c.received || 0} received, ${Math.max(0, returnsOpen)} still to come.`;
+    if (returnsOpen > 0) {
+      out.items.push({ kind: 'employee', label: `${returnsOpen} document(s) still to be returned`, dueAt: assignment.pack_due_at || null, overdue: isOverdue(assignment.pack_due_at, now) });
+    }
+    out.next = { actor: 'admin', action: 'review_returns', label: 'Work through Requires Your Attention, then finish the documentation' };
     return out;
   }
 
@@ -335,7 +346,21 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
 
 function projectInduction(assignment, tasks, now, stage2Complete) {
   const out = { state: 'pending', summary: 'Starts when the documentation is approved.', completedAt: null, items: [], next: null };
-  if (!stage2Complete) return out;
+  // Internal setup runs ALONGSIDE the documentation: once tasks exist the
+  // stage is live, but it only becomes the record's current stage after
+  // the documentation is done.
+  if (!stage2Complete && !(tasks && tasks.length)) return out;
+  if (!stage2Complete) {
+    const sorted = [...tasks].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    for (const t of sorted) {
+      if (t.status === 'done' || t.status === 'skipped') out.items.push({ kind: 'done', label: t.title, at: t.completed_at || null, taskCode: t.code });
+      else out.items.push({ kind: 'internal', label: t.status === 'failed' ? `${t.title} — failed` : t.title, dueAt: t.due_at || null, overdue: isOverdue(t.due_at, now), assigneeUserId: t.assignee_user_id || null, assigneeName: t.assignee_name || null, taskCode: t.code, automation: t.automation || null, status: t.status });
+    }
+    const done = sorted.filter((t) => t.status === 'done' || t.status === 'skipped').length;
+    out.state = 'parallel';
+    out.summary = `Internal setup under way alongside the documentation — ${done} of ${sorted.length} ready.`;
+    return out;
+  }
 
   const status = assignment.status;
   const sorted = [...tasks].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -344,8 +369,8 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
   const finished = sorted.filter((t) => t.status === 'done' || t.status === 'skipped');
 
   for (const t of finished) out.items.push({ kind: 'done', label: t.title, at: t.completed_at || null, taskCode: t.code });
-  for (const t of failed) out.items.push({ kind: 'review', label: `${t.title} — failed: ${t.note || 'see the record'}`, at: t.updated_at || null, taskCode: t.code });
-  for (const t of open) {
+  // Failed tasks are raised by Requires Your Attention (account set-up failed); here they stay in the internal list.
+  for (const t of [...open, ...failed]) {
     out.items.push({
       kind: 'internal', label: t.title, dueAt: t.due_at || null, overdue: isOverdue(t.due_at, now),
       assigneeUserId: t.assignee_user_id || null, assigneeName: t.assignee_name || null,
@@ -400,7 +425,7 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
  * @param {object|null} p.pack    { prepared, draftId, counts:{included,returns,missingFiles} } for the document pack
  * @param {Date} p.now
  */
-function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, now = new Date() }) {
+function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, attention = [], now = new Date() }) {
   const closed = assignment.status === 'cancelled' || assignment.status === 'archived';
 
   const s1 = projectOffer(assignment, offer, now);
@@ -425,7 +450,12 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
   const completed = all.filter((i) => i.kind === 'done');
   const waitingOnEmployee = all.filter((i) => i.kind === 'employee');
   const internalOpen = all.filter((i) => i.kind === 'internal');
-  const adminReview = all.filter((i) => i.kind === 'review');
+  // Requires Your Attention: the exceptions the automation could not settle,
+  // plus the stage-level asks (approve the letter, send the draft).
+  const adminReview = [
+    ...(attention || []).map((a) => ({ kind: 'review', label: a.title, detail: a.detail, severity: a.severity, action: a.action, attentionKind: a.kind, options: a.options })),
+    ...all.filter((i) => i.kind === 'review'),
+  ];
   const overdue = all.filter((i) => i.overdue === true);
 
   // The commencement date itself is a deadline for the whole run.

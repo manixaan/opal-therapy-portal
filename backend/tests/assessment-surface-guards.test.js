@@ -674,9 +674,9 @@ describe('changed assets are cache-busted', () => {
       // 10: the management surface is delegated to onboarding-journey.js;
       // open()/nav() carry a record id. The CSS stays at 8.
       ['onboarding.js', 10], ['onboarding.css', 8],
-      // 3: Phase 2 — the per-employee document pack: table with flags,
-      // preview/replace/rename/remove, add document, ZIP + Email 2 draft.
-      ['onboarding-journey.js', 3], ['onboarding-journey.css', 3],
+      // 4: the return leg — Requires Your Attention (conflicts, reviews,
+      // unrecognised documents), returned-document uploads, the profile panel.
+      ['onboarding-journey.js', 4], ['onboarding-journey.css', 4],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
