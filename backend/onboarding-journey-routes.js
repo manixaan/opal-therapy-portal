@@ -857,7 +857,18 @@ router.post('/api/onboarding/journey/records/:id/offer/signed', requirePermissio
     targetType: 'onboarding_offer', targetId: offer.id,
     metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes },
   });
-  res.status(201).json(await recordDetail(req, assignment));
+  // The stored signed letter IS the acceptance: Phase 1 settles and the
+  // document pack is prepared without a separate verification click.
+  const verified = await jdb.verifyOffer(offer.id, req.user.id);
+  await odb.pool.query(
+    `UPDATE onboarding_assignments SET offer_accepted_at = COALESCE(offer_accepted_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
+    [assignment.id]
+  );
+  await auditOnboarding(req, 'offer_verified', {
+    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified ? verified.version : offer.version, trigger: 'signed_upload' },
+  });
+  const prepared = await preparePackFor(req, assignment);
+  res.status(201).json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), prepared });
 }));
 
 async function serveSigned(req, res, disposition) {

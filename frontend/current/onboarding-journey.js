@@ -695,7 +695,6 @@
       body += '<div class="oj-field"><label for="oj-e-subject">Subject</label><input id="oj-e-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-e-body">Message</label><textarea id="oj-e-body" rows="14">' + esc(E.body || '') + '</textarea>'
         + '<small>The letter is attached automatically. Edit freely — what you send is what is kept on the record.</small></div>'
-        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' You can still download the letter and send it yourself, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
         + btn(drafted ? 'Create a fresh Outlook draft' : 'Create the Outlook draft with the letter attached', 'OnboardingJourney.createDraft()', 'oj-btn-primary')
         + btn('Save the wording', 'OnboardingJourney.saveEmail()')
@@ -716,39 +715,19 @@
     }
     body += '</li>';
 
-    // ── Step 1.5: waiting / signed ──
-    var waiting = o.status === 'sent'; var received = o.status === 'signed_received'; var done = o.status === 'accepted';
-    body += '<li class="oj-step ' + stepState(received || done, waiting) + '"><div class="oj-step-head"><span class="oj-step-n">1.5</span><strong>Waiting for the signed letter</strong>'
-      + (waiting ? '<span class="oj-chip is-employee">With the employee</span>' : '') + '</div>';
-    if (waiting) {
-      body += '<p class="oj-quiet">Sent ' + esc(fmtDateTime(E.sentAt || o.sentAt)) + '. The email asks for the signed letter within 48 hours.</p>';
-    }
-    if ((waiting || received || before) && c.assign) {
-      body += '<div class="oj-actions"><label class="oj-btn ' + (waiting ? 'oj-btn-primary' : '') + ' oj-file">' + (received ? 'Replace the signed letter' : 'Upload the signed letter') + '<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label>'
-        + (waiting ? btn('Not sent after all', 'OnboardingJourney.unmarkSent()', 'oj-btn-quiet') : '')
-        + (waiting || received ? btn('They declined', 'OnboardingJourney.declineOffer()', 'oj-btn-quiet') : '')
-        + '</div>';
-    }
-    body += '</li>';
-
-    // ── Verify ──
-    var Sg = d.signed;
-    body += '<li class="oj-step ' + stepState(done, received) + '"><div class="oj-step-head"><span class="oj-step-n">✓</span><strong>Verify the signed letter</strong>'
-      + (done ? '<span class="oj-chip is-done">Verified ' + esc(fmtDateTime(o.verifiedAt)) + '</span>' : '') + '</div>';
+    // ── The signed letter: one upload, and Phase 1 is done ──
+    var Sg = d.signed; var done = o.status === 'accepted';
+    body += '<li class="oj-step ' + stepState(done, !done) + '"><div class="oj-step-head"><span class="oj-step-n">4</span><strong>Signed letter</strong></div>';
     if (Sg) {
-      body += '<p class="oj-quiet">' + esc(Sg.fileName) + ' · ' + Math.round((Sg.size || 0) / 1024) + ' KB · received ' + esc(fmtDateTime(Sg.uploadedAt)) + (Sg.uploadedByName ? ' by ' + esc(Sg.uploadedByName) : '') + '</p>'
+      body += '<p class="oj-quiet">' + esc(Sg.fileName) + ' · received ' + esc(fmtDateTime(Sg.uploadedAt)) + '</p>'
         + '<div class="oj-actions">' + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
-        + (received && c.assign ? btn('Verify — phase 1 complete, start the documentation', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '')
-        + '</div>';
-    } else {
-      body += '<p class="oj-quiet">Once the signed letter is uploaded, check it here and verify it.</p>';
+        + (c.assign && !done ? '<label class="oj-btn oj-file">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label>' : '') + '</div>';
+    } else if (c.assign) {
+      body += '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
     }
     body += '</li></ol>';
 
-    if (c.assign && !done) {
-      body += '<div class="oj-actions oj-actions-quiet">' + btn('Withdraw the offer', 'OnboardingJourney.withdrawOffer()', 'oj-btn-quiet')
-        + (before ? btn('No letter needed — go straight to documentation', 'OnboardingJourney.skipOffer()', 'oj-btn-quiet') : '') + '</div>';
-    }
+
     if (d.offerHistory && d.offerHistory.length > 1) {
       body += '<details class="oj-history"><summary>Previous versions (' + (d.offerHistory.length - 1) + ')</summary><ul>'
         + d.offerHistory.filter(function (h) { return h.id !== o.id; }).map(function (h) {
@@ -1172,7 +1151,7 @@
     return res;
   }
   function uploadLetter(input) { return uploadTo(input, '/offer/letter', 'Edited letter'); }
-  function uploadSigned(input) { return uploadTo(input, '/offer/signed', 'Signed letter'); }
+  function uploadSigned(input) { return refreshRecordAfter(uploadTo(input, '/offer/signed', 'Signed letter')); }
   function discardLetter() {
     if (!global.confirm('Discard the uploaded edit and go back to the generated letter?')) return;
     return act('/offer/letter', {}, 'Using the generated letter again.', 'DELETE');

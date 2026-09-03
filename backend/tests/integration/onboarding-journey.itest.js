@@ -244,25 +244,23 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
 
     // Terms are frozen once sent.
     expect((await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Changed' } })).status).toBe(409);
-    expect((await agent.post(`${base}/offer/verify`)).status).toBe(409);
 
     // The signed letter comes back and is stored.
     const signedBytes = Buffer.from('%PDF-1.4 signed letter');
     const up = await agent.post(`${base}/offer/signed`).send({ fileName: 'Jane Smith signed LOO.pdf', fileMime: 'application/pdf', fileData: signedBytes.toString('base64') });
     expect(up.status).toBe(201);
-    expect(up.body.offer.status).toBe('signed_received');
+    // The stored signed letter is the acceptance: no separate verification click.
+    expect(up.body.offer.status).toBe('accepted');
     expect(up.body.signed).toMatchObject({ kind: 'signed', fileName: 'Jane Smith signed LOO.pdf', previewKind: 'pdf', size: signedBytes.length });
-    expect(up.body.journey.next.action).toBe('verify_offer');
+    expect(up.body.prepared.status).toBe('prepared');
     const served = await agent.get(`${base}/offer/signed/download`);
     expect(served.status).toBe(200);
     expect(served.headers['content-type']).toBe('application/pdf');
     expect(Buffer.from(served.body).toString()).toBe('%PDF-1.4 signed letter');
 
-    // Verification completes phase 1 and this person's document pack is derived without another click.
-    const verified = await agent.post(`${base}/offer/verify`);
-    expect(verified.status).toBe(200);
-    expect(verified.body.offer.status).toBe('accepted');
-    expect(verified.body.prepared.status).toBe('prepared');
+    // Phase 1 settled on upload; the document pack was derived without another click.
+    expect((await agent.post(`${base}/offer/verify`)).status).toBe(409);
+    const verified = { body: up.body };
     expect(verified.body.prepared.total).toBeGreaterThan(8);
     expect(verified.body.record.status).toBe('created');
     expect(verified.body.journey.stage.key).toBe('documentation');
