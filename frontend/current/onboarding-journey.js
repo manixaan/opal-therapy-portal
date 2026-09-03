@@ -120,7 +120,6 @@
     options: null,
     record: null,       // the last GET /records/:id payload
     recordId: null,
-    offerUrl: null,     // returned once by send; shown until the view changes
     editingTerms: false,
     busy: false,
   };
@@ -154,7 +153,6 @@
     }
     S.view = view;
     S.recordId = view === 'record' ? (id || S.recordId) : null;
-    S.offerUrl = null;
     S.editingTerms = false;
     if (global.Onboarding && typeof global.Onboarding.nav === 'function') {
       global.Onboarding.nav(view, S.recordId);
@@ -342,9 +340,16 @@
       + field(p + 'awardClassification', 'Award / classification', input(p + 'awardClassification', 'text', t.awardClassification, 'maxlength="150"'), 'e.g. Health Professionals and Support Services Award, Level 2')
       + field(p + 'workLocation', 'Location', input(p + 'workLocation', 'text', t.workLocation || (opts.defaults && opts.defaults.workLocation) || '', 'maxlength="150"'))
       + '</div>'
+      + '<details class="oj-more"><summary>Letter particulars (defaults apply if left blank)</summary><div class="oj-grid2">'
+      + field(p + 'award', 'Applicable modern award', input(p + 'award', 'text', t.award, 'maxlength="200" placeholder="Health Professionals and Support Services Award 2020 (MA000027)"'))
+      + field(p + 'workPattern', 'Work pattern', input(p + 'workPattern', 'text', t.workPattern, 'maxlength="200" placeholder="worked between 8:30am and 4:30pm (flexible), Monday to Friday"'))
+      + field(p + 'payCycle', 'Pay cycle', input(p + 'payCycle', 'text', t.payCycle, 'maxlength="40" placeholder="Fortnightly"'))
+      + field(p + 'superannuationRate', 'Superannuation %', input(p + 'superannuationRate', 'number', t.superannuationRate, 'min="0" max="30" step="0.5" placeholder="12"'))
+      + field(p + 'offerClosingDate', 'Offer closing date', input(p + 'offerClosingDate', 'date', isoDate(t.offerClosingDate)), 'Blank: seven days from the day the letter is issued.')
+      + '</div></details>'
       + field(p + 'additionalTerms', 'Additional terms for the letter (optional)',
         '<textarea id="' + p + 'additionalTerms" rows="3" maxlength="4000">' + esc(t.additionalTerms || '') + '</textarea>',
-        'Appears as its own paragraph in the letter of offer.');
+        'Kept on the record for the contract stage. The letter template itself is fixed wording.');
   }
 
   function readTerms(prefix) {
@@ -356,6 +361,8 @@
       hoursPerWeek: v('hoursPerWeek') || null, probationMonths: v('probationMonths') || null,
       awardClassification: v('awardClassification') || null, workLocation: v('workLocation') || null,
       additionalTerms: v('additionalTerms') || null,
+      award: v('award') || null, workPattern: v('workPattern') || null, payCycle: v('payCycle') || null,
+      superannuationRate: v('superannuationRate') || null, offerClosingDate: v('offerClosingDate') || null,
     };
   }
 
@@ -405,6 +412,8 @@
       position: terms.positionTitle, employmentType: terms.employmentType, startDate: terms.startDate, endDate: terms.endDate,
       payBasis: terms.payBasis, payRate: terms.payRate, hoursPerWeek: terms.hoursPerWeek, probationMonths: terms.probationMonths,
       awardClassification: terms.awardClassification, workLocation: terms.workLocation, additionalTerms: terms.additionalTerms,
+      award: terms.award, workPattern: terms.workPattern, payCycle: terms.payCycle,
+      superannuationRate: terms.superannuationRate, offerClosingDate: terms.offerClosingDate,
       packageId: v('oj-f-packageId') || null, notes: v('oj-f-notes') || null,
     };
     S.busy = true; if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
@@ -484,10 +493,11 @@
   function actionButton(n, d) {
     var c = d.can;
     switch (n.action) {
-      case 'edit_offer': case 'reissue_offer': return c.assign ? btn('Edit the offer terms', 'OnboardingJourney.editTerms()', 'oj-btn-primary') : '';
-      case 'approve_offer': return c.assign ? btn('Approve the letter', 'OnboardingJourney.approveOffer()', 'oj-btn-primary') : '';
-      case 'send_offer': return c.assign ? btn('Send the letter of offer', 'OnboardingJourney.sendOffer()', 'oj-btn-primary') : '';
-      case 'resend_offer': return c.assign ? btn('Send it again', 'OnboardingJourney.sendOffer()', 'oj-btn-primary') : '';
+      case 'edit_offer': case 'reissue_offer': return c.assign ? btn('Edit the offer details', 'OnboardingJourney.editTerms()', 'oj-btn-primary') : '';
+      case 'prepare_email': return btn('Preview the letter', 'OnboardingJourney.previewLetter()', 'oj-btn-primary') + btn('Go to Email 1', 'OnboardingJourney.scrollTo(\'oj-email\')');
+      case 'send_in_outlook': return (d.offer && d.offer.email && d.offer.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.offer.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
+        + (c.assign ? btn('Mark as sent', 'OnboardingJourney.markSent()') : '');
+      case 'verify_offer': return btn('View the signed letter', 'OnboardingJourney.previewSigned()') + (c.assign ? btn('Verify', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '');
       case 'release': return c.assign ? btn('Release the documentation', 'OnboardingJourney.release()', 'oj-btn-primary') : '';
       case 'review': return btn('Open the review', 'OnboardingJourney.openReview()', 'oj-btn-primary');
       case 'activate': return c.activate ? btn('Activate portal access', 'OnboardingJourney.runTask(\'portal_access\')', 'oj-btn-primary') : '';
@@ -535,57 +545,136 @@
   }
 
   function offerPanel(d) {
-    var o = d.offer; var st = d.journey.stages[0]; var c = d.can;
-    var editable = c.assign && d.record.status === 'created' && (!o || ['draft', 'approved', 'declined', 'withdrawn'].indexOf(o.status) !== -1);
+    var o = d.offer; var st = d.journey.stages[0]; var c = d.can; var r = d.record;
+    var editable = c.assign && r.status === 'created' && (!o || ['draft', 'approved', 'email_drafted', 'declined', 'withdrawn'].indexOf(o.status) !== -1);
     var body = '';
 
     if (S.editingTerms && editable) {
       body += '<form class="oj-form" onsubmit="return OnboardingJourney.saveTerms(event)">'
-        + termsFields(S.options || {}, (o && o.terms) || d.record.terms || {}, 'oj-t-')
+        + termsFields(S.options || {}, (o && o.terms) || r.terms || {}, 'oj-t-')
         + '<div id="oj-terms-error" class="ob-note is-danger" role="alert" hidden></div>'
-        + '<div class="oj-actions"><button type="submit" class="oj-btn oj-btn-primary">Save the terms</button>'
+        + '<div class="oj-actions"><button type="submit" class="oj-btn oj-btn-primary">Save — the letter regenerates from these details</button>'
         + '<button type="button" class="oj-btn" onclick="OnboardingJourney.cancelEdit()">Cancel</button></div></form>';
+      return stagePanel(1, 'Letter of Offer', st, body);
+    }
+
+    if (!o) {
+      if (editable) body += '<div class="oj-actions">' + btn('Enter the offer details', 'OnboardingJourney.editTerms()', 'oj-btn-primary') + '</div>';
+      return stagePanel(1, 'Letter of Offer', st, body);
+    }
+
+    var before = ['draft', 'approved', 'email_drafted'].indexOf(o.status) !== -1;   // not yet sent
+    var closed = ['declined', 'withdrawn', 'not_required'].indexOf(o.status) !== -1;
+    var stepState = function (done, active) { return done ? 'is-done' : (active ? 'is-active' : 'is-todo'); };
+
+    body += '<div class="oj-offer-status">'
+      + '<span class="oj-chip ' + offerChipClass(o.status) + '">' + esc(offerLabel(o)) + '</span>'
+      + (o.declineReason ? '<span class="oj-quiet">Reason given: ' + esc(o.declineReason) + '</span>' : '')
+      + '</div>';
+
+    if (closed) {
+      if (editable) body += '<div class="oj-actions">' + btn(o.status === 'not_required' ? 'Edit the offer details' : 'Issue a revised offer', 'OnboardingJourney.editTerms()') + '</div>';
+      return stagePanel(1, 'Letter of Offer', st, body);
+    }
+
+    // ── Step 1: details ──
+    body += '<ol class="oj-steps">';
+    body += '<li class="oj-step ' + stepState(true, false) + '"><div class="oj-step-head"><span class="oj-step-n">1</span><strong>Employee details</strong>'
+      + (editable ? btn('Edit', 'OnboardingJourney.editTerms()', 'oj-btn-small') : '') + '</div>'
+      + termsTable(o.terms || r.terms || {})
+      + (before ? '<p class="oj-quiet">Change these and the letter regenerates. An Outlook draft made from the old letter is discarded.</p>' : '')
+      + '</li>';
+
+    // ── Step 2: the letter ──
+    var L = d.letter || {};
+    body += '<li class="oj-step ' + stepState(!before, before) + '"><div class="oj-step-head"><span class="oj-step-n">2</span><strong>Letter of Offer</strong>'
+      + '<span class="oj-chip ' + (L.source === 'uploaded' ? 'is-you' : 'is-quiet') + '">' + (L.source === 'uploaded' ? 'Edited copy uploaded' : 'Generated from the template') + '</span></div>'
+      + '<p class="oj-quiet">' + esc(L.fileName || '') + (L.uploaded ? ' · uploaded ' + esc(fmtDateTime(L.uploaded.uploadedAt)) + (L.uploaded.uploadedByName ? ' by ' + esc(L.uploaded.uploadedByName) : '') : '') + '</p>'
+      + '<div class="oj-actions">'
+      + btn('Preview the letter', 'OnboardingJourney.previewLetter()', before ? 'oj-btn-primary' : '')
+      + '<a class="oj-btn" href="' + esc(L.downloadUrl || '#') + '">Download (.docx)</a>'
+      + (before && c.assign ? '<label class="oj-btn oj-file">Upload an edited letter<input type="file" accept=".docx" hidden onchange="OnboardingJourney.uploadLetter(this)"></label>' : '')
+      + (before && c.assign && L.source === 'uploaded' ? btn('Discard the edit — use the generated letter', 'OnboardingJourney.discardLetter()', 'oj-btn-quiet') : '')
+      + '</div>'
+      + '<div id="oj-letter-preview" class="oj-docx-host" hidden></div>'
+      + '</li>';
+
+    // ── Step 3: Email 1 ──
+    var E = d.email || {};
+    var drafted = o.status === 'email_drafted';
+    body += '<li class="oj-step ' + stepState(!before, before) + '" id="oj-email"><div class="oj-step-head"><span class="oj-step-n">3</span><strong>Email 1 — to ' + esc(r.applicantEmail || '') + '</strong>'
+      + (drafted ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>';
+    if (before && c.assign) {
+      body += '<div class="oj-field"><label for="oj-e-subject">Subject</label><input id="oj-e-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
+        + '<div class="oj-field"><label for="oj-e-body">Message</label><textarea id="oj-e-body" rows="14">' + esc(E.body || '') + '</textarea>'
+        + '<small>The letter is attached automatically. Edit freely — what you send is what is kept on the record.</small></div>'
+        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' You can still download the letter and send it yourself, then mark it as sent.</div>' : '')
+        + '<div class="oj-actions">'
+        + btn(drafted ? 'Create a fresh Outlook draft' : 'Create the Outlook draft with the letter attached', 'OnboardingJourney.createDraft()', 'oj-btn-primary')
+        + btn('Save the wording', 'OnboardingJourney.saveEmail()')
+        + btn('Reset to the template', 'OnboardingJourney.resetEmail()', 'oj-btn-quiet')
+        + '</div>';
+      if (drafted) {
+        body += '<div class="ob-note is-info"><strong>Your draft is in Outlook</strong>' + (E.draftedAt ? ' (created ' + esc(fmtDateTime(E.draftedAt)) + ')' : '') + '. Read it over and press Send there, then come back and mark it as sent.'
+          + '<div class="oj-actions">'
+          + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
+          + btn('I have sent it — mark as sent', 'OnboardingJourney.markSent()', 'oj-btn-primary')
+          + '</div></div>';
+      } else {
+        body += '<p class="oj-quiet">Sent it another way? ' + '<button type="button" class="oj-link" onclick="OnboardingJourney.markSent()">Mark as sent</button></p>';
+      }
     } else {
-      body += '<div class="oj-offer-status">'
-        + (o ? '<span class="oj-chip ' + offerChipClass(o.status) + '">' + esc(offerLabel(o)) + '</span>' : '')
-        + (o && o.sentAt ? '<span class="oj-quiet"> sent ' + esc(fmtDateTime(o.sentAt)) + (o.sentByName ? ' by ' + esc(o.sentByName) : '') + (o.reminderCount ? ' · ' + o.reminderCount + ' reminder' + (o.reminderCount === 1 ? '' : 's') : '') + '</span>' : '')
-        + (o && o.firstViewedAt ? '<span class="oj-quiet"> · opened ' + esc(fmtDateTime(o.firstViewedAt)) + '</span>' : '')
-        + (o && o.respondedAt ? '<span class="oj-quiet"> · answered ' + esc(fmtDateTime(o.respondedAt)) + (o.signedName ? ', signed “' + esc(o.signedName) + '”' : '') + '</span>' : '')
-        + '</div>'
-        + (o && o.declineReason ? '<div class="ob-note is-warn">Reason given: ' + esc(o.declineReason) + '</div>' : '')
-        + termsTable((o && o.terms) || d.record.terms || {});
+      body += '<p class="oj-quiet">' + (E.sentAt ? 'Sent ' + esc(fmtDateTime(E.sentAt)) : 'Not yet sent') + (E.subject ? ' · “' + esc(E.subject) + '”' : '') + '</p>'
+        + '<details class="oj-history"><summary>Show the message</summary><pre class="oj-pre">' + esc(E.body || '') + '</pre></details>';
+    }
+    body += '</li>';
 
-      if (S.offerUrl) {
-        body += '<div class="ob-note is-info"><strong>Response link</strong> (shown once — copy it if you need to deliver it yourself):<br>'
-          + '<code class="oj-code">' + esc(S.offerUrl) + '</code> <button type="button" class="oj-btn oj-btn-small" onclick="OnboardingJourney.copy(\'' + jsq(S.offerUrl) + '\')">Copy</button></div>';
-      }
+    // ── Step 1.5: waiting / signed ──
+    var waiting = o.status === 'sent'; var received = o.status === 'signed_received'; var done = o.status === 'accepted';
+    body += '<li class="oj-step ' + stepState(received || done, waiting) + '"><div class="oj-step-head"><span class="oj-step-n">1.5</span><strong>Waiting for the signed letter</strong>'
+      + (waiting ? '<span class="oj-chip is-employee">With the employee</span>' : '') + '</div>';
+    if (waiting) {
+      body += '<p class="oj-quiet">Sent ' + esc(fmtDateTime(E.sentAt || o.sentAt)) + '. The email asks for the signed letter within 48 hours.</p>';
+    }
+    if ((waiting || received || before) && c.assign) {
+      body += '<div class="oj-actions"><label class="oj-btn ' + (waiting ? 'oj-btn-primary' : '') + ' oj-file">' + (received ? 'Replace the signed letter' : 'Upload the signed letter') + '<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label>'
+        + (waiting ? btn('Not sent after all', 'OnboardingJourney.unmarkSent()', 'oj-btn-quiet') : '')
+        + (waiting || received ? btn('They declined', 'OnboardingJourney.declineOffer()', 'oj-btn-quiet') : '')
+        + '</div>';
+    }
+    body += '</li>';
 
-      var acts = [];
-      if (editable) acts.push(btn(o && ['declined', 'withdrawn'].indexOf(o.status) !== -1 ? 'Issue a revised offer' : 'Edit the terms', 'OnboardingJourney.editTerms()'));
-      if (c.assign && o && o.status === 'draft') acts.push(btn('Approve the letter', 'OnboardingJourney.approveOffer()', 'oj-btn-primary'));
-      if (c.assign && o && o.status === 'approved') acts.push(btn('Send the letter of offer', 'OnboardingJourney.sendOffer()', 'oj-btn-primary'));
-      if (c.assign && o && o.status === 'sent') acts.push(btn(o.linkLive ? 'Send a reminder' : 'Send it again (new link)', 'OnboardingJourney.sendOffer()', 'oj-btn-primary'));
-      if (c.assign && o && ['draft', 'approved', 'sent'].indexOf(o.status) !== -1) acts.push(btn('Withdraw', 'OnboardingJourney.withdrawOffer()', 'oj-btn-quiet'));
-      if (c.assign && o && ['draft', 'approved'].indexOf(o.status) !== -1) acts.push(btn('No letter needed — go to documentation', 'OnboardingJourney.skipOffer()', 'oj-btn-quiet'));
-      if (acts.length) body += '<div class="oj-actions">' + acts.join('') + '</div>';
+    // ── Verify ──
+    var Sg = d.signed;
+    body += '<li class="oj-step ' + stepState(done, received) + '"><div class="oj-step-head"><span class="oj-step-n">✓</span><strong>Verify the signed letter</strong>'
+      + (done ? '<span class="oj-chip is-done">Verified ' + esc(fmtDateTime(o.verifiedAt)) + '</span>' : '') + '</div>';
+    if (Sg) {
+      body += '<p class="oj-quiet">' + esc(Sg.fileName) + ' · ' + Math.round((Sg.size || 0) / 1024) + ' KB · received ' + esc(fmtDateTime(Sg.uploadedAt)) + (Sg.uploadedByName ? ' by ' + esc(Sg.uploadedByName) : '') + '</p>'
+        + '<div class="oj-actions">' + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
+        + (received && c.assign ? btn('Verify — phase 1 complete, start the documentation', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '')
+        + '</div>';
+    } else {
+      body += '<p class="oj-quiet">Once the signed letter is uploaded, check it here and verify it.</p>';
+    }
+    body += '</li></ol>';
 
-      if (d.letterHtml) {
-        body += '<details class="oj-letter-preview"><summary>Preview the letter as the employee will read it</summary>'
-          + '<div class="oj-letter">' + d.letterHtml + '</div></details>';
-      }
-      if (d.offerHistory && d.offerHistory.length > 1) {
-        body += '<details class="oj-history"><summary>Previous versions (' + (d.offerHistory.length - 1) + ')</summary><ul>'
-          + d.offerHistory.filter(function (h) { return !o || h.id !== o.id; }).map(function (h) {
-            return '<li>v' + h.version + ' — ' + esc(offerLabel(h)) + (h.respondedAt ? ' ' + esc(fmtDate(h.respondedAt)) : h.withdrawnAt ? ' ' + esc(fmtDate(h.withdrawnAt)) : '') + '</li>';
-          }).join('') + '</ul></details>';
-      }
+    if (c.assign && !done) {
+      body += '<div class="oj-actions oj-actions-quiet">' + btn('Withdraw the offer', 'OnboardingJourney.withdrawOffer()', 'oj-btn-quiet')
+        + (before ? btn('No letter needed — go straight to documentation', 'OnboardingJourney.skipOffer()', 'oj-btn-quiet') : '') + '</div>';
+    }
+    if (d.offerHistory && d.offerHistory.length > 1) {
+      body += '<details class="oj-history"><summary>Previous versions (' + (d.offerHistory.length - 1) + ')</summary><ul>'
+        + d.offerHistory.filter(function (h) { return h.id !== o.id; }).map(function (h) {
+          return '<li>v' + h.version + ' — ' + esc(offerLabel(h)) + (h.respondedAt ? ' ' + esc(fmtDate(h.respondedAt)) : h.withdrawnAt ? ' ' + esc(fmtDate(h.withdrawnAt)) : '') + '</li>';
+        }).join('') + '</ul></details>';
     }
     return stagePanel(1, 'Letter of Offer', st, body);
   }
 
   function offerLabel(o) {
-    return { draft: 'Draft — awaiting approval', approved: 'Approved — not yet sent', sent: 'Sent — awaiting response',
-      accepted: 'Accepted', declined: 'Declined', withdrawn: 'Withdrawn', not_required: 'Not required' }[o.status] || titleCase(o.status);
+    return { draft: 'Letter ready — Email 1 not yet drafted', approved: 'Letter ready — Email 1 not yet drafted',
+      email_drafted: 'Email 1 drafted in Outlook', sent: 'Sent — awaiting the signed letter', signed_received: 'Signed letter received — verify it',
+      accepted: 'Signed and verified', declined: 'Declined', withdrawn: 'Withdrawn', not_required: 'Not required' }[o.status] || titleCase(o.status);
   }
   function offerChipClass(s) {
     return s === 'accepted' || s === 'not_required' ? 'is-done' : s === 'declined' || s === 'withdrawn' ? 'is-danger' : s === 'sent' ? 'is-employee' : 'is-you';
@@ -714,14 +803,87 @@
     return false;
   }
 
-  function approveOffer() { return act('/offer/approve', {}, 'Letter approved. Send it when you are ready.'); }
+  /** Preview the letter as the employee will read it (docx-preview, in the modal). */
+  function previewLetter() {
+    var L = S.record && S.record.letter;
+    if (!L) return;
+    if (global.DocPreview && typeof global.DocPreview.open === 'function') {
+      global.DocPreview.open({ kind: 'docx', url: L.previewUrl + '?rev=' + Date.now(), downloadUrl: L.downloadUrl, title: 'Letter of Offer — ' + (S.record.record.applicantName || ''), meta: L.source === 'uploaded' ? 'Your edited copy' : 'Generated from the template' });
+    } else {
+      global.open(L.downloadUrl, '_blank');
+    }
+  }
+  function previewSigned() {
+    var Sg = S.record && S.record.signed;
+    if (!Sg) return;
+    if (Sg.previewKind && global.DocPreview && typeof global.DocPreview.open === 'function') {
+      global.DocPreview.open({ kind: Sg.previewKind, url: Sg.previewUrl + '?rev=' + Date.now(), downloadUrl: Sg.downloadUrl, title: 'Signed Letter of Offer', meta: Sg.fileName });
+    } else {
+      global.open(Sg.previewUrl, '_blank');
+    }
+  }
 
-  async function sendOffer() {
-    var res = await act('/offer/send', {}, null);
+  function readFileAsBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result).split(',')[1] || ''); };
+      fr.onerror = function () { reject(new Error('read failed')); };
+      fr.readAsDataURL(file);
+    });
+  }
+  var MIMES = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+
+  async function uploadTo(input, path, kindLabel) {
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('That file is larger than 10 MB.', true); input.value = ''; return; }
+    var ext = String(file.name).split('.').pop().toLowerCase();
+    var mime = MIMES[ext] || file.type;
+    toast('Uploading ' + kindLabel + '…');
+    var b64;
+    try { b64 = await readFileAsBase64(file); } catch (_) { toast('The file could not be read.', true); return; }
+    var res = await act(path, { fileName: file.name, fileMime: mime, fileData: b64 }, kindLabel + ' stored.');
+    input.value = '';
+    return res;
+  }
+  function uploadLetter(input) { return uploadTo(input, '/offer/letter', 'Edited letter'); }
+  function uploadSigned(input) { return uploadTo(input, '/offer/signed', 'Signed letter'); }
+  function discardLetter() {
+    if (!global.confirm('Discard the uploaded edit and go back to the generated letter?')) return;
+    return act('/offer/letter', {}, 'Using the generated letter again.', 'DELETE');
+  }
+
+  function readEmail() {
+    var sub = doc.getElementById('oj-e-subject'); var body = doc.getElementById('oj-e-body');
+    return { subject: sub ? sub.value.trim() : undefined, body: body ? body.value : undefined };
+  }
+  function saveEmail() { return act('/offer/email', readEmail(), 'Email wording saved.', 'PUT'); }
+  function resetEmail() { return act('/offer/email/reset', {}, 'Email reset to the template.'); }
+
+  async function createDraft() {
+    var e = readEmail();
+    if (e.subject !== undefined && !e.subject) return toast('Give the email a subject.', true);
+    if (e.body !== undefined && !e.body.trim()) return toast('The email needs a message.', true);
+    var res = await act('/offer/email/draft', e, null);
     if (!res) return;
-    if (res.offerUrl) S.offerUrl = res.offerUrl;
-    if (res.delivery) toast(res.delivery.message, res.delivery.status === 'failed');
-    var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane);
+    if (res.delivery) {
+      toast(res.delivery.message, false);
+      if (res.delivery.webLink) global.open(res.delivery.webLink, '_blank', 'noopener');
+    }
+  }
+  function markSent() {
+    if (!global.confirm('Mark the letter of offer as sent? The record moves to waiting for the signed copy.')) return;
+    return act('/offer/mark-sent', {}, 'Marked as sent. Waiting for the signed letter.');
+  }
+  function unmarkSent() { return act('/offer/unmark-sent', {}, 'Back to not sent.'); }
+  function verifyOffer() {
+    if (!global.confirm('Verify the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.')) return;
+    return act('/offer/verify', {}, function (r) { return (r.release && r.release.message) || 'Verified.'; });
+  }
+  function declineOffer() {
+    var reason = global.prompt('Record that the candidate declined. Reason (optional):');
+    if (reason === null) return;
+    return act('/offer/decline', { reason: reason || undefined }, 'Recorded as declined.');
   }
 
   function withdrawOffer() {
@@ -788,7 +950,9 @@
     filter: setFilter,
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
-    approveOffer: approveOffer, sendOffer: sendOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
+    previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
+    saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
+    verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,

@@ -5,19 +5,25 @@
  *
  *   /api/onboarding/journey/*    the Owner's board and one record's command
  *                                centre (session + onboarding.* permission)
- *   /api/onboarding-offer/*      the candidate's response to a letter of offer
- *                                (public, token-only, rate limited)
+ *
+ * PHASE 1 — THE LETTER OF OFFER
+ * ─────────────────────────────
+ *   terms → letter (.docx, from the template, regenerated whenever the terms
+ *   change) → preview / download / edit in Word / upload back → Email 1
+ *   (Opal's wording, editable) → an Outlook DRAFT with the letter attached →
+ *   the Owner sends it from Outlook and marks it sent → stage 1.5, waiting →
+ *   the signed letter is uploaded and stored → the Owner verifies it → the
+ *   release (034's act) runs by itself and Stage 2 begins.
  *
  * WHAT IS AUTOMATIC HERE
  * ──────────────────────
- *  • Start Onboarding creates the record AND the first letter-of-offer draft
- *    from the same details; the package is chosen by recommendation.
- *  • Accepting the offer performs the release (034's act) — account,
- *    invitation, requirement set — with no Owner click in between. If the
- *    release is refused (an unpublished policy, say) the acceptance is still
- *    recorded and the record's "next" line tells the Owner to release by hand.
- *  • Reaching the induction stage generates the checklist.
- *  • The last induction task closes the record.
+ *  • Start Onboarding creates the record AND the letter from the same
+ *    details; the package is chosen by recommendation.
+ *  • Verifying the signed letter performs the release — account, invitation,
+ *    requirement set — with no further click. If the release is refused (an
+ *    unpublished policy, say) the record's "next" line says so.
+ *  • Reaching the induction stage generates the checklist; the last task
+ *    closes the record.
  *
  * Every state-changing act is audited with ids only, never names or emails.
  */
@@ -34,9 +40,11 @@ const engine = require('./onboarding-engine');
 const journey = require('./onboarding-journey');
 const lifecycle = require('./onboarding-lifecycle');
 const letter = require('./onboarding-offer-letter');
-const { auditOnboarding, safeMetadata } = require('./onboarding-audit');
+const offerDocx = require('./onboarding-offer-docx');
+const offerEmail = require('./onboarding-offer-email');
+const graphMail = require('./graph-mail');
+const { auditOnboarding } = require('./onboarding-audit');
 const { requireAuth, requirePermission, hasPermission } = require('./permissions');
-const { inviteRateLimit } = require('./onboarding-employee-routes');
 const log = require('./logger').createLogger('onboarding-journey');
 
 const orgOf = (req) => req.user?.organisation_id || null;
@@ -88,10 +96,56 @@ function offerRow(o) {
     respondedAt: o.responded_at, signedName: o.signed_name || null,
     declineReason: o.decline_reason || null,
     withdrawnAt: o.withdrawn_at, withdrawReason: o.withdraw_reason || null,
-    linkExpiresAt: o.token_expires_at,
-    linkLive: !!o.response_token_hash && (!o.token_expires_at || new Date(o.token_expires_at) > new Date()),
+    email: {
+      subject: o.email_subject || null, body: o.email_body || null,
+      draftId: o.email_draft_id || null, webLink: o.email_web_link || null,
+      draftedAt: o.email_drafted_at || null, sentAt: o.email_sent_at || null,
+    },
+    signedReceivedAt: o.signed_received_at || null,
+    verifiedAt: o.verified_at || null,
     createdAt: o.created_at,
   };
+}
+
+function documentRow(d) {
+  if (!d) return null;
+  return {
+    id: d.id, kind: d.kind, fileName: d.file_name, mime: d.file_mime, size: d.file_size_bytes,
+    sha256: d.file_sha256, uploadedAt: d.uploaded_at, uploadedByName: d.uploaded_by_name || null,
+    previewKind: d.file_mime === 'application/pdf' ? 'pdf' : (d.file_mime === offerDocx.DOCX_MIME ? 'docx' : null),
+  };
+}
+
+/** The practice signatory for the letter: settings first, then the module default. */
+function signatoryFrom(settings) {
+  const st = settings || {};
+  return {
+    name: st.offerSignatoryName || offerDocx.DEFAULT_SIGNATORY.name,
+    title: st.offerSignatoryTitle || offerDocx.DEFAULT_SIGNATORY.title,
+    email: st.offerSignatoryEmail || offerDocx.DEFAULT_SIGNATORY.email,
+    phone: st.offerSignatoryPhone || offerDocx.DEFAULT_SIGNATORY.phone,
+  };
+}
+
+/**
+ * The letter as it stands: the uploaded edit if there is one, else composed
+ * fresh from the terms — so a change to the terms is always a change to the
+ * letter, and an edit made in Word is never silently overwritten.
+ */
+async function currentLetter(assignment, offer) {
+  const edited = await jdb.getLiveOfferDocument(offer.id, 'letter');
+  if (edited) {
+    const bytes = await jdb.readOfferDocumentBytes(edited);
+    if (bytes) return { bytes, fileName: edited.file_name, source: 'uploaded', document: edited };
+  }
+  const settings = await odb.getOnboardingSettings();
+  const issuedAt = offer.email_sent_at || offer.email_drafted_at || new Date();
+  const bytes = await offerDocx.buildOfferDocx({
+    terms: offer.terms || {}, issuedAt, signatory: signatoryFrom(settings),
+    applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
+    isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
+  });
+  return { bytes, fileName: offerDocx.offerFileName(assignment.applicant_name, issuedAt), source: 'generated', document: null };
 }
 
 function taskRow(t) {
@@ -168,16 +222,13 @@ async function recordDetail(req, assignment) {
   tasks = await ensureInduction(assignment, tasks);
 
   const j = journey.projectJourney({ assignment, offer, requirements, tasks });
-  const org = await orgName(assignment.organisation_id);
   const s = shape();
-  const preview = offer
-    ? letter.renderOfferLetter({
-      terms: offer.terms, applicantName: assignment.applicant_name, orgName: org,
-      issuedAt: offer.sent_at || offer.approved_at || offer.created_at,
-      signatoryName: offer.approved_by_name || offer.sent_by_name || null,
-      respondBy: offer.token_expires_at,
-    })
-    : null;
+  const [editedLetter, signed] = offer
+    ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed')])
+    : [null, null];
+  const emailDefault = offerEmail.composeOfferEmail({
+    applicantName: assignment.applicant_name, positionTitle: assignment.job_title,
+  });
 
   return {
     ok: true,
@@ -191,7 +242,27 @@ async function recordDetail(req, assignment) {
     },
     offer: offerRow(offer),
     offerHistory: offers.map(offerRow),
-    letterHtml: preview ? preview.html : null,
+    letter: offer ? {
+      source: editedLetter ? 'uploaded' : 'generated',
+      fileName: editedLetter ? editedLetter.file_name : offerDocx.offerFileName(assignment.applicant_name, offer.email_sent_at || new Date()),
+      uploaded: documentRow(editedLetter),
+      templateVersion: offerDocx.TEMPLATE_VERSION,
+      previewUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/preview.docx`,
+      downloadUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/download`,
+    } : null,
+    emailDefault,
+    email: offer ? {
+      subject: offer.email_subject || emailDefault.subject,
+      body: offer.email_body || emailDefault.body,
+      draftId: offer.email_draft_id || null, webLink: offer.email_web_link || null,
+      draftedAt: offer.email_drafted_at || null, sentAt: offer.email_sent_at || null,
+      outlook: { available: graphMail.isAvailable(req.user), reason: graphMail.unavailableReason(req.user) },
+    } : null,
+    signed: signed ? {
+      ...documentRow(signed),
+      previewUrl: `/api/onboarding/journey/records/${assignment.id}/offer/signed/preview`,
+      downloadUrl: `/api/onboarding/journey/records/${assignment.id}/offer/signed/download`,
+    } : null,
     journey: j,
     sections: s.groupSections(requirements),
     tasks: tasks.map(taskRow),
@@ -457,7 +528,9 @@ router.put('/api/onboarding/journey/records/:id/offer', requirePermission('onboa
 
   const current = await jdb.getCurrentOffer(assignment.id);
   let offer;
-  if (current && ['draft', 'approved'].includes(current.status)) {
+  if (current && ['draft', 'approved', 'email_drafted'].includes(current.status)) {
+    // The letter regenerates from the new terms; an Outlook draft made from
+    // the old letter is forgotten so it cannot be sent by mistake.
     offer = await jdb.updateOfferTerms(current.id, terms);
   } else if (!current || ['declined', 'withdrawn'].includes(current.status)) {
     offer = await jdb.createOfferDraft({
@@ -465,7 +538,7 @@ router.put('/api/onboarding/journey/records/:id/offer', requirePermission('onboa
     });
   } else {
     return res.status(409).json({
-      error: `The offer has been ${current.status}. Withdraw it before changing the terms.`, code: 'offer_' + current.status,
+      error: `The letter has been ${current.status.replace(/_/g, ' ')}. Withdraw it before changing the terms.`, code: 'offer_' + current.status,
     });
   }
 
@@ -489,81 +562,315 @@ router.put('/api/onboarding/journey/records/:id/offer', requirePermission('onboa
   res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
 }));
 
-router.post('/api/onboarding/journey/records/:id/offer/approve', requirePermission('onboarding.assign'), safe(async (req, res) => {
+// ── The letter itself ───────────────────────────────────────────────────────
+
+/** The letter as a .docx — a preview stream (inline) or a download. */
+async function serveLetter(req, res, disposition) {
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
-  const current = await jdb.getCurrentOffer(assignment.id);
-  if (!current || current.status !== 'draft') {
-    return res.status(409).json({ error: 'There is no draft letter of offer to approve.', code: 'no_draft' });
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer) return res.status(409).json({ error: 'There is no letter of offer on this record yet.', code: 'no_offer' });
+  let out;
+  try {
+    out = await currentLetter(assignment, offer);
+  } catch (err) {
+    log.error('letter of offer could not be composed', { error: err, assignmentId: assignment.id });
+    return res.status(500).json({ error: 'The letter could not be generated.', code: 'generation_failed' });
   }
-  const offer = await jdb.approveOffer(current.id, req.user.id);
-  await auditOnboarding(req, 'offer_approved', {
+  let bytes = out.bytes;
+  if (disposition === 'inline' && out.source === 'generated') {
+    // Explicit page breaks for the browser preview only; the download is untouched.
+    try { bytes = await require('./fca/preview-pagination').paginateForPreview(bytes); } catch (_) { /* preview only */ }
+  }
+  noStore(res);
+  res.set('Content-Type', offerDocx.DOCX_MIME);
+  res.set('Content-Length', String(bytes.length));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(out.fileName)}"`);
+  res.send(bytes);
+}
+router.get('/api/onboarding/journey/records/:id/offer/letter/preview.docx', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'inline')));
+router.get('/api/onboarding/journey/records/:id/offer/letter/download', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'attachment')));
+
+const UPLOAD_MIMES = {
+  [offerDocx.DOCX_MIME]: ['docx'],
+  'application/pdf': ['pdf'],
+  'image/png': ['png'],
+  'image/jpeg': ['jpg', 'jpeg'],
+};
+const MAX_UPLOAD_BASE64 = 14 * 1024 * 1024;
+
+/** Validate a base64 upload; returns { buffer, fileName, fileMime } or { error }. */
+function readUpload(body, allowedMimes) {
+  const f = body || {};
+  if (!f.fileData || typeof f.fileData !== 'string') return { error: 'No file was received.' };
+  if (f.fileData.length > MAX_UPLOAD_BASE64) return { error: 'That file is too large (10 MB limit).' };
+  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(f.fileData.slice(0, 1000))) return { error: 'The file could not be read.' };
+  const fileMime = String(f.fileMime || '').toLowerCase();
+  const exts = allowedMimes[fileMime];
+  if (!exts) return { error: `That file type is not accepted. Use ${Object.values(allowedMimes).flat().map((e) => e.toUpperCase()).join(', ')}.` };
+  const fileName = String(f.fileName || '').trim().slice(0, 255);
+  if (!fileName || /[/\\]|\.\./.test(fileName)) return { error: 'The file name is not valid.' };
+  const ext = fileName.split('.').pop().toLowerCase();
+  if (!exts.includes(ext)) return { error: 'The file name does not match its type.' };
+  const buffer = Buffer.from(f.fileData, 'base64');
+  if (!buffer.length) return { error: 'The file is empty.' };
+  return { buffer, fileName, fileMime };
+}
+
+/** Upload a letter edited in Word. It becomes the attachment until the terms change. */
+router.post('/api/onboarding/journey/records/:id/offer/letter', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['draft', 'approved', 'email_drafted'].includes(offer.status)) {
+    return res.status(409).json({ error: 'The letter can only be replaced before it is sent.', code: 'not_editable' });
+  }
+  const up = readUpload(req.body, { [offerDocx.DOCX_MIME]: ['docx'] });
+  if (up.error) return res.status(400).json({ error: up.error });
+  // It must still be a Word package; a renamed file is refused.
+  try { await require('jszip').loadAsync(up.buffer); } catch (_) { return res.status(400).json({ error: 'That is not a Word document.' }); }
+
+  const doc = await jdb.storeOfferDocument({
+    organisationId: orgOf(req), offerId: offer.id, assignmentId: assignment.id, kind: 'letter',
+    fileName: up.fileName, fileMime: up.fileMime, buffer: up.buffer, uploadedBy: req.user.id,
+  });
+  // A draft in Outlook carries the old letter; it has to be made again.
+  if (offer.status === 'email_drafted') await jdb.resetOfferToDraft(offer.id);
+  await auditOnboarding(req, 'offer_letter_uploaded', {
     targetType: 'onboarding_offer', targetId: offer.id,
-    metadata: { assignmentId: assignment.id, version: offer.version },
+    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes },
+  });
+  res.status(201).json(await recordDetail(req, assignment));
+}));
+
+/** Discard the uploaded edit and go back to the generated letter. */
+router.delete('/api/onboarding/journey/records/:id/offer/letter', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['draft', 'approved', 'email_drafted'].includes(offer.status)) {
+    return res.status(409).json({ error: 'The letter can only be changed before it is sent.', code: 'not_editable' });
+  }
+  const removed = await jdb.removeOfferDocument(offer.id, 'letter');
+  if (removed && offer.status === 'email_drafted') await jdb.resetOfferToDraft(offer.id);
+  await auditOnboarding(req, 'offer_letter_upload_discarded', { targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id } });
+  res.json(await recordDetail(req, assignment));
+}));
+
+// ── Email 1 ─────────────────────────────────────────────────────────────────
+
+/** Save the Owner's edits to Email 1 (subject and body) without drafting yet. */
+router.put('/api/onboarding/journey/records/:id/offer/email', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['draft', 'approved', 'email_drafted'].includes(offer.status)) {
+    return res.status(409).json({ error: 'Email 1 can only be edited before it is sent.', code: 'not_editable' });
+  }
+  const subject = str(req.body?.subject, 250);
+  const body = typeof req.body?.body === 'string' ? req.body.body.slice(0, 20000) : null;
+  if (!subject) return res.status(400).json({ error: 'A subject is required.' });
+  if (!body || !body.trim()) return res.status(400).json({ error: 'The email body cannot be empty.' });
+  await jdb.saveOfferEmail(offer.id, { subject, body });
+  res.json(await recordDetail(req, assignment));
+}));
+
+/** Reset Email 1 to Opal's template wording. */
+router.post('/api/onboarding/journey/records/:id/offer/email/reset', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer) return notFound(res);
+  await jdb.saveOfferEmail(offer.id, { subject: null, body: null });
+  res.json(await recordDetail(req, assignment));
+}));
+
+/**
+ * THE ONE BUTTON. Create the Outlook draft: Email 1 as it stands, the current
+ * letter attached. Nothing is sent — the Owner reads it in Outlook and presses
+ * Send there.
+ */
+router.post('/api/onboarding/journey/records/:id/offer/email/draft', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['draft', 'approved', 'email_drafted'].includes(offer.status)) {
+    return res.status(409).json({ error: 'This offer has already been sent.', code: 'already_sent' });
+  }
+
+  const reason = graphMail.unavailableReason(req.user);
+  if (reason) return res.status(409).json({ error: reason, code: 'graph_unavailable' });
+  const accessToken = await graphMail.getAccessToken(req.user);
+  if (!accessToken) {
+    return res.status(409).json({ error: 'Your Microsoft connection needs renewing. Reconnect Outlook in Settings and try again.', code: 'graph_no_token' });
+  }
+
+  // The body may arrive edited with this click, or have been saved earlier.
+  const d = offerEmail.composeOfferEmail({ applicantName: assignment.applicant_name, positionTitle: assignment.job_title });
+  const subject = str(req.body?.subject, 250) || offer.email_subject || d.subject;
+  const body = (typeof req.body?.body === 'string' && req.body.body.trim()) ? req.body.body.slice(0, 20000) : (offer.email_body || d.body);
+
+  let letterOut;
+  try {
+    letterOut = await currentLetter(assignment, offer);
+  } catch (err) {
+    log.error('letter of offer could not be composed for the draft', { error: err, assignmentId: assignment.id });
+    return res.status(500).json({ error: 'The letter could not be generated.', code: 'generation_failed' });
+  }
+  if (letterOut.bytes.length > graphMail.MAX_SIMPLE_ATTACHMENT_BYTES) {
+    return res.status(413).json({ error: 'The letter is too large to attach through Outlook.', code: 'attachment_too_large' });
+  }
+
+  const draft = await graphMail.createDraft({
+    accessToken, to: assignment.applicant_email, subject, html: offerEmail.bodyToHtml(body),
+    attachment: letterOut.bytes, attachmentName: letterOut.fileName, attachmentMime: offerDocx.DOCX_MIME,
+  });
+
+  await wdb.recordDispatch({
+    organisationId: orgOf(req), assignmentId: assignment.id, kind: 'letter_of_offer',
+    toEmail: assignment.applicant_email, subject, method: 'graph_draft',
+    status: draft.ok ? 'draft_created' : 'failed', attachmentIncluded: true, attachmentBytes: letterOut.bytes.length,
+    providerDraftId: draft.ok ? draft.id : null, webLink: draft.ok ? draft.webLink : null,
+    errorReason: draft.ok ? null : draft.code, requestedBy: req.user.id,
+  });
+
+  if (!draft.ok) {
+    await auditOnboarding(req, 'offer_email_draft_failed', {
+      targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, reason: draft.code },
+    });
+    return res.status(502).json({ error: draft.reason || 'Outlook did not accept the draft.', code: draft.code || 'graph_error' });
+  }
+
+  await jdb.markEmailDrafted(offer.id, {
+    actorId: req.user.id, draftId: draft.id, webLink: draft.webLink, subject, body,
+    templateVersion: letterOut.source === 'generated' ? offerDocx.TEMPLATE_VERSION : null,
+  });
+  await auditOnboarding(req, 'offer_email_drafted', {
+    targetType: 'onboarding_offer', targetId: offer.id,
+    metadata: { assignmentId: assignment.id, version: offer.version, letterSource: letterOut.source, attachmentBytes: letterOut.bytes.length },
+  });
+  res.status(201).json({
+    ...(await recordDetail(req, assignment)),
+    delivery: { status: 'draft_created', webLink: draft.webLink, message: 'A draft is waiting in your Outlook. Read it over and press Send, then mark it as sent here.' },
+  });
+}));
+
+/** The Owner sent it from Outlook. Stage 1.5 — waiting for the signed copy. */
+router.post('/api/onboarding/journey/records/:id/offer/mark-sent', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['email_drafted', 'draft', 'approved'].includes(offer.status)) {
+    return res.status(409).json({ error: 'This offer is not waiting to be sent.', code: 'not_sendable' });
+  }
+  const updated = await jdb.markOfferSent(offer.id, { actorId: req.user.id, toEmail: assignment.applicant_email });
+  await wdb.recordDispatch({
+    organisationId: orgOf(req), assignmentId: assignment.id, kind: 'letter_of_offer',
+    toEmail: assignment.applicant_email, subject: offer.email_subject || offerEmail.SUBJECT, method: 'manual',
+    status: 'sent', attachmentIncluded: true, requestedBy: req.user.id,
+  });
+  await auditOnboarding(req, 'offer_marked_sent', {
+    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: updated.version, hadOutlookDraft: !!offer.email_draft_id },
   });
   res.json(await recordDetail(req, assignment));
 }));
 
-/** Send (or re-send) the approved letter. Mints a fresh response link each time. */
-router.post('/api/onboarding/journey/records/:id/offer/send', requirePermission('onboarding.assign'), safe(async (req, res) => {
+router.post('/api/onboarding/journey/records/:id/offer/unmark-sent', requirePermission('onboarding.assign'), safe(async (req, res) => {
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
-  const current = await jdb.getCurrentOffer(assignment.id);
-  if (!current || !['approved', 'sent'].includes(current.status)) {
-    return res.status(409).json({ error: 'Approve the letter of offer before sending it.', code: 'not_approved' });
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || offer.status !== 'sent') return res.status(409).json({ error: 'This offer is not marked as sent.', code: 'not_sent' });
+  await jdb.unmarkOfferSent(offer.id);
+  await auditOnboarding(req, 'offer_unmarked_sent', { targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id } });
+  res.json(await recordDetail(req, assignment));
+}));
+
+// ── The signed letter ───────────────────────────────────────────────────────
+
+router.post('/api/onboarding/journey/records/:id/offer/signed', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['sent', 'signed_received', 'email_drafted', 'draft', 'approved'].includes(offer.status)) {
+    return res.status(409).json({ error: 'This offer is not waiting for a signed letter.', code: 'not_waiting' });
   }
-  const isReminder = current.status === 'sent';
-  const days = Number(req.body?.days) || 14;
-  const minted = await jdb.markOfferSent(current.id, { actorId: req.user.id, toEmail: assignment.applicant_email, days });
-  if (!minted) return res.status(409).json({ error: 'The offer could not be sent.', code: 'not_sendable' });
+  const up = readUpload(req.body, UPLOAD_MIMES);
+  if (up.error) return res.status(400).json({ error: up.error });
 
-  const org = await orgName(assignment.organisation_id);
-  let outcome;
-  try {
-    const r = await email.sendOfferEmail({
-      toEmail: assignment.applicant_email, token: minted.token,
-      displayName: assignment.applicant_name, roleTitle: assignment.job_title,
-      orgName: org, expiresAt: minted.offer.token_expires_at, isReminder,
-    });
-    outcome = r.skipped
-      ? { status: 'skipped', message: 'Email is not configured. Copy the link and send it yourself.', subject: r.subject }
-      : { status: 'sent', messageId: r.messageId, message: `Letter of offer sent to ${assignment.applicant_email}.`, subject: r.subject };
-  } catch (err) {
-    log.warn('offer email failed', { error: err, assignmentId: assignment.id });
-    outcome = { status: 'failed', message: 'The email could not be sent. The link below still works — you can deliver it yourself.', subject: null };
-  }
-
-  await wdb.recordDispatch({
-    organisationId: orgOf(req), assignmentId: assignment.id,
-    kind: isReminder ? 'offer_reminder' : 'letter_of_offer', toEmail: assignment.applicant_email,
-    subject: outcome.subject || 'Letter of offer', method: 'smtp', status: outcome.status,
-    providerMessageId: outcome.messageId || null,
-    errorReason: outcome.status === 'failed' ? 'smtp_error' : null,
-    requestedBy: req.user.id,
+  const doc = await jdb.storeOfferDocument({
+    organisationId: orgOf(req), offerId: offer.id, assignmentId: assignment.id, kind: 'signed',
+    fileName: up.fileName, fileMime: up.fileMime, buffer: up.buffer, uploadedBy: req.user.id,
   });
-  await auditOnboarding(req, isReminder ? 'offer_reminder_sent' : 'offer_sent', {
-    targetType: 'onboarding_offer', targetId: minted.offer.id,
-    metadata: {
-      assignmentId: assignment.id, version: minted.offer.version,
-      emailSent: outcome.status === 'sent', emailSkipped: outcome.status === 'skipped', emailFailed: outcome.status === 'failed',
-    },
+  await jdb.markSignedReceived(offer.id);
+  await auditOnboarding(req, 'offer_signed_received', {
+    targetType: 'onboarding_offer', targetId: offer.id,
+    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes },
   });
+  res.status(201).json(await recordDetail(req, assignment));
+}));
 
+async function serveSigned(req, res, disposition) {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  const doc = offer ? await jdb.getLiveOfferDocument(offer.id, 'signed') : null;
+  const bytes = doc ? await jdb.readOfferDocumentBytes(doc).catch(() => null) : null;
+  if (!bytes) return res.status(404).json({ error: 'No signed letter has been stored.' });
   noStore(res);
-  const detail = await recordDetail(req, assignment);
-  res.status(outcome.status === 'failed' ? 502 : 200).json({
-    ...detail, ok: outcome.status !== 'failed',
-    delivery: { status: outcome.status, message: outcome.message },
-    // Returned only to the person who sent it, this once.
-    offerUrl: email.buildOfferUrl(minted.token),
+  res.set('Content-Type', doc.file_mime);
+  res.set('Content-Length', String(bytes.length));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(doc.file_name)}"`);
+  res.send(bytes);
+}
+router.get('/api/onboarding/journey/records/:id/offer/signed/preview', requirePermission('onboarding.view'), safe((req, res) => serveSigned(req, res, 'inline')));
+router.get('/api/onboarding/journey/records/:id/offer/signed/download', requirePermission('onboarding.view'), safe((req, res) => serveSigned(req, res, 'attachment')));
+
+/**
+ * VERIFY. The Owner has looked at the signed letter and it is right. Phase 1
+ * is complete, and the release (Stage 2) runs by itself.
+ */
+router.post('/api/onboarding/journey/records/:id/offer/verify', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || offer.status !== 'signed_received') {
+    return res.status(409).json({ error: 'Upload the signed letter before verifying it.', code: 'no_signed_letter' });
+  }
+  const verified = await jdb.verifyOffer(offer.id, req.user.id);
+  await odb.pool.query(
+    `UPDATE onboarding_assignments SET offer_accepted_at = COALESCE(offer_accepted_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
+    [assignment.id]
+  );
+  await auditOnboarding(req, 'offer_verified', {
+    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified.version },
   });
+  const release = await tryRelease(req, await odb.getAssignment(orgOf(req), assignment.id));
+  res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), release });
+}));
+
+/** The candidate said no (by email, by phone). Recorded so the record does not sit in 1.5 forever. */
+router.post('/api/onboarding/journey/records/:id/offer/decline', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer || !['sent', 'signed_received', 'email_drafted'].includes(offer.status)) {
+    return res.status(409).json({ error: 'There is no outstanding offer to decline.', code: 'not_open' });
+  }
+  const declined = await jdb.declineOffer(offer.id, req.body?.reason);
+  await odb.pool.query(`UPDATE onboarding_assignments SET offer_declined_at = NOW(), last_activity_at = NOW() WHERE id = $1`, [assignment.id]);
+  await auditOnboarding(req, 'offer_declined', {
+    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: declined.version, hasReason: !!req.body?.reason },
+  });
+  res.json(await recordDetail(req, assignment));
 }));
 
 router.post('/api/onboarding/journey/records/:id/offer/withdraw', requirePermission('onboarding.assign'), safe(async (req, res) => {
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
   const current = await jdb.getCurrentOffer(assignment.id);
-  if (!current || !['draft', 'approved', 'sent'].includes(current.status)) {
+  if (!current || !['draft', 'approved', 'email_drafted', 'sent', 'signed_received'].includes(current.status)) {
     return res.status(409).json({ error: 'There is no open offer to withdraw.', code: 'no_open_offer' });
   }
   const offer = await jdb.withdrawOffer(current.id, req.user.id, req.body?.reason);
@@ -581,7 +888,7 @@ router.post('/api/onboarding/journey/records/:id/offer/skip', requirePermission(
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
   const current = await jdb.getCurrentOffer(assignment.id);
-  if (!current || !['draft', 'approved'].includes(current.status)) {
+  if (!current || !['draft', 'approved', 'email_drafted'].includes(current.status)) {
     return res.status(409).json({ error: 'Only an unsent offer can be marked as not required.', code: 'not_skippable' });
   }
   const offer = await jdb.markOfferNotRequired(current.id);
@@ -756,143 +1063,5 @@ router.post('/api/onboarding/journey/records/:id/tasks/:code/run', requirePermis
   res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
 }));
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  PUBLIC — the candidate's response
-// ═════════════════════════════════════════════════════════════════════════════
-
-function offerProblem(o) {
-  if (!o) return { status: 404, code: 'invalid', message: 'This offer link is not valid.' };
-  if (o.status === 'accepted') return { status: 410, code: 'answered', message: 'This offer has already been accepted. Thank you!' };
-  if (o.status === 'declined') return { status: 410, code: 'answered', message: 'This offer has already been answered.' };
-  if (o.status === 'withdrawn') return { status: 410, code: 'withdrawn', message: 'This offer has been withdrawn. Please contact the practice.' };
-  if (o.status !== 'sent') return { status: 410, code: 'invalid', message: 'This offer link is not valid.' };
-  if (o.token_expires_at && new Date(o.token_expires_at) <= new Date()) {
-    return { status: 410, code: 'expired', message: 'This offer link has expired. Please ask the practice to send it again.' };
-  }
-  if (['cancelled', 'archived'].includes(o.assignment_status)) {
-    return { status: 410, code: 'cancelled', message: 'This offer is no longer open. Please contact the practice.' };
-  }
-  return null;
-}
-
-async function publicAudit(o, action, metadata, req) {
-  try {
-    await db.logAuditEvent({
-      actorUserId: null, action: `onboarding.${action}`, targetType: 'onboarding_offer', targetId: o.id,
-      organisationId: o.org_id || null, ipAddress: req.ip, metadata: safeMetadata(metadata),
-    });
-  } catch (err) { log.warn('audit write failed', { error: err, action }); }
-}
-
-router.post('/api/onboarding-offer/check', inviteRateLimit, safe(async (req, res) => {
-  noStore(res);
-  const o = await jdb.getOfferByToken(req.body?.token);
-  const problem = offerProblem(o);
-  if (problem) return res.status(problem.status).json({ ok: false, code: problem.code, error: problem.message });
-
-  await jdb.markOfferViewed(o.id);
-  const { rows } = await odb.pool.query('SELECT name FROM users WHERE id = $1', [o.approved_by || o.sent_by]);
-  const rendered = letter.renderOfferLetter({
-    terms: o.terms, applicantName: o.applicant_name, orgName: o.organisation_name,
-    issuedAt: o.sent_at, signatoryName: rows[0]?.name || null, respondBy: o.token_expires_at,
-  });
-  res.json({
-    ok: true,
-    applicantName: o.applicant_name,
-    organisationName: o.organisation_name || 'Opal Therapy',
-    positionTitle: o.terms?.positionTitle || null,
-    expiresAt: o.token_expires_at,
-    letterHtml: rendered.html,
-  });
-}));
-
-router.post('/api/onboarding-offer/respond', inviteRateLimit, safe(async (req, res) => {
-  noStore(res);
-  const b = req.body || {};
-  const o = await jdb.getOfferByToken(b.token);
-  const problem = offerProblem(o);
-  if (problem) return res.status(problem.status).json({ ok: false, code: problem.code, error: problem.message });
-
-  const decision = b.decision === 'accept' ? 'accept' : (b.decision === 'decline' ? 'decline' : null);
-  if (!decision) return res.status(400).json({ ok: false, error: 'Please choose accept or decline.' });
-  const signedName = str(b.signedName, 200);
-  if (decision === 'accept' && (!signedName || signedName.length < 2)) {
-    return res.status(400).json({ ok: false, error: 'Please type your full name to accept the offer.' });
-  }
-
-  const answered = await jdb.respondToOffer(o.id, { decision, signedName, reason: b.reason });
-  if (!answered) return res.status(409).json({ ok: false, code: 'answered', error: 'This offer has already been answered.' });
-
-  await odb.pool.query(
-    decision === 'accept'
-      ? `UPDATE onboarding_assignments SET offer_accepted_at = NOW(), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`
-      : `UPDATE onboarding_assignments SET offer_declined_at = NOW(), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
-    [o.assignment_id]
-  );
-  await publicAudit(o, decision === 'accept' ? 'offer_accepted' : 'offer_declined',
-    { assignmentId: o.assignment_id, version: o.version, hasReason: !!b.reason }, req);
-
-  // Whoever sent the offer hears about the answer.
-  const owner = o.sent_by || o.approved_by || null;
-
-  if (decision === 'decline') {
-    await notify(owner, {
-      type: `onboarding_offer_declined_${o.assignment_id}`,
-      title: 'A letter of offer was declined',
-      message: `${o.applicant_name} has declined the offer. Open the onboarding record to revise or close it.`,
-      severity: 'warning', relatedEntity: 'onboarding_assignment', actionPayload: { assignmentId: o.assignment_id },
-    });
-    return res.json({ ok: true, decision: 'declined', message: 'Thank you for letting us know. The practice has been informed.' });
-  }
-
-  // ACCEPTED → Stage 2 begins by itself. The release is recorded against the
-  // person who sent the offer: they are the one who authorised it.
-  let release = { status: 'pending' };
-  try {
-    const assignment = await odb.getAssignment(o.org_id, o.assignment_id);
-    const { rows } = await odb.pool.query('SELECT id, name, email FROM users WHERE id = $1', [owner]);
-    const actor = rows[0] ? { id: rows[0].id, name: rows[0].name, email: rows[0].email } : null;
-    if (assignment && actor) {
-      const outcome = await lifecycle.releaseAssignment({ org: o.org_id, assignment, actor });
-      release = { status: 'released', emailSent: outcome.emailResult?.sent || false };
-      await db.logAuditEvent({
-        actorUserId: actor.id, action: 'onboarding.assignment_released', targetType: 'onboarding_assignment',
-        targetId: assignment.id, organisationId: o.org_id, ipAddress: req.ip,
-        metadata: safeMetadata({
-          assignmentId: assignment.id, subjectUserId: outcome.userId, inviteId: outcome.invite.id,
-          requirementCount: outcome.issued, emailSent: outcome.emailResult?.sent || false, trigger: 'offer_accepted',
-        }),
-      });
-    } else {
-      release = { status: 'refused', reason: 'no_actor' };
-    }
-  } catch (err) {
-    if (err instanceof lifecycle.LifecycleError) {
-      release = { status: 'refused', reason: err.body?.code || 'refused' };
-      log.warn('automatic release refused after acceptance', { assignmentId: o.assignment_id, code: err.body?.code });
-    } else {
-      log.error('automatic release failed after acceptance', { error: err, assignmentId: o.assignment_id });
-      release = { status: 'failed' };
-    }
-  }
-
-  await notify(owner, {
-    type: `onboarding_offer_accepted_${o.assignment_id}`,
-    title: 'A letter of offer was accepted',
-    message: release.status === 'released'
-      ? `${o.applicant_name} accepted the offer. Their onboarding documentation has been released automatically.`
-      : `${o.applicant_name} accepted the offer. The onboarding documentation could not be released automatically — open the record to release it.`,
-    severity: release.status === 'released' ? 'success' : 'warning',
-    relatedEntity: 'onboarding_assignment', actionPayload: { assignmentId: o.assignment_id },
-  });
-
-  res.json({
-    ok: true, decision: 'accepted',
-    message: release.status === 'released'
-      ? 'Thank you — your acceptance has been recorded. A separate email with a secure link to complete your onboarding is on its way.'
-      : 'Thank you — your acceptance has been recorded. The practice will be in touch with your onboarding details shortly.',
-  });
-}));
-
 module.exports = router;
-module.exports._internals = { tryRelease, ensureInduction, maybeComplete, offerProblem };
+module.exports._internals = { tryRelease, ensureInduction, maybeComplete, currentLetter, readUpload };

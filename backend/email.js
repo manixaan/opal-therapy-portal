@@ -205,65 +205,6 @@ If you weren't expecting this, you can ignore it.
   return { sent: true, messageId: info.messageId, registerUrl };
 }
 
-// ── Email: Letter of offer ──────────────────────────────────────────────────
-
-/** Response URL for an offer token — single source of truth for the shape. */
-function buildOfferUrl(token) {
-  return `${BASE()}/offer?token=${encodeURIComponent(token)}`;
-}
-
-/**
- * Tell a candidate a letter of offer is waiting for them.
- *
- * The TERMS ARE NOT IN THE EMAIL. Salary and employment conditions live behind
- * the link, on a page that answers only to the token, for the same reason the
- * onboarding invitation carries no personal details: an email is forwarded,
- * quoted and archived in places the practice does not control.
- */
-async function sendOfferEmail({ toEmail, token, displayName, roleTitle, orgName, expiresAt, isReminder }) {
-  const offerUrl = buildOfferUrl(token);
-  const org = escapeHtml(orgName || 'Opal Therapy');
-  const greeting = displayName ? `Hi ${escapeHtml(String(displayName).split(' ')[0])},` : 'Hello,';
-  const role = roleTitle ? escapeHtml(roleTitle) : null;
-  const expires = expiresAt ? new Date(expiresAt) : null;
-  const expiresText = expires && !Number.isNaN(expires.getTime())
-    ? expires.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' })
-    : null;
-  const subject = isReminder
-    ? `Reminder: your letter of offer from ${orgName || 'Opal Therapy'}`
-    : `Your letter of offer from ${orgName || 'Opal Therapy'}`;
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 24px; color: #241f1a; }
-  .card { background: #fff; border-radius: 10px; max-width: 560px; margin: 0 auto; padding: 36px 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-  .logo { font-size: 20px; font-weight: 700; color: #0f7c6c; margin-bottom: 28px; }
-  h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 12px; }
-  p { font-size: 15px; line-height: 1.6; color: #3a3a4a; margin: 0 0 14px; }
-  .btn { display: inline-block; background: #0f7c6c; color: #fff !important; text-decoration: none; padding: 13px 26px; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 8px 0 18px; }
-  .url { font-size: 12px; color: #99928a; word-break: break-all; }
-  .footer { font-size: 12px; color: #99928a; margin-top: 28px; border-top: 1px solid #e9e3d9; padding-top: 16px; }
-</style></head>
-<body><div class="card">
-  <div class="logo">🌿 ${org}</div>
-  <h2>${isReminder ? 'A reminder about your offer' : 'Your letter of offer'}</h2>
-  <p>${greeting}</p>
-  <p>${isReminder ? 'Your letter of offer' : 'We are delighted to send you a letter of offer'}${role ? ` for the position of <strong>${role}</strong>` : ''} ${isReminder ? 'is still waiting for your response' : 'is ready for you to read'}. Please use the secure link below to read the full letter and let us know your decision.</p>
-  <a href="${offerUrl}" class="btn">Read my letter of offer →</a>
-  ${expiresText ? `<p>This link is valid until <strong>${escapeHtml(expiresText)}</strong>.</p>` : ''}
-  <p class="url">If the button does not work, copy this address into your browser:<br>${offerUrl}</p>
-  <div class="footer">This email was sent by ${org}. If you were not expecting it, you can safely ignore it.</div>
-</div></body></html>`;
-
-  const text = `${greeting}\n\n${isReminder ? 'Your letter of offer' : 'We are delighted to send you a letter of offer'}${roleTitle ? ` for the position of ${roleTitle}` : ''} ${isReminder ? 'is still waiting for your response' : 'is ready for you to read'}.\n\nRead it and respond here:\n${offerUrl}\n${expiresText ? `\nThis link is valid until ${expiresText}.\n` : ''}\n${orgName || 'Opal Therapy'}`;
-
-  const result = await sendTemplated({ to: toEmail, subject, html, text });
-  return { ...result, offerUrl, subject };
-}
-
 // ── Email: Onboarding invitation ─────────────────────────────────────────────
 
 /** Onboarding URL for an invite token — single source of truth for the shape. */
@@ -900,8 +841,6 @@ module.exports = {
   sendOnboardingInviteEmail,
   sendEmployeeLoginInviteEmail,
   buildOnboardingInviteUrl,
-  sendOfferEmail,
-  buildOfferUrl,
   sendWelcomeEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,

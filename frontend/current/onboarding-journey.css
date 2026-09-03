@@ -188,3 +188,24 @@
 }
 .oj-field input:focus, .oj-field select:focus, .oj-field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .oj-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-top: 12px; }
+
+/* ── Stage 1 steps ───────────────────────────────────────────────────────── */
+.oj-steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.oj-step { border: 1px solid var(--border); border-left-width: 4px; border-radius: 10px; padding: 12px 14px; background: var(--bg, #faf6f0); }
+.oj-step.is-active { border-left-color: #e0a52a; background: var(--panel); }
+.oj-step.is-done { border-left-color: #2f7d4f; }
+.oj-step.is-todo { opacity: .75; }
+.oj-step-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.oj-step-head strong { font-size: 14px; }
+.oj-step-n { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; background: var(--border); color: var(--ink-soft); flex: none; }
+.oj-step.is-active .oj-step-n { background: #e0a52a; color: #fff; }
+.oj-step.is-done .oj-step-n { background: #2f7d4f; color: #fff; }
+.oj-step .oj-field { margin-top: 8px; }
+.oj-step textarea { font-family: inherit; line-height: 1.5; }
+.oj-file { position: relative; cursor: pointer; }
+.oj-link { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.oj-pre { white-space: pre-wrap; font: inherit; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0 0; }
+.oj-more { margin-top: 10px; }
+.oj-more summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.oj-actions-quiet { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px dashed var(--border); }
+a.oj-btn { text-decoration: none; display: inline-block; }

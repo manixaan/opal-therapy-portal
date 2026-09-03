@@ -7,16 +7,19 @@
  * The path the feature exists for:
  *
  *   Owner presses Start Onboarding once → the record AND the letter of offer
- *   draft exist → the Owner approves and sends → the candidate reads the
- *   letter through a token-only page and accepts → the release happens BY
- *   ITSELF (account, invitation, requirement set, employment profile carrying
- *   the offer terms) → the documentation is done → the induction checklist
- *   is generated → activating portal access is one of its tasks → the last
- *   task closes the record.
+ *   exist → the letter is previewed as a real .docx → Email 1 is prepared and
+ *   an Outlook draft is created with the letter attached (Graph stubbed at
+ *   its boundary) → the Owner marks it sent → the signed letter is uploaded
+ *   and stored → the Owner verifies it → the release happens BY ITSELF
+ *   (account, invitation, requirement set, employment profile carrying the
+ *   offer terms) → the documentation is done → the induction checklist is
+ *   generated → activating portal access is one of its tasks → the last task
+ *   closes the record.
  *
- * Alongside it, what must NOT happen: a token answering twice, a therapist
- * reading the board, another organisation reading a record, a viewer ticking
- * off an induction task, and a declined offer silently disappearing.
+ * Alongside it, what must NOT happen: a therapist reading the board, another
+ * organisation reading a record, a viewer ticking off an induction task, a
+ * stale Outlook draft surviving a change of terms, and a declined offer
+ * silently disappearing.
  */
 
 const http = require('http');
@@ -27,6 +30,16 @@ const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
 const { db, truncateAll, seedUser, seedOrganisation, closePool } = require('./helpers');
+const graphMail = require('../../graph-mail');
+const offerDocx = require('../../onboarding-offer-docx');
+
+/** Outlook, stubbed at the Graph boundary: available, and a draft is "created". */
+function stubOutlook() {
+  jest.spyOn(graphMail, 'unavailableReason').mockReturnValue(null);
+  jest.spyOn(graphMail, 'isAvailable').mockReturnValue(true);
+  jest.spyOn(graphMail, 'getAccessToken').mockResolvedValue('token');
+  return jest.spyOn(graphMail, 'createDraft').mockResolvedValue({ ok: true, id: 'AAMk-draft-1', webLink: 'https://outlook.office.com/mail/drafts/1' });
+}
 
 jest.setTimeout(60000);
 
@@ -105,7 +118,6 @@ async function start(agent, over = {}) {
   return res.body;
 }
 
-const tokenFrom = (url) => new URL(url).searchParams.get('token');
 
 beforeAll(() => {
   process.env.ONBOARDING_ENCRYPTION_KEY = 'ef'.repeat(32);
@@ -127,6 +139,8 @@ beforeEach(async () => {
   org = await seedOrganisation('Opal Therapy Test');
   await seedCatalogue();
   await publishAllDocuments();
+  // A spy on graph-mail from one test must not carry its calls into the next.
+  jest.restoreAllMocks();
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -141,9 +155,9 @@ describe('Stage 1 — Start Onboarding creates the record and the letter togethe
     expect(body.offer).toMatchObject({ version: 1, status: 'draft' });
     expect(body.offer.terms.positionTitle).toBe('Occupational Therapist');
     expect(body.journey.stage.key).toBe('offer');
-    expect(body.journey.next).toMatchObject({ actor: 'admin', action: 'approve_offer' });
-    expect(body.letterHtml).toContain('Occupational Therapist');
-    expect(body.letterHtml).toContain('$92,000.00 per annum');
+    expect(body.journey.next).toMatchObject({ actor: 'admin', action: 'prepare_email' });
+    expect(body.letter).toMatchObject({ source: 'generated', templateVersion: offerDocx.TEMPLATE_VERSION });
+    expect(body.email.subject).toBe('Letter of Offer - Opal Therapy');
     // The package was chosen for them.
     expect(body.record.packageId).toBeTruthy();
   });
@@ -173,70 +187,88 @@ describe('Stage 1 — Start Onboarding creates the record and the letter togethe
   });
 });
 
-describe('Stage 1 → 2 — approve, send, accept, and the release happens by itself', () => {
+describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verification, release', () => {
   test('the whole path, with the terms reaching the employment profile untyped', async () => {
     const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
 
-    // Sending before approval is refused.
-    expect((await agent.post(`${base}/offer/send`)).status).toBe(409);
+    // The letter is a real .docx composed from the record.
+    const preview = await agent.get(`${base}/offer/letter/preview.docx`).buffer().parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(preview.status).toBe(200);
+    expect(preview.headers['content-type']).toBe(offerDocx.DOCX_MIME);
+    expect(preview.headers['content-disposition']).toMatch(/^inline/);
+    const zip = await require('jszip').loadAsync(preview.body);
+    const xml = await zip.file('word/document.xml').async('string');
+    expect(xml).toContain('Occupational Therapist');
+    expect(xml).toContain('$92,000 per annum');
+    expect(xml).not.toMatch(/\[PORTAL/);
+    const dl = await agent.get(`${base}/offer/letter/download`);
+    expect(dl.headers['content-disposition']).toMatch(/^attachment; filename="Letter%20of%20Offer%20-%20Jane%20Smith/);
 
-    const approved = await agent.post(`${base}/offer/approve`);
-    expect(approved.status).toBe(200);
-    expect(approved.body.offer.status).toBe('approved');
-    expect(approved.body.journey.next.action).toBe('send_offer');
+    // Email 1 is prefilled with Opal's wording and can be edited.
+    const detail = await agent.get(base);
+    expect(detail.body.email.subject).toBe('Letter of Offer - Opal Therapy');
+    expect(detail.body.email.body).toContain('Hi Jane,');
+    expect(detail.body.email.body).toContain('position of Occupational Therapist with Opal Therapy');
+    expect(detail.body.journey.next.action).toBe('prepare_email');
 
-    const sent = await agent.post(`${base}/offer/send`);
+    // Without Outlook connected, the draft is refused legibly.
+    const noGraph = await agent.post(`${base}/offer/email/draft`);
+    expect(noGraph.status).toBe(409);
+    expect(noGraph.body.code).toBe('graph_unavailable');
+
+    const createDraft = stubOutlook();
+    const drafted = await agent.post(`${base}/offer/email/draft`).send({ subject: 'Letter of Offer - Opal Therapy', body: detail.body.email.body + '\n\nPS. Welcome!' });
+    expect(drafted.status).toBe(201);
+    expect(drafted.body.offer.status).toBe('email_drafted');
+    expect(drafted.body.email.webLink).toBe('https://outlook.office.com/mail/drafts/1');
+    expect(drafted.body.email.body).toContain('PS. Welcome!');
+    expect(drafted.body.journey.next.action).toBe('send_in_outlook');
+    expect(drafted.body.dispatches[0]).toMatchObject({ kind: 'letter_of_offer', method: 'graph_draft', status: 'draft_created' });
+    // The Graph call carried the letter as a .docx attachment, to the candidate, with the HTML body.
+    const call = createDraft.mock.calls[0][0];
+    expect(call.to).toBe('jane.smith@example.com');
+    expect(call.attachmentMime).toBe(offerDocx.DOCX_MIME);
+    expect(call.attachmentName).toMatch(/^Letter of Offer - Jane Smith/);
+    expect(Buffer.isBuffer(call.attachment)).toBe(true);
+    expect(call.html).toContain('<p style="margin:0 0 12px">Hi Jane,</p>');
+    expect(call.html).toContain('PS. Welcome!');
+
+    // Nothing is sent by the portal: the Owner sends in Outlook and says so.
+    const sent = await agent.post(`${base}/offer/mark-sent`);
     expect(sent.status).toBe(200);
     expect(sent.body.offer.status).toBe('sent');
-    expect(sent.body.offer.linkLive).toBe(true);
-    expect(sent.body.delivery.status).toBe('skipped'); // no SMTP in tests
-    expect(sent.body.offerUrl).toMatch(/^https:\/\/portal\.test\.invalid\/offer\?token=/);
+    expect(sent.body.journey.stage.number).toBe(1.5);
     expect(sent.body.journey.next.actor).toBe('employee');
-    expect(sent.body.dispatches[0]).toMatchObject({ kind: 'letter_of_offer', status: 'skipped' });
 
-    // The response link is never returned again, and the token is stored hashed.
-    const again = await agent.get(base);
-    expect(again.body.offerUrl).toBeUndefined();
-    const token = tokenFrom(sent.body.offerUrl);
-    const { rows } = await db.pool.query('SELECT response_token_hash FROM onboarding_offers WHERE id = $1', [sent.body.offer.id]);
-    expect(rows[0].response_token_hash).not.toBe(token);
-    expect(rows[0].response_token_hash).toHaveLength(64);
+    // Terms are frozen once sent.
+    expect((await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Changed' } })).status).toBe(409);
+    expect((await agent.post(`${base}/offer/verify`)).status).toBe(409);
 
-    // The candidate reads it without an account.
-    const pub = request(server);
-    const check = await pub.post('/api/onboarding-offer/check').set('X-Forwarded-For', nextIp()).send({ token });
-    expect(check.status).toBe(200);
-    expect(check.body.letterHtml).toContain('Occupational Therapist');
-    expect(check.body.letterHtml).toContain('30.4 hours per week');
-    expect(check.body).not.toHaveProperty('applicantEmail');
+    // The signed letter comes back and is stored.
+    const signedBytes = Buffer.from('%PDF-1.4 signed letter');
+    const up = await agent.post(`${base}/offer/signed`).send({ fileName: 'Jane Smith signed LOO.pdf', fileMime: 'application/pdf', fileData: signedBytes.toString('base64') });
+    expect(up.status).toBe(201);
+    expect(up.body.offer.status).toBe('signed_received');
+    expect(up.body.signed).toMatchObject({ kind: 'signed', fileName: 'Jane Smith signed LOO.pdf', previewKind: 'pdf', size: signedBytes.length });
+    expect(up.body.journey.next.action).toBe('verify_offer');
+    const served = await agent.get(`${base}/offer/signed/download`);
+    expect(served.status).toBe(200);
+    expect(served.headers['content-type']).toBe('application/pdf');
+    expect(Buffer.from(served.body).toString()).toBe('%PDF-1.4 signed letter');
 
-    // Accepting needs a typed name.
-    expect((await pub.post('/api/onboarding-offer/respond').set('X-Forwarded-For', nextIp())
-      .send({ token, decision: 'accept' })).status).toBe(400);
-
-    const accept = await pub.post('/api/onboarding-offer/respond').set('X-Forwarded-For', nextIp())
-      .send({ token, decision: 'accept', signedName: 'Jane Smith' });
-    expect(accept.status).toBe(200);
-    expect(accept.body.decision).toBe('accepted');
-
-    // Single use.
-    const twice = await pub.post('/api/onboarding-offer/respond').set('X-Forwarded-For', nextIp())
-      .send({ token, decision: 'accept', signedName: 'Jane Smith' });
-    expect(twice.status).toBe(410);
-    expect(twice.body.code).toBe('answered');
-
-    // The release happened without an Owner click.
-    const after = await agent.get(base);
-    expect(after.body.offer.status).toBe('accepted');
-    expect(after.body.offer.signedName).toBe('Jane Smith');
-    expect(after.body.record.status).toBe('invite_sent');
-    expect(after.body.record.userId).toBeTruthy();
-    expect(after.body.journey.stage.key).toBe('documentation');
-    expect(after.body.journey.stages[0].state).toBe('complete');
-    expect(after.body.journey.next.actor).toBe('employee');
-    expect(after.body.sections.length).toBeGreaterThan(0);
+    // Verification completes phase 1 and the release happens without another click.
+    const verified = await agent.post(`${base}/offer/verify`);
+    expect(verified.status).toBe(200);
+    expect(verified.body.offer.status).toBe('accepted');
+    expect(verified.body.release.status).toBe('released');
+    expect(verified.body.record.status).toBe('invite_sent');
+    expect(verified.body.record.userId).toBeTruthy();
+    expect(verified.body.journey.stage.key).toBe('documentation');
+    expect(verified.body.journey.stages[0].state).toBe('complete');
+    expect(verified.body.journey.next.actor).toBe('employee');
+    expect(verified.body.sections.length).toBeGreaterThan(0);
 
     const { rows: users } = await db.pool.query('SELECT role FROM users WHERE email = $1', ['jane.smith@example.com']);
     expect(users[0].role).toBe('pre_employee');
@@ -252,66 +284,97 @@ describe('Stage 1 → 2 — approve, send, accept, and the release happens by it
     expect(profiles[0].award_classification).toBe('HPSS Award Level 2');
     expect(profiles[0].probation_end_date).toBeTruthy();
 
-    // Terms are frozen once released.
-    expect((await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Changed' } })).status).toBe(409);
-
-    // The Owner was told.
-    const { rows: notes } = await db.pool.query(
-      "SELECT title FROM user_notifications WHERE user_id = $1 AND type LIKE 'onboarding_offer_accepted_%'", [owner.id]);
-    expect(notes).toHaveLength(1);
-
-    // And the audit trail names ids, never the person.
+    // The audit trail names ids, never the person, and never the file.
     const { rows: audit } = await db.pool.query(
-      "SELECT action, metadata FROM audit_logs WHERE action IN ('onboarding.offer_accepted', 'onboarding.assignment_released') ORDER BY action");
-    expect(audit.map((a) => a.action)).toEqual(['onboarding.assignment_released', 'onboarding.offer_accepted']);
+      "SELECT action, metadata FROM audit_logs WHERE action LIKE 'onboarding.offer_%' OR action = 'onboarding.assignment_released' ORDER BY created_at");
+    expect(audit.map((a) => a.action)).toEqual([
+      'onboarding.offer_email_drafted', 'onboarding.offer_marked_sent', 'onboarding.offer_signed_received',
+      'onboarding.offer_verified', 'onboarding.assignment_released',
+    ]);
     expect(JSON.stringify(audit)).not.toContain('jane.smith@example.com');
     expect(JSON.stringify(audit)).not.toContain('Jane Smith');
   });
 
-  test('a reminder re-mints the link and the old one stops working', async () => {
+  test('changing the terms regenerates the letter and forgets a stale Outlook draft', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
-    await agent.post(`${base}/offer/approve`);
-    const first = await agent.post(`${base}/offer/send`);
-    const second = await agent.post(`${base}/offer/send`);
-    expect(second.body.offer.reminderCount).toBe(1);
-    expect(second.body.dispatches[0].kind).toBe('offer_reminder');
+    stubOutlook();
+    await agent.post(`${base}/offer/email/draft`);
 
-    const pub = request(server);
-    const old = await pub.post('/api/onboarding-offer/check').set('X-Forwarded-For', nextIp()).send({ token: tokenFrom(first.body.offerUrl) });
-    expect(old.status).toBe(404);
-    const fresh = await pub.post('/api/onboarding-offer/check').set('X-Forwarded-For', nextIp()).send({ token: tokenFrom(second.body.offerUrl) });
-    expect(fresh.status).toBe(200);
+    const revised = await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Senior Occupational Therapist', payRate: 99000 } });
+    expect(revised.status).toBe(200);
+    expect(revised.body.offer.status).toBe('draft');
+    expect(revised.body.email.draftId).toBeNull();
+    expect(revised.body.record.jobTitle).toBe('Senior Occupational Therapist');
+
+    const dl = await agent.get(`${base}/offer/letter/download`).buffer().parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    const xml = await (await require('jszip').loadAsync(dl.body)).file('word/document.xml').async('string');
+    expect(xml).toContain('Senior Occupational Therapist');
+    expect(xml).toContain('$99,000 per annum');
+  });
+
+  test('an edited letter uploaded from Word is what gets attached, until it is discarded', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { record } = await start(agent);
+    const base = `/api/onboarding/journey/records/${record.id}`;
+
+    // A renamed non-Word file is refused.
+    const bad = await agent.post(`${base}/offer/letter`).send({ fileName: 'letter.docx', fileMime: offerDocx.DOCX_MIME, fileData: Buffer.from('not a zip').toString('base64') });
+    expect(bad.status).toBe(400);
+
+    const edited = await offerDocx.buildOfferDocx({
+      terms: { positionTitle: 'Occupational Therapist (edited in Word)', employmentType: 'part_time', startDate: '2026-11-02' },
+      applicant: { name: 'Jane Smith', email: 'jane.smith@example.com' }, isTreatingTherapist: true,
+    });
+    const up = await agent.post(`${base}/offer/letter`).send({ fileName: 'LOO Jane edited.docx', fileMime: offerDocx.DOCX_MIME, fileData: edited.toString('base64') });
+    expect(up.status).toBe(201);
+    expect(up.body.letter.source).toBe('uploaded');
+    expect(up.body.letter.uploaded.fileName).toBe('LOO Jane edited.docx');
+
+    const createDraft = stubOutlook();
+    await agent.post(`${base}/offer/email/draft`);
+    expect(createDraft.mock.calls[0][0].attachmentName).toBe('LOO Jane edited.docx');
+    const attached = await (await require('jszip').loadAsync(createDraft.mock.calls[0][0].attachment)).file('word/document.xml').async('string');
+    expect(attached).toContain('(edited in Word)');
+
+    const discarded = await agent.delete(`${base}/offer/letter`);
+    expect(discarded.status).toBe(200);
+    expect(discarded.body.letter.source).toBe('generated');
+    expect(discarded.body.offer.status).toBe('draft'); // the draft carried the old letter
   });
 
   test('a declined offer blocks the stage, asks the Owner, and a revised letter is a new version', async () => {
-    const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
-    await agent.post(`${base}/offer/approve`);
-    const sent = await agent.post(`${base}/offer/send`);
+    await agent.post(`${base}/offer/mark-sent`);
 
-    const decline = await request(server).post('/api/onboarding-offer/respond').set('X-Forwarded-For', nextIp())
-      .send({ token: tokenFrom(sent.body.offerUrl), decision: 'decline', reason: 'Accepted another role' });
+    const decline = await agent.post(`${base}/offer/decline`).send({ reason: 'Accepted another role' });
     expect(decline.status).toBe(200);
-
-    const after = await agent.get(base);
-    expect(after.body.offer.status).toBe('declined');
-    expect(after.body.offer.declineReason).toBe('Accepted another role');
-    expect(after.body.record.status).toBe('created'); // nothing was released
-    expect(after.body.journey.stages[0].state).toBe('blocked');
-    expect(after.body.journey.next).toMatchObject({ actor: 'admin', action: 'reissue_offer' });
-    const { rows: notes } = await db.pool.query(
-      "SELECT 1 FROM user_notifications WHERE user_id = $1 AND type LIKE 'onboarding_offer_declined_%'", [owner.id]);
-    expect(notes).toHaveLength(1);
+    expect(decline.body.offer.status).toBe('declined');
+    expect(decline.body.offer.declineReason).toBe('Accepted another role');
+    expect(decline.body.record.status).toBe('created'); // nothing was released
+    expect(decline.body.journey.stages[0].state).toBe('blocked');
+    expect(decline.body.journey.next).toMatchObject({ actor: 'admin', action: 'reissue_offer' });
 
     const revised = await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Senior Occupational Therapist', payRate: 99000 } });
     expect(revised.status).toBe(200);
     expect(revised.body.offer).toMatchObject({ version: 2, status: 'draft' });
     expect(revised.body.offerHistory).toHaveLength(2);
-    expect(revised.body.record.jobTitle).toBe('Senior Occupational Therapist');
     expect(revised.body.journey.stages[0].state).toBe('active');
+  });
+
+  test('a viewer can read the letter but cannot draft, mark sent, upload or verify', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { record } = await start(agent);
+    const base = `/api/onboarding/journey/records/${record.id}`;
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
+    expect((await viewer.agent.get(`${base}/offer/letter/download`)).status).toBe(200);
+    expect((await viewer.agent.post(`${base}/offer/email/draft`)).status).toBe(403);
+    expect((await viewer.agent.post(`${base}/offer/mark-sent`)).status).toBe(403);
+    expect((await viewer.agent.post(`${base}/offer/signed`).send({ fileName: 'x.pdf', fileMime: 'application/pdf', fileData: 'JVBERg==' })).status).toBe(403);
+    expect((await viewer.agent.post(`${base}/offer/verify`)).status).toBe(403);
   });
 
   test('skipping the letter releases the documentation straight away', async () => {
@@ -320,6 +383,7 @@ describe('Stage 1 → 2 — approve, send, accept, and the release happens by it
     const res = await agent.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
     expect(res.status).toBe(200);
     expect(res.body.offer.status).toBe('not_required');
+    if (res.body.release.status !== 'released') console.log('RELEASE', JSON.stringify(res.body.release));
     expect(res.body.release.status).toBe('released');
     expect(res.body.record.status).toBe('invite_sent');
   });
@@ -433,8 +497,7 @@ describe('the board', () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const a = await start(agent);                                       // draft: needs the Owner
     const b = await start(agent, { name: 'Bob Brown', personalEmail: 'bob@example.com' });
-    await agent.post(`/api/onboarding/journey/records/${b.record.id}/offer/approve`);
-    await agent.post(`/api/onboarding/journey/records/${b.record.id}/offer/send`);   // sent: waits on Bob
+    await agent.post(`/api/onboarding/journey/records/${b.record.id}/offer/mark-sent`);   // sent: waits on Bob
 
     const board = await agent.get('/api/onboarding/journey/board');
     expect(board.status).toBe(200);

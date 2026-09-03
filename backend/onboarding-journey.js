@@ -21,11 +21,11 @@ const STAGES = [
   { key: 'induction', number: 3, label: 'Internal Induction & Access' },
 ];
 
-const OFFER_STATUSES = ['draft', 'approved', 'sent', 'accepted', 'declined', 'withdrawn', 'not_required'];
+const OFFER_STATUSES = ['draft', 'email_drafted', 'sent', 'signed_received', 'accepted', 'declined', 'withdrawn', 'not_required'];
 const TASK_STATUSES = ['pending', 'in_progress', 'done', 'skipped', 'failed'];
 
-/** Days after sending with no response before the offer is flagged for a chase. */
-const OFFER_CHASE_DAYS = 5;
+/** Days after sending with no signed letter back before the record is flagged. The email asks for 48 hours. */
+const OFFER_CHASE_DAYS = 3;
 
 const REQ_EMPLOYEE_OPEN = new Set(['not_started', 'in_progress', 'correction_required', 'expired']);
 const REQ_NEEDS_REVIEW = new Set(['submitted', 'awaiting_verification']);
@@ -136,45 +136,48 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
 // ── Stage 1 ─────────────────────────────────────────────────────────────────
 
 function projectOffer(assignment, offer, now) {
-  const out = { state: 'active', summary: '', completedAt: null, items: [], next: null };
+  const out = { state: 'active', summary: '', completedAt: null, items: [], next: null, substage: null };
 
   if (!offer) {
     out.summary = 'No letter of offer yet.';
-    out.next = { actor: 'admin', action: 'edit_offer', label: 'Prepare the letter of offer' };
+    out.next = { actor: 'admin', action: 'edit_offer', label: 'Enter the offer details' };
     return out;
   }
 
   switch (offer.status) {
     case 'draft':
-      out.summary = `Letter of offer v${offer.version} drafted — awaiting approval.`;
-      out.next = { actor: 'admin', action: 'approve_offer', label: 'Review and approve the letter of offer' };
-      out.items.push({ kind: 'review', label: 'Letter of offer awaiting approval', at: offer.created_at });
-      break;
     case 'approved':
-      out.summary = `Letter of offer v${offer.version} approved — not yet sent.`;
-      out.next = { actor: 'admin', action: 'send_offer', label: 'Send the letter of offer' };
+      out.summary = `Letter of offer v${offer.version} ready to preview — Email 1 not yet drafted.`;
+      out.next = { actor: 'admin', action: 'prepare_email', label: 'Preview the letter, then prepare Email 1 and create the Outlook draft' };
+      out.items.push({ kind: 'review', label: 'Letter of offer — preview and prepare Email 1', at: offer.created_at });
+      break;
+    case 'email_drafted':
+      out.summary = 'Email 1 is waiting in Outlook with the letter attached.';
+      out.next = { actor: 'admin', action: 'send_in_outlook', label: 'Open the draft in Outlook, send it, then mark it as sent' };
+      out.items.push({ kind: 'review', label: 'Email 1 drafted in Outlook — send it and mark as sent', at: offer.email_drafted_at });
       break;
     case 'sent': {
-      const sentAt = toDate(offer.sent_at);
-      const expired = isOverdue(offer.token_expires_at, now);
+      const sentAt = toDate(offer.email_sent_at || offer.sent_at);
       const stale = sentAt ? daysBetween(sentAt, now) >= OFFER_CHASE_DAYS : false;
-      out.summary = expired
-        ? 'The offer link has expired without a response.'
-        : `Letter of offer sent${sentAt ? ` ${daysBetween(sentAt, now)} day(s) ago` : ''} — awaiting the employee's response.`;
+      out.substage = 'waiting';
+      out.summary = `Letter of offer sent${sentAt ? ` ${daysBetween(sentAt, now)} day(s) ago` : ''} — waiting for the signed copy.`;
       out.items.push({
-        kind: 'employee', label: 'Respond to the letter of offer',
-        dueAt: offer.token_expires_at || null, overdue: expired || stale,
-        detail: expired ? 'Link expired' : (stale ? 'No response yet — consider a reminder' : null),
+        kind: 'employee', label: 'Sign and return the letter of offer',
+        dueAt: sentAt ? new Date(sentAt.getTime() + 2 * 86400000) : null, overdue: stale,
+        detail: stale ? 'No signed letter yet — consider following up' : '48 hours requested',
       });
-      out.next = expired
-        ? { actor: 'admin', action: 'resend_offer', label: 'Re-send the letter of offer (link expired)' }
-        : { actor: 'employee', action: null, label: 'Waiting for the employee to accept the offer' };
+      out.next = { actor: 'employee', action: null, label: 'Waiting for the signed letter of offer to come back' };
       break;
     }
+    case 'signed_received':
+      out.summary = 'The signed letter is in — waiting for you to verify it.';
+      out.items.push({ kind: 'review', label: 'Verify the signed letter of offer', at: offer.signed_received_at });
+      out.next = { actor: 'admin', action: 'verify_offer', label: 'Check the signed letter and verify it' };
+      break;
     case 'accepted':
       out.state = 'complete';
-      out.completedAt = offer.responded_at || null;
-      out.summary = `Offer accepted${offer.signed_name ? ` by ${offer.signed_name}` : ''}.`;
+      out.completedAt = offer.verified_at || offer.responded_at || null;
+      out.summary = 'Signed letter of offer verified.';
       break;
     case 'not_required':
       out.state = 'complete';
@@ -376,6 +379,7 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
   else if (s3.state === 'complete') current = { key: 'complete', number: 4, label: 'Complete' };
   else if (s3.state === 'active') current = STAGES[2];
   else if (s2.state === 'active') current = STAGES[1];
+  else if (s1.substage === 'waiting') current = { ...STAGES[0], number: 1.5, label: 'Awaiting signed offer' };
   else current = STAGES[0];
 
   const all = [...s1.items, ...s2.items, ...s3.items];

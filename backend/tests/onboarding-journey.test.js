@@ -28,44 +28,46 @@ const req = (over = {}) => ({ id: 'r', title: 'Bank details', actor: 'employee',
 const task = (over = {}) => ({ code: 't', title: 'Task', status: 'pending', sort_order: 10, ...over });
 
 describe('Stage 1 — Letter of Offer', () => {
-  test('a new record with no offer asks the admin to prepare one', () => {
+  test('a new record with no offer asks the admin for the details', () => {
     const j = journey.projectJourney({ assignment: assignment(), now: NOW });
     expect(j.stage.key).toBe('offer');
     expect(j.next).toMatchObject({ actor: 'admin', action: 'edit_offer' });
     expect(j.stages[1].state).toBe('pending');
   });
 
-  test('a draft waits for approval; an approved letter waits to be sent', () => {
-    expect(journey.projectJourney({ assignment: assignment(), offer: offer(), now: NOW }).next.action).toBe('approve_offer');
-    expect(journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'approved' }), now: NOW }).next.action).toBe('send_offer');
+  test('a drafted letter asks for the preview and Email 1; an Outlook draft asks to be sent', () => {
+    expect(journey.projectJourney({ assignment: assignment(), offer: offer(), now: NOW }).next.action).toBe('prepare_email');
+    const j = journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'email_drafted', email_drafted_at: NOW }), now: NOW });
+    expect(j.next).toMatchObject({ actor: 'admin', action: 'send_in_outlook' });
+    expect(j.counts.adminReview).toBe(1);
   });
 
-  test('a sent letter is waiting on the employee, and is not the admin\'s problem yet', () => {
+  test('once sent the record is at stage 1.5, waiting on the employee, not on the admin', () => {
     const j = journey.projectJourney({
       assignment: assignment(), now: NOW,
-      offer: offer({ status: 'sent', sent_at: daysFromNow(-1), token_expires_at: daysFromNow(13) }),
+      offer: offer({ status: 'sent', email_sent_at: daysFromNow(-1) }),
     });
+    expect(j.stage.number).toBe(1.5);
+    expect(j.stage.key).toBe('offer');
     expect(j.next.actor).toBe('employee');
     expect(j.counts.waitingOnEmployee).toBe(1);
     expect(j.counts.overdue).toBe(0);
     expect(j.attention).toBe(0);
   });
 
-  test('a sent letter with no answer after the chase window is flagged overdue', () => {
+  test('no signed letter after the chase window is flagged overdue', () => {
     const j = journey.projectJourney({
       assignment: assignment(), now: NOW,
-      offer: offer({ status: 'sent', sent_at: daysFromNow(-journey.OFFER_CHASE_DAYS - 1), token_expires_at: daysFromNow(7) }),
+      offer: offer({ status: 'sent', email_sent_at: daysFromNow(-journey.OFFER_CHASE_DAYS - 1) }),
     });
     expect(j.overdue).toHaveLength(1);
     expect(j.attention).toBeGreaterThan(0);
   });
 
-  test('an expired link hands the next action back to the admin', () => {
-    const j = journey.projectJourney({
-      assignment: assignment(), now: NOW,
-      offer: offer({ status: 'sent', sent_at: daysFromNow(-20), token_expires_at: daysFromNow(-1) }),
-    });
-    expect(j.next).toMatchObject({ actor: 'admin', action: 'resend_offer' });
+  test('a signed letter in hand hands the next action back to the admin to verify', () => {
+    const j = journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'signed_received', signed_received_at: NOW }), now: NOW });
+    expect(j.next).toMatchObject({ actor: 'admin', action: 'verify_offer' });
+    expect(j.stage.number).toBe(1);
   });
 
   test('a declined offer blocks the stage and asks the admin to decide', () => {
@@ -75,9 +77,10 @@ describe('Stage 1 — Letter of Offer', () => {
     expect(j.counts.adminReview).toBe(1);
   });
 
-  test('acceptance completes the stage and, until release, asks the admin to release', () => {
-    const j = journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'accepted', responded_at: NOW }), now: NOW });
+  test('verification completes the stage and, until release, asks the admin to release', () => {
+    const j = journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'accepted', verified_at: NOW }), now: NOW });
     expect(j.stages[0].state).toBe('complete');
+    expect(j.stages[0].completedAt).toBe(NOW);
     expect(j.stage.key).toBe('documentation');
     expect(j.next).toMatchObject({ actor: 'admin', action: 'release' });
   });
@@ -186,22 +189,7 @@ describe('the whole record', () => {
   });
 });
 
-describe('the letter of offer', () => {
-  test('renders the terms once, escaped, in both HTML and text', () => {
-    const { terms } = letter.normaliseTerms({
-      positionTitle: 'Occupational <Therapist>', employmentType: 'part_time', startDate: '2026-10-01',
-      payBasis: 'annual', payRate: 95000, hoursPerWeek: 30.4, probationMonths: 6, workLocation: 'Fremantle',
-    }, ['full_time', 'part_time', 'casual']);
-    const out = letter.renderOfferLetter({ terms, applicantName: 'Jane Smith', orgName: 'Opal Therapy', issuedAt: NOW, signatoryName: 'Ann Owner' });
-    expect(out.html).toContain('Occupational &lt;Therapist&gt;');
-    expect(out.html).not.toContain('<Therapist>');
-    expect(out.html).toContain('$95,000.00 per annum');
-    expect(out.html).toContain('30.4 hours per week');
-    expect(out.html).toContain('6 months');
-    expect(out.text).toContain('Dear Jane,');
-    expect(out.text).toContain('Ann Owner');
-  });
-
+describe('the offer terms', () => {
   test('normalisation refuses what a letter cannot state', () => {
     const types = ['full_time', 'part_time', 'casual'];
     expect(letter.normaliseTerms({}, types).errors).toEqual(expect.arrayContaining(['Position is required', 'Employment type is not recognised', 'Commencement date is required']));
@@ -211,10 +199,13 @@ describe('the letter of offer', () => {
       .toEqual(expect.arrayContaining([expect.stringMatching(/Probation/)]));
     expect(letter.normaliseTerms({ positionTitle: 'OT', employmentType: 'casual', startDate: '2026-10-01', hoursPerWeek: 90 }, types).errors)
       .toEqual(expect.arrayContaining([expect.stringMatching(/Standard hours/)]));
+    expect(letter.normaliseTerms({ positionTitle: 'OT', employmentType: 'casual', startDate: '2026-10-01', superannuationRate: 45 }, types).errors)
+      .toEqual(expect.arrayContaining([expect.stringMatching(/Superannuation/)]));
   });
 
-  test('unknown keys never reach the snapshot', () => {
-    const { terms } = letter.normaliseTerms({ positionTitle: 'OT', employmentType: 'casual', startDate: '2026-10-01', tfn: '123' }, ['casual']);
+  test('unknown keys never reach the snapshot; letter particulars do', () => {
+    const { terms } = letter.normaliseTerms({ positionTitle: 'OT', employmentType: 'casual', startDate: '2026-10-01', tfn: '123', payCycle: 'Monthly', offerClosingDate: '2026-10-10' }, ['casual']);
     expect(terms).not.toHaveProperty('tfn');
+    expect(terms).toMatchObject({ payCycle: 'Monthly', offerClosingDate: '2026-10-10' });
   });
 });
