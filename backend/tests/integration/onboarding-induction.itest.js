@@ -87,6 +87,7 @@ beforeEach(async () => {
   require('../../auth')._resetLoginRateLimit();
   org = await seedOrganisation('Opal Therapy Test');
   await require('../../onboarding-seed').seedOnboarding({ organisationId: org.id });
+  await require('./onboarding-fixtures').configurePackDefaults(org.id);
   await publishFiles(['DOC_CONTRACT_TEMPLATE', 'DOC_NEW_EMPLOYEE_DETAILS', 'DOC_OUTLOOK_SETUP', 'DOC_PORTAL_SETUP', 'DOC_PRIVACY_AGREEMENT', 'DOC_CODE_OF_CONDUCT_AGREEMENT']);
   jest.restoreAllMocks();
 });

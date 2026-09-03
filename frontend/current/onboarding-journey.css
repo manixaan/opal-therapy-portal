@@ -293,3 +293,6 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-tile-link:hover h3 { color: var(--accent); }
 .oj-tile-arrow { font-size: 18px; color: var(--ink-soft); align-self: center; }
 .oj-tile-link:hover .oj-tile-arrow { color: var(--accent); }
+
+.oj-pack-addrow td { background: #fffaf0; padding: 10px; }
+#oj-defaults-add { margin-bottom: 10px; }

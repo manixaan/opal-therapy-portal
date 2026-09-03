@@ -96,6 +96,7 @@ beforeEach(async () => {
   require('../../auth')._resetLoginRateLimit();
   org = await seedOrganisation('Opal Therapy Test');
   await require('../../onboarding-seed').seedOnboarding({ organisationId: org.id });
+  await require('./onboarding-fixtures').configurePackDefaults(org.id);
   jest.restoreAllMocks();
 });
 

@@ -223,10 +223,13 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map(), pha
  */
 function applyDefaults(items, defaults, phase) {
   const rows = (defaults || []).filter((d) => d.phase === phase);
-  if (!rows.length) return items;
   const byCode = new Map(rows.map((d) => [d.code, d]));
   const out = [];
-  for (const it of items) {
+  for (const raw of items) {
+    // The Owner sets the three switches deliberately in Edit Onboarding:
+    // until they do, a derived item is not required, comes back from
+    // nobody and is verified by nobody. Whether a file is SENT stays derived.
+    const it = { ...raw, required: false, returns: false, verifies: false };
     const d = byCode.get(it.code);
     if (!d) { out.push(it); continue; }
     if (d.action === 'remove') continue;

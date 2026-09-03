@@ -369,9 +369,11 @@
       return '<button type="button" class="oj-toggle ' + (value ? 'is-on' : '') + '" onclick="OnboardingJourney.defaultsFlag(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + field + '\',' + (value ? 'false' : 'true') + ')">' + (value ? 'Yes' : 'No') + '</button>';
     };
     var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
-      + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package</span></div>'
-      + (edit ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
-      + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
+      + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
+      + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
+      + '<div id="oj-defaults-add" hidden></div>'
+      + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>'
+      + (edit ? '<tr class="oj-pack-addrow"><td colspan="6">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section"><td colspan="6">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
       groups[k].forEach(function (i) {
@@ -390,7 +392,7 @@
     });
     out += '</tbody></table></div>';
     if (removed.length) out += '<details class="oj-history"><summary>Removed from this package\'s default (' + removed.length + ')</summary><ul>' + removed.map(function (i) { return '<li>' + esc(i.title) + (edit ? ' ' + btn('Restore', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', false)', 'oj-btn-small oj-btn-quiet') : '') + '</li>'; }).join('') + '</ul></details>';
-    out += '<div id="oj-defaults-add" hidden></div></section>';
+    out += '</section>';
     return out;
   }
 

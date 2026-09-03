@@ -126,9 +126,14 @@ describe('package defaults (Edit onboarding)', () => {
     ], 'documentation');
     const codes = out.map((i) => i.code);
     expect(codes).not.toContain('PACK_FIRST_AID');
-    expect(out.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false, sends: true, returns: true });
+    expect(out.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false, sends: true, returns: false });
     expect(out[out.length - 1]).toMatchObject({ code: 'DEF_ABC', title: 'Parking map', phase: 'documentation', documentId: 'lib-map', returns: false });
-    expect(pack.applyDefaults(derived, [], 'documentation')).toEqual(derived);
+    // Until the Owner sets them, the three switches are No on every derived item; sending stays derived.
+    const untouched = pack.applyDefaults(derived, [], 'documentation');
+    expect(untouched.every((i) => i.required === false && i.returns === false && i.verifies === false)).toBe(true);
+    expect(untouched.find((i) => i.code === 'PACK_CONTRACT').sends).toBe(true);
+    const set = pack.applyDefaults(derived, [{ phase: 'documentation', code: 'PACK_CONTRACT', action: 'override', required: true, employee_returns: true, requires_verification: true }], 'documentation');
+    expect(set.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ required: true, returns: true, verifies: true });
   });
   test('sample facts follow the package: an OT package is treating, mobile and child-related; an admin one is not', () => {
     const ot = pack.sampleFactsFor({ role_category: 'occupational_therapist', employment_type: 'casual' }, { ndisProviderStatus: 'unregistered' });
