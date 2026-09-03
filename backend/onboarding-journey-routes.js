@@ -214,11 +214,14 @@ async function maybeComplete(assignment, tasks) {
   return 'completed';
 }
 
+const trackingOf = (c) => (c ? { total: c.tracked, done: c.done, required: c.required, requiredDone: c.requiredDone } : null);
+
 /** What the projection needs to know about the pack. */
-function packSummary(a, counts) {
+function packSummary(a, counts, tracking) {
   return {
     prepared: !!a.pack_prepared_at, draftId: a.pack_email_draft_id || null,
-    sentAt: a.starter_pack_sent_at || null, dueAt: a.pack_due_at || null, counts: counts || {},
+    sentAt: a.starter_pack_sent_at || null, dueAt: a.pack_due_at || null, counts: counts || {}, tracking: tracking || null,
+    completedAt: a.documentation_completed_at || null,
   };
 }
 
@@ -234,7 +237,13 @@ async function recordDetail(req, assignment) {
   tasks = await ensureInduction(assignment, tasks);
 
   const packRoutes = require('./onboarding-pack-routes');
-  const packDetail = await packRoutes._internals.packDetail(req, assignment);
+  const packDetail = await packRoutes._internals.packDetail(req, assignment, 'documentation');
+  const inductionDetail = await packRoutes._internals.packDetail(req, assignment, 'induction');
+  const readiness = await packRoutes._internals.readinessFor(req, assignment);
+  let payrollSetup = null;
+  if (hasPermission(req.user, 'onboarding.payroll')) {
+    try { payrollSetup = await require('./onboarding-payroll-routes')._internals.payrollSetupFor(assignment); } catch (err) { log.warn('payroll setup unavailable', { error: err }); }
+  }
   const returns = require('./onboarding-returns-routes')._internals;
   const attentionList = await returns.attentionFor(assignment);
   const profile = await require('./onboarding-profile-sync').profileSummary(assignment.user_id);
@@ -246,7 +255,11 @@ async function recordDetail(req, assignment) {
     previewUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/preview`,
     downloadUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/download`,
   }));
-  const j = journey.projectJourney({ assignment, offer, requirements, tasks, pack: packSummary(assignment, packDetail.counts), attention: attentionList });
+  const j = journey.projectJourney({
+    assignment, offer, requirements, tasks, pack: packSummary(assignment, packDetail.counts, packDetail.tracking), attention: attentionList,
+    induction: { prepared: !!assignment.induction_pack_prepared_at, draftId: assignment.induction_email_draft_id || null, sentAt: assignment.induction_sent_at || null, dueAt: assignment.induction_due_at || null, completedAt: assignment.induction_completed_at || null, tracking: inductionDetail.tracking, readiness },
+    payroll: payrollSetup ? { status: payrollSetup.status, label: payrollSetup.label, ready: payrollSetup.ready, approved: payrollSetup.approved } : null,
+  });
   const s = shape();
   const [editedLetter, signed] = offer
     ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed')])
@@ -290,6 +303,8 @@ async function recordDetail(req, assignment) {
     } : null,
     journey: j,
     pack: packDetail,
+    induction: { ...inductionDetail, readiness },
+    payroll: payrollSetup,
     attention: attentionList,
     profile,
     returnedDocuments: returnedDocs,
@@ -323,8 +338,8 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
   const ids = rows.map((a) => a.id);
 
   const pdb = require('./onboarding-pack-db');
-  const [offers, tasksMap, reqMap, packCounts] = await Promise.all([
-    jdb.mapCurrentOffers(ids), jdb.mapTasks(ids), jdb.mapRequirements(ids), pdb.countItems(ids),
+  const [offers, tasksMap, reqMap, packCounts, phaseCounts] = await Promise.all([
+    jdb.mapCurrentOffers(ids), jdb.mapTasks(ids), jdb.mapRequirements(ids), pdb.countItems(ids), pdb.countItemsByPhase(ids),
   ]);
 
   const records = [];
@@ -334,8 +349,9 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
     const j = journey.projectJourney({
       assignment: a, offer: offers.get(a.id) || null,
       requirements: reqMap.get(a.id) || [], tasks,
-      pack: packSummary(a, packCounts.get(a.id) || {}),
-      attention: ['documents_received', 'starter_pack_sent', 'details_extracted'].includes(a.status)
+      pack: packSummary(a, packCounts.get(a.id) || {}, trackingOf((phaseCounts.get(a.id) || {}).documentation)),
+      induction: { prepared: !!a.induction_pack_prepared_at, draftId: a.induction_email_draft_id || null, sentAt: a.induction_sent_at || null, dueAt: a.induction_due_at || null, completedAt: a.induction_completed_at || null, tracking: trackingOf((phaseCounts.get(a.id) || {}).induction), readiness: null },
+      attention: ['documents_received', 'starter_pack_sent', 'details_extracted'].includes(a.status) || a.induction_sent_at
         ? await require('./onboarding-returns-routes')._internals.attentionFor(a) : [],
     });
     const offer = offers.get(a.id) || null;
@@ -355,6 +371,7 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
       offerVersion: offer ? offer.version : null,
       stage: j.stage,
       stages: j.stages,
+      summary: j.summary,
       next: j.next,
       counts: j.counts,
       daysToStart: j.daysToStart,
@@ -1018,6 +1035,7 @@ for (const [verb, spec] of Object.entries(TASK_VERBS)) {
     await jdb.setTaskStatus(assignment.id, task.code, { status: spec.status, actorId: req.user.id, note: req.body?.note });
     const tasks = await jdb.listTasks(assignment.id);
     const status = await maybeComplete(assignment, tasks);
+    await require('./onboarding-returns-routes')._internals.syncProgress(req, await odb.getAssignment(orgOf(req), assignment.id));
     await auditOnboarding(req, spec.audit, {
       targetType: 'onboarding_assignment', targetId: assignment.id,
       metadata: { assignmentId: assignment.id, taskCode: task.code, recordStatus: status },

@@ -186,9 +186,9 @@ describe('editing one person\'s pack', () => {
     expect(removed.body.pack.items.find((i) => i.id === fwis.id)).toMatchObject({ status: 'removed', removedReason: 'given in person' });
 
     const lib = await agent.get(`${jane.base}/pack/library`);
-    const handbook = lib.body.documents.find((d) => d.code === 'DOC_HANDBOOK');
-    expect(handbook.alreadyInPack).toBe(true);
-    expect((await agent.post(`${jane.base}/pack/items`).send({ documentId: handbook.id })).status).toBe(409);
+    const notice = lib.body.documents.find((d) => d.code === 'POL_COLLECTION_NOTICE');
+    expect(notice.alreadyInPack).toBe(true);
+    expect((await agent.post(`${jane.base}/pack/items`).send({ documentId: notice.id })).status).toBe(409);
     const leave = lib.body.documents.find((d) => d.code === 'POL_LEAVE');
     expect(leave.alreadyInPack).toBe(false);
     const added = await agent.post(`${jane.base}/pack/items`).send({ documentId: leave.id, employeeReturns: false, required: false });

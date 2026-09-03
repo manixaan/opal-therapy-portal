@@ -62,7 +62,7 @@ describe('the default pack', () => {
 
     expect(codes(ot)).toEqual(expect.arrayContaining([
       'PACK_CONTRACT', 'PACK_NEW_EMPLOYEE_DETAILS', 'PACK_SUPER_CHOICE', 'REQ_FWIS', 'REQ_TAX_SETUP',
-      'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'PACK_PASSPORT_VISA', 'PACK_POLICE_CHECK', 'REQ_AHPRA',
+      'PACK_PASSPORT_VISA', 'PACK_POLICE_CHECK', 'REQ_AHPRA',
       'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'REQ_VEHICLE', 'PACK_FIRST_AID', 'PACK_CPR',
     ]));
     expect(codes(ot)).not.toContain('REQ_CEIS');
@@ -80,7 +80,7 @@ describe('the default pack', () => {
   test('portal forms the supplement replaces do not appear twice; non-documents never appear', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
     const codes = ot.map((i) => i.code);
-    for (const gone of ['REQ_PERSONAL_DETAILS', 'REQ_BANK_DETAILS', 'REQ_SUPER_SETUP', 'REQ_CONTRACT', 'REQ_PAYROLL_SETUP', 'REQ_OPAL_INDUCTION', 'REQ_WHS_INDUCTION', 'REQ_NDIS_ORIENTATION']) {
+    for (const gone of ['REQ_PERSONAL_DETAILS', 'REQ_BANK_DETAILS', 'REQ_SUPER_SETUP', 'REQ_CONTRACT', 'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'REQ_PAYROLL_SETUP', 'REQ_OPAL_INDUCTION', 'REQ_WHS_INDUCTION', 'REQ_NDIS_ORIENTATION', 'REQ_HANDBOOK', 'REQ_NDIS_CODE']) {
       expect(`${gone}:${codes.includes(gone)}`).toBe(`${gone}:false`);
     }
     expect(new Set(codes).size).toBe(codes.length);
@@ -89,6 +89,11 @@ describe('the default pack', () => {
   test('each item says what it means: sends, returns, verifies, required', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
     const by = Object.fromEntries(ot.map((i) => [i.code, i]));
+    // The induction pack carries the policy acknowledgements, the handbook, the NDIS Code and the agreements.
+    const ind = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library, 'induction');
+    expect(ind.map((i) => i.code)).toEqual(expect.arrayContaining(['REQ_HANDBOOK', 'REQ_NDIS_CODE', 'IND_SPLOSE_SETUP', 'IND_PRIVACY_AGREEMENT', 'IND_SPLOSE_ACTIVE', 'IND_TRAINING']));
+    expect(ind.find((i) => i.code === 'IND_SPLOSE_ACTIVE')).toMatchObject({ itemKind: 'account', linkedTaskCode: 'systems_access', sends: false });
+    expect(ind.every((i) => i.phase === 'induction')).toBe(true);
     expect(by.PACK_CONTRACT).toMatchObject({ sends: true, returns: true, verifies: true, required: true, documentId: 'lib-contract', documentVersionId: 'v-contract' });
     expect(by.REQ_FWIS).toMatchObject({ sends: true, returns: false, verifies: false, required: true });
     expect(by.REQ_AHPRA).toMatchObject({ sends: false, returns: true, verifies: true, required: true });
@@ -98,7 +103,7 @@ describe('the default pack', () => {
     expect(by.PACK_SUPER_CHOICE.documentId).toBe('lib-super');
     // Ordered: contract first, screening after identity.
     expect(ot[0].code).toBe('PACK_CONTRACT');
-    expect(ot.findIndex((i) => i.code === 'REQ_IDENTITY')).toBeLessThan(ot.findIndex((i) => i.code === 'REQ_WWCC'));
+    expect(ot.findIndex((i) => i.code === 'PACK_PASSPORT_VISA')).toBeLessThan(ot.findIndex((i) => i.code === 'REQ_WWCC'));
   });
 
   test('package-level additions travel with the pack once, and unknown facts fail closed', () => {

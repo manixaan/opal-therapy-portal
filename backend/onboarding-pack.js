@@ -66,10 +66,30 @@ const SUPPLEMENT = [
     description: 'A current CPR certificate (HLTAID009 or equivalent), renewed annually.' },
 ];
 
+/** The induction pack's own items. Instructions go out; agreements come back signed; accounts and training are tracked, not sent. */
+const INDUCTION_SUPPLEMENT = [
+  { code: 'IND_SPLOSE_SETUP', title: 'Splose setup instructions', section: 'systems', sortOrder: 10, documentCode: 'DOC_SPLOSE_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.PARTICIPANT_FACING, itemKind: 'document' },
+  { code: 'IND_OUTLOOK_SETUP', title: 'Outlook setup instructions', section: 'systems', sortOrder: 20, documentCode: 'DOC_OUTLOOK_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_PORTAL_SETUP', title: 'Opal Portal setup instructions', section: 'systems', sortOrder: 30, documentCode: 'DOC_PORTAL_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_PRIVACY_AGREEMENT', title: 'Privacy and Confidentiality Agreement', section: 'agreements', sortOrder: 100, documentCode: 'DOC_PRIVACY_AGREEMENT', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_CODE_OF_CONDUCT', title: 'Code of Conduct Agreement', section: 'agreements', sortOrder: 110, documentCode: 'DOC_CODE_OF_CONDUCT_AGREEMENT', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_HANDBOOK', title: 'Staff Handbook acknowledgement', section: 'agreements', sortOrder: 120, documentCode: 'DOC_HANDBOOK', sends: true, returns: true, verifies: false, required: false, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_SPLOSE_ACTIVE', title: 'Splose account activated', section: 'accounts', sortOrder: 300, sends: false, returns: false, verifies: false, required: true, rule: R.PARTICIPANT_FACING, itemKind: 'account', linkedTaskCode: 'systems_access', description: 'Marked ready when the internal set-up task is done.' },
+  { code: 'IND_OUTLOOK_ACTIVE', title: 'Outlook account activated', section: 'accounts', sortOrder: 310, sends: false, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'account', linkedTaskCode: 'work_email', description: 'Marked ready when the internal set-up task is done.' },
+  { code: 'IND_PORTAL_ACTIVE', title: 'Opal Portal account activated', section: 'accounts', sortOrder: 320, sends: false, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'account', linkedTaskCode: 'portal_account', description: 'Marked ready when the internal set-up task is done.' },
+  { code: 'IND_TRAINING', title: 'Opal induction training', section: 'training', sortOrder: 400, sends: false, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'training', linkedTaskCode: 'induction_walkthrough', description: 'The portal induction walkthrough, assigned through Learning.' },
+];
+
+/** Requirement sections that belong to the induction pack, not the documentation pack. */
+const INDUCTION_SECTIONS = new Set(['policies', 'ndis', 'training']);
+const INDUCTION_REQ_CODES = new Set(['REQ_HANDBOOK', 'REQ_WELCOME', 'REQ_INJURY_INFO', 'REQ_POSITION_DESCRIPTION']);
+
 /** Requirement codes whose portal form is replaced in the pack by a supplement document. */
 const REPLACED_BY_SUPPLEMENT = new Set([
   'REQ_PERSONAL_DETAILS', 'REQ_EMERGENCY_CONTACT', 'REQ_BANK_DETAILS', 'REQ_SUPER_SETUP',
   'REQ_CONTRACT', 'REQ_POLICE_CHECK',
+  // Identity and right to work are the passport / visa documentation in the paper model.
+  'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK',
 ]);
 
 /** Requirement handlers that are not documents at all. */
@@ -79,7 +99,14 @@ const NOT_A_DOCUMENT = new Set(['employer_task', 'training', 'live_source']);
 const SECTION_BASE = {
   welcome_employment: 0, personal_details: 100, payroll_tax_super: 130, identity: 200,
   professional: 250, screening: 300, ndis: 400, policies: 500, training: 600,
+  systems: 0, agreements: 100, accounts: 300,
 };
+
+/** Which phase a requirement-derived item belongs to. */
+function phaseOf(req) {
+  if (INDUCTION_SECTIONS.has(req.section) || INDUCTION_REQ_CODES.has(req.template_code) || /^REQ_ACK_/.test(req.template_code || '')) return 'induction';
+  return 'documentation';
+}
 
 const TITLE_OVERRIDES = {
   REQ_TAX_SETUP: 'Tax File Number Declaration (online via myGov)',
@@ -140,15 +167,17 @@ function itemFromRequirement(item, index) {
  *        (rows from odb.listDocuments — current_version_id, current_file_*, official_source_url)
  * @returns {object[]} items in pack order
  */
-function buildDefaultItems(versionContent, facts, libraryByCode = new Map()) {
+function buildDefaultItems(versionContent, facts, libraryByCode = new Map(), phase = 'documentation') {
   const { applied } = engine.selectApplicable(versionContent, facts);
   const items = [];
   applied.forEach((req, i) => {
+    if (phaseOf(req) !== phase) return;
     const it = itemFromRequirement(req, i);
-    if (it) items.push(it);
+    if (it) items.push({ ...it, phase, itemKind: 'document' });
   });
 
-  for (const s of SUPPLEMENT) {
+  const supplement = phase === 'induction' ? INDUCTION_SUPPLEMENT : SUPPLEMENT;
+  for (const s of supplement) {
     if (!engine.evaluateRule(s.rule, facts)) continue;
     const lib = s.documentCode ? libraryByCode.get(s.documentCode) : null;
     // The supplement owns its document: a requirement the seed generated for
@@ -159,7 +188,7 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map()) {
     items.push({
       code: s.code, title: s.title, description: s.description, section: s.section,
       sends: s.sends, returns: s.returns, verifies: s.verifies, required: s.required,
-      requirementCode: null,
+      requirementCode: null, phase, itemKind: s.itemKind || 'document', linkedTaskCode: s.linkedTaskCode || null,
       documentId: lib ? lib.id : null,
       documentVersionId: lib ? (lib.current_version_id || null) : null,
       documentCode: s.documentCode || null,
@@ -168,8 +197,8 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map()) {
     });
   }
 
-  // Package-level manual additions (038's onboarding_package_documents) travel too.
-  const pack = versionContent && versionContent.starterPack;
+  // Package-level manual additions (038's onboarding_package_documents) travel with the documentation pack.
+  const pack = phase === 'documentation' ? versionContent && versionContent.starterPack : null;
   const known = new Set(items.map((i) => i.documentId).filter(Boolean));
   for (const d of (pack && Array.isArray(pack.documents) ? pack.documents : [])) {
     if (!d.documentId || known.has(d.documentId)) continue;
@@ -177,7 +206,7 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map()) {
     items.push({
       code: `DOC_${String(d.documentCode || d.documentId).replace(/^DOC_/, '')}`.slice(0, 80),
       title: d.title || d.libraryTitle, description: null, section: 'policies',
-      sends: true, returns: false, verifies: false, required: false,
+      sends: true, returns: false, verifies: false, required: false, phase, itemKind: 'document',
       requirementCode: null, documentId: d.documentId, documentVersionId: d.documentVersionId || null,
       documentCode: d.documentCode || null, officialSourceUrl: d.officialSourceUrl || null,
       sortOrder: 500 + (d.position || 0),
@@ -207,12 +236,12 @@ function extFor(mime, fileName) {
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Perth' }) : null);
 
 /** The Read Me that leads the ZIP: what is enclosed, what must come back. */
-function buildReadme({ orgName, employeeName, roleTitle, dueDate, returnEmail, items }) {
+function buildReadme({ orgName, employeeName, roleTitle, dueDate, returnEmail, items, packName }) {
   const org = orgName || 'Opal Therapy';
   const enclosed = items.filter((i) => i.entryName);
   const returns = items.filter((i) => i.employee_returns);
   const lines = [
-    `${org} — Onboarding Documentation Pack`,
+    `${org} — ${packName || 'Onboarding Documentation Pack'}`,
     `Prepared for: ${employeeName || 'New starter'}${roleTitle ? ` (${roleTitle})` : ''}`,
     '',
     'ENCLOSED',
@@ -277,6 +306,6 @@ async function buildPackZip(resolved, meta) {
 }
 
 module.exports = {
-  SUPPLEMENT, REPLACED_BY_SUPPLEMENT, NOT_A_DOCUMENT, TITLE_OVERRIDES,
+  SUPPLEMENT, INDUCTION_SUPPLEMENT, INDUCTION_SECTIONS, REPLACED_BY_SUPPLEMENT, NOT_A_DOCUMENT, TITLE_OVERRIDES, phaseOf,
   itemFromRequirement, buildDefaultItems, buildPackZip, buildReadme, safeStem, extFor,
 };

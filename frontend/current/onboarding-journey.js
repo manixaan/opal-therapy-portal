@@ -261,6 +261,21 @@
     }).join('') + '</ol>';
   }
 
+  /** The six lines: Phase 1, Phase 2, Internal setup, Payroll, Phase 3, Attention. */
+  function summaryLines(sm) {
+    var cls = function (st) { return st === 'complete' || st === 'approved' ? 'is-done' : st === 'blocked' || st === 'conflict' ? 'is-danger' : st === 'ready_for_review' || st === 'review' ? 'is-you' : st === 'pending' || st === 'gathering' || st === 'unknown' ? 'is-quiet' : 'is-employee'; };
+    var line = function (k, v, st, extra) { return '<div class="oj-sum-line"><span class="oj-sum-k">' + esc(k) + '</span><span class="oj-chip ' + cls(st) + '">' + esc(v) + '</span>' + (extra ? '<span class="oj-quiet">' + esc(extra) + '</span>' : '') + '</div>'; };
+    return '<div class="oj-summary">'
+      + line('Phase 1 — Offer', sm.offer.label, sm.offer.state)
+      + line('Phase 2 — Documentation', sm.documentation.label, sm.documentation.state, sm.documentation.detail && sm.documentation.detail !== sm.documentation.label ? sm.documentation.detail : '')
+      + line('Internal setup', sm.setup.label, sm.setup.total && sm.setup.ready === sm.setup.total ? 'complete' : 'active')
+      + line('Payroll', sm.payroll.label, sm.payroll.state)
+      + line('Phase 3 — Induction', sm.induction.label, sm.induction.state)
+      + line('Requires your attention', sm.attention ? sm.attention + ' item' + (sm.attention === 1 ? '' : 's') : 'Nothing', sm.attention ? 'review' : 'complete')
+      + (sm.employee ? '<div class="oj-sum-line"><span class="oj-sum-k">Employee</span><span class="oj-chip is-done">' + esc(sm.employee) + '</span></div>' : '')
+      + '</div>';
+  }
+
   function nextLine(next) {
     var cls = next.actor === 'admin' ? 'is-you' : next.actor === 'employee' ? 'is-employee' : 'is-quiet';
     var who = next.actor === 'admin' ? 'You' : next.actor === 'employee' ? 'Employee' : next.actor === 'system' ? 'Portal' : 'Done';
@@ -280,8 +295,8 @@
     return '<article class="oj-row' + (r.next.actor === 'admin' ? ' needs-you' : '') + '">'
       + '<div class="oj-row-main">'
       + '  <h3><a href="#onboarding/record/' + esc(r.id) + '" onclick="OnboardingJourney.openRecord(\'' + jsq(r.id) + '\');return false;">' + esc(r.applicantName) + '</a></h3>'
-      + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType)) + (r.startDate ? ' · ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(r.daysToStart)) + ')' : '') + '</p>'
-      + stageTrack(r)
+      + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType)) + (r.startDate ? ' · commencement ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(r.daysToStart)) + ')' : '') + '</p>'
+      + (r.summary ? summaryLines(r.summary) : stageTrack(r))
       + '</div>'
       + '<div class="oj-row-side">'
       + nextLine(r.next)
@@ -458,7 +473,7 @@
       + (r.startDate ? ' · commences ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(j.daysToStart)) + ')' : '') + '</p></div>'
       + '  <div class="oj-record-head-actions">' + recordHeadActions(d) + '</div>'
       + '</div>'
-      + stageTrack({ stages: j.stages })
+      + (j.summary ? summaryLines(j.summary) : stageTrack({ stages: j.stages }))
       + nextBanner(d)
       + attentionHtml(d)
       + groupsHtml(j)
@@ -466,6 +481,8 @@
       + offerPanel(d)
       + documentationPanel(d)
       + inductionPanel(d)
+      + payrollPanel(d)
+      + phase3Panel(d)
       + profilePanel(d)
       + '</div>'
       + emailsPanel(d);
@@ -505,6 +522,10 @@
       case 'send_pack_in_outlook': return (d.pack && d.pack.email && d.pack.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.pack.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.packMarkSent()') : '');
       case 'review_returns': return btn('Open the document pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-primary');
+      case 'unblock_induction': return btn('See what is blocking Phase 3', 'OnboardingJourney.scrollTo(\'oj-phase3\')', 'oj-btn-primary');
+      case 'prepare_induction': return btn('Review the induction pack', 'OnboardingJourney.scrollTo(\'oj-phase3\')', 'oj-btn-primary');
+      case 'send_induction_in_outlook': return (d.induction && d.induction.email && d.induction.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.induction.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
+        + (c.assign ? btn('Mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')') : '');
       case 'review': return btn('Open the review', 'OnboardingJourney.openReview()', 'oj-btn-primary');
       case 'activate': return c.activate ? btn('Activate portal access', 'OnboardingJourney.runTask(\'portal_access\')', 'oj-btn-primary') : '';
       case 'task': return n.taskCode ? btn('Go to the task', 'OnboardingJourney.scrollTo(\'oj-task-' + jsq(n.taskCode) + '\')') : '';
@@ -549,9 +570,12 @@
         }).join('') + '</div>';
         if (c.review) acts = btn('Use the selected value', 'OnboardingJourney.resolveConflict(\'' + jsq(act.fieldId) + '\',' + n + ')', 'oj-btn-primary oj-btn-small') + btn('Type a different value', 'OnboardingJourney.correctField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small') + btn('Ignore', 'OnboardingJourney.rejectField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small oj-btn-quiet');
         break;
-      case 'confirm_field':
-        if (c.review) acts = btn('Looks right', 'OnboardingJourney.acceptField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Correct it', 'OnboardingJourney.correctField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small') + btn('Ignore', 'OnboardingJourney.rejectField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small oj-btn-quiet');
+      case 'confirm_field': {
+        var src = (d.returnedDocuments || []).filter(function (x) { return x.matchStatus !== 'unrecognised' && x.previewKind; })[0];
+        if (src) acts += btn('Preview', 'OnboardingJourney.previewReturn(\'' + jsq(src.id) + '\')', 'oj-btn-small');
+        if (c.review) acts += btn('Confirm', 'OnboardingJourney.acceptField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Correct it', 'OnboardingJourney.correctField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small') + btn('Ignore', 'OnboardingJourney.rejectField(\'' + jsq(act.fieldId) + '\')', 'oj-btn-small oj-btn-quiet');
         break;
+      }
       case 'assign_document': {
         var opts = ((d.pack && d.pack.items) || []).filter(function (i) { return i.status === 'included' && i.employeeReturns; }).map(function (i) { return [i.id, i.title]; });
         body += '<div class="oj-inline-row">' + select('oj-asg-' + n, [['', '— Which document is this? —']].concat(opts), '') + '</div>';
@@ -561,10 +585,11 @@
         break;
       }
       case 'verify_item':
-        if (c.verify) acts = btn('Checked the register — verify', 'OnboardingJourney.verifyItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-small oj-btn-quiet');
+        if (act.returnedDocumentId) acts += btn('Preview', 'OnboardingJourney.previewReturn(\'' + jsq(act.returnedDocumentId) + '\')', 'oj-btn-small');
+        if (c.verify) acts += btn(a.kind === 'register_check' ? 'Checked the register — verify' : 'Verify', 'OnboardingJourney.verifyItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-primary oj-btn-small') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(act.packItemId) + '\')', 'oj-btn-small oj-btn-quiet');
         break;
       case 'approve_payroll':
-        if (c.payroll !== false) acts = btn('Approve for payroll', 'OnboardingJourney.approvePayroll()', 'oj-btn-primary oj-btn-small');
+        acts = btn('Review Payroll', 'OnboardingJourney.scrollTo(\'oj-payroll\')', 'oj-btn-primary oj-btn-small');
         break;
       case 'request_again': case 'chase':
         acts = btn('Open the pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-small');
@@ -760,6 +785,7 @@
     welcome_employment: 'Employment', personal_details: 'Personal details', payroll_tax_super: 'Payroll, tax and super',
     identity: 'Identity and right to work', professional: 'Professional registration', screening: 'Screening and checks',
     ndis: 'NDIS', policies: 'Policies', training: 'Training',
+    systems: 'Account setup instructions', agreements: 'Agreements and acknowledgements', accounts: 'Accounts activated',
   };
 
   function documentationPanel(d) {
@@ -823,17 +849,27 @@
       }
     }
 
-    // ── The table ──
+    out += packTable(d, P, 'documentation');
+    if (sent) return out;
+    out += packEmailEditor(d, P, 'documentation');
+    return out;
+  }
+
+  /** The pack table for either phase. */
+  function packTable(d, P, phase) {
+    var r = d.record; var c = P.can || d.can; var out = '';
+    var editable = P.editable && c.assign;
+    var sent = !!P.sent;
     var included = P.items.filter(function (i) { return i.status === 'included'; });
     var removed = P.items.filter(function (i) { return i.status !== 'included'; });
     var groups = {};
     included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
     var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
 
-    out += '<div class="oj-pack-head"><div><strong>' + included.length + ' documents in the pack</strong> · '
-      + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back, ' + P.counts.verifies + ' verified by the practice</span>'
+    out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong> · '
+      + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back' + (P.tracking ? ', ' + P.tracking.done + ' of ' + P.tracking.total + ' tracked items complete' : '') + '</span>'
       + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) marked as sent have no file behind them yet — upload a file, or remove them before preparing the email.</span>' : '') + '</div>'
-      + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen()') + '</div>' : '') + '</div>';
+      + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>';
 
     if (sent && c.review) {
       out += '<div class="oj-returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back; the portal reads it, matches it to the pack and fills the profile.</span>'
@@ -857,11 +893,14 @@
           + (editable ? ' ' + btn('Restore', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'restore\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
       }).join('') + '</ul></details>';
     }
-    out += '<div id="oj-pack-add" hidden></div>';
+    out += '<div id="oj-pack-add-' + phase + '" hidden></div>';
+    return out;
+  }
 
-    if (sent) return out;
-
-    // ── Email 2 ──
+  /** Email 2 editor (Phase 2). */
+  function packEmailEditor(d, P, phase) {
+    var r = d.record; var c = P.can || d.can; var out = '';
+    var E = P.email || {}; var drafted = !!E.draftId;
     out += '<div class="oj-step is-active" id="oj-pack-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Onboarding email — to ' + esc(r.applicantEmail || '') + '</strong>'
       + (drafted ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>';
     if (c.assign) {
@@ -891,7 +930,7 @@
     return out;
   }
 
-  var PROGRESS_LABELS = { awaiting_return: 'Awaiting return', received: 'Received', verified: 'Verified', attention: 'Needs attention', sent: 'Sent', 'n/a': '—', removed: 'Removed' };
+  var PROGRESS_LABELS = { awaiting_return: 'Awaiting return', received: 'Received', verified: 'Complete', attention: 'Needs attention', sent: 'Sent', awaiting: 'Pending', 'n/a': '—', removed: 'Removed' };
   function progressChip(i) {
     var cls = i.progress === 'verified' ? 'is-done' : i.progress === 'received' ? 'is-employee' : i.progress === 'attention' ? 'is-danger' : i.progress === 'awaiting_return' ? 'is-you' : 'is-quiet';
     return '<span class="oj-chip ' + cls + '">' + esc(PROGRESS_LABELS[i.progress] || titleCase(i.progress)) + '</span>' + (i.verificationMode === 'auto' && i.progress === 'verified' ? '<br><span class="oj-quiet">by the portal</span>' : '');
@@ -900,7 +939,9 @@
   function packRow(i, editable, sent) {
     var f = i.file || {};
     var fileCell;
-    if (f.previewUrl) {
+    if (i.itemKind && i.itemKind !== 'document') {
+      fileCell = '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the internal set-up task' : i.itemKind === 'training' ? 'Follows the induction walkthrough task' : 'Tracked') + '</span>';
+    } else if (f.previewUrl) {
       fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>';
     } else if (!i.sendsDocument) {
       fileCell = '<span class="oj-quiet">Employee supplies their own</span>';
@@ -979,6 +1020,55 @@
         + '</li>';
     }).join('') + '</ul>' : '<p class="oj-quiet">The checklist is being generated.</p>';
     return stagePanel(3, 'Internal Setup & Induction', st, body);
+  }
+
+  /** Payroll Setup — confirm, do not retype. */
+  function payrollPanel(d) {
+    var P = d.payroll;
+    if (!P) return '';
+    var state = P.approved ? 'complete' : P.ready ? 'active' : 'parallel';
+    var cls = function (x) { return x === 'ready' ? 'is-done' : x === 'conflict' ? 'is-danger' : x === 'review' ? 'is-you' : 'is-quiet'; };
+    var lbl = { ready: 'Ready', missing: 'Missing', conflict: 'Conflict', review: 'Needs confirmation' };
+    var body = '<div class="oj-table-wrap"><table class="oj-pack oj-payroll"><tbody>' + P.rows.map(function (r) {
+      return '<tr><th scope="row">' + esc(r.label) + '</th><td>' + (r.value ? esc(r.value) : '<span class="oj-quiet">—</span>') + '</td><td><span class="oj-chip ' + cls(r.status) + '">' + esc(lbl[r.status] || r.status) + '</span></td></tr>';
+    }).join('') + '</tbody></table></div>';
+    if (P.approved) body += '<p class="oj-quiet">Approved ' + esc(fmtDateTime(P.approvedAt)) + (P.approvedByName ? ' by ' + esc(P.approvedByName) : '') + '. ' + esc(P.integration.note) + '</p>';
+    else if (P.ready) body += '<div class="oj-actions">' + btn('Approve Payroll Setup', 'OnboardingJourney.approvePayrollSetup()', 'oj-btn-primary') + '</div><p class="oj-quiet">' + esc(P.integration.note) + '</p>';
+    else body += '<div class="ob-note is-warn"><strong>Payroll cannot proceed yet.</strong> ' + esc(P.blockers.join(' · ')) + '. Resolve these in Requires Your Attention or wait for the documents.</div>';
+    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-payroll"><header><h2><span class="oj-stage-n">$</span>Payroll Setup</h2><span class="oj-chip ' + (P.approved ? 'is-done' : P.ready ? 'is-you' : 'is-quiet') + '">' + esc(P.label) + '</span></header>'
+      + '<p class="oj-stage-summary">' + P.readyCount + ' of ' + P.total + ' lines ready. Everything here was gathered during onboarding; confirm it rather than typing it again.</p>' + body + '</section>';
+  }
+
+  /** Phase 3 — readiness, the induction pack, Email 3, tracking. */
+  function phase3Panel(d) {
+    var I = d.induction;
+    if (!I) return '';
+    var R = I.readiness || { ready: false, checks: [], blockers: [] };
+    var c = I.can || d.can; var E = I.email || {}; var sent = I.sent;
+    var state = I.tracking && I.tracking.total && I.tracking.done === I.tracking.total && sent ? 'complete' : sent ? 'active' : R.ready ? 'active' : 'parallel';
+    var body = '';
+    body += '<div class="oj-ready"><h3>' + (R.ready ? 'Ready to send' : 'Phase 3 is not ready because:') + '</h3>'
+      + (R.ready ? '' : '<ul class="oj-blockers">' + R.blockers.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>')
+      + '<ul class="oj-checks">' + R.checks.map(function (k) { return '<li><span>' + esc(k.label) + '</span><span class="oj-chip ' + (k.state === 'ready' ? 'is-done' : k.state === 'in_progress' ? 'is-employee' : 'is-quiet') + '">' + esc(k.detail) + '</span></li>'; }).join('') + '</ul></div>';
+    if (sent) {
+      body += '<div class="oj-sent-banner"><strong>Internal Induction Sent</strong><span>Due: ' + esc(fmtDate(E.dueAt)) + '</span><span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + (I.tracking ? ' · ' + I.tracking.done + ' of ' + I.tracking.total + ' induction items complete' : '') + '</span></div>';
+    }
+    body += packTable(d, I, 'induction');
+    if (!sent && c.assign) {
+      body += '<div class="oj-step is-active" id="oj-induction-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Phase 3 email — to ' + esc(d.record.applicantEmail || '') + '</strong>' + (E.draftId ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>'
+        + '<div class="oj-field"><label for="oj-ie-subject">Subject</label><input id="oj-ie-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
+        + '<div class="oj-field"><label for="oj-ie-body">Message</label><textarea id="oj-ie-body" rows="14">' + esc(E.body || '') + '</textarea><small>The induction ZIP is built from the pack above and attached. The due date is seven days from the day the draft is created.</small></div>'
+        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + '</div>' : '')
+        + '<div class="oj-actions">' + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
+        + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
+          : '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent(\'induction\')">Mark as sent</button></p>')
+        + '</div>';
+    }
+    if (sent && c.review) {
+      body += '<div class="oj-returns"><strong>Returned induction documents</strong> <span class="oj-quiet">— signed agreements and acknowledgements; the portal matches and completes them.</span>'
+        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this)"></label></div></div>';
+    }
+    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-phase3"><header><h2><span class="oj-stage-n">3</span>Phase 3 — Internal Induction Pack</h2><span class="oj-chip ' + (state === 'complete' ? 'is-done' : sent ? 'is-employee' : R.ready ? 'is-you' : 'is-quiet') + '">' + esc(state === 'complete' ? 'Complete' : sent ? 'Sent — tracking' : R.ready ? 'Ready to send' : 'Not ready') + '</span></header>' + body + '</section>';
   }
 
   /** The employee profile — the source of truth every register reads. */
@@ -1159,25 +1249,40 @@
   }
 
   // ── Phase 2: the document pack ──
-  function packPath(rest) { return '/pack' + rest; }
-  async function packAct(rest, body, okMessage, method) {
-    var res = await act(packPath(rest), body, null, method);
+  function packPath(rest, phase) { return (phase === 'induction' ? '/induction' : '/pack') + rest; }
+  async function packAct(rest, body, okMessage, method, phase) {
+    var res = await act(packPath(rest, phase), body, null, method);
     if (!res) return null;
-    if (res.pack && S.record) { S.record.pack = res.pack; var pane = doc.getElementById('oj-view'); if (pane) drawRecord(pane); }
+    if (res.pack && S.record) {
+      if (res.pack.phase === 'induction') S.record.induction = Object.assign({}, S.record.induction || {}, res.pack); else S.record.pack = res.pack;
+      var pane = doc.getElementById('oj-view'); if (pane) drawRecord(pane);
+    }
     if (okMessage && res.ok !== false) toast(typeof okMessage === 'function' ? okMessage(res) : okMessage);
     return res;
+  }
+  function phaseOfItem(id) {
+    var ind = (S.record && S.record.induction && S.record.induction.items) || [];
+    return ind.some(function (i) { return i.id === id; }) ? 'induction' : 'documentation';
+  }
+  function packRestoreDefaults(phase) {
+    if (!global.confirm('Restore the default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack for this person? Removed defaults come back; added documents are removed.')) return;
+    return refreshRecordAfter(packAct('/restore-defaults', {}, 'Defaults restored.', 'POST', phase));
+  }
+  function approvePayrollSetup() {
+    if (!global.confirm('Approve the payroll setup? Bank details are approved with it.')) return;
+    return returnsAct('/payroll-setup/approve', {}, 'Payroll setup approved.');
   }
   function packPrepare() { return refreshRecordAfter(packAct('/prepare', {}, 'Pack prepared.')); }
   function packItem(id, verb) {
     var reason;
     if (verb === 'remove') { reason = global.prompt('Remove this document from this person\'s pack? Reason (optional):'); if (reason === null) return; }
-    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, { reason: reason || undefined }, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.'));
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, { reason: reason || undefined }, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.', 'POST', phaseOfItem(id)));
   }
-  function packFlag(id, field, value) { var body = {}; body[field] = value; return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), body, null, 'PATCH')); }
+  function packFlag(id, field, value) { var body = {}; body[field] = value; return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), body, null, 'PATCH', phaseOfItem(id))); }
   function packRename(id, current) {
     var title = global.prompt('Document name as it will appear in the pack:', current || '');
     if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
-    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), { title: title.trim() }, 'Renamed.', 'PATCH'));
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), { title: title.trim() }, 'Renamed.', 'PATCH', phaseOfItem(id)));
   }
   async function packUploadFile(id, input) {
     var file = input && input.files && input.files[0];
@@ -1187,11 +1292,12 @@
     var mime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type);
     var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast('The file could not be read.', true); return; }
     input.value = '';
-    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', { fileName: file.name, fileMime: mime, fileData: b64 }, 'File replaced for this person only.'));
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', { fileName: file.name, fileMime: mime, fileData: b64 }, 'File replaced for this person only.', 'POST', phaseOfItem(id)));
   }
-  function packRevertFile(id) { return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, 'Back to the library copy.', 'DELETE')); }
+  function packRevertFile(id) { return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, 'Back to the library copy.', 'DELETE', phaseOfItem(id))); }
   function packPreview(id) {
-    var i = (S.record && S.record.pack ? S.record.pack.items : []).filter(function (x) { return x.id === id; })[0];
+    var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
+    var i = all.filter(function (x) { return x.id === id; })[0];
     if (!i || !i.file || !i.file.previewUrl) return;
     var kind = i.file.previewKind;
     if ((kind === 'pdf' || kind === 'docx') && global.DocPreview && typeof global.DocPreview.open === 'function') {
@@ -1200,12 +1306,14 @@
       global.open(i.file.previewUrl, '_blank', 'noopener');
     }
   }
-  async function packAddOpen() {
-    var host = doc.getElementById('oj-pack-add');
+  async function packAddOpen(phase) {
+    phase = phase || 'documentation';
+    S.addPhase = phase;
+    var host = doc.getElementById('oj-pack-add-' + phase);
     if (!host) return;
     host.hidden = false;
     host.innerHTML = spinner('Loading the library…');
-    var lib = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/pack/library');
+    var lib = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + packPath('/library', phase));
     if (!lib.ok) { host.innerHTML = '<div class="ob-note is-danger">' + esc(lib.error) + '</div>'; return; }
     var opts = [['', '— Choose a library document —']].concat(lib.documents.filter(function (d) { return !d.alreadyInPack; }).map(function (d) {
       return [d.id, d.title + (d.hasFile ? '' : d.contentStatus === 'link_only' ? ' (official link — no file)' : ' (no file yet)')];
@@ -1227,7 +1335,7 @@
       + '</div>';
     host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
-  function packAddClose() { var host = doc.getElementById('oj-pack-add'); if (host) { host.hidden = true; host.innerHTML = ''; } }
+  function packAddClose() { var host = doc.getElementById('oj-pack-add-' + (S.addPhase || 'documentation')); if (host) { host.hidden = true; host.innerHTML = ''; } }
   async function packAddSubmit() {
     var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
     var ck = function (id) { var el = doc.getElementById(id); return !!(el && el.checked); };
@@ -1241,32 +1349,34 @@
       body.fileName = file.name; body.fileMime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type);
       try { body.fileData = await readFileAsBase64(file); } catch (_) { return toast('The file could not be read.', true); }
     }
-    var res = await packAct('/items', body, 'Added to this pack.');
+    var res = await packAct('/items', body, 'Added to this pack.', 'POST', S.addPhase || 'documentation');
     if (res && res.ok !== false) { packAddClose(); return refreshRecordAfter(Promise.resolve(res)); }
   }
-  function readPackEmail() {
-    var sub = doc.getElementById('oj-pe-subject'); var body = doc.getElementById('oj-pe-body');
+  function readPackEmail(phase) {
+    var sfx = phase === 'induction' ? 'ie' : 'pe';
+    var sub = doc.getElementById('oj-' + sfx + '-subject'); var body = doc.getElementById('oj-' + sfx + '-body');
     return { subject: sub ? sub.value.trim() : undefined, body: body ? body.value : undefined };
   }
-  function packSaveEmail() { return packAct('/email', readPackEmail(), 'Email wording saved.', 'PUT'); }
-  function packResetEmail() { return packAct('/email/reset', {}, 'Email reset to the template.'); }
-  async function packCreateDraft() {
-    var e = readPackEmail();
+  function packSaveEmail(phase) { return packAct('/email', readPackEmail(phase), 'Email wording saved.', 'PUT', phase); }
+  function packResetEmail(phase) { return packAct('/email/reset', {}, 'Email reset to the template.', 'POST', phase); }
+  async function packCreateDraft(phase) {
+    var e = readPackEmail(phase);
     if (e.subject !== undefined && !e.subject) return toast('Give the email a subject.', true);
     if (e.body !== undefined && !e.body.trim()) return toast('The email needs a message.', true);
-    var res = await packAct('/email/draft', e, null);
+    var res = await packAct('/email/draft', e, null, 'POST', phase);
     if (!res) return;
+    if (res.blockers) toast('Phase 3 is not ready: ' + res.blockers.join('; '), true);
     if (res.delivery) {
       toast(res.delivery.message, false);
       if (res.delivery.webLink) global.open(res.delivery.webLink, '_blank', 'noopener');
     }
     return refreshRecordAfter(Promise.resolve(res));
   }
-  function packMarkSent() {
-    if (!global.confirm('Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
-    return refreshRecordAfter(packAct('/mark-sent', {}, 'Marked as sent. Waiting for the returned documentation.'));
+  function packMarkSent(phase) {
+    if (!global.confirm(phase === 'induction' ? 'Mark the Internal Induction Pack as sent? The record tracks the induction items from here.' : 'Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
+    return refreshRecordAfter(packAct('/mark-sent', {}, phase === 'induction' ? 'Internal Induction Sent.' : 'Marked as sent. Waiting for the returned documentation.', 'POST', phase));
   }
-  function packUnmarkSent() { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.')); }
+  function packUnmarkSent(phase) { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.', 'POST', phase)); }
 
   // ── The return leg ──
   async function returnsAct(rest, body, okMessage, method) {
@@ -1392,7 +1502,7 @@
     packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
     uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
-    verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll,
+    verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,

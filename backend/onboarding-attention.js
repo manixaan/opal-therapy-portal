@@ -17,7 +17,7 @@ const KIND_LABELS = {
   missing_signature: 'Missing signature',
   missing_required_document: 'Missing required document',
   expired_credential: 'Expired credential',
-  incorrect_document: 'Incorrect document',
+  incorrect_document: 'Document needs a look',
   payroll_approval: 'Payroll information needs approval',
   account_setup_failed: 'Account set-up failed',
   register_check: 'Verify against the register',
@@ -90,7 +90,7 @@ function buildAttention({ returnedDocuments = [], packItems = [], fields = [], c
   for (const p of packItems) {
     if (p.status !== 'included') continue;
     if (p.verification_status === 'attention') {
-      push('incorrect_document', { severity: 'high', detail: `${p.title}: ${p.attention_reason || 'the returned document does not match'}.`, action: { type: 'open_item', packItemId: p.id } });
+      push('incorrect_document', { severity: 'high', detail: `${p.title}: ${p.attention_reason || 'the returned document does not match'}.`, action: { type: 'verify_item', packItemId: p.id, returnedDocumentId: (returnedDocuments.find((d) => d.pack_item_id === p.id) || {}).id || null } });
       continue;
     }
     if (p.employee_returns && p.required && !p.returned_at && overdue && ['starter_pack_sent', 'documents_received'].includes(assignment.status)) {

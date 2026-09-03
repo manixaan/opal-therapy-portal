@@ -58,12 +58,14 @@ const KIND_TO_CODES = {
   drivers_licence: ['REQ_DRIVERS_LICENCE', 'REQ_IDENTITY'], police_check: ['PACK_POLICE_CHECK', 'REQ_POLICE_CHECK'],
   ndis_screening: ['REQ_NDIS_SCREENING'], wwcc: ['REQ_WWCC'], ahpra: ['REQ_AHPRA'], first_aid: ['PACK_FIRST_AID'], cpr: ['PACK_CPR'],
   vehicle: ['REQ_VEHICLE'], insurance: ['REQ_PII', 'REQ_VEHICLE'], identity_other: ['REQ_IDENTITY'],
+  privacy_agreement: ['IND_PRIVACY_AGREEMENT'], code_of_conduct: ['IND_CODE_OF_CONDUCT'], handbook_acknowledgement: ['IND_HANDBOOK'],
 };
 const FILENAME_HINTS = [
   [/contract/i, 'contract'], [/employee.?details|new.?employee|personal.?details/i, 'new_employee_details'], [/super/i, 'super_choice'],
   [/tax|tfn|ato/i, 'tax_summary'], [/passport/i, 'passport'], [/visa|vevo/i, 'visa'], [/licen[cs]e/i, 'drivers_licence'],
   [/police|npc/i, 'police_check'], [/ndis|screening/i, 'ndis_screening'], [/wwcc|working.?with.?children/i, 'wwcc'], [/ahpra/i, 'ahpra'],
   [/first.?aid/i, 'first_aid'], [/cpr/i, 'cpr'], [/vehicle|rego|registration/i, 'vehicle'], [/insurance|indemnity/i, 'insurance'],
+  [/privacy|confidential/i, 'privacy_agreement'], [/code.?of.?conduct/i, 'code_of_conduct'], [/handbook/i, 'handbook_acknowledgement'],
 ];
 
 function matchDocument(doc, classification, packItems) {
@@ -73,9 +75,11 @@ function matchDocument(doc, classification, packItems) {
     const hint = FILENAME_HINTS.find(([re]) => re.test(`${doc.title || ''} ${doc.file_name || ''}`));
     if (hint) { kind = hint[1]; confidence = 'medium'; }
   }
-  if (!kind || kind === 'unrecognised' || kind === 'other' || kind === 'policy_acknowledgement') return { kind: kind || 'unrecognised', item: null, confidence: 'low' };
+  if (!kind || kind === 'unrecognised' || kind === 'other') return { kind: kind || 'unrecognised', item: null, confidence: 'low' };
   const codes = KIND_TO_CODES[kind] || [];
+  // A signed policy acknowledgement answers the induction item whose title it names.
   const item = codes.map((c) => included.find((p) => p.code === c)).find(Boolean)
+    || (kind === 'policy_acknowledgement' ? included.find((p) => p.phase === 'induction' && p.employee_returns && new RegExp(String(doc.title || doc.file_name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z]+/gi, '.*'), 'i').test(p.title)) : null)
     || included.find((p) => p.employee_returns && new RegExp(kind.replace(/_/g, '.?'), 'i').test(p.title)) || null;
   return { kind, item, confidence: item ? confidence : 'low' };
 }
@@ -196,7 +200,17 @@ async function processReturns(req, assignment) {
     if (unsettled) { await rdb.setItemVerification(item.id, { status: 'pending', mode: null, reason: null }); continue; }
     if (!item.requires_verification || (!statutory && (readings.length > 0 || !keys.length))) {
       if (item.verification_status !== 'verified') { await rdb.setItemVerification(item.id, { status: 'verified', mode: 'auto', reason: null, note: 'Verified automatically: recognised, read reliably, nothing in conflict' }); out.autoVerified += 1; }
+    } else if (!statutory && keys.length && !readings.length && item.verification_status === 'pending') {
+      // Recognised, but none of its details could be read: a person has to look at it.
+      await rdb.setItemVerification(item.id, { status: 'attention', mode: 'auto', reason: 'Received, but its details could not be read — check the document and verify it' });
     }
+  }
+
+  // 6b. A tax summary in hand settles the tax line of payroll.
+  if (fresh.user_id && docsNow.some((d) => d.document_kind === 'tax_summary')) {
+    const taxDoc = docsNow.find((d) => d.document_kind === 'tax_summary');
+    const documentId = await rdb.attachOriginal(taxDoc, { userId: fresh.user_id, organisationId: fresh.organisation_id, title: 'Employee Tax Details Summary', documentType: 'tax_summary' });
+    await odb.savePayrollTax(fresh.user_id, fresh.organisation_id, { assignmentId: fresh.id, taxSetupStatus: 'employee_completed', taxSubmissionMethod: 'ato_online_services', taxSummaryDocumentId: documentId }, req.user.id).catch((err) => log.warn('tax summary not recorded', { error: err }));
   }
 
   // 7. The record moves.
@@ -205,7 +219,60 @@ async function processReturns(req, assignment) {
         documents_received_at = COALESCE(documents_received_at, NOW()), extraction_completed_at = CASE WHEN $2::boolean THEN NOW() ELSE extraction_completed_at END,
         last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignment.id, out.aiUsed]
   );
+  await syncProgress(req, await odb.getAssignment(assignment.organisation_id, assignment.id));
   return out;
+}
+
+/**
+ * PROGRESS. Account and training items follow their internal task; a phase
+ * completes when every required tracked item is done; Phase 3 complete means
+ * the person is activated and the record closes.
+ */
+async function syncProgress(req, assignment) {
+  const jdb = require('./onboarding-journey-db');
+  const inductionRules = require('./onboarding-induction');
+  const tasks = await jdb.listTasks(assignment.id);
+  const items = await pdb.listItems(assignment.id);
+  for (const it of items) {
+    if (it.status !== 'included') continue;
+    if (it.item_kind !== 'document' && it.linked_task_code) {
+      const t = tasks.find((x) => x.code === it.linked_task_code);
+      const done = !!t && (t.status === 'done' || t.status === 'skipped');
+      if (done !== !!it.completed_at) await pdb.setItemCompleted(assignment.id, it.code, done);
+    } else if (it.item_kind === 'document' && it.employee_returns && !it.requires_verification && it.returned_at && it.verification_status === 'pending') {
+      // An acknowledgement that came back (signed) is complete on return.
+      const doc = (await rdb.listReturns(assignment.id)).find((d) => d.id === it.returned_document_id);
+      if (doc && doc.signature_status !== 'missing') await rdb.setItemVerification(it.id, { status: 'verified', mode: 'auto', reason: null, note: 'Returned and acknowledged' });
+    }
+  }
+  const after = await pdb.listItems(assignment.id);
+  const docReq = after.filter((i) => i.phase === 'documentation' && i.status === 'included' && i.required && i.employee_returns);
+  const docDone = docReq.length > 0 && docReq.every((i) => i.verification_status === 'verified');
+  if (docDone && !assignment.documentation_completed_at) {
+    await odb.pool.query('UPDATE onboarding_assignments SET documentation_completed_at = NOW(), updated_at = NOW() WHERE id = $1', [assignment.id]);
+  }
+  const ind = inductionRules.inductionComplete(after.filter((i) => i.phase === 'induction'));
+  if (assignment.induction_sent_at && ind.complete && !assignment.induction_completed_at) {
+    await odb.pool.query('UPDATE onboarding_assignments SET induction_completed_at = NOW(), updated_at = NOW() WHERE id = $1', [assignment.id]);
+    await completeOnboarding(req, await odb.getAssignment(assignment.organisation_id, assignment.id));
+  }
+  return { documentationComplete: docDone, induction: ind };
+}
+
+/** Everything required is done: activate the person and close the record. */
+async function completeOnboarding(req, assignment) {
+  const lifecycle = require('./onboarding-lifecycle');
+  const jdb = require('./onboarding-journey-db');
+  if (['activated', 'completed', 'cancelled', 'archived'].includes(assignment.status)) return;
+  try {
+    const outcome = await lifecycle.activateAssignment({ assignment, actor: { id: req.user.id, name: req.user.name, email: req.user.email } });
+    await jdb.setTaskStatus(assignment.id, 'portal_access', { status: 'done', actorId: req.user.id, note: 'Activated when the induction completed', detail: { activatedRole: outcome.user.role } }).catch(() => {});
+    await odb.pool.query(`UPDATE onboarding_assignments SET status = 'completed', completed_at = COALESCE(completed_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignment.id]);
+    await auditOnboarding(req, 'onboarding_completed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, role: outcome.user.role } });
+  } catch (err) {
+    log.warn('completion could not activate the account', { error: err, assignmentId: assignment.id });
+    await jdb.setTaskStatus(assignment.id, 'portal_access', { status: 'failed', actorId: req.user.id, note: err.body?.error || 'Activation refused' }).catch(() => {});
+  }
 }
 
 /** The attention list for a record, assembled from every source. */
@@ -388,4 +455,4 @@ router.get('/api/onboarding/journey/records/:id/profile', requirePermission('onb
 }));
 
 module.exports = router;
-module.exports._internals = { processReturns, attentionFor, matchDocument, KIND_TO_CODES, ITEM_FIELDS };
+module.exports._internals = { processReturns, attentionFor, matchDocument, syncProgress, completeOnboarding, KIND_TO_CODES, ITEM_FIELDS };

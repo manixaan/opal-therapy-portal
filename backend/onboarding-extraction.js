@@ -157,7 +157,8 @@ const FIELDS = Object.freeze({
 const DOCUMENT_KINDS = [
   'contract', 'new_employee_details', 'super_choice', 'tax_summary', 'fair_work_statement',
   'passport', 'visa', 'drivers_licence', 'police_check', 'ndis_screening', 'wwcc', 'ahpra',
-  'first_aid', 'cpr', 'vehicle', 'insurance', 'identity_other', 'policy_acknowledgement', 'other', 'unrecognised',
+  'first_aid', 'cpr', 'vehicle', 'insurance', 'identity_other', 'policy_acknowledgement',
+  'privacy_agreement', 'code_of_conduct', 'handbook_acknowledgement', 'other', 'unrecognised',
 ];
 
 const FIELD_KEYS = Object.freeze(Object.keys(FIELDS));

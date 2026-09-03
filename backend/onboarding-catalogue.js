@@ -857,6 +857,17 @@ const OPAL_POLICIES = [
     description: 'The contract template. Sent in the onboarding pack; the signed copy comes back with it.' },
   { code: 'DOC_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details Form', category: 'Employment', ack: false,
     description: 'Personal, emergency contact and bank details on one form, returned with the pack.' },
+  // Phase 3 — the Internal Induction Pack.
+  { code: 'DOC_SPLOSE_SETUP', title: 'Splose setup instructions', category: 'Systems', ack: false,
+    description: 'How to activate and sign in to Splose for the first time.' },
+  { code: 'DOC_OUTLOOK_SETUP', title: 'Outlook and Microsoft 365 setup instructions', category: 'Systems', ack: false,
+    description: 'Mailbox, calendar and Teams on the practice tenant; first sign-in and password change.' },
+  { code: 'DOC_PORTAL_SETUP', title: 'Opal Portal setup instructions', category: 'Systems', ack: false,
+    description: 'Signing in to the Opal Portal for the first time.' },
+  { code: 'DOC_PRIVACY_AGREEMENT', title: 'Privacy and Confidentiality Agreement', category: 'Employment', ack: true,
+    description: 'Signed and returned with the induction pack.' },
+  { code: 'DOC_CODE_OF_CONDUCT_AGREEMENT', title: 'Code of Conduct Agreement', category: 'Employment', ack: true,
+    description: 'Signed and returned with the induction pack.' },
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════

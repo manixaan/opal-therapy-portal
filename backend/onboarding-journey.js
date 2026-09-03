@@ -224,9 +224,9 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
   const status = assignment.status;
   const p = pack || {};
 
-  if (STAGE3_STATUSES.has(status)) {
+  if (STAGE3_STATUSES.has(status) || (p.completedAt && ['documents_received', 'starter_pack_sent'].includes(status))) {
     out.state = 'complete';
-    out.completedAt = assignment.submitted_at || assignment.activated_at || null;
+    out.completedAt = p.completedAt || assignment.submitted_at || assignment.activated_at || null;
     out.summary = 'All onboarding documentation approved.';
     for (const r of requirements) {
       if (REQ_DONE.has(r.status)) out.items.push({ kind: 'done', label: r.title, at: r.completed_at || r.reviewed_at || null });
@@ -344,8 +344,24 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
 
 // ── Stage 3 ─────────────────────────────────────────────────────────────────
 
-function projectInduction(assignment, tasks, now, stage2Complete) {
+function projectInduction(assignment, tasks, now, stage2Complete, induction) {
   const out = { state: 'pending', summary: 'Starts when the documentation is approved.', completedAt: null, items: [], next: null };
+  const I = induction || {};
+  // ── The induction PACK (Phase 3) once it has been sent ──
+  if (I.sentAt) {
+    const tr = I.tracking || { total: 0, done: 0, required: 0, requiredDone: 0 };
+    if (I.completedAt || assignment.status === 'completed') {
+      out.state = 'complete'; out.completedAt = I.completedAt || assignment.completed_at || null;
+      out.summary = 'Induction complete. Employee active and ready for commencement.';
+      return out;
+    }
+    out.state = 'active';
+    const overdue = isOverdue(I.dueAt, now);
+    out.summary = `Internal Induction Sent — due ${I.dueAt ? new Date(I.dueAt).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Australia/Perth' }) : ''}. ${tr.done} of ${tr.total} induction items complete.`;
+    out.items.push({ kind: 'employee', label: `Complete the induction items (${Math.max(0, tr.total - tr.done)} remaining)`, dueAt: I.dueAt || null, overdue, detail: overdue ? 'Past the seven days requested' : null });
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the employee to complete the induction items' };
+    return out;
+  }
   // Internal setup runs ALONGSIDE the documentation: once tasks exist the
   // stage is live, but it only becomes the record's current stage after
   // the documentation is done.
@@ -358,7 +374,10 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
     }
     const done = sorted.filter((t) => t.status === 'done' || t.status === 'skipped').length;
     out.state = 'parallel';
-    out.summary = `Internal setup under way alongside the documentation — ${done} of ${sorted.length} ready.`;
+    const R = I.readiness;
+    out.summary = R && !R.ready
+      ? `Internal setup under way (${done} of ${sorted.length} ready). Phase 3 is not ready because: ${R.blockers.slice(0, 3).join('; ')}${R.blockers.length > 3 ? '…' : ''}`
+      : `Internal setup under way alongside the documentation — ${done} of ${sorted.length} ready.`;
     return out;
   }
 
@@ -389,6 +408,27 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
   if (!tasks.length) {
     out.summary = 'Ready for induction — the checklist has not been generated yet.';
     out.next = { actor: 'system', action: 'generate_tasks', label: 'Generating the induction checklist' };
+    return out;
+  }
+
+  // Phase 3 pack not yet sent: the readiness check decides the next line.
+  // (A record on the portal-wizard path — ready_to_activate — keeps the
+  // activation flow below instead.)
+  if (I.prepared !== undefined && !STAGE3_STATUSES.has(status)) {
+    const R = I.readiness;
+    if (R && !R.ready) {
+      out.summary = `Phase 3 is not ready because: ${R.blockers.slice(0, 3).join('; ')}${R.blockers.length > 3 ? '…' : ''}`;
+      out.items.push({ kind: 'review', label: `Phase 3 is not ready: ${R.blockers[0]}`, at: null });
+      out.next = { actor: 'admin', action: 'unblock_induction', label: `Phase 3 is not ready — ${R.blockers[0]}` };
+      return out;
+    }
+    if (I.draftId) {
+      out.summary = 'The induction email is waiting in Outlook with the pack attached.';
+      out.next = { actor: 'admin', action: 'send_induction_in_outlook', label: 'Open the induction draft in Outlook, send it, then mark it as sent' };
+      return out;
+    }
+    out.summary = 'Ready to send the Internal Induction Pack.';
+    out.next = { actor: 'admin', action: 'prepare_induction', label: 'Review the induction pack and prepare the Phase 3 email' };
     return out;
   }
 
@@ -425,12 +465,12 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
  * @param {object|null} p.pack    { prepared, draftId, counts:{included,returns,missingFiles} } for the document pack
  * @param {Date} p.now
  */
-function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, attention = [], now = new Date() }) {
+function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, attention = [], induction = null, payroll = null, now = new Date() }) {
   const closed = assignment.status === 'cancelled' || assignment.status === 'archived';
 
   const s1 = projectOffer(assignment, offer, now);
   const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete', pack);
-  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete');
+  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete', induction);
 
   const stages = [
     { ...STAGES[0], ...pick(s1) },
@@ -472,8 +512,31 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
 
   const daysToStart = start ? daysBetween(now, start) : null;
 
+  // The one-screen summary: six lines, each a state and a count.
+  const p2 = (pack && pack.tracking) || null;
+  const setupTasks = (tasks || []).filter((t) => t.code !== 'portal_access');
+  const setupReady = setupTasks.filter((t) => t.status === 'done' || t.status === 'skipped').length;
+  const I = induction || {};
+  const summary = {
+    offer: { state: s1.state === 'complete' ? 'complete' : s1.state === 'blocked' ? 'blocked' : s1.substage === 'waiting' ? 'waiting' : 'in_progress', label: s1.state === 'complete' ? 'Complete' : s1.substage === 'waiting' ? 'Awaiting signed offer' : s1.state === 'blocked' ? 'Declined / withdrawn' : 'In progress' },
+    documentation: {
+      state: s2.state, done: p2 ? p2.done : 0, total: p2 ? p2.total : 0,
+      label: s2.state === 'complete' ? 'Complete' : s2.state === 'pending' ? 'Not yet started' : p2 && p2.total ? `${p2.done} of ${p2.total} items complete` : (pack && pack.sentAt ? 'Awaiting employee' : 'Preparing the pack'),
+      detail: s2.state === 'active' ? (s2.next && s2.next.actor === 'employee' ? 'Awaiting employee' : s2.next ? s2.next.label : '') : '',
+    },
+    setup: { ready: setupReady, total: setupTasks.length, label: setupTasks.length ? `${setupReady} of ${setupTasks.length} items ready` : 'Not yet started' },
+    payroll: { state: payroll ? payroll.status : 'unknown', label: payroll ? payroll.label : '—' },
+    induction: {
+      state: s3.state, done: I.tracking ? I.tracking.done : 0, total: I.tracking ? I.tracking.total : 0,
+      label: I.completedAt ? 'Complete' : I.sentAt ? `Sent — ${I.tracking ? `${I.tracking.done} of ${I.tracking.total} complete` : 'tracking'}` : I.draftId ? 'Draft in Outlook' : s2.state !== 'complete' ? 'Not yet sent' : I.readiness && !I.readiness.ready ? 'Not ready' : 'Ready to send',
+    },
+    attention: (attention || []).length,
+    employee: current.key === 'complete' ? 'Active — ready for commencement' : null,
+  };
+
   return {
     stage: current,
+    summary,
     stages,
     next,
     completed,

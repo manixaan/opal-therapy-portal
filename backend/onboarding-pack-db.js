@@ -36,9 +36,9 @@ const ITEM_SELECT = `
     LEFT JOIN users fu ON fu.id = i.file_uploaded_by
     LEFT JOIN users vb ON vb.id = i.verified_by`;
 
-async function listItems(assignmentId, q = pool) {
+async function listItems(assignmentId, q = pool, phase = null) {
   if (!isUuid(assignmentId)) return [];
-  const { rows } = await q.query(`${ITEM_SELECT} WHERE i.assignment_id = $1 ORDER BY i.sort_order, i.title`, [assignmentId]);
+  const { rows } = await q.query(`${ITEM_SELECT} WHERE i.assignment_id = $1 ${phase ? 'AND i.phase = $2' : ''} ORDER BY i.sort_order, i.title`, phase ? [assignmentId, phase] : [assignmentId]);
   return rows;
 }
 
@@ -71,34 +71,67 @@ async function insertDefaults(organisationId, assignmentId, items, q = pool) {
       `INSERT INTO onboarding_pack_items
          (organisation_id, assignment_id, code, title, description, section,
           sends_document, employee_returns, requires_verification, required,
-          origin, requirement_code, document_id, document_version_id, official_source_url, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'default',$11,$12,$13,$14,$15)
+          origin, requirement_code, document_id, document_version_id, official_source_url, sort_order,
+          phase, item_kind, linked_task_code)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'default',$11,$12,$13,$14,$15,$16,$17,$18)
        ON CONFLICT (assignment_id, code) DO NOTHING`,
       [organisationId, assignmentId, str(it.code, 80), str(it.title, 250), str(it.description, 1000), str(it.section, 40),
         it.sends === true, it.returns === true, it.verifies === true, it.required !== false,
         str(it.requirementCode, 80), isUuid(it.documentId) ? it.documentId : null,
-        isUuid(it.documentVersionId) ? it.documentVersionId : null, str(it.officialSourceUrl, 2000), Number(it.sortOrder) || 0]
+        isUuid(it.documentVersionId) ? it.documentVersionId : null, str(it.officialSourceUrl, 2000), Number(it.sortOrder) || 0,
+        it.phase || 'documentation', it.itemKind || 'document', str(it.linkedTaskCode, 60)]
     );
     inserted += rowCount;
   }
   return inserted;
 }
 
-async function addItem({ organisationId, assignmentId, title, description, sends, returns, verifies, required, documentId, documentVersionId, officialSourceUrl }, q = pool) {
+async function addItem({ organisationId, assignmentId, title, description, sends, returns, verifies, required, documentId, documentVersionId, officialSourceUrl, phase = 'documentation' }, q = pool) {
   const code = `ADDED_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const { rows } = await q.query(
     `INSERT INTO onboarding_pack_items
        (organisation_id, assignment_id, code, title, description, section,
         sends_document, employee_returns, requires_verification, required,
-        origin, document_id, document_version_id, official_source_url, sort_order)
-     VALUES ($1,$2,$3,$4,$5,'policies',$6,$7,$8,$9,'added',$10,$11,$12,
-             COALESCE((SELECT MAX(sort_order) FROM onboarding_pack_items WHERE assignment_id = $2), 0) + 10)
+        origin, document_id, document_version_id, official_source_url, sort_order, phase)
+     VALUES ($1,$2,$3,$4,$5,$13,$6,$7,$8,$9,'added',$10,$11,$12,
+             COALESCE((SELECT MAX(sort_order) FROM onboarding_pack_items WHERE assignment_id = $2 AND phase = $14), 0) + 10, $14)
      RETURNING *`,
     [organisationId, assignmentId, code, str(title, 250), str(description, 1000),
       sends === true, returns === true, verifies === true, required !== false,
-      isUuid(documentId) ? documentId : null, isUuid(documentVersionId) ? documentVersionId : null, str(officialSourceUrl, 2000)]
+      isUuid(documentId) ? documentId : null, isUuid(documentVersionId) ? documentVersionId : null, str(officialSourceUrl, 2000),
+      phase === 'induction' ? 'agreements' : 'policies', phase]
   );
   return rows[0];
+}
+
+/** Restore the defaults for one phase: removed default items come back, added ones are removed. */
+async function restoreDefaults(assignmentId, phase, q = pool) {
+  const { rowCount: restored } = await q.query(`UPDATE onboarding_pack_items SET status = 'included', removed_reason = NULL, updated_at = NOW() WHERE assignment_id = $1 AND phase = $2 AND origin = 'default' AND status = 'removed'`, [assignmentId, phase]);
+  const { rowCount: removed } = await q.query(`UPDATE onboarding_pack_items SET status = 'removed', removed_reason = 'Defaults restored', updated_at = NOW() WHERE assignment_id = $1 AND phase = $2 AND origin = 'added' AND status = 'included'`, [assignmentId, phase]);
+  return { restored, removed };
+}
+
+async function countItemsByPhase(assignmentIds, q = pool) {
+  const ids = (assignmentIds || []).filter(isUuid);
+  const out = new Map();
+  if (!ids.length) return out;
+  const { rows } = await q.query(
+    `SELECT assignment_id, phase,
+            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document')) AS tracked,
+            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND required) AS required,
+            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS done,
+            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND required AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS required_done
+       FROM onboarding_pack_items WHERE assignment_id = ANY($1::uuid[]) GROUP BY assignment_id, phase`, [ids]
+  );
+  for (const r of rows) {
+    if (!out.has(r.assignment_id)) out.set(r.assignment_id, {});
+    out.get(r.assignment_id)[r.phase] = { tracked: +r.tracked, required: +r.required, done: +r.done, requiredDone: +r.required_done };
+  }
+  return out;
+}
+
+async function setItemCompleted(assignmentId, code, completed, q = pool) {
+  await q.query(`UPDATE onboarding_pack_items SET completed_at = CASE WHEN $3::boolean THEN COALESCE(completed_at, NOW()) ELSE NULL END, updated_at = NOW() WHERE assignment_id = $1 AND code = $2`, [assignmentId, code, completed]);
 }
 
 async function updateItem(assignmentId, itemId, patch, q = pool) {
@@ -263,7 +296,7 @@ async function unmarkPackSent(assignmentId, q = pool) {
 }
 
 module.exports = {
-  listItems, getItem, countItems, insertDefaults, addItem, updateItem, setItemStatus, reorderItems,
+  listItems, getItem, countItems, countItemsByPhase, insertDefaults, addItem, restoreDefaults, updateItem, setItemStatus, reorderItems, setItemCompleted,
   setItemFile, clearItemFile, describeItemFile, readItemFile,
   setPackPrepared, savePackEmail, markPackDrafted, clearPackDraft, markPackSent, unmarkPackSent,
 };
