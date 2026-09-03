@@ -115,6 +115,29 @@ describe('the default pack', () => {
   });
 });
 
+describe('package defaults (Edit onboarding)', () => {
+  test('a package tweak removes, renames, reflags or adds — and only for that phase', () => {
+    const derived = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
+    const out = pack.applyDefaults(derived, [
+      { phase: 'documentation', code: 'PACK_FIRST_AID', action: 'remove' },
+      { phase: 'documentation', code: 'PACK_CONTRACT', action: 'override', title: 'Employment Contract', required: false },
+      { phase: 'documentation', code: 'DEF_ABC', action: 'add', title: 'Parking map', sends_document: true, employee_returns: false, document_id: 'lib-map', sort_order: 950 },
+      { phase: 'induction', code: 'PACK_CONTRACT', action: 'remove' },
+    ], 'documentation');
+    const codes = out.map((i) => i.code);
+    expect(codes).not.toContain('PACK_FIRST_AID');
+    expect(out.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false, sends: true, returns: true });
+    expect(out[out.length - 1]).toMatchObject({ code: 'DEF_ABC', title: 'Parking map', phase: 'documentation', documentId: 'lib-map', returns: false });
+    expect(pack.applyDefaults(derived, [], 'documentation')).toEqual(derived);
+  });
+  test('sample facts follow the package: an OT package is treating, mobile and child-related; an admin one is not', () => {
+    const ot = pack.sampleFactsFor({ role_category: 'occupational_therapist', employment_type: 'casual' }, { ndisProviderStatus: 'unregistered' });
+    const admin = pack.sampleFactsFor({ role_category: 'administration', employment_type: 'full_time' }, { ndisProviderStatus: 'unregistered' });
+    expect(ot).toMatchObject({ employment_type: 'casual', is_treating_therapist: true, mobile_community_role: true });
+    expect(admin).toMatchObject({ employment_type: 'full_time', is_treating_therapist: false, mobile_community_role: false });
+  });
+});
+
 describe('the ZIP', () => {
   test('carries only sendable items with files, numbered, with a read-me that lists the returns', async () => {
     const items = [

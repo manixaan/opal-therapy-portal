@@ -563,6 +563,7 @@ app.use('/', require('./onboarding-journey-routes'));
 app.use('/', require('./onboarding-pack-routes'));
 app.use('/', require('./onboarding-returns-routes'));
 app.use('/', require('./onboarding-payroll-routes'));
+app.use('/', require('./onboarding-defaults-routes'));
 app.use('/', require('./onboarding-package-docs-routes'));
 app.use('/', require('./onboarding-assignment-routes'));
 app.use('/', require('./onboarding-library-routes'));

@@ -667,7 +667,8 @@ describe('changed assets are cache-busted', () => {
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
-      ['navigation.js', 8],
+      // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
+      ['navigation.js', 9],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -677,7 +678,7 @@ describe('changed assets are cache-busted', () => {
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 8], ['onboarding-journey.css', 6],
+      ['onboarding-journey.js', 9], ['onboarding-journey.css', 7],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.

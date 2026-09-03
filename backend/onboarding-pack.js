@@ -217,6 +217,52 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map(), pha
   return items;
 }
 
+/**
+ * Apply the package's saved tweaks (onboarding_pack_defaults rows) to a
+ * derived list. Removals drop; overrides patch; adds append.
+ */
+function applyDefaults(items, defaults, phase) {
+  const rows = (defaults || []).filter((d) => d.phase === phase);
+  if (!rows.length) return items;
+  const byCode = new Map(rows.map((d) => [d.code, d]));
+  const out = [];
+  for (const it of items) {
+    const d = byCode.get(it.code);
+    if (!d) { out.push(it); continue; }
+    if (d.action === 'remove') continue;
+    out.push({
+      ...it,
+      title: d.title || it.title, description: d.description ?? it.description,
+      sends: d.sends_document ?? it.sends, returns: d.employee_returns ?? it.returns,
+      verifies: d.requires_verification ?? it.verifies, required: d.required ?? it.required,
+      sortOrder: d.sort_order ?? it.sortOrder,
+    });
+  }
+  for (const d of rows) {
+    if (d.action !== 'add') continue;
+    out.push({
+      code: d.code, title: d.title || 'Document', description: d.description || null, section: phase === 'induction' ? 'agreements' : 'policies',
+      sends: d.sends_document !== false, returns: d.employee_returns === true, verifies: d.requires_verification === true, required: d.required !== false,
+      requirementCode: null, phase, itemKind: 'document', linkedTaskCode: null,
+      documentId: d.document_id || null, documentVersionId: d.current_version_id || null, documentCode: d.document_code || null,
+      officialSourceUrl: d.official_source_url || null, sortOrder: d.sort_order ?? 900,
+    });
+  }
+  out.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+  return out;
+}
+
+/** Representative facts for a package, so its default pack can be shown without an employee. */
+function sampleFactsFor(pkg, settings) {
+  const engine2 = require('./onboarding-engine');
+  const ot = pkg.role_category === 'occupational_therapist';
+  return engine2.buildFacts({
+    employment_type: pkg.employment_type || 'full_time', role_category: pkg.role_category || 'administration', proposed_role: ot ? 'therapist' : 'admin',
+    is_treating_therapist: ot, child_related_work: ot ? 'yes' : 'no', ndis_risk_assessed_role: ot ? 'yes' : 'no',
+    mobile_community_role: ot, uses_own_vehicle: ot, new_graduate: false, work_rights_check_required: false,
+  }, settings || {});
+}
+
 // ── The ZIP ─────────────────────────────────────────────────────────────────
 
 function safeStem(title, fallback = 'Document') {
@@ -307,5 +353,5 @@ async function buildPackZip(resolved, meta) {
 
 module.exports = {
   SUPPLEMENT, INDUCTION_SUPPLEMENT, INDUCTION_SECTIONS, REPLACED_BY_SUPPLEMENT, NOT_A_DOCUMENT, TITLE_OVERRIDES, phaseOf,
-  itemFromRequirement, buildDefaultItems, buildPackZip, buildReadme, safeStem, extFor,
+  itemFromRequirement, buildDefaultItems, applyDefaults, sampleFactsFor, buildPackZip, buildReadme, safeStem, extFor,
 };

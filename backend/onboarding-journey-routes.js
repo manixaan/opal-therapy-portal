@@ -332,9 +332,8 @@ router.use('/api/onboarding/journey', requireAuth);
 /** The board: every live record with its stage, next action and counts. */
 router.get('/api/onboarding/journey/board', requirePermission('onboarding.view'), safe(async (req, res) => {
   const org = orgOf(req);
-  const includeClosed = req.query.closed === '1';
   const all = await odb.listAssignments(org, {});
-  const rows = all.filter((a) => includeClosed || !['cancelled', 'archived'].includes(a.status));
+  const rows = all;
   const ids = rows.map((a) => a.id);
 
   const pdb = require('./onboarding-pack-db');
@@ -399,6 +398,7 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
         induction: live.filter((r) => r.stage.key === 'induction').length,
       },
       complete: records.filter((r) => r.complete).length,
+      archived: records.filter((r) => r.closed).length,
     },
     can: {
       assign: hasPermission(req.user, 'onboarding.assign'),

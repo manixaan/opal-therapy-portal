@@ -295,7 +295,58 @@ async function unmarkPackSent(assignmentId, q = pool) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  PACKAGE DEFAULTS (Edit Onboarding)
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function listPackDefaults(packageId, q = pool) {
+  if (!isUuid(packageId)) return [];
+  const { rows } = await q.query(
+    `SELECT d.*, doc.code AS document_code, doc.official_source_url, v.id AS current_version_id
+       FROM onboarding_pack_defaults d
+       LEFT JOIN onboarding_documents doc ON doc.id = d.document_id
+       LEFT JOIN onboarding_document_versions v ON v.document_id = doc.id AND v.version = doc.current_version
+      WHERE d.package_id = $1 ORDER BY d.sort_order NULLS LAST, d.created_at`, [packageId]
+  );
+  return rows;
+}
+
+async function upsertPackDefault({ organisationId, packageId, phase, code, action, patch = {}, actorId }, q = pool) {
+  const { rows } = await q.query(
+    `INSERT INTO onboarding_pack_defaults
+       (organisation_id, package_id, phase, code, action, title, description, sends_document, employee_returns, requires_verification, required, document_id, sort_order, updated_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     ON CONFLICT (package_id, phase, code) DO UPDATE SET
+       action = EXCLUDED.action,
+       title = COALESCE(EXCLUDED.title, onboarding_pack_defaults.title),
+       description = COALESCE(EXCLUDED.description, onboarding_pack_defaults.description),
+       sends_document = COALESCE(EXCLUDED.sends_document, onboarding_pack_defaults.sends_document),
+       employee_returns = COALESCE(EXCLUDED.employee_returns, onboarding_pack_defaults.employee_returns),
+       requires_verification = COALESCE(EXCLUDED.requires_verification, onboarding_pack_defaults.requires_verification),
+       required = COALESCE(EXCLUDED.required, onboarding_pack_defaults.required),
+       document_id = COALESCE(EXCLUDED.document_id, onboarding_pack_defaults.document_id),
+       sort_order = COALESCE(EXCLUDED.sort_order, onboarding_pack_defaults.sort_order),
+       updated_by = EXCLUDED.updated_by, updated_at = NOW()
+     RETURNING *`,
+    [organisationId, packageId, phase, str(code, 80), action, str(patch.title, 250), str(patch.description, 1000),
+      patch.sends ?? null, patch.returns ?? null, patch.verifies ?? null, patch.required ?? null,
+      isUuid(patch.documentId) ? patch.documentId : null, patch.sortOrder ?? null, actorId || null]
+  );
+  return rows[0];
+}
+
+async function deletePackDefault(packageId, phase, code, q = pool) {
+  const { rowCount } = await q.query('DELETE FROM onboarding_pack_defaults WHERE package_id = $1 AND phase = $2 AND code = $3', [packageId, phase, str(code, 80)]);
+  return rowCount;
+}
+
+async function clearPackDefaults(packageId, phase, q = pool) {
+  const { rowCount } = await q.query('DELETE FROM onboarding_pack_defaults WHERE package_id = $1 AND phase = $2', [packageId, phase]);
+  return rowCount;
+}
+
 module.exports = {
+  listPackDefaults, upsertPackDefault, deletePackDefault, clearPackDefaults,
   listItems, getItem, countItems, countItemsByPhase, insertDefaults, addItem, restoreDefaults, updateItem, setItemStatus, reorderItems, setItemCompleted,
   setItemFile, clearItemFile, describeItemFile, readItemFile,
   setPackPrepared, savePackEmail, markPackDrafted, clearPackDraft, markPackSent, unmarkPackSent,

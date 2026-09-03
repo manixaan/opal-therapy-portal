@@ -127,7 +127,7 @@
   var VIEWS = [
     { key: 'board', label: 'Onboarding' },
     { key: 'start', label: 'Start onboarding' },
-    { key: 'packages', label: 'Packages' },
+    { key: 'defaults', label: 'Edit onboarding' },
   ];
 
   function root() { return doc.getElementById('ob-root'); }
@@ -137,7 +137,7 @@
     return '<div class="ob-subnav oj-subnav" role="tablist">'
       + VIEWS.filter(function (v) { return v.key !== 'start' || can('onboarding.assign'); })
         .map(function (v) {
-          var on = active === v.key || (active === 'record' && v.key === 'board');
+          var on = active === v.key || (active === 'record' && v.key === 'board') || (active === 'defaults' && v.key === 'defaults');
           return '<button type="button" role="tab" aria-selected="' + (on ? 'true' : 'false') + '"'
             + (on ? ' class="active"' : '') + ' onclick="OnboardingJourney.nav(\'' + v.key + '\')">'
             + esc(v.label) + '</button>';
@@ -153,10 +153,11 @@
     }
     S.view = view;
     S.recordId = view === 'record' ? (id || S.recordId) : null;
+    S.packageId = view === 'defaults' ? (id || null) : null;
     S.phaseView = null;
     S.editingTerms = false;
     if (global.Onboarding && typeof global.Onboarding.nav === 'function') {
-      global.Onboarding.nav(view, S.recordId);
+      global.Onboarding.nav(view, view === 'defaults' ? S.packageId : S.recordId);
     } else {
       render(root());
     }
@@ -174,6 +175,7 @@
     if (!host) return;
     if (view) S.view = (view === 'track' || view === 'dashboard') ? 'board' : view;
     if (S.view === 'record' && id) S.recordId = id;
+    if (S.view === 'defaults') S.packageId = id || S.packageId || null;
     if (S.view === 'record' && !S.recordId) S.view = 'board';
     if (S.view === 'start' && !can('onboarding.assign')) S.view = 'board';
 
@@ -188,6 +190,7 @@
     var actions = doc.getElementById('oj-hero-actions');
     if (S.view === 'start') return viewStart(pane, actions);
     if (S.view === 'record') return viewRecord(pane, actions);
+    if (S.view === 'defaults') return viewDefaults(pane, actions);
     return viewBoard(pane, actions);
   }
 
@@ -197,10 +200,7 @@
   //  THE BOARD
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var FILTERS = [
-    ['all', 'Everyone'], ['needs_you', 'Needs you'], ['employee', 'Waiting on employee'], ['overdue', 'Overdue'],
-    ['offer', 'Letter of offer'], ['documentation', 'Documentation'], ['induction', 'Induction'], ['complete', 'Complete'],
-  ];
+  var FILTERS = [['all', 'In progress'], ['complete', 'Completed'], ['archived', 'Archived']];
 
   function matchesFilter(r, f) {
     switch (f) {
@@ -208,8 +208,9 @@
       case 'employee': return !r.closed && !r.complete && r.next.actor === 'employee';
       case 'overdue': return !r.closed && !r.complete && r.counts.overdue > 0;
       case 'offer': case 'documentation': case 'induction': return r.stage.key === f;
-      case 'complete': return r.complete;
-      default: return !r.complete;
+      case 'complete': return r.complete && !r.closed;
+      case 'archived': return r.closed;
+      default: return !r.complete && !r.closed;
     }
   }
 
@@ -236,12 +237,9 @@
 
     pane.innerHTML = ''
       + '<div class="oj-tiles">'
-      + tile(s.needsYou, 'Need you', 'needs_you', 'is-you')
-      + tile(s.waitingOnEmployee, 'Waiting on employee', 'employee')
-      + tile(s.overdue, 'Overdue', 'overdue', s.overdue ? 'is-danger' : '')
-      + tile(s.byStage.offer, 'Letter of offer', 'offer')
-      + tile(s.byStage.documentation, 'Documentation', 'documentation')
-      + tile(s.byStage.induction, 'Induction & access', 'induction')
+      + tile(s.live, 'In progress', 'all')
+      + tile(s.complete, 'Completed', 'complete')
+      + tile(s.archived || 0, 'Archived', 'archived')
       + '</div>'
       + '<div class="oj-filters" role="tablist">'
       + FILTERS.map(function (f) {
@@ -251,7 +249,7 @@
       + '</div>'
       + (rows.length ? '<div class="oj-list">' + rows.map(boardRow).join('') + '</div>'
         : empty(S.filter === 'all' && !b.records.length ? 'Nobody is being onboarded yet' : 'Nothing here',
-          S.filter === 'all' && !b.records.length ? 'Press Start onboarding to create the first record — the letter of offer is drafted from the same details.' : 'Try another filter.'));
+          S.filter === 'all' && !b.records.length ? 'Press Start onboarding to create the first record — the letter of offer is drafted from the same details.' : ''));
   }
 
   function stageTrack(r) {
@@ -308,6 +306,138 @@
   }
 
   function setFilter(f) { S.filter = f; var pane = doc.getElementById('oj-view'); if (pane && S.board) drawBoard(pane); }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  EDIT ONBOARDING — the default copy each package starts from
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async function viewDefaults(pane, actions) {
+    if (actions) actions.innerHTML = S.packageId ? '<button type="button" class="oj-btn" onclick="OnboardingJourney.nav(\'defaults\')">← All packages</button>' : '';
+    if (!S.packageId) {
+      var res = await api('/api/onboarding/journey/defaults');
+      if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'; return; }
+      pane.innerHTML = '<p class="oj-quiet">Each package is the default an onboarding starts from. Open one to walk through its three phases and tweak the documents; every new onboarding for that package inherits the tweak.</p>'
+        + '<div class="oj-list">' + res.packages.map(function (p) {
+          return '<article class="oj-row"><div class="oj-row-main"><h3><a href="#onboarding/defaults/' + esc(p.id) + '" onclick="OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\');return false;">' + esc(p.title) + '</a></h3>'
+            + '<p class="oj-quiet">' + esc(titleCase(p.roleCategory || '')) + ' · ' + esc(titleCase(p.employmentType || '')) + (p.tweaks ? ' · ' + p.tweaks + ' tweak' + (p.tweaks === 1 ? '' : 's') : '') + (p.published ? '' : ' · not published') + '</p></div>'
+            + '<div class="oj-row-side">' + btn('Open', 'OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\')') + '</div></article>';
+        }).join('') + '</div>';
+      return;
+    }
+    var d = await api('/api/onboarding/journey/defaults/' + encodeURIComponent(S.packageId));
+    if (!d.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(d.error) + '</div>'; return; }
+    S.defaults = d;
+    drawDefaults(pane);
+  }
+  function openDefaults(id) { nav('defaults', id); }
+
+  function drawDefaults(pane) {
+    var d = S.defaults; var view = S.defaultsPhase || 1;
+    var names = ['Letter of Offer', 'Onboarding Documentation', 'Internal Induction'];
+    var stepper = '<ol class="oj-stepper">' + names.map(function (n, i) {
+      var num = i + 1;
+      return '<li class="oj-stepper-step is-current' + (num === view ? ' is-viewing' : '') + '"><button type="button" onclick="OnboardingJourney.viewDefaultsPhase(' + num + ')"><span class="oj-stepper-n">' + num + '</span>' + esc(n) + '</button></li>';
+    }).join('') + '</ol>';
+    var body;
+    if (view === 1) {
+      body = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">1</span>Letter of Offer</h2></header>'
+        + '<p class="oj-quiet">The letter template, filled with a sample employee so you can see how it reads. The wording is fixed; the particulars come from each onboarding\'s details.</p>'
+        + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a></div>'
+        + '<h3 class="oj-sub">Email 1</h3><pre class="oj-pre">' + esc(d.emails.offer.subject) + '\n\n' + esc(d.emails.offer.body) + '</pre></section>';
+    } else {
+      var phase = view === 2 ? 'documentation' : 'induction';
+      var em = view === 2 ? d.emails.documentation : d.emails.induction;
+      body = defaultsTable(d, phase)
+        + '<section class="oj-panel"><h3 class="oj-sub">' + (view === 2 ? 'Email 2' : 'Email 3') + '</h3><pre class="oj-pre">' + esc(em.subject) + '\n\n' + esc(em.body) + '</pre></section>';
+    }
+    pane.innerHTML = '<div class="oj-record-head"><div><h2>' + esc(d.package.title) + '</h2><p class="oj-quiet">' + esc(titleCase(d.package.roleCategory || '')) + ' · ' + esc(titleCase(d.package.employmentType || '')) + ' · default copy — nothing here is sent to anyone</p></div></div>'
+      + stepper + '<div class="oj-stages">' + body + '</div>';
+  }
+  function viewDefaultsPhase(n) { S.defaultsPhase = n; var pane = doc.getElementById('oj-view'); if (pane && S.defaults) drawDefaults(pane); }
+  function previewDefaultsLetter() {
+    var L = S.defaults && S.defaults.letter; if (!L) return;
+    if (global.DocPreview) global.DocPreview.open({ kind: 'docx', url: L.previewUrl + '&r=' + Date.now(), downloadUrl: L.downloadUrl, title: 'Letter of Offer — template', meta: 'Sample employee' });
+    else global.open(L.downloadUrl, '_blank');
+  }
+
+  function defaultsTable(d, phase) {
+    var items = d.phases[phase].items; var edit = d.can && d.can.edit;
+    var included = items.filter(function (i) { return i.status === 'included'; }); var removed = items.filter(function (i) { return i.status !== 'included'; });
+    var groups = {}; included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
+    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
+    var flag = function (i, field, value) {
+      if (!edit) return yesNo(value);
+      return '<button type="button" class="oj-toggle ' + (value ? 'is-on' : '') + '" onclick="OnboardingJourney.defaultsFlag(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + field + '\',' + (value ? 'false' : 'true') + ')">' + (value ? 'Yes' : 'No') + '</button>';
+    };
+    var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
+      + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package</span></div>'
+      + (edit ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
+      + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
+    order.forEach(function (k) {
+      out += '<tr class="oj-pack-section"><td colspan="6">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      groups[k].forEach(function (i) {
+        var f = i.file || {};
+        var fileCell = i.itemKind !== 'document' ? '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the set-up task' : 'Follows the induction task') + '</span>'
+          : f.previewUrl ? '<span class="oj-quiet">' + esc(f.fileName || 'Library') + '</span>' : !i.sendsDocument ? '<span class="oj-quiet">Employee supplies their own</span>'
+          : f.source === 'link' && i.officialSourceUrl ? '<span class="oj-warn">No file</span> <a href="' + esc(i.officialSourceUrl) + '" target="_blank" rel="noopener" class="oj-quiet">official source ↗</a>' : '<span class="oj-warn">No file yet</span>';
+        var acts = [];
+        if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small'));
+        if (f.previewUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.previewUrl) + '" download>Download</a>');
+        if (edit) { acts.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); acts.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
+        out += '<tr' + (i.origin === 'added' ? ' class="oj-pack-row is-added"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+          + '<td>' + flag(i, 'required', i.required) + '</td><td>' + flag(i, 'employeeReturns', i.employeeReturns) + '</td><td>' + flag(i, 'requiresVerification', i.requiresVerification) + '</td>'
+          + '<td>' + fileCell + '</td><td><div class="oj-actions oj-actions-tight">' + acts.join('') + '</div></td></tr>';
+      });
+    });
+    out += '</tbody></table></div>';
+    if (removed.length) out += '<details class="oj-history"><summary>Removed from this package\'s default (' + removed.length + ')</summary><ul>' + removed.map(function (i) { return '<li>' + esc(i.title) + (edit ? ' ' + btn('Restore', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', false)', 'oj-btn-small oj-btn-quiet') : '') + '</li>'; }).join('') + '</ul></details>';
+    out += '<div id="oj-defaults-add" hidden></div></section>';
+    return out;
+  }
+
+  async function defaultsAct(rest, body, method, okMessage) {
+    if (S.busy) return null; S.busy = true;
+    var res = await api('/api/onboarding/journey/defaults/' + encodeURIComponent(S.packageId) + rest, { method: method || 'POST', body: body || {} });
+    S.busy = false;
+    if (!res.ok) { toast(res.error, true); return res; }
+    if (res.items && S.defaults) S.defaults.phases[res.phase].items = res.items;
+    if (okMessage) toast(okMessage);
+    var pane = doc.getElementById('oj-view'); if (pane && S.defaults) drawDefaults(pane);
+    return res;
+  }
+  function defaultsFlag(code, phase, field, value) { var b = { phase: phase }; b[field] = value; return defaultsAct('/items/' + encodeURIComponent(code), b, 'PATCH'); }
+  function defaultsRename(code, phase, current) {
+    var title = global.prompt('Document name in this package\'s default pack:', current || '');
+    if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
+    return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, title: title.trim() }, 'PATCH', 'Renamed for every new onboarding of this package.');
+  }
+  function defaultsRemove(code, phase, removed) { return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, removed: removed }, 'PATCH', removed ? 'Removed from the default.' : 'Restored to the default.'); }
+  function defaultsRestore(phase) { if (!global.confirm('Restore this package\'s default pack? Every tweak for this phase is cleared.')) return; return defaultsAct('/restore', { phase: phase }, 'POST', 'Defaults restored.'); }
+  function defaultsPreview(code, phase) {
+    var i = (S.defaults.phases[phase].items || []).filter(function (x) { return x.code === code; })[0];
+    if (!i || !i.file || !i.file.previewUrl) return;
+    if ((i.file.previewKind === 'pdf' || i.file.previewKind === 'docx') && global.DocPreview) global.DocPreview.open({ kind: i.file.previewKind, url: i.file.previewUrl, downloadUrl: i.file.previewUrl, title: i.title, meta: 'Library copy' });
+    else global.open(i.file.previewUrl, '_blank', 'noopener');
+  }
+  async function defaultsAddOpen(phase) {
+    var host = doc.getElementById('oj-defaults-add'); if (!host) return;
+    host.hidden = false; host.innerHTML = spinner('Loading the library…');
+    var lib = await api('/api/onboarding/documents?audience=employee');
+    var docs = (lib.ok && (lib.documents || lib.items)) || [];
+    var opts = [['', '— Choose a library document —']].concat(docs.filter(function (x) { return x.status !== 'archived'; }).map(function (x) { return [x.id, x.title]; }));
+    host.innerHTML = '<div class="oj-panel oj-add"><h3>Add a document to this package\'s default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</h3>'
+      + '<div class="oj-grid2">' + field('oj-da-doc', 'From the library', select('oj-da-doc', opts, '')) + field('oj-da-title', 'Name (optional when choosing from the library)', input('oj-da-title', 'text', '', 'maxlength="250"')) + '</div>'
+      + '<div class="oj-check-row"><label class="oj-check"><input type="checkbox" id="oj-da-sends" checked> A file is sent in the pack</label><label class="oj-check"><input type="checkbox" id="oj-da-returns"> The employee returns it</label><label class="oj-check"><input type="checkbox" id="oj-da-verifies"> We verify it</label><label class="oj-check"><input type="checkbox" id="oj-da-required" checked> Required</label></div>'
+      + '<div class="oj-actions">' + btn('Add to the default', 'OnboardingJourney.defaultsAddSubmit(\'' + phase + '\')', 'oj-btn-primary') + btn('Cancel', 'OnboardingJourney.defaultsAddClose()') + '</div></div>';
+  }
+  function defaultsAddClose() { var host = doc.getElementById('oj-defaults-add'); if (host) { host.hidden = true; host.innerHTML = ''; } }
+  async function defaultsAddSubmit(phase) {
+    var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
+    var ck = function (id) { var el = doc.getElementById(id); return !!(el && el.checked); };
+    if (!v('oj-da-doc') && !v('oj-da-title')) return toast('Choose a library document or give the new document a name.', true);
+    var res = await defaultsAct('/items', { phase: phase, documentId: v('oj-da-doc') || null, title: v('oj-da-title') || null, sendsDocument: ck('oj-da-sends'), employeeReturns: ck('oj-da-returns'), requiresVerification: ck('oj-da-verifies'), required: ck('oj-da-required') }, 'POST', 'Added to the default.');
+    if (res && res.ok) defaultsAddClose();
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  START ONBOARDING
@@ -1518,6 +1648,8 @@
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
     scrollTo: scrollTo, copy: copy, viewPhase: viewPhase,
+    openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsFlag: defaultsFlag, defaultsRename: defaultsRename,
+    defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
     refresh: rerender,
     _state: S,
   };

@@ -201,7 +201,8 @@ async function preparePack(assignment) {
   for (const phase of ['documentation', 'induction']) {
     const existing = await pdb.listItems(assignment.id, undefined, phase);
     if (existing.length) { if (phase === 'documentation') out.total += existing.length; continue; }
-    const items = pack.buildDefaultItems(version ? version.content : {}, assignment.facts || {}, byCode, phase);
+    const derived = pack.buildDefaultItems(version ? version.content : {}, assignment.facts || {}, byCode, phase);
+    const items = pack.applyDefaults(derived, await pdb.listPackDefaults(assignment.package_id), phase);
     const n = await pdb.insertDefaults(assignment.organisation_id, assignment.id, items);
     if (phase === 'documentation') { out.inserted += n; out.total += items.length; }
   }

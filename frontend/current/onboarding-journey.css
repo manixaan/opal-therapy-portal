@@ -282,3 +282,5 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-stepper-step.is-current .oj-stepper-n { background: #e0a52a; color: #fff; }
 .oj-coming-soon { opacity: .55; filter: grayscale(1); pointer-events: none; }
 @media (max-width: 640px) { .oj-stepper { grid-template-columns: 1fr; } }
+
+.oj-sub { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); margin: 14px 0 6px; }

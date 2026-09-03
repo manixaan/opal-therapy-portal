@@ -132,9 +132,9 @@
    *  compliance/expiring/documents/settings addresses — normalises to Track
    *  Onboarding rather than 404ing, so old bookmarks keep landing somewhere
    *  true. */
-  var OB_VIEWS = ['track', 'board', 'packages', 'start', 'record'];
-  /** The one onboarding view that carries an id: '#onboarding/record/<id>'. */
-  var OB_VIEWS_WITH_ID = ['record'];
+  var OB_VIEWS = ['track', 'board', 'packages', 'start', 'record', 'defaults'];
+  /** Onboarding views that carry an id: '#onboarding/record/<id>', '#onboarding/defaults/<packageId>'. */
+  var OB_VIEWS_WITH_ID = ['record', 'defaults'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -205,8 +205,9 @@
       // to the board rather than to an empty pane.
       if (inList(OB_VIEWS_WITH_ID, out.view)) {
         var obId = safeId(s.id);
-        if (!obId) out.view = 'board';
-        else out.id = obId;
+        // An idless record address names nothing; an idless defaults address is the list.
+        if (!obId && out.view === 'record') out.view = 'board';
+        else if (obId) out.id = obId;
       }
 
     } else if (out.tab === 'casenotes') {

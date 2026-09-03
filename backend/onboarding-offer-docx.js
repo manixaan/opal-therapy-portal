@@ -133,7 +133,9 @@ function offerClosingDate(terms, issuedAt) {
  */
 function buildScalars({ terms, applicant, signatory, issuedAt, isTreatingTherapist }) {
   const t = terms || {};
-  const sig = { ...DEFAULT_SIGNATORY, ...(signatory || {}) };
+  // Only defined overrides replace a default; an unset settings key keeps Ann's details.
+  const sig = { ...DEFAULT_SIGNATORY };
+  for (const [k, v] of Object.entries(signatory || {})) if (v != null && String(v).trim() !== '') sig[k] = v;
   const issued = issuedAt || new Date();
   const closing = offerClosingDate(t, issued);
   const pay = remuneration(t);
