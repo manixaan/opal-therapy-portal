@@ -113,6 +113,30 @@ describe('Edit onboarding', () => {
     const still = (await agent.get(`/api/onboarding/journey/records/${ot}/pack`)).body.pack.items.find((i) => i.code === 'PACK_CONTRACT');
     expect(still.title).toBe('Employment Contract');
 
+    // Upload the file behind a default that has none; it publishes to the library and reaches new records.
+    const fresh = await agent.get(`/api/onboarding/journey/defaults/${otFull.id}`);
+    const superItem = fresh.body.phases.documentation.items.find((i) => i.code === 'PACK_SUPER_CHOICE');
+    expect(superItem.file.previewUrl).toBeNull();
+    const up = await agent.post(`/api/onboarding/journey/defaults/${otFull.id}/items/PACK_SUPER_CHOICE/file`).send({ phase: 'documentation', fileName: 'super-choice.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF-1.4 super').toString('base64') });
+    expect(up.status).toBe(201);
+    expect(up.body.items.find((i) => i.code === 'PACK_SUPER_CHOICE').file.previewUrl).toBeTruthy();
+    // An added item with no library document gets one created for it.
+    const newDoc = await agent.post(`/api/onboarding/journey/defaults/${otFull.id}/items`).send({ phase: 'documentation', title: 'Parking map' });
+    const parking = newDoc.body.items.find((i) => i.title === 'Parking map');
+    expect(parking.file.previewUrl).toBeNull();
+    const up2 = await agent.post(`/api/onboarding/journey/defaults/${otFull.id}/items/${parking.code}/file`).send({ phase: 'documentation', fileName: 'parking.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF-1.4 map').toString('base64') });
+    expect(up2.status).toBe(201);
+    const parkingAfter = up2.body.items.find((i) => i.code === parking.code);
+    expect(parkingAfter.library).toBeTruthy();
+    expect(parkingAfter.file.previewUrl).toBeTruthy();
+    const bytes = await agent.get(parkingAfter.file.previewUrl);
+    expect(bytes.status).toBe(200);
+    const later = await start({ name: 'Kim Lee', personalEmail: 'kim@example.com', position: 'OT', roleCategory: 'occupational_therapist', employmentType: 'full_time', isTreatingTherapist: true, startDate: '2026-11-02' });
+    await agent.post(`/api/onboarding/journey/records/${later}/offer/skip`);
+    const laterPack = (await agent.get(`/api/onboarding/journey/records/${later}/pack`)).body.pack.items;
+    expect(laterPack.find((i) => i.code === 'PACK_SUPER_CHOICE').file.source).toBe('library');
+    expect(laterPack.find((i) => i.title === 'Parking map').file.source).toBe('library');
+
     // A viewer can look but not tweak.
     const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
     expect((await viewer.agent.get(`/api/onboarding/journey/defaults/${adminPerm.id}`)).status).toBe(200);

@@ -183,6 +183,43 @@ router.patch('/api/onboarding/journey/defaults/:packageId/items/:code', requireP
   res.json({ ok: true, items: await defaultItems(req, pkg, phase), phase });
 }));
 
+/**
+ * Upload (or replace) the file behind a default item. The file becomes a
+ * published version of the library document — so every package and every
+ * new onboarding that uses the document gets it — and an item that had no
+ * library document gets one created for it.
+ */
+router.post('/api/onboarding/journey/defaults/:packageId/items/:code/file', requirePermission('onboarding.manage_packages'), safe(async (req, res) => {
+  const pkg = await loadPackage(req);
+  if (!pkg) return notFound(res);
+  const b = req.body || {};
+  const phase = PHASES.includes(b.phase) ? b.phase : 'documentation';
+  const code = str(req.params.code, 80);
+  const item = (await defaultItems(req, pkg, phase)).find((i) => i.code === code);
+  if (!item) return notFound(res);
+  const up = require('./onboarding-pack-routes')._internals.readUpload(b);
+  if (up.error) return res.status(400).json({ error: up.error });
+
+  let documentId = item.library ? item.library.documentId : null;
+  if (!documentId) {
+    const created = await odb.upsertDocument(orgOf(req), {
+      code: `DOC_${code.replace(/^(PACK_|REQ_|IND_|DEF_)/, '').slice(0, 60)}_${require('crypto').randomBytes(2).toString('hex').toUpperCase()}`,
+      title: item.title, category: phase === 'induction' ? 'Employment' : 'Employment', classification: 'OPAL_FORM', audience: 'employee',
+      ownerControlled: true, contentStatus: 'available', status: 'published',
+    }, req.user.id);
+    documentId = created.id;
+    await pdb.upsertPackDefault({ organisationId: orgOf(req), packageId: pkg.id, phase, code, action: item.origin === 'added' ? 'add' : 'override', actorId: req.user.id, patch: { documentId } });
+  }
+  const version = await odb.createDocumentVersion(documentId, {
+    title: item.title, fileName: up.fileName, fileMime: up.fileMime, fileData: up.buffer.toString('base64'), fileSizeBytes: up.buffer.length,
+    effectiveDate: new Date().toISOString().slice(0, 10), changeNote: 'Uploaded from Edit Onboarding',
+  }, req.user.id);
+  await odb.publishDocumentVersion(documentId, version.id, req.user.id);
+  await odb.pool.query(`UPDATE onboarding_documents SET content_status = 'available', status = 'published', updated_at = NOW() WHERE id = $1`, [documentId]);
+  await auditOnboarding(req, 'pack_default_file_uploaded', { targetType: 'onboarding_document', targetId: documentId, metadata: { packageId: pkg.id, phase, code, versionId: version.id, bytes: up.buffer.length } });
+  res.status(201).json({ ok: true, items: await defaultItems(req, pkg, phase), phase });
+}));
+
 router.post('/api/onboarding/journey/defaults/:packageId/restore', requirePermission('onboarding.manage_packages'), safe(async (req, res) => {
   const pkg = await loadPackage(req);
   if (!pkg) return notFound(res);

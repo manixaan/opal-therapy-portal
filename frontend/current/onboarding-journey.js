@@ -384,6 +384,7 @@
         var acts = [];
         if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small'));
         if (f.previewUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.previewUrl) + '" download>Download</a>');
+        if (edit && i.itemKind === 'document') acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace file' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
         if (edit) { acts.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); acts.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         out += '<tr' + (i.origin === 'added' ? ' class="oj-pack-row is-added"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
           + '<td>' + flag(i, 'required', i.required) + '</td><td>' + flag(i, 'employeeReturns', i.employeeReturns) + '</td><td>' + flag(i, 'requiresVerification', i.requiresVerification) + '</td>'
@@ -413,6 +414,16 @@
     return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, title: title.trim() }, 'PATCH', 'Renamed for every new onboarding of this package.');
   }
   function defaultsRemove(code, phase, removed) { return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, removed: removed }, 'PATCH', removed ? 'Removed from the default.' : 'Restored to the default.'); }
+  async function defaultsUpload(code, phase, input) {
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('That file is larger than 10 MB.', true); input.value = ''; return; }
+    var ext = String(file.name).split('.').pop().toLowerCase();
+    var mime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type);
+    var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast('The file could not be read.', true); return; }
+    input.value = '';
+    return defaultsAct('/items/' + encodeURIComponent(code) + '/file', { phase: phase, fileName: file.name, fileMime: mime, fileData: b64 }, 'POST', 'File uploaded — it now goes out in every new onboarding that includes this document.');
+  }
   function defaultsRestore(phase) { if (!global.confirm('Restore this package\'s default pack? Every tweak for this phase is cleared.')) return; return defaultsAct('/restore', { phase: phase }, 'POST', 'Defaults restored.'); }
   function defaultsPreview(code, phase) {
     var i = (S.defaults.phases[phase].items || []).filter(function (x) { return x.code === code; })[0];
@@ -1650,7 +1661,7 @@
     cancelRecord: cancelRecord, openReview: openReview,
     scrollTo: scrollTo, copy: copy, viewPhase: viewPhase,
     openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsFlag: defaultsFlag, defaultsRename: defaultsRename,
-    defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
+    defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsUpload: defaultsUpload, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
     refresh: rerender,
     _state: S,
   };
