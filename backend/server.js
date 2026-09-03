@@ -344,6 +344,12 @@ app.get('/pending-approval', (req, res) => {
 app.get('/onboarding-invite', (req, res) => {
   res.sendFile(path.join(frontendPath, 'onboarding-invite.html'));
 });
+// Letter of offer: the candidate follows the emailed link here to read and
+// answer the offer. Public by necessity — they have no account — and the token
+// is validated by /api/onboarding-offer/check, which is rate limited.
+app.get('/offer', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'offer.html'));
+});
 
 // First sign-in on a temporary password. Reachable only WITH a session — the
 // page's whole job is to call /api/auth/change-password as the signed-in user
@@ -558,6 +564,9 @@ app.use('/', require('./onboarding-employee-routes'));
 // before they have an account, and onboarding-routes applies requireAuth
 // across the whole /api/onboarding prefix.
 app.use('/', require('./onboarding-workflow-routes'));
+// The three-stage journey (offer → documentation → induction). Its public
+// /api/onboarding-offer/* endpoints answer to a token, not a session.
+app.use('/', require('./onboarding-journey-routes'));
 app.use('/', require('./onboarding-package-docs-routes'));
 app.use('/', require('./onboarding-assignment-routes'));
 app.use('/', require('./onboarding-library-routes'));

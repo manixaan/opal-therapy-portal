@@ -666,11 +666,17 @@ describe('changed assets are cache-busted', () => {
       ['workshop.js', 4], ['workshop.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
-      ['navigation.js', 7],
+      // 8: '#onboarding/record/<id>' — the journey record carries an id.
+      ['navigation.js', 8],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
-      ['onboarding.js', 9], ['onboarding.css', 8],
+      // 10: the management surface is delegated to onboarding-journey.js;
+      // open()/nav() carry a record id. The CSS stays at 8.
+      ['onboarding.js', 10], ['onboarding.css', 8],
+      // 1: the three-stage journey (board, Start Onboarding, record). A first
+      // pin is still a pin.
+      ['onboarding-journey.js', 1], ['onboarding-journey.css', 1],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.

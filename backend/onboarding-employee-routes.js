@@ -1335,6 +1335,7 @@ router.get('/api/onboarding/me/reference-pack', safe(async (req, res) => {
 
 module.exports = router;
 module.exports._resetInviteRateLimit = _resetInviteRateLimit;
+module.exports.inviteRateLimit = inviteRateLimit;
 module.exports.validateForm = validateForm;
 module.exports.validateUpload = validateUpload;
 module.exports.inviteProblem = inviteProblem;

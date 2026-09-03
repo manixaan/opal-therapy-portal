@@ -65,6 +65,9 @@ const ALL_TABLES = [
   'onboarding_extracted_field_events', 'onboarding_extracted_fields',
   'onboarding_extraction_runs', 'onboarding_returned_documents',
   'onboarding_email_dispatches', 'onboarding_starter_packs',
+  // The three-stage journey (migration 047) — offers and induction tasks hang
+  // off the assignment.
+  'onboarding_internal_tasks', 'onboarding_offers',
   'onboarding_assignments',
   'onboarding_package_versions', 'onboarding_package_requirements',
   'onboarding_package_documents', 'onboarding_packages',

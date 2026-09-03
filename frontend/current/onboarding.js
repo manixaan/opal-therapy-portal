@@ -332,7 +332,7 @@
     return 'error';
   }
 
-  async function open(view) {
+  async function open(view, id) {
     var host = root();
     if (!host) return;
     if (!S.booted) {
@@ -341,12 +341,16 @@
       S.mode = await resolveMode();
     }
     if (view) S.view = view;
+    // A record address (#onboarding/record/<id>) belongs to the journey
+    // surface; the id travels with the view so a deep link lands on it.
+    S.journeyId = view === 'record' ? (id || S.journeyId || null) : null;
     await render();
   }
 
-  function nav(view) {
+  function nav(view, id) {
     if (!view) return;
     S.view = view;
+    S.journeyId = view === 'record' ? (id || S.journeyId || null) : null;
     S.assignmentDetail = null;
     S.packageDetail = null;
     render();
@@ -384,10 +388,22 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function renderManage(host) {
+    // THE THREE-STAGE JOURNEY OWNS THE MANAGEMENT SURFACE. onboarding-journey.js
+    // draws the board, Start Onboarding and each record; this file keeps only
+    // the Packages editor (and the detailed requirement review it reaches
+    // through openAssignment). Every other view, including the retired
+    // 'track' and 'start' addresses, is handed over.
+    var J = global.OnboardingJourney;
+    if (J && typeof J.render === 'function' && S.view !== 'packages' && !S.assignmentDetail) {
+      return J.render(host, S.view, S.journeyId);
+    }
+
     var views = visibleViews();
     if (!views.some(function (v) { return v.key === S.view; })) S.view = views[0].key;
 
-    var subnav = '<div class="ob-subnav" id="ob-subnav" role="tablist">'
+    var subnav = (J && typeof J.subnavHtml === 'function')
+      ? J.subnavHtml(S.view)
+      : '<div class="ob-subnav" id="ob-subnav" role="tablist">'
       + views.map(function (v) {
         return '<button type="button" role="tab" data-ob="' + esc(v.key) + '"'
           + ' aria-selected="' + (S.view === v.key ? 'true' : 'false') + '"'

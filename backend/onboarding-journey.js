@@ -1,0 +1,437 @@
+'use strict';
+
+/**
+ * ONBOARDING JOURNEY — the three-stage projection. Pure: no I/O, no clock of
+ * its own (callers pass `now`), so every rule here is unit-testable.
+ *
+ *   Stage 1  Letter of Offer              onboarding_offers
+ *   Stage 2  Onboarding Documentation     onboarding_requirements + the 034/038 ladder
+ *   Stage 3  Internal Induction & Access  onboarding_internal_tasks
+ *
+ * projectJourney() answers the six questions the Owner's screen asks of every
+ * record — what stage, what is done, what is waiting on the employee, what
+ * internal setup is open, what needs review, what is overdue — and one more:
+ * WHAT HAPPENS NEXT, as a single line with a named actor. The portal manages
+ * the run; the Owner is only asked to step in when `next.actor === 'admin'`.
+ */
+
+const STAGES = [
+  { key: 'offer', number: 1, label: 'Letter of Offer' },
+  { key: 'documentation', number: 2, label: 'Onboarding Documentation' },
+  { key: 'induction', number: 3, label: 'Internal Induction & Access' },
+];
+
+const OFFER_STATUSES = ['draft', 'approved', 'sent', 'accepted', 'declined', 'withdrawn', 'not_required'];
+const TASK_STATUSES = ['pending', 'in_progress', 'done', 'skipped', 'failed'];
+
+/** Days after sending with no response before the offer is flagged for a chase. */
+const OFFER_CHASE_DAYS = 5;
+
+const REQ_EMPLOYEE_OPEN = new Set(['not_started', 'in_progress', 'correction_required', 'expired']);
+const REQ_NEEDS_REVIEW = new Set(['submitted', 'awaiting_verification']);
+const REQ_DONE = new Set(['verified', 'complete', 'not_applicable']);
+
+const STAGE2_STATUSES = new Set([
+  'invite_sent', 'invite_accepted', 'in_progress', 'employee_actions_complete',
+  'employer_review', 'corrections_required',
+  // the paper round-trip (038) counts as documentation in progress
+  'starter_pack_ready', 'starter_pack_sent', 'documents_received',
+  'details_extracted', 'ready_for_account', 'account_created',
+]);
+const STAGE3_STATUSES = new Set(['ready_to_activate', 'activated', 'completed']);
+
+const toDate = (v) => {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+const daysBetween = (a, b) => Math.floor((b.getTime() - a.getTime()) / 86400000);
+const isOverdue = (dueAt, now) => { const d = toDate(dueAt); return !!d && d.getTime() < now.getTime(); };
+
+const isEmployeeActor = (r) => r.actor === 'employee' || r.actor === 'both';
+const isEmployerActor = (r) => r.actor === 'employer' || r.actor === 'both';
+
+/**
+ * The induction checklist for a role. Codes are stable: a task is upserted by
+ * (assignment, code), so re-running generation never duplicates.
+ *
+ * `automation` names an act the portal performs itself when the task is run;
+ * every other task is done by a named person and ticked off.
+ */
+function buildInductionTasks(assignment, { now = new Date() } = {}) {
+  const start = toDate(assignment.start_date);
+  const onStart = start ? new Date(start) : null;
+  const afterStart = (days) => {
+    if (!start) return null;
+    const d = new Date(start); d.setDate(d.getDate() + days); return d;
+  };
+  const beforeStart = (days) => afterStart(-days);
+  const soonest = (d) => (d && d.getTime() > now.getTime() ? d : afterStart(2) || null);
+
+  const treating = assignment.is_treating_therapist === true
+    || assignment.role_category === 'occupational_therapist';
+
+  const tasks = [
+    {
+      code: 'portal_access', sortOrder: 10,
+      title: 'Activate portal access',
+      description: 'Turns the pre-employee account into a staff account with the agreed portal role. The portal does this itself.',
+      automation: 'activate_portal_access',
+      dueAt: soonest(beforeStart(1)),
+    },
+    {
+      code: 'work_email', sortOrder: 20,
+      title: 'Create work email and Microsoft 365 account',
+      description: 'Mailbox, calendar and Teams access in the practice tenant. Record the address on the onboarding record once created.',
+      dueAt: soonest(beforeStart(2)),
+    },
+    {
+      code: 'payroll_setup', sortOrder: 30,
+      title: 'Set up in payroll (Xero)',
+      description: 'Employee record, pay template from the agreed rate and hours, tax and super details from the onboarding documentation.',
+      dueAt: soonest(beforeStart(1)),
+    },
+    {
+      code: 'systems_access', sortOrder: 40,
+      title: treating ? 'Grant practice management and clinical system access' : 'Grant system access',
+      description: treating
+        ? 'Practice management system login, calendar publishing and case note access appropriate to the role.'
+        : 'Logins for the systems the position uses.',
+      dueAt: soonest(beforeStart(1)),
+    },
+    {
+      code: 'equipment', sortOrder: 50,
+      title: 'Issue equipment',
+      description: 'Laptop, phone, ID badge, keys or access card as the position requires.',
+      dueAt: onStart,
+    },
+    {
+      code: 'induction_walkthrough', sortOrder: 60,
+      title: 'Assign the portal induction walkthrough',
+      description: 'The interactive induction in the Learning module, so the first day starts with a guided tour rather than a manual.',
+      dueAt: onStart,
+    },
+    {
+      code: 'first_week_checkin', sortOrder: 70,
+      title: 'Book the first-week check-in with their manager',
+      description: 'A short meeting in week one to confirm expectations, equipment and any open onboarding items.',
+      assigneeUserId: assignment.manager_user_id || null,
+      dueAt: afterStart(5),
+    },
+  ];
+
+  if (treating) {
+    tasks.push({
+      code: 'clinical_supervision', sortOrder: 80,
+      title: 'Confirm the clinical supervision arrangement',
+      description: 'Named supervisor, frequency and the first session date, recorded against the professional profile.',
+      assigneeUserId: assignment.manager_user_id || null,
+      dueAt: afterStart(10),
+    });
+  }
+
+  return tasks;
+}
+
+// ── Stage 1 ─────────────────────────────────────────────────────────────────
+
+function projectOffer(assignment, offer, now) {
+  const out = { state: 'active', summary: '', completedAt: null, items: [], next: null };
+
+  if (!offer) {
+    out.summary = 'No letter of offer yet.';
+    out.next = { actor: 'admin', action: 'edit_offer', label: 'Prepare the letter of offer' };
+    return out;
+  }
+
+  switch (offer.status) {
+    case 'draft':
+      out.summary = `Letter of offer v${offer.version} drafted — awaiting approval.`;
+      out.next = { actor: 'admin', action: 'approve_offer', label: 'Review and approve the letter of offer' };
+      out.items.push({ kind: 'review', label: 'Letter of offer awaiting approval', at: offer.created_at });
+      break;
+    case 'approved':
+      out.summary = `Letter of offer v${offer.version} approved — not yet sent.`;
+      out.next = { actor: 'admin', action: 'send_offer', label: 'Send the letter of offer' };
+      break;
+    case 'sent': {
+      const sentAt = toDate(offer.sent_at);
+      const expired = isOverdue(offer.token_expires_at, now);
+      const stale = sentAt ? daysBetween(sentAt, now) >= OFFER_CHASE_DAYS : false;
+      out.summary = expired
+        ? 'The offer link has expired without a response.'
+        : `Letter of offer sent${sentAt ? ` ${daysBetween(sentAt, now)} day(s) ago` : ''} — awaiting the employee's response.`;
+      out.items.push({
+        kind: 'employee', label: 'Respond to the letter of offer',
+        dueAt: offer.token_expires_at || null, overdue: expired || stale,
+        detail: expired ? 'Link expired' : (stale ? 'No response yet — consider a reminder' : null),
+      });
+      out.next = expired
+        ? { actor: 'admin', action: 'resend_offer', label: 'Re-send the letter of offer (link expired)' }
+        : { actor: 'employee', action: null, label: 'Waiting for the employee to accept the offer' };
+      break;
+    }
+    case 'accepted':
+      out.state = 'complete';
+      out.completedAt = offer.responded_at || null;
+      out.summary = `Offer accepted${offer.signed_name ? ` by ${offer.signed_name}` : ''}.`;
+      break;
+    case 'not_required':
+      out.state = 'complete';
+      out.completedAt = offer.responded_at || offer.updated_at || null;
+      out.summary = 'Letter of offer not required for this record.';
+      break;
+    case 'declined':
+      out.state = 'blocked';
+      out.summary = 'The offer was declined.';
+      out.items.push({ kind: 'review', label: 'Offer declined — decide whether to revise or close', at: offer.responded_at });
+      out.next = { actor: 'admin', action: 'reissue_offer', label: 'Offer declined — issue a revised offer or close the record' };
+      break;
+    case 'withdrawn':
+      out.state = 'blocked';
+      out.summary = 'The offer was withdrawn.';
+      out.next = { actor: 'admin', action: 'reissue_offer', label: 'Offer withdrawn — issue a new offer or close the record' };
+      break;
+    default:
+      out.summary = `Offer status: ${offer.status}`;
+  }
+  return out;
+}
+
+// ── Stage 2 ─────────────────────────────────────────────────────────────────
+
+function projectDocumentation(assignment, requirements, now, stage1Complete) {
+  const out = { state: 'pending', summary: 'Starts when the offer is accepted.', completedAt: null, items: [], next: null };
+  if (!stage1Complete) return out;
+
+  const status = assignment.status;
+
+  if (status === 'created') {
+    out.state = 'active';
+    out.summary = 'Offer accepted — the onboarding pack has not been released yet.';
+    out.next = { actor: 'admin', action: 'release', label: 'Release the onboarding documentation' };
+    out.items.push({ kind: 'review', label: 'Release the onboarding documentation', at: assignment.offer_accepted_at });
+    return out;
+  }
+
+  if (STAGE3_STATUSES.has(status)) {
+    out.state = 'complete';
+    out.completedAt = assignment.submitted_at || assignment.activated_at || null;
+    out.summary = 'All onboarding documentation approved.';
+    // still list the completed requirements
+    for (const r of requirements) {
+      if (REQ_DONE.has(r.status)) out.items.push({ kind: 'done', label: r.title, at: r.completed_at || r.reviewed_at || null });
+    }
+    return out;
+  }
+
+  out.state = 'active';
+
+  if (status === 'invite_sent' || status === 'account_created') {
+    out.summary = 'Invitation sent — waiting for the employee to sign in and start.';
+    out.items.push({
+      kind: 'employee', label: 'Accept the onboarding invitation and set a password',
+      dueAt: assignment.due_at || null, overdue: isOverdue(assignment.due_at, now),
+    });
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the employee to accept the invitation' };
+    return out;
+  }
+
+  if (['starter_pack_ready', 'starter_pack_sent', 'documents_received', 'details_extracted', 'ready_for_account'].includes(status)) {
+    out.summary = `Paper round-trip in progress (${status.replace(/_/g, ' ')}).`;
+    out.next = { actor: 'admin', action: 'open_record', label: 'Continue the paper round-trip on the record' };
+    return out;
+  }
+
+  let employeeOpen = 0; let review = 0; let employerOpen = 0; let done = 0;
+  for (const r of requirements) {
+    if (REQ_DONE.has(r.status)) {
+      done += 1;
+      out.items.push({ kind: 'done', label: r.title, at: r.completed_at || r.reviewed_at || null });
+      continue;
+    }
+    if (REQ_NEEDS_REVIEW.has(r.status)) {
+      review += 1;
+      out.items.push({ kind: 'review', label: `${r.title} — submitted, needs ${r.requires_employer_verification ? 'verification' : 'review'}`, at: r.submitted_at || null, requirementId: r.id });
+      continue;
+    }
+    if (isEmployeeActor(r) && REQ_EMPLOYEE_OPEN.has(r.status)) {
+      employeeOpen += 1;
+      out.items.push({
+        kind: 'employee',
+        label: r.status === 'correction_required' ? `${r.title} — correction requested` : r.title,
+        dueAt: r.due_at || null, overdue: isOverdue(r.due_at, now), requirementId: r.id,
+      });
+      continue;
+    }
+    if (isEmployerActor(r)) {
+      employerOpen += 1;
+      out.items.push({
+        kind: 'internal', label: r.title, dueAt: r.due_at || null,
+        overdue: isOverdue(r.due_at, now), requirementId: r.id,
+      });
+    }
+  }
+
+  const total = requirements.length;
+  if (status === 'employee_actions_complete' || status === 'employer_review') {
+    out.summary = `Employee has finished their part — ${review + employerOpen} item(s) to review or verify.`;
+    out.next = { actor: 'admin', action: 'review', label: `Review ${review + employerOpen} submitted item(s)` };
+  } else if (status === 'corrections_required') {
+    out.summary = 'Corrections requested — waiting on the employee.';
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the employee to supply corrections' };
+  } else if (review > 0) {
+    out.summary = `${done} of ${total} complete — ${review} awaiting your review.`;
+    out.next = { actor: 'admin', action: 'review', label: `Review ${review} submitted item(s)` };
+  } else {
+    out.summary = `${done} of ${total} complete — ${employeeOpen} waiting on the employee.`;
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the employee to complete their documentation' };
+  }
+  return out;
+}
+
+// ── Stage 3 ─────────────────────────────────────────────────────────────────
+
+function projectInduction(assignment, tasks, now, stage2Complete) {
+  const out = { state: 'pending', summary: 'Starts when the documentation is approved.', completedAt: null, items: [], next: null };
+  if (!stage2Complete) return out;
+
+  const status = assignment.status;
+  const sorted = [...tasks].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const open = sorted.filter((t) => t.status === 'pending' || t.status === 'in_progress');
+  const failed = sorted.filter((t) => t.status === 'failed');
+  const finished = sorted.filter((t) => t.status === 'done' || t.status === 'skipped');
+
+  for (const t of finished) out.items.push({ kind: 'done', label: t.title, at: t.completed_at || null, taskCode: t.code });
+  for (const t of failed) out.items.push({ kind: 'review', label: `${t.title} — failed: ${t.note || 'see the record'}`, at: t.updated_at || null, taskCode: t.code });
+  for (const t of open) {
+    out.items.push({
+      kind: 'internal', label: t.title, dueAt: t.due_at || null, overdue: isOverdue(t.due_at, now),
+      assigneeUserId: t.assignee_user_id || null, assigneeName: t.assignee_name || null,
+      taskCode: t.code, automation: t.automation || null, status: t.status,
+    });
+  }
+
+  if (status === 'completed' || (status === 'activated' && tasks.length > 0 && open.length === 0 && failed.length === 0)) {
+    out.state = 'complete';
+    out.completedAt = assignment.completed_at || null;
+    out.summary = 'Induction complete. The employee is active.';
+    return out;
+  }
+
+  out.state = 'active';
+  if (!tasks.length) {
+    out.summary = 'Ready for induction — the checklist has not been generated yet.';
+    out.next = { actor: 'system', action: 'generate_tasks', label: 'Generating the induction checklist' };
+    return out;
+  }
+
+  const portal = sorted.find((t) => t.code === 'portal_access');
+  if (portal && portal.status !== 'done' && portal.status !== 'skipped' && status === 'ready_to_activate') {
+    out.summary = `${finished.length} of ${tasks.length} induction tasks done — portal access not yet activated.`;
+    out.next = { actor: 'admin', action: 'activate', label: 'Activate portal access', taskCode: 'portal_access' };
+    return out;
+  }
+
+  if (failed.length) {
+    out.summary = `${failed.length} induction task(s) failed.`;
+    out.next = { actor: 'admin', action: 'task', label: `Resolve: ${failed[0].title}`, taskCode: failed[0].code };
+    return out;
+  }
+
+  const first = open[0];
+  out.summary = `${finished.length} of ${tasks.length} induction tasks done.`;
+  out.next = {
+    actor: 'admin', action: 'task', taskCode: first.code,
+    label: `${first.title}${first.assignee_name ? ` (${first.assignee_name})` : ''}`,
+  };
+  return out;
+}
+
+// ── The projection ──────────────────────────────────────────────────────────
+
+/**
+ * @param {object} p
+ * @param {object} p.assignment   an onboarding_assignments row (with joins)
+ * @param {object|null} p.offer   the live or latest onboarding_offers row
+ * @param {object[]} p.requirements onboarding_requirements rows
+ * @param {object[]} p.tasks      onboarding_internal_tasks rows (assignee_name joined)
+ * @param {Date} p.now
+ */
+function projectJourney({ assignment, offer = null, requirements = [], tasks = [], now = new Date() }) {
+  const closed = assignment.status === 'cancelled' || assignment.status === 'archived';
+
+  const s1 = projectOffer(assignment, offer, now);
+  const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete');
+  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete');
+
+  const stages = [
+    { ...STAGES[0], ...pick(s1) },
+    { ...STAGES[1], ...pick(s2) },
+    { ...STAGES[2], ...pick(s3) },
+  ];
+
+  let current;
+  if (closed) current = { key: 'closed', number: 0, label: assignment.status === 'cancelled' ? 'Cancelled' : 'Archived' };
+  else if (s3.state === 'complete') current = { key: 'complete', number: 4, label: 'Complete' };
+  else if (s3.state === 'active') current = STAGES[2];
+  else if (s2.state === 'active') current = STAGES[1];
+  else current = STAGES[0];
+
+  const all = [...s1.items, ...s2.items, ...s3.items];
+  const completed = all.filter((i) => i.kind === 'done');
+  const waitingOnEmployee = all.filter((i) => i.kind === 'employee');
+  const internalOpen = all.filter((i) => i.kind === 'internal');
+  const adminReview = all.filter((i) => i.kind === 'review');
+  const overdue = all.filter((i) => i.overdue === true);
+
+  // The commencement date itself is a deadline for the whole run.
+  const start = toDate(assignment.start_date);
+  if (!closed && start && current.key !== 'complete' && start.getTime() < now.getTime()) {
+    overdue.push({ kind: 'record', label: 'Commencement date has passed with onboarding incomplete', dueAt: assignment.start_date, overdue: true });
+  }
+
+  let next;
+  if (closed) next = { actor: 'none', action: null, label: `Record ${assignment.status}` };
+  else if (current.key === 'complete') next = { actor: 'none', action: null, label: 'Onboarding complete — nothing further to do' };
+  else next = (s3.state === 'active' ? s3.next : s2.state === 'active' ? s2.next : s1.next)
+    || { actor: 'system', action: null, label: 'In progress' };
+
+  const daysToStart = start ? daysBetween(now, start) : null;
+
+  return {
+    stage: current,
+    stages,
+    next,
+    completed,
+    waitingOnEmployee,
+    internalOpen,
+    adminReview,
+    overdue,
+    daysToStart,
+    closed,
+    counts: {
+      completed: completed.length,
+      waitingOnEmployee: waitingOnEmployee.length,
+      internalOpen: internalOpen.length,
+      adminReview: adminReview.length,
+      overdue: overdue.length,
+    },
+    // Higher = needs the Owner sooner. Used to sort the board.
+    attention: (closed || current.key === 'complete') ? 0
+      : overdue.length * 100 + adminReview.length * 10 + (next.actor === 'admin' ? 5 : 0),
+  };
+}
+
+function pick(s) {
+  return { state: s.state, summary: s.summary, completedAt: s.completedAt };
+}
+
+module.exports = {
+  STAGES,
+  OFFER_STATUSES,
+  TASK_STATUSES,
+  OFFER_CHASE_DAYS,
+  buildInductionTasks,
+  projectJourney,
+};

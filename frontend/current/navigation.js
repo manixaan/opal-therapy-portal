@@ -132,7 +132,9 @@
    *  compliance/expiring/documents/settings addresses — normalises to Track
    *  Onboarding rather than 404ing, so old bookmarks keep landing somewhere
    *  true. */
-  var OB_VIEWS = ['track', 'packages', 'start'];
+  var OB_VIEWS = ['track', 'board', 'packages', 'start', 'record'];
+  /** The one onboarding view that carries an id: '#onboarding/record/<id>'. */
+  var OB_VIEWS_WITH_ID = ['record'];
 
   var OVERLAYS = ['booking', 'event', 'support', 'modal'];
   var OVERLAYS_WITH_ID = ['event', 'modal'];
@@ -199,6 +201,13 @@
       // An unrecognised sub-view degrades to Track Onboarding rather than
       // producing an address that renders nothing.
       out.view = inList(OB_VIEWS, obView) ? obView : 'track';
+      // A record address without an id names nothing openable: it degrades
+      // to the board rather than to an empty pane.
+      if (inList(OB_VIEWS_WITH_ID, out.view)) {
+        var obId = safeId(s.id);
+        if (!obId) out.view = 'board';
+        else out.id = obId;
+      }
 
     } else if (out.tab === 'casenotes') {
       out.id = safeId(s.id) || null;
@@ -257,6 +266,7 @@
     } else if (s.tab === 'onboarding') {
       // '#onboarding' IS Track Onboarding, so it needs no segment of its own.
       if (s.view && s.view !== 'track') out += '/' + s.view;
+      if (inList(OB_VIEWS_WITH_ID, s.view) && s.id) out += '/' + encodeURIComponent(s.id);
     } else if (s.tab === 'casenotes') {
       if (s.id) out += '/' + encodeURIComponent(s.id);
     } else if (s.tab === 'interviews') {
@@ -311,6 +321,7 @@
       if (inList(RH_VIEWS_WITH_ID, lower(parts[1]))) st.id = decodeSegment(parts[2]);
     } else if (tab === 'onboarding') {
       st.view = parts[1];
+      if (inList(OB_VIEWS_WITH_ID, lower(parts[1]))) st.id = decodeSegment(parts[2]);
     } else if (tab === 'casenotes') {
       st.id = decodeSegment(parts[1]);
     } else if (tab === 'interviews') {
@@ -414,6 +425,7 @@
     rhView: null,    // Resource Hub sub-view (RH2 exports no state object)
     rhId: null,
     obView: null,    // Onboarding sub-view (same reason as rhView)
+    obId: null,      // the record id when obView is 'record'
     wizard: null,    // 'fca' | 'letter' | null
     wizardStep: null,
     page: null,      // 'assessment' | null — full-screen surface addressed by id
@@ -478,7 +490,7 @@
     var st = { tab: tab };
     if (tab === 'calendar') st.view = calendarModeName();
     else if (tab === 'resources') { st.view = NAV.rhView || 'home'; st.id = NAV.rhId; }
-    else if (tab === 'onboarding') st.view = NAV.obView || 'track';
+    else if (tab === 'onboarding') { st.view = NAV.obView || 'track'; st.id = NAV.obId; }
     else if (tab === 'casenotes') st.id = caseNoteSelectedId();
     else if (tab === 'interviews') st.id = interviewRecordId();
     return st;
@@ -827,9 +839,10 @@
       // section. open() is idempotent, so calling it here as well as from the
       // RBAC guard's post-switch dispatch is safe.
       if (isFn(global.Onboarding.open)) {
-        try { global.Onboarding.open(t.view || 'track'); } catch (e) {}
+        try { global.Onboarding.open(t.view || 'track', t.id || null); } catch (e) {}
       }
       NAV.obView = t.view || 'track';
+      NAV.obId = t.id || null;
     }
 
     if (t.tab === 'resources' && global.RH2) {
@@ -931,6 +944,7 @@
         finally { NAV.inNav--; if (NAV.inNav < 0) NAV.inNav = 0; }
         if (name !== 'resources') { NAV.rhView = null; NAV.rhId = null; }
         if (name !== 'onboarding') NAV.obView = null;
+        if (name !== 'onboarding') NAV.obId = null;
         syncBase();
         return out;
       };
@@ -1005,9 +1019,10 @@
     // history entry and survives a reload.
     if (global.Onboarding) {
       hookMethod('Onboarding', 'nav', function (orig) {
-        return function (view) {
+        return function (view, id) {
           var out = orig.apply(this, arguments);
           NAV.obView = lower(view) || 'track';
+          NAV.obId = inList(OB_VIEWS_WITH_ID, NAV.obView) ? (safeId(id) || null) : null;
           syncBase();
           return out;
         };
