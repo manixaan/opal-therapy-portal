@@ -1640,7 +1640,7 @@ router.patch('/api/admin/users/:id/deactivate', requireAuth, requireRole('owner'
   try {
     const { rows } = await pool.query(
       `UPDATE users SET account_status = 'deactivated', is_active = FALSE, updated_at = NOW()
-         WHERE id = $1 RETURNING id, email, name`,
+         WHERE id = $1 RETURNING id, email, name, m365_object_id, m365_disabled_at`,
       [id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
@@ -1653,13 +1653,45 @@ router.patch('/api/admin/users/:id/deactivate', requireAuth, requireRole('owner'
       ipAddress: req.ip,
     }).catch(() => {});
 
+    // Offboard the Microsoft 365 side too: disable sign-in, end sessions,
+    // release the licence back to the pool. Never deletes. A Graph failure is
+    // reported, not fatal — the portal account is already closed, and the
+    // Owner can finish the Microsoft side in the admin centre.
+    const m365 = await offboardMicrosoft365(req, rows[0]);
+
     console.log(`🗑️  Account deactivated: ${rows[0].email} by ${req.user.email}`);
-    res.json({ ok: true, user: rows[0] });
+    res.json({ ok: true, user: { id: rows[0].id, email: rows[0].email, name: rows[0].name }, m365 });
   } catch (err) {
     console.error('PATCH deactivate error:', err);
     res.status(500).json({ error: 'Failed to deactivate account' });
   }
 });
+
+/**
+ * Disable the user's Microsoft 365 account and release its licence.
+ * @returns {Promise<{attempted:boolean, disabled:boolean, licencesReleased:number, reason:string|null}>}
+ */
+async function offboardMicrosoft365(req, user) {
+  const graphIdentity = require('./graph-identity');
+  if (!user || !user.m365_object_id) return { attempted: false, disabled: false, licencesReleased: 0, reason: null };
+  if (user.m365_disabled_at) return { attempted: false, disabled: true, licencesReleased: 0, reason: null };
+  const cfg = graphIdentity.configState();
+  if (!cfg.ok) return { attempted: false, disabled: false, licencesReleased: 0, reason: cfg.message };
+  try {
+    const result = await graphIdentity.decommission(user.m365_object_id);
+    await pool.query('UPDATE users SET m365_disabled_at = NOW(), updated_at = NOW() WHERE id = $1', [user.id]);
+    await require('./database').logAuditEvent({
+      actorUserId: req.user.id, action: 'account.m365_disabled', targetType: 'user', targetId: user.id,
+      ipAddress: req.ip,
+      metadata: { m365Disabled: true, licencesReleased: result.licencesReleased },
+    }).catch(() => {});
+    return { attempted: true, disabled: true, licencesReleased: result.licencesReleased, reason: null };
+  } catch (err) {
+    const classified = graphIdentity.classify(err);
+    console.warn(`⚠️  Microsoft 365 offboarding failed for ${user.id}: ${classified.code}`);
+    return { attempted: true, disabled: false, licencesReleased: 0, reason: classified.message };
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 //  Export router

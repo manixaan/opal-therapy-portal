@@ -1744,3 +1744,193 @@ describe('the editable onboarding email', () => {
     expect(rows[0].n).toBe(1);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  MICROSOFT 365 ACCOUNT — created through Graph, stubbed at the module edge
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('creating the Microsoft 365 account', () => {
+  const graphIdentity = require('../../graph-identity');
+  const M365_ENV = {
+    M365_PROVISIONING_ENABLED: 'true', M365_DOMAIN: 'opaltherapy.com.au',
+    M365_LICENCE_SKU_BASIC: 'sku-basic', M365_LICENCE_SKU_FULL: 'sku-full',
+    MICROSOFT_CLIENT_ID: 'client', MICROSOFT_CLIENT_SECRET: 'secret', MICROSOFT_TENANT_ID: 'tenant',
+  };
+  const savedEnv = {};
+
+  beforeEach(() => {
+    for (const k of Object.keys(M365_ENV)) { savedEnv[k] = process.env[k]; process.env[k] = M365_ENV[k]; }
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    for (const k of Object.keys(M365_ENV)) {
+      if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k];
+    }
+  });
+
+  function pool(basicFree, fullFree) {
+    return {
+      basic: { key: 'basic', label: 'Basic', description: '', configured: true, total: 5, used: 5 - basicFree, available: basicFree },
+      full: { key: 'full', label: 'Full', description: '', configured: true, total: 2, used: 2 - fullFree, available: fullFree },
+    };
+  }
+
+  test('switched off: the journey says to ask the admin, and the step refuses with 503', async () => {
+    process.env.M365_PROVISIONING_ENABLED = 'false';
+    const { agent } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(agent);
+
+    const journey = await agent.get(`/api/onboarding/assignments/${assignmentId}/journey`);
+    expect(journey.body.m365).toMatchObject({ enabled: false, objectId: null });
+    expect(journey.body.m365.reason).toMatch(/ask your Microsoft admin/i);
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'basic' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('m365_unavailable');
+  });
+
+  test('no licences left: nothing is created and the Owner is told to buy one first', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(agent);
+    jest.spyOn(graphIdentity, 'licenceAvailability').mockResolvedValue(pool(0, 0));
+    const create = jest.spyOn(graphIdentity, 'createUser');
+
+    const look = await agent.get(`/api/onboarding/assignments/${assignmentId}/m365`);
+    expect(look.status).toBe(200);
+    expect(look.body.suggestedUpn).toBe('jane.smith@opaltherapy.com.au');
+    expect(look.body.licences.every((l) => l.available === 0)).toBe(true);
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'basic' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('no_licences');
+    expect(res.body.error).toMatch(/buy one/i);
+    expect(create).not.toHaveBeenCalled();
+
+    const { rows } = await db.pool.query('SELECT m365_object_id FROM onboarding_assignments WHERE id = $1', [assignmentId]);
+    expect(rows[0].m365_object_id).toBeNull();
+  });
+
+  test('the admin has not granted the permission: 503 with the admin message, nothing stored', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(agent);
+    jest.spyOn(graphIdentity, 'licenceAvailability')
+      .mockRejectedValue(new graphIdentity.GraphIdentityError('grant_missing', graphIdentity.ADMIN_MESSAGE, 403));
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'basic' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('m365_unavailable');
+    expect(res.body.error).toMatch(/ask your Microsoft admin/i);
+  });
+
+  test('creates the account once, shows the password once, records the link on the record and the user', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(agent);
+    // A portal account first, so the users row exists to carry the link.
+    await db.pool.query('UPDATE onboarding_assignments SET status = $2 WHERE id = $1', [assignmentId, 'documents_received']);
+
+    jest.spyOn(graphIdentity, 'licenceAvailability').mockResolvedValue(pool(1, 0));
+    jest.spyOn(graphIdentity, 'findUserByPrincipalName').mockResolvedValue(null);
+    const create = jest.spyOn(graphIdentity, 'createUser')
+      .mockResolvedValue({ id: 'obj-123', upn: 'jane.smith@opaltherapy.com.au' });
+    jest.spyOn(graphIdentity, 'assignLicence').mockResolvedValue();
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`)
+      .send({ licence: 'basic', upn: 'Jane.Smith@OpalTherapy.com.au' });
+    expect(res.status).toBe(201);
+    expect(res.headers['cache-control']).toContain('no-store');
+    expect(res.body.upn).toBe('jane.smith@opaltherapy.com.au');
+    expect(res.body.licenceAssigned).toBe(true);
+    expect(res.body.temporaryPassword).toMatch(/^[A-Z]/);
+    expect(create.mock.calls[0][0].password).toBe(res.body.temporaryPassword);
+    expect(create.mock.calls[0][0].givenName).toBe('Jane');
+    expect(create.mock.calls[0][0].surname).toBe('Smith');
+
+    const { rows } = await db.pool.query(
+      'SELECT m365_object_id, m365_upn, m365_licence, m365_licence_assigned FROM onboarding_assignments WHERE id = $1',
+      [assignmentId]
+    );
+    expect(rows[0]).toMatchObject({
+      m365_object_id: 'obj-123', m365_upn: 'jane.smith@opaltherapy.com.au', m365_licence: 'basic', m365_licence_assigned: true,
+    });
+
+    // Idempotent: a second press does not mint a second account.
+    const again = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'basic' });
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('m365_exists');
+    expect(create).toHaveBeenCalledTimes(1);
+
+    const journey = await agent.get(`/api/onboarding/assignments/${assignmentId}/journey`);
+    expect(journey.body.m365).toMatchObject({ enabled: true, objectId: 'obj-123', licenceAssigned: true, licenceLabel: 'Basic' });
+
+    // The audit trail carries the identifiers and never the address or password.
+    const { rows: audit } = await db.pool.query(
+      `SELECT metadata FROM audit_logs WHERE action = 'onboarding.m365_account_created' ORDER BY created_at DESC LIMIT 1`
+    );
+    expect(audit[0].metadata).toMatchObject({ licence: 'basic', m365ObjectId: 'obj-123', tempPasswordIssued: true });
+    expect(JSON.stringify(audit[0].metadata)).not.toContain(res.body.temporaryPassword);
+    expect(JSON.stringify(audit[0].metadata)).not.toContain('opaltherapy.com.au');
+  });
+
+  test('a licence that fails after creation is reported, and a retry assigns only the licence', async () => {
+    const { agent } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(agent);
+    jest.spyOn(graphIdentity, 'licenceAvailability').mockResolvedValue(pool(1, 1));
+    jest.spyOn(graphIdentity, 'findUserByPrincipalName').mockResolvedValue(null);
+    const create = jest.spyOn(graphIdentity, 'createUser').mockResolvedValue({ id: 'obj-9', upn: 'jane.smith@opaltherapy.com.au' });
+    const assign = jest.spyOn(graphIdentity, 'assignLicence')
+      .mockRejectedValueOnce(new graphIdentity.GraphIdentityError('transient', 'Graph hiccup'))
+      .mockResolvedValue();
+
+    const first = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'full' });
+    expect(first.status).toBe(201);
+    expect(first.body.licenceAssigned).toBe(false);
+    expect(first.body.licenceWarning).toMatch(/could not be assigned/i);
+
+    const retry = await agent.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'full' });
+    expect(retry.status).toBe(200);
+    expect(retry.body.licenceAssigned).toBe(true);
+    expect(retry.body.temporaryPassword).toBeUndefined();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledTimes(2);
+  });
+
+  test('only the Owner: an admin holding onboarding.activate is refused, and a viewer cannot look', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await startOnboarding(owner);
+    const { agent: admin } = await agentFor({ role: 'admin', permissions: ['onboarding.activate', 'onboarding.view'] });
+    const { agent: viewer } = await agentFor({ role: 'admin', permissions: ['onboarding.view'] });
+
+    expect((await admin.post(`/api/onboarding/assignments/${assignmentId}/m365`).send({ licence: 'basic' })).status).toBe(403);
+    expect((await admin.get(`/api/onboarding/assignments/${assignmentId}/m365`)).status).toBe(403);
+    expect((await viewer.get(`/api/onboarding/assignments/${assignmentId}/m365`)).status).toBe(403);
+  });
+
+  test('deactivating the portal account disables the Microsoft one and releases the licence', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const { user: leaver } = await agentFor({ role: 'therapist' });
+    await db.pool.query(
+      `UPDATE users SET m365_object_id = 'obj-leaver', m365_upn = 'x@opaltherapy.com.au', m365_licence = 'basic' WHERE id = $1`,
+      [leaver.id]
+    );
+    const decommission = jest.spyOn(graphIdentity, 'decommission').mockResolvedValue({ disabled: true, licencesReleased: 1 });
+
+    const res = await owner.patch(`/api/admin/users/${leaver.id}/deactivate`);
+    expect(res.status).toBe(200);
+    expect(res.body.m365).toEqual({ attempted: true, disabled: true, licencesReleased: 1, reason: null });
+    expect(decommission).toHaveBeenCalledWith('obj-leaver');
+
+    const { rows } = await db.pool.query('SELECT m365_disabled_at, is_active FROM users WHERE id = $1', [leaver.id]);
+    expect(rows[0].is_active).toBe(false);
+    expect(rows[0].m365_disabled_at).not.toBeNull();
+
+    // A Graph failure closes the portal account regardless and says why.
+    const { user: second } = await agentFor({ role: 'therapist' });
+    await db.pool.query(`UPDATE users SET m365_object_id = 'obj-2' WHERE id = $1`, [second.id]);
+    decommission.mockRejectedValue(new graphIdentity.GraphIdentityError('grant_missing', graphIdentity.ADMIN_MESSAGE, 403));
+    const failed = await owner.patch(`/api/admin/users/${second.id}/deactivate`);
+    expect(failed.status).toBe(200);
+    expect(failed.body.m365.disabled).toBe(false);
+    expect(failed.body.m365.reason).toMatch(/ask your Microsoft admin/i);
+    expect((await db.pool.query('SELECT is_active FROM users WHERE id = $1', [second.id])).rows[0].is_active).toBe(false);
+  });
+});

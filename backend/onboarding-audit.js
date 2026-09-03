@@ -67,6 +67,11 @@ const ALLOWED_FIELDS = Object.freeze([
   'downloadLinkUsed', 'attachmentIncluded', 'attachmentBytes',
   'accountRole', 'portalRole', 'tempPasswordIssued', 'expiresInDays',
   'loginEmailChanged', 'excluded', 'displayTitleChanged', 'sortOrder',
+
+  // ── Microsoft 365 provisioning (migration 053) ─────────────────────────
+  // The licence tier and the Entra object id are identifiers; the address
+  // lives on the user row and the password has no key here, ever.
+  'licence', 'licenceAssigned', 'licencesReleased', 'm365ObjectId', 'm365Disabled',
 ]);
 
 const ALLOWED = new Set(ALLOWED_FIELDS);

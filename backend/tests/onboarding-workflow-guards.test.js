@@ -69,6 +69,10 @@ describe('every journey route carries a permission', () => {
     'POST /api/onboarding/assignments/:id/account': 'onboarding.activate',
     'POST /api/onboarding/assignments/:id/account/reissue-password': 'onboarding.activate',
     'POST /api/onboarding/assignments/:id/account/invite': 'onboarding.assign',
+    // Microsoft 365 provisioning: Owner-only on top of the permission, and
+    // it commits the practice to a licence charge, so it sits with activate.
+    'GET /api/onboarding/assignments/:id/m365': 'onboarding.activate',
+    'POST /api/onboarding/assignments/:id/m365': 'onboarding.activate',
     'GET /api/onboarding/assignments/:id/journey': 'onboarding.view',
     'GET /api/onboarding/packages/recommend': 'onboarding.assign',
     // Start Onboarding's editable email prefill — the same default wording an

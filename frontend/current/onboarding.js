@@ -3642,6 +3642,45 @@
             + 'Create portal account</button></div>'
           : '<p class="ob-quiet">Only the practice owner can create a portal account.</p>'))
       + '  </div>'
+      + '</div>'
+
+      // ── Microsoft 365 account ─────────────────────────────────────────────
+      + m365Card(res);
+  }
+
+  /**
+   * The Microsoft 365 step. Three states: not available (the admin has not
+   * granted the portal the right to manage users — say so, do not fail),
+   * created (show the address and the licence, and offer to assign the
+   * licence if that half failed), or ready to create.
+   */
+  function m365Card(res) {
+    var m = res.m365 || {};
+    var body;
+    if (m.objectId) {
+      body = '<p><strong>Created.</strong> Their work address is <strong>' + esc(m.upn || '') + '</strong>'
+        + (m.licenceAssigned
+          ? ' with a ' + esc(m.licenceLabel || m.licence || '') + ' licence.</p>'
+          : '.</p><div class="ob-note is-warn"><strong>No licence yet.</strong> The account exists but '
+            + 'cannot receive email until a licence is assigned.</div>'
+            + (res.canCreateAccount
+              ? '<div class="ob-inline-actions ob-mt-3">'
+                + '<button class="btn primary" onclick="Onboarding.m365Dialog()">Assign licence</button></div>'
+              : ''));
+    } else if (!m.enabled) {
+      body = '<p class="ob-quiet">' + esc(m.reason || 'Microsoft 365 accounts cannot be created from here yet.') + '</p>';
+    } else if (res.canCreateAccount) {
+      body = '<p>Give them a work email address on ' + esc(m.domain || 'the practice domain')
+        + ' with Outlook and Teams. A licence is a monthly charge, so you choose the tier and '
+        + 'we check one is free before anything is created.</p>'
+        + '<div class="ob-inline-actions ob-mt-3">'
+        + '<button class="btn primary" onclick="Onboarding.m365Dialog()">Create Microsoft account</button></div>';
+    } else {
+      body = '<p class="ob-quiet">Only the practice owner can create a Microsoft 365 account.</p>';
+    }
+    return '<div class="ob-section-card">'
+      + '  <div class="ob-section-head"><h2>Microsoft 365 account</h2></div>'
+      + '  <div class="ob-section-body">' + body + '</div>'
       + '</div>';
   }
 
@@ -4080,6 +4119,95 @@
       + '/account/reissue-password', { method: 'POST' });
     if (!res.ok) { toast(res.error, true); return; }
     showCredential(res, 'New temporary password');
+  }
+
+  // ── Microsoft 365 account ───────────────────────────────────────────────────
+
+  /**
+   * Ask Microsoft how many licences are left BEFORE showing the form, so an
+   * empty pool is a sentence on the dialog ("buy one first"), not a failure
+   * after the Owner has filled everything in.
+   */
+  async function m365Dialog() {
+    var j = S.journey || {};
+    var a = j.assignment || {};
+    var existing = (j.m365 || {}).objectId ? j.m365 : null;
+    openModal({
+      title: existing ? 'Assign a licence' : 'Create Microsoft account',
+      subtitle: a.name || '',
+      body: '<p class="ob-quiet">Checking with Microsoft 365…</p>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>',
+    });
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId()) + '/m365');
+    if (!res.ok) {
+      openModal({
+        title: existing ? 'Assign a licence' : 'Create Microsoft account',
+        subtitle: a.name || '',
+        body: '<div class="ob-note is-warn">' + esc(res.error || 'Microsoft 365 is not available right now.') + '</div>',
+        footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>',
+      });
+      return;
+    }
+    var licences = res.licences || [];
+    var anyFree = licences.some(function (l) { return l.available > 0; });
+    var first = true;
+    var licenceHtml = licences.map(function (l) {
+      var free = l.available > 0;
+      var sub = l.description + ' ' + (free
+        ? l.available + ' of ' + l.total + ' available.'
+        : 'None left — buy one in the Microsoft 365 admin centre first.');
+      var html = radio('licence', l.key, l.label, sub, free && first);
+      if (free) first = false;
+      if (!free) html = html.replace('<input ', '<input disabled ');
+      return html;
+    }).join('');
+    openModal({
+      title: existing ? 'Assign a licence' : 'Create Microsoft account',
+      subtitle: a.name || '',
+      body: (anyFree
+        ? '<div class="ob-note is-info">We will create the address, choose a temporary password and show '
+          + 'it to you once. They will be asked to choose their own the first time they sign in.</div>'
+        : '<div class="ob-note is-warn"><strong>No licences left.</strong> Buy one in the Microsoft 365 '
+          + 'admin centre first, then come back — nothing is created until a licence is free.</div>')
+        + (existing
+          ? '<p>Address: <strong>' + esc(existing.upn || '') + '</strong></p>'
+          : field2('Work email address', 'upn', 'email', res.suggestedUpn || '')
+            + '<p class="ob-hint">Must be on ' + esc((res.m365 || {}).domain || 'the practice domain') + '.</p>')
+        + '<div class="ob-field"><label>Licence</label>' + licenceHtml + '</div>',
+      footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
+        + (anyFree
+          ? '<button class="btn primary" onclick="Onboarding.submitM365()">'
+            + (existing ? 'Assign licence' : 'Create account') + '</button>'
+          : ''),
+    });
+  }
+
+  async function submitM365() {
+    var v = modalValues();
+    if (!v.licence) { modalError('Choose a licence.'); return; }
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
+      + '/m365', { method: 'POST', body: { licence: v.licence, upn: v.upn } });
+    if (!res.ok) { modalError(res.error); return; }
+    if (res.temporaryPassword) {
+      openModal({
+        title: 'Microsoft account created',
+        subtitle: res.upn || '',
+        body: '<div class="ob-note is-warn"><strong>This is the only time this password is shown.</strong> '
+          + 'Pass it on now, or copy it somewhere safe.</div>'
+          + (res.licenceWarning ? '<div class="ob-note is-warn">' + esc(res.licenceWarning) + '</div>' : '')
+          + '<div class="ob-cred">'
+          + '<div><span>Sign in at</span><strong>' + esc(res.signInUrl || '') + '</strong></div>'
+          + '<div><span>Email</span><strong>' + esc(res.upn || '') + '</strong></div>'
+          + '<div><span>Temporary password</span><code>' + esc(res.temporaryPassword) + '</code></div>'
+          + '</div>'
+          + '<p class="ob-hint ob-mt-3">They choose their own password the first time they sign in.</p>',
+        footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Done</button>',
+      });
+    } else {
+      closeModal();
+      toast('Licence assigned');
+    }
+    await refreshAssignment();
   }
 
   /**
@@ -4561,6 +4689,8 @@
     createAccountDialog: createAccountDialog,
     submitCreateAccount: submitCreateAccount,
     reissuePassword: reissuePassword,
+    m365Dialog: m365Dialog,
+    submitM365: submitM365,
     sendInviteDialog: sendInviteDialog,
     submitInvite: submitInvite,
     // package documents

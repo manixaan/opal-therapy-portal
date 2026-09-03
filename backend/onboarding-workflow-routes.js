@@ -44,6 +44,7 @@ const starterPack = require('./onboarding-starter-pack');
 const extraction = require('./onboarding-extraction');
 const accounts = require('./onboarding-accounts');
 const graphMail = require('./graph-mail');
+const graphIdentity = require('./graph-identity');
 const gateway = require('./ai/ai-gateway');
 const { auditOnboarding } = require('./onboarding-audit');
 const { requireAuth, requirePermission, hasPermission } = require('./permissions');
@@ -1678,6 +1679,206 @@ router.post('/api/onboarding/assignments/:id/account/invite',
  * the job of assembling that answer in the browser, where it would be
  * reassembled slightly differently by every caller.
  */
+// ═════════════════════════════════════════════════════════════════════════════
+//  MICROSOFT 365 ACCOUNT
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * What the journey screen shows for this step, without touching the network.
+ * Configuration state plus whatever the assignment already records.
+ */
+function m365State(assignment) {
+  const cfg = graphIdentity.configState();
+  return {
+    enabled: cfg.ok,
+    reason: cfg.ok ? null : cfg.message,
+    domain: cfg.ok ? cfg.domain : null,
+    objectId: assignment.m365_object_id || null,
+    upn: assignment.m365_upn || null,
+    licence: assignment.m365_licence || null,
+    licenceLabel: assignment.m365_licence
+      ? (graphIdentity.LICENCES[assignment.m365_licence] || {}).label || null : null,
+    licenceAssigned: assignment.m365_licence_assigned === true,
+    createdAt: assignment.m365_created_at || null,
+  };
+}
+
+/** Map a Graph failure to a response the Owner can act on. */
+function m365Failure(res, err) {
+  const code = err && err.code;
+  if (code === 'grant_missing' || code === 'misconfigured') {
+    return res.status(503).json({ error: graphIdentity.ADMIN_MESSAGE, code: 'm365_unavailable' });
+  }
+  if (code === 'no_licence') return res.status(409).json({ error: err.message, code: 'no_licences' });
+  if (code === 'upn_taken') return res.status(409).json({ error: err.message, code: 'upn_taken' });
+  if (code === 'bad_request') return res.status(400).json({ error: err.message });
+  if (code === 'not_found') return res.status(404).json({ error: err.message, code: 'm365_not_found' });
+  if (code === 'transient') return res.status(502).json({ error: err.message, code: 'm365_transient' });
+  throw err;
+}
+
+/**
+ * The create dialog's opening question: what address would they get, and
+ * how many licences are left in each tier. Owner-only, like the step itself.
+ */
+router.get('/api/onboarding/assignments/:id/m365',
+  requirePermission('onboarding.activate'), safe(async (req, res) => {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Forbidden', message: 'Only the practice owner can manage Microsoft 365 accounts.' });
+    }
+    const assignment = await loadAssignment(req);
+    if (!assignment) return notFound(res);
+
+    const state = m365State(assignment);
+    if (!state.enabled) {
+      return res.status(503).json({ error: state.reason, code: 'm365_unavailable', m365: state });
+    }
+    try {
+      const licences = await graphIdentity.licenceAvailability();
+      noStore(res);
+      res.json({
+        ok: true,
+        m365: state,
+        suggestedUpn: state.upn || graphIdentity.suggestUserPrincipalName(assignment.applicant_name),
+        licences: Object.values(licences).filter((l) => l.configured),
+      });
+    } catch (err) {
+      return m365Failure(res, err);
+    }
+  }));
+
+/**
+ * Create the Microsoft 365 account.
+ *
+ * OWNER-ONLY, for the same reason the portal account is: it hands somebody a
+ * credential, and it also commits the practice to a monthly licence charge.
+ * The licence pool is checked before anything is created, so "no licences
+ * left" costs nothing and says exactly what to do. A retry after the account
+ * exists but the licence failed assigns the licence only — it never mints a
+ * second account or a second password.
+ */
+router.post('/api/onboarding/assignments/:id/m365',
+  requirePermission('onboarding.activate'), safe(async (req, res) => {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Forbidden', message: 'Only the practice owner can create a Microsoft 365 account.' });
+    }
+    const assignment = await loadAssignment(req);
+    if (!assignment) return notFound(res);
+    if (['cancelled', 'archived'].includes(assignment.status)) {
+      return res.status(409).json({ error: 'This onboarding is closed.' });
+    }
+
+    const state = m365State(assignment);
+    if (!state.enabled) {
+      return res.status(503).json({ error: state.reason, code: 'm365_unavailable', m365: state });
+    }
+
+    const licenceKey = String(req.body?.licence || '').trim().toLowerCase();
+    if (!graphIdentity.LICENCES[licenceKey]) {
+      return res.status(400).json({ error: 'Choose either a Basic or Full licence.' });
+    }
+
+    // ── Retry path: the account exists, only the licence is outstanding ────
+    if (assignment.m365_object_id) {
+      if (assignment.m365_licence_assigned === true) {
+        return res.status(409).json({
+          error: 'A Microsoft 365 account already exists for this onboarding.',
+          code: 'm365_exists', m365: state,
+        });
+      }
+      try {
+        await graphIdentity.assignLicence(assignment.m365_object_id, licenceKey);
+      } catch (err) {
+        return m365Failure(res, err);
+      }
+      await db.pool.query(
+        `UPDATE onboarding_assignments SET m365_licence = $2, m365_licence_assigned = TRUE,
+                last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [assignment.id, licenceKey]
+      );
+      if (assignment.user_id) {
+        await db.pool.query('UPDATE users SET m365_licence = $2, updated_at = NOW() WHERE id = $1',
+          [assignment.user_id, licenceKey]);
+      }
+      await auditOnboarding(req, 'm365_licence_assigned', {
+        targetType: 'onboarding_assignment', targetId: assignment.id,
+        metadata: { assignmentId: assignment.id, licence: licenceKey, m365ObjectId: assignment.m365_object_id },
+      });
+      const refreshed = await odb.getAssignment(orgOf(req), assignment.id);
+      return res.json({ ok: true, licenceAssigned: true, m365: m365State(refreshed) });
+    }
+
+    // ── First run ─────────────────────────────────────────────────────────
+    const upnCheck = graphIdentity.validateUserPrincipalName(
+      req.body?.upn || graphIdentity.suggestUserPrincipalName(assignment.applicant_name)
+    );
+    if (!upnCheck.ok) return res.status(400).json({ error: upnCheck.error });
+
+    const nameParts = String(assignment.applicant_name || '').trim().split(/\s+/);
+    const tempPassword = accounts.generateTemporaryPassword();
+
+    let result;
+    try {
+      result = await graphIdentity.provision({
+        displayName: assignment.applicant_name,
+        givenName: nameParts[0] || undefined,
+        surname: nameParts.length > 1 ? nameParts[nameParts.length - 1] : undefined,
+        upn: upnCheck.upn,
+        nickname: upnCheck.nickname,
+        password: tempPassword,
+        licenceKey,
+      });
+    } catch (err) {
+      return m365Failure(res, err);
+    }
+
+    await odb.withTransaction(async (q) => {
+      await q.query(
+        `UPDATE onboarding_assignments
+            SET m365_object_id = $2, m365_upn = $3, m365_licence = $4, m365_licence_assigned = $5,
+                m365_created_at = NOW(), m365_created_by = $6,
+                last_activity_at = NOW(), updated_at = NOW()
+          WHERE id = $1`,
+        [assignment.id, result.objectId, result.upn, licenceKey, result.licenceAssigned, req.user.id]
+      );
+      if (assignment.user_id) {
+        await q.query(
+          `UPDATE users SET m365_object_id = $2, m365_upn = $3, m365_licence = $4,
+                  m365_provisioned_at = NOW(), m365_provisioned_by = $5, updated_at = NOW()
+            WHERE id = $1`,
+          [assignment.user_id, result.objectId, result.upn, licenceKey, req.user.id]
+        );
+      }
+    });
+
+    await auditOnboarding(req, 'm365_account_created', {
+      targetType: 'onboarding_assignment', targetId: assignment.id,
+      metadata: {
+        assignmentId: assignment.id, subjectUserId: assignment.user_id || undefined,
+        licence: licenceKey, licenceAssigned: result.licenceAssigned,
+        m365ObjectId: result.objectId, tempPasswordIssued: true,
+      },
+    });
+
+    const refreshed = await odb.getAssignment(orgOf(req), assignment.id);
+    // The plaintext leaves the server exactly once, here.
+    noStore(res);
+    res.status(201).json({
+      ok: true,
+      m365: m365State(refreshed),
+      upn: result.upn,
+      licence: licenceKey,
+      licenceLabel: graphIdentity.LICENCES[licenceKey].label,
+      licenceAssigned: result.licenceAssigned,
+      licenceWarning: result.licenceAssigned ? null
+        : `The account was created but the licence could not be assigned: ${result.licenceError?.message || 'unknown error'} `
+          + 'Use "Assign licence" to try again.',
+      temporaryPassword: tempPassword,
+      signInUrl: 'https://www.office.com',
+      notice: 'This is the only time this password is shown. They will be asked to choose their own the first time they sign in.',
+    });
+  }));
+
 router.get('/api/onboarding/assignments/:id/journey',
   requirePermission('onboarding.view'), safe(async (req, res) => {
     const assignment = await loadAssignment(req);
@@ -1724,6 +1925,7 @@ router.get('/api/onboarding/assignments/:id/journey',
       dispatches,
       canSeePayroll: caps.payroll,
       canCreateAccount: req.user.role === 'owner' && hasPermission(req.user, 'onboarding.activate'),
+      m365: m365State(assignment),
     });
   }));
 
