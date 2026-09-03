@@ -126,12 +126,22 @@
       + '<div class="dp-stage" id="dp-stage"><div class="dp-status" role="status">Loading preview…</div></div>';
     doc.body.appendChild(el);
     el.addEventListener('click', onClick);
+    // Click outside the document closes it. Remembering where the press
+    // started means a text selection that ends on the backdrop does not.
+    el.addEventListener('mousedown', function (e) { S.pressedBackdrop = isBackdrop(e.target); });
     doc.addEventListener('keydown', onKey, true);
     var closeBtn = el.querySelector('[data-dp="close"]');
     if (closeBtn) closeBtn.focus();
   }
 
+  /** The dim area around the page — the overlay itself or the empty stage. */
+  function isBackdrop(target) {
+    if (!target) return false;
+    return target.id === 'dp-overlay' || target.id === 'dp-stage' || target.classList.contains('dp-sheet') || target.classList.contains('dp-docx-render-wrapper');
+  }
+
   function onClick(e) {
+    if (isBackdrop(e.target) && S.pressedBackdrop) { close(); return; }
     var t = e.target && e.target.closest ? e.target.closest('[data-dp]') : null;
     if (!t) return;
     var act = t.getAttribute('data-dp');
