@@ -75,11 +75,13 @@
     '.dp-docx-render{background:transparent;}',
     // text-align:center on the stage/sheet is for centring the PAGE, not its
     // words: a Word paragraph with no alignment is left-aligned.
-    '.dp-docx-render section{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;text-align:left;box-sizing:border-box;flex:none;}',
+    // docx-preview puts the className on each PAGE <section> (inside a
+    // .dp-docx-render-wrapper); the selectors below address the page itself.
+    '.dp-docx-render-wrapper > section.dp-docx-render{box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;text-align:left;box-sizing:border-box;flex:none;}',
     // The shell styles bare <header> as position:sticky with a white background
     // and a high z-index; docx-preview emits a <header> per page for the
     // running header, which then floated over the letterhead. Undo it here.
-    '.dp-docx-render section > header, .dp-docx-render section > footer{position:static !important;display:block;padding:0;margin:0;background:transparent !important;border:0 !important;box-shadow:none !important;height:auto !important;z-index:auto !important;}',
+    'section.dp-docx-render > header, section.dp-docx-render > footer{position:static !important;display:block !important;padding:0 !important;margin:0 !important;background:transparent !important;border:0 !important;box-shadow:none !important;height:auto !important;min-height:0 !important;z-index:auto !important;}',
     '@media (max-width:700px){.dp-title{max-width:60vw;}.dp-meta{display:none;}.dp-stage{padding:10px;}}',
   ].join('\n');
 
