@@ -42,6 +42,13 @@ describe('the template', () => {
     for (const tag of tags) expect(docx.TAGS).toContain(tag);
     expect(parts.join('')).not.toMatch(/Hunter|emmakhunter|0426 997/);
     expect(zip.file('word/comments.xml')).toBeNull();
+    // Nowhere in the package — relationships (a mailto: link) and properties included.
+    for (const name of Object.keys(zip.files)) {
+      if (zip.files[name].dir || /\.(png|jpe?g|emf|wmf)$/i.test(name)) continue;
+      const text = await zip.file(name).async('string');
+      expect(`${name}:${/Hunter|emmakhunter|0426 997|icloud/.test(text)}`).toBe(`${name}:false`);
+    }
+    expect(await zip.file('word/document.xml').async('string')).not.toMatch(/<w:hyperlink[^>]*><w:sdt>/);
   });
 });
 

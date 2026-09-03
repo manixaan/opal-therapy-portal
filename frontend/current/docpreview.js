@@ -73,7 +73,13 @@
     '.dp-status .dp-btn{margin-top:14px;}',
     // docx-preview injects its own sheet styling; contain it to white pages.
     '.dp-docx-render{background:transparent;}',
-    '.dp-docx-render section{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;}',
+    // text-align:center on the stage/sheet is for centring the PAGE, not its
+    // words: a Word paragraph with no alignment is left-aligned.
+    '.dp-docx-render section{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;text-align:left;box-sizing:border-box;flex:none;}',
+    // The shell styles bare <header> as position:sticky with a white background
+    // and a high z-index; docx-preview emits a <header> per page for the
+    // running header, which then floated over the letterhead. Undo it here.
+    '.dp-docx-render section > header, .dp-docx-render section > footer{position:static !important;display:block;padding:0;margin:0;background:transparent !important;border:0 !important;box-shadow:none !important;height:auto !important;z-index:auto !important;}',
     '@media (max-width:700px){.dp-title{max-width:60vw;}.dp-meta{display:none;}.dp-stage{padding:10px;}}',
   ].join('\n');
 
@@ -280,6 +286,13 @@
         });
       })
       .then(function () {
+        // Real pages: docx-preview only breaks on explicit breaks, so a long
+        // section grows past the sheet. Measure, and move what falls past the
+        // page's content area onto continuation pages (same header/footer).
+        var sheet0 = doc.getElementById('dp-docx-sheet');
+        return sheet0 ? settled(sheet0).then(function () { paginate(sheet0); }) : null;
+      })
+      .then(function () {
         // Fit-to-width baseline: a Word page has a fixed layout width (usually
         // ~816px) that rarely matches the stage. Measure once, then let user
         // zoom multiply the fitted base — 100% means "the page fits".
@@ -297,6 +310,84 @@
         if (err && err.name === 'AbortError') return;
         fail('This document could not be previewed.');
       });
+  }
+
+  /** Wait for images and fonts so measurement sees real heights. */
+  function settled(root) {
+    var waits = Array.prototype.slice.call(root.querySelectorAll('img')).map(function (img) {
+      if (img.complete) return Promise.resolve();
+      if (img.decode) return img.decode().catch(function () {});
+      return new Promise(function (r) { img.onload = img.onerror = r; });
+    });
+    if (doc.fonts && doc.fonts.ready) waits.push(doc.fonts.ready.catch(function () {}));
+    return Promise.all(waits);
+  }
+
+  /**
+   * PAGE PAGINATION — the same pass templates.js uses for the FCA preview.
+   * Each rendered <section> is one page whose min-height comes from the
+   * document's own page size (A4 or Letter). Blocks past the content area
+   * move to a cloned page; completed pages are pinned to exact height. A block
+   * moves whole (Word may split a paragraph), so a boundary can differ by up
+   * to one block; a single block taller than a page keeps its tall page.
+   */
+  function paginate(root) {
+    var wrapper = root.querySelector('.dp-docx-render-wrapper') || root;
+    Array.prototype.slice.call(wrapper.children).filter(function (n) { return n.tagName === 'SECTION'; }).forEach(splitPage);
+  }
+
+  function splitPage(sec) {
+    var guard = 80;
+    var current = sec;
+    while (guard-- > 0) {
+      var cs = getComputedStyle(current);
+      var target = parseFloat(cs.minHeight) || parseFloat(current.style.minHeight);
+      if (!target) return;
+      var limit = target - (parseFloat(cs.paddingBottom) || 0);
+      var articles = Array.prototype.slice.call(current.children).filter(function (n) { return n.tagName === 'ARTICLE'; });
+      if (!articles.length) return;
+      var secTop = current.getBoundingClientRect().top;
+      var flow = [];
+      articles.forEach(function (art, ai) {
+        Array.prototype.slice.call(art.children).forEach(function (kid) { flow.push({ el: kid, art: ai }); });
+      });
+      var splitAt = -1;
+      for (var i = 0; i < flow.length; i++) {
+        var r = flow[i].el.getBoundingClientRect();
+        if (r.height === 0) continue;
+        if (r.bottom - secTop > limit) { splitAt = i; break; }
+      }
+      if (splitAt !== -1) {
+        var tailHasContent = false;
+        for (var t = splitAt; t < flow.length; t++) {
+          var tEl = flow[t].el;
+          if ((tEl.textContent || '').trim() !== '' || tEl.querySelector('img, table')) { tailHasContent = true; break; }
+        }
+        if (!tailHasContent) splitAt = -1;
+      }
+      if (splitAt === -1) { current.style.height = target + 'px'; current.style.overflow = 'hidden'; return; }
+      if (splitAt === 0) return;
+      var next = current.cloneNode(false);
+      var header = current.querySelector(':scope > header');
+      if (header) next.appendChild(header.cloneNode(true));
+      var ai2 = flow[splitAt].art;
+      var srcArticle = articles[ai2];
+      var within = Array.prototype.indexOf.call(srcArticle.children, flow[splitAt].el);
+      if (within > 0) {
+        var nextArticle = srcArticle.cloneNode(false);
+        next.appendChild(nextArticle);
+        var kids = Array.prototype.slice.call(srcArticle.children);
+        for (var k = within; k < kids.length; k++) nextArticle.appendChild(kids[k]);
+        ai2 += 1;
+      }
+      for (var a = ai2; a < articles.length; a++) next.appendChild(articles[a]);
+      var footer = current.querySelector(':scope > footer');
+      if (footer) next.appendChild(footer.cloneNode(true));
+      current.parentNode.insertBefore(next, current.nextSibling);
+      current.style.height = target + 'px';
+      current.style.overflow = 'hidden';
+      current = next;
+    }
   }
 
   function applyDocxZoom() {
