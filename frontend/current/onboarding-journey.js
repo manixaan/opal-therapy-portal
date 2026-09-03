@@ -499,6 +499,10 @@
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.markSent()') : '');
       case 'verify_offer': return btn('View the signed letter', 'OnboardingJourney.previewSigned()') + (c.assign ? btn('Verify', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '');
       case 'release': return c.assign ? btn('Release the documentation', 'OnboardingJourney.release()', 'oj-btn-primary') : '';
+      case 'review_pack': return btn('Review the document pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-primary');
+      case 'send_pack_in_outlook': return (d.pack && d.pack.email && d.pack.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.pack.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
+        + (c.assign ? btn('Mark as sent', 'OnboardingJourney.packMarkSent()') : '');
+      case 'review_returns': return btn('Open the document pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-primary');
       case 'review': return btn('Open the review', 'OnboardingJourney.openReview()', 'oj-btn-primary');
       case 'activate': return c.activate ? btn('Activate portal access', 'OnboardingJourney.runTask(\'portal_access\')', 'oj-btn-primary') : '';
       case 'task': return n.taskCode ? btn('Go to the task', 'OnboardingJourney.scrollTo(\'oj-task-' + jsq(n.taskCode) + '\')') : '';
@@ -690,13 +694,27 @@
 
   // ── Stage 2 panel ─────────────────────────────────────────────────────────
 
+  var SECTION_LABELS = {
+    welcome_employment: 'Employment', personal_details: 'Personal details', payroll_tax_super: 'Payroll, tax and super',
+    identity: 'Identity and right to work', professional: 'Professional registration', screening: 'Screening and checks',
+    ndis: 'NDIS', policies: 'Policies', training: 'Training',
+  };
+
   function documentationPanel(d) {
     var st = d.journey.stages[1];
-    var body = '';
     if (st.state === 'pending') return stagePanel(2, 'Onboarding Documentation', st, '');
-    var r = d.record;
+    var r = d.record; var P = d.pack;
+    var body = '';
+
+    // The document pack (Phase 2) — while the record is on the paper round-trip.
+    var packStatuses = ['created', 'starter_pack_ready', 'starter_pack_sent', 'documents_received'];
+    if (P && packStatuses.indexOf(r.status) !== -1) {
+      body += packPanel(d);
+      return stagePanel(2, 'Onboarding Documentation', st, body);
+    }
+
     if (r.status === 'created') {
-      body += '<p>The employee has accepted. Releasing creates their portal account, emails the invitation and issues the documentation list from the <strong>' + esc(r.packageTitle || 'onboarding') + '</strong> package.</p>';
+      body += '<p>Releasing creates their portal account, emails the invitation and issues the documentation list from the <strong>' + esc(r.packageTitle || 'onboarding') + '</strong> package.</p>';
       if (d.can.assign) body += '<div class="oj-actions">' + btn('Release the documentation', 'OnboardingJourney.release()', 'oj-btn-primary') + '</div>';
       return stagePanel(2, 'Onboarding Documentation', st, body);
     }
@@ -714,6 +732,126 @@
     }
     body += '<div class="oj-actions">' + btn('Open the full review', 'OnboardingJourney.openReview()') + '</div>';
     return stagePanel(2, 'Onboarding Documentation', st, body);
+  }
+
+  function yesNo(v) { return v ? '<span class="oj-yes">Yes</span>' : '<span class="oj-no">No</span>'; }
+
+  function packPanel(d) {
+    var P = d.pack; var r = d.record; var c = P.can || d.can; var E = P.email || {};
+    var editable = P.editable && c.assign;
+    var sent = r.status === 'starter_pack_sent' || r.status === 'documents_received';
+    var drafted = !!E.draftId;
+    var out = '';
+
+    if (!P.prepared) {
+      out += '<p class="oj-quiet">The document pack is being prepared from the role and employment type.</p>';
+      if (c.assign) out += '<div class="oj-actions">' + btn('Prepare the pack now', 'OnboardingJourney.packPrepare()', 'oj-btn-primary') + '</div>';
+      return out;
+    }
+
+    // ── Sent banner ──
+    if (sent) {
+      out += '<div class="oj-sent-banner"><strong>Onboarding Documents Sent</strong>'
+        + '<span>Due: ' + esc(fmtDate(E.dueAt)) + '</span>'
+        + '<span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + ' to ' + esc(E.sentTo || r.applicantEmail || '') + (P.zip ? ' · ' + P.zip.documentCount + ' document(s)' : '') + '</span>'
+        + '</div>';
+      if (r.status === 'starter_pack_sent') {
+        out += '<p class="oj-quiet">Waiting for the completed documentation to come back. ' + P.counts.returns + ' item(s) are expected to be returned.</p>';
+        if (c.assign) out += '<div class="oj-actions">' + btn('Not sent after all', 'OnboardingJourney.packUnmarkSent()', 'oj-btn-quiet') + (P.zip ? '<a class="oj-btn" href="' + esc(P.zip.downloadUrl) + '">Download the ZIP that went out</a>' : '') + '</div>';
+      }
+    }
+
+    // ── The table ──
+    var included = P.items.filter(function (i) { return i.status === 'included'; });
+    var removed = P.items.filter(function (i) { return i.status !== 'included'; });
+    var groups = {};
+    included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
+    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
+
+    out += '<div class="oj-pack-head"><div><strong>' + included.length + ' documents in the pack</strong> · '
+      + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back, ' + P.counts.verifies + ' verified by the practice</span>'
+      + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) marked as sent have no file behind them yet — upload a file, or remove them before preparing the email.</span>' : '') + '</div>'
+      + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen()') + '</div>' : '') + '</div>';
+
+    out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
+    order.forEach(function (k) {
+      out += '<tr class="oj-pack-section"><td colspan="6">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      groups[k].forEach(function (i) { out += packRow(i, editable); });
+    });
+    out += '</tbody></table></div>';
+    if (removed.length) {
+      out += '<details class="oj-history"><summary>Removed from this pack (' + removed.length + ')</summary><ul>' + removed.map(function (i) {
+        return '<li>' + esc(i.title) + (i.removedReason ? ' <span class="oj-quiet">— ' + esc(i.removedReason) + '</span>' : '')
+          + (editable ? ' ' + btn('Restore', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'restore\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
+      }).join('') + '</ul></details>';
+    }
+    out += '<div id="oj-pack-add" hidden></div>';
+
+    if (sent) return out;
+
+    // ── Email 2 ──
+    out += '<div class="oj-step is-active" id="oj-pack-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Onboarding email — to ' + esc(r.applicantEmail || '') + '</strong>'
+      + (drafted ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>';
+    if (c.assign) {
+      out += '<div class="oj-field"><label for="oj-pe-subject">Subject</label><input id="oj-pe-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
+        + '<div class="oj-field"><label for="oj-pe-body">Message</label><textarea id="oj-pe-body" rows="16">' + esc(E.body || '') + '</textarea>'
+        + '<small>The ZIP is built from the pack above and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
+        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' You can still download the ZIP, send it yourself, then mark it as sent.</div>' : '')
+        + '<div class="oj-actions">'
+        + btn(drafted ? 'Prepare a fresh Outlook draft' : 'Prepare Onboarding Email — create the Outlook draft with the ZIP attached', 'OnboardingJourney.packCreateDraft()', 'oj-btn-primary')
+        + btn('Save the wording', 'OnboardingJourney.packSaveEmail()')
+        + btn('Reset to the template', 'OnboardingJourney.packResetEmail()', 'oj-btn-quiet')
+        + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(r.id) + '/pack/zip">Download the ZIP</a>'
+        + '</div>';
+      if (drafted) {
+        out += '<div class="ob-note is-info"><strong>Your draft is in Outlook</strong>' + (E.draftedAt ? ' (created ' + esc(fmtDateTime(E.draftedAt)) + ')' : '') + ' with '
+          + (P.zip ? P.zip.documentCount + ' document(s) attached' : 'the pack attached') + '. Due date in the email: ' + esc(fmtDate(E.dueAt)) + '. Read it over and press Send there, then mark it as sent.'
+          + (P.zip && P.zip.omissions && P.zip.omissions.length ? '<br><span class="oj-warn">Left out (no file): ' + esc(P.zip.omissions.map(function (o) { return o.title; }).join(', ')) + '</span>' : '')
+          + '<div class="oj-actions">'
+          + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
+          + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent()', 'oj-btn-primary')
+          + '</div></div>';
+      } else {
+        out += '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent()">Mark as sent</button></p>';
+      }
+    }
+    out += '</div>';
+    return out;
+  }
+
+  function packRow(i, editable) {
+    var f = i.file || {};
+    var fileCell;
+    if (f.previewUrl) {
+      fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>';
+    } else if (!i.sendsDocument) {
+      fileCell = '<span class="oj-quiet">Employee supplies their own</span>';
+    } else if (f.source === 'link' && i.officialSourceUrl) {
+      fileCell = '<span class="oj-warn">No file</span> <a href="' + esc(i.officialSourceUrl) + '" target="_blank" rel="noopener" class="oj-quiet">official source ↗</a>';
+    } else {
+      fileCell = '<span class="oj-warn">No file yet</span>';
+    }
+    var acts = [];
+    if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.packPreview(\'' + jsq(i.id) + '\')', 'oj-btn-small'));
+    if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
+    if (editable) {
+      acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.source === 'own' ? 'Replace again' : i.sendsDocument ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
+      acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
+    }
+    var flag = function (field, value) {
+      if (!editable) return yesNo(value);
+      return '<button type="button" class="oj-toggle ' + (value ? 'is-on' : '') + '" onclick="OnboardingJourney.packFlag(\'' + jsq(i.id) + '\',\'' + field + '\',' + (value ? 'false' : 'true') + ')" aria-pressed="' + (value ? 'true' : 'false') + '">' + (value ? 'Yes' : 'No') + '</button>';
+    };
+    return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + '">'
+      + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+      + '<td>' + flag('required', i.required) + '</td>'
+      + '<td>' + flag('employeeReturns', i.employeeReturns) + '</td>'
+      + '<td>' + flag('requiresVerification', i.requiresVerification) + '</td>'
+      + '<td>' + fileCell + '</td>'
+      + '<td><div class="oj-actions oj-actions-tight">' + acts.join('') + '</div></td>'
+      + '</tr>';
   }
 
   function meter(label, done, total) {
@@ -779,6 +917,7 @@
     S.busy = false;
     if (!res.ok && !res.record) { toast(res.error, true); return res; }
     if (res.record) S.record = res;
+    else if (res.pack && S.record) S.record.pack = res.pack;
     if (okMessage) toast(typeof okMessage === 'function' ? okMessage(res) : okMessage, !res.ok);
     var pane = doc.getElementById('oj-view');
     if (pane && S.record) drawRecord(pane);
@@ -917,6 +1056,125 @@
     return act('/tasks/' + encodeURIComponent(code), body, null, 'PATCH');
   }
 
+  // ── Phase 2: the document pack ──
+  function packPath(rest) { return '/pack' + rest; }
+  async function packAct(rest, body, okMessage, method) {
+    var res = await act(packPath(rest), body, null, method);
+    if (!res) return null;
+    if (res.pack && S.record) { S.record.pack = res.pack; var pane = doc.getElementById('oj-view'); if (pane) drawRecord(pane); }
+    if (okMessage && res.ok !== false) toast(typeof okMessage === 'function' ? okMessage(res) : okMessage);
+    return res;
+  }
+  function packPrepare() { return refreshRecordAfter(packAct('/prepare', {}, 'Pack prepared.')); }
+  function packItem(id, verb) {
+    var reason;
+    if (verb === 'remove') { reason = global.prompt('Remove this document from this person\'s pack? Reason (optional):'); if (reason === null) return; }
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, { reason: reason || undefined }, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.'));
+  }
+  function packFlag(id, field, value) { var body = {}; body[field] = value; return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), body, null, 'PATCH')); }
+  function packRename(id, current) {
+    var title = global.prompt('Document name as it will appear in the pack:', current || '');
+    if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), { title: title.trim() }, 'Renamed.', 'PATCH'));
+  }
+  async function packUploadFile(id, input) {
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('That file is larger than 10 MB.', true); input.value = ''; return; }
+    var ext = String(file.name).split('.').pop().toLowerCase();
+    var mime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type);
+    var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast('The file could not be read.', true); return; }
+    input.value = '';
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', { fileName: file.name, fileMime: mime, fileData: b64 }, 'File replaced for this person only.'));
+  }
+  function packRevertFile(id) { return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, 'Back to the library copy.', 'DELETE')); }
+  function packPreview(id) {
+    var i = (S.record && S.record.pack ? S.record.pack.items : []).filter(function (x) { return x.id === id; })[0];
+    if (!i || !i.file || !i.file.previewUrl) return;
+    var kind = i.file.previewKind;
+    if ((kind === 'pdf' || kind === 'docx') && global.DocPreview && typeof global.DocPreview.open === 'function') {
+      global.DocPreview.open({ kind: kind, url: i.file.previewUrl + '?rev=' + Date.now(), downloadUrl: i.file.downloadUrl, title: i.title, meta: (i.file.source === 'own' ? 'Your copy' : 'Library copy') + (i.file.fileName ? ' · ' + i.file.fileName : '') });
+    } else {
+      global.open(i.file.previewUrl, '_blank', 'noopener');
+    }
+  }
+  async function packAddOpen() {
+    var host = doc.getElementById('oj-pack-add');
+    if (!host) return;
+    host.hidden = false;
+    host.innerHTML = spinner('Loading the library…');
+    var lib = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/pack/library');
+    if (!lib.ok) { host.innerHTML = '<div class="ob-note is-danger">' + esc(lib.error) + '</div>'; return; }
+    var opts = [['', '— Choose a library document —']].concat(lib.documents.filter(function (d) { return !d.alreadyInPack; }).map(function (d) {
+      return [d.id, d.title + (d.hasFile ? '' : d.contentStatus === 'link_only' ? ' (official link — no file)' : ' (no file yet)')];
+    }));
+    host.innerHTML = '<div class="oj-panel oj-add">'
+      + '<h3>Add a document to this pack</h3>'
+      + '<div class="oj-grid2">'
+      + field('oj-pa-doc', 'From the library', select('oj-pa-doc', opts, ''), 'Or leave blank and upload a file below.')
+      + field('oj-pa-title', 'Name (optional when choosing from the library)', input('oj-pa-title', 'text', '', 'maxlength="250"'))
+      + '</div>'
+      + '<div class="oj-check-row">'
+      + '<label class="oj-check"><input type="checkbox" id="oj-pa-sends" checked> A file is sent in the pack</label>'
+      + '<label class="oj-check"><input type="checkbox" id="oj-pa-returns"> The employee returns it</label>'
+      + '<label class="oj-check"><input type="checkbox" id="oj-pa-verifies"> We verify it</label>'
+      + '<label class="oj-check"><input type="checkbox" id="oj-pa-required" checked> Required</label>'
+      + '</div>'
+      + '<div class="oj-field"><label for="oj-pa-file">Upload a file (PDF, Word, PNG or JPEG)</label><input id="oj-pa-file" type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg"></div>'
+      + '<div class="oj-actions">' + btn('Add to this pack', 'OnboardingJourney.packAddSubmit()', 'oj-btn-primary') + btn('Cancel', 'OnboardingJourney.packAddClose()') + '</div>'
+      + '</div>';
+    host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  function packAddClose() { var host = doc.getElementById('oj-pack-add'); if (host) { host.hidden = true; host.innerHTML = ''; } }
+  async function packAddSubmit() {
+    var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
+    var ck = function (id) { var el = doc.getElementById(id); return !!(el && el.checked); };
+    var body = { documentId: v('oj-pa-doc') || null, title: v('oj-pa-title') || null, sendsDocument: ck('oj-pa-sends'), employeeReturns: ck('oj-pa-returns'), requiresVerification: ck('oj-pa-verifies'), required: ck('oj-pa-required') };
+    var fileEl = doc.getElementById('oj-pa-file');
+    var file = fileEl && fileEl.files && fileEl.files[0];
+    if (!body.documentId && !body.title) return toast('Choose a library document or give the new document a name.', true);
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) return toast('That file is larger than 10 MB.', true);
+      var ext = String(file.name).split('.').pop().toLowerCase();
+      body.fileName = file.name; body.fileMime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type);
+      try { body.fileData = await readFileAsBase64(file); } catch (_) { return toast('The file could not be read.', true); }
+    }
+    var res = await packAct('/items', body, 'Added to this pack.');
+    if (res && res.ok !== false) { packAddClose(); return refreshRecordAfter(Promise.resolve(res)); }
+  }
+  function readPackEmail() {
+    var sub = doc.getElementById('oj-pe-subject'); var body = doc.getElementById('oj-pe-body');
+    return { subject: sub ? sub.value.trim() : undefined, body: body ? body.value : undefined };
+  }
+  function packSaveEmail() { return packAct('/email', readPackEmail(), 'Email wording saved.', 'PUT'); }
+  function packResetEmail() { return packAct('/email/reset', {}, 'Email reset to the template.'); }
+  async function packCreateDraft() {
+    var e = readPackEmail();
+    if (e.subject !== undefined && !e.subject) return toast('Give the email a subject.', true);
+    if (e.body !== undefined && !e.body.trim()) return toast('The email needs a message.', true);
+    var res = await packAct('/email/draft', e, null);
+    if (!res) return;
+    if (res.delivery) {
+      toast(res.delivery.message, false);
+      if (res.delivery.webLink) global.open(res.delivery.webLink, '_blank', 'noopener');
+    }
+    return refreshRecordAfter(Promise.resolve(res));
+  }
+  function packMarkSent() {
+    if (!global.confirm('Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
+    return refreshRecordAfter(packAct('/mark-sent', {}, 'Marked as sent. Waiting for the returned documentation.'));
+  }
+  function packUnmarkSent() { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.')); }
+
+  /** Pack changes move the record's stage/next line: reload the record after them. */
+  async function refreshRecordAfter(p) {
+    var res = await p;
+    if (!res || res.ok === false) return res;
+    var fresh = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId));
+    if (fresh.ok) { S.record = fresh; var pane = doc.getElementById('oj-view'); if (pane) drawRecord(pane); }
+    return res;
+  }
+
   async function cancelRecord() {
     var reason = global.prompt('Cancel this onboarding? Give a reason for the record.');
     if (reason === null) return;
@@ -953,6 +1211,9 @@
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
+    packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
+    packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
+    packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,

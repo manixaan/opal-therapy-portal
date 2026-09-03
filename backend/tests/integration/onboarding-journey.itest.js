@@ -258,17 +258,24 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect(served.headers['content-type']).toBe('application/pdf');
     expect(Buffer.from(served.body).toString()).toBe('%PDF-1.4 signed letter');
 
-    // Verification completes phase 1 and the release happens without another click.
+    // Verification completes phase 1 and this person's document pack is derived without another click.
     const verified = await agent.post(`${base}/offer/verify`);
     expect(verified.status).toBe(200);
     expect(verified.body.offer.status).toBe('accepted');
-    expect(verified.body.release.status).toBe('released');
-    expect(verified.body.record.status).toBe('invite_sent');
-    expect(verified.body.record.userId).toBeTruthy();
+    expect(verified.body.prepared.status).toBe('prepared');
+    expect(verified.body.prepared.total).toBeGreaterThan(8);
+    expect(verified.body.record.status).toBe('created');
     expect(verified.body.journey.stage.key).toBe('documentation');
     expect(verified.body.journey.stages[0].state).toBe('complete');
-    expect(verified.body.journey.next.actor).toBe('employee');
-    expect(verified.body.sections.length).toBeGreaterThan(0);
+    expect(verified.body.journey.next).toMatchObject({ actor: 'admin', action: 'review_pack' });
+    expect(verified.body.pack.items.length).toBe(verified.body.prepared.total);
+
+    // The 034 release (portal account + invitation) is still available by hand.
+    const released = await agent.post(`${base}/release`);
+    expect(released.status).toBe(201);
+    expect(released.body.record.status).toBe('invite_sent');
+    expect(released.body.record.userId).toBeTruthy();
+    expect(released.body.sections.length).toBeGreaterThan(0);
 
     const { rows: users } = await db.pool.query('SELECT role FROM users WHERE email = $1', ['jane.smith@example.com']);
     expect(users[0].role).toBe('pre_employee');
@@ -377,15 +384,15 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect((await viewer.agent.post(`${base}/offer/verify`)).status).toBe(403);
   });
 
-  test('skipping the letter releases the documentation straight away', async () => {
+  test('skipping the letter prepares the document pack straight away', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const res = await agent.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
     expect(res.status).toBe(200);
     expect(res.body.offer.status).toBe('not_required');
-    if (res.body.release.status !== 'released') console.log('RELEASE', JSON.stringify(res.body.release));
-    expect(res.body.release.status).toBe('released');
-    expect(res.body.record.status).toBe('invite_sent');
+    expect(res.body.prepared.status).toBe('prepared');
+    expect(res.body.record.status).toBe('created');
+    expect(res.body.journey.next.action).toBe('review_pack');
   });
 });
 
@@ -394,6 +401,7 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
     await agent.post(`${base}/offer/skip`);
+    expect((await agent.post(`${base}/release`)).status).toBe(201);
     // Stand in for the documentation stage: every requirement satisfied.
     await db.pool.query(
       `UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW() WHERE assignment_id = $1`, [record.id]);

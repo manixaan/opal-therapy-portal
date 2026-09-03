@@ -1,0 +1,269 @@
+'use strict';
+
+/**
+ * DATA ACCESS for the per-employee document pack (migration 049).
+ *
+ * A pack item's file resolves in this order, and readItemFile() is the one
+ * place that order lives:
+ *   1. the person's own copy on the row (a replacement the Owner uploaded)
+ *   2. the pinned library version's file
+ *   3. the library document's CURRENT version's file (a pin that lapsed)
+ *   4. a text body, served as plain text
+ *   5. nothing — an official link, or no file yet
+ */
+
+const crypto = require('crypto');
+const odb = require('./onboarding-db');
+const { getBackend, getBackendName } = require('./storage');
+
+const { pool, isUuid, str } = odb;
+
+const ITEM_SELECT = `
+  SELECT i.*,
+         d.code AS library_code, d.title AS library_title, d.content_status AS library_content_status,
+         d.official_source_url AS library_source_url, d.current_version AS library_current_version,
+         pv.file_name AS pinned_file_name, pv.file_mime AS pinned_file_mime,
+         (pv.file_data IS NOT NULL OR pv.storage_key IS NOT NULL) AS pinned_has_file,
+         (pv.body IS NOT NULL) AS pinned_has_body,
+         cv.id AS current_version_id, cv.file_name AS current_file_name, cv.file_mime AS current_file_mime,
+         (cv.file_data IS NOT NULL OR cv.storage_key IS NOT NULL) AS current_has_file,
+         (cv.body IS NOT NULL) AS current_has_body,
+         fu.name AS file_uploaded_by_name, vb.name AS verified_by_name
+    FROM onboarding_pack_items i
+    LEFT JOIN onboarding_documents d ON d.id = i.document_id
+    LEFT JOIN onboarding_document_versions pv ON pv.id = i.document_version_id
+    LEFT JOIN onboarding_document_versions cv ON cv.document_id = d.id AND cv.version = d.current_version
+    LEFT JOIN users fu ON fu.id = i.file_uploaded_by
+    LEFT JOIN users vb ON vb.id = i.verified_by`;
+
+async function listItems(assignmentId, q = pool) {
+  if (!isUuid(assignmentId)) return [];
+  const { rows } = await q.query(`${ITEM_SELECT} WHERE i.assignment_id = $1 ORDER BY i.sort_order, i.title`, [assignmentId]);
+  return rows;
+}
+
+async function getItem(assignmentId, itemId, q = pool) {
+  if (!isUuid(assignmentId) || !isUuid(itemId)) return null;
+  const { rows } = await q.query(`${ITEM_SELECT} WHERE i.assignment_id = $1 AND i.id = $2`, [assignmentId, itemId]);
+  return rows[0] || null;
+}
+
+async function countItems(assignmentIds, q = pool) {
+  const ids = (assignmentIds || []).filter(isUuid);
+  const out = new Map();
+  if (!ids.length) return out;
+  const { rows } = await q.query(
+    `SELECT assignment_id, COUNT(*) FILTER (WHERE status = 'included') AS included,
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns) AS returns,
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND returned_at IS NOT NULL) AS returned,
+            COUNT(*) FILTER (WHERE status = 'included' AND requires_verification AND verified_at IS NOT NULL) AS verified
+       FROM onboarding_pack_items WHERE assignment_id = ANY($1::uuid[]) GROUP BY assignment_id`, [ids]
+  );
+  for (const r of rows) out.set(r.assignment_id, { included: +r.included, returns: +r.returns, returned: +r.returned, verified: +r.verified });
+  return out;
+}
+
+/** Insert the default items; existing (assignment, code) rows are left alone. */
+async function insertDefaults(organisationId, assignmentId, items, q = pool) {
+  let inserted = 0;
+  for (const it of items) {
+    const { rowCount } = await q.query(
+      `INSERT INTO onboarding_pack_items
+         (organisation_id, assignment_id, code, title, description, section,
+          sends_document, employee_returns, requires_verification, required,
+          origin, requirement_code, document_id, document_version_id, official_source_url, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'default',$11,$12,$13,$14,$15)
+       ON CONFLICT (assignment_id, code) DO NOTHING`,
+      [organisationId, assignmentId, str(it.code, 80), str(it.title, 250), str(it.description, 1000), str(it.section, 40),
+        it.sends === true, it.returns === true, it.verifies === true, it.required !== false,
+        str(it.requirementCode, 80), isUuid(it.documentId) ? it.documentId : null,
+        isUuid(it.documentVersionId) ? it.documentVersionId : null, str(it.officialSourceUrl, 2000), Number(it.sortOrder) || 0]
+    );
+    inserted += rowCount;
+  }
+  return inserted;
+}
+
+async function addItem({ organisationId, assignmentId, title, description, sends, returns, verifies, required, documentId, documentVersionId, officialSourceUrl }, q = pool) {
+  const code = `ADDED_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const { rows } = await q.query(
+    `INSERT INTO onboarding_pack_items
+       (organisation_id, assignment_id, code, title, description, section,
+        sends_document, employee_returns, requires_verification, required,
+        origin, document_id, document_version_id, official_source_url, sort_order)
+     VALUES ($1,$2,$3,$4,$5,'policies',$6,$7,$8,$9,'added',$10,$11,$12,
+             COALESCE((SELECT MAX(sort_order) FROM onboarding_pack_items WHERE assignment_id = $2), 0) + 10)
+     RETURNING *`,
+    [organisationId, assignmentId, code, str(title, 250), str(description, 1000),
+      sends === true, returns === true, verifies === true, required !== false,
+      isUuid(documentId) ? documentId : null, isUuid(documentVersionId) ? documentVersionId : null, str(officialSourceUrl, 2000)]
+  );
+  return rows[0];
+}
+
+async function updateItem(assignmentId, itemId, patch, q = pool) {
+  const sets = ['updated_at = NOW()'];
+  const params = [assignmentId, itemId];
+  const set = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+  if (patch.title !== undefined) set('title', str(patch.title, 250));
+  if (patch.description !== undefined) set('description', str(patch.description, 1000));
+  if (patch.required !== undefined) set('required', patch.required === true);
+  if (patch.returns !== undefined) set('employee_returns', patch.returns === true);
+  if (patch.verifies !== undefined) set('requires_verification', patch.verifies === true);
+  if (patch.sends !== undefined) set('sends_document', patch.sends === true);
+  const { rows } = await q.query(
+    `UPDATE onboarding_pack_items SET ${sets.join(', ')} WHERE assignment_id = $1 AND id = $2 RETURNING *`, params
+  );
+  return rows[0] || null;
+}
+
+async function setItemStatus(assignmentId, itemId, status, reason, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_pack_items SET status = $3, removed_reason = $4, updated_at = NOW()
+      WHERE assignment_id = $1 AND id = $2 RETURNING *`,
+    [assignmentId, itemId, status, status === 'removed' ? str(reason, 500) : null]
+  );
+  return rows[0] || null;
+}
+
+async function reorderItems(assignmentId, itemIds, q = pool) {
+  await odb.withTransaction(async (c) => {
+    for (let i = 0; i < itemIds.length; i += 1) {
+      await c.query('UPDATE onboarding_pack_items SET sort_order = $3, updated_at = NOW() WHERE assignment_id = $1 AND id = $2',
+        [assignmentId, itemIds[i], (i + 1) * 10]);
+    }
+  });
+}
+
+/** Store this person's own copy of a document on the item. */
+async function setItemFile(assignmentId, itemId, { fileName, fileMime, buffer, uploadedBy }) {
+  const sha = crypto.createHash('sha256').update(buffer).digest('hex');
+  const backendName = getBackendName();
+  let storageKey = null; let backend = 'db'; let fileData = buffer.toString('base64');
+  if (backendName !== 'db') {
+    const put = await getBackend(backendName).put({ userId: 'onboarding-pack', docId: `${itemId}-${Date.now()}`, fileName, mime: fileMime, base64: fileData });
+    backend = put.backend; storageKey = put.storageKey; fileData = null;
+  }
+  const { rows } = await pool.query(
+    `UPDATE onboarding_pack_items
+        SET file_name = $3, file_mime = $4, file_size_bytes = $5, file_sha256 = $6,
+            storage_backend = $7, storage_key = $8, file_data = $9,
+            file_uploaded_by = $10, file_uploaded_at = NOW(), sends_document = TRUE, updated_at = NOW()
+      WHERE assignment_id = $1 AND id = $2 RETURNING *`,
+    [assignmentId, itemId, str(fileName, 255), str(fileMime, 100), buffer.length, sha, backend, storageKey, fileData, uploadedBy || null]
+  );
+  return rows[0] || null;
+}
+
+async function clearItemFile(assignmentId, itemId, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_pack_items
+        SET file_name = NULL, file_mime = NULL, file_size_bytes = NULL, file_sha256 = NULL,
+            storage_backend = NULL, storage_key = NULL, file_data = NULL,
+            file_uploaded_by = NULL, file_uploaded_at = NULL, updated_at = NOW()
+      WHERE assignment_id = $1 AND id = $2 RETURNING *`, [assignmentId, itemId]
+  );
+  return rows[0] || null;
+}
+
+async function readStored({ storage_backend, storage_key, file_data }) {
+  if (!storage_backend || storage_backend === 'db' || !storage_key) {
+    return file_data ? Buffer.from(file_data, 'base64') : null;
+  }
+  const out = await getBackend(storage_backend).get({ backend: storage_backend, storageKey: storage_key, fileData: file_data });
+  return out && out.base64 ? Buffer.from(out.base64, 'base64') : null;
+}
+
+/**
+ * What the item's file IS, without reading bytes: { source, fileName, mime, previewKind, unavailableReason }.
+ * source: 'own' | 'library' | 'body' | 'link' | 'none'
+ */
+function describeItemFile(row) {
+  const kind = (mime) => (mime === 'application/pdf' ? 'pdf' : String(mime || '').includes('wordprocessingml') ? 'docx' : (String(mime || '').startsWith('image/') ? 'image' : (mime === 'text/plain' ? 'text' : null)));
+  if (row.file_name) return { source: 'own', fileName: row.file_name, mime: row.file_mime, previewKind: kind(row.file_mime), unavailableReason: null };
+  if (row.document_id) {
+    if (row.pinned_has_file) return { source: 'library', fileName: row.pinned_file_name, mime: row.pinned_file_mime, previewKind: kind(row.pinned_file_mime), unavailableReason: null };
+    if (row.current_has_file) return { source: 'library', fileName: row.current_file_name, mime: row.current_file_mime, previewKind: kind(row.current_file_mime), unavailableReason: null };
+    if (row.pinned_has_body || row.current_has_body) return { source: 'body', fileName: `${row.title}.txt`, mime: 'text/plain', previewKind: 'text', unavailableReason: null };
+    if (row.library_content_status === 'link_only' || row.official_source_url || row.library_source_url) {
+      return { source: 'link', fileName: null, mime: null, previewKind: 'link', unavailableReason: 'Published as an official link rather than a file — upload the current PDF to include it in the ZIP' };
+    }
+    return { source: 'none', fileName: null, mime: null, previewKind: null, unavailableReason: 'No file has been published for this document yet' };
+  }
+  if (row.official_source_url) return { source: 'link', fileName: null, mime: null, previewKind: 'link', unavailableReason: 'An official link — upload the file to include it in the ZIP' };
+  return { source: 'none', fileName: null, mime: null, previewKind: null, unavailableReason: row.sends_document ? 'No file attached to this item yet' : null };
+}
+
+/** The bytes behind an item, per the order above. { bytes, mime, fileName, source } or null. */
+async function readItemFile(row, q = pool) {
+  if (row.file_name) {
+    const bytes = await readStored(row);
+    return bytes ? { bytes, mime: row.file_mime, fileName: row.file_name, source: 'own' } : null;
+  }
+  if (!row.document_id) return null;
+  const versionIds = [row.document_version_id, row.current_version_id].filter(Boolean);
+  for (const vid of versionIds) {
+    const v = await odb.getDocumentVersion(vid, q);
+    if (!v) continue;
+    if (v.file_name || v.storage_key || v.file_data) {
+      const bytes = await readStored(v);
+      if (bytes) return { bytes, mime: v.file_mime || 'application/octet-stream', fileName: v.file_name || `${row.title}`, source: 'library' };
+    }
+    if (v.body) return { bytes: Buffer.from(String(v.body), 'utf8'), mime: 'text/plain', fileName: `${row.title}.txt`, source: 'body' };
+  }
+  return null;
+}
+
+// ── The record's pack milestones ─────────────────────────────────────────────
+
+async function setPackPrepared(assignmentId, q = pool) {
+  await q.query(`UPDATE onboarding_assignments SET pack_prepared_at = COALESCE(pack_prepared_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignmentId]);
+}
+
+async function savePackEmail(assignmentId, { subject, body }, q = pool) {
+  await q.query(`UPDATE onboarding_assignments SET pack_email_subject = $2, pack_email_body = $3, updated_at = NOW() WHERE id = $1`,
+    [assignmentId, str(subject, 250), body == null ? null : String(body).slice(0, 20000)]);
+}
+
+async function markPackDrafted(assignmentId, { actorId, draftId, webLink, subject, body, dueAt }, q = pool) {
+  await q.query(
+    `UPDATE onboarding_assignments
+        SET pack_email_draft_id = $2, pack_email_web_link = $3, pack_email_drafted_at = NOW(), pack_email_drafted_by = $4,
+            pack_email_subject = $5, pack_email_body = $6, pack_due_at = $7,
+            status = CASE WHEN status = 'created' THEN 'starter_pack_ready' ELSE status END,
+            starter_pack_generated_at = COALESCE(starter_pack_generated_at, NOW()),
+            last_activity_at = NOW(), updated_at = NOW()
+      WHERE id = $1`,
+    [assignmentId, str(draftId, 300), webLink ? String(webLink).slice(0, 2000) : null, actorId, str(subject, 250),
+      body == null ? null : String(body).slice(0, 20000), dueAt || null]
+  );
+}
+
+async function clearPackDraft(assignmentId, q = pool) {
+  await q.query(`UPDATE onboarding_assignments SET pack_email_draft_id = NULL, pack_email_web_link = NULL, pack_email_drafted_at = NULL, pack_email_drafted_by = NULL, updated_at = NOW() WHERE id = $1`, [assignmentId]);
+}
+
+async function markPackSent(assignmentId, { actorId, toEmail, dueAt }, q = pool) {
+  await q.query(
+    `UPDATE onboarding_assignments
+        SET status = CASE WHEN status IN ('created', 'starter_pack_ready') THEN 'starter_pack_sent' ELSE status END,
+            starter_pack_sent_at = NOW(), starter_pack_sent_to = $3, pack_sent_by = $2,
+            pack_due_at = COALESCE(pack_due_at, $4), last_activity_at = NOW(), updated_at = NOW()
+      WHERE id = $1`, [assignmentId, actorId, toEmail, dueAt || null]
+  );
+}
+
+async function unmarkPackSent(assignmentId, q = pool) {
+  await q.query(
+    `UPDATE onboarding_assignments
+        SET status = CASE WHEN status = 'starter_pack_sent' THEN 'starter_pack_ready' ELSE status END,
+            starter_pack_sent_at = NULL, starter_pack_sent_to = NULL, pack_sent_by = NULL, updated_at = NOW()
+      WHERE id = $1`, [assignmentId]
+  );
+}
+
+module.exports = {
+  listItems, getItem, countItems, insertDefaults, addItem, updateItem, setItemStatus, reorderItems,
+  setItemFile, clearItemFile, describeItemFile, readItemFile,
+  setPackPrepared, savePackEmail, markPackDrafted, clearPackDraft, markPackSent, unmarkPackSent,
+};

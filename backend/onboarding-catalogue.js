@@ -745,6 +745,14 @@ const OFFICIAL_DOCUMENTS = [
     description: 'The statement every new employee must be given. Published by the Fair Work Ombudsman and reissued each July.',
   },
   {
+    code: 'DOC_SUPER_CHOICE', title: 'Superannuation Standard Choice Form', category: 'Payroll',
+    classification: 'OFFICIAL_DOCUMENT', audience: 'employee', ownerControlled: false,
+    complianceCode: 'ATO_SUPER_CHOICE', requiresAcknowledgement: false,
+    officialSourceUrl: 'https://www.ato.gov.au/forms-and-instructions/superannuation-standard-choice-form',
+    sourceVersionLabel: 'NAT 13080',
+    description: 'The ATO form a new employee completes to nominate a superannuation fund. Published by the ATO; upload the current PDF to include it in the pack.',
+  },
+  {
     code: 'DOC_CEIS', title: 'Casual Employment Information Statement', category: 'Fair Work',
     classification: 'OFFICIAL_DOCUMENT', audience: 'employee', ownerControlled: false,
     complianceCode: 'CEIS', requiresAcknowledgement: true,
@@ -843,6 +851,12 @@ const OPAL_POLICIES = [
   { code: 'DOC_WELCOME', title: 'Welcome to Opal Therapy', category: 'Employment', ack: false,
     description: 'The first page a new starter sees. Rendered from their own onboarding record — role, start date, '
       + 'contact person and what they need to complete — rather than a static flyer.' },
+  // Phase 2 pack documents: templates the practice writes, uploaded through
+  // the library like every other Opal document, sent in the pack and returned signed.
+  { code: 'DOC_CONTRACT_TEMPLATE', title: 'Contract of Employment', category: 'Employment', ack: false,
+    description: 'The contract template. Sent in the onboarding pack; the signed copy comes back with it.' },
+  { code: 'DOC_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details Form', category: 'Employment', ack: false,
+    description: 'Personal, emergency contact and bank details on one form, returned with the pack.' },
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════

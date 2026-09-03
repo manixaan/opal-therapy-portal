@@ -68,6 +68,7 @@ const ALL_TABLES = [
   // The three-stage journey (migration 047) — offers and induction tasks hang
   // off the assignment.
   'onboarding_internal_tasks', 'onboarding_offer_documents', 'onboarding_offers',
+  'onboarding_pack_items',
   'onboarding_assignments',
   'onboarding_package_versions', 'onboarding_package_requirements',
   'onboarding_package_documents', 'onboarding_packages',

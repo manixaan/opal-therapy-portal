@@ -203,25 +203,24 @@ function projectOffer(assignment, offer, now) {
 
 // ── Stage 2 ─────────────────────────────────────────────────────────────────
 
-function projectDocumentation(assignment, requirements, now, stage1Complete) {
-  const out = { state: 'pending', summary: 'Starts when the offer is accepted.', completedAt: null, items: [], next: null };
+/**
+ * Stage 2. Two models coexist underneath:
+ *   • the DOCUMENT PACK (Phase 2): defaults derived, edited, ZIPped, drafted
+ *     in Outlook, marked sent, returned and verified — `pack` carries it;
+ *   • the 034 portal wizard, once a release has issued requirements.
+ * The projection reads whichever the record is actually using.
+ */
+function projectDocumentation(assignment, requirements, now, stage1Complete, pack) {
+  const out = { state: 'pending', summary: 'Starts when the signed letter of offer is verified.', completedAt: null, items: [], next: null };
   if (!stage1Complete) return out;
 
   const status = assignment.status;
-
-  if (status === 'created') {
-    out.state = 'active';
-    out.summary = 'Offer accepted — the onboarding pack has not been released yet.';
-    out.next = { actor: 'admin', action: 'release', label: 'Release the onboarding documentation' };
-    out.items.push({ kind: 'review', label: 'Release the onboarding documentation', at: assignment.offer_accepted_at });
-    return out;
-  }
+  const p = pack || {};
 
   if (STAGE3_STATUSES.has(status)) {
     out.state = 'complete';
     out.completedAt = assignment.submitted_at || assignment.activated_at || null;
     out.summary = 'All onboarding documentation approved.';
-    // still list the completed requirements
     for (const r of requirements) {
       if (REQ_DONE.has(r.status)) out.items.push({ kind: 'done', label: r.title, at: r.completed_at || r.reviewed_at || null });
     }
@@ -229,6 +228,45 @@ function projectDocumentation(assignment, requirements, now, stage1Complete) {
   }
 
   out.state = 'active';
+
+  // ── The pack, before and after sending ──
+  if (status === 'created' || status === 'starter_pack_ready' || status === 'starter_pack_sent' || status === 'documents_received') {
+    const c = p.counts || {};
+    if (status === 'created' && !p.prepared) {
+      out.summary = 'Preparing the onboarding documentation pack.';
+      out.next = { actor: 'system', action: 'prepare_pack', label: 'Preparing the document pack from the role and employment type' };
+      return out;
+    }
+    if (status === 'created' && !p.draftId) {
+      out.summary = `Document pack ready to review — ${c.included || 0} document(s), ${c.returns || 0} to come back.`;
+      out.items.push({ kind: 'review', label: 'Review the document pack and prepare the onboarding email', at: assignment.pack_prepared_at });
+      out.next = { actor: 'admin', action: 'review_pack', label: 'Review the document pack, then prepare the onboarding email' };
+      if (c.missingFiles) out.items.push({ kind: 'review', label: `${c.missingFiles} document(s) in the pack have no file behind them`, at: null });
+      return out;
+    }
+    if (status === 'created' || status === 'starter_pack_ready') {
+      out.summary = 'The onboarding email is waiting in Outlook with the pack attached.';
+      out.items.push({ kind: 'review', label: 'Onboarding email drafted in Outlook — send it and mark as sent', at: assignment.pack_email_drafted_at });
+      out.next = { actor: 'admin', action: 'send_pack_in_outlook', label: 'Open the draft in Outlook, send it, then mark it as sent' };
+      return out;
+    }
+    if (status === 'starter_pack_sent') {
+      const due = toDate(assignment.pack_due_at);
+      const overdue = isOverdue(assignment.pack_due_at, now);
+      out.summary = `Onboarding documents sent${due ? ` — due ${due.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Australia/Perth' })}` : ''}.`;
+      out.items.push({
+        kind: 'employee', label: `Complete and return the onboarding documentation (${c.returns || 0} item(s))`,
+        dueAt: assignment.pack_due_at || null, overdue, detail: overdue ? 'Past the seven days requested' : null,
+      });
+      out.next = { actor: 'employee', action: null, label: 'Waiting for the completed onboarding documentation to come back' };
+      return out;
+    }
+    // documents_received: the return leg (verification) — the next phase.
+    out.summary = 'Returned documents are in — waiting for review.';
+    out.items.push({ kind: 'review', label: 'Review the returned onboarding documentation', at: assignment.documents_received_at });
+    out.next = { actor: 'admin', action: 'review_returns', label: 'Review the returned documents' };
+    return out;
+  }
 
   if (status === 'invite_sent' || status === 'account_created') {
     out.summary = 'Invitation sent — waiting for the employee to sign in and start.';
@@ -240,7 +278,7 @@ function projectDocumentation(assignment, requirements, now, stage1Complete) {
     return out;
   }
 
-  if (['starter_pack_ready', 'starter_pack_sent', 'documents_received', 'details_extracted', 'ready_for_account'].includes(status)) {
+  if (['details_extracted', 'ready_for_account'].includes(status)) {
     out.summary = `Paper round-trip in progress (${status.replace(/_/g, ' ')}).`;
     out.next = { actor: 'admin', action: 'open_record', label: 'Continue the paper round-trip on the record' };
     return out;
@@ -359,13 +397,14 @@ function projectInduction(assignment, tasks, now, stage2Complete) {
  * @param {object|null} p.offer   the live or latest onboarding_offers row
  * @param {object[]} p.requirements onboarding_requirements rows
  * @param {object[]} p.tasks      onboarding_internal_tasks rows (assignee_name joined)
+ * @param {object|null} p.pack    { prepared, draftId, counts:{included,returns,missingFiles} } for the document pack
  * @param {Date} p.now
  */
-function projectJourney({ assignment, offer = null, requirements = [], tasks = [], now = new Date() }) {
+function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, now = new Date() }) {
   const closed = assignment.status === 'cancelled' || assignment.status === 'archived';
 
   const s1 = projectOffer(assignment, offer, now);
-  const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete');
+  const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete', pack);
   const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete');
 
   const stages = [

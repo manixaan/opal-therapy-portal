@@ -77,12 +77,45 @@ describe('Stage 1 — Letter of Offer', () => {
     expect(j.counts.adminReview).toBe(1);
   });
 
-  test('verification completes the stage and, until release, asks the admin to release', () => {
-    const j = journey.projectJourney({ assignment: assignment(), offer: offer({ status: 'accepted', verified_at: NOW }), now: NOW });
-    expect(j.stages[0].state).toBe('complete');
-    expect(j.stages[0].completedAt).toBe(NOW);
-    expect(j.stage.key).toBe('documentation');
-    expect(j.next).toMatchObject({ actor: 'admin', action: 'release' });
+  test('verification completes the stage; the document pack then asks the admin to review it', () => {
+    const accepted = offer({ status: 'accepted', verified_at: NOW });
+    const preparing = journey.projectJourney({ assignment: assignment(), offer: accepted, now: NOW });
+    expect(preparing.stages[0].state).toBe('complete');
+    expect(preparing.stages[0].completedAt).toBe(NOW);
+    expect(preparing.stage.key).toBe('documentation');
+    expect(preparing.next).toMatchObject({ actor: 'system', action: 'prepare_pack' });
+
+    const ready = journey.projectJourney({
+      assignment: assignment({ pack_prepared_at: NOW }), offer: accepted, now: NOW,
+      pack: { prepared: true, draftId: null, counts: { included: 12, returns: 8, missingFiles: 2 } },
+    });
+    expect(ready.next).toMatchObject({ actor: 'admin', action: 'review_pack' });
+    expect(ready.counts.adminReview).toBe(2); // the review itself, and the missing files
+  });
+});
+
+describe('Stage 2 — the document pack', () => {
+  const accepted = offer({ status: 'accepted', verified_at: NOW });
+  const packed = { prepared: true, draftId: 'd', counts: { included: 10, returns: 6, missingFiles: 0 } };
+
+  test('an Outlook draft waiting is the admin\'s to send', () => {
+    const j = journey.projectJourney({ assignment: assignment({ status: 'starter_pack_ready', pack_email_draft_id: 'd', pack_prepared_at: NOW }), offer: accepted, pack: packed, now: NOW });
+    expect(j.next).toMatchObject({ actor: 'admin', action: 'send_pack_in_outlook' });
+  });
+
+  test('sent shows the due date and waits on the employee; past it, overdue', () => {
+    const j = journey.projectJourney({ assignment: assignment({ status: 'starter_pack_sent', pack_due_at: daysFromNow(5), pack_prepared_at: NOW }), offer: accepted, pack: packed, now: NOW });
+    expect(j.next.actor).toBe('employee');
+    expect(j.stages[1].summary).toMatch(/Onboarding documents sent — due \d{2}\/\d{2}\/\d{4}/);
+    expect(j.counts.overdue).toBe(0);
+    const late = journey.projectJourney({ assignment: assignment({ status: 'starter_pack_sent', pack_due_at: daysFromNow(-1), pack_prepared_at: NOW }), offer: accepted, pack: packed, now: NOW });
+    expect(late.counts.overdue).toBe(1);
+    expect(late.attention).toBeGreaterThan(0);
+  });
+
+  test('returned documents hand the next action back to the admin', () => {
+    const j = journey.projectJourney({ assignment: assignment({ status: 'documents_received', pack_prepared_at: NOW }), offer: accepted, pack: packed, now: NOW });
+    expect(j.next).toMatchObject({ actor: 'admin', action: 'review_returns' });
   });
 });
 

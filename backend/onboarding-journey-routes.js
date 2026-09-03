@@ -210,6 +210,14 @@ async function maybeComplete(assignment, tasks) {
   return 'completed';
 }
 
+/** What the projection needs to know about the pack. */
+function packSummary(a, counts) {
+  return {
+    prepared: !!a.pack_prepared_at, draftId: a.pack_email_draft_id || null,
+    sentAt: a.starter_pack_sent_at || null, dueAt: a.pack_due_at || null, counts: counts || {},
+  };
+}
+
 /** Everything the record screen shows, in one call. */
 async function recordDetail(req, assignment) {
   let [offer, offers, requirements, tasks, dispatches] = await Promise.all([
@@ -221,7 +229,9 @@ async function recordDetail(req, assignment) {
   ]);
   tasks = await ensureInduction(assignment, tasks);
 
-  const j = journey.projectJourney({ assignment, offer, requirements, tasks });
+  const packRoutes = require('./onboarding-pack-routes');
+  const packDetail = await packRoutes._internals.packDetail(req, assignment);
+  const j = journey.projectJourney({ assignment, offer, requirements, tasks, pack: packSummary(assignment, packDetail.counts) });
   const s = shape();
   const [editedLetter, signed] = offer
     ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed')])
@@ -264,6 +274,7 @@ async function recordDetail(req, assignment) {
       downloadUrl: `/api/onboarding/journey/records/${assignment.id}/offer/signed/download`,
     } : null,
     journey: j,
+    pack: packDetail,
     sections: s.groupSections(requirements),
     tasks: tasks.map(taskRow),
     dispatches: dispatches.map((d) => ({
@@ -293,8 +304,9 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
   const rows = all.filter((a) => includeClosed || !['cancelled', 'archived'].includes(a.status));
   const ids = rows.map((a) => a.id);
 
-  const [offers, tasksMap, reqMap] = await Promise.all([
-    jdb.mapCurrentOffers(ids), jdb.mapTasks(ids), jdb.mapRequirements(ids),
+  const pdb = require('./onboarding-pack-db');
+  const [offers, tasksMap, reqMap, packCounts] = await Promise.all([
+    jdb.mapCurrentOffers(ids), jdb.mapTasks(ids), jdb.mapRequirements(ids), pdb.countItems(ids),
   ]);
 
   const records = [];
@@ -304,6 +316,7 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
     const j = journey.projectJourney({
       assignment: a, offer: offers.get(a.id) || null,
       requirements: reqMap.get(a.id) || [], tasks,
+      pack: packSummary(a, packCounts.get(a.id) || {}),
     });
     const offer = offers.get(a.id) || null;
     records.push({
@@ -846,8 +859,10 @@ router.post('/api/onboarding/journey/records/:id/offer/verify', requirePermissio
   await auditOnboarding(req, 'offer_verified', {
     targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified.version },
   });
-  const release = await tryRelease(req, await odb.getAssignment(orgOf(req), assignment.id));
-  res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), release });
+  // Phase 2 begins by itself: this person's document pack is derived from
+  // the role, employment type and determinations, ready for the Owner to review.
+  const prepared = await preparePackFor(req, assignment);
+  res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), prepared });
 }));
 
 /** The candidate said no (by email, by phone). Recorded so the record does not sit in 1.5 forever. */
@@ -899,9 +914,21 @@ router.post('/api/onboarding/journey/records/:id/offer/skip', requirePermission(
   await auditOnboarding(req, 'offer_not_required', {
     targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id },
   });
-  const release = await tryRelease(req, await odb.getAssignment(orgOf(req), assignment.id));
-  res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), release });
+  const prepared = await preparePackFor(req, assignment);
+  res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), prepared });
 }));
+
+/** Derive the document pack for a record whose offer has just settled. Never fatal. */
+async function preparePackFor(req, assignment) {
+  try {
+    const out = await require('./onboarding-pack-routes')._internals.preparePack(assignment);
+    await auditOnboarding(req, 'pack_prepared', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, inserted: out.inserted, total: out.total } });
+    return { status: 'prepared', ...out };
+  } catch (err) {
+    log.error('document pack could not be prepared', { error: err, assignmentId: assignment.id });
+    return { status: 'failed' };
+  }
+}
 
 /** Stage 1 → 2 by hand, for when the automatic release after acceptance was refused. */
 router.post('/api/onboarding/journey/records/:id/release', requirePermission('onboarding.assign'), safe(async (req, res) => {
