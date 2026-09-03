@@ -464,7 +464,7 @@
 
   function drawRecord(pane) {
     var d = S.record; var r = d.record; var j = d.journey;
-    var stagePill = '<span class="oj-stage-pill is-' + esc(j.stage.key) + '">' + (j.stage.number ? 'Stage ' + j.stage.number + ' · ' : '') + esc(j.stage.label) + '</span>';
+    var stagePill = '';
 
     pane.innerHTML = ''
       + '<div class="oj-record-head">'
@@ -473,10 +473,9 @@
       + (r.startDate ? ' · commences ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(j.daysToStart)) + ')' : '') + '</p></div>'
       + '  <div class="oj-record-head-actions">' + recordHeadActions(d) + '</div>'
       + '</div>'
-      + (j.summary ? summaryLines(j.summary) : stageTrack({ stages: j.stages }))
-      + nextBanner(d)
-      + attentionHtml(d)
-      + groupsHtml(j)
+      // The record screen is the work surface: the documents, their preview /
+      // edit / replace buttons, and the emails. Status, the summary lines, the
+      // next-action banner and the attention list live on the board row.
       + '<div class="oj-stages">'
       + offerPanel(d)
       + documentationPanel(d)
@@ -658,10 +657,7 @@
     var closed = ['declined', 'withdrawn', 'not_required'].indexOf(o.status) !== -1;
     var stepState = function (done, active) { return done ? 'is-done' : (active ? 'is-active' : 'is-todo'); };
 
-    body += '<div class="oj-offer-status">'
-      + '<span class="oj-chip ' + offerChipClass(o.status) + '">' + esc(offerLabel(o)) + '</span>'
-      + (o.declineReason ? '<span class="oj-quiet">Reason given: ' + esc(o.declineReason) + '</span>' : '')
-      + '</div>';
+    body += o.declineReason ? '<div class="oj-offer-status"><span class="oj-quiet">Reason given: ' + esc(o.declineReason) + '</span></div>' : '';
 
     if (closed) {
       if (editable) body += '<div class="oj-actions">' + btn(o.status === 'not_required' ? 'Edit the offer details' : 'Issue a revised offer', 'OnboardingJourney.editTerms()') + '</div>';
@@ -773,9 +769,7 @@
 
   function stagePanel(n, title, st, body) {
     return '<section class="oj-panel oj-stage is-' + esc(st.state) + '" id="oj-stage-' + n + '">'
-      + '<header><h2><span class="oj-stage-n">' + n + '</span>' + esc(title) + '</h2>'
-      + '<span class="oj-chip is-' + esc(st.state) + '">' + esc(st.state === 'parallel' ? 'Under way alongside' : titleCase(st.state)) + '</span></header>'
-      + '<p class="oj-stage-summary">' + esc(st.summary) + '</p>'
+      + '<header><h2><span class="oj-stage-n">' + n + '</span>' + esc(title) + '</h2></header>'
       + body + '</section>';
   }
 
