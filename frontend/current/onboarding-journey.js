@@ -381,14 +381,16 @@
         var fileCell = i.itemKind !== 'document' ? '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the set-up task' : 'Follows the induction task') + '</span>'
           : f.previewUrl ? '<span class="oj-quiet">' + esc(f.fileName || 'Library') + '</span>' : !i.sendsDocument ? '<span class="oj-quiet">Employee supplies their own</span>'
           : f.source === 'link' && i.officialSourceUrl ? '<span class="oj-warn">No file</span> <a href="' + esc(i.officialSourceUrl) + '" target="_blank" rel="noopener" class="oj-quiet">official source ↗</a>' : '<span class="oj-warn">No file yet</span>';
-        var acts = [];
-        if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small'));
-        if (f.previewUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.previewUrl) + '" download>Download</a>');
-        if (edit && i.itemKind === 'document') acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace file' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
-        if (edit) { acts.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); acts.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
+        var fileActs = [];
+        if (f.previewUrl) fileActs.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small oj-btn-quiet'));
+        if (f.previewUrl) fileActs.push('<a class="oj-btn oj-btn-small oj-btn-quiet" href="' + esc(f.previewUrl) + '" download>Download</a>');
+        if (edit && i.itemKind === 'document') fileActs.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? ' oj-btn-quiet' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
+        var rowActs = [];
+        if (edit) { rowActs.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         out += '<tr' + (i.origin === 'added' ? ' class="oj-pack-row is-added"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
           + '<td>' + flag(i, 'required', i.required) + '</td><td>' + flag(i, 'employeeReturns', i.employeeReturns) + '</td><td>' + flag(i, 'requiresVerification', i.requiresVerification) + '</td>'
-          + '<td>' + fileCell + '</td><td><div class="oj-actions oj-actions-tight">' + acts.join('') + '</div></td></tr>';
+          + '<td class="oj-filecell"><div>' + fileCell + '</div>' + (fileActs.length ? '<div class="oj-actions oj-actions-tight oj-file-acts">' + fileActs.join('') + '</div>' : '') + '</td>'
+          + '<td class="oj-rowacts"><div class="oj-actions oj-actions-tight">' + rowActs.join('') + '</div></td></tr>';
       });
     });
     out += '</tbody></table></div>';
