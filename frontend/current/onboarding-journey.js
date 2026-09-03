@@ -153,6 +153,7 @@
     }
     S.view = view;
     S.recordId = view === 'record' ? (id || S.recordId) : null;
+    S.phaseView = null;
     S.editingTerms = false;
     if (global.Onboarding && typeof global.Onboarding.nav === 'function') {
       global.Onboarding.nav(view, S.recordId);
@@ -473,19 +474,49 @@
       + (r.startDate ? ' · commences ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(j.daysToStart)) + ')' : '') + '</p></div>'
       + '  <div class="oj-record-head-actions">' + recordHeadActions(d) + '</div>'
       + '</div>'
-      // The record screen is the work surface: the documents, their preview /
-      // edit / replace buttons, and the emails. Status, the summary lines, the
-      // next-action banner and the attention list live on the board row.
+      // One phase at a time. The screen shows the phase the record is on;
+      // when that phase completes, the screen moves to the next. Earlier
+      // phases stay reachable through the stepper.
+      + phaseStepper(d)
       + '<div class="oj-stages">'
-      + offerPanel(d)
-      + documentationPanel(d)
-      + inductionPanel(d)
-      + payrollPanel(d)
-      + phase3Panel(d)
-      + profilePanel(d)
+      + phaseBody(d)
       + '</div>'
       + emailsPanel(d);
   }
+
+  /** Which phase the record is on: 1 until the signed letter is in, 2 until the documentation is done, then 3. */
+  function currentPhase(d) {
+    var o = d.offer; var r = d.record;
+    if (!o || ['accepted', 'not_required'].indexOf(o.status) === -1) return 1;
+    var I = d.induction || {};
+    if (I.sentAt || I.completedAt || r.status === 'completed' || r.status === 'activated' || r.status === 'ready_to_activate') return 3;
+    if (d.journey && d.journey.stages && d.journey.stages[1] && d.journey.stages[1].state === 'complete') return 3;
+    return 2;
+  }
+
+  function phaseStepper(d) {
+    var cur = currentPhase(d);
+    var view = S.phaseView || cur;
+    var names = ['Letter of Offer', 'Onboarding Documentation', 'Internal Induction'];
+    return '<ol class="oj-stepper">' + names.map(function (n, i) {
+      var num = i + 1; var state = num < cur ? 'done' : num === cur ? 'current' : 'upcoming';
+      var clickable = num <= cur;
+      return '<li class="oj-stepper-step is-' + state + (num === view ? ' is-viewing' : '') + '">'
+        + (clickable ? '<button type="button" onclick="OnboardingJourney.viewPhase(' + num + ')">' : '<span>')
+        + '<span class="oj-stepper-n">' + (state === 'done' ? '✓' : num) + '</span>' + esc(n)
+        + (clickable ? '</button>' : '</span>') + '</li>';
+    }).join('') + '</ol>';
+  }
+
+  function phaseBody(d) {
+    var cur = currentPhase(d);
+    var view = Math.min(S.phaseView || cur, cur);
+    if (view === 1) return offerPanel(d);
+    if (view === 2) return documentationPanel(d) + inductionPanel(d) + payrollPanel(d);
+    return phase3Panel(d) + inductionPanel(d) + payrollPanel(d) + profilePanel(d);
+  }
+
+  function viewPhase(n) { S.phaseView = n; var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane); }
 
   function recordHeadActions(d) {
     var r = d.record;
@@ -763,7 +794,7 @@
 
   function documentationPanel(d) {
     var st = d.journey.stages[1];
-    if (st.state === 'pending') return stagePanel(2, 'Onboarding Documentation', st, '');
+    if (st.state === 'pending') return '';
     var r = d.record; var P = d.pack;
     var body = '';
 
@@ -960,7 +991,7 @@
 
   function inductionPanel(d) {
     var st = d.journey.stages[2];
-    if (st.state === 'pending') return stagePanel(3, 'Internal Setup & Induction', st, '');
+    if (st.state === 'pending') return '';
     var c = d.can;
     var staff = [['', 'Unassigned']].concat(((S.options && S.options.staff) || []).map(function (u) { return [u.id, u.name]; }));
     var body = d.tasks.length ? '<ul class="oj-tasks">' + d.tasks.map(function (t) {
@@ -992,11 +1023,18 @@
         + '<div class="oj-task-side">' + assign + '<div class="oj-actions">' + acts.join('') + '</div></div>'
         + '</li>';
     }).join('') + '</ul>' : '<p class="oj-quiet">The checklist is being generated.</p>';
-    return stagePanel(3, 'Internal Setup & Induction', st, body);
+    return stagePanel('⚙', 'Internal Setup', st, body);
   }
 
   /** Payroll Setup — confirm, do not retype. */
   function payrollPanel(d) {
+    // Coming soon: the payroll set is gathered underneath, but the review and
+    // approval are switched off until the payroll integration is connected.
+    return '<section class="oj-panel oj-stage oj-coming-soon" id="oj-payroll" aria-disabled="true"><header><h2><span class="oj-stage-n">$</span>Payroll Setup</h2><span class="oj-chip is-quiet">Coming soon</span></header>'
+      + '<p class="oj-quiet">Payroll set-up will be prepared here from the onboarding information once the payroll integration is connected.</p></section>';
+  }
+
+  function payrollPanelFull(d) {
     var P = d.payroll;
     if (!P) return '';
     var state = P.approved ? 'complete' : P.ready ? 'active' : 'parallel';
@@ -1479,7 +1517,7 @@
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
-    scrollTo: scrollTo, copy: copy,
+    scrollTo: scrollTo, copy: copy, viewPhase: viewPhase,
     refresh: rerender,
     _state: S,
   };

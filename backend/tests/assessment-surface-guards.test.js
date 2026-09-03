@@ -677,7 +677,7 @@ describe('changed assets are cache-busted', () => {
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 7], ['onboarding-journey.css', 5],
+      ['onboarding-journey.js', 8], ['onboarding-journey.css', 6],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
