@@ -506,10 +506,7 @@
       + field(p + 'payCycle', 'Pay cycle', input(p + 'payCycle', 'text', t.payCycle, 'maxlength="40" placeholder="Fortnightly"'))
       + field(p + 'superannuationRate', 'Superannuation %', input(p + 'superannuationRate', 'number', t.superannuationRate, 'min="0" max="30" step="0.5" placeholder="12"'))
       + field(p + 'offerClosingDate', 'Offer closing date', input(p + 'offerClosingDate', 'date', isoDate(t.offerClosingDate)), 'Blank: seven days from the day the letter is issued.')
-      + '</div></details>'
-      + field(p + 'additionalTerms', 'Additional terms for the letter (optional)',
-        '<textarea id="' + p + 'additionalTerms" rows="3" maxlength="4000">' + esc(t.additionalTerms || '') + '</textarea>',
-        'Kept on the record for the contract stage. The letter template itself is fixed wording.');
+      + '</div></details>';
   }
 
   function readTerms(prefix) {
@@ -520,7 +517,6 @@
       endDate: v('endDate') || null, payBasis: v('payRate') ? v('payBasis') : null, payRate: v('payRate') || null,
       hoursPerWeek: v('hoursPerWeek') || null, probationMonths: v('probationMonths') || null,
       awardClassification: v('awardClassification') || null, workLocation: v('workLocation') || null,
-      additionalTerms: v('additionalTerms') || null,
       award: v('award') || null, workPattern: v('workPattern') || null, payCycle: v('payCycle') || null,
       superannuationRate: v('superannuationRate') || null, offerClosingDate: v('offerClosingDate') || null,
     };
