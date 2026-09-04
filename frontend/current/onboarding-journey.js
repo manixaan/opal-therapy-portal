@@ -1000,6 +1000,36 @@
     return out;
   }
 
+  /**
+   * Returned documents, for either phase: one drop zone for files, a folder or
+   * a ZIP; what came back and what it was matched to; what is still to come.
+   */
+  function returnsBlock(d, P, phase, sent) {
+    var active = (d.returnedDocuments || []).filter(function (x) { return x.status === 'active'; });
+    var expected = P.items.filter(function (i) { return i.status === 'included' && i.itemKind === 'document' && i.employeeReturns; });
+    var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
+    var unrecognised = active.filter(function (x) { return x.matchStatus === 'unrecognised'; });
+    var out = '<div class="oj-returns" id="oj-returns-' + esc(phase) + '"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one, works out which document it is, ticks it off and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
+      + (!sent ? '<p class="oj-quiet">The pack has not been marked as sent yet. You can still upload anything the employee has already returned.</p>' : '')
+      + '<div class="oj-actions">'
+      + '<label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
+      + '<label class="oj-btn oj-file">Upload a folder<input type="file" multiple webkitdirectory directory hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
+      + (active.length ? btn('Re-read everything', 'OnboardingJourney.processReturns()', 'oj-btn-quiet') : '') + '</div>';
+    if (active.length) {
+      out += '<ul class="oj-returns-list">' + active.map(function (x) {
+        var item = P.items.filter(function (i) { return i.id === x.packItemId; })[0];
+        return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">' + (item ? '→ ' + esc(item.title) : x.matchStatus === 'unrecognised' ? '<span class="oj-warn">not recognised — name it under Requires Your Attention</span>' : 'reading…') + (x.signatureStatus === 'missing' ? ' · <span class="oj-warn">no signature</span>' : '') + '</span> '
+          + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>') + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (expected.length) {
+      out += '<p class="oj-returns-pending">' + (pending.length
+        ? '<strong>Still to come back (' + pending.length + ' of ' + expected.length + '):</strong> ' + esc(pending.map(function (i) { return i.title; }).join(' · '))
+        : '<strong>Everything expected has come back.</strong>' + (unrecognised.length ? ' ' + unrecognised.length + ' file(s) still need naming.' : '')) + '</p>';
+    }
+    return out + '</div>';
+  }
+
   /** The pack table for either phase. */
   function packTable(d, P, phase) {
     var r = d.record; var c = P.can || d.can; var out = '';
@@ -1016,17 +1046,8 @@
       + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) marked as sent have no file behind them yet — upload a file, or remove them before preparing the email.</span>' : '') + '</div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>';
 
-    if (sent && c.review) {
-      out += '<div class="oj-returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back; the portal reads it, matches it to the pack and fills the profile.</span>'
-        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
-        + btn('Re-read everything', 'OnboardingJourney.processReturns()', 'oj-btn-quiet') + '</div>'
-        + ((d.returnedDocuments || []).filter(function (x) { return x.status === 'active'; }).length ? '<ul class="oj-returns-list">' + d.returnedDocuments.filter(function (x) { return x.status === 'active'; }).map(function (x) {
-          var item = P.items.filter(function (i) { return i.id === x.packItemId; })[0];
-          return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">' + (item ? '→ ' + esc(item.title) : x.matchStatus === 'unrecognised' ? 'not recognised' : 'reading…') + (x.signatureStatus === 'missing' ? ' · <span class="oj-warn">no signature</span>' : '') + '</span> '
-            + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>') + '</li>';
-        }).join('') + '</ul>' : '') + '</div>';
-    }
-    out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>';
+    if (c.review) out += returnsBlock(d, P, phase, sent);
+    out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section"><td colspan="7">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
       groups[k].forEach(function (i) { out += packRow(i, editable, sent); });
@@ -1104,16 +1125,17 @@
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
-    var flag = function (field, value) {
-      if (!editable) return yesNo(value);
-      return '<button type="button" class="oj-toggle ' + (value ? 'is-on' : '') + '" onclick="OnboardingJourney.packFlag(\'' + jsq(i.id) + '\',\'' + field + '\',' + (value ? 'false' : 'true') + ')" aria-pressed="' + (value ? 'true' : 'false') + '">' + (value ? 'Yes' : 'No') + '</button>';
-    };
+    // What the portal expects of this item, in words — the flags themselves
+    // are the package's defaults and are not toggled per record.
+    var expects = [];
+    if (i.itemKind === 'document') {
+      if (i.employeeReturns) expects.push(i.required ? 'comes back, required' : 'comes back if provided');
+      else if (i.sendsDocument) expects.push('for reading only');
+      if (i.employeeReturns && i.requiresVerification) expects.push('checked by us');
+    }
     return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + '">'
-      + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+      + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + (expects.length ? '<br><span class="oj-quiet">' + esc(expects.join(' · ')) + '</span>' : '') + '</td>'
       + (sent ? '<td>' + progressChip(i) + (i.progress === 'received' && i.requiresVerification && S.record && S.record.can && S.record.can.verify ? '<div class="oj-actions oj-actions-tight">' + btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small') + '</div>' : '') + '</td>' : '')
-      + '<td>' + flag('required', i.required) + '</td>'
-      + '<td>' + flag('employeeReturns', i.employeeReturns) + '</td>'
-      + '<td>' + flag('requiresVerification', i.requiresVerification) + '</td>'
       + '<td>' + fileCell + '</td>'
       + '<td><div class="oj-actions oj-actions-tight">' + acts.join('') + '</div></td>'
       + '</tr>';
@@ -1215,10 +1237,6 @@
         + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
           : '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent(\'induction\')">Mark as sent</button></p>')
         + '</div>';
-    }
-    if (sent && c.review) {
-      body += '<div class="oj-returns"><strong>Returned induction documents</strong> <span class="oj-quiet">— signed agreements and acknowledgements; the portal matches and completes them.</span>'
-        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this)"></label></div></div>';
     }
     return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-phase3"><header><h2><span class="oj-stage-n">3</span>Phase 3 — Internal Induction Pack</h2><span class="oj-chip ' + (state === 'complete' ? 'is-done' : sent ? 'is-employee' : R.ready ? 'is-you' : 'is-quiet') + '">' + esc(state === 'complete' ? 'Complete' : sent ? 'Sent — tracking' : R.ready ? 'Ready to send' : 'Not ready') + '</span></header>' + body + '</section>';
   }
@@ -1540,24 +1558,49 @@
     if (okMessage) toast(typeof okMessage === 'function' ? okMessage(res) : okMessage);
     return refreshRecordAfter(Promise.resolve(res));
   }
+  var RETURN_EXTS = { pdf: 1, docx: 1, doc: 1, png: 1, jpg: 1, jpeg: 1, txt: 1, zip: 1 };
+  /** Files, a folder or a ZIP → the returns endpoint, in batches the server accepts (12 files, ~10 MB each request). */
   async function uploadReturns(input) {
     var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    input.value = '';
     if (!files.length) return;
-    var payload = [];
+    var payload = []; var skipped = 0;
     for (var i = 0; i < files.length; i += 1) {
       var f = files[i];
-      if (f.size > 10 * 1024 * 1024) { toast(f.name + ' is larger than 10 MB.', true); continue; }
-      var ext = String(f.name).split('.').pop().toLowerCase();
-      var mime = MIMES[ext] || (ext === 'doc' ? 'application/msword' : ext === 'txt' ? 'text/plain' : f.type);
-      try { payload.push({ fileName: f.name, fileMime: mime, fileData: await readFileAsBase64(f) }); } catch (_) { toast(f.name + ' could not be read.', true); }
+      var rel = f.webkitRelativePath || f.name;
+      var base = String(f.name);
+      if (base.charAt(0) === '.' || /(^|\/)__MACOSX\//.test(rel) || base === 'Thumbs.db') continue; // folder noise
+      var ext = base.split('.').pop().toLowerCase();
+      if (!RETURN_EXTS[ext]) { skipped += 1; continue; }
+      if (f.size > 10 * 1024 * 1024) { toast(base + ' is larger than 10 MB.', true); continue; }
+      var mime = ext === 'zip' ? 'application/zip' : MIMES[ext] || (ext === 'doc' ? 'application/msword' : ext === 'txt' ? 'text/plain' : f.type);
+      try { payload.push({ fileName: base, fileMime: mime, fileData: await readFileAsBase64(f), title: rel !== base ? rel.split('/').slice(0, -1).join('/') + ' / ' + base : base, bytes: f.size }); } catch (_) { toast(base + ' could not be read.', true); }
     }
-    input.value = '';
+    if (skipped) toast(skipped + ' file(s) skipped — not PDF, Word, image, text or ZIP.', true);
     if (!payload.length) return;
-    toast('Reading ' + payload.length + ' document(s)…');
-    return returnsAct('/returns', { files: payload }, function (r) {
-      var p = r.processed || {};
-      return (r.stored || []).length + ' stored · ' + (p.matched || 0) + ' matched · ' + (p.reliable || 0) + ' values applied · ' + ((p.conflict || 0) + (p.review || 0)) + ' for you to check';
+    // Batch: at most 12 files and about 10 MB per request.
+    var batches = []; var cur = []; var curBytes = 0;
+    payload.forEach(function (p) {
+      if (cur.length >= 12 || (cur.length && curBytes + p.bytes > 10 * 1024 * 1024)) { batches.push(cur); cur = []; curBytes = 0; }
+      cur.push(p); curBytes += p.bytes;
     });
+    if (cur.length) batches.push(cur);
+    toast('Reading ' + payload.length + ' file(s)' + (batches.length > 1 ? ' in ' + batches.length + ' batches' : '') + '…');
+    var totals = { stored: 0, matched: 0, applied: 0, check: 0, rejected: [] }; var last = null;
+    for (var b = 0; b < batches.length; b += 1) {
+      var body = { files: batches[b].map(function (p) { return { fileName: p.fileName, fileMime: p.fileMime, fileData: p.fileData, title: p.title }; }) };
+      var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/returns', { method: 'POST', body: body });
+      if (!res.ok) { toast(res.error, true); break; }
+      last = res;
+      var p2 = res.processed || {};
+      totals.stored += (res.stored || []).length; totals.matched = p2.matched || totals.matched; totals.applied = p2.reliable || totals.applied; totals.check = (p2.conflict || 0) + (p2.review || 0);
+      totals.rejected = totals.rejected.concat(res.rejected || []);
+    }
+    if (last) {
+      toast(totals.stored + ' stored · ' + totals.matched + ' matched · ' + totals.applied + ' values applied · ' + totals.check + ' for you to check' + (totals.rejected.length ? ' · ' + totals.rejected.length + ' not accepted' : ''));
+      if (totals.rejected.length) toast(totals.rejected.slice(0, 3).map(function (r) { return r.fileName + ': ' + r.reason; }).join(' · '), true);
+    }
+    return refreshRecordAfter(Promise.resolve(last || { ok: false }));
   }
   function processReturns() { return returnsAct('/returns/process', {}, 'Re-read.'); }
   function previewReturn(id) {

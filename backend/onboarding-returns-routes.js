@@ -296,14 +296,16 @@ async function attentionFor(assignment) {
 
 router.use('/api/onboarding/journey', requireAuth);
 
-/** Base64 upload → { buffer, fileName, fileMime } or { error }. Returned documents may be scans, Word files or text. */
+const returnsZip = require('./onboarding-returns-zip');
+
+/** Base64 upload → { buffer, fileName, fileMime } or { error }. Returned documents may be scans, Word files, text, or a ZIP of those. */
 function readReturn(f) {
   if (!f || !f.fileData || typeof f.fileData !== 'string') return { error: 'No file was received.' };
   if (f.fileData.length > 14 * 1024 * 1024) return { error: 'That file is too large (10 MB limit).' };
   if (!/^[A-Za-z0-9+/=\r\n]+$/.test(f.fileData.slice(0, 1000))) return { error: 'The file could not be read.' };
   const fileMime = String(f.fileMime || '').toLowerCase();
-  const exts = RETURN_MIMES[fileMime];
-  if (!exts) return { error: 'That file type is not accepted. Use PDF, Word, PNG, JPEG or text.' };
+  const exts = returnsZip.isZipMime(fileMime) ? ['zip'] : RETURN_MIMES[fileMime];
+  if (!exts) return { error: 'That file type is not accepted. Use PDF, Word, PNG, JPEG, text or a ZIP of those.' };
   const fileName = String(f.fileName || '').trim().slice(0, 255);
   if (!fileName || /[/\\]|\.\./.test(fileName)) return { error: 'The file name is not valid.' };
   if (!exts.includes(fileName.split('.').pop().toLowerCase())) return { error: 'The file name does not match its type.' };
@@ -322,17 +324,30 @@ router.post('/api/onboarding/journey/records/:id/returns', requirePermission('on
   if (!files.length) return res.status(400).json({ error: 'No files were received.' });
   if (files.length > 12) return res.status(413).json({ error: 'Upload at most 12 files at a time.' });
   const stored = []; const rejected = [];
+  // A ZIP is a folder of returns: each entry is stored as its own document.
+  const incoming = [];
   for (const f of files) {
     const up = readReturn(f);
     if (up.error) { rejected.push({ fileName: f.fileName, reason: up.error }); continue; }
+    if (returnsZip.isZipMime(up.fileMime)) {
+      const expanded = await returnsZip.expandZip(up.buffer);
+      for (const r of expanded.rejected) rejected.push({ fileName: `${up.fileName} › ${r.fileName}`, reason: r.reason });
+      for (const e of expanded.files) incoming.push({ buffer: e.buffer, fileName: e.fileName, fileMime: e.fileMime, title: e.title, packItemId: null, fromZip: up.fileName });
+      if (!expanded.files.length && !expanded.rejected.length) rejected.push({ fileName: up.fileName, reason: 'The ZIP holds no documents.' });
+      continue;
+    }
+    incoming.push({ buffer: up.buffer, fileName: up.fileName, fileMime: up.fileMime, title: str(f.title, 250) || up.fileName, packItemId: f.packItemId, fromZip: null });
+  }
+  for (const f of incoming) {
     const { row, duplicate } = await wdb.createReturnedDocument({
-      organisationId: orgOf(req), assignmentId: assignment.id, title: str(f.title, 250) || up.fileName, fileName: up.fileName, fileMime: up.fileMime,
-      buffer: up.buffer, uploadedBy: req.user.id, textStatus: 'pending',
+      organisationId: orgOf(req), assignmentId: assignment.id, title: f.title, fileName: f.fileName, fileMime: f.fileMime,
+      buffer: f.buffer, uploadedBy: req.user.id, textStatus: 'pending',
     });
     if (f.packItemId && isUuid(f.packItemId) && !duplicate) await rdb.assignDocumentToItem(row.id, f.packItemId);
-    stored.push({ id: row.id, fileName: row.file_name, duplicate });
-    if (!duplicate) await auditOnboarding(req, 'returned_document_uploaded', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: row.id, sha256: row.file_sha256, bytes: row.file_size_bytes } });
+    stored.push({ id: row.id, fileName: row.file_name, duplicate, fromZip: f.fromZip });
+    if (!duplicate) await auditOnboarding(req, 'returned_document_uploaded', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: row.id, sha256: row.file_sha256, bytes: row.file_size_bytes, fromZip: !!f.fromZip } });
   }
+  if (!incoming.length) return res.status(400).json({ error: rejected[0] ? rejected[0].reason : 'No files were received.', rejected });
   let processed = null;
   try { processed = await processReturns(req, assignment); } catch (err) {
     if (err.code === 'ENCRYPTION_UNAVAILABLE') return res.status(503).json({ error: 'Field encryption is not configured.', code: 'ENCRYPTION_UNAVAILABLE' });

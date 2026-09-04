@@ -260,6 +260,38 @@ describe('returned documents: read, reconciled, applied', () => {
     expect((await viewer.agent.post(`${base}/returns/${blur.action.returnedDocumentId}/archive`)).status).toBe(403);
   });
 
+  test('a ZIP of returns is unpacked into documents, each matched on its own; what it cannot hold is reported', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { base } = await settledAndSent(agent);
+    const gateway = require('../../ai/ai-gateway');
+    jest.spyOn(gateway, 'isAvailable').mockReturnValue(false);
+    const JSZip = require('jszip');
+    const z = new JSZip();
+    z.file('Returned/Jane police check.txt', 'NATIONAL POLICE CHECK result no disclosable outcome'.padEnd(60, ' '));
+    z.file('Returned/Signed contract.txt', 'CONTRACT OF EMPLOYMENT signed'.padEnd(60, ' '));
+    z.file('Returned/__MACOSX/._x.txt', 'junk');
+    z.file('Returned/budget.xlsx', 'nope');
+    const zipData = (await z.generateAsync({ type: 'nodebuffer' })).toString('base64');
+    const up = await agent.post(`${base}/returns`).send({ files: [{ fileName: 'returns.zip', fileMime: 'application/zip', fileData: zipData }] });
+    expect(up.status).toBe(201);
+    expect(up.body.stored.map((s) => [s.fileName, s.fromZip])).toEqual([['Jane police check.txt', 'returns.zip'], ['Signed contract.txt', 'returns.zip']]);
+    expect(up.body.rejected).toEqual([{ fileName: 'returns.zip › budget.xlsx', reason: expect.stringMatching(/not accepted/) }]);
+    expect(up.body.processed).toMatchObject({ matched: 2, aiUsed: false });
+    const rec = await agent.get(base);
+    expect(rec.body.pack.items.find((i) => i.code === 'PACK_POLICE_CHECK').progress).toBe('received');
+    // Without the model the signature is unknown, so the contract is received and waits for a person.
+    expect(rec.body.pack.items.find((i) => i.code === 'PACK_CONTRACT').returnedAt).toBeTruthy();
+    expect(rec.body.returnedDocuments.map((d) => d.title).sort()).toEqual(['Returned / Jane police check.txt', 'Returned / Signed contract.txt']);
+    // A zip that turns out to hold nothing usable is a 400, not a silent success.
+    const empty = new JSZip(); empty.file('only.xlsx', 'x');
+    const bad = await agent.post(`${base}/returns`).send({ files: [{ fileName: 'empty.zip', fileMime: 'application/zip', fileData: (await empty.generateAsync({ type: 'nodebuffer' })).toString('base64') }] });
+    expect(bad.status).toBe(400);
+    // No audit row names a file.
+    const { rows } = await db.pool.query("SELECT metadata FROM audit_logs WHERE action = 'onboarding.returned_document_uploaded'");
+    expect(rows.length).toBe(2);
+    for (const r of rows) expect(JSON.stringify(r.metadata)).not.toMatch(/police|contract|Jane/i);
+  });
+
   test('without the model, documents are still matched by name and nothing is invented', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { base } = await settledAndSent(agent);
