@@ -187,6 +187,8 @@ describe('Stage 1 — Start Onboarding creates the record and the letter togethe
   });
 });
 
+const detailLetter = (res) => res.body.letter;
+
 describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verification, release', () => {
   test('the whole path, with the terms reaching the employment profile untyped', async () => {
     const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
@@ -205,6 +207,13 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect(xml).not.toMatch(/\[PORTAL/);
     const dl = await agent.get(`${base}/offer/letter/download`);
     expect(dl.headers['content-disposition']).toMatch(/^attachment; filename="Letter%20of%20Offer%20-%20Jane%20Smith/);
+    // The same letter as a PDF — read from the .docx, named like it.
+    const pdfRes = await agent.get(`${base}/offer/letter/download.pdf`).buffer().parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.headers['content-type']).toBe('application/pdf');
+    expect(pdfRes.headers['content-disposition']).toMatch(/^attachment; filename="Letter%20of%20Offer%20-%20Jane%20Smith.*\.pdf"$/);
+    expect(pdfRes.body.slice(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(detailLetter(await agent.get(base)).pdfUrl).toBe(`${base}/offer/letter/download.pdf`);
 
     // Email 1 is prefilled with Opal's wording and can be edited.
     const detail = await agent.get(base);
@@ -376,6 +385,7 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     const base = `/api/onboarding/journey/records/${record.id}`;
     const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
     expect((await viewer.agent.get(`${base}/offer/letter/download`)).status).toBe(200);
+    expect((await viewer.agent.get(`${base}/offer/letter/download.pdf`)).status).toBe(200);
     expect((await viewer.agent.post(`${base}/offer/email/draft`)).status).toBe(403);
     expect((await viewer.agent.post(`${base}/offer/mark-sent`)).status).toBe(403);
     expect((await viewer.agent.post(`${base}/offer/signed`).send({ fileName: 'x.pdf', fileMime: 'application/pdf', fileData: 'JVBERg==' })).status).toBe(403);

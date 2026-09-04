@@ -36,7 +36,14 @@ const MICROSOFT_OAUTH_CONFIG = {
   scopes: [
     'Calendars.ReadWrite', // Read and write calendar events
     'offline_access', // Get refresh tokens for offline access
-    'User.Read' // Read user profile
+    'User.Read', // Read user profile
+    // Outlook drafts (graph-mail.js) need Mail.ReadWrite. The scope is only
+    // requested once an administrator has granted it in Entra AND switched
+    // the draft path on — asking for a scope the tenant has not consented to
+    // would break the calendar connection for everyone, and a stored refresh
+    // token must never quietly gain mail rights. Users connected before the
+    // switch reconnect once to pick it up.
+    ...(String(process.env.GRAPH_MAIL_ENABLED || '').toLowerCase() === 'true' ? ['Mail.ReadWrite'] : [])
   ]
 };
 

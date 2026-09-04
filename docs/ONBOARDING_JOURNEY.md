@@ -369,10 +369,13 @@ needs, in order:
    registration (staging and production are separate registrations — see
    `deploy/AZURE_DEPLOYMENT.md` and `deploy/staging-entra.sh`).
 2. Grant admin consent.
-3. Add `Mail.ReadWrite` to the scope list in `backend/outlook-oauth.js`.
-4. Every already-connected user must **reconnect** — stored refresh tokens are
-   scoped to the old set and do not silently gain mail rights.
-5. Set `GRAPH_MAIL_ENABLED=true`.
+3. Set `GRAPH_MAIL_ENABLED=true` on the App Service and restart. With the flag
+   on, `backend/outlook-oauth.js` adds `Mail.ReadWrite` to the scopes it
+   requests; with it off, the scope is never asked for, so a tenant that has
+   not consented is never confronted with it.
+4. Every already-connected user must **reconnect** (Settings → Integrations)
+   — stored refresh tokens are scoped to the old set and do not silently gain
+   mail rights. The draft button stays disabled for a user until they do.
 
 Until then the SMTP path carries the pack, attached, from the practice mailbox.
 Nothing is blocked on this; the draft is the nicer option, not the only one.

@@ -37,6 +37,7 @@ const odb = require('./onboarding-db');
 const jdb = require('./onboarding-journey-db');
 const wdb = require('./onboarding-workflow-db');
 const engine = require('./onboarding-engine');
+const offerPdf = require('./onboarding-offer-pdf');
 const journey = require('./onboarding-journey');
 const lifecycle = require('./onboarding-lifecycle');
 const letter = require('./onboarding-offer-letter');
@@ -287,6 +288,7 @@ async function recordDetail(req, assignment) {
       templateVersion: offerDocx.TEMPLATE_VERSION,
       previewUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/preview.docx`,
       downloadUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/download`,
+      pdfUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/download.pdf`,
     } : null,
     emailDefault,
     email: offer ? {
@@ -615,7 +617,7 @@ router.put('/api/onboarding/journey/records/:id/offer', requirePermission('onboa
 // ── The letter itself ───────────────────────────────────────────────────────
 
 /** The letter as a .docx — a preview stream (inline) or a download. */
-async function serveLetter(req, res, disposition) {
+async function serveLetter(req, res, disposition, format = 'docx') {
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
   const offer = await jdb.getCurrentOffer(assignment.id);
@@ -628,19 +630,33 @@ async function serveLetter(req, res, disposition) {
     return res.status(500).json({ error: 'The letter could not be generated.', code: 'generation_failed' });
   }
   let bytes = out.bytes;
-  if (disposition === 'inline' && out.source === 'generated') {
+  let fileName = out.fileName;
+  let mime = offerDocx.DOCX_MIME;
+  if (format === 'pdf') {
+    // The PDF is read from the same bytes — generated or uploaded — so it
+    // cannot say something the Word file does not.
+    try {
+      bytes = await offerPdf.offerPdfFromDocx(bytes, { title: `Letter of Offer — ${assignment.applicant_name || ''}`.trim() });
+    } catch (err) {
+      log.error('letter of offer could not be rendered as PDF', { error: err, assignmentId: assignment.id });
+      return res.status(500).json({ error: 'The PDF could not be generated.', code: 'pdf_failed' });
+    }
+    fileName = offerPdf.pdfFileName(out.fileName);
+    mime = offerPdf.PDF_MIME;
+  } else if (disposition === 'inline' && out.source === 'generated') {
     // Explicit page breaks for the browser preview only; the download is untouched.
     try { bytes = await require('./fca/preview-pagination').paginateForPreview(bytes); } catch (_) { /* preview only */ }
   }
   noStore(res);
-  res.set('Content-Type', offerDocx.DOCX_MIME);
+  res.set('Content-Type', mime);
   res.set('Content-Length', String(bytes.length));
   res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(out.fileName)}"`);
+  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(fileName)}"`);
   res.send(bytes);
 }
 router.get('/api/onboarding/journey/records/:id/offer/letter/preview.docx', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'inline')));
 router.get('/api/onboarding/journey/records/:id/offer/letter/download', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'attachment')));
+router.get('/api/onboarding/journey/records/:id/offer/letter/download.pdf', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'attachment', 'pdf')));
 
 const UPLOAD_MIMES = {
   [offerDocx.DOCX_MIME]: ['docx'],

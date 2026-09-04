@@ -22,6 +22,7 @@ const odb = require('./onboarding-db');
 const pdb = require('./onboarding-pack-db');
 const pack = require('./onboarding-pack');
 const offerDocx = require('./onboarding-offer-docx');
+const offerPdf = require('./onboarding-offer-pdf');
 const offerEmail = require('./onboarding-offer-email');
 const packEmail = require('./onboarding-pack-email');
 const induction = require('./onboarding-induction');
@@ -104,7 +105,7 @@ router.get('/api/onboarding/journey/defaults/:packageId', requirePermission('onb
   res.json({
     ok: true,
     package: { id: pkg.id, code: pkg.code, title: pkg.title, roleCategory: pkg.role_category, employmentType: pkg.employment_type, published: pkg.status === 'published' && Number(pkg.current_version) > 0 },
-    letter: { previewUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx`, downloadUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx?download=1`, templateVersion: offerDocx.TEMPLATE_VERSION, sample },
+    letter: { previewUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx`, downloadUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx?download=1`, pdfUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/download.pdf`, templateVersion: offerDocx.TEMPLATE_VERSION, sample },
     emails: {
       offer: offerEmail.composeOfferEmail({ applicantName: sample.name, positionTitle: sample.position }),
       documentation: packEmail.composePackEmail({ applicantName: sample.name }),
@@ -115,9 +116,7 @@ router.get('/api/onboarding/journey/defaults/:packageId', requirePermission('onb
   });
 }));
 
-router.get('/api/onboarding/journey/defaults/:packageId/letter/preview.docx', requirePermission('onboarding.view'), safe(async (req, res) => {
-  const pkg = await loadPackage(req);
-  if (!pkg) return notFound(res);
+async function sampleLetter(pkg) {
   const settings = await odb.getOnboardingSettings();
   const start = new Date(); start.setDate(start.getDate() + 28);
   const ot = pkg.role_category === 'occupational_therapist';
@@ -128,6 +127,30 @@ router.get('/api/onboarding/journey/defaults/:packageId/letter/preview.docx', re
     signatory: { name: settings.offerSignatoryName, title: settings.offerSignatoryTitle, email: settings.offerSignatoryEmail, phone: settings.offerSignatoryPhone },
     isTreatingTherapist: ot,
   });
+  return bytes;
+}
+
+router.get('/api/onboarding/journey/defaults/:packageId/letter/download.pdf', requirePermission('onboarding.view'), safe(async (req, res) => {
+  const pkg = await loadPackage(req);
+  if (!pkg) return notFound(res);
+  let pdf;
+  try {
+    pdf = await offerPdf.offerPdfFromDocx(await sampleLetter(pkg), { title: 'Letter of Offer — template preview' });
+  } catch (err) {
+    log.error('sample letter could not be rendered as PDF', { error: err, packageId: pkg.id });
+    return res.status(500).json({ error: 'The PDF could not be generated.', code: 'pdf_failed' });
+  }
+  res.set('Cache-Control', 'no-store');
+  res.set('Content-Type', offerPdf.PDF_MIME);
+  res.set('Content-Length', String(pdf.length));
+  res.set('Content-Disposition', 'attachment; filename="Letter of Offer - template preview.pdf"');
+  res.send(pdf);
+}));
+
+router.get('/api/onboarding/journey/defaults/:packageId/letter/preview.docx', requirePermission('onboarding.view'), safe(async (req, res) => {
+  const pkg = await loadPackage(req);
+  if (!pkg) return notFound(res);
+  let bytes = await sampleLetter(pkg);
   const download = req.query.download === '1';
   if (!download) { try { bytes = await require('./fca/preview-pagination').paginateForPreview(bytes); } catch (_) { /* preview only */ } }
   res.set('Cache-Control', 'no-store');

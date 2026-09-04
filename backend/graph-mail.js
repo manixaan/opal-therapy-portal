@@ -20,9 +20,11 @@
  * Creating a draft needs the delegated `Mail.ReadWrite` scope. The portal's
  * consented scope set today is Calendars.ReadWrite + offline_access + User.Read
  * (outlook-oauth.js), so this module is INERT until an administrator adds
- * Mail.ReadWrite to the Entra app registration and each connected user
- * re-consents. That is deliberate: silently widening what a stored refresh
- * token can do is not something code should arrange for itself.
+ * Mail.ReadWrite to the Entra app registration, grants consent, and sets
+ * GRAPH_MAIL_ENABLED=true — at which point outlook-oauth.js starts asking for
+ * the scope and each connected user reconnects once to pick it up. That is
+ * deliberate: silently widening what a stored refresh token can do is not
+ * something code should arrange for itself.
  *
  * Until then `isAvailable()` returns false and the caller falls back to SMTP,
  * which already sends from the practice mailbox and already carries

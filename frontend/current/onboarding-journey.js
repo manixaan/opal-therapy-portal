@@ -341,7 +341,7 @@
     if (view === 1) {
       body = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">1</span>Letter of Offer</h2></header>'
         + '<p class="oj-quiet">The letter template, filled with a sample employee so you can see how it reads. The wording is fixed; the particulars come from each onboarding\'s details.</p>'
-        + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a></div>'
+        + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a>' + (d.letter.pdfUrl ? '<a class="oj-btn" href="' + esc(d.letter.pdfUrl) + '">Download (PDF)</a>' : '') + '</div>'
         + '<h3 class="oj-sub">Email 1</h3><pre class="oj-pre">' + esc(d.emails.offer.subject) + '\n\n' + esc(d.emails.offer.body) + '</pre></section>';
     } else {
       var phase = view === 2 ? 'documentation' : 'induction';
@@ -851,6 +851,7 @@
       + '<div class="oj-actions">'
       + btn('Preview the letter', 'OnboardingJourney.previewLetter()', before ? 'oj-btn-primary' : '')
       + '<a class="oj-btn" href="' + esc(L.downloadUrl || '#') + '">Download (.docx)</a>'
+      + (L.pdfUrl ? '<a class="oj-btn" href="' + esc(L.pdfUrl) + '">Download (PDF)</a>' : '')
       + (before && c.assign ? '<label class="oj-btn oj-file">Upload an edited letter<input type="file" accept=".docx" hidden onchange="OnboardingJourney.uploadLetter(this)"></label>' : '')
       + (before && c.assign && L.source === 'uploaded' ? btn('Discard the edit — use the generated letter', 'OnboardingJourney.discardLetter()', 'oj-btn-quiet') : '')
       + '</div>'
