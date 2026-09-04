@@ -50,6 +50,19 @@ describe('the template', () => {
     }
     expect(await zip.file('word/document.xml').async('string')).not.toMatch(/<w:hyperlink[^>]*><w:sdt>/);
   });
+
+  test('the acceptance step is a body paragraph, not a list item with numbering switched off', async () => {
+    // Word drops a list's indent when numId is 0; docx-preview keeps it, so the
+    // preview showed an indent the letter never had. The paragraph is OPALBody.
+    const zip = await JSZip.loadAsync(docx.readTemplateBuffer());
+    const xml = await zip.file('word/document.xml').async('string');
+    expect(xml).not.toMatch(/<w:numId w:val="0"\/>/);
+    const text = (p) => (p.match(/<w:t[^>]*>[^<]*<\/w:t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join('');
+    const para = xml.split('</w:p>').find((p) => text(p).includes('Sign and date'));
+    expect(para).toBeDefined();
+    expect(para).toMatch(/<w:pStyle w:val="OPALBody"\/>/);
+    expect(para).not.toMatch(/<w:numPr>/);
+  });
 });
 
 describe('the scalars', () => {
