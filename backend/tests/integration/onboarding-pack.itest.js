@@ -198,6 +198,21 @@ describe('editing one person\'s pack', () => {
     const uploaded = await agent.post(`${jane.base}/pack/items`).send({ title: 'Parking map', employeeReturns: false, fileName: 'parking.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF map').toString('base64') });
     expect(uploaded.status).toBe(201);
     expect(uploaded.body.pack.items.find((i) => i.title === 'Parking map').file.source).toBe('own');
+    // Several files on one document: attachments, each removable on its own, all in the ZIP.
+    const att1 = await agent.post(`${jane.base}/pack/items/${contract.id}/attachments`).send({ fileName: 'schedule-a.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF schedule A').toString('base64') });
+    expect(att1.status).toBe(201);
+    const att2 = await agent.post(`${jane.base}/pack/items/${contract.id}/attachments`).send({ fileName: 'schedule-b.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF schedule B').toString('base64') });
+    const withBoth = att2.body.pack.items.find((i) => i.id === contract.id);
+    expect(withBoth.attachments.map((a) => a.fileName)).toEqual(['schedule-a.pdf', 'schedule-b.pdf']);
+    const attBytes = await agent.get(withBoth.attachments[0].previewUrl).buffer().parse(binary);
+    expect(attBytes.body.toString()).toBe('%PDF schedule A');
+    const zipRes = await agent.get(`${jane.base}/pack/zip`).buffer().parse(binary);
+    const zipped = await require('jszip').loadAsync(zipRes.body);
+    expect(Object.keys(zipped.files).filter((n) => /schedule.a|schedule.b/i.test(n))).toHaveLength(2);
+    const dropped = await agent.delete(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[0].id}`);
+    expect(dropped.status).toBe(200);
+    expect(dropped.body.pack.items.find((i) => i.id === contract.id).attachments.map((a) => a.fileName)).toEqual(['schedule-b.pdf']);
+    expect((await agent.delete(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[0].id}`)).status).toBe(404);
     // A file dropped on a section files under that section; an unknown section falls to the default.
     const filed = await agent.post(`${jane.base}/pack/items`).send({ title: 'Passport scan', section: 'identity', employeeReturns: false, required: false, fileName: 'passport.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF passport').toString('base64') });
     expect(filed.status).toBe(201);

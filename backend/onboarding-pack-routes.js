@@ -91,7 +91,7 @@ const packEditable = (a, phase = 'documentation') => PHASES[phase].editable(a);
 
 // ── Shaping ─────────────────────────────────────────────────────────────────
 
-function itemRow(row, assignmentId) {
+function itemRow(row, assignmentId, attachments = []) {
   const file = pdb.describeItemFile(row);
   const base = `/api/onboarding/journey/records/${assignmentId}/pack/items/${row.id}`;
   return {
@@ -115,6 +115,12 @@ function itemRow(row, assignmentId) {
       previewUrl: file.source === 'none' || file.source === 'link' ? null : `${base}/preview`,
       downloadUrl: file.source === 'none' || file.source === 'link' ? null : `${base}/download`,
     },
+    // Extra files alongside the document's own file; each removable on its own.
+    attachments: attachments.map((a) => ({
+      id: a.id, fileName: a.file_name, mime: a.file_mime, size: a.file_size_bytes, uploadedAt: a.uploaded_at, uploadedByName: a.uploaded_by_name || null,
+      previewKind: a.file_mime === 'application/pdf' ? 'pdf' : String(a.file_mime || '').includes('wordprocessingml') ? 'docx' : String(a.file_mime || '').startsWith('image/') ? 'image' : null,
+      previewUrl: `${base}/attachments/${a.id}/preview`, downloadUrl: `${base}/attachments/${a.id}/download`,
+    })),
     returnedAt: row.returned_at || null, returnedDocumentId: row.returned_document_id || null,
     verifiedAt: row.verified_at || null, verifiedByName: row.verified_by_name || null,
     verificationNote: row.verification_note || null,
@@ -136,7 +142,8 @@ function itemRow(row, assignmentId) {
 async function packDetail(req, assignment, phase = 'documentation') {
   const P = PHASES[phase]; const C = P.cols;
   const rows = await pdb.listItems(assignment.id, undefined, phase);
-  const items = rows.map((r) => itemRow(r, assignment.id));
+  const attachments = await pdb.mapAttachments(assignment.id);
+  const items = rows.map((r) => itemRow(r, assignment.id, attachments[r.id] || []));
   const included = items.filter((i) => i.status === 'included');
   const zip = await wdb.getLiveStarterPack(assignment.id);
   const zipIsOurs = zip && Array.isArray(zip.manifest) && (zip.manifest.length === 0 || zip.manifest[0].phase === phase);
@@ -244,6 +251,7 @@ async function ensureProfileOwner(assignment) {
 /** Resolve every included, sendable item to bytes and build the ZIP. */
 async function buildZipForRecord(req, assignment, phase = 'documentation') {
   const rows = (await pdb.listItems(assignment.id, undefined, phase)).filter((r) => r.status === 'included');
+  const attachments = await pdb.mapAttachments(assignment.id);
   const resolved = [];
   for (const r of rows) {
     let file = null; let unavailableReason = null;
@@ -251,7 +259,11 @@ async function buildZipForRecord(req, assignment, phase = 'documentation') {
       try { file = await pdb.readItemFile(r); } catch (err) { log.warn('pack item unreadable', { error: err, itemId: r.id }); }
       if (!file) unavailableReason = pdb.describeItemFile(r).unavailableReason || 'No file behind this document';
     }
-    resolved.push({ ...r, file, unavailableReason });
+    const extras = [];
+    for (const a of attachments[r.id] || []) {
+      try { const f = await pdb.readAttachment(a); if (f) extras.push({ ...f, attachmentId: a.id }); } catch (err) { log.warn('pack attachment unreadable', { error: err, attachmentId: a.id }); }
+    }
+    resolved.push({ ...r, file, unavailableReason, attachments: extras });
   }
   const org = await orgName(assignment.organisation_id);
   const built = await pack.buildPackZip(resolved, {
@@ -438,6 +450,51 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     await respond(req, res, assignment, 200, phase);
   }));
   
+  // ── Attachments: several files on one document, each removable on its own ──
+
+  router.post(`${BASE}/items/:itemId/attachments`, requirePermission('onboarding.assign'), safe(async (req, res) => {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    if (!packEditable(assignment, phase)) return res.status(409).json({ error: 'The pack has been sent and can no longer be changed.', code: 'sent' });
+    const item = await pdb.getItem(assignment.id, req.params.itemId);
+    if (!item) return notFound(res);
+    const up = readUpload(req.body);
+    if (up.error) return res.status(400).json({ error: up.error });
+    const stored = await pdb.addAttachment({ organisationId: orgOf(req), assignmentId: assignment.id, itemId: item.id, ...up, uploadedBy: req.user.id });
+    await clearDraft(assignment.id, phase);
+    await auditOnboarding(req, P.auditPrefix + '_item_attachment_added', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, attachmentId: stored.id, sha256: stored.file_sha256, bytes: stored.file_size_bytes } });
+    await respond(req, res, assignment, 201, phase);
+  }));
+
+  router.delete(`${BASE}/items/:itemId/attachments/:attachmentId`, requirePermission('onboarding.assign'), safe(async (req, res) => {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    if (!packEditable(assignment, phase)) return res.status(409).json({ error: 'The pack has been sent and can no longer be changed.', code: 'sent' });
+    const gone = await pdb.deleteAttachment(assignment.id, req.params.itemId, req.params.attachmentId);
+    if (!gone) return notFound(res);
+    await clearDraft(assignment.id, phase);
+    await auditOnboarding(req, P.auditPrefix + '_item_attachment_removed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: req.params.itemId, attachmentId: req.params.attachmentId } });
+    await respond(req, res, assignment, 200, phase);
+  }));
+
+  async function serveAttachment(req, res, disposition) {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    const a = await pdb.getAttachment(assignment.id, req.params.itemId, req.params.attachmentId);
+    if (!a) return notFound(res);
+    let file = null;
+    try { file = await pdb.readAttachment(a); } catch (err) { log.warn('pack attachment unreadable', { error: err, attachmentId: a.id }); }
+    if (!file) return notFound(res);
+    noStore(res);
+    res.set('Content-Type', file.mime);
+    res.set('Content-Length', String(file.bytes.length));
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Disposition', contentDisposition(disposition, file.fileName));
+    res.send(file.bytes);
+  }
+  router.get(`${BASE}/items/:itemId/attachments/:attachmentId/preview`, requirePermission('onboarding.view'), safe((req, res) => serveAttachment(req, res, 'inline')));
+  router.get(`${BASE}/items/:itemId/attachments/:attachmentId/download`, requirePermission('onboarding.view'), safe((req, res) => serveAttachment(req, res, 'attachment')));
+
   async function serveItem(req, res, disposition) {
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);

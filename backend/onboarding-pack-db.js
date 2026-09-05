@@ -247,6 +247,64 @@ async function readItemFile(row, q = pool) {
   return null;
 }
 
+// ── Attachments: any number of extra files alongside a document's own file ──
+
+const ATTACH_SELECT = `
+  SELECT a.id, a.item_id, a.assignment_id, a.file_name, a.file_mime, a.file_size_bytes, a.file_sha256,
+         a.storage_backend, a.storage_key, a.uploaded_at, a.uploaded_by, a.sort_order, u.name AS uploaded_by_name
+    FROM onboarding_pack_item_attachments a LEFT JOIN users u ON u.id = a.uploaded_by`;
+
+/** Attachments for every item of a record, keyed by item id (no bytes). */
+async function mapAttachments(assignmentId, q = pool) {
+  const { rows } = await q.query(`${ATTACH_SELECT} WHERE a.assignment_id = $1 ORDER BY a.sort_order, a.uploaded_at`, [assignmentId]);
+  const out = {};
+  for (const r of rows) (out[r.item_id] = out[r.item_id] || []).push(r);
+  return out;
+}
+
+async function getAttachment(assignmentId, itemId, id, q = pool) {
+  if (!isUuid(id) || !isUuid(itemId)) return null;
+  const { rows } = await q.query(`SELECT a.* FROM onboarding_pack_item_attachments a WHERE a.assignment_id = $1 AND a.item_id = $2 AND a.id = $3`, [assignmentId, itemId, id]);
+  return rows[0] || null;
+}
+
+async function addAttachment({ organisationId, assignmentId, itemId, fileName, fileMime, buffer, uploadedBy }) {
+  const sha = crypto.createHash('sha256').update(buffer).digest('hex');
+  const backendName = getBackendName();
+  let storageKey = null; let backend = 'db'; let fileData = buffer.toString('base64');
+  if (backendName !== 'db') {
+    const put = await getBackend(backendName).put({ userId: 'onboarding-pack', docId: `${itemId}-att-${Date.now()}`, fileName, mime: fileMime, base64: fileData });
+    backend = put.backend; storageKey = put.storageKey; fileData = null;
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO onboarding_pack_item_attachments
+       (organisation_id, assignment_id, item_id, file_name, file_mime, file_size_bytes, file_sha256, storage_backend, storage_key, file_data, uploaded_by, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+             COALESCE((SELECT MAX(sort_order) FROM onboarding_pack_item_attachments WHERE item_id = $3), 0) + 1)
+     RETURNING *`,
+    [organisationId || null, assignmentId, itemId, str(fileName, 255), str(fileMime, 100), buffer.length, sha, backend, storageKey, fileData, uploadedBy || null]
+  );
+  return rows[0];
+}
+
+async function deleteAttachment(assignmentId, itemId, id, q = pool) {
+  if (!isUuid(id) || !isUuid(itemId)) return false;
+  const { rowCount } = await q.query('DELETE FROM onboarding_pack_item_attachments WHERE assignment_id = $1 AND item_id = $2 AND id = $3', [assignmentId, itemId, id]);
+  return rowCount > 0;
+}
+
+async function readAttachment(row, q = pool) {
+  // The listing carries no bytes; fetch the stored form when asked to read.
+  let src = row;
+  if (src.file_data === undefined) {
+    const { rows } = await q.query('SELECT storage_backend, storage_key, file_data FROM onboarding_pack_item_attachments WHERE id = $1', [row.id]);
+    if (!rows[0]) return null;
+    src = { ...row, ...rows[0] };
+  }
+  const bytes = await readStored(src);
+  return bytes ? { bytes, mime: row.file_mime, fileName: row.file_name, source: 'attachment' } : null;
+}
+
 // ── The record's pack milestones ─────────────────────────────────────────────
 
 async function setPackPrepared(assignmentId, q = pool) {
@@ -346,6 +404,7 @@ async function clearPackDefaults(packageId, phase, q = pool) {
 }
 
 module.exports = {
+  mapAttachments, getAttachment, addAttachment, deleteAttachment, readAttachment,
   listPackDefaults, upsertPackDefault, deletePackDefault, clearPackDefaults,
   listItems, getItem, countItems, countItemsByPhase, insertDefaults, addItem, restoreDefaults, updateItem, setItemStatus, reorderItems, setItemCompleted,
   setItemFile, clearItemFile, describeItemFile, readItemFile,

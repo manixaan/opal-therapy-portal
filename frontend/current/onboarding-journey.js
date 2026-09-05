@@ -1292,11 +1292,19 @@
     } else {
       fileCell = '<span class="oj-warn">No file yet</span>';
     }
+    var atts = (i.attachments || []);
+    if (atts.length) {
+      fileCell += '<ul class="oj-atts">' + atts.map(function (a) {
+        return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" target="_blank" rel="noopener" title="Open">' + esc(a.fileName) + '</a>'
+          + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
+      }).join('') + '</ul>';
+    }
     var acts = [];
     if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.packPreview(\'' + jsq(i.id) + '\')', 'oj-btn-small'));
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
       acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      acts.push('<label class="oj-btn oj-btn-small oj-file" title="Add one or more extra files to this document">+ Attach more<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAddAttachments(\'' + jsq(i.id) + '\', this.files); this.value = \'\';"></label>');
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
@@ -1681,11 +1689,11 @@
       var files = ev.dataTransfer && ev.dataTransfer.files;
       if (!files || !files.length) return;
       var spec = row.getAttribute('data-drop').split(':');
-      if (spec[0] === 'pack') packUploadFile(spec[1], files[0]);
+      if (spec[0] === 'pack') { if (files.length > 1) packAddAttachments(spec[1], files); else packUploadFile(spec[1], files[0]); }
       else if (spec[0] === 'defaults') defaultsUpload(spec[1], spec[2], files[0]);
       else if (spec[0] === 'returns') uploadReturns({ files: files, value: '' });
       else if (spec[0] === 'section') packAttachToSection(spec[1], spec[2], files);
-      if (files.length > 1 && spec[0] !== 'returns' && spec[0] !== 'section') toast('One file per document — the first one was used. Drop several on a section heading to add them all.', true);
+
     });
   }
 
@@ -1826,6 +1834,28 @@
     if (!hasLibrary && !await portalConfirm('Remove the attached file? The document stays in the pack with no file until you attach another.', { danger: true })) return;
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'Back to the library copy.' : 'File removed — attach the right one when ready.', 'DELETE', phaseOfItem(id)));
   }
+  /** Extra files on one document. Several at once; each lands as its own attachment. */
+  async function packAddAttachments(id, files) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    var ok = 0;
+    for (var n = 0; n < list.length; n++) {
+      var file = list[n];
+      if (file.size > 10 * 1024 * 1024) { toast(file.name + ' is larger than 10 MB — skipped.', true); continue; }
+      var ext = String(file.name).split('.').pop().toLowerCase();
+      var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast(file.name + ' could not be read.', true); continue; }
+      var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + packPath('/items/' + encodeURIComponent(id) + '/attachments', phaseOfItem(id)), { method: 'POST', body: {
+        fileName: file.name, fileMime: MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type), fileData: b64,
+      } });
+      if (res.ok) ok += 1; else toast(file.name + ': ' + res.error, true);
+    }
+    if (ok) toast(ok === 1 ? 'Attached.' : ok + ' files attached.');
+    return refreshRecordAfter(Promise.resolve({ ok: true }));
+  }
+  function packRemoveAttachment(id, attachmentId) {
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(attachmentId), {}, 'Attachment removed.', 'DELETE', phaseOfItem(id)));
+  }
+
   /** × on a file: off immediately, no dialog — the row stays, so the right file can go on. */
   function packRemoveFileNow(id) {
     var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
@@ -2086,7 +2116,7 @@
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
-    packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection,
+    packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,

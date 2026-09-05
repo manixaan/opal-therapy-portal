@@ -341,6 +341,23 @@ async function buildPackZip(resolved, meta) {
       source: item.file.source, sizeBytes: item.file.bytes.length, mime: item.file.mime,
       sha256: require('crypto').createHash('sha256').update(item.file.bytes).digest('hex'),
     });
+    // The document's attachments follow it, lettered so they sort together.
+    (item.attachments || []).forEach((att, idx) => {
+      if (!att.bytes || !att.bytes.length) return;
+      const aext = extFor(att.mime, att.fileName);
+      const letter = String.fromCharCode(97 + (idx % 26));
+      let aname = `${String(position).padStart(2, '0')}${letter} - ${safeStem(item.title)} - ${safeStem(String(att.fileName || 'attachment').replace(/\.[^.]+$/, ''))}.${aext}`;
+      let m = 2;
+      while (used.has(aname.toLowerCase())) aname = aname.replace(/(\.[^.]+)$/, ` (${m++})$1`);
+      used.add(aname.toLowerCase());
+      zip.file(aname, att.bytes, { date: new Date(0), binary: true });
+      manifest.push({
+        position, fileName: aname, title: item.title, code: item.code, itemId: item.id || null, attachmentId: att.attachmentId || null,
+        documentId: item.document_id || null, documentVersionId: item.document_version_id || null,
+        source: 'attachment', sizeBytes: att.bytes.length, mime: att.mime,
+        sha256: require('crypto').createHash('sha256').update(att.bytes).digest('hex'),
+      });
+    });
   }
 
   zip.file('00 - Read Me First.txt', buildReadme({ ...meta, items: resolved }), { date: new Date(0) });
