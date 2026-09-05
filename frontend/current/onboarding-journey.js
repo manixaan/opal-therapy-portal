@@ -1284,7 +1284,7 @@
       fileCell = '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the internal set-up task' : i.itemKind === 'training' ? 'Follows the induction walkthrough task' : 'Tracked') + '</span>';
     } else if (f.previewUrl) {
       fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>'
-        + (editable && f.source === 'own' ? '<button type="button" class="oj-file-x" title="Remove this file now" aria-label="Remove this file" onclick="OnboardingJourney.packRemoveFileNow(\'' + jsq(i.id) + '\')">×</button>' : '');
+        + (editable ? '<button type="button" class="oj-file-x" title="' + (f.source === 'own' ? 'Remove this file now' : 'This is the library copy — × takes the document out of this pack (restorable below)') + '" aria-label="Remove" onclick="OnboardingJourney.packRemoveFileNow(\'' + jsq(i.id) + '\')">×</button>' : '');
     } else if (!i.sendsDocument) {
       fileCell = '<span class="oj-quiet">Employee supplies their own</span>';
     } else if (f.source === 'link' && i.officialSourceUrl) {
@@ -1860,6 +1860,11 @@
   function packRemoveFileNow(id) {
     var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
     var i = all.filter(function (x) { return x.id === id; })[0];
+    var src = i && i.file ? i.file.source : 'own';
+    if (src !== 'own') {
+      // The library's own copy cannot be detached from its document, so the document leaves the pack — restorable from the list below.
+      return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/remove', {}, 'Taken out of this pack. Restore it from "Removed from this pack" if that was a slip.', 'POST', phaseOfItem(id)));
+    }
     var hasLibrary = !!(i && i.library);
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'File removed — back to the library copy.' : 'File removed.', 'DELETE', phaseOfItem(id)));
   }
