@@ -80,8 +80,8 @@ describe('the scalars', () => {
       OPAL_LOO_REMUNERATION: '$90,000 per annum, exclusive of superannuation',
       OPAL_LOO_SUPERANNUATION: 'Superannuation of 12%, in addition to your salary.',
       OPAL_LOO_PROBATION: 'Three months from the Commencement Date',
-      OPAL_LOO_OFFER_CLOSING_DATE: '10/09/2026',
-      OPAL_LOO_OFFER_CLOSING_DATE_LONG: '10 September 2026',
+      OPAL_LOO_OFFER_CLOSING_DATE: '05/09/2026',
+      OPAL_LOO_OFFER_CLOSING_DATE_LONG: '5 September 2026',
       OPAL_LOO_SIGNATORY_NAME: 'Ann Mary Mathew',
       OPAL_LOO_SIGNATORY_FIRST_NAME: 'Ann',
     });
@@ -115,7 +115,7 @@ describe('the filled document', () => {
   test('carries the values, the header names the candidate, and no placeholder survives', async () => {
     const buf = await docx.buildOfferDocx(OT);
     const { text, headerText, xml } = await bodyText(buf);
-    for (const needle of ['Dear Jane,', 'Jane Smith', 'jane@example.com', '0412 000 000', 'Occupational Therapist', '7 October 2026', '$90,000 per annum', 'Three months', '10 September 2026', 'AHPRA']) {
+    for (const needle of ['Dear Jane,', 'Jane Smith', 'jane@example.com', '0412 000 000', 'Occupational Therapist', '7 October 2026', '$90,000 per annum', 'Three months', '5 September 2026', 'AHPRA']) {
       expect(`${needle}:${text.includes(needle)}`).toBe(`${needle}:true`);
     }
     expect(headerText).toContain('Jane Smith');

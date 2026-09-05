@@ -663,7 +663,7 @@
       + field(p + 'workPattern', 'Work pattern', input(p + 'workPattern', 'text', t.workPattern, 'maxlength="200" placeholder="worked between 8:30am and 4:30pm (flexible), Monday to Friday"'))
       + field(p + 'payCycle', 'Pay cycle', input(p + 'payCycle', 'text', t.payCycle, 'maxlength="40" placeholder="Fortnightly"'))
       + field(p + 'superannuationRate', 'Superannuation %', input(p + 'superannuationRate', 'number', t.superannuationRate, 'min="0" max="30" step="0.5" placeholder="12"'))
-      + field(p + 'offerClosingDate', 'Offer closing date', input(p + 'offerClosingDate', 'date', isoDate(t.offerClosingDate)), 'Blank: seven days from the day the letter is issued.')
+      + field(p + 'offerClosingDate', 'Offer closing date', input(p + 'offerClosingDate', 'date', isoDate(t.offerClosingDate)), 'Blank: 48 hours from the day the offer email goes out — the same window the email asks for.')
       + '</div></details>';
   }
 

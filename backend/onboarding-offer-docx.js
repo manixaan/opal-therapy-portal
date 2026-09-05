@@ -34,7 +34,7 @@ const DEFAULTS = {
   superannuationRate: 12,
   payCycle: 'Fortnightly',
   workPattern: 'worked between 8:30am and 4:30pm (flexible), Monday to Friday',
-  offerOpenDays: 7,
+  offerOpenDays: 2, // 48 hours — the same window Email 1 asks for
   registrationCondition: 'Professional registration — current general registration as an occupational therapist with the '
     + 'Occupational Therapy Board of Australia, via AHPRA, free of any condition, undertaking or restriction that would '
     + 'prevent or restrict the performance of Your Role.',
