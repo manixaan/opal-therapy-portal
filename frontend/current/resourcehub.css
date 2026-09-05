@@ -106,6 +106,7 @@
 }
 .rh2-chip-warn { background: var(--warn-soft); border-color: #e3c58f; color: var(--warn); }
 .rh2-chip-ok { background: var(--ok-soft); border-color: #b9d9c3; color: var(--ok); }
+.rh2-chip-doing { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
 .rh2-chip-quiet { background: none; }
 .rh2-chip-clear { cursor: pointer; font-family: inherit; }
 

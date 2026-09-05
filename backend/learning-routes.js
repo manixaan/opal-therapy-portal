@@ -678,9 +678,10 @@ async function importExistingInductions(org, createdBy) {
   }
 
   // ── The Splose induction ───────────────────────────────────────────────────
-  // The Splose walkthrough lessons (registry group 'splose') plus the formal
-  // close the source curriculum asks for: a server-scored knowledge check at
-  // an 80% pass mark and the first-day checklist as an acknowledgement.
+  // The Splose walkthrough lessons (registry group 'splose') plus the
+  // knowledge check the source curriculum asks for, server-scored at an 80%
+  // pass mark. (The curriculum's first-day checklist acknowledgement was
+  // dropped on the Owner's instruction — the walkthroughs already cover it.)
   // Splose is an external system, so there are no hub tutorial pages to link
   // — each lesson is a `task` item carrying its walkthrough key, which the
   // player renders as a launch tile. Questions restate the curriculum's own
@@ -731,16 +732,11 @@ async function importExistingInductions(org, createdBy) {
               ],
             },
           },
-          {
-            type: 'acknowledgement', title: 'First-day setup checklist', required: true, minutes: 2,
-            body: 'The walkthroughs covered every line of this checklist. Confirm it honestly — anything you cannot confirm goes to Opal administration first.',
-            ack_statement: 'I confirm my Splose first-day setup is complete: my workspace invite is accepted and my login works; my profile, work locations, services and availability are reviewed and correct; my Opal Microsoft account, Outlook and Teams are working; my Microsoft Teams integration is connected in Splose; the Splose calendar feed is enabled and subscribed in Outlook where Opal requires it, and I understand that sync is one-way; my Opal Portal login and Learning access work, with travel, invoice and resource access available as appropriate to my role. I understand Splose is the source of truth for participant appointments.',
-          },
         ],
       });
       await insert(
         'Splose Induction',
-        'The Splose induction for Opal practitioners: account setup, booking, appointment management, progress notes and AI documentation, the Microsoft 365 connection, performance — closed out by a knowledge check and the first-day checklist.',
+        'The Splose induction for Opal practitioners: account setup, booking, appointment management, progress notes and AI documentation, the Microsoft 365 connection, performance — closed out by a knowledge check.',
         'induction',
         sections);
     }

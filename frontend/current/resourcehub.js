@@ -4575,7 +4575,7 @@
     if (a.status === 'completed') return '<span class="rh2-chip rh2-chip-ok">Completed</span>';
     if (a.status === 'cancelled') return '<span class="rh2-chip rh2-chip-quiet">Cancelled</span>';
     if (a.overdue) return '<span class="rh2-chip rh2-chip-warn">Overdue</span>';
-    if (a.status === 'in_progress') return '<span class="rh2-chip">In progress</span>';
+    if (a.status === 'in_progress') return '<span class="rh2-chip rh2-chip-doing">In progress</span>';
     return '<span class="rh2-chip rh2-chip-quiet">Not started</span>';
   }
 
@@ -4642,16 +4642,12 @@
       return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' +
         '<div class="rh2-empty">You’re all up to date — no outstanding learning has been assigned to you.</div></section>';
     }
-    var todo = rows.filter(function (a) { return a.status === 'assigned'; });
-    var doing = rows.filter(function (a) { return a.status === 'in_progress'; });
-    var doneRows = rows.filter(function (a) { return a.status === 'completed'; });
-    var group = function (label, list) {
-      if (!list.length) return '';
-      return '<h3 class="rh2-learn-group">' + label + '</h3>' +
-        '<div class="rh2-learn-cards">' + list.map(myAssignmentCard).join('') + '</div>';
-    };
+    // One list, in the order the server gives it (active first, then by due
+    // date). Starting an induction used to move its card into an "In
+    // progress" group above the rest — it jumped. Now the card stays where
+    // it was and only its status chip changes colour.
     return '<section class="rh2-card" aria-labelledby="rh2-h-myl"><h2 id="rh2-h-myl">Assigned learning</h2>' +
-      group('In progress', doing) + group('To do', todo) + group('Completed', doneRows) +
+      '<div class="rh2-learn-cards">' + rows.map(myAssignmentCard).join('') + '</div>' +
     '</section>';
   }
 

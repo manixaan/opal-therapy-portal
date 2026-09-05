@@ -580,6 +580,15 @@ describe('the induction is one clear interaction path', () => {
     expect(VISIBLE).not.toContain('Restart from beginning');
   });
 
+  test('starting an induction changes its chip colour, not its place in the list', () => {
+    const list = fn('renderMyAssignments');
+    expect(list).toContain('rows.map(myAssignmentCard)');
+    expect(list).not.toContain('rh2-learn-group');
+    expect(list).not.toContain("'In progress'");
+    expect(fn('laStatusChip')).toContain('rh2-chip-doing">In progress');
+    expect(CSS).toMatch(/\.rh2-chip-doing\s*\{[^}]*background/);
+  });
+
   test('re-entering the open induction keeps its loaded data', () => {
     expect(fn('openAssignment')).toContain('sameId');
     expect(fn('openAssignment')).toContain('data: sameId ? S.assignment.data : null');
@@ -884,8 +893,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r21');
-    expect(SHELL).toContain('/resourcehub.js?v=r36');
+    expect(SHELL).toContain('/resourcehub.css?v=r22');
+    expect(SHELL).toContain('/resourcehub.js?v=r37');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

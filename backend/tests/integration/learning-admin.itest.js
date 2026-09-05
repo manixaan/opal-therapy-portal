@@ -521,13 +521,13 @@ test('the Splose induction imports with launchable lessons and a formal close', 
   const pItems = pDetail.body.workflow.draft_content.sections.flatMap((s) => s.items);
   expect(pItems.some((i) => i.walkthrough_key || /^Splose/.test(i.title))).toBe(false);
 
-  // The formal close the curriculum asks for: a server-scored knowledge
-  // check at the 80% pass mark, and the first-day checklist acknowledgement.
+  // The close the curriculum asks for: a server-scored knowledge check at
+  // the 80% pass mark. No acknowledgement — the first-day checklist was
+  // dropped; the walkthroughs already cover every line of it.
   const quiz = items.find((i) => i.type === 'quiz');
   expect(quiz.quiz.passThreshold).toBe(80);
   expect(quiz.quiz.questions).toHaveLength(10);
-  const ack = items.find((i) => i.type === 'acknowledgement');
-  expect(ack.ack_statement).toMatch(/source of truth/);
+  expect(items.some((i) => i.type === 'acknowledgement')).toBe(false);
 
   // What a learner receives keeps the walkthrough key (the player needs it)
   // and never the answer key.
