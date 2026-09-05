@@ -67,6 +67,16 @@ describe('the PDF', () => {
     expect(loaded.getAuthor()).toBe('Opal Therapy');
   });
 
+  test('the acceptance block is a form the candidate can type into', async () => {
+    const bytes = await pdf.offerPdfFromDocx(await docx.buildOfferDocx(OT));
+    const loaded = await PDFDocument.load(bytes);
+    const names = loaded.getForm().getFields().map((f) => f.getName());
+    expect(names).toEqual(expect.arrayContaining(['Full Name', 'Signature', 'Date']));
+    // The particulars table is filled, so nothing there became a field.
+    expect(names).not.toContain('Position Title');
+    expect(names).not.toContain('Annual Salary');
+  });
+
   test('takes the .docx file name and changes only the extension', () => {
     expect(pdf.pdfFileName('Letter of Offer - Jane Smith - Opal Therapy - 2026-09-03.docx')).toBe('Letter of Offer - Jane Smith - Opal Therapy - 2026-09-03.pdf');
     expect(pdf.pdfFileName('edited copy.DOCX')).toBe('edited copy.pdf');

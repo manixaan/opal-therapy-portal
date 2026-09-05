@@ -21,11 +21,15 @@
  * the first and the confidential footer. Colours, sizes and spacing are read
  * from the letter's styles where they are stated and mirrored from the
  * template where they are not. Word remains the master for exact pagination.
+ *
+ * The acceptance block at the end is a form: every empty cell beside a label
+ * (Full Name, Signature, Date, …) becomes a real PDF text field, so the
+ * candidate can type into the PDF and return it without printing.
  */
 
 const JSZip = require('jszip');
 const { DOMParser } = require('@xmldom/xmldom');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { PDFDocument, StandardFonts, rgb, PDFName, PDFBool } = require('pdf-lib');
 const { toWinAnsi } = require('./interview-pdf');
 
 const PDF_FOOTER = 'Opal Therapy | Confidential | Letter of Offer';
@@ -248,7 +252,19 @@ class Flow {
     this.pdf = pdf; this.fonts = fonts; this.model = model; this.footer = footer;
     this.pg = model.page; this.pages = []; this.page = null; this.y = 0;
     this.contentW = this.pg.w - this.pg.left - this.pg.right;
+    this.form = pdf.getForm(); this.fieldNames = new Set();
     this.newPage();
+  }
+  /** A fillable text field sized to a table cell. */
+  field(label, x, y, width, height) {
+    const base = String(label || 'Field').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 60) || 'Field';
+    let name = base; let n = 2;
+    while (this.fieldNames.has(name)) name = `${base} ${n++}`;
+    this.fieldNames.add(name);
+    const f = this.form.createTextField(name);
+    f.addToPage(this.page, { x, y, width, height, borderWidth: 0, backgroundColor: hex(C.white), textColor: hex(C.ink), font: this.fonts.regular });
+    f.setFontSize(10);
+    return f;
   }
   newPage() {
     this.page = this.pdf.addPage([this.pg.w, this.pg.h]);
@@ -406,6 +422,8 @@ function renderTable(flow, block) {
       laid.push(cellLines); rowH = Math.max(rowH, h);
     }
     rowH = Math.max(rowH + CELL_PAD_Y * 2, 20);
+    // A fill-in row (label + empty cell) gets room to write in.
+    if (row.paras.length > 1 && !row.paras.slice(1).some((paras) => paras.some((p) => p.segments.some((s) => s.type === 'text' && s.text.trim())))) rowH = Math.max(rowH, 26);
     if (flow.y - rowH < pg.bottom + 14) flow.newPage();
     const top = flow.y;
     let cx = pg.left;
@@ -416,8 +434,15 @@ function renderTable(flow, block) {
       flow.page.drawRectangle({ x: cx, y: top - rowH, width: colW[i], height: rowH, borderColor: hex(C.grid), borderWidth: 0.5 });
       // Text sits vertically centred in the row, as the template's cells do.
       const textH = laid[i].reduce((acc, c) => acc + c.lines.length * c.spec.size * c.spec.leading, 0);
-      flow.y = top - (rowH - textH) / 2;
-      for (const c of laid[i]) drawLines(flow, c.lines, cx + CELL_PAD_X, colW[i] - CELL_PAD_X * 2, c.spec.size, c.spec, { align: c.jc });
+      const empty = !laid[i].some((c) => c.lines.some((ln) => ln.tokens.some((t) => t.kind === 'word')));
+      const labelText = i > 0 ? (row.paras[0] || []).map((p) => p.segments.filter((s) => s.type === 'text').map((s) => s.text).join('')).join(' ').trim() : '';
+      if (empty && i > 0 && labelText) {
+        // An empty cell beside a label is for the candidate to fill in.
+        flow.field(labelText, cx + 2, top - rowH + 2, colW[i] - 4, rowH - 4);
+      } else {
+        flow.y = top - (rowH - textH) / 2;
+        for (const c of laid[i]) drawLines(flow, c.lines, cx + CELL_PAD_X, colW[i] - CELL_PAD_X * 2, c.spec.size, c.spec, { align: c.jc });
+      }
       cx += colW[i];
     }
     flow.y = top - rowH;
@@ -445,7 +470,13 @@ async function renderLetterPdf({ model, title, footer }) {
     else if (block.type === 'table') renderTable(flow, block);
   }
   flow.stampFooters();
-  return Buffer.from(await pdf.save());
+  if (flow.fieldNames.size) {
+    // A viewer that will not trust our appearance streams still has to draw
+    // what the candidate types, so the document asks it to generate its own.
+    flow.form.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.True);
+    try { flow.form.updateFieldAppearances(fonts.regular); } catch (_) { /* appearances stay as built */ }
+  }
+  return Buffer.from(await pdf.save({ updateFieldAppearances: false }));
 }
 
 /**
