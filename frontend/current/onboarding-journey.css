@@ -259,6 +259,9 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-pack-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; flex-wrap: wrap; margin: 6px 0 10px; font-size: 13.5px; }
 .oj-warn { color: #8a5a00; font-weight: 600; font-size: 12.5px; }
 .oj-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+/* Breathing room between the pack table and whatever follows it (the email step). */
+.oj-table-wrap + .oj-step, .oj-table-wrap + .oj-history, .oj-table-wrap + .oj-actions { margin-top: 28px; }
+#oj-pack-email, #oj-induction-email { margin-top: 28px; }
 .oj-pack { width: 100%; border-collapse: collapse; font-size: 13px; }
 .oj-pack th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .oj-pack td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
