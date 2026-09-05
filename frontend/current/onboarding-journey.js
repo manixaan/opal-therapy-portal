@@ -1232,12 +1232,7 @@
       if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here, or press + Attach files.</td></tr>';
     });
     out += '</tbody></table></div>';
-    if (removed.length) {
-      out += '<details class="oj-history"><summary>Removed from this pack (' + removed.length + ')</summary><ul>' + removed.map(function (i) {
-        return '<li>' + esc(i.title) + (i.removedReason ? ' <span class="oj-quiet">— ' + esc(i.removedReason) + '</span>' : '')
-          + (editable ? ' ' + btn('Restore', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'restore\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
-      }).join('') + '</ul></details>';
-    }
+    // Removed documents are not listed here — a stale entry is noise on the working pack. Restore defaults brings the defaults back.
     out += '<div id="oj-pack-add-' + phase + '" hidden></div>';
     return out;
   }
@@ -1288,7 +1283,7 @@
       fileCell = '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the internal set-up task' : i.itemKind === 'training' ? 'Follows the induction walkthrough task' : 'Tracked') + '</span>';
     } else if (f.previewUrl) {
       fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>'
-        + (editable ? '<button type="button" class="oj-file-x" title="' + (f.source === 'own' ? 'Remove this file now' : 'This is the library copy — × takes the document out of this pack (restorable below)') + '" aria-label="Remove" onclick="OnboardingJourney.packRemoveFileNow(\'' + jsq(i.id) + '\')">×</button>' : '');
+        + (editable ? '<button type="button" class="oj-file-x" title="' + (f.source === 'own' ? 'Remove this file now' : 'This is the library copy — × takes the document out of this pack') + '" aria-label="Remove" onclick="OnboardingJourney.packRemoveFileNow(\'' + jsq(i.id) + '\')">×</button>' : '');
     } else if (!i.sendsDocument) {
       fileCell = '<span class="oj-quiet">Employee supplies their own</span>';
     } else if (f.source === 'link' && i.officialSourceUrl) {
@@ -1869,8 +1864,8 @@
     var i = all.filter(function (x) { return x.id === id; })[0];
     var src = i && i.file ? i.file.source : 'own';
     if (src !== 'own') {
-      // The library's own copy cannot be detached from its document, so the document leaves the pack — restorable from the list below.
-      return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/remove', {}, 'Taken out of this pack. Restore it from "Removed from this pack" if that was a slip.', 'POST', phaseOfItem(id)));
+      // The library's own copy cannot be detached from its document, so the document leaves the pack.
+      return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/remove', {}, 'Taken out of this pack. Add it again from the library if that was a slip.', 'POST', phaseOfItem(id)));
     }
     var hasLibrary = !!(i && i.library);
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'File removed — back to the library copy.' : 'File removed.', 'DELETE', phaseOfItem(id)));
@@ -1887,7 +1882,8 @@
       var ext = String(file.name).split('.').pop().toLowerCase();
       if (!MIMES[ext] && ext !== 'doc') { toast(file.name + ' is not a PDF, Word, PNG or JPEG — skipped.', true); continue; }
       var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast(file.name + ' could not be read.', true); continue; }
-      var title = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || file.name;
+      var stem = file.name.replace(/\.[^.]+$/, ''); try { stem = decodeURIComponent(stem); } catch (_) { /* keep as typed */ }
+      var title = stem.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || file.name;
       var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + packPath('/items', phase), { method: 'POST', body: {
         title: title, section: section, sendsDocument: true, employeeReturns: false, requiresVerification: false, required: false,
         fileName: file.name, fileMime: MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type), fileData: b64,
