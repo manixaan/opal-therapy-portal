@@ -293,55 +293,52 @@ describe('an item on Assign Learning offers three actions, and only three', () =
 //  learner's page could carry.
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('the reader gets the whole induction on one page; the editor keeps its steps', () => {
+describe('reader, preview and editor are all one page — no steps, no tabs', () => {
   const player = fn('renderAssignment');
   const editor = fn('renderLaEditor');
 
-  test('both modes render through the shared header and section renderer', () => {
-    for (const shared of ['indHeader(', 'indSectionRead(']) {
-      expect(`player ${shared}:${player.includes(shared)}`).toBe(`player ${shared}:true`);
-    }
+  test('both modes render through the shared header, which carries no rail', () => {
+    expect(player).toContain('indHeader(');
     expect(editor).toContain('indHeader(');
-    // The rail is the editor's alone: a reader has nothing to step between.
-    expect(fn('indHeader')).toContain("(mode === 'edit' ? indRail(mode, step, sections) : '')");
+    expect(fn('indHeader')).not.toContain('indRail');
+    // The step machinery is gone, not hidden: nothing to switch back on.
+    for (const gone of ['indRail', 'indNav', 'indGo', 'indJump', 'indStep', 'indStepCount',
+      'indFirstStep', 'indStepLabel', 'indTocRow', 'indChoiceRead', 'alResumeStep', 'alAutoSection',
+      'indOverviewRead']) {
+      expect(`${gone}:${VISIBLE.includes(gone)}`).toBe(`${gone}:false`);
+    }
+    expect(CSS).not.toContain('.rh2-ind-rail');
+    expect(CSS).not.toContain('.rh2-ind-nav');
   });
 
-  test('the reader sees every section in order, then the closing block — no tabs, no Next', () => {
+  test('the reader sees ONE continuous list of items, then the closing block', () => {
     expect(player).toContain('rh2-ind-flat');
     expect(player).toContain('indSectionRead(s, i + 1, sections.length, true)');
     expect(player).toContain('indFinishRead(a, sections, mode)');
-    expect(player).not.toContain('indNav(');
-    expect(player).not.toContain('indStep(');
-    expect(player).not.toContain('indRail(');
-    // No introduction screen, no welcome-back question, no step cursor.
-    expect(player).not.toContain('indOverviewRead');
-    expect(VISIBLE).not.toContain('indOverviewRead');
-    expect(VISIBLE).not.toContain('indChoiceRead');
-    expect(VISIBLE).not.toContain('alResumeStep');
-    // The flat page drops the "Section n of m" label; the section title is a
-    // heading only when there is more than one section to tell apart.
-    expect(fn('indSectionRead')).toContain("secCount > 1 ? '<h2 class=\"rh2-ind-sectitle\">'");
+    // Sections organise the editor; the learner never sees the split, so the
+    // knowledge check and the sign-off sit inside the induction, not under a
+    // "make it formal" heading of their own.
+    const read = fn('indSectionRead');
+    expect(read).toMatch(/var out = flat\s*\?\s*''/);
+    expect(read).not.toContain("flat\n      ? (secCount > 1");
     expect(CSS).toMatch(/\.rh2-ind-flatsec \+ \.rh2-ind-flatsec\s*\{[^}]*border-top/);
   });
 
-  test('the editor still walks one section per step, bounded, with a jumpable rail', () => {
-    expect(fn('indStepCount')).toContain('+ 2');
-    expect(fn('indFirstStep')).toContain("'edit' ? 0 : 1");
-    expect(editor).toContain('indNav(');
-    expect(editor).toContain('indStep(');
-    expect(editor).toContain('step > sections.length');
-    expect(editor).toContain('if (step === 0)');
-    expect(editor).toContain('indSectionEdit(sections[step - 1]');
-    const nav = fn('indNav');
-    expect(nav).toContain('RH2.indGo(-1)');
-    expect(nav).toContain('RH2.indGo(1)');
-    expect(nav).toContain("(step === 0 ? 'disabled ' : '')");
-    expect(nav).toContain("(step === last ? 'disabled ' : '')");
-    expect(fn('indGo')).toContain('Math.min(n - 1');
-    expect(fn('indGo')).toContain('indFirstStep(mode)');
-    expect(fn('indRail')).toContain('RH2.indJump(');
-    expect(fn('indRail')).toContain('aria-current="step"');
-    expect(CSS).toMatch(/\.rh2-ind-railbtn\.is-on\s*\{[^}]*border-color/);
+  test('the editor is the same page with the fields live: overview, every section, then the close', () => {
+    expect(editor).toContain('rh2-ind-flat');
+    expect(editor).toContain('indOverviewEdit(ed)');
+    expect(editor).toContain('indSectionEdit(s, i, sections.length)');
+    expect(editor).toContain('indFinishEdit(ed)');
+    expect(editor).not.toContain('step');
+    // No contents list pointing at steps that no longer exist.
+    expect(fn('indOverviewEdit')).not.toContain('rh2-ind-toc');
+    expect(fn('indFinishEdit')).not.toContain('rh2-ind-toc');
+    expect(fn('indOverviewEdit')).not.toContain('Edit section 1');
+    expect(fn('indFinishEdit')).toContain('RH2.laSecAdd()');
+    // Adding or moving a section no longer moves a cursor.
+    expect(fn('laSecAdd')).not.toContain('.step');
+    expect(fn('laSecMove')).not.toContain('.step');
+    expect(fn('laEdit')).not.toContain('keepStep');
   });
 
   test('what is still owed scrolls to the item itself, on the same page', () => {
@@ -389,10 +386,13 @@ describe('edit mode is the learner\'s screen with the fields exposed', () => {
     expect(editor).toContain('Learners receive v');
   });
 
-  test('the step the Owner was on survives a save', () => {
-    // laSave re-opens from the server's normalised copy; being thrown back to
-    // the overview on every save is how an editor teaches people not to save.
-    expect(fn('laEdit')).toContain('keepStep');
+  test('a save re-opens the same page, with no step cursor to lose', () => {
+    // laSave re-opens from the server's normalised copy. The editor is one
+    // page now, so there is no step to carry across and nothing to be thrown
+    // back to — the Owner simply stays on the induction.
+    expect(fn('laSave')).toContain('laEdit(ed.id)');
+    expect(fn('laEdit')).not.toContain('keepStep');
+    expect(fn('laEdit')).not.toMatch(/step: /);
   });
 });
 
@@ -884,8 +884,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r20');
-    expect(SHELL).toContain('/resourcehub.js?v=r35');
+    expect(SHELL).toContain('/resourcehub.css?v=r21');
+    expect(SHELL).toContain('/resourcehub.js?v=r36');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -893,7 +893,7 @@ describe('the shell', () => {
       'rh2-dialog-backdrop', 'rh2-dialog', 'rh2-dialog-head', 'rh2-dialog-body',
       'rh2-dialog-foot', 'rh2-avatar', 'rh2-learn-staff-has', 'rh2-learn-assign-bar',
       'rh2-page-intro', 'rh2-learn-cannot', 'rh2-row-btn',
-      'rh2-learn-cat-head', 'rh2-learn-cat-search', 'rh2-ind-rail', 'rh2-ind-nav',
+      'rh2-learn-cat-head', 'rh2-learn-cat-search',
       'rh2-ind-item', 'rh2-ind-toc',
     ]) {
       expect(`${cls}:${CSS.includes('.' + cls)}`).toBe(`${cls}:true`);

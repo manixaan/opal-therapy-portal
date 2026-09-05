@@ -874,7 +874,6 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-learn-adetail-items { list-style: none; margin: 4px 0 0; padding: 0 0 0 6px; display: flex; flex-direction: column; gap: 3px; }
 .rh2-learn-adone { color: var(--ink-soft); }
 
-
 /* ── Workflow tools in the library grid ──────────────────────────────────────
    A tool is a document the portal BUILDS with you rather than one you read.
    It uses the ordinary card so it reads as a native member of the grid; the
@@ -1261,33 +1260,8 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 
 /* The step rail. A row of destinations on a wide screen; it wraps rather than
    scrolls, because a step the reader cannot see is a step they cannot reach. */
-.rh2-ind-rail {
-  list-style: none; margin: 4px 0 0; padding: 0;
-  display: flex; flex-wrap: wrap; gap: 6px;
-}
-.rh2-ind-railbtn {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
-  padding: 5px 12px 5px 6px; cursor: pointer; font-family: inherit; font-size: 12.5px;
-  color: var(--ink-soft); max-width: 100%;
-  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
-}
-.rh2-ind-railbtn:hover { border-color: var(--accent); color: var(--ink); }
-.rh2-ind-railbtn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.rh2-ind-railno {
-  width: 20px; height: 20px; flex: 0 0 auto; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--border-soft); color: var(--ink-soft);
-  font-size: 11px; font-weight: 700;
-}
-.rh2-ind-raillbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
 /* The current step carries a border, a tint AND the filled marker, so it is
    never signalled by colour alone; aria-current carries it for a reader. */
-.rh2-ind-railbtn.is-on {
-  border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 600;
-}
-.rh2-ind-railbtn.is-on .rh2-ind-railno { background: var(--accent); color: #fff; }
-.rh2-ind-railbtn.is-past .rh2-ind-railno { background: var(--accent-soft); color: var(--accent-deep, var(--accent)); }
 
 /* One section = one screen. */
 .rh2-ind-stage { display: flex; flex-direction: column; align-items: stretch; gap: 12px; text-align: left; }
@@ -1352,15 +1326,6 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 
 /* Back / where-am-I / Next. Sticky at the foot: on a long section the way
    forward must not require scrolling back to find it. */
-.rh2-ind-nav {
-  position: sticky; bottom: 0; z-index: 2;
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin-top: 14px; padding: 10px 12px;
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-.rh2-ind-nav .rh2-btn { min-height: 42px; }
-.rh2-ind-count { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); text-align: center; }
 
 /* ── Edit mode: the same screens, with the fields exposed ────────────────── */
 .rh2-ind-title-in { font-size: 21px; font-weight: 700; width: 100%; }
@@ -1401,9 +1366,6 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 @media (max-width: 640px) {
   .rh2-learn-cat-head { grid-template-columns: 1fr; }
   .rh2-learn-cat-actions { justify-content: flex-start; }
-  .rh2-ind-nav { flex-wrap: wrap; }
-  .rh2-ind-nav .rh2-btn { flex: 1 1 40%; }
-  .rh2-ind-count { order: -1; flex: 1 1 100%; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

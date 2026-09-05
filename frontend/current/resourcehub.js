@@ -346,7 +346,7 @@
     // `step` is the cursor into the section flow (0 = overview).
     assignment: {
       id: null, data: null, loading: false, err: '', backView: 'learning',
-      step: 0, quizAnswers: {}, quizResult: null, ackArmed: false,
+      quizAnswers: {}, quizResult: null, ackArmed: false,
       busy: false, preview: false, previewDone: {}, celebrate: false,
     },
     // Owner learning console (Admin → Learning). Sub-tabs: library |
@@ -4680,27 +4680,6 @@
     return 'edit';
   }
 
-  /** The state object that owns the step cursor for the active mode. */
-  function indState(mode) { return (mode || indMode()) === 'edit' ? S.la.editor : S.assignment; }
-
-  function indSections(mode) {
-    if ((mode || indMode()) === 'edit') return (S.la.editor && S.la.editor.sections) || [];
-    var d = S.assignment && S.assignment.data;
-    return (d && d.content && d.content.sections) || [];
-  }
-
-  /** Overview (edit only) + one screen per section + the closing screen. */
-  function indStepCount(sections) { return (sections ? sections.length : 0) + 2; }
-
-  /** The first step a mode can stand on: readers have no overview to stand on. */
-  function indFirstStep(mode) { return (mode || indMode()) === 'edit' ? 0 : 1; }
-
-  function indStep(mode, sections) {
-    var st = indState(mode);
-    if (!st) return indFirstStep(mode);
-    return Math.max(indFirstStep(mode), Math.min(indStepCount(sections) - 1, Number(st.step) || 0));
-  }
-
   /** A step change is a page change: start it at the top, not mid-paragraph. */
   function indScrollTop() {
     try {
@@ -4709,78 +4688,13 @@
     } catch (e) { /* rendering must never depend on scrolling */ }
   }
 
-  function indGo(delta) {
-    var mode = indMode();
-    var st = indState(mode);
-    if (!st) return;
-    var n = indStepCount(indSections(mode));
-    var first = indFirstStep(mode);
-    var from = Math.max(first, Math.min(n - 1, Number(st.step) || 0));
-    var to = Math.max(first, Math.min(n - 1, from + Number(delta || 0)));
-    st.step = to;
-    indScrollTop();
-    render();
-  }
-
-  function indJump(i) {
-    var mode = indMode();
-    var st = indState(mode);
-    if (!st) return;
-    st.step = Math.max(indFirstStep(mode), Math.min(indStepCount(indSections(mode)) - 1, Number(i) || 0));
-    indScrollTop();
-    render();
-  }
-
-  function indStepLabel(step, secCount, mode) {
-    if (step === 0) return 'Overview';
-    if (step > secCount) return mode === 'edit' ? 'Finish' : 'Complete';
-    return 'Section ' + step + ' of ' + secCount;
-  }
-
-  /** The rail: where the reader is, and every step they may jump to. */
-  function indRail(mode, step, sections) {
-    var last = sections.length + 1;
-    var entries = mode === 'edit' ? [{ i: 0, no: '&bull;', label: 'Overview' }] : [];
-    sections.forEach(function (s, i) {
-      entries.push({ i: i + 1, no: String(i + 1), label: String((s && s.title) || ('Section ' + (i + 1))) });
-    });
-    entries.push({ i: last, no: '&#10003;', label: mode === 'edit' ? 'Finish' : 'Complete' });
-    return '<ol class="rh2-ind-rail">' + entries.map(function (e) {
-      return '<li class="rh2-ind-railitem"><button type="button" class="rh2-ind-railbtn' +
-        (e.i === step ? ' is-on' : '') + (e.i < step ? ' is-past' : '') + '"' +
-        (e.i === step ? ' aria-current="step"' : '') +
-        ' onclick="RH2.indJump(' + e.i + ')">' +
-        '<span class="rh2-ind-railno" aria-hidden="true">' + e.no + '</span>' +
-        '<span class="rh2-ind-raillbl">' + esc(e.label) + '</span></button></li>';
-    }).join('') + '</ol>';
-  }
-
-  /** Back / where-am-I / Next. The same control in all three modes. */
-  function indNav(mode, step, secCount) {
-    var last = secCount + 1;
-    // A reader's Back always goes somewhere: from the first section it leaves
-    // the induction the way it was entered. Only the editor's settings step
-    // has nothing before it.
-    var backOut = mode !== 'edit' && step <= indFirstStep(mode);
-    var backClick = backOut ? 'RH2.alBack()' : 'RH2.indGo(-1)';
-    return '<nav class="rh2-ind-nav" aria-label="Induction navigation">' +
-      '<button type="button" class="rh2-btn rh2-ind-back" ' +
-        (mode === 'edit' ? (step === 0 ? 'disabled ' : '') : '') +
-        'onclick="' + backClick + '">&larr; Back</button>' +
-      '<span class="rh2-ind-count" role="status" aria-live="polite">' +
-        esc(indStepLabel(step, secCount, mode)) + '</span>' +
-      '<button type="button" class="rh2-btn rh2-btn-primary rh2-ind-next" ' + (step === last ? 'disabled ' : '') +
-        'onclick="RH2.indGo(1)">Next &rarr;</button>' +
-    '</nav>';
-  }
-
   /**
    * The head every mode shares: what this induction is, where the reader is in
    * it, and — learner only — how much of it is done. In edit mode the title IS
    * the input: a heading you type straight into is the whole point of opening
    * the learner's own screen to edit rather than a form beside it.
    */
-  function indHeader(mode, meta, sections, step) {
+  function indHeader(mode, meta) {
     var title = mode === 'edit'
       ? '<input class="rh2-input rh2-ind-title-in" id="la-ed-title" value="' + esc(meta.title || '') + '"' +
         ' placeholder="Learning title" aria-label="Learning title" oninput="RH2.laMeta(\'title\',this.value)">'
@@ -4792,18 +4706,7 @@
           '<div class="rh2-row-sub">' + meta.progress.done + ' of ' + meta.progress.total +
             ' required modules &middot; ' + meta.progress.percent + '%</div>'
         : '') +
-      // The rail is the editor's: a reader gets the whole induction on one
-      // page, so there is nothing to step between.
-      (mode === 'edit' ? indRail(mode, step, sections) : '') +
     '</header>';
-  }
-
-  /** A section row in a contents list — used by every mode's overview. */
-  function indTocRow(title, sub, stepIndex, no) {
-    return '<li><button type="button" class="rh2-ind-tocbtn" onclick="RH2.indJump(' + stepIndex + ')">' +
-      '<span class="rh2-ind-item-no">' + no + '</span>' +
-      '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(title) + '</span>' +
-      '<span class="rh2-row-sub">' + esc(sub) + '</span></span></button></li>';
   }
 
   // ── Employee: assigned learning, and the Owner's read-only twin ────────────
@@ -4953,12 +4856,7 @@
       if (st.data.completed_items) st.data.completed_items[key] = new Date().toISOString();
       if (d.assignment) st.data.assignment = d.assignment;
       st.ackArmed = false;
-      if (d.assignment_completed && !(opts && opts.stay)) {
-        st.celebrate = true;
-        // Finishing the last required step earns the closing screen rather
-        // than leaving the reader on a section that has nothing left in it.
-        st.step = indStepCount(indSections('learner')) - 1;
-      }
+      if (d.assignment_completed && !(opts && opts.stay)) st.celebrate = true;
       loadMyLearning();
     }
     render();
@@ -5114,7 +5012,7 @@
       // its own preview mode (nothing saved — not even the Owner's place),
       // and the tile ticks only when it is finished, the learner's contract.
       if (mod) {
-        var pLaunch = { preview: true, itemKey: key, moduleKey: mod.key, wfId: st.previewWfId, step: st.step };
+        var pLaunch = { preview: true, itemKey: key, moduleKey: mod.key, wfId: st.previewWfId };
         Promise.resolve(global.OpalInduction.start(mod.key, { preview: true })).then(function () {
           if (doc.getElementById('ind-layer')) pendingWalk = pLaunch;
         });
@@ -5133,7 +5031,7 @@
       }
       return openDetail(item.resource_id, 'assignment');
     }
-    var launch = { itemKey: key, moduleKey: mod.key, assignmentId: st.id, step: st.step };
+    var launch = { itemKey: key, moduleKey: mod.key, assignmentId: st.id };
     Promise.resolve(global.OpalInduction.start(mod.key)).then(function () {
       if (doc.getElementById('ind-layer')) pendingWalk = launch;
     });
@@ -5151,7 +5049,6 @@
     } else if (!st.id || st.preview || String(st.id) !== String(p.assignmentId)) {
       return;
     }
-    st.step = p.step;
     try { if (typeof global.switchTab === 'function') global.switchTab('resources'); } catch (e) { /* the player renders regardless */ }
     try { if (typeof global.rhSwitch === 'function') global.rhSwitch('shared'); } catch (e) { /* as above */ }
     if (p.preview) {
@@ -5231,14 +5128,15 @@
     return out + '</div>';
   }
 
-  /** One section. In the editor it is one screen; a reader sees every
-   *  section on the one page (`flat`), where the section title is a heading
-   *  only when there is more than one section to tell apart. */
+  /** One section's items. A reader (`flat`) sees the induction as ONE
+   *  continuous list: sections are how the Owner organises the editor, not
+   *  headings the learner has to step through — the knowledge check and the
+   *  sign-off simply come where they come, inside the induction. */
   function indSectionRead(s, step, secCount, flat) {
     if (!s) return '<div class="rh2-empty">This section is empty.</div>';
     var items = s.items || [];
     var out = flat
-      ? (secCount > 1 ? '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>' : '')
+      ? ''
       : '<div class="rh2-ind-steplbl">Section ' + step + ' of ' + secCount + '</div>' +
         '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>';
     if (!items.length) return out + '<p class="rh2-quiet">There is nothing in this section yet.</p>';
@@ -5351,7 +5249,7 @@
         done: pick(a, 'required_done') || 0,
         total: pick(a, 'required_total') || 0,
       },
-    }, sections, 0);
+    });
 
     if (!st.preview && pick(a, 'owner_note')) {
       out += '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>';
@@ -6080,7 +5978,6 @@
    * time you save is how an editor teaches people not to save.
    */
   async function laEdit(id) {
-    var keepStep = (S.la.editor && S.la.editor.id === id) ? (Number(S.la.editor.step) || 0) : 0;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
     if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
     // The walkthrough shelf, so a task step in an EXISTING induction can name
@@ -6093,7 +5990,6 @@
     var w = d.workflow;
     S.la.editor = {
       id: w.id,
-      step: keepStep,
       // Click-to-edit state: `editing` names the ONE region currently open as
       // a field; `settingsOpen` names the one step/section settings strip.
       editing: null,
@@ -6379,9 +6275,8 @@
     var ed = S.la.editor;
     ed.sections.push({ key: '', title: 'New section', items: [] });
     ed._dirty = true;
-    // Land ON the new section's screen with its title open: adding a section
-    // is the start of writing it, not a row appended to a list somewhere.
-    ed.step = ed.sections.length;
+    // Open the new section's title straight away: adding a section is the
+    // start of writing it.
     laEditStart('s-' + (ed.sections.length - 1));
   }
   function laSecRemove(si) {
@@ -6402,10 +6297,8 @@
     if (to < 0 || to >= ed.sections.length) return;
     var s = ed.sections.splice(si, 1)[0];
     ed.sections.splice(to, 0, s);
-    // The screen and the open settings strip both follow the section they
-    // belong to — a move must not leave the Owner looking at the neighbour.
-    if (Number(ed.step) === si + 1) ed.step = to + 1;
-    else if (Number(ed.step) === to + 1) ed.step = si + 1;
+    // The open settings strip follows the section it belongs to — a move must
+    // not leave the Owner looking at the neighbour's.
     if (ed.settingsOpen === 's-' + si) ed.settingsOpen = 's-' + to;
     else if (ed.settingsOpen === 's-' + to) ed.settingsOpen = 's-' + si;
     ed.editing = null;
@@ -6843,8 +6736,7 @@
   function indOverviewEdit(ed) {
     var cats = S.la.categories ||
       ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
-    return '<div class="rh2-ind-steplbl">Overview</div>' +
-      '<h2 class="rh2-ind-sectitle">What this covers</h2>' +
+    return '<h2 class="rh2-ind-sectitle">What this covers</h2>' +
       laEditable('desc',
         ed.description
           ? '<div class="rh2-learn-prose">' + mdRender(ed.description) + '</div>'
@@ -6861,15 +6753,11 @@
           }).join('') +
         '</select>' +
       '</div>' +
-      '<ol class="rh2-ind-toc">' + ed.sections.map(function (s, i) {
-        var n = (s.items || []).length;
-        return indTocRow(s.title || ('Section ' + (i + 1)), n + ' step' + (n === 1 ? '' : 's'), i + 1, i + 1);
-      }).join('') + '</ol>' +
-      '<div class="rh2-learn-actions">' +
-        (ed.sections.length
-          ? '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.indGo(1)">Edit section 1 &rarr;</button>'
-          : '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSecAdd()">+ Add the first section</button>') +
-      '</div>';
+      // The sections themselves follow on this page; no contents list here.
+      (ed.sections.length ? '' :
+        '<div class="rh2-learn-actions">' +
+          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSecAdd()">+ Add the first section</button>' +
+        '</div>');
   }
 
   /** One section, one screen — the learner's screen; the title opens on a
@@ -6879,7 +6767,7 @@
     var items = s.items || [];
     var sk = 's-' + si;
     var setOpen = S.la.editor.settingsOpen === sk;
-    return '<div class="rh2-ind-steplbl">Section ' + (si + 1) + ' of ' + secCount + '</div>' +
+    return '<div class="rh2-ind-steplbl">Section ' + (si + 1) + '</div>' +
       '<div class="rh2-ind-sechead">' +
         laEditable(sk,
           '<h2 class="rh2-ind-sectitle">' +
@@ -6922,13 +6810,7 @@
   /** The closing screen in edit mode: the shape of the whole thing, plus the
    *  publish history the Owner needs to read draft state honestly. */
   function indFinishEdit(ed) {
-    var out = '<div class="rh2-ind-steplbl">Finish</div>' +
-      '<h2 class="rh2-ind-sectitle">Sections</h2>' +
-      '<ol class="rh2-ind-toc">' + ed.sections.map(function (s, i) {
-        var n = (s.items || []).length;
-        return indTocRow(s.title || ('Section ' + (i + 1)), n + ' step' + (n === 1 ? '' : 's'), i + 1, i + 1);
-      }).join('') + '</ol>' +
-      '<div class="rh2-learn-actions">' +
+    var out = '<div class="rh2-learn-actions">' +
         '<button type="button" class="rh2-btn" onclick="RH2.laSecAdd()">+ Add section</button>' +
         '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') +
           'onclick="RH2.laSave()">' + (S.la.editorSaving ? 'Saving…' : 'Save changes') + '</button>' +
@@ -6955,7 +6837,6 @@
   function renderLaEditor() {
     var ed = S.la.editor;
     var sections = ed.sections || [];
-    var step = indStep('edit', sections);
     // What learners receive right now, stated plainly next to Save/Publish so
     // the Owner can always tell draft state from published state.
     var pubLine = ed._currentVersion
@@ -6989,15 +6870,18 @@
         title: ed.title,
         sub: esc(laCatLabel(ed.category)) + ' &middot; ' + sections.length + ' section' +
           (sections.length === 1 ? '' : 's'),
-      }, sections, step) +
-      '<section class="rh2-card rh2-ind-stage">';
-
-    if (step === 0) out += indOverviewEdit(ed);
-    else if (step > sections.length) out += indFinishEdit(ed);
-    else out += indSectionEdit(sections[step - 1], step - 1, sections.length);
-
-    out += '</section>';
-    return out + indNav('edit', step, sections.length) + '</div>';
+      }, sections) +
+      // The whole induction on one page, exactly as the learner gets it: the
+      // description and category, every section with its fields live, then
+      // the closing block (add a section, save, published versions).
+      '<section class="rh2-card rh2-ind-stage rh2-ind-flat">' +
+        '<div class="rh2-ind-flatsec">' + indOverviewEdit(ed) + '</div>' +
+        sections.map(function (s, i) {
+          return '<div class="rh2-ind-flatsec">' + indSectionEdit(s, i, sections.length) + '</div>';
+        }).join('') +
+        '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishEdit(ed) + '</div>' +
+      '</section>';
+    return out + '</div>';
   }
 
   // ── Owner: assign panel ─────────────────────────────────────────────────────
@@ -7801,8 +7685,6 @@
 
     // ── Owner-controlled learning ────────────────────────────────────────────
     // The shared induction experience — learner, preview and edit modes
-    indGo: indGo,
-    indJump: indJump,
     // Employee: assigned learning + player
     openAssignment: openAssignment,
     reloadMyLearning: function () { S.myl.rows = null; loadMyLearning(); },
