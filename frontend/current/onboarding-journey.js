@@ -1324,42 +1324,57 @@
 
   // ── Stage 3 panel ─────────────────────────────────────────────────────────
 
-  var TASK_STATE = { pending: 'Preparing', in_progress: 'In progress', done: 'Ready', skipped: 'Skipped', failed: 'Failed' };
 
   function inductionPanel(d) {
     var st = d.journey.stages[2];
     if (st.state === 'pending') return '';
     var c = d.can;
     var staff = [['', 'Unassigned']].concat(((S.options && S.options.staff) || []).map(function (u) { return [u.id, u.name]; }));
-    var body = d.tasks.length ? '<ul class="oj-tasks">' + d.tasks.map(function (t) {
-      var acts = [];
-      if (t.automation === 'activate_portal_access') {
-        if (t.status !== 'done' && c.activate) acts.push(btn(t.status === 'failed' ? 'Try again' : 'Run — activate portal access', 'OnboardingJourney.runTask(\'' + jsq(t.code) + '\')', 'oj-btn-primary oj-btn-small'));
-      } else if (c.review) {
-        if (t.status === 'pending' || t.status === 'in_progress' || t.status === 'failed') {
-          acts.push(btn('Done', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'complete\')', 'oj-btn-primary oj-btn-small'));
-          acts.push(btn('Skip', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'skip\')', 'oj-btn-small oj-btn-quiet'));
-        } else {
-          acts.push(btn('Reopen', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'reopen\')', 'oj-btn-small oj-btn-quiet'));
+    var ready = d.tasks.filter(function (t) { return t.status === 'done' || t.status === 'skipped'; }).length;
+    var body = '';
+    if (d.tasks.length) {
+      body += '<div class="oj-tasks-head"><span class="oj-tasks-count">' + ready + ' of ' + d.tasks.length + ' ready</span>'
+        + '<span class="oj-meter-bar oj-tasks-bar"><span style="width:' + Math.round(ready / d.tasks.length * 100) + '%"></span></span></div>';
+      body += '<ul class="oj-tasks">' + d.tasks.map(function (t) {
+        var open = t.status === 'pending' || t.status === 'in_progress' || t.status === 'failed';
+        var tone = t.status === 'done' ? 'done' : t.status === 'skipped' ? 'skipped' : t.status === 'failed' || t.overdue ? 'danger' : t.automation ? 'portal' : 'open';
+        var icon = t.status === 'done' ? '✓' : t.status === 'skipped' ? '–' : t.status === 'failed' ? '!' : t.automation ? '▶' : '';
+        var acts = [];
+        if (t.automation === 'activate_portal_access') {
+          if (open && c.activate) acts.push(btn(t.status === 'failed' ? 'Try again' : 'Activate', 'OnboardingJourney.runTask(\'' + jsq(t.code) + '\')', 'oj-btn-primary oj-btn-small'));
+        } else if (c.review) {
+          if (open) {
+            acts.push(btn('Done', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'complete\')', 'oj-btn-primary oj-btn-small'));
+            acts.push(btn('Skip', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'skip\')', 'oj-btn-small oj-btn-quiet'));
+          } else {
+            acts.push(btn('Reopen', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'reopen\')', 'oj-btn-small oj-btn-quiet'));
+          }
         }
-      }
-      var assign = c.review && !t.automation
-        ? '<label class="oj-inline">Assign <select onchange="OnboardingJourney.assignTask(\'' + jsq(t.code) + '\', this.value)">' + staff.map(function (s) {
-          return '<option value="' + esc(s[0]) + '"' + (String(s[0]) === String(t.assigneeUserId || '') ? ' selected' : '') + '>' + esc(s[1]) + '</option>';
-        }).join('') + '</select></label>'
-        + '<label class="oj-inline">Due <input type="date" value="' + esc(isoDate(t.dueAt)) + '" onchange="OnboardingJourney.assignTask(\'' + jsq(t.code) + '\', null, this.value)"></label>'
-        : (t.assigneeName ? '<span class="oj-quiet">' + esc(t.assigneeName) + '</span>' : '');
-      return '<li class="oj-task is-' + esc(t.status) + (t.overdue ? ' is-overdue' : '') + '" id="oj-task-' + esc(t.code) + '">'
-        + '<div class="oj-task-main"><strong>' + esc(t.title) + '</strong>'
-        + '<span class="oj-chip is-' + esc(t.status) + '">' + esc(TASK_STATE[t.status] || titleCase(t.status)) + (t.automation ? ' · portal' : '') + '</span>'
-        + '<p class="oj-quiet">' + esc(t.description || '') + '</p>'
-        + (t.note ? '<p class="oj-quiet">Note: ' + esc(t.note) + '</p>' : '')
-        + (t.dueAt ? '<span class="oj-due' + (t.overdue ? ' is-overdue' : '') + '">' + (t.overdue ? 'overdue · ' : 'due ') + esc(fmtDate(t.dueAt)) + '</span>' : '')
-        + (t.completedAt ? '<span class="oj-quiet"> · done ' + esc(fmtDate(t.completedAt)) + (t.completedByName ? ' by ' + esc(t.completedByName) : '') + '</span>' : '')
-        + '</div>'
-        + '<div class="oj-task-side">' + assign + '<div class="oj-actions">' + acts.join('') + '</div></div>'
-        + '</li>';
-    }).join('') + '</ul>' : '<p class="oj-quiet">The checklist is being generated.</p>';
+        // One line of facts: who, when. Editable in place while the task is open.
+        var meta = [];
+        if (t.automation) meta.push('<span class="oj-task-portal">Portal does this</span>');
+        if (open && c.review && !t.automation) {
+          meta.push('<label class="oj-task-ctl" title="Assign to"><select onchange="OnboardingJourney.assignTask(\'' + jsq(t.code) + '\', this.value)">' + staff.map(function (s) {
+            return '<option value="' + esc(s[0]) + '"' + (String(s[0]) === String(t.assigneeUserId || '') ? ' selected' : '') + '>' + esc(s[1]) + '</option>';
+          }).join('') + '</select></label>');
+          meta.push('<label class="oj-task-ctl' + (t.overdue ? ' is-overdue' : '') + '" title="Due date">' + (t.overdue ? 'Overdue ' : 'Due ') + '<input type="date" value="' + esc(isoDate(t.dueAt)) + '" onchange="OnboardingJourney.assignTask(\'' + jsq(t.code) + '\', null, this.value)"></label>');
+        } else {
+          if (t.assigneeName && open) meta.push(esc(t.assigneeName));
+          if (open && t.dueAt) meta.push('<span' + (t.overdue ? ' class="oj-warn"' : '') + '>' + (t.overdue ? 'overdue ' : 'due ') + esc(fmtDate(t.dueAt)) + '</span>');
+          if (t.completedAt) meta.push((t.status === 'skipped' ? 'skipped ' : 'done ') + esc(fmtDate(t.completedAt)) + (t.completedByName ? ' by ' + esc(t.completedByName) : ''));
+        }
+        if (t.note) meta.push('<span class="oj-task-note" title="' + esc(t.note) + '">' + esc(t.note) + '</span>');
+        return '<li class="oj-task is-' + tone + '" id="oj-task-' + esc(t.code) + '">'
+          + '<span class="oj-task-dot" aria-hidden="true">' + icon + '</span>'
+          + '<div class="oj-task-main"><span class="oj-task-title" title="' + esc(t.description || '') + '">' + esc(t.title) + '</span>'
+          + (meta.length ? '<span class="oj-task-meta">' + meta.join('<span class="oj-task-sep">·</span>') + '</span>' : '')
+          + '</div>'
+          + '<div class="oj-task-acts">' + acts.join('') + '</div>'
+          + '</li>';
+      }).join('') + '</ul>';
+    } else {
+      body = '<p class="oj-quiet">The checklist is being generated.</p>';
+    }
     return stagePanel('⚙', 'Internal Setup', st, body);
   }
 
