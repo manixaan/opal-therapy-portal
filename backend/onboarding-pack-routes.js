@@ -23,6 +23,8 @@
  */
 
 const express = require('express');
+/** The sections a pack is filed under; anything else falls to the phase's default. */
+const PACK_SECTIONS = new Set(['welcome_employment', 'personal_details', 'payroll_tax_super', 'identity', 'professional', 'screening', 'ndis', 'policies', 'training', 'systems', 'agreements', 'accounts', 'other']);
 const { contentDisposition } = require('./content-disposition');
 const router = express.Router();
 
@@ -346,12 +348,14 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
       title = title || doc.title;
     }
     if (!title) return res.status(400).json({ error: 'A document name is required' });
+    // The section the document files under — a file dropped on a section lands there.
+    const section = PACK_SECTIONS.has(b.section) ? b.section : null;
     const version = doc ? await odb.getCurrentDocumentVersion(doc.id) : null;
     const row = await pdb.addItem({
       organisationId: orgOf(req), assignmentId: assignment.id, title, description: b.description,
       sends: b.sendsDocument !== false, returns: b.employeeReturns === true, verifies: b.requiresVerification === true,
       required: b.required !== false, documentId: doc ? doc.id : null, documentVersionId: version ? version.id : null,
-      officialSourceUrl: doc ? doc.official_source_url : null, phase,
+      officialSourceUrl: doc ? doc.official_source_url : null, phase, section,
     });
     let stored = row;
     if (b.fileData) {

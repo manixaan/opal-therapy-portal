@@ -1222,7 +1222,9 @@
     if (editable) out += '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>';
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
-      out += '<tr class="oj-pack-section"><td colspan="7">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
+        + (editable ? '<label class="oj-btn oj-btn-small oj-btn-quiet oj-file oj-section-attach">+ Attach files<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAttachToSection(\'' + jsq(phase) + '\', \'' + jsq(k) + '\', this.files); this.value = \'\';"></label>' : '')
+        + '</td></tr>';
       groups[k].forEach(function (i) { out += packRow(i, editable, sent); });
     });
     out += '</tbody></table></div>';
@@ -1281,7 +1283,8 @@
     if (i.itemKind && i.itemKind !== 'document') {
       fileCell = '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the internal set-up task' : i.itemKind === 'training' ? 'Follows the induction walkthrough task' : 'Tracked') + '</span>';
     } else if (f.previewUrl) {
-      fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>';
+      fileCell = '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>'
+        + (editable && f.source === 'own' ? '<button type="button" class="oj-file-x" title="Remove this file now" aria-label="Remove this file" onclick="OnboardingJourney.packRemoveFileNow(\'' + jsq(i.id) + '\')">×</button>' : '');
     } else if (!i.sendsDocument) {
       fileCell = '<span class="oj-quiet">Employee supplies their own</span>';
     } else if (f.source === 'link' && i.officialSourceUrl) {
@@ -1294,7 +1297,7 @@
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
       acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
-      if (f.source === 'own') acts.push(btn(i.library ? 'Use library copy' : 'Remove file', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
@@ -1681,7 +1684,8 @@
       if (spec[0] === 'pack') packUploadFile(spec[1], files[0]);
       else if (spec[0] === 'defaults') defaultsUpload(spec[1], spec[2], files[0]);
       else if (spec[0] === 'returns') uploadReturns({ files: files, value: '' });
-      if (files.length > 1 && spec[0] !== 'returns') toast('One file per document — the first one was used.', true);
+      else if (spec[0] === 'section') packAttachToSection(spec[1], spec[2], files);
+      if (files.length > 1 && spec[0] !== 'returns' && spec[0] !== 'section') toast('One file per document — the first one was used. Drop several on a section heading to add them all.', true);
     });
   }
 
@@ -1822,6 +1826,36 @@
     if (!hasLibrary && !await portalConfirm('Remove the attached file? The document stays in the pack with no file until you attach another.', { danger: true })) return;
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'Back to the library copy.' : 'File removed — attach the right one when ready.', 'DELETE', phaseOfItem(id)));
   }
+  /** × on a file: off immediately, no dialog — the row stays, so the right file can go on. */
+  function packRemoveFileNow(id) {
+    var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
+    var i = all.filter(function (x) { return x.id === id; })[0];
+    var hasLibrary = !!(i && i.library);
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'File removed — back to the library copy.' : 'File removed.', 'DELETE', phaseOfItem(id)));
+  }
+
+  /** Several files onto a section: each becomes its own document there, named after the file. */
+  async function packAttachToSection(phase, section, files) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    var ok = 0;
+    for (var n = 0; n < list.length; n++) {
+      var file = list[n];
+      if (file.size > 10 * 1024 * 1024) { toast(file.name + ' is larger than 10 MB — skipped.', true); continue; }
+      var ext = String(file.name).split('.').pop().toLowerCase();
+      if (!MIMES[ext] && ext !== 'doc') { toast(file.name + ' is not a PDF, Word, PNG or JPEG — skipped.', true); continue; }
+      var b64; try { b64 = await readFileAsBase64(file); } catch (_) { toast(file.name + ' could not be read.', true); continue; }
+      var title = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || file.name;
+      var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + packPath('/items', phase), { method: 'POST', body: {
+        title: title, section: section, sendsDocument: true, employeeReturns: false, requiresVerification: false, required: false,
+        fileName: file.name, fileMime: MIMES[ext] || (ext === 'doc' ? 'application/msword' : file.type), fileData: b64,
+      } });
+      if (res.ok) ok += 1; else toast(file.name + ': ' + res.error, true);
+    }
+    if (ok) toast(ok === 1 ? 'Added to the pack.' : ok + ' documents added to the pack.');
+    return refreshRecordAfter(Promise.resolve({ ok: true }));
+  }
+
   function packPreview(id) {
     var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
     var i = all.filter(function (x) { return x.id === id; })[0];
@@ -2052,6 +2086,7 @@
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
+    packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,

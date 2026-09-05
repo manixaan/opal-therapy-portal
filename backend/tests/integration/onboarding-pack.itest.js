@@ -198,6 +198,12 @@ describe('editing one person\'s pack', () => {
     const uploaded = await agent.post(`${jane.base}/pack/items`).send({ title: 'Parking map', employeeReturns: false, fileName: 'parking.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF map').toString('base64') });
     expect(uploaded.status).toBe(201);
     expect(uploaded.body.pack.items.find((i) => i.title === 'Parking map').file.source).toBe('own');
+    // A file dropped on a section files under that section; an unknown section falls to the default.
+    const filed = await agent.post(`${jane.base}/pack/items`).send({ title: 'Passport scan', section: 'identity', employeeReturns: false, required: false, fileName: 'passport.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF passport').toString('base64') });
+    expect(filed.status).toBe(201);
+    expect(filed.body.pack.items.find((i) => i.title === 'Passport scan')).toMatchObject({ section: 'identity', origin: 'added' });
+    const misfiled = await agent.post(`${jane.base}/pack/items`).send({ title: 'Odd one', section: 'nonsense', employeeReturns: false });
+    expect(misfiled.body.pack.items.find((i) => i.title === 'Odd one').section).toBe('policies');
 
     // Reverting the replacement goes back to the library copy.
     const reverted = await agent.delete(`${jane.base}/pack/items/${contract.id}/file`);

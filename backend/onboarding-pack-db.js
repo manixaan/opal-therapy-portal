@@ -86,7 +86,7 @@ async function insertDefaults(organisationId, assignmentId, items, q = pool) {
   return inserted;
 }
 
-async function addItem({ organisationId, assignmentId, title, description, sends, returns, verifies, required, documentId, documentVersionId, officialSourceUrl, phase = 'documentation' }, q = pool) {
+async function addItem({ organisationId, assignmentId, title, description, sends, returns, verifies, required, documentId, documentVersionId, officialSourceUrl, phase = 'documentation', section = null }, q = pool) {
   const code = `ADDED_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   const { rows } = await q.query(
     `INSERT INTO onboarding_pack_items
@@ -99,7 +99,7 @@ async function addItem({ organisationId, assignmentId, title, description, sends
     [organisationId, assignmentId, code, str(title, 250), str(description, 1000),
       sends === true, returns === true, verifies === true, required !== false,
       isUuid(documentId) ? documentId : null, isUuid(documentVersionId) ? documentVersionId : null, str(officialSourceUrl, 2000),
-      phase === 'induction' ? 'agreements' : 'policies', phase]
+      section || (phase === 'induction' ? 'agreements' : 'policies'), phase]
   );
   return rows[0];
 }
