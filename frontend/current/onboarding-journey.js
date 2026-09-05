@@ -1222,9 +1222,9 @@
     if (editable) out += '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>';
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
-      out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
+      out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
         + (editable ? '<label class="oj-btn oj-btn-small oj-btn-quiet oj-file oj-section-attach">+ Attach files<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAttachToSection(\'' + jsq(phase) + '\', \'' + jsq(k) + '\', this.files); this.value = \'\';"></label>' : '')
-        + '</td></tr>';
+        + '</div></td></tr>';
       groups[k].forEach(function (i) { out += packRow(i, editable, sent); });
     });
     out += '</tbody></table></div>';
