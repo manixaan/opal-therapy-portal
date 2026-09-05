@@ -5802,11 +5802,12 @@
     var c = S.la.create;
     if (!c || c.busy) return;
     if (kind === 'walkthrough') {
-      // An interactive walkthrough is built in the workshop, which names it
-      // and opens its editor; it then sits on the shelf for any induction.
-      S.la.create = null;
+      // Named here, in the portal's own dialog; the workshop then creates it
+      // and opens its editor. It sits on the shelf for any induction to use.
+      c.kind = 'walkthrough';
       render();
-      if (global.OpalWorkshop && global.OpalWorkshop.createNew) global.OpalWorkshop.createNew();
+      var wIn = doc.getElementById('la-new-title');
+      if (wIn) { try { wIn.focus(); } catch (e) { /* not yet painted */ } }
       return;
     }
     if (kind === 'import') {
@@ -5880,6 +5881,14 @@
       if (input) { try { input.focus(); } catch (e) { /* gone */ } }
       return;
     }
+    if (c.kind === 'walkthrough') {
+      // The workshop owns walkthroughs: it creates this one and opens its
+      // editor. The dialog has done its job once the name is in.
+      S.la.create = null;
+      render();
+      if (global.OpalWorkshop && global.OpalWorkshop.createNew) global.OpalWorkshop.createNew(title);
+      return;
+    }
     c.busy = true;
     c.err = '';
     render();
@@ -5907,9 +5916,10 @@
         '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateClose()"' +
         ' aria-label="Close without creating">Close</button>' +
       '</div>' +
-      (c.kind !== 'document'
+      (c.kind === 'walkthrough' ? laCreateWalkthroughForm(c) :
+       c.kind === 'document' ? laCreateDocumentForm(c, cats) :
         // The first screen: what are you making? Two tiles, one quiet line.
-        ? '<div class="rh2-dialog-body">' +
+        '<div class="rh2-dialog-body">' +
             '<p class="rh2-quiet rh2-learn-new-hint">What kind of induction is it?</p>' +
             '<div class="rh2-learn-kind">' +
               '<button type="button" class="rh2-learn-kind-tile" onclick="RH2.laCreateKind(\'document\')">' +
@@ -5927,8 +5937,29 @@
           '</div>' +
           '<div class="rh2-dialog-foot">' +
             '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
-          '</div></section></div>'
-        : laCreateDocumentForm(c, cats));
+          '</div></section></div>');
+  }
+
+  /** The second screen of an interactive walkthrough: its name. The
+   *  workshop creates it and opens its editor from here. */
+  function laCreateWalkthroughForm(c) {
+    return '<div class="rh2-dialog-body">' +
+        '<p class="rh2-quiet rh2-learn-new-hint">Name it now — the walkthrough editor opens next, where you ' +
+        'add the pop-ups and spotlights on the real screens. Staff see nothing until you publish it.</p>' +
+        '<div class="rh2-form-grid">' +
+          '<label class="rh2-lbl" for="la-new-title">Name</label>' +
+          '<input class="rh2-input" id="la-new-title" value="' + esc(c.title) + '"' +
+            ' placeholder="e.g. Booking a client appointment" autocomplete="off"' +
+            ' oninput="RH2.laCreateField(\'title\',this.value)"' +
+            ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();RH2.laCreateSubmit();}">' +
+        '</div>' +
+        (c.err ? '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(c.err) + '</div>' : '') +
+      '</div>' +
+      '<div class="rh2-dialog-foot">' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary"' + (c.busy ? ' disabled' : '') +
+          ' onclick="RH2.laCreateSubmit()">Create and edit</button>' +
+      '</div></section></div>';
   }
 
   /** The second screen of a document induction: its name and category. */

@@ -951,7 +951,7 @@ describe('the shell', () => {
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r22');
-    expect(SHELL).toContain('/resourcehub.js?v=r39');
+    expect(SHELL).toContain('/resourcehub.js?v=r40');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -1052,9 +1052,15 @@ describe('the new learning item dialog', () => {
     expect(dlg).toContain("RH2.laCreateKind(\\'document\\')");
     expect(dlg).toContain("RH2.laCreateKind(\\'walkthrough\\')");
     expect(dlg).toContain("RH2.laCreateKind(\\'import\\')");
-    expect(dlg).toContain("c.kind !== 'document'");
+    expect(dlg).toContain("c.kind === 'walkthrough' ? laCreateWalkthroughForm(c)");
     const kind = fn('laCreateKind');
-    expect(kind).toContain('OpalWorkshop.createNew()');
+    expect(kind).toContain("c.kind = 'walkthrough'");
+    expect(fn('laCreateSubmit')).toContain('OpalWorkshop.createNew(title)');
+    expect(VISIBLE).toContain('function laCreateWalkthroughForm(');
+    // The workshop never falls back to the browser's own prompt() dialog.
+    const WORKSHOP = fs.readFileSync(path.join(FRONTEND, 'workshop.js'), 'utf8');
+    expect(WORKSHOP).not.toMatch(/\bprompt\(/);
+    expect(WORKSHOP).toContain('wk-new-title');
     expect(kind).toContain('laImport()');
     expect(kind).toContain("c.kind = 'document'");
     expect(fn('laCreate')).toContain('kind: null');

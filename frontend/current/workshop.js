@@ -153,6 +153,16 @@
          '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.closeShelf()">Close</button>' +
          '</div></div>';
 
+    if (W.naming) {
+      h += '<form class="wk-field wk-new" onsubmit="event.preventDefault();OpalWorkshop.createNew(this.elements.title.value)">' +
+           '<label for="wk-new-title">What is this walkthrough called?</label>' +
+           '<input type="text" id="wk-new-title" name="title" autocomplete="off" placeholder="e.g. Booking a client appointment">' +
+           '<div class="wk-new-row">' +
+           '<button type="submit" class="wk-btn wk-btn-primary">Create</button>' +
+           '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.cancelNew()">Cancel</button>' +
+           '</div></form>';
+    }
+
     if (!d.seeded) {
       h += '<div class="wk-empty">' +
            '<p><strong>The built-in walkthroughs have not been imported yet.</strong></p>' +
@@ -214,9 +224,21 @@
     open();
   }
 
-  async function createNew() {
-    var title = global.prompt('What is this walkthrough called?', '');
-    if (!title || !title.trim()) return;
+  /**
+   * Create a walkthrough. With a title (the New induction dialog collects
+   * one) it is created straight away; without one the shelf shows its own
+   * name field — never the browser's own dialog, which ignores the theme.
+   */
+  async function createNew(title) {
+    title = String(title || '').trim();
+    if (!title) {
+      W.naming = true;
+      if (!doc.getElementById('wk-shelf')) { await open(); } else { renderShelf(); }
+      var el = doc.getElementById('wk-new-title');
+      if (el) { try { el.focus(); } catch (e) { /* not painted yet */ } }
+      return;
+    }
+    W.naming = false;
     var res = await api('/api/walkthroughs', {
       method: 'POST',
       body: {
@@ -233,6 +255,8 @@
     closeShelf();
     edit(res.data.walkthrough.id);
   }
+
+  function cancelNew() { W.naming = false; renderShelf(); }
 
   async function duplicate(id) {
     var res = await api('/api/walkthroughs/' + encodeURIComponent(id) + '/duplicate', { method: 'POST' });
@@ -1100,6 +1124,7 @@
     closeShelf: closeShelf,
     seed: seed,
     createNew: createNew,
+    cancelNew: cancelNew,
     edit: edit,
     closeDock: closeDock,
     duplicate: duplicate,

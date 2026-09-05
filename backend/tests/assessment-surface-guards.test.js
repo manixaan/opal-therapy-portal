@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r39'], ['resourcehub.css', 'r22'],
+      ['resourcehub.js', 'r40'], ['resourcehub.css', 'r22'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -663,7 +663,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 4], ['workshop.css', 2],
+      ['workshop.js', 5], ['workshop.css', 3],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.

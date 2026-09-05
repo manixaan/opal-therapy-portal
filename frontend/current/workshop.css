@@ -273,3 +273,7 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 @media (prefers-reduced-motion: reduce) {
   .wk-rec-dot { animation: none; }
 }
+
+/* Naming a new walkthrough, inline on the shelf. */
+.wk-new { margin: 0 0 16px; }
+.wk-new-row { display: flex; gap: 8px; margin-top: 8px; }
