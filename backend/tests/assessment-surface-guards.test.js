@@ -663,7 +663,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 5], ['workshop.css', 3],
+      ['workshop.js', 6], ['workshop.css', 3],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.

@@ -1061,6 +1061,10 @@ describe('the new learning item dialog', () => {
     const WORKSHOP = fs.readFileSync(path.join(FRONTEND, 'workshop.js'), 'utf8');
     expect(WORKSHOP).not.toMatch(/\bprompt\(/);
     expect(WORKSHOP).toContain('wk-new-title');
+    // Save is the whole lifecycle: it also makes the walkthrough live.
+    expect(WORKSHOP).not.toContain('Publish to staff');
+    expect(WORKSHOP).not.toContain('OpalWorkshop.publish()');
+    expect(WORKSHOP.slice(WORKSHOP.indexOf('async function save('), WORKSHOP.indexOf('async function save(') + 1500)).toContain("'/publish'");
     expect(kind).toContain('laImport()');
     expect(kind).toContain("c.kind = 'document'");
     expect(fn('laCreate')).toContain('kind: null');

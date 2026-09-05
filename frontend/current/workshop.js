@@ -15,7 +15,8 @@
    anchor resolution, same card. "As a new starter sees it" is the same call
    with the dock hidden.
 
-   Everything writes to the DRAFT. Nothing reaches a learner until Publish.
+   Save writes the draft and makes it the live version in one step; anyone
+   part-way through a walkthrough stays on the version they started.
 
    Backend: backend/walkthrough-routes.js (owner only). Globals on window, no
    modules, matching every other file here.
@@ -146,7 +147,7 @@
     h += '<div class="wk-shelf-inner">';
     h += '<div class="wk-shelf-head">' +
          '<div><h2 class="wk-h2">Walkthroughs</h2>' +
-         '<p class="wk-muted">Built once, reusable in any induction. Editing changes nothing for staff until you publish.</p></div>' +
+         '<p class="wk-muted">Built once, reusable in any induction. Saving makes the latest version the one staff and inductions use.</p></div>' +
          '<div class="wk-head-actions">' +
          '<button type="button" class="wk-btn" onclick="OpalWorkshop.report()">Check my walkthroughs</button>' +
          '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.createNew()">New walkthrough</button>' +
@@ -190,8 +191,8 @@
 
   function shelfCard(w) {
     var state = w.status === 'archived' ? 'Archived'
-      : w.current_version < 1 ? 'Never published'
-      : w.has_unpublished_changes ? ('v' + w.current_version + ' · unpublished changes')
+      : w.current_version < 1 ? 'Not saved yet'
+      : w.has_unpublished_changes ? ('v' + w.current_version + ' · unsaved changes')
       : ('v' + w.current_version + ' · up to date');
     var tone = w.status === 'archived' ? 'muted'
       : w.current_version < 1 ? 'draft'
@@ -354,9 +355,9 @@
   function renderDock() {
     if (!W.wt) return;
     var w = W.wt;
-    var state = w.current_version < 1 ? 'Never published'
+    var state = w.current_version < 1 ? 'Not saved yet'
       : (W.dirty || w.has_unpublished_changes)
-        ? ('Staff see v' + w.current_version + ' · your changes are not published')
+        ? ('Staff see v' + w.current_version + ' · unsaved changes')
         : ('Staff see v' + w.current_version + ' · up to date');
 
     var h = '';
@@ -372,7 +373,6 @@
     h += '<div class="wk-dock-bar">' +
       '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.save()"' +
         (W.dirty ? '' : ' disabled') + '>Save</button>' +
-      '<button type="button" class="wk-btn" onclick="OpalWorkshop.publish()">Publish to staff</button>' +
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.previewAsLearner()">As a new starter sees it</button>' +
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.startRecording()">Record steps</button>' +
     '</div>';
@@ -806,22 +806,22 @@
     W.wt = res.data.walkthrough;
     W.steps = res.data.steps;
     W.dirty = false;
+    // Saving IS making it usable: the saved draft becomes the version staff
+    // and inductions run. Anyone part-way through stays on the version they
+    // started. There is no separate publish step to forget.
+    var pub = await api('/api/walkthroughs/' + encodeURIComponent(W.wt.id) + '/publish', { method: 'POST' });
+    if (!pub.ok) {
+      renderDock();
+      fail(pub, 'The walkthrough was saved but could not be made available to staff.');
+      return false;
+    }
+    if (pub.data.published) {
+      W.wt.current_version = pub.data.version;
+      W.wt.has_unpublished_changes = false;
+    }
     renderDock();
-    toast('Saved', 'Your draft is saved. Staff still see the published version.');
+    toast('Saved', 'Staff and inductions now use v' + (W.wt.current_version || 1) + '.');
     return true;
-  }
-
-  async function publish() {
-    if (!W.wt) return;
-    if (W.dirty && !await save()) return;
-    if (!global.confirm('Publish this walkthrough to staff? Anyone part-way through stays on the version they started.')) return;
-    var res = await api('/api/walkthroughs/' + encodeURIComponent(W.wt.id) + '/publish', { method: 'POST' });
-    if (!res.ok) { fail(res, 'This walkthrough could not be published.'); return; }
-    if (!res.data.published) { toast('Nothing to publish', 'Staff already have this version.'); return; }
-    W.wt.current_version = res.data.version;
-    W.wt.has_unpublished_changes = false;
-    renderDock();
-    toast('Published', 'Staff now see v' + res.data.version + '.');
   }
 
   /** The same player, with the dock out of the way. */
@@ -1145,7 +1145,6 @@
     playCurrent: playCurrent,
     previewAsLearner: previewAsLearner,
     save: save,
-    publish: publish,
     _meta: _meta,
     _step: _step,
     _target: _target,
