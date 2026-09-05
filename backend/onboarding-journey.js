@@ -118,24 +118,7 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
       description: 'The interactive induction in the Learning module, so the first day starts with a guided tour rather than a manual.',
       dueAt: onStart,
     },
-    {
-      code: 'first_week_checkin', sortOrder: 70,
-      title: 'Book the first-week check-in with their manager',
-      description: 'A short meeting in week one to confirm expectations, equipment and any open onboarding items.',
-      assigneeUserId: assignment.manager_user_id || null,
-      dueAt: afterStart(5),
-    },
   ];
-
-  if (treating) {
-    tasks.push({
-      code: 'clinical_supervision', sortOrder: 80,
-      title: 'Confirm the clinical supervision arrangement',
-      description: 'Named supervisor, frequency and the first session date, recorded against the professional profile.',
-      assigneeUserId: assignment.manager_user_id || null,
-      dueAt: afterStart(10),
-    });
-  }
 
   return tasks;
 }

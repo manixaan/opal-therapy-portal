@@ -164,11 +164,13 @@ describe('Stage 2 — Onboarding Documentation', () => {
 describe('Stage 3 — Internal Induction & Access', () => {
   const accepted = offer({ status: 'accepted', responded_at: NOW });
 
-  test('the checklist is keyed to the role — a treating therapist gets clinical supervision', () => {
+  test('the checklist is internal set-up only — no manager follow-ups; the role changes the systems wording', () => {
     const ot = journey.buildInductionTasks(assignment(), { now: NOW });
     const admin = journey.buildInductionTasks(assignment({ is_treating_therapist: false, role_category: 'administration' }), { now: NOW });
-    expect(ot.map((t) => t.code)).toContain('clinical_supervision');
-    expect(admin.map((t) => t.code)).not.toContain('clinical_supervision');
+    expect(ot.map((t) => t.code)).not.toContain('clinical_supervision');
+    expect(ot.map((t) => t.code)).not.toContain('first_week_checkin');
+    expect(ot.find((t) => t.code === 'systems_access').title).toMatch(/clinical system access/);
+    expect(admin.find((t) => t.code === 'systems_access').title).toBe('Grant system access');
     expect(ot.find((t) => t.code === 'portal_access').automation).toBe('activate_portal_access');
     // Every task carries a stable code, so regeneration never duplicates.
     expect(new Set(ot.map((t) => t.code)).size).toBe(ot.length);

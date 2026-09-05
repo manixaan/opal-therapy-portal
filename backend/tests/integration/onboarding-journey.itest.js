@@ -524,7 +524,9 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     expect(one.body.journey.stage.key).toBe('induction');
     expect(one.body.journey.stages[1].state).toBe('complete');
     const codes = one.body.tasks.map((t) => t.code);
-    expect(codes).toEqual(expect.arrayContaining(['portal_access', 'work_email', 'payroll_setup', 'induction_walkthrough', 'clinical_supervision']));
+    expect(codes).toEqual(expect.arrayContaining(['portal_access', 'work_email', 'payroll_setup', 'induction_walkthrough']));
+    expect(codes).not.toContain('clinical_supervision');
+    expect(codes).not.toContain('first_week_checkin');
     expect(one.body.journey.next).toMatchObject({ actor: 'admin', action: 'activate' });
     expect(one.body.record.inductionStartedAt).toBeTruthy();
 
