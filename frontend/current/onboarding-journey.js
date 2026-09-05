@@ -1348,16 +1348,14 @@
         var tone = t.status === 'done' ? 'done' : t.status === 'skipped' ? 'skipped' : t.status === 'failed' || t.overdue ? 'danger' : t.automation ? 'portal' : 'open';
         var icon = t.status === 'done' ? '✓' : t.status === 'skipped' ? '–' : t.status === 'failed' ? '!' : t.automation ? '▶' : '';
         var acts = [];
-        if (t.automation === 'activate_portal_access') {
-          if (open && c.activate) acts.push(btn(t.status === 'failed' ? 'Try again' : 'Activate', 'OnboardingJourney.runTask(\'' + jsq(t.code) + '\')', 'oj-btn-primary oj-btn-small'));
-        } else if (c.review) {
-          if (open) {
-            acts.push(btn('Done', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'complete\')', 'oj-btn-primary oj-btn-small'));
-            acts.push(btn('Skip', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'skip\')', 'oj-btn-small oj-btn-quiet'));
-          } else {
-            acts.push(btn('Reopen', 'OnboardingJourney.task(\'' + jsq(t.code) + '\',\'reopen\')', 'oj-btn-small oj-btn-quiet'));
-          }
+        // Manual tasks are ticked and unticked; only the portal's own action keeps a button.
+        var tickable = c.review && t.automation !== 'activate_portal_access';
+        if (t.automation === 'activate_portal_access' && open && c.activate) {
+          acts.push(btn(t.status === 'failed' ? 'Try again' : 'Activate', 'OnboardingJourney.runTask(\'' + jsq(t.code) + '\')', 'oj-btn-primary oj-btn-small'));
         }
+        var lead = tickable
+          ? '<label class="oj-task-check" title="' + (t.status === 'done' ? 'Untick to reopen' : 'Tick when done') + '"><input type="checkbox"' + (t.status === 'done' ? ' checked' : '') + ' aria-label="' + esc(t.title) + ' done" onchange="OnboardingJourney.task(\'' + jsq(t.code) + '\', this.checked ? \'complete\' : \'reopen\')"><span class="oj-task-dot">' + icon + '</span></label>'
+          : '<span class="oj-task-dot" aria-hidden="true">' + icon + '</span>';
         // One line of facts: who, when. Editable in place while the task is open.
         var meta = [];
         if (t.automation) meta.push('<span class="oj-task-portal">Portal does this</span>');
@@ -1372,8 +1370,10 @@
           if (t.completedAt) meta.push((t.status === 'skipped' ? 'skipped ' : 'done ') + esc(fmtDate(t.completedAt)) + (t.completedByName ? ' by ' + esc(t.completedByName) : ''));
         }
         if (t.note) meta.push('<span class="oj-task-note" title="' + esc(t.note) + '">' + esc(t.note) + '</span>');
+        if (tickable && open) meta.push('<button type="button" class="oj-task-link" onclick="OnboardingJourney.task(\'' + jsq(t.code) + '\',\'skip\')">skip — not needed</button>');
+        if (tickable && t.status === 'skipped') meta.push('<button type="button" class="oj-task-link" onclick="OnboardingJourney.task(\'' + jsq(t.code) + '\',\'reopen\')">reopen</button>');
         return '<li class="oj-task is-' + tone + '" id="oj-task-' + esc(t.code) + '">'
-          + '<span class="oj-task-dot" aria-hidden="true">' + icon + '</span>'
+          + lead
           + '<div class="oj-task-main"><span class="oj-task-title" title="' + esc(t.description || '') + '">' + esc(t.title) + '</span>'
           + (meta.length ? '<span class="oj-task-meta">' + meta.join('<span class="oj-task-sep">·</span>') + '</span>' : '')
           + '</div>'
