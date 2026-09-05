@@ -260,18 +260,27 @@
     }).join('') + '</ol>';
   }
 
-  /** The six lines: Phase 1, Phase 2, Internal setup, Payroll, Phase 3, Attention. */
-  function summaryLines(sm) {
+  /**
+   * The six cells: three phases across the top, then Internal setup, Payroll and
+   * Attention beneath. Each cell stacks its label over its chip so the eye reads
+   * column by column. `compact` (the board) drops the detail subline — the row's
+   * "next" line already says it.
+   */
+  function summaryLines(sm, compact) {
     var cls = function (st) { return st === 'complete' || st === 'approved' ? 'is-done' : st === 'blocked' || st === 'conflict' ? 'is-danger' : st === 'ready_for_review' || st === 'review' ? 'is-you' : st === 'pending' || st === 'gathering' || st === 'unknown' ? 'is-quiet' : 'is-employee'; };
-    var line = function (k, v, st, extra) { return '<div class="oj-sum-line"><span class="oj-sum-k">' + esc(k) + '</span><span class="oj-chip ' + cls(st) + '">' + esc(v) + '</span>' + (extra ? '<span class="oj-quiet">' + esc(extra) + '</span>' : '') + '</div>'; };
+    var cell = function (k, v, st, extra) {
+      return '<div class="oj-sum-cell"><span class="oj-sum-k">' + esc(k) + '</span><span class="oj-chip ' + cls(st) + '">' + esc(v) + '</span>'
+        + (extra && !compact ? '<span class="oj-sum-detail">' + esc(extra) + '</span>' : '') + '</div>';
+    };
+    var docDetail = sm.documentation.detail && sm.documentation.detail !== sm.documentation.label ? sm.documentation.detail : '';
     return '<div class="oj-summary">'
-      + line('Phase 1 — Offer', sm.offer.label, sm.offer.state)
-      + line('Phase 2 — Documentation', sm.documentation.label, sm.documentation.state, sm.documentation.detail && sm.documentation.detail !== sm.documentation.label ? sm.documentation.detail : '')
-      + line('Internal setup', sm.setup.label, sm.setup.total && sm.setup.ready === sm.setup.total ? 'complete' : 'active')
-      + line('Payroll', sm.payroll.label, sm.payroll.state)
-      + line('Phase 3 — Induction', sm.induction.label, sm.induction.state)
-      + line('Requires your attention', sm.attention ? sm.attention + ' item' + (sm.attention === 1 ? '' : 's') : 'Nothing', sm.attention ? 'review' : 'complete')
-      + (sm.employee ? '<div class="oj-sum-line"><span class="oj-sum-k">Employee</span><span class="oj-chip is-done">' + esc(sm.employee) + '</span></div>' : '')
+      + cell('Phase 1 · Offer', sm.offer.label, sm.offer.state)
+      + cell('Phase 2 · Documentation', sm.documentation.label, sm.documentation.state, docDetail)
+      + cell('Phase 3 · Induction', sm.induction.label, sm.induction.state)
+      + cell('Internal setup', sm.setup.label, sm.setup.total && sm.setup.ready === sm.setup.total ? 'complete' : 'active')
+      + cell('Payroll', sm.payroll.label, sm.payroll.state)
+      + cell('Needs your attention', sm.attention ? sm.attention + ' item' + (sm.attention === 1 ? '' : 's') : 'Nothing', sm.attention ? 'review' : 'complete')
+      + (sm.employee ? cell('Employee', sm.employee, 'complete') : '')
       + '</div>';
   }
 
@@ -295,7 +304,7 @@
       + '<div class="oj-row-main">'
       + '  <h3>' + esc(r.applicantName) + '</h3>'
       + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType)) + (r.startDate ? ' · commencement ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(r.daysToStart)) + ')' : '') + '</p>'
-      + (r.summary ? summaryLines(r.summary) : stageTrack(r))
+      + (r.summary ? summaryLines(r.summary, true) : stageTrack(r))
       + '</div>'
       + '<div class="oj-row-side">'
       + nextLine(r.next)
