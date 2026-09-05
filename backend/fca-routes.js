@@ -49,6 +49,7 @@
  */
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -1010,7 +1011,7 @@ router.get('/api/fca/documents/:documentId/download', requireClinicalRead, safe(
   await audit(req, 'fca.report_downloaded', doc.draft_id, { documentId: doc.id, templateVersion: doc.template_version });
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.filename)}"`);
+  res.setHeader('Content-Disposition', contentDisposition('attachment', doc.filename));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(Buffer.from(base64, 'base64'));
 }));

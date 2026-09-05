@@ -29,6 +29,7 @@
  */
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const router = express.Router();
 
 const db = require('./database');
@@ -752,7 +753,7 @@ async function serveLetter(req, res, disposition, format = 'docx') {
   res.set('Content-Type', mime);
   res.set('Content-Length', String(bytes.length));
   res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(fileName)}"`);
+  res.set('Content-Disposition', contentDisposition(disposition, fileName));
   res.send(bytes);
 }
 router.get('/api/onboarding/journey/records/:id/offer/letter/preview.docx', requirePermission('onboarding.view'), safe((req, res) => serveLetter(req, res, 'inline')));
@@ -999,7 +1000,7 @@ async function serveSigned(req, res, disposition) {
   res.set('Content-Type', doc.file_mime);
   res.set('Content-Length', String(bytes.length));
   res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(doc.file_name)}"`);
+  res.set('Content-Disposition', contentDisposition(disposition, doc.file_name));
   res.send(bytes);
 }
 router.get('/api/onboarding/journey/records/:id/offer/signed/preview', requirePermission('onboarding.view'), safe((req, res) => serveSigned(req, res, 'inline')));

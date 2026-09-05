@@ -24,6 +24,7 @@
  */
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const router = express.Router();
 const db = require('./database');
 const { pool } = require('./database');
@@ -716,7 +717,7 @@ router.get('/api/support/attachments/:id/download', requireAuth, safe(async (req
   } catch (_) { /* missing object → 404 below */ }
   if (!base64) return res.status(404).json({ error: 'File content unavailable' });
   res.setHeader('Content-Type', f.file_mime || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(f.file_name || 'attachment')}"`);
+  res.setHeader('Content-Disposition', contentDisposition('attachment', f.file_name || 'attachment'));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(Buffer.from(base64, 'base64'));
 }));

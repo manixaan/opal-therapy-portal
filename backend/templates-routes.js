@@ -32,6 +32,7 @@
  */
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const fs = require('fs');
 const crypto = require('crypto');
 const router = express.Router();
@@ -724,7 +725,7 @@ async function sendExport(req, res, format) {
 
   res.setHeader('Content-Type', out.contentType);
   res.setHeader('Content-Length', String(out.buffer.length));
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(out.filename)}"`);
+  res.setHeader('Content-Disposition', contentDisposition('attachment', out.filename));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
   return res.end(out.buffer);

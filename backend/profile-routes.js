@@ -18,6 +18,7 @@
 'use strict';
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const router  = express.Router();
 const db      = require('./database');
 const { requireAuth } = require('./permissions');
@@ -489,7 +490,7 @@ router.get('/api/profile/documents/:id/download', requireAuth, async (req, res) 
 
     const buf = Buffer.from(base64, 'base64');
     res.setHeader('Content-Type', doc.file_mime || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.file_name || 'document')}"`);
+    res.setHeader('Content-Disposition', contentDisposition('attachment', doc.file_name || 'document'));
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(buf);
   } catch (err) {

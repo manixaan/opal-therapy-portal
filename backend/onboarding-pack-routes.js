@@ -23,6 +23,7 @@
  */
 
 const express = require('express');
+const { contentDisposition } = require('./content-disposition');
 const router = express.Router();
 
 const odb = require('./onboarding-db');
@@ -445,7 +446,7 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     res.set('Content-Type', file.mime);
     res.set('Content-Length', String(file.bytes.length));
     res.set('X-Content-Type-Options', 'nosniff');
-    res.set('Content-Disposition', `${disposition}; filename="${encodeURIComponent(file.fileName)}"`);
+    res.set('Content-Disposition', contentDisposition(disposition, file.fileName));
     res.send(file.bytes);
   }
   router.get(`${BASE}/items/:itemId/preview`, requirePermission('onboarding.view'), safe((req, res) => serveItem(req, res, 'inline')));
@@ -467,7 +468,7 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     noStore(res);
     res.set('Content-Type', 'application/zip');
     res.set('Content-Length', String(bytes.length));
-    res.set('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.set('Content-Disposition', contentDisposition('attachment', fileName));
     res.send(bytes);
   }));
   
