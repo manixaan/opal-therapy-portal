@@ -1211,7 +1211,10 @@
     var removed = P.items.filter(function (i) { return i.status !== 'included'; });
     var groups = {};
     included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
-    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
+    // While the pack is editable every section of this phase is shown, empty ones
+    // included, so there is always somewhere to drop a file for it.
+    var phaseSections = phase === 'induction' ? ['systems', 'policies', 'ndis', 'training', 'agreements', 'accounts'] : ['welcome_employment', 'personal_details', 'payroll_tax_super', 'identity', 'professional', 'screening'];
+    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k] || (editable && phaseSections.indexOf(k) >= 0); });
 
     out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong> · '
       + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back' + (P.tracking ? ', ' + P.tracking.done + ' of ' + P.tracking.total + ' tracked items complete' : '') + '</span>'
@@ -1225,7 +1228,8 @@
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
         + (editable ? '<label class="oj-btn oj-btn-small oj-btn-quiet oj-file oj-section-attach">+ Attach files<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAttachToSection(\'' + jsq(phase) + '\', \'' + jsq(k) + '\', this.files); this.value = \'\';"></label>' : '')
         + '</div></td></tr>';
-      groups[k].forEach(function (i) { out += packRow(i, editable, sent); });
+      (groups[k] || []).forEach(function (i) { out += packRow(i, editable, sent); });
+      if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here, or press + Attach files.</td></tr>';
     });
     out += '</tbody></table></div>';
     if (removed.length) {
@@ -1678,6 +1682,9 @@
     };
     doc.addEventListener('dragover', over);
     doc.addEventListener('dragenter', over);
+    // A file let go anywhere else on the page must not open in the browser and lose the record.
+    doc.addEventListener('dragover', function (ev) { if (ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') >= 0) ev.preventDefault(); });
+    doc.addEventListener('drop', function (ev) { if (ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') >= 0 && !(ev.target.closest && ev.target.closest('[data-drop]'))) { ev.preventDefault(); toast('Drop the file on a document\'s row or a section heading.', true); } });
     doc.addEventListener('dragleave', function (ev) {
       var row = ev.target.closest && ev.target.closest('[data-drop]');
       if (row && !row.contains(ev.relatedTarget)) row.classList.remove('is-dragover');
