@@ -428,6 +428,9 @@
       try { selStart = prev.selectionStart; selEnd = prev.selectionEnd; } catch (e) { /* not a text field */ }
     }
 
+    // The editor notices its own changes here, on the way to the screen.
+    if (S.la && S.la.editor) laTrack();
+
     var body = '';
     if (S.view === 'home') body = renderHome();
     else if (S.view === 'library') body = renderLibrary();
@@ -522,16 +525,12 @@
     // navigation.js) but it is not a view: it renders over the Learning
     // console. Navigating anywhere else — Back included — must close it,
     // otherwise the editor stays on screen and Back appears to do nothing.
-    // An unsaved editor asks first; declining keeps the editor and the view.
+    // Leaving saves whatever is unsaved and says so; nothing is asked.
     if (view === 'lwedit') {
       if (S.la.editor) return;
       view = 'learning';
     } else if (S.la.editor) {
-      if (S.la.editor._dirty && !confirm('Discard unsaved changes to this workflow?')) return;
-      S.la.editor = null;
-      S.la.resPick = null;
-      S.la.publishNote = '';
-      S.la.editorStale = false;
+      laEditorLeave();
     }
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
@@ -5327,11 +5326,7 @@
     // tabs while one is open would highlight a tab that shows nothing —
     // close them first (the editor close warns about unsaved changes and can
     // be declined, in which case the tab stays put).
-    if (S.la.editor) {
-      if (S.la.editor._dirty && !confirm('Discard unsaved changes to this workflow?')) return;
-      S.la.editor = null;
-      S.la.resPick = null;
-    }
+    laEditorLeave();
     S.la.assign = null;
     S.la.tab = t;
     S.la.err = '';
@@ -5974,6 +5969,9 @@
    * time you save is how an editor teaches people not to save.
    */
   async function laEdit(id) {
+    // A reload of the induction already open (after an autosave) keeps its
+    // undo history; a fresh open starts one.
+    var keepUndo = (S.la.editor && S.la.editor.id === id) ? (S.la.editor._undo || []) : [];
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
     if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
     // The walkthrough shelf, so a task step in an EXISTING induction can name
@@ -6022,22 +6020,18 @@
       // What learners currently receive, for the editor's publish line.
       _currentVersion: Number(w.current_version) || 0,
       _hasUnpublished: !!w.has_unpublished_changes,
+      _undo: keepUndo,
     };
+    S.la.editor._snap = laSnapshot(S.la.editor);
     S.la.editorErr = '';
     S.la.editorStale = false;
     S.la.resPick = null;
     render();
   }
 
-  /** Returns false when the close was declined (unsaved changes kept), so the
-   *  navigation wrapper only moves the address when the editor really closed. */
+  /** The editor's own Learning button. Saves on the way out; never declines. */
   function laEditorClose() {
-    if (S.la.editor && S.la.editor._dirty &&
-        !confirm('Discard unsaved changes to this workflow?')) return false;
-    S.la.editor = null;
-    S.la.resPick = null;
-    S.la.publishNote = '';
-    S.la.editorStale = false;
+    laEditorLeave();
     loadLa();
     return true;
   }
@@ -6078,12 +6072,24 @@
     };
   }
 
+  /**
+   * Save the draft. Called by the autosave timer and by leaving the editor —
+   * never by a button. Resolves true when the server took it. The editor may
+   * already have been left by the time the reply arrives, so the reload only
+   * happens if this induction is still the one open.
+   */
   async function laSave() {
     var ed = S.la.editor;
-    if (!ed || S.la.editorSaving) return;
+    if (!ed) return false;
+    if (S.la.savePromise) return S.la.savePromise;
+    S.la.savePromise = laSaveNow(ed);
+    try { return await S.la.savePromise; } finally { S.la.savePromise = null; }
+  }
+
+  async function laSaveNow(ed) {
+    laTrack();
     S.la.editorSaving = true;
     render();
-    S.la.publishNote = '';
     var d = await api('/api/learning/workflows/' + encodeURIComponent(ed.id), {
       method: 'PUT',
       body: {
@@ -6097,17 +6103,105 @@
       },
     });
     S.la.editorSaving = false;
+    var stillOpen = !!(S.la.editor && S.la.editor.id === ed.id);
     if (!d.ok) {
-      S.la.editorErr = d.error || 'Saving failed.';
-      // A stale edit gets its own recovery path: the fix is to reload, not
-      // to hammer Save until the other session's work is overwritten.
-      S.la.editorStale = d.status === 409 && d.code === 'stale_edit';
-      return render();
+      if (stillOpen) {
+        S.la.editorErr = d.error || 'Saving failed.';
+        // A stale edit gets its own recovery path: the fix is to reload, not
+        // to keep retrying until the other session's work is overwritten.
+        S.la.editorStale = d.status === 409 && d.code === 'stale_edit';
+      }
+      render();
+      return false;
     }
-    S.la.editorErr = '';
+    if (stillOpen) {
+      S.la.editorErr = '';
+      S.la.editorStale = false;
+      // Re-open from the server's normalised copy (keys may have been
+      // assigned); the undo history survives the reload.
+      await laEdit(ed.id);
+    }
+    return true;
+  }
+
+  /** The editor's own content, as one comparable string. */
+  function laSnapshot(ed) {
+    return JSON.stringify({ title: ed.title, description: ed.description, category: ed.category, sections: ed.sections });
+  }
+
+  /**
+   * Notice a change. Runs on every render of the editor and just before a
+   * save: if the content differs from the last snapshot, the previous state
+   * goes on the undo stack and an autosave is scheduled. One undo step per
+   * visible change — a whole typed phrase, not a keystroke.
+   */
+  function laTrack() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    var snap = laSnapshot(ed);
+    if (snap !== ed._snap) {
+      ed._undo = ed._undo || [];
+      ed._undo.push(ed._snap);
+      if (ed._undo.length > 50) ed._undo.shift();
+      ed._snap = snap;
+      ed._dirty = true;
+    }
+    if (ed._dirty && !ed.editing && !S.la.editorSaving) laAutosaveSchedule();
+  }
+
+  /** Save shortly after the last change — and not while a field is open. */
+  function laAutosaveSchedule(ms) {
+    clearTimeout(S.la.autosaveTimer);
+    S.la.autosaveTimer = setTimeout(function () {
+      var ed = S.la.editor;
+      if (!ed || !ed._dirty) return;
+      if (ed.editing) { laAutosaveSchedule(ms); return; }
+      laSave();
+    }, ms || 900);
+  }
+
+  /** Put the content back one step. The change itself is a change: it saves. */
+  function laUndo() {
+    var ed = S.la.editor;
+    if (!ed || !ed._undo || !ed._undo.length) return;
+    laTrack();
+    var snap = ed._undo.pop();
+    var prev = JSON.parse(snap);
+    ed.title = prev.title;
+    ed.description = prev.description;
+    ed.category = prev.category;
+    ed.sections = prev.sections;
+    ed._snap = snap;
+    ed._dirty = true;
+    ed.editing = null;
+    render();
+    laAutosaveSchedule();
+  }
+
+  /**
+   * Leave the editor from anywhere — its own button, a tab, browser Back.
+   * Nothing is asked: whatever is unsaved is saved on the way out, and a
+   * small notice says which induction was saved. Synchronous for callers
+   * that cannot wait (navigation); the save finishes in the background.
+   */
+  function laEditorLeave() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    clearTimeout(S.la.autosaveTimer);
+    laTrack();
+    var title = ed.title || 'Untitled induction';
+    var pending = (ed._dirty || S.la.editorSaving) ? laSave() : null;
+    S.la.editor = null;
+    S.la.resPick = null;
     S.la.editorStale = false;
-    // Re-open from the server's normalised copy (keys may have been assigned).
-    await laEdit(ed.id);
+    S.la.editorErr = '';
+    if (pending) {
+      pending.then(function (ok) {
+        if (ok) toast('Saved', '“' + title + '” was updated.');
+        else toast('Not saved', 'The changes to “' + title + '” could not be saved. Open it again to retry.');
+        loadLa();
+      });
+    }
   }
 
   /** Discard this editor's unsaved work and load what the server now holds. */
@@ -6118,39 +6212,17 @@
     laEdit(ed.id);
   }
 
-  /**
-   * Deliberate publish: snapshot the saved draft as the latest version without
-   * assigning anyone. Unsaved edits are saved first — publishing what is on
-   * the server while the screen shows something newer would mislead.
-   */
-  async function laPublish(id) {
-    var ed = S.la.editor;
-    if (S.la.editorSaving || S.la.publishBusy) return;
-    if (ed && ed._dirty) {
-      await laSave();
-      ed = S.la.editor;
-      if (S.la.editorErr) return; // save failed (or stale) — surfaced already
-    }
-    S.la.publishBusy = true;
-    render();
-    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/publish', { method: 'POST' });
-    S.la.publishBusy = false;
-    if (!d.ok) {
-      if (ed) { S.la.editorErr = d.error || 'Publishing failed.'; render(); }
-      else alert(d.error || 'Publishing failed.');
-      return;
-    }
-    var msg = d.published
-      ? 'Published version ' + d.version + ' — learners now receive it.'
-      : 'Already up to date — learners already receive version ' + d.version + '.';
-    if (ed) { S.la.publishNote = msg; await laEdit(id); S.la.publishNote = msg; render(); }
-    else { alert(msg); loadLa(); }
-  }
-
   // Editor field handlers deliberately do NOT re-render on keystroke — the
   // input already shows the value; a full re-render would fight the caret.
   // Every mutation flags _dirty so closing the editor can warn honestly.
-  function laMeta(field, value) { if (S.la.editor) { S.la.editor[field] = value; S.la.editor._dirty = true; } }
+  function laMeta(field, value) {
+    if (!S.la.editor) return;
+    S.la.editor[field] = value;
+    S.la.editor._dirty = true;
+    // Typed straight into the live title: no render happens per keystroke,
+    // so the save is scheduled from here — a little later, to let them finish.
+    laAutosaveSchedule(1500);
+  }
   function laSecField(si, value) { var ed = S.la.editor; if (ed && ed.sections[si]) { ed.sections[si].title = value; ed._dirty = true; } }
   /**
    * The editor's counterpart of the learner's launch tile. A task step that
@@ -6833,29 +6905,27 @@
   function renderLaEditor() {
     var ed = S.la.editor;
     var sections = ed.sections || [];
-    // What learners receive right now, stated plainly next to Save/Publish so
-    // the Owner can always tell draft state from published state.
+    // What learners receive right now, stated plainly so the Owner can always
+    // tell draft state from published state. Edits save themselves; a new
+    // version is cut when the induction is assigned.
     var pubLine = ed._currentVersion
-      ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' · unpublished draft changes' : ' · up to date')
-      : 'Never published — assigning (or Publish) creates version 1';
+      ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' · draft changes go out with the next assignment' : ' · up to date')
+      : 'Not yet assigned — assigning creates version 1';
+    var saveLine = S.la.editorSaving ? 'Saving…' : (ed._dirty ? 'Unsaved changes' : 'All changes saved');
     var out = '<div class="rh2-learn-ed rh2-ind rh2-ind-edit">' +
       '<div class="rh2-learn-ed-bar">' +
         '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">&larr; Learning</button>' +
         '<span class="rh2-chip rh2-chip-warn">Editing &mdash; this is the learner&rsquo;s own screen</span>' +
         '<span class="rh2-quiet">' +
-          esc(pubLine) + ' · ' +
-          (ed.counts.total ? ed.counts.total + ' assignment(s) pinned to published versions — saving edits never changes them' : 'nothing assigned yet') +
+          '<span class="rh2-learn-ed-save" role="status" aria-live="polite">' + esc(saveLine) + '</span> · ' +
+          esc(pubLine) +
+          (ed.counts.total ? ' · ' + ed.counts.total + ' assignment(s) pinned to published versions' : '') +
         '</span>' +
         '<span class="rh2-learn-ed-bar-actions">' +
-          '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(ed.id) + '\')">Preview</button>' +
-          '<button type="button" class="rh2-btn" ' + ((S.la.editorSaving || S.la.publishBusy) ? 'disabled ' : '') +
-            'onclick="RH2.laPublish(\'' + esc(ed.id) + '\')">' +
-            (S.la.publishBusy ? 'Publishing…' : 'Publish version') + '</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') + 'onclick="RH2.laSave()">' +
-            (S.la.editorSaving ? 'Saving…' : 'Save') + '</button>' +
+          '<button type="button" class="rh2-btn" ' + ((ed._undo && ed._undo.length) ? '' : 'disabled ') +
+            'onclick="RH2.laUndo()" title="Undo the last change">Undo</button>' +
         '</span>' +
       '</div>' +
-      (S.la.publishNote ? '<div class="rh2-learn-done-banner" role="status">' + esc(S.la.publishNote) + '</div>' : '') +
       (S.la.editorErr
         ? '<div class="rh2-empty" role="alert">' + esc(S.la.editorErr) +
           (S.la.editorStale
@@ -7701,6 +7771,7 @@
     laCreateKind: laCreateKind,
     laEdit: laEdit,
     laEditorClose: laEditorClose,
+    laUndo: laUndo,
     laSave: laSave,
     laMeta: laMeta,
     laSecField: laSecField,
@@ -7760,7 +7831,6 @@
     laAssignBack: laAssignBack,
     laAssignReassign: laAssignReassign,
     // Deliberate publish + stale-edit recovery
-    laPublish: laPublish,
     laEditorReload: laEditorReload,
     // Owner: Assign Learning
     aslSearch: aslSearch,

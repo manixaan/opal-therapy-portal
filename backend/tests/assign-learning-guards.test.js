@@ -376,21 +376,61 @@ describe('edit mode is the learner\'s screen with the fields exposed', () => {
   });
 
   test('saving goes through the existing draft lifecycle, not a new one', () => {
-    // Draft is saved; a version is cut by Publish or by assigning. Nothing
-    // here may publish silently.
-    const save = fn('laSave');
+    // Draft is saved; a version is cut by assigning. Nothing here may
+    // publish silently — and there is no Publish button to do it loudly.
+    const save = fn('laSaveNow');
     expect(save).toContain("method: 'PUT'");
     expect(save).toContain('expectedUpdatedAt');
     expect(save).not.toContain('/publish');
-    expect(editor).toContain('RH2.laPublish(');
+    expect(VISIBLE).not.toContain('laPublish');
     expect(editor).toContain('Learners receive v');
+  });
+
+  test('edits save themselves: no Save, Preview or Publish buttons in the bar', () => {
+    const bar = editor.slice(editor.indexOf('rh2-learn-ed-bar'), editor.indexOf('indHeader('));
+    for (const gone of ['RH2.laSave()', 'RH2.laPreview(', 'RH2.laPublish(', '>Save<', 'Preview</button>', 'Publish version']) {
+      expect(`${gone}:${bar.includes(gone)}`).toBe(`${gone}:false`);
+    }
+    expect(bar).toContain('rh2-learn-ed-save');
+    expect(editor).toContain("'All changes saved'");
+    expect(bar).toContain('RH2.laUndo()');
+    // Every render of the editor notices changes and schedules the save;
+    // the live title input schedules it itself, since it never re-renders.
+    expect(fn('render')).toContain('if (S.la && S.la.editor) laTrack();');
+    expect(fn('laTrack')).toContain('laAutosaveSchedule()');
+    expect(fn('laMeta')).toContain('laAutosaveSchedule(1500)');
+    // Never while a field is open under the caret.
+    expect(fn('laAutosaveSchedule')).toContain('if (ed.editing) { laAutosaveSchedule(ms); return; }');
+  });
+
+  test('undo puts the content back one step, and that is itself a change', () => {
+    const undo = fn('laUndo');
+    expect(undo).toContain('ed._undo.pop()');
+    expect(undo).toContain('ed._dirty = true');
+    expect(undo).toContain('laAutosaveSchedule()');
+    expect(fn('laTrack')).toContain('ed._undo.push(ed._snap)');
+    // The history survives the reload an autosave triggers.
+    expect(fn('laEdit')).toContain('_undo: keepUndo');
+  });
+
+  test('leaving the editor saves and says so; nothing is asked', () => {
+    const leave = fn('laEditorLeave');
+    expect(leave).toContain('laSave()');
+    expect(leave).toContain("toast('Saved'");
+    expect(leave).toContain("toast('Not saved'");
+    expect(VISIBLE).not.toContain('Discard unsaved changes to this workflow?');
+    expect(fn('laEditorClose')).toContain('laEditorLeave()');
+    expect(fn('laNav')).toContain('laEditorLeave()');
+    expect(fn('nav')).toContain('laEditorLeave()');
+    // A save that lands after the editor was left never re-opens it.
+    expect(fn('laSaveNow')).toContain('stillOpen');
   });
 
   test('a save re-opens the same page, with no step cursor to lose', () => {
     // laSave re-opens from the server's normalised copy. The editor is one
     // page now, so there is no step to carry across and nothing to be thrown
     // back to — the Owner simply stays on the induction.
-    expect(fn('laSave')).toContain('laEdit(ed.id)');
+    expect(fn('laSaveNow')).toContain('laEdit(ed.id)');
     expect(fn('laEdit')).not.toContain('keepStep');
     expect(fn('laEdit')).not.toMatch(/step: /);
   });
@@ -894,7 +934,7 @@ describe('the shell', () => {
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r22');
-    expect(SHELL).toContain('/resourcehub.js?v=r37');
+    expect(SHELL).toContain('/resourcehub.js?v=r38');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
