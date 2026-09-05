@@ -187,6 +187,25 @@
   font: inherit; font-size: 14px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); width: 100%;
 }
 .oj-field input:focus, .oj-field select:focus, .oj-field textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Number field with a suggestions button at its right edge. The native spinner
+   is hidden: the button lists the options, the arrow keys step by 1. */
+.oj-combo { position: relative; display: flex; }
+.oj-combo input { width: 100%; padding-right: 38px; -moz-appearance: textfield; appearance: textfield; }
+.oj-combo input::-webkit-outer-spin-button, .oj-combo input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.oj-combo-btn {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 34px; border: 0; border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-md, 8px) var(--radius-md, 8px) 0; background: transparent; color: var(--ink-soft);
+  font-size: 13px; cursor: pointer;
+}
+.oj-combo-btn:hover { background: var(--bg, #f3efe8); color: var(--ink); }
+.oj-combo-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); box-shadow: var(--shadow-md, 0 6px 20px rgba(0,0,0,.12));
+  padding: 4px; max-height: 260px; overflow-y: auto;
+}
+.oj-combo-menu[hidden] { display: none; }
+.oj-combo-item { text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 6px; font: inherit; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.oj-combo-item:hover, .oj-combo-item:focus-visible { background: var(--bg, #f3efe8); outline: none; }
 .oj-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-top: 12px; }
 
 /* ── Stage 1 steps ───────────────────────────────────────────────────────── */

@@ -570,24 +570,69 @@
   function input(id, type, value, attrs) {
     return '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(value == null ? '' : value) + '" ' + (attrs || '') + '>';
   }
-  /** Suggested values for a number field: a native datalist, so the field stays free-text. */
+  /** Suggested values for a number field. The field stays free-text; the
+   *  button at its edge lists every suggestion, always, filtered by nothing. */
   var SUGGEST = {
     payAnnual: [65000, 70000, 75000, 80000, 85000, 90000, 95000, 100000, 110000, 120000],
     payHourly: [35, 40, 45, 50, 55, 60, 65, 70, 75, 80],
     hours: [[38, '38 — full time'], [30.4, '30.4 — 0.8 FTE'], [22.8, '22.8 — 0.6 FTE'], [19, '19 — 0.5 FTE'], [15.2, '15.2 — 0.4 FTE'], [7.6, '7.6 — 0.2 FTE']],
     probation: [[0, 'None'], [3, '3 months'], [6, '6 months'], [12, '12 months']]
   };
-  function suggestOptions(options) {
+  function comboItems(id, options) {
     return options.map(function (o) {
-      var v = Array.isArray(o) ? o[0] : o; var l = Array.isArray(o) ? o[1] : '';
-      return '<option value="' + esc(v) + '"' + (l ? ' label="' + esc(l) + '"' : '') + '></option>';
+      var v = Array.isArray(o) ? o[0] : o; var l = Array.isArray(o) ? o[1] : String(v);
+      return '<button type="button" role="option" class="oj-combo-item" onclick="OnboardingJourney.comboPick(\'' + jsq(id) + '\', \'' + jsq(String(v)) + '\')">' + esc(l) + '</button>';
     }).join('');
   }
-  function suggest(id, options) { return '<datalist id="' + id + '-list">' + suggestOptions(options) + '</datalist>'; }
+  /** A number input with a dropdown of suggestions at its right edge. */
+  function combo(id, value, attrs, options) {
+    return '<div class="oj-combo" id="' + id + '-combo">'
+      + '<input id="' + id + '" type="number" value="' + esc(value == null ? '' : value) + '" ' + (attrs || '') + ' onkeydown="OnboardingJourney.comboKey(event, \'' + jsq(id) + '\')">'
+      + '<button type="button" class="oj-combo-btn" aria-label="Show options" aria-haspopup="listbox" onclick="OnboardingJourney.comboToggle(\'' + jsq(id) + '\')">▾</button>'
+      + '<div class="oj-combo-menu" id="' + id + '-menu" role="listbox" hidden>' + comboItems(id, options) + '</div>'
+      + '</div>';
+  }
+  function comboClose() {
+    var open = doc.querySelectorAll('.oj-combo-menu:not([hidden])');
+    for (var i = 0; i < open.length; i++) open[i].hidden = true;
+  }
+  function comboToggle(id) {
+    var menu = doc.getElementById(id + '-menu'); if (!menu) return;
+    var wasHidden = menu.hidden;
+    comboClose();
+    menu.hidden = !wasHidden;
+    if (!menu.hidden) {
+      var input = doc.getElementById(id); if (input) input.focus({ preventScroll: true });
+      setTimeout(function () { doc.addEventListener('click', function onDoc(ev) {
+        if (!ev.target.closest || !ev.target.closest('#' + id + '-combo')) { menu.hidden = true; doc.removeEventListener('click', onDoc); }
+      }); }, 0);
+    }
+  }
+  function comboPick(id, value) {
+    var input = doc.getElementById(id); if (!input) return;
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    comboClose();
+    input.focus({ preventScroll: true });
+  }
+  /** Arrow keys step by a whole 1 regardless of the field's decimal step. */
+  function comboKey(ev, id) {
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') { if (ev.key === 'Escape') comboClose(); return; }
+    ev.preventDefault();
+    var input = doc.getElementById(id); if (!input) return;
+    var n = parseFloat(input.value); if (isNaN(n)) n = 0;
+    n = n + (ev.key === 'ArrowUp' ? 1 : -1);
+    var min = parseFloat(input.min), max = parseFloat(input.max);
+    if (!isNaN(min) && n < min) n = min;
+    if (!isNaN(max) && n > max) n = max;
+    input.value = String(Math.round(n * 100) / 100);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   /** Pay basis changed: swap the salary suggestions between annual and hourly figures. */
   function syncPaySuggestions(prefix) {
-    var basis = doc.getElementById(prefix + 'payBasis'), list = doc.getElementById(prefix + 'payRate-list');
-    if (basis && list) list.innerHTML = suggestOptions(basis.value === 'hourly' ? SUGGEST.payHourly : SUGGEST.payAnnual);
+    var basis = doc.getElementById(prefix + 'payBasis'), menu = doc.getElementById(prefix + 'payRate-menu');
+    if (basis && menu) menu.innerHTML = comboItems(prefix + 'payRate', basis.value === 'hourly' ? SUGGEST.payHourly : SUGGEST.payAnnual);
   }
   function select(id, options, value, attrs) {
     return '<select id="' + id + '" ' + (attrs || '') + '>' + options.map(function (o) {
@@ -607,9 +652,9 @@
       + field(p + 'startDate', 'Commencement date', input(p + 'startDate', 'date', isoDate(t.startDate), 'required'))
       + field(p + 'endDate', 'End date (fixed-term only)', input(p + 'endDate', 'date', isoDate(t.endDate)))
       + field(p + 'payBasis', 'Pay basis', select(p + 'payBasis', [['annual', 'Annual salary'], ['hourly', 'Hourly rate']], t.payBasis || 'annual', 'onchange="OnboardingJourney.syncPay(\'' + jsq(p) + '\')"'))
-      + field(p + 'payRate', 'Salary or rate (AUD, excl. super)', input(p + 'payRate', 'number', t.payRate, 'min="0" step="0.01" inputmode="decimal" list="' + p + 'payRate-list"') + suggest(p + 'payRate', t.payBasis === 'hourly' ? SUGGEST.payHourly : SUGGEST.payAnnual))
-      + field(p + 'hoursPerWeek', 'Standard hours per week', input(p + 'hoursPerWeek', 'number', t.hoursPerWeek, 'min="0" max="80" step="0.1" inputmode="decimal" list="' + p + 'hoursPerWeek-list"') + suggest(p + 'hoursPerWeek', SUGGEST.hours))
-      + field(p + 'probationMonths', 'Probation (months)', input(p + 'probationMonths', 'number', t.probationMonths == null ? 6 : t.probationMonths, 'min="0" max="12" step="1" list="' + p + 'probationMonths-list"') + suggest(p + 'probationMonths', SUGGEST.probation))
+      + field(p + 'payRate', 'Salary or rate (AUD, excl. super)', combo(p + 'payRate', t.payRate, 'min="0" step="any" inputmode="decimal"', t.payBasis === 'hourly' ? SUGGEST.payHourly : SUGGEST.payAnnual))
+      + field(p + 'hoursPerWeek', 'Standard hours per week', combo(p + 'hoursPerWeek', t.hoursPerWeek, 'min="0" max="80" step="any" inputmode="decimal"', SUGGEST.hours))
+      + field(p + 'probationMonths', 'Probation (months)', combo(p + 'probationMonths', t.probationMonths == null ? 6 : t.probationMonths, 'min="0" max="12" step="1"', SUGGEST.probation))
       + field(p + 'awardClassification', 'Award / classification', input(p + 'awardClassification', 'text', t.awardClassification, 'maxlength="150"'), 'e.g. Health Professionals and Support Services Award, Level 2')
       + field(p + 'workLocation', 'Location', input(p + 'workLocation', 'text', t.workLocation || (opts.defaults && opts.defaults.workLocation) || '', 'maxlength="150"'))
       + '</div>'
@@ -1807,6 +1852,7 @@
   global.OnboardingJourney = {
     render: render,
     syncPay: syncPaySuggestions,
+    comboToggle: comboToggle, comboPick: comboPick, comboKey: comboKey,
     saveDraft: function () { return saveDraft(false); },
     saveDraftAndLeave: saveDraftAndLeave,
     discardDraft: discardDraft,
