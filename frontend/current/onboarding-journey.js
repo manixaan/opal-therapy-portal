@@ -1039,8 +1039,13 @@
       body += '<div class="oj-field"><label for="oj-e-subject">Subject</label><input id="oj-e-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-e-body">Message</label><textarea id="oj-e-body" rows="14">' + esc(E.body || '') + '</textarea>'
         + '<small>The letter is attached automatically. Edit freely — what you send is what is kept on the record.</small></div>'
+        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the letter and opens a new message with the wording filled in — drag the letter into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
-        + btn(drafted ? 'Create a fresh Outlook draft' : 'Create the Outlook draft with the letter attached', 'OnboardingJourney.createDraft()', 'oj-btn-primary')
+        + (E.outlook && !E.outlook.available
+          ? btn('Open in my mail app — with the letter downloaded', 'OnboardingJourney.openInMailApp(\'e\', \'' + jsq((d.letter && d.letter.pdfUrl) || (d.letter && d.letter.downloadUrl) || '') + '\')', 'oj-btn-primary')
+            + btn('Create the Outlook draft', 'OnboardingJourney.createDraft()')
+          : btn(drafted ? 'Create a fresh Outlook draft' : 'Create the Outlook draft with the letter attached', 'OnboardingJourney.createDraft()', 'oj-btn-primary')
+            + btn('Open in my mail app instead', 'OnboardingJourney.openInMailApp(\'e\', \'' + jsq((d.letter && d.letter.pdfUrl) || (d.letter && d.letter.downloadUrl) || '') + '\')'))
         + btn('Save the wording', 'OnboardingJourney.saveEmail()')
         + btn('Reset to the template', 'OnboardingJourney.resetEmail()', 'oj-btn-quiet')
         + '</div>';
@@ -1246,9 +1251,13 @@
       out += '<div class="oj-field"><label for="oj-pe-subject">Subject</label><input id="oj-pe-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-pe-body">Message</label><textarea id="oj-pe-body" rows="16">' + esc(E.body || '') + '</textarea>'
         + '<small>The ZIP is built from the pack above and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
-        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' You can still download the ZIP, send it yourself, then mark it as sent.</div>' : '')
+        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the ZIP and opens a new message with the wording filled in — drag the ZIP into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
-        + btn(drafted ? 'Prepare a fresh Outlook draft' : 'Prepare Onboarding Email — create the Outlook draft with the ZIP attached', 'OnboardingJourney.packCreateDraft()', 'oj-btn-primary')
+        + (E.outlook && !E.outlook.available
+          ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'pe\', \'/api/onboarding/journey/records/' + jsq(r.id) + '/pack/zip\')', 'oj-btn-primary')
+            + btn('Prepare the Outlook draft', 'OnboardingJourney.packCreateDraft()')
+          : btn(drafted ? 'Prepare a fresh Outlook draft' : 'Prepare Onboarding Email — create the Outlook draft with the ZIP attached', 'OnboardingJourney.packCreateDraft()', 'oj-btn-primary')
+            + btn('Open in my mail app instead', 'OnboardingJourney.openInMailApp(\'pe\', \'/api/onboarding/journey/records/' + jsq(r.id) + '/pack/zip\')'))
         + btn('Save the wording', 'OnboardingJourney.packSaveEmail()')
         + btn('Reset to the template', 'OnboardingJourney.packResetEmail()', 'oj-btn-quiet')
         + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(r.id) + '/pack/zip">Download the ZIP</a>'
@@ -1430,7 +1439,7 @@
         + '<div class="oj-field"><label for="oj-ie-subject">Subject</label><input id="oj-ie-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-ie-body">Message</label><textarea id="oj-ie-body" rows="14">' + esc(E.body || '') + '</textarea><small>The induction ZIP is built from the pack above and attached. The due date is seven days from the day the draft is created.</small></div>'
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + '</div>' : '')
-        + '<div class="oj-actions">' + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
+        + '<div class="oj-actions">' + (E.outlook && !E.outlook.available ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'ie\', \'/api/onboarding/journey/records/' + jsq(d.record.id) + '/induction/zip\')', R.ready ? 'oj-btn-primary' : '') : '') + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready && !(E.outlook && !E.outlook.available) ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
         + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
           : '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent(\'induction\')">Mark as sent</button></p>')
         + '</div>';
@@ -1715,6 +1724,25 @@
   async function discardLetter() {
     if (!await portalConfirm('Discard the uploaded edit and go back to the generated letter?', { danger: true })) return;
     return act('/offer/letter', {}, 'Using the generated letter again.', 'DELETE');
+  }
+
+  /**
+   * Without Outlook drafts (Graph), the next best thing: the attachment is
+   * downloaded and the laptop's own mail app opens with recipient, subject and
+   * message filled in. A browser cannot attach a file to a mailto: message,
+   * so the downloaded file is dragged in — the note beside the button says so.
+   */
+  function openInMailApp(prefix, attachmentUrl) {
+    var r = S.record && S.record.record; if (!r) return;
+    var sub = doc.getElementById('oj-' + prefix + '-subject'); var body = doc.getElementById('oj-' + prefix + '-body');
+    var subject = sub ? sub.value.trim() : ''; var text = body ? body.value : '';
+    if (attachmentUrl) {
+      var a = doc.createElement('a'); a.href = attachmentUrl; a.download = ''; a.style.display = 'none';
+      doc.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1000);
+    }
+    var href = 'mailto:' + encodeURIComponent(r.applicantEmail || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
+    setTimeout(function () { global.location.href = href; }, attachmentUrl ? 400 : 0);
+    toast(attachmentUrl ? 'Your mail app is opening — attach the file that just downloaded, then send.' : 'Your mail app is opening.');
   }
 
   function readEmail() {
@@ -2134,6 +2162,7 @@
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
     packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
+    openInMailApp: openInMailApp,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
