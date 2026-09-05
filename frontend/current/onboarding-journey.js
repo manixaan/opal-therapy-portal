@@ -1293,8 +1293,8 @@
     if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.packPreview(\'' + jsq(i.id) + '\')', 'oj-btn-small'));
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
-      acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.source === 'own' ? 'Replace again' : i.sendsDocument ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
-      if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      if (f.source === 'own') acts.push(btn(i.library ? 'Use library copy' : 'Remove file', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
@@ -1815,7 +1815,13 @@
     input.value = '';
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', { fileName: file.name, fileMime: mime, fileData: b64 }, 'File replaced for this person only.', 'POST', phaseOfItem(id)));
   }
-  function packRevertFile(id) { return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, 'Back to the library copy.', 'DELETE', phaseOfItem(id))); }
+  async function packRevertFile(id) {
+    var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
+    var i = all.filter(function (x) { return x.id === id; })[0];
+    var hasLibrary = !!(i && i.library);
+    if (!hasLibrary && !await portalConfirm('Remove the attached file? The document stays in the pack with no file until you attach another.', { danger: true })) return;
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'Back to the library copy.' : 'File removed — attach the right one when ready.', 'DELETE', phaseOfItem(id)));
+  }
   function packPreview(id) {
     var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
     var i = all.filter(function (x) { return x.id === id; })[0];
