@@ -884,8 +884,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r19');
-    expect(SHELL).toContain('/resourcehub.js?v=r34');
+    expect(SHELL).toContain('/resourcehub.css?v=r20');
+    expect(SHELL).toContain('/resourcehub.js?v=r35');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -936,7 +936,7 @@ describe('the new learning item dialog', () => {
   });
 
   test('it collects a name and a category, and the category list is data-driven', () => {
-    const dlg = fn('renderLaCreate');
+    const dlg = fn('renderLaCreate') + fn('laCreateDocumentForm');
     expect(dlg).toContain('la-new-title');
     expect(dlg).toContain('la-new-cat');
     expect(dlg).toContain('S.la.categories');
@@ -969,6 +969,30 @@ describe('the new learning item dialog', () => {
 
   test('it is narrower than the people picker', () => {
     expect(CSS).toContain('.rh2-dialog-sm');
+  });
+
+  test('the header offers ONE way in, and the dialog asks document or walkthrough first', () => {
+    // Import existing, Walkthroughs and New learning item were three buttons
+    // and three decisions before anything was started. One button now; the
+    // kind is the dialog's first question, and the import is its quiet line.
+    const page = fn('renderAssignLearning');
+    const header = page.slice(page.indexOf('rh2-learn-cat-actions'), page.indexOf('rh2-learn-cat-search'));
+    expect(header).toContain('+ New induction');
+    expect(header).not.toContain('Import existing');
+    expect(header).not.toContain('OpalWorkshop.open()');
+    expect((header.match(/rh2-btn-primary/g) || []).length).toBe(1);
+
+    const dlg = fn('renderLaCreate');
+    expect(dlg).toContain("RH2.laCreateKind(\\'document\\')");
+    expect(dlg).toContain("RH2.laCreateKind(\\'walkthrough\\')");
+    expect(dlg).toContain("RH2.laCreateKind(\\'import\\')");
+    expect(dlg).toContain("c.kind !== 'document'");
+    const kind = fn('laCreateKind');
+    expect(kind).toContain('OpalWorkshop.createNew()');
+    expect(kind).toContain('laImport()');
+    expect(kind).toContain("c.kind = 'document'");
+    expect(fn('laCreate')).toContain('kind: null');
+    expect(CSS).toContain('.rh2-learn-kind-tile');
   });
 });
 

@@ -1493,3 +1493,14 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-ind-flat { gap: 20px; }
 .rh2-ind-flatsec { display: flex; flex-direction: column; gap: 12px; }
 .rh2-ind-flatsec + .rh2-ind-flatsec { padding-top: 20px; border-top: 1px solid var(--border-soft); }
+
+/* New induction: the first question is what kind — two tiles, one quiet line. */
+.rh2-learn-kind { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.rh2-learn-kind-tile {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; width: 100%;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); color: inherit; font: inherit; cursor: pointer;
+}
+.rh2-learn-kind-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rh2-learn-kind-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.rh2-learn-kind-import { margin: 14px 0 0; }

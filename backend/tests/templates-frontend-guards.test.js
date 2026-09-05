@@ -88,7 +88,7 @@ describe('the shell wires the surface', () => {
     // The pin is shared by every feature that edits the file — the shell
     // ships the union under the newest version. r29 makes the Owner's
     // preview launch its walkthrough tiles for real.
-    expect(SHELL).toContain('<script src="/resourcehub.js?v=r34" defer></script>');
+    expect(SHELL).toContain('<script src="/resourcehub.js?v=r35" defer></script>');
   });
 });
 

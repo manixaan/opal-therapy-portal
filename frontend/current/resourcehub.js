@@ -5741,17 +5741,11 @@
         ? '<div class="rh2-learn-cat-actions">' +
             '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
               'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
-            '<button type="button" class="rh2-btn" ' + (la.importing ? 'disabled ' : '') +
-              'onclick="RH2.laImport()" title="Bring the Resource Hub learning paths and the portal ' +
-              'induction in as editable, assignable items">' +
-              (la.importing ? 'Importing…' : 'Import existing') + '</button>' +
-            // The walkthrough workshop is a sibling of this console, not a
-            // child of any one learning item: a tour built here goes on the
-            // shelf and can be used by any induction.
-            '<button type="button" class="rh2-btn" onclick="OpalWorkshop.open()" ' +
-              'title="Build and edit the interactive walkthroughs — the pop-ups and spotlights">' +
-              'Walkthroughs</button>' +
-            '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New learning item</button>' +
+            // One way in. The dialog asks whether the new induction is a
+            // document or an interactive walkthrough, and offers the import
+            // of the practice's existing inductions as a quiet third line —
+            // three buttons up here was three decisions before starting.
+            '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New induction</button>' +
           '</div>' +
           // Its own full-width row beneath the heading, so the field lines up
           // with the cards it filters instead of floating off to the right.
@@ -5778,7 +5772,7 @@
         '<div class="rh2-empty-act">' +
         '<button type="button" class="rh2-btn rh2-btn-primary" ' + (la.importing ? 'disabled ' : '') +
           'onclick="RH2.laImport()">' + (la.importing ? 'Importing…' : 'Import existing inductions') + '</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laCreate()">+ New learning item</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.laCreate()">+ New induction</button>' +
         '</div></div>';
     } else if (!rows.length) {
       out += '<div class="rh2-empty">Nothing matches &ldquo;' + esc(a.q) + '&rdquo;.' +
@@ -5908,7 +5902,31 @@
    * the assignment flow uses.
    */
   function laCreate() {
-    S.la.create = { title: '', category: 'induction', busy: false, err: '' };
+    // `kind` is the first question: null until the Owner picks document or
+    // walkthrough. Only a document goes on to the name-and-category form.
+    S.la.create = { kind: null, title: '', category: 'induction', busy: false, err: '' };
+    render();
+  }
+
+  /** The Owner's answer to "what are you making?". */
+  function laCreateKind(kind) {
+    var c = S.la.create;
+    if (!c || c.busy) return;
+    if (kind === 'walkthrough') {
+      // An interactive walkthrough is built in the workshop, which names it
+      // and opens its editor; it then sits on the shelf for any induction.
+      S.la.create = null;
+      render();
+      if (global.OpalWorkshop && global.OpalWorkshop.createNew) global.OpalWorkshop.createNew();
+      return;
+    }
+    if (kind === 'import') {
+      S.la.create = null;
+      render();
+      laImport();
+      return;
+    }
+    c.kind = 'document';
     render();
     var input = doc.getElementById('la-new-title');
     if (input) { try { input.focus(); } catch (e) { /* not yet painted */ } }
@@ -5996,11 +6014,37 @@
       '<section class="rh2-dialog rh2-dialog-sm" role="dialog" aria-modal="true"' +
       ' aria-labelledby="la-new-title-h" id="la-new-dialog">' +
       '<div class="rh2-dialog-head">' +
-        '<h2 class="rh2-h2" id="la-new-title-h">New learning item</h2>' +
+        '<h2 class="rh2-h2" id="la-new-title-h">New induction</h2>' +
         '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateClose()"' +
         ' aria-label="Close without creating">Close</button>' +
       '</div>' +
-      '<div class="rh2-dialog-body">' +
+      (c.kind !== 'document'
+        // The first screen: what are you making? Two tiles, one quiet line.
+        ? '<div class="rh2-dialog-body">' +
+            '<p class="rh2-quiet rh2-learn-new-hint">What kind of induction is it?</p>' +
+            '<div class="rh2-learn-kind">' +
+              '<button type="button" class="rh2-learn-kind-tile" onclick="RH2.laCreateKind(\'document\')">' +
+                '<span class="rh2-row-title">Document</span>' +
+                '<span class="rh2-row-sub">Written sections, resources to read, sign-offs and knowledge checks. ' +
+                'You write it on the learner&rsquo;s own screen.</span></button>' +
+              '<button type="button" class="rh2-learn-kind-tile" onclick="RH2.laCreateKind(\'walkthrough\')">' +
+                '<span class="rh2-row-title">Interactive walkthrough</span>' +
+                '<span class="rh2-row-sub">A guided tour of the portal itself &mdash; pop-ups and spotlights ' +
+                'on the real screens. Built in the walkthrough workshop.</span></button>' +
+            '</div>' +
+            '<p class="rh2-quiet rh2-learn-kind-import">Or <button type="button" class="rh2-linkbtn" ' +
+              (S.la.importing ? 'disabled ' : '') + 'onclick="RH2.laCreateKind(\'import\')">' +
+              'import the practice&rsquo;s existing inductions</button> to edit and assign them.</p>' +
+          '</div>' +
+          '<div class="rh2-dialog-foot">' +
+            '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
+          '</div></section></div>'
+        : laCreateDocumentForm(c, cats));
+  }
+
+  /** The second screen of a document induction: its name and category. */
+  function laCreateDocumentForm(c, cats) {
+    return '<div class="rh2-dialog-body">' +
         '<p class="rh2-quiet rh2-learn-new-hint">Name it now — you can add sections, modules and ' +
         'assessments on the next screen. Nothing is visible to anyone until you assign it.</p>' +
         '<div class="rh2-form-grid">' +
@@ -7776,6 +7820,7 @@
     // Owner: learning console
     laNav: laNav,
     laCreate: laCreate,
+    laCreateKind: laCreateKind,
     laEdit: laEdit,
     laEditorClose: laEditorClose,
     laSave: laSave,
