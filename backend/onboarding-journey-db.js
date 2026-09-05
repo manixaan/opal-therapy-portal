@@ -392,7 +392,66 @@ async function listAssignableStaff(organisationId, q = pool) {
   return rows;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  START ONBOARDING DRAFTS — the unsubmitted form, saved as it is typed
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DRAFT_SELECT = `
+  SELECT id, organisation_id AS "organisationId", created_by AS "createdBy", updated_by AS "updatedBy",
+         applicant_name AS "applicantName", position_title AS "positionTitle", form,
+         created_at AS "createdAt", updated_at AS "updatedAt"
+    FROM onboarding_start_drafts`;
+
+/** Plain-object form only; anything else is stored as an empty form. */
+function cleanForm(form) {
+  return form && typeof form === 'object' && !Array.isArray(form) ? form : {};
+}
+
+async function listStartDrafts(organisationId, q = pool) {
+  const r = await q.query(`${DRAFT_SELECT} WHERE organisation_id = $1 ORDER BY updated_at DESC`, [organisationId]);
+  return r.rows;
+}
+
+async function getStartDraft(organisationId, id, q = pool) {
+  if (!isUuid(id)) return null;
+  const r = await q.query(`${DRAFT_SELECT} WHERE organisation_id = $1 AND id = $2`, [organisationId, id]);
+  return r.rows[0] || null;
+}
+
+async function createStartDraft({ organisationId, userId, form }, q = pool) {
+  const f = cleanForm(form);
+  const r = await q.query(
+    `INSERT INTO onboarding_start_drafts (organisation_id, created_by, updated_by, applicant_name, position_title, form)
+     VALUES ($1, $2, $2, $3, $4, $5) RETURNING id`,
+    [organisationId, userId || null, str(f.name, 200) || null, str(f.position, 150) || null, JSON.stringify(f)],
+  );
+  return getStartDraft(organisationId, r.rows[0].id, q);
+}
+
+async function updateStartDraft(organisationId, id, { userId, form }, q = pool) {
+  if (!isUuid(id)) return null;
+  const f = cleanForm(form);
+  const r = await q.query(
+    `UPDATE onboarding_start_drafts
+        SET form = $4, applicant_name = $5, position_title = $6, updated_by = $3, updated_at = NOW()
+      WHERE organisation_id = $1 AND id = $2 RETURNING id`,
+    [organisationId, id, userId || null, JSON.stringify(f), str(f.name, 200) || null, str(f.position, 150) || null],
+  );
+  return r.rowCount ? getStartDraft(organisationId, id, q) : null;
+}
+
+async function deleteStartDraft(organisationId, id, q = pool) {
+  if (!isUuid(id)) return false;
+  const r = await q.query('DELETE FROM onboarding_start_drafts WHERE organisation_id = $1 AND id = $2', [organisationId, id]);
+  return r.rowCount > 0;
+}
+
 module.exports = {
+  listStartDrafts,
+  getStartDraft,
+  createStartDraft,
+  updateStartDraft,
+  deleteStartDraft,
   getCurrentOffer,
   listOffers,
   getOffer,

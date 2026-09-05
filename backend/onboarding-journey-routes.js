@@ -411,6 +411,55 @@ router.get('/api/onboarding/journey/board', requirePermission('onboarding.view')
 }));
 
 /** What the Start Onboarding form needs to draw itself. */
+// ── Start Onboarding drafts ──────────────────────────────────────────────
+// The unsubmitted Start form, saved as it is typed so a timeout loses nothing.
+// A draft carries a name, an email and pay figures, so it is behind the same
+// permission as starting an onboarding, never the wider view permission.
+
+const DRAFT_FORM_LIMIT = 16 * 1024;
+
+function draftFormOf(req) {
+  const form = req.body?.form;
+  if (!form || typeof form !== 'object' || Array.isArray(form)) return null;
+  if (JSON.stringify(form).length > DRAFT_FORM_LIMIT) return null;
+  return form;
+}
+
+router.get('/api/onboarding/journey/drafts', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  noStore(res);
+  res.json({ drafts: await jdb.listStartDrafts(orgOf(req)) });
+}));
+
+router.get('/api/onboarding/journey/drafts/:id', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  noStore(res);
+  const draft = await jdb.getStartDraft(orgOf(req), req.params.id);
+  if (!draft) return notFound(res);
+  res.json({ draft });
+}));
+
+router.post('/api/onboarding/journey/drafts', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const form = draftFormOf(req);
+  if (!form) return res.status(400).json({ error: 'A draft is the form as an object' });
+  const draft = await jdb.createStartDraft({ organisationId: orgOf(req), userId: req.user.id, form });
+  await auditOnboarding(req, 'start_draft_saved', { targetType: 'onboarding_start_draft', targetId: draft.id });
+  res.status(201).json({ draft });
+}));
+
+router.put('/api/onboarding/journey/drafts/:id', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const form = draftFormOf(req);
+  if (!form) return res.status(400).json({ error: 'A draft is the form as an object' });
+  const draft = await jdb.updateStartDraft(orgOf(req), req.params.id, { userId: req.user.id, form });
+  if (!draft) return notFound(res);
+  res.json({ draft });
+}));
+
+router.delete('/api/onboarding/journey/drafts/:id', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const gone = await jdb.deleteStartDraft(orgOf(req), req.params.id);
+  if (!gone) return notFound(res);
+  await auditOnboarding(req, 'start_draft_discarded', { targetType: 'onboarding_start_draft', targetId: req.params.id });
+  res.json({ ok: true });
+}));
+
 router.get('/api/onboarding/journey/options', requirePermission('onboarding.view'), safe(async (req, res) => {
   const org = orgOf(req);
   const [packages, staff, settings] = await Promise.all([
@@ -554,6 +603,9 @@ router.post('/api/onboarding/journey/records', requirePermission('onboarding.ass
       offerId: offer.id, employmentType: created.employment_type, roleCategory, role: proposedRole,
     },
   });
+
+  // The draft this form was resumed from has become the record.
+  if (isUuid(b.draftId)) await jdb.deleteStartDraft(org, b.draftId);
 
   const full = await odb.getAssignment(org, created.id);
   res.status(201).json(await recordDetail(req, full));

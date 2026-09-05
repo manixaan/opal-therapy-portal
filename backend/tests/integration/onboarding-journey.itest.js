@@ -187,6 +187,58 @@ describe('Stage 1 — Start Onboarding creates the record and the letter togethe
   });
 });
 
+describe('Stage 0 — a Start form saved part-way survives as a draft (migration 054)', () => {
+  test('save, list, resume, then creating the record clears the draft', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const form = { name: 'Jane Smith', position: 'Occupational Therapist', payRate: '92000' };
+
+    const saved = await agent.post('/api/onboarding/journey/drafts').send({ form });
+    expect(saved.status).toBe(201);
+    expect(saved.body.draft).toMatchObject({ applicantName: 'Jane Smith', positionTitle: 'Occupational Therapist', form });
+    const id = saved.body.draft.id;
+
+    const updated = await agent.put(`/api/onboarding/journey/drafts/${id}`).send({ form: { ...form, name: 'Jane A Smith' } });
+    expect(updated.status).toBe(200);
+    expect(updated.body.draft.applicantName).toBe('Jane A Smith');
+
+    const list = await agent.get('/api/onboarding/journey/drafts');
+    expect(list.status).toBe(200);
+    expect(list.body.drafts.map((d) => d.id)).toEqual([id]);
+
+    const one = await agent.get(`/api/onboarding/journey/drafts/${id}`);
+    expect(one.body.draft.form.payRate).toBe('92000');
+
+    await start(agent, { draftId: id });
+    expect((await agent.get('/api/onboarding/journey/drafts')).body.drafts).toEqual([]);
+    expect((await agent.get(`/api/onboarding/journey/drafts/${id}`)).status).toBe(404);
+  });
+
+  test('a draft can be discarded, and a malformed one is refused', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    expect((await agent.post('/api/onboarding/journey/drafts').send({ form: 'nope' })).status).toBe(400);
+    expect((await agent.post('/api/onboarding/journey/drafts').send({ form: { pad: 'x'.repeat(20000) } })).status).toBe(400);
+
+    const { body } = await agent.post('/api/onboarding/journey/drafts').send({ form: { name: 'Temp' } });
+    expect((await agent.delete(`/api/onboarding/journey/drafts/${body.draft.id}`)).status).toBe(200);
+    expect((await agent.delete(`/api/onboarding/journey/drafts/${body.draft.id}`)).status).toBe(404);
+  });
+
+  test('drafts carry personal details, so the view permission alone cannot read them, and another organisation never can', async () => {
+    const owner = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { body } = await owner.agent.post('/api/onboarding/journey/drafts').send({ form: { name: 'Private Person', personalEmail: 'p@example.com' } });
+
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
+    expect((await viewer.agent.get('/api/onboarding/journey/drafts')).status).toBe(403);
+    expect((await viewer.agent.get(`/api/onboarding/journey/drafts/${body.draft.id}`)).status).toBe(403);
+
+    const otherOrg = await seedOrganisation('Elsewhere Pty Ltd');
+    const outsider = await agentFor({ role: 'owner', email: 'other@example.com', organisation_id: otherOrg.id });
+    expect((await outsider.agent.get(`/api/onboarding/journey/drafts/${body.draft.id}`)).status).toBe(404);
+    expect((await outsider.agent.get('/api/onboarding/journey/drafts')).body.drafts).toEqual([]);
+    expect((await outsider.agent.delete(`/api/onboarding/journey/drafts/${body.draft.id}`)).status).toBe(404);
+  });
+});
+
 const detailLetter = (res) => res.body.letter;
 
 describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verification, release', () => {

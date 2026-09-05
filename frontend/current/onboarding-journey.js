@@ -122,6 +122,9 @@
     recordId: null,
     editingTerms: false,
     busy: false,
+    draftId: null,      // the Start form being resumed / autosaved
+    draftTimer: null,
+    draftDirty: false,
   };
 
   var VIEWS = [
@@ -152,6 +155,7 @@
       return;
     }
     S.view = view;
+    S.draftId = view === 'start' ? (id || null) : null;
     S.recordId = view === 'record' ? (id || S.recordId) : null;
     S.packageId = view === 'defaults' ? (id || null) : null;
     S.phaseView = null;
@@ -175,6 +179,7 @@
     if (!host) return;
     if (view) S.view = (view === 'track' || view === 'dashboard') ? 'board' : view;
     if (S.view === 'record' && id) S.recordId = id;
+    if (S.view === 'start' && id) S.draftId = id;
     if (S.view === 'defaults') S.packageId = id || S.packageId || null;
     if (S.view === 'record' && !S.recordId) S.view = 'board';
     if (S.view === 'start' && !can('onboarding.assign')) S.view = 'board';
@@ -218,9 +223,11 @@
     if (actions && can('onboarding.assign')) {
       actions.innerHTML = '<button type="button" class="oj-btn oj-btn-primary" onclick="OnboardingJourney.nav(\'start\')">+ Start onboarding</button>';
     }
-    var res = await api('/api/onboarding/journey/board');
+    var both = await Promise.all([api('/api/onboarding/journey/board'), can('onboarding.assign') ? api('/api/onboarding/journey/drafts') : { ok: true, drafts: [] }]);
+    var res = both[0];
     if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'; return; }
     S.board = res;
+    S.drafts = both[1].ok ? both[1].drafts : [];
     drawBoard(pane);
   }
 
@@ -236,6 +243,7 @@
     var rows = b.records.filter(function (r) { return matchesFilter(r, S.filter); });
 
     pane.innerHTML = ''
+      + draftsSection(S.drafts)
       + '<div class="oj-tiles">'
       + tile(s.live, 'In progress', 'all')
       + tile(s.complete, 'Completed', 'complete')
@@ -473,9 +481,86 @@
       if (!o.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(o.error) + '</div>'; return; }
       S.options = o;
     }
-    pane.innerHTML = startForm(S.options, {});
+    var form = {};
+    if (S.draftId) {
+      var d = await api('/api/onboarding/journey/drafts/' + encodeURIComponent(S.draftId));
+      if (d.ok) form = d.draft.form || {};
+      else { S.draftId = null; toast('That draft is no longer there — starting fresh.', true); }
+    }
+    pane.innerHTML = startForm(S.options, form);
+    var formEl = doc.getElementById('oj-start');
+    if (formEl) formEl.addEventListener('input', markDraftDirty);
+    if (formEl) formEl.addEventListener('change', markDraftDirty);
+    if (S.draftId) syncPaySuggestions('oj-f-');
+    setDraftStatus(S.draftId ? 'Draft resumed — saves as you type' : 'Saves as you type');
     var first = doc.getElementById('oj-f-name');
     if (first) first.focus({ preventScroll: true });
+  }
+
+  // ── Drafts: the form is saved as it is typed, and on demand ──────────────
+
+  var DRAFT_DELAY = 1500;
+
+  function setDraftStatus(text, isError) {
+    var el = doc.getElementById('oj-draft-status');
+    if (el) { el.textContent = text; el.classList.toggle('is-error', !!isError); }
+  }
+
+  function markDraftDirty() {
+    S.draftDirty = true;
+    if (S.draftTimer) clearTimeout(S.draftTimer);
+    S.draftTimer = setTimeout(function () { saveDraft(true); }, DRAFT_DELAY);
+    setDraftStatus('Unsaved changes…');
+  }
+
+  function fmtTime(d) { return d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }); }
+
+  /** Saves the Start form as a draft. `auto` is the typing-triggered save; a
+   *  manual save also tells the person where it went. */
+  async function saveDraft(auto) {
+    if (S.draftTimer) { clearTimeout(S.draftTimer); S.draftTimer = null; }
+    if (!doc.getElementById('oj-start')) return false;
+    var form = readStartForm();
+    var typedAnything = Object.keys(form).some(function (k) { return form[k] !== '' && form[k] !== null && form[k] !== false && k !== 'proposedRole' && k !== 'employmentType' && k !== 'payBasis' && k !== 'probationMonths' && k !== 'isTreatingTherapist'; });
+    if (!S.draftId && !typedAnything) { setDraftStatus('Saves as you type'); return false; }
+    setDraftStatus('Saving…');
+    var res = S.draftId
+      ? await api('/api/onboarding/journey/drafts/' + encodeURIComponent(S.draftId), { method: 'PUT', body: { form: form } })
+      : await api('/api/onboarding/journey/drafts', { method: 'POST', body: { form: form } });
+    if (!res.ok) { setDraftStatus('Could not save the draft — ' + res.error, true); if (!auto) toast(res.error, true); return false; }
+    S.draftId = res.draft.id;
+    S.draftDirty = false;
+    setDraftStatus('Draft saved ' + fmtTime(new Date()));
+    if (!auto) toast('Draft saved. Find it under Drafts on the Onboarding board whenever you come back.');
+    return true;
+  }
+
+  async function saveDraftAndLeave() {
+    var ok = await saveDraft(false);
+    if (ok || !S.draftDirty) nav('board');
+  }
+
+  async function discardDraft(id) {
+    if (!await portalConfirm('Discard this draft? Nothing has been created from it, so there is nothing else to undo.', { danger: true })) return;
+    var res = await api('/api/onboarding/journey/drafts/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!res.ok) { toast(res.error, true); return; }
+    if (S.draftId === id) S.draftId = null;
+    toast('Draft discarded.');
+    if (S.view === 'start') nav('board'); else { var pane = doc.getElementById('oj-view'); if (pane) viewBoard(pane, doc.getElementById('oj-hero-actions')); }
+  }
+
+  function draftsSection(drafts) {
+    if (!drafts || !drafts.length) return '';
+    return '<section class="oj-drafts"><h2>Drafts <span class="oj-count">' + drafts.length + '</span></h2>'
+      + '<p class="oj-quiet">Start Onboarding forms saved part-way. Nothing has been created from them yet.</p>'
+      + '<div class="oj-list">' + drafts.map(function (d) {
+        return '<article class="oj-row oj-row-draft"><div class="oj-row-main"><h3>' + esc(d.applicantName || 'Unnamed') + ' <span class="oj-chip is-quiet">Draft</span></h3>'
+          + '<p class="oj-quiet">' + esc(d.positionTitle || 'Position not set') + ' · last saved ' + esc(fmtDateTime(d.updatedAt)) + '</p></div>'
+          + '<div class="oj-row-side"><div class="oj-actions oj-actions-tight">'
+          + '<button type="button" class="oj-btn oj-btn-primary oj-btn-small" onclick="OnboardingJourney.nav(\'start\', \'' + jsq(d.id) + '\')">Resume</button>'
+          + '<button type="button" class="oj-btn oj-btn-small" onclick="OnboardingJourney.discardDraft(\'' + jsq(d.id) + '\')">Discard</button>'
+          + '</div></div></article>';
+      }).join('') + '</div></section>';
   }
 
   function field(id, label, control, hint) {
@@ -558,37 +643,36 @@
       + '<form class="oj-form" id="oj-start" onsubmit="return OnboardingJourney.submitStart(event)">'
       + '<section class="oj-panel"><h2>Who</h2>'
       + '<div class="oj-grid2">'
-      + field('oj-f-name', 'Full name', input('oj-f-name', 'text', '', 'maxlength="200" required autocomplete="off"'))
-      + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', '', 'maxlength="255" required autocomplete="off"'), 'The letter of offer and the onboarding invitation go here.')
-      + field('oj-f-mobile', 'Mobile (optional)', input('oj-f-mobile', 'tel', '', 'maxlength="40"'))
-      + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, ''), 'Drives which onboarding package applies.')
-      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], 'therapist'), 'Granted at induction, never before.')
-      + field('oj-f-managerUserId', 'Reports to', select('oj-f-managerUserId', staff, ''))
+      + field('oj-f-name', 'Full name', input('oj-f-name', 'text', t.name, 'maxlength="200" required autocomplete="off"'))
+      + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', t.personalEmail, 'maxlength="255" required autocomplete="off"'), 'The letter of offer and the onboarding invitation go here.')
+      + field('oj-f-mobile', 'Mobile (optional)', input('oj-f-mobile', 'tel', t.mobile, 'maxlength="40"'))
+      + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, t.roleCategory || ''), 'Drives which onboarding package applies.')
+      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], t.proposedRole || 'therapist'), 'Granted at induction, never before.')
+      + field('oj-f-managerUserId', 'Reports to', select('oj-f-managerUserId', staff, t.managerUserId || ''))
       + '</div>'
-      + '<label class="oj-check"><input type="checkbox" id="oj-f-treating" checked> Treating therapist (works directly with participants)</label>'
+      + '<label class="oj-check"><input type="checkbox" id="oj-f-treating"' + (t.isTreatingTherapist === false ? '' : ' checked') + '> Treating therapist (works directly with participants)</label>'
       + '</section>'
       + '<section class="oj-panel"><h2>The offer</h2>'
       + '<p class="oj-quiet">Entered once. These terms become the letter of offer, the employment profile and the payroll set-up task.</p>'
       + termsFields(opts, t)
       + '</section>'
       + '<section class="oj-panel"><h2>Onboarding package</h2>'
-      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, ''), 'Left alone, the portal picks the published package that matches the role and employment type.')
-      + field('oj-f-notes', 'Internal note (optional)', '<textarea id="oj-f-notes" rows="2" maxlength="2000"></textarea>')
+      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, t.packageId || ''), 'Left alone, the portal picks the published package that matches the role and employment type.')
+      + field('oj-f-notes', 'Internal note (optional)', '<textarea id="oj-f-notes" rows="2" maxlength="2000">' + esc(t.notes || '') + '</textarea>')
       + '</section>'
       + '<div id="oj-start-error" class="ob-note is-danger" role="alert" hidden></div>'
       + '<div class="oj-actions"><button type="submit" class="oj-btn oj-btn-primary" id="oj-start-submit">Create the record and draft the letter</button>'
-      + '<button type="button" class="oj-btn" onclick="OnboardingJourney.nav(\'board\')">Cancel</button></div>'
+      + '<button type="button" class="oj-btn" onclick="OnboardingJourney.saveDraftAndLeave()">Save and come back later</button>'
+      + '<button type="button" class="oj-btn" onclick="OnboardingJourney.nav(\'board\')">Cancel</button>'
+      + '<span class="oj-draft-status" id="oj-draft-status" aria-live="polite"></span></div>'
       + '</form>';
   }
 
-  async function submitStart(ev) {
-    if (ev) ev.preventDefault();
-    if (S.busy) return false;
-    var errEl = doc.getElementById('oj-start-error');
-    var btn = doc.getElementById('oj-start-submit');
+  /** Every field of the Start form, as the create endpoint (and a draft) takes it. */
+  function readStartForm() {
     var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
     var terms = readTerms();
-    var body = {
+    return {
       name: v('oj-f-name'), personalEmail: v('oj-f-email'), mobile: v('oj-f-mobile') || null,
       roleCategory: v('oj-f-roleCategory') || null, proposedRole: v('oj-f-proposedRole'),
       managerUserId: v('oj-f-managerUserId') || null,
@@ -600,6 +684,16 @@
       superannuationRate: terms.superannuationRate, offerClosingDate: terms.offerClosingDate,
       packageId: v('oj-f-packageId') || null, notes: v('oj-f-notes') || null,
     };
+  }
+
+  async function submitStart(ev) {
+    if (ev) ev.preventDefault();
+    if (S.busy) return false;
+    if (S.draftTimer) { clearTimeout(S.draftTimer); S.draftTimer = null; }
+    var errEl = doc.getElementById('oj-start-error');
+    var btn = doc.getElementById('oj-start-submit');
+    var body = readStartForm();
+    body.draftId = S.draftId || null;
     S.busy = true; if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     var res = await api('/api/onboarding/journey/records', { method: 'POST', body: body });
     S.busy = false; if (btn) { btn.disabled = false; btn.textContent = 'Create the record and draft the letter'; }
@@ -608,6 +702,7 @@
       return false;
     }
     toast('Onboarding started — the letter of offer is drafted and waiting for your approval.');
+    S.draftId = null; S.draftDirty = false;
     S.record = res;
     nav('record', res.record.id);
     return false;
@@ -1712,6 +1807,9 @@
   global.OnboardingJourney = {
     render: render,
     syncPay: syncPaySuggestions,
+    saveDraft: function () { return saveDraft(false); },
+    saveDraftAndLeave: saveDraftAndLeave,
+    discardDraft: discardDraft,
     subnavHtml: subnavHtml,
     nav: nav,
     openRecord: openRecord,
