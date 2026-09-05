@@ -1226,10 +1226,9 @@
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
-        + (editable ? '<label class="oj-btn oj-btn-small oj-btn-quiet oj-file oj-section-attach">+ Attach files<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAttachToSection(\'' + jsq(phase) + '\', \'' + jsq(k) + '\', this.files); this.value = \'\';"></label>' : '')
         + '</div></td></tr>';
       (groups[k] || []).forEach(function (i) { out += packRow(i, editable, sent); });
-      if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here, or press + Attach files.</td></tr>';
+      if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here to add them, or press + Add document.</td></tr>';
     });
     out += '</tbody></table></div>';
     // Removed documents are not listed here — a stale entry is noise on the working pack. Restore defaults brings the defaults back.
@@ -1303,7 +1302,6 @@
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
       acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
-      acts.push('<label class="oj-btn oj-btn-small oj-file" title="Add one or more extra files to this document">+ Attach more<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAddAttachments(\'' + jsq(i.id) + '\', this.files); this.value = \'\';"></label>');
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
@@ -1691,7 +1689,7 @@
       var files = ev.dataTransfer && ev.dataTransfer.files;
       if (!files || !files.length) return;
       var spec = row.getAttribute('data-drop').split(':');
-      if (spec[0] === 'pack') { if (files.length > 1) packAddAttachments(spec[1], files); else packUploadFile(spec[1], files[0]); }
+      if (spec[0] === 'pack') { packUploadFile(spec[1], files[0]); if (files.length > 1) toast('One document per line — the first file was used. Drop several on a section heading to add one line each.', true); }
       else if (spec[0] === 'defaults') defaultsUpload(spec[1], spec[2], files[0]);
       else if (spec[0] === 'returns') uploadReturns({ files: files, value: '' });
       else if (spec[0] === 'section') packAttachToSection(spec[1], spec[2], files);
