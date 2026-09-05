@@ -330,16 +330,43 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-pack-addrow td { background: #fffaf0; padding: 10px; }
 #oj-defaults-add { margin-bottom: 10px; }
 
-/* ── Letter of Offer wording editor ─────────────────────────────────────── */
-.oj-lt { display: flex; flex-direction: column; gap: 8px; }
-.oj-lt-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+/* ── Letter of Offer wording editor — reads like the letter ─────────────── */
+.oj-lt { display: flex; flex-direction: column; gap: 10px; }
+.oj-lt-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.oj-lt-help { margin: 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
+.oj-lt-help code { font-family: inherit; background: #eef3f0; color: #2f5651; padding: 1px 5px; border-radius: 4px; }
 .oj-lt-insert { font-size: 12.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; }
 .oj-lt-insert select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
-.oj-lt-para textarea {
-  width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.5; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); resize: vertical;
+.oj-lt-page { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 28px 34px; display: flex; flex-direction: column; gap: 2px; }
+.oj-lt-text {
+  display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.5; color: #263633;
+  padding: 4px 8px; margin: 0 -8px; border: 1px solid transparent; border-radius: 6px; background: transparent; resize: none; overflow: hidden;
 }
-.oj-lt-para textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.oj-lt-para.is-h1 textarea { font-weight: 800; font-size: 17px; }
-.oj-lt-para.is-h2 textarea { font-weight: 700; font-size: 15px; margin-top: 6px; }
-.oj-lt-para.is-th textarea { font-weight: 600; font-size: 12.5px; color: var(--ink-soft); }
+.oj-lt-text:hover { border-color: var(--border); background: #fbfaf7; }
+.oj-lt-text:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(47, 86, 81, .12); resize: vertical; overflow: auto; }
+.oj-lt-para { padding: 2px 0; }
+.oj-lt-para.is-h1 .oj-lt-text { font-weight: 800; font-size: 20px; color: #2f5651; margin-top: 10px; }
+.oj-lt-para.is-h2 .oj-lt-text { font-weight: 700; font-size: 15.5px; color: #2f5651; margin-top: 8px; }
+.oj-lt-para.is-list { padding-left: 22px; position: relative; }
+.oj-lt-para.is-list::before { content: '•'; position: absolute; left: 6px; top: 6px; color: #2f5651; }
+.oj-lt-page { counter-reset: ltnum; }
+.oj-lt-para:not(.is-num) { counter-reset: ltnum; }
+.oj-lt-para.is-num { padding-left: 26px; position: relative; counter-increment: ltnum; }
+.oj-lt-para.is-num::before { content: counter(ltnum) '.'; position: absolute; left: 2px; top: 6px; color: #2f5651; font-size: 13px; }
+.oj-lt-table { display: flex; flex-direction: column; border: 1px solid #d9e2de; border-radius: 6px; overflow: hidden; margin: 8px 0 10px; }
+.oj-lt-row { display: grid; grid-template-columns: 220px 1fr; border-top: 1px solid #d9e2de; }
+.oj-lt-row:first-child { border-top: 0; }
+.oj-lt-row .oj-lt-text { margin: 0; border-radius: 0; font-size: 12.5px; padding: 7px 10px; }
+.oj-lt-row .is-th { background: #2f5651; color: #fff; font-weight: 600; }
+.oj-lt-row .is-th:hover { background: #3a6a63; }
+.oj-lt-row .is-th:focus { background: #3a6a63; box-shadow: inset 0 0 0 2px #fff; }
+.oj-lt-row .is-td { background: #fff; }
+.oj-lt-row .is-td::placeholder { color: #a9b3b0; font-style: italic; }
+.oj-lt-td-empty { background: #fff; }
+
+/* ── Drag and drop onto pack rows ───────────────────────────────────────── */
+.oj-droprow { transition: background .12s, box-shadow .12s; }
+.oj-droprow.is-dragover { background: #eef5f1 !important; box-shadow: inset 0 0 0 2px var(--accent); }
+tr.oj-droprow.is-dragover td { background: #eef5f1; }
+.oj-returns.oj-droprow.is-dragover { border-color: var(--accent); }
+.oj-drophint { font-size: 12px; color: var(--ink-soft); margin: 0 0 6px; }

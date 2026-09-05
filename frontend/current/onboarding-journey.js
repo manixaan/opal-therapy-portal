@@ -177,6 +177,7 @@
    */
   async function render(host, view, id) {
     if (!host) return;
+    armDropzones();
     if (view) S.view = (view === 'track' || view === 'dashboard') ? 'board' : view;
     if (S.view === 'record' && id) S.recordId = id;
     if (S.view === 'start' && id) S.draftId = id;
@@ -389,6 +390,7 @@
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<div id="oj-defaults-add" hidden></div>'
+      + (edit ? '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>' : '')
       + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>'
       + (edit ? '<tr class="oj-pack-addrow"><td colspan="6">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
@@ -404,7 +406,8 @@
         if (edit && i.itemKind === 'document') fileActs.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? ' oj-btn-quiet' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
         var rowActs = [];
         if (edit) { rowActs.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
-        out += '<tr' + (i.origin === 'added' ? ' class="oj-pack-row is-added"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+        var droppable = edit && i.itemKind === 'document';
+        out += '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="defaults:' + esc(i.code) + ':' + esc(phase) + '" title="Drop a file here to attach it"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
           + '<td>' + flag(i, 'required', i.required) + '</td><td>' + flag(i, 'employeeReturns', i.employeeReturns) + '</td><td>' + flag(i, 'requiresVerification', i.requiresVerification) + '</td>'
           + '<td class="oj-filecell"><div>' + fileCell + '</div>' + (fileActs.length ? '<div class="oj-actions oj-actions-tight oj-file-acts">' + fileActs.join('') + '</div>' : '') + '</td>'
           + '<td class="oj-rowacts"><div class="oj-actions oj-actions-tight">' + rowActs.join('') + '</div></td></tr>';
@@ -434,7 +437,7 @@
   }
   function defaultsRemove(code, phase, removed) { return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, removed: removed }, 'PATCH', removed ? 'Removed from the default.' : 'Restored to the default.'); }
   async function defaultsUpload(code, phase, input) {
-    var file = input && input.files && input.files[0];
+    var file = fileFrom(input);
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { toast('That file is larger than 10 MB.', true); input.value = ''; return; }
     var ext = String(file.name).split('.').pop().toLowerCase();
@@ -1178,7 +1181,7 @@
     var expected = P.items.filter(function (i) { return i.status === 'included' && i.itemKind === 'document' && i.employeeReturns; });
     var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
     var unrecognised = active.filter(function (x) { return x.matchStatus === 'unrecognised'; });
-    var out = '<div class="oj-returns" id="oj-returns-' + esc(phase) + '"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one, works out which document it is, ticks it off and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
+    var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one, works out which document it is, ticks it off and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
       + (!sent ? '<p class="oj-quiet">The pack has not been marked as sent yet. You can still upload anything the employee has already returned.</p>' : '')
       + '<div class="oj-actions">'
       + '<label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
@@ -1216,6 +1219,7 @@
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>';
 
     if (c.review) out += returnsBlock(d, P, phase, sent);
+    if (editable) out += '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>';
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section"><td colspan="7">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
@@ -1302,7 +1306,8 @@
       else if (i.sendsDocument) expects.push('for reading only');
       if (i.employeeReturns && i.requiresVerification) expects.push('checked by us');
     }
-    return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + '">'
+    var droppable = editable && (!i.itemKind || i.itemKind === 'document');
+    return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="pack:' + esc(i.id) + '" title="Drop a file here to attach it"' : '') + '>'
       + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + (expects.length ? '<br><span class="oj-quiet">' + esc(expects.join(' · ')) + '</span>' : '') + '</td>'
       + (sent ? '<td>' + progressChip(i) + (i.progress === 'received' && i.requiresVerification && S.record && S.record.can && S.record.can.verify ? '<div class="oj-actions oj-actions-tight">' + btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small') + '</div>' : '') + '</td>' : '')
       + '<td>' + fileCell + '</td>'
@@ -1512,22 +1517,44 @@
     LT.data = res;
     var labels = {}; res.tags.forEach(function (t) { labels[t.tag] = t.label; });
     var t = res.template;
-    var rows = res.paragraphs.filter(function (p) { return p.segments.length; }).map(function (p) {
+    var TH = 'OPALTableHeader', TD = 'OPALTableBody';
+    var paras = res.paragraphs.filter(function (p) { return p.segments.length || p.style === TD; });
+    var box = function (p, extraCls) {
       var text = segmentsToText(p.segments, labels);
       var kind = HEADING_STYLES[p.style] || '';
-      return '<div class="oj-lt-para' + (kind ? ' is-' + kind : '') + '">'
-        + '<textarea id="oj-lt-' + p.index + '" data-index="' + p.index + '" data-original="' + esc(text) + '" rows="' + Math.max(text.split('\n').length, Math.min(8, Math.ceil(text.length / 95))) + '" maxlength="' + res.maxParagraphChars + '" onfocus="OnboardingJourney.letterFocus(this)">' + esc(text) + '</textarea>'
-        + '</div>';
-    }).join('');
+      return '<textarea class="oj-lt-text' + (kind ? ' is-' + kind : '') + (extraCls ? ' ' + extraCls : '') + '" id="oj-lt-' + p.index + '" data-index="' + p.index + '" data-original="' + esc(text) + '"'
+        + ' rows="' + Math.max(text.split('\n').length, Math.min(8, Math.ceil(text.length / 95)) || 1) + '" maxlength="' + res.maxParagraphChars + '" placeholder="' + (p.style === TD ? 'Left blank in the letter' : '') + '" onfocus="OnboardingJourney.letterFocus(this)">' + esc(text) + '</textarea>';
+    };
+    var rows = ''; var i = 0;
+    while (i < paras.length) {
+      var p = paras[i];
+      if (p.style === TH) {
+        // A table: label / value pairs until the labels stop.
+        rows += '<div class="oj-lt-table">';
+        while (i < paras.length && paras[i].style === TH) {
+          var label = paras[i]; var value = paras[i + 1] && paras[i + 1].style === TD ? paras[i + 1] : null;
+          rows += '<div class="oj-lt-row">' + box(label, 'is-th') + (value ? box(value, 'is-td') : '<span class="oj-lt-td-empty"></span>') + '</div>';
+          i += value ? 2 : 1;
+        }
+        rows += '</div>';
+        continue;
+      }
+      var kindCls = HEADING_STYLES[p.style] ? ' is-' + HEADING_STYLES[p.style] : /NumberedList/.test(p.style) ? ' is-num' : /Bullet/.test(p.style) ? ' is-list' : '';
+      rows += '<div class="oj-lt-para' + kindCls + '">' + box(p) + '</div>';
+      i += 1;
+    }
     var fields = res.tags.map(function (x) { return '<option value="' + esc(x.label) + '">' + esc(x.label) + '</option>'; }).join('');
     global.Onboarding.openModal({
       title: 'Edit the Letter of Offer',
-      subtitle: 'Every paragraph is editable. Fields in double braces are filled from each onboarding. Save makes this the standard letter for every offer from now on.',
+      subtitle: 'Click any line of the letter to change it. Save makes it the standard letter for every offer from now on.',
       wide: true,
       body: '<div class="oj-lt">'
         + '<div class="oj-lt-bar"><span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>'
         + '<label class="oj-lt-insert">Insert a field <select onchange="OnboardingJourney.letterInsert(this)"><option value="">Choose…</option>' + fields + '</select></label></div>'
+        + '<p class="oj-lt-help">Anything in <code>{{double braces}}</code> is filled in by the portal for each person — the candidate\'s name, the salary, the dates. Leave those as they are, or move them; the words around them are yours to change.</p>'
+        + '<div class="oj-lt-page">'
         + rows
+        + '</div>'
         + '<div id="oj-lt-error" class="ob-note is-danger" role="alert" hidden></div>'
         + '</div>',
       footer: '<div class="oj-actions oj-actions-tight">'
@@ -1552,7 +1579,7 @@
     var d = LT.data; if (!d) return;
     var tagByLabel = {}; d.tags.forEach(function (t) { tagByLabel[t.label.toLowerCase()] = t.tag; tagByLabel[t.tag.toLowerCase()] = t.tag; });
     var edits = [];
-    var areas = doc.querySelectorAll('.oj-lt textarea');
+    var areas = doc.querySelectorAll('.oj-lt textarea.oj-lt-text');
     for (var i = 0; i < areas.length; i++) {
       var ta = areas[i];
       if (ta.value === ta.getAttribute('data-original')) continue;
@@ -1604,6 +1631,44 @@
     });
   }
   var MIMES = { docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+
+  /** The file behind an upload: a File dropped on a row, or the input's first file. */
+  function fileFrom(input) {
+    if (!input) return null;
+    if (typeof File !== 'undefined' && input instanceof File) return input;
+    return input.files && input.files[0];
+  }
+
+  // ── Drag and drop: a file dropped on a pack row attaches to that item ─────
+
+  var DROP_ARMED = false;
+  function armDropzones() {
+    if (DROP_ARMED) return; DROP_ARMED = true;
+    var over = function (ev) {
+      var row = ev.target.closest && ev.target.closest('[data-drop]');
+      if (!row || !ev.dataTransfer || Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') < 0) return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy';
+      row.classList.add('is-dragover');
+    };
+    doc.addEventListener('dragover', over);
+    doc.addEventListener('dragenter', over);
+    doc.addEventListener('dragleave', function (ev) {
+      var row = ev.target.closest && ev.target.closest('[data-drop]');
+      if (row && !row.contains(ev.relatedTarget)) row.classList.remove('is-dragover');
+    });
+    doc.addEventListener('drop', function (ev) {
+      var row = ev.target.closest && ev.target.closest('[data-drop]');
+      if (!row) return;
+      ev.preventDefault(); row.classList.remove('is-dragover');
+      var files = ev.dataTransfer && ev.dataTransfer.files;
+      if (!files || !files.length) return;
+      var spec = row.getAttribute('data-drop').split(':');
+      if (spec[0] === 'pack') packUploadFile(spec[1], files[0]);
+      else if (spec[0] === 'defaults') defaultsUpload(spec[1], spec[2], files[0]);
+      else if (spec[0] === 'returns') uploadReturns({ files: files, value: '' });
+      if (files.length > 1 && spec[0] !== 'returns') toast('One file per document — the first one was used.', true);
+    });
+  }
 
   async function uploadTo(input, path, kindLabel) {
     var file = input && input.files && input.files[0];
@@ -1726,7 +1791,7 @@
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), { title: title.trim() }, 'Renamed.', 'PATCH', phaseOfItem(id)));
   }
   async function packUploadFile(id, input) {
-    var file = input && input.files && input.files[0];
+    var file = fileFrom(input);
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { toast('That file is larger than 10 MB.', true); input.value = ''; return; }
     var ext = String(file.name).split('.').pop().toLowerCase();
