@@ -680,6 +680,23 @@ describe('the induction is one clear interaction path', () => {
     expect(fn('laEditorContentForApi')).toContain('out.walkthrough_key = it.walkthrough_key');
   });
 
+  test('a portal walkthrough step (a resource step) is editable too, not only the Splose tasks', () => {
+    // The portal induction imports its walkthroughs as RESOURCE steps whose
+    // hub slug is the walkthrough key. The editor used to offer "Edit this
+    // walkthrough" only to task steps, so every portal walkthrough looked
+    // uneditable. The slug now rides along on the Owner's load and the tile
+    // resolves it — but only when it really is a walkthrough, never for a
+    // plain document.
+    const tile = fn('laItemWalkHtml');
+    expect(tile).toContain("it.type === 'resource' && it.resource_slug");
+    expect(tile).toContain('OpalInduction.moduleForSlug(slug)');
+    expect(tile).toContain('shelf.some(function (w) { return w.key === slug; })');
+    expect(fn('laEdit')).toContain("resource_slug: it.resource_slug || ''");
+    expect(ROUTES).toContain('draft_content: await attachResourceSlugs(wf.draft_content, orgOf(req))');
+    // The slug is read-only: the save projection never sends it back.
+    expect(fn('laEditorContentForApi')).not.toContain('resource_slug');
+  });
+
   test('completion is the closing screen\'s one deliberate act', () => {
     const finish = fn('indFinishRead');
     expect(finish).toContain('Mark as Complete');
@@ -934,7 +951,7 @@ describe('the shell', () => {
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r22');
-    expect(SHELL).toContain('/resourcehub.js?v=r38');
+    expect(SHELL).toContain('/resourcehub.js?v=r39');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

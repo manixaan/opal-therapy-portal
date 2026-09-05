@@ -356,7 +356,9 @@ router.get('/api/learning/workflows/:id', ownerOnly, safe(async (req, res) => {
   res.json({
     workflow: {
       ...workflowRow(wf),
-      draft_content: wf.draft_content,
+      // Slugs ride along so the editor can find the walkthrough behind a
+      // resource step; normalisation drops them again on save.
+      draft_content: await attachResourceSlugs(wf.draft_content, orgOf(req)),
       has_unpublished_changes: !unchanged,
       stats: lc.contentStats(wf.draft_content),
     },

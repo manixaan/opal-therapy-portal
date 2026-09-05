@@ -6000,6 +6000,9 @@
               key: it.key, type: it.type, title: it.title, body: it.body || '',
               minutes: it.minutes || '', required: it.required !== false,
               resource_id: it.resource_id || '', resource_title: it.resource_title || '',
+              // Read-only: the hub slug behind a resource step, which is how a
+              // portal walkthrough is found (the registry keys modules by it).
+              resource_slug: it.resource_slug || '',
               walkthrough_key: it.walkthrough_key || '',
               ack_statement: it.ack_statement || '',
               quiz: q ? {
@@ -6235,9 +6238,20 @@
    * is not there.
    */
   function laItemWalkHtml(it) {
-    if (it.type !== 'task' || !it.walkthrough_key) return '';
-    var key = it.walkthrough_key;
     var shelf = S.la.walkthroughs || [];
+    var key = '';
+    if (it.type === 'task' && it.walkthrough_key) {
+      key = it.walkthrough_key;
+    } else if (it.type === 'resource' && it.resource_slug) {
+      // A portal walkthrough step is a resource step whose hub slug is a
+      // walkthrough key — on the shelf, or a built-in not yet imported. A
+      // plain document's slug matches neither and gets no tile.
+      var slug = it.resource_slug;
+      var builtIn = !!(global.OpalInduction && global.OpalInduction.moduleForSlug &&
+        global.OpalInduction.moduleForSlug(slug));
+      if (builtIn || shelf.some(function (w) { return w.key === slug; })) key = slug;
+    }
+    if (!key) return '';
     var known = shelf.some(function (w) { return w.key === key; });
 
     return '<div class="rh2-learn-ed-walk">' +
