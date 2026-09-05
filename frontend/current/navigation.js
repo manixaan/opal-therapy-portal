@@ -116,7 +116,12 @@
   // 'pd' is the one resources view that carries an id of its own: '#resources/pd'
   // is the catalogue, '#resources/pd/<id>' is one event. That is why the id rule
   // below tests for either view rather than for 'detail' alone.
-  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments', 'assignment'];
+  //
+  // 'lwedit' is the Owner's learning-workflow editor ('#resources/lwedit/<id>').
+  // It renders INSTEAD of the Learning console, so without an address of its
+  // own Back landed on the same console the editor was already covering and
+  // appeared to do nothing. Id-only: idless it degrades to Assign Learning.
+  var RH_VIEWS = ['home', 'library', 'saved', 'learning', 'admin', 'detail', 'pd', 'instruments', 'assignment', 'lwedit'];
 
   /** Resources views that may carry a record id.
    *  'instruments' joins them because each assessment has an information page
@@ -125,7 +130,7 @@
    *  page could not be linked to and Back skipped straight past it.
    *  'assignment' is a learning-assignment player ('#resources/assignment/<id>')
    *  — id-only: without an id RH2.nav degrades it to My Learning. */
-  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment'];
+  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment', 'lwedit'];
 
   /** Onboarding sub-views. Mirrors MANAGE_VIEWS in onboarding.js; an
    *  unrecognised value — including the retired dashboard/active/employees/
@@ -191,6 +196,7 @@
       if (!inList(RH_VIEWS, view)) view = 'home';
       var rid = safeId(s.id);
       if (view === 'detail' && !rid) view = 'library'; // "#resources/detail/" with no id
+      if (view === 'lwedit' && !rid) view = 'learning'; // an idless editor address is the console
       out.view = view;
       // An idless '#resources/pd/' is still a valid address — it is the
       // catalogue — so unlike 'detail' it degrades to itself, not elsewhere.
@@ -263,6 +269,7 @@
       // degrades to itself rather than losing the segment.
       else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      else if (s.view === 'lwedit') out += '/lwedit' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'onboarding') {
       // '#onboarding' IS Track Onboarding, so it needs no segment of its own.
@@ -868,6 +875,12 @@
       } else if (t.view === 'assignment' && t.id && isFn(global.RH2.openAssignment)) {
         try { global.RH2.openAssignment(t.id); } catch (e) {}
         NAV.rhView = 'assignment'; NAV.rhId = t.id;
+      } else if (t.view === 'lwedit' && t.id && isFn(global.RH2.laEdit)) {
+        // Forward (or a reload) re-opens the editor over the Learning console;
+        // laEdit itself refuses for anyone who is not the Owner.
+        if (isFn(global.RH2.nav)) { try { global.RH2.nav('learning'); } catch (e) {} }
+        try { global.RH2.laEdit(t.id); } catch (e) {}
+        NAV.rhView = 'lwedit'; NAV.rhId = t.id;
       } else if (isFn(global.RH2.nav)) {
         try { global.RH2.nav(t.view || 'home'); } catch (e) {}
         NAV.rhView = t.view || 'home'; NAV.rhId = null;
@@ -1082,6 +1095,32 @@
           var out = orig.apply(this, arguments);
           NAV.rhView = 'instruments';
           NAV.rhId = safeId(key) || null;
+          syncBase();
+          return out;
+        };
+      });
+      // The learning-workflow editor covers the Learning console, so opening
+      // it is a real navigation: it gets its own entry and Back closes it.
+      // laEdit is async — the address is written when the editor is asked
+      // for, the same moment the user sees the page change.
+      hookMethod('RH2', 'laEdit', function (orig) {
+        return function (id) {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'lwedit';
+          NAV.rhId = safeId(id) || null;
+          syncBase();
+          return out;
+        };
+      });
+      // Closing through the editor's own button returns to the console. The
+      // close can be declined (unsaved changes) — it reports whether it
+      // happened, and only a real close moves the address.
+      hookMethod('RH2', 'laEditorClose', function (orig) {
+        return function () {
+          var out = orig.apply(this, arguments);
+          if (out === false) return out;
+          NAV.rhView = 'learning';
+          NAV.rhId = null;
           syncBase();
           return out;
         };

@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r32'], ['resourcehub.css', 'r18'],
+      ['resourcehub.js', 'r33'], ['resourcehub.css', 'r18'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -668,7 +668,7 @@ describe('changed assets are cache-busted', () => {
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
-      ['navigation.js', 9],
+      ['navigation.js', 10],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.

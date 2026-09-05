@@ -518,6 +518,21 @@
       if (S.assignment.id) return openAssignment(S.assignment.id);
       view = 'learning';
     }
+    // The workflow editor has an address of its own ('lwedit/<id>', see
+    // navigation.js) but it is not a view: it renders over the Learning
+    // console. Navigating anywhere else — Back included — must close it,
+    // otherwise the editor stays on screen and Back appears to do nothing.
+    // An unsaved editor asks first; declining keeps the editor and the view.
+    if (view === 'lwedit') {
+      if (S.la.editor) return;
+      view = 'learning';
+    } else if (S.la.editor) {
+      if (S.la.editor._dirty && !confirm('Discard unsaved changes to this workflow?')) return;
+      S.la.editor = null;
+      S.la.resPick = null;
+      S.la.publishNote = '';
+      S.la.editorStale = false;
+    }
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
     if (view === 'library') {
@@ -6103,14 +6118,17 @@
     render();
   }
 
+  /** Returns false when the close was declined (unsaved changes kept), so the
+   *  navigation wrapper only moves the address when the editor really closed. */
   function laEditorClose() {
     if (S.la.editor && S.la.editor._dirty &&
-        !confirm('Discard unsaved changes to this workflow?')) return;
+        !confirm('Discard unsaved changes to this workflow?')) return false;
     S.la.editor = null;
     S.la.resPick = null;
     S.la.publishNote = '';
     S.la.editorStale = false;
     loadLa();
+    return true;
   }
 
   function laEditorContentForApi(ed) {

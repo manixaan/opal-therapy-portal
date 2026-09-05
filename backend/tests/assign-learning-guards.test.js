@@ -878,7 +878,7 @@ describe('the shell', () => {
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r18');
-    expect(SHELL).toContain('/resourcehub.js?v=r32');
+    expect(SHELL).toContain('/resourcehub.js?v=r33');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

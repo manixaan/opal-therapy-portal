@@ -172,6 +172,25 @@ describe('assessment information pages', () => {
   });
 });
 
+// ── Learning-workflow editor ───────────────────────────────────────────────
+// The editor renders over the Learning console. Without an address of its own
+// Back re-landed on the console it was already covering, so it looked inert.
+
+describe('learning-workflow editor', () => {
+  test('an open editor is addressable by workflow id', () => {
+    const hash = '#resources/lwedit/037be510-7e10-4ba2-9842-7ad206ebfc85';
+    expect(decodeRoute(hash)).toMatchObject({
+      tab: 'resources', view: 'lwedit', id: '037be510-7e10-4ba2-9842-7ad206ebfc85',
+    });
+    expect(encodeRoute(decodeRoute(hash))).toBe(hash);
+  });
+
+  test('an idless editor address is the Learning console, not an empty editor', () => {
+    expect(encodeRoute(decodeRoute('#resources/lwedit'))).toBe('#resources/learning');
+    expect(encodeRoute(decodeRoute('#resources/lwedit/'))).toBe('#resources/learning');
+  });
+});
+
 // ── Normalisation ──────────────────────────────────────────────────────────
 
 describe('normaliseRoute', () => {
