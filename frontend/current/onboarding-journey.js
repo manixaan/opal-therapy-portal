@@ -357,8 +357,8 @@
     var body;
     if (view === 1) {
       body = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">1</span>Letter of Offer</h2></header>'
-        + '<p class="oj-quiet">The letter template, filled with a sample employee so you can see how it reads. The wording is fixed; the particulars come from each onboarding\'s details.</p>'
-        + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a>' + (d.letter.pdfUrl ? '<a class="oj-btn" href="' + esc(d.letter.pdfUrl) + '">Download (PDF)</a>' : '') + '</div>'
+        + '<p class="oj-quiet">The letter template, filled with a sample employee so you can see how it reads. Edit the wording here and it becomes the standard for every offer; the particulars come from each onboarding\'s details.</p>'
+        + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + (can('onboarding.assign') ? btn('Edit the letter', 'OnboardingJourney.openLetterEditor()') : '') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a>' + (d.letter.pdfUrl ? '<a class="oj-btn" href="' + esc(d.letter.pdfUrl) + '">Download (PDF)</a>' : '') + '</div>'
         + '<h3 class="oj-sub">Email 1</h3><pre class="oj-pre">' + esc(d.emails.offer.subject) + '\n\n' + esc(d.emails.offer.body) + '</pre></section>';
     } else {
       var phase = view === 2 ? 'documentation' : 'induction';
@@ -1014,12 +1014,13 @@
     // ── Step 2: the letter ──
     var L = d.letter || {};
     body += '<li class="oj-step ' + stepState(!before, before) + '"><div class="oj-step-head"><span class="oj-step-n">2</span><strong>Letter of Offer</strong>'
-      + '<span class="oj-chip ' + (L.source === 'uploaded' ? 'is-you' : 'is-quiet') + '">' + (L.source === 'uploaded' ? 'Edited copy uploaded' : 'Generated from the template') + '</span></div>'
+      + '<span class="oj-chip ' + (L.source === 'uploaded' ? 'is-you' : 'is-quiet') + '">' + (L.source === 'uploaded' ? 'Edited copy uploaded' : templateChipText(L.template)) + '</span></div>'
       + '<p class="oj-quiet">' + esc(L.fileName || '') + (L.uploaded ? ' · uploaded ' + esc(fmtDateTime(L.uploaded.uploadedAt)) + (L.uploaded.uploadedByName ? ' by ' + esc(L.uploaded.uploadedByName) : '') : '') + '</p>'
       + '<div class="oj-actions">'
       + btn('Preview the letter', 'OnboardingJourney.previewLetter()', before ? 'oj-btn-primary' : '')
       + '<a class="oj-btn" href="' + esc(L.downloadUrl || '#') + '">Download (.docx)</a>'
       + (L.pdfUrl ? '<a class="oj-btn" href="' + esc(L.pdfUrl) + '">Download (PDF)</a>' : '')
+      + (before && c.assign && L.source !== 'uploaded' ? btn('Edit the letter', 'OnboardingJourney.openLetterEditor()') : '')
       + (before && c.assign ? '<label class="oj-btn oj-file">Upload an edited letter<input type="file" accept=".docx" hidden onchange="OnboardingJourney.uploadLetter(this)"></label>' : '')
       + (before && c.assign && L.source === 'uploaded' ? btn('Discard the edit — use the generated letter', 'OnboardingJourney.discardLetter()', 'oj-btn-quiet') : '')
       + '</div>'
@@ -1473,6 +1474,108 @@
   }
 
   /** Preview the letter as the employee will read it (docx-preview, in the modal). */
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  THE LETTER'S WORDING — edit any paragraph; save makes it the standard
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var LT = { data: null, lastFocus: null };
+  var HEADING_STYLES = { OPALHeading1: 'h1', OPALHeading2: 'h2', OPALTableHeader: 'th' };
+
+  function templateChipText(t) {
+    if (!t || t.source !== 'practice') return 'Generated from the template';
+    return 'Your wording, v' + t.version;
+  }
+
+  /** Segments → the text a person edits: fields appear as {{Field name}}. */
+  function segmentsToText(segs, labels) {
+    return (segs || []).map(function (s) { return s.type === 'tag' ? '{{' + (labels[s.tag] || s.tag) + '}}' : s.text; }).join('');
+  }
+  /** The edited text → segments. An unknown {{name}} stays as plain text. */
+  function textToSegments(text, tagByLabel) {
+    var out = [];
+    String(text || '').split(/(\{\{[^{}]+\}\})/).forEach(function (piece) {
+      if (!piece) return;
+      var m = /^\{\{([^{}]+)\}\}$/.exec(piece);
+      var tag = m && tagByLabel[m[1].trim().toLowerCase()];
+      if (tag) out.push({ type: 'tag', tag: tag });
+      else if (out.length && out[out.length - 1].type === 'text') out[out.length - 1].text += piece;
+      else out.push({ type: 'text', text: piece });
+    });
+    return out;
+  }
+
+  async function openLetterEditor() {
+    if (!global.Onboarding || typeof global.Onboarding.openModal !== 'function') return;
+    var res = await api('/api/onboarding/journey/offer-template');
+    if (!res.ok) { toast(res.error, true); return; }
+    LT.data = res;
+    var labels = {}; res.tags.forEach(function (t) { labels[t.tag] = t.label; });
+    var t = res.template;
+    var rows = res.paragraphs.filter(function (p) { return p.segments.length; }).map(function (p) {
+      var text = segmentsToText(p.segments, labels);
+      var kind = HEADING_STYLES[p.style] || '';
+      return '<div class="oj-lt-para' + (kind ? ' is-' + kind : '') + '">'
+        + '<textarea id="oj-lt-' + p.index + '" data-index="' + p.index + '" data-original="' + esc(text) + '" rows="' + Math.max(text.split('\n').length, Math.min(8, Math.ceil(text.length / 95))) + '" maxlength="' + res.maxParagraphChars + '" onfocus="OnboardingJourney.letterFocus(this)">' + esc(text) + '</textarea>'
+        + '</div>';
+    }).join('');
+    var fields = res.tags.map(function (x) { return '<option value="' + esc(x.label) + '">' + esc(x.label) + '</option>'; }).join('');
+    global.Onboarding.openModal({
+      title: 'Edit the Letter of Offer',
+      subtitle: 'Every paragraph is editable. Fields in double braces are filled from each onboarding. Save makes this the standard letter for every offer from now on.',
+      wide: true,
+      body: '<div class="oj-lt">'
+        + '<div class="oj-lt-bar"><span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>'
+        + '<label class="oj-lt-insert">Insert a field <select onchange="OnboardingJourney.letterInsert(this)"><option value="">Choose…</option>' + fields + '</select></label></div>'
+        + rows
+        + '<div id="oj-lt-error" class="ob-note is-danger" role="alert" hidden></div>'
+        + '</div>',
+      footer: '<div class="oj-actions oj-actions-tight">'
+        + btn('Save as the standard letter', 'OnboardingJourney.saveLetterEditor()', 'oj-btn-primary')
+        + btn('Cancel', 'Onboarding.closeModal()')
+        + (t.source === 'practice' ? btn('Restore the original letter', 'OnboardingJourney.resetLetterTemplate()', 'oj-btn-quiet') : '')
+        + '</div>',
+    });
+  }
+
+  function letterFocus(el) { LT.lastFocus = el; }
+  function letterInsert(sel) {
+    var label = sel.value; sel.value = '';
+    var ta = LT.lastFocus; if (!label || !ta || !doc.body.contains(ta)) return;
+    var token = '{{' + label + '}}';
+    var a = ta.selectionStart || 0, b = ta.selectionEnd || a;
+    ta.value = ta.value.slice(0, a) + token + ta.value.slice(b);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = a + token.length;
+  }
+
+  async function saveLetterEditor() {
+    var d = LT.data; if (!d) return;
+    var tagByLabel = {}; d.tags.forEach(function (t) { tagByLabel[t.label.toLowerCase()] = t.tag; tagByLabel[t.tag.toLowerCase()] = t.tag; });
+    var edits = [];
+    var areas = doc.querySelectorAll('.oj-lt textarea');
+    for (var i = 0; i < areas.length; i++) {
+      var ta = areas[i];
+      if (ta.value === ta.getAttribute('data-original')) continue;
+      edits.push({ index: Number(ta.getAttribute('data-index')), segments: textToSegments(ta.value, tagByLabel) });
+    }
+    var errEl = doc.getElementById('oj-lt-error');
+    if (!edits.length) { global.Onboarding.closeModal(); toast('Nothing changed.'); return; }
+    var res = await api('/api/onboarding/journey/offer-template', { method: 'PUT', body: { paragraphs: edits } });
+    if (!res.ok) { if (errEl) { errEl.textContent = res.error; errEl.hidden = false; errEl.scrollIntoView({ block: 'nearest' }); } return; }
+    global.Onboarding.closeModal();
+    toast('Saved. This wording is now the standard letter — v' + res.template.version + '.');
+    rerender();
+  }
+
+  async function resetLetterTemplate() {
+    if (!await portalConfirm('Go back to the original letter? Your edited wording is kept in the history but no longer used.', { danger: true })) return;
+    var res = await api('/api/onboarding/journey/offer-template/reset', { method: 'POST' });
+    if (!res.ok) { toast(res.error, true); return; }
+    global.Onboarding.closeModal();
+    toast('The original letter is the standard again.');
+    rerender();
+  }
+
   function previewLetter() {
     var L = S.record && S.record.letter;
     if (!L) return;
@@ -1862,6 +1965,7 @@
     filter: setFilter,
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
+    openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,

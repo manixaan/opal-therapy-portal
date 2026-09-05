@@ -4628,6 +4628,7 @@
   var api_ = {
     open: open,
     nav: nav,
+    openModal: openModal,
     closeModal: closeModal,
     applyFilters: applyFilters,
     // management

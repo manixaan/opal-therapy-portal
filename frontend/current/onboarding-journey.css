@@ -329,3 +329,17 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 
 .oj-pack-addrow td { background: #fffaf0; padding: 10px; }
 #oj-defaults-add { margin-bottom: 10px; }
+
+/* ── Letter of Offer wording editor ─────────────────────────────────────── */
+.oj-lt { display: flex; flex-direction: column; gap: 8px; }
+.oj-lt-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.oj-lt-insert { font-size: 12.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; }
+.oj-lt-insert select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.oj-lt-para textarea {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.5; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); resize: vertical;
+}
+.oj-lt-para textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.oj-lt-para.is-h1 textarea { font-weight: 800; font-size: 17px; }
+.oj-lt-para.is-h2 textarea { font-weight: 700; font-size: 15px; margin-top: 6px; }
+.oj-lt-para.is-th textarea { font-weight: 600; font-size: 12.5px; color: var(--ink-soft); }

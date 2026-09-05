@@ -183,12 +183,14 @@ const OPTIONS = {
   rebuildToc: false,
 };
 
-/** Fill the template. Throws if a placeholder would survive. */
+/** Fill the template — the shipped one, or `input.templateBuffer` (the
+ *  practice's edited wording, onboarding-offer-template.js). Throws if a
+ *  placeholder would survive. */
 async function buildOfferDocx(input) {
   const scalarData = buildScalars(input);
   const excludedTags = Object.keys(scalarData).filter((k) => scalarData[k] === null);
   const buffer = await composeDocx({
-    templateBuffer: readTemplateBuffer(),
+    templateBuffer: Buffer.isBuffer(input.templateBuffer) && input.templateBuffer.length ? input.templateBuffer : readTemplateBuffer(),
     manifest: { scalarData, excludedTags, sections: [] },
     options: OPTIONS,
   });

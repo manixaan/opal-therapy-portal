@@ -43,6 +43,7 @@ const lifecycle = require('./onboarding-lifecycle');
 const letter = require('./onboarding-offer-letter');
 const offerDocx = require('./onboarding-offer-docx');
 const offerEmail = require('./onboarding-offer-email');
+const offerTemplate = require('./onboarding-offer-template');
 const graphMail = require('./graph-mail');
 const { auditOnboarding } = require('./onboarding-audit');
 const { requireAuth, requirePermission, hasPermission } = require('./permissions');
@@ -142,6 +143,7 @@ async function currentLetter(assignment, offer) {
   const settings = await odb.getOnboardingSettings();
   const issuedAt = offer.email_sent_at || offer.email_drafted_at || new Date();
   const bytes = await offerDocx.buildOfferDocx({
+    templateBuffer: await offerTemplate.currentTemplateBuffer(assignment.organisation_id),
     terms: offer.terms || {}, issuedAt, signatory: signatoryFrom(settings),
     applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
     isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
@@ -286,6 +288,7 @@ async function recordDetail(req, assignment) {
       fileName: editedLetter ? editedLetter.file_name : offerDocx.offerFileName(assignment.applicant_name, offer.email_sent_at || new Date()),
       uploaded: documentRow(editedLetter),
       templateVersion: offerDocx.TEMPLATE_VERSION,
+      template: await templateSummary(assignment.organisation_id),
       previewUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/preview.docx`,
       downloadUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/download`,
       pdfUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/download.pdf`,
@@ -458,6 +461,52 @@ router.delete('/api/onboarding/journey/drafts/:id', requirePermission('onboardin
   if (!gone) return notFound(res);
   await auditOnboarding(req, 'start_draft_discarded', { targetType: 'onboarding_start_draft', targetId: req.params.id });
   res.json({ ok: true });
+}));
+
+// ── The letter's wording — the practice's own template ──────────────────
+// Any paragraph of the letter can be edited and saved; the result is the
+// standard letter for every offer generated from then on.
+
+async function templateSummary(org) {
+  const cur = await offerTemplate.getCurrentTemplate(org);
+  return cur
+    ? { source: 'practice', version: cur.version, savedAt: cur.createdAt, savedByName: cur.createdByName || null, note: cur.note || null }
+    : { source: 'built_in', version: 0, savedAt: null, savedByName: null, note: null };
+}
+
+async function templatePayload(org) {
+  const cur = await offerTemplate.currentTemplate(org);
+  return {
+    template: await templateSummary(org),
+    paragraphs: await offerTemplate.readParagraphs(cur.buffer),
+    tags: Object.keys(offerTemplate.TAG_LABELS).map((tag) => ({ tag, label: offerTemplate.TAG_LABELS[tag] })),
+    maxParagraphChars: offerTemplate.MAX_PARAGRAPH_CHARS,
+  };
+}
+
+router.get('/api/onboarding/journey/offer-template', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  noStore(res);
+  res.json(await templatePayload(orgOf(req)));
+}));
+
+router.put('/api/onboarding/journey/offer-template', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const edits = req.body?.paragraphs;
+  if (!Array.isArray(edits) || !edits.length || edits.length > 400) return res.status(400).json({ error: 'Send the edited paragraphs' });
+  let saved;
+  try {
+    saved = await offerTemplate.saveEdits({ organisationId: orgOf(req), userId: req.user.id, edits, note: str(req.body?.note, 400) });
+  } catch (err) {
+    log.warn('offer template edit refused', { error: err.message });
+    return res.status(400).json({ error: `The letter could not be saved: ${err.message}` });
+  }
+  await auditOnboarding(req, 'offer_template_saved', { targetType: 'onboarding_offer_template', targetId: saved.id, metadata: { version: saved.version, paragraphs: edits.length } });
+  res.json(await templatePayload(orgOf(req)));
+}));
+
+router.post('/api/onboarding/journey/offer-template/reset', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const n = await offerTemplate.resetTemplate(orgOf(req));
+  if (n) await auditOnboarding(req, 'offer_template_reset', { targetType: 'onboarding_offer_template' });
+  res.json(await templatePayload(orgOf(req)));
 }));
 
 router.get('/api/onboarding/journey/options', requirePermission('onboarding.view'), safe(async (req, res) => {

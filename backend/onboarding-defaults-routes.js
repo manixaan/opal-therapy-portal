@@ -116,11 +116,12 @@ router.get('/api/onboarding/journey/defaults/:packageId', requirePermission('onb
   });
 }));
 
-async function sampleLetter(pkg) {
+async function sampleLetter(pkg, org) {
   const settings = await odb.getOnboardingSettings();
   const start = new Date(); start.setDate(start.getDate() + 28);
   const ot = pkg.role_category === 'occupational_therapist';
   let bytes = await offerDocx.buildOfferDocx({
+    templateBuffer: await require('./onboarding-offer-template').currentTemplateBuffer(org),
     terms: { positionTitle: pkg.title.split('—')[0].trim(), employmentType: pkg.employment_type || 'full_time', startDate: start.toISOString().slice(0, 10),
       payBasis: pkg.employment_type === 'casual' ? 'hourly' : 'annual', payRate: pkg.employment_type === 'casual' ? 45 : 90000, hoursPerWeek: pkg.employment_type === 'casual' ? null : 38, probationMonths: 3 },
     applicant: { name: 'Sample Employee', email: 'sample.employee@example.com', mobile: '0400 000 000' },
@@ -135,7 +136,7 @@ router.get('/api/onboarding/journey/defaults/:packageId/letter/download.pdf', re
   if (!pkg) return notFound(res);
   let pdf;
   try {
-    pdf = await offerPdf.offerPdfFromDocx(await sampleLetter(pkg), { title: 'Letter of Offer — template preview' });
+    pdf = await offerPdf.offerPdfFromDocx(await sampleLetter(pkg, orgOf(req)), { title: 'Letter of Offer — template preview' });
   } catch (err) {
     log.error('sample letter could not be rendered as PDF', { error: err, packageId: pkg.id });
     return res.status(500).json({ error: 'The PDF could not be generated.', code: 'pdf_failed' });
@@ -150,7 +151,7 @@ router.get('/api/onboarding/journey/defaults/:packageId/letter/download.pdf', re
 router.get('/api/onboarding/journey/defaults/:packageId/letter/preview.docx', requirePermission('onboarding.view'), safe(async (req, res) => {
   const pkg = await loadPackage(req);
   if (!pkg) return notFound(res);
-  let bytes = await sampleLetter(pkg);
+  let bytes = await sampleLetter(pkg, orgOf(req));
   const download = req.query.download === '1';
   if (!download) { try { bytes = await require('./fca/preview-pagination').paginateForPreview(bytes); } catch (_) { /* preview only */ } }
   res.set('Cache-Control', 'no-store');

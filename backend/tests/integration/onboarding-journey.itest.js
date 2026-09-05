@@ -239,6 +239,52 @@ describe('Stage 0 — a Start form saved part-way survives as a draft (migration
   });
 });
 
+describe('The letter\'s wording — edited in the portal, the standard from then on (migration 055)', () => {
+  const greetingIndex = (paras) => paras.findIndex((p) => p.segments[0] && p.segments[0].text === 'Dear ');
+  const letterText = async (agent, id) => {
+    const res = await agent.get(`/api/onboarding/journey/records/${id}/offer/letter/download`).buffer(true).parse((r, cb) => { const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(res.status).toBe(200);
+    const zip = await require('jszip').loadAsync(res.body);
+    const xml = await zip.file('word/document.xml').async('string');
+    return (xml.match(/<w:t(?: [^>]*)?>[^<]*<\/w:t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join('');
+  };
+
+  test('save an edit → every generated letter carries it, the record says so, and reset goes back', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const before = await agent.get('/api/onboarding/journey/offer-template');
+    expect(before.status).toBe(200);
+    expect(before.body.template.source).toBe('built_in');
+    const i = greetingIndex(before.body.paragraphs);
+
+    const saved = await agent.put('/api/onboarding/journey/offer-template').send({ paragraphs: [{ index: i, segments: [
+      { type: 'text', text: 'Hello ' }, { type: 'tag', tag: 'OPAL_LOO_CANDIDATE_FIRST_NAME' }, { type: 'text', text: ', and welcome,' },
+    ] }] });
+    expect(saved.status).toBe(200);
+    expect(saved.body.template).toMatchObject({ source: 'practice', version: 1 });
+    expect(saved.body.paragraphs[i].segments[0].text).toBe('Hello ');
+
+    const record = await start(agent);
+    expect(record.letter.template).toMatchObject({ source: 'practice', version: 1 });
+    expect(await letterText(agent, record.record.id)).toContain('Hello Jane, and welcome,');
+
+    const reset = await agent.post('/api/onboarding/journey/offer-template/reset');
+    expect(reset.body.template.source).toBe('built_in');
+    expect(await letterText(agent, record.record.id)).toContain('Dear Jane,');
+  });
+
+  test('a bad edit is refused and changes nothing; only onboarding.assign may edit', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    expect((await agent.put('/api/onboarding/journey/offer-template').send({ paragraphs: [{ index: 99999, segments: [] }] })).status).toBe(400);
+    expect((await agent.put('/api/onboarding/journey/offer-template').send({})).status).toBe(400);
+    expect((await agent.get('/api/onboarding/journey/offer-template')).body.template.source).toBe('built_in');
+
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
+    expect((await viewer.agent.get('/api/onboarding/journey/offer-template')).status).toBe(403);
+    expect((await viewer.agent.put('/api/onboarding/journey/offer-template').send({ paragraphs: [] })).status).toBe(403);
+    expect((await viewer.agent.post('/api/onboarding/journey/offer-template/reset')).status).toBe(403);
+  });
+});
+
 const detailLetter = (res) => res.body.letter;
 
 describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verification, release', () => {
