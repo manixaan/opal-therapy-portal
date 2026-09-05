@@ -1467,3 +1467,13 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-learn-kind-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
 .rh2-learn-kind-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .rh2-learn-kind-import { margin: 14px 0 0; }
+
+/* Edit mode mirrors the learner's page: the same tiles, the same lines, with
+   the fields live. The walkthrough hint is the learner's hint, and the title
+   reads as a heading until it is touched. */
+.rh2-ind-item-edit { display: block; }
+.rh2-ind-edit .rh2-learn-ed-walk { margin: 0; padding: 0; border: 0; background: none; }
+.rh2-ind-edit .rh2-learn-ed-walk .rh2-ind-launch { padding: 0; }
+.rh2-ind-edit .rh2-ind-title-in { border-color: transparent; background: transparent; padding-left: 0; }
+.rh2-ind-edit .rh2-ind-title-in:hover,
+.rh2-ind-edit .rh2-ind-title-in:focus { border-color: var(--border); background: var(--panel); padding-left: 10px; }

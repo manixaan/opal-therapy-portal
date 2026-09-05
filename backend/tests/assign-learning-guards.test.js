@@ -697,6 +697,20 @@ describe('the induction is one clear interaction path', () => {
     expect(fn('laEditorContentForApi')).not.toContain('resource_slug');
   });
 
+  test('the editor mirrors the learner tile: same chips, no numbering, one hint per walkthrough', () => {
+    const item = fn('laEditorItemHtml');
+    // Only the interactions announce themselves, exactly as the reader shows.
+    expect(item).toContain("(it.type === 'acknowledgement' || it.type === 'quiz')");
+    expect(item).not.toContain("it.type !== 'content'");
+    // A walkthrough resource shows the learner's hint once — never a second
+    // "Opens: …" line beneath it.
+    expect(item).toContain("if (it.type === 'resource' && !walk)");
+    // No number badge and no "Section n" label the learner never sees.
+    expect(fn('indSectionEdit')).not.toContain('rh2-ind-item-no');
+    expect(fn('indSectionEdit')).not.toContain("'Section ' + (si + 1)");
+    expect(CSS).toMatch(/\.rh2-ind-edit \.rh2-learn-ed-walk \{[^}]*border: 0/);
+  });
+
   test('completion is the closing screen\'s one deliberate act', () => {
     const finish = fn('indFinishRead');
     expect(finish).toContain('Mark as Complete');
@@ -950,8 +964,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r22');
-    expect(SHELL).toContain('/resourcehub.js?v=r40');
+    expect(SHELL).toContain('/resourcehub.css?v=r23');
+    expect(SHELL).toContain('/resourcehub.js?v=r41');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

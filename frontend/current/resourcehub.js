@@ -6674,11 +6674,17 @@
   function laEditorItemHtml(it, si, ii, count) {
     var k = 'i-' + si + '-' + ii;
     var setOpen = S.la.editor.settingsOpen === k;
-    var typeChip = it.type !== 'content'
+    // The same chips the learner sees: only the interactions announce
+    // themselves. A resource or a task is simply content there, so it is
+    // simply content here.
+    var typeChip = (it.type === 'acknowledgement' || it.type === 'quiz')
       ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
     var reqChip = !it.required ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
     var mins = parseInt(it.minutes, 10) > 0
       ? '<span class="rh2-row-sub">' + parseInt(it.minutes, 10) + ' min</span>' : '';
+    // The learner's launch hint, made into the way into the walkthrough
+    // editor. Empty for anything that is not a walkthrough.
+    var walk = laItemWalkHtml(it);
 
     var out = '<div class="rh2-learn-ed-item">' +
       '<div class="rh2-ind-item-head">' +
@@ -6698,7 +6704,7 @@
       // walkthrough; the editor showed text boxes and nothing else, so the
       // pop-ups were invisible in the one place they are meant to be edited.
       // Same tile, same position — it opens the walkthrough EDITOR instead.
-      laItemWalkHtml(it);
+      walk;
 
     // The secondary settings strip — configuration, off the primary surface.
     if (setOpen) {
@@ -6761,10 +6767,11 @@
         'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>',
       'Edit the content of step ' + (ii + 1));
 
-    if (it.type === 'resource') {
+    if (it.type === 'resource' && !walk) {
       // The learner's resource item is ONE launch tile — mirror it inert.
       // Opening is the learner's click, and opening records the step; there
-      // is no separate button to depict.
+      // is no separate button to depict. A walkthrough resource already has
+      // its hint above, exactly where the learner sees it.
       out += '<div class="rh2-learn-actions">' +
         '<span class="rh2-ind-launch-hint">Opens' +
           (it.resource_title ? ': ' + esc(it.resource_title) : ' the linked resource') +
@@ -6880,8 +6887,9 @@
     var items = s.items || [];
     var sk = 's-' + si;
     var setOpen = S.la.editor.settingsOpen === sk;
-    return '<div class="rh2-ind-steplbl">Section ' + (si + 1) + '</div>' +
-      '<div class="rh2-ind-sechead">' +
+    // No "Section n" label: the learner's page has none. The section title
+    // and its settings are the only structure the editor adds.
+    return '<div class="rh2-ind-sechead">' +
         laEditable(sk,
           '<h2 class="rh2-ind-sectitle">' +
             (s.title ? esc(s.title) : '<span class="rh2-ind-ed-empty">Untitled section &mdash; click to name it</span>') +
@@ -6901,9 +6909,10 @@
             '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laSecRemove(' + si + ')">Remove section</button>' +
           '</span></div>'
         : '') +
+      // The learner's own tiles, in the learner's own list — no numbering the
+      // learner never sees. Everything inside is the same card, made live.
       '<ol class="rh2-ind-items">' + items.map(function (it, ii) {
         return '<li class="rh2-ind-item rh2-ind-item-edit">' +
-          '<span class="rh2-ind-item-no">' + (ii + 1) + '</span>' +
           laEditorItemHtml(it, si, ii, items.length) + '</li>';
       }).join('') + '</ol>' +
       (items.length ? '' : '<p class="rh2-quiet">There is nothing in this section yet — add the first step below.</p>') +
