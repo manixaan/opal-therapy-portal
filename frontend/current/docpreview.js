@@ -15,7 +15,7 @@
  *
  * Contract:
  *   DocPreview.open({
- *     kind: 'pdf' | 'docx',       // which renderer
+ *     kind: 'pdf' | 'docx' | 'image' | 'text',   // which renderer
  *     url: '/api/rh2/files/<id>/preview',  // authenticated inline bytes
  *     title: 'Sensory Worksheet',
  *     downloadUrl: '/api/rh2/files/<id>',  // optional Download button
@@ -69,6 +69,8 @@
     '.dp-stage{flex:1;overflow:auto;padding:20px;display:block;text-align:center;-webkit-overflow-scrolling:touch;}',
     '.dp-sheet{display:inline-block;text-align:center;transform-origin:top center;}',
     '.dp-page{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;display:block;max-width:100%;}',
+    '.dp-image{width:100%;height:auto;max-width:none;}',
+    '.dp-text{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto;max-width:820px;min-width:min(820px,90vw);padding:48px 56px;text-align:left;white-space:pre-wrap;word-wrap:break-word;font:14px/1.6 Georgia,\'Times New Roman\',serif;color:#222;}',
     '.dp-status{color:#fff;padding:40px 20px;font-size:14.5px;text-align:center;}',
     '.dp-status .dp-btn{margin-top:14px;}',
     // docx-preview injects its own sheet styling; contain it to white pages.
@@ -165,6 +167,7 @@
     var zEl = doc.getElementById('dp-zoom');
     if (zEl) zEl.textContent = Math.round(S.zoom * 100) + '%';
     if (S.kind === 'pdf') schedulePdfRender();
+    else if (S.kind === 'image') applyImageZoom();
     else applyDocxZoom();
   }
 
@@ -410,12 +413,46 @@
     sheet.style.zoom = String((S.docxFit || 1) * S.zoom);
   }
 
+  // ── Images and plain text: the same overlay, no renderer needed ──────────
+
+  function openImage() {
+    var stage = stageEl(); if (!stage) return;
+    var img = doc.createElement('img');
+    img.className = 'dp-page dp-image';
+    img.alt = S.title;
+    img.src = S.url;
+    img.onerror = function () { stage.innerHTML = statusHtml('The image could not be loaded.', true); };
+    stage.innerHTML = '';
+    stage.appendChild(img);
+    applyImageZoom();
+  }
+  function applyImageZoom() {
+    var img = doc.querySelector('#dp-stage .dp-image');
+    if (img) { img.style.width = Math.round(S.zoom * 100) + '%'; img.style.maxWidth = 'none'; }
+  }
+
+  function openText() {
+    var stage = stageEl(); if (!stage) return;
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    S.abort = ctrl;
+    fetch(S.url, { credentials: 'include', signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (text) {
+      if (!S.open || S.kind !== 'text') return;
+      stage.innerHTML = '<div class="dp-sheet" id="dp-docx-sheet"><pre class="dp-text">' + esc(text) + '</pre></div>';
+      applyDocxZoom();
+    }).catch(function () {
+      if (S.open) stage.innerHTML = statusHtml('The document could not be loaded.', true);
+    });
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   function open(opts) {
     if (S.open) close();
     S.open = true;
-    S.kind = opts.kind === 'docx' ? 'docx' : 'pdf';
+    S.kind = opts.kind === 'docx' || opts.kind === 'image' || opts.kind === 'text' ? opts.kind : 'pdf';
     S.url = String(opts.url || '');
     S.downloadUrl = opts.downloadUrl ? String(opts.downloadUrl) : null;
     S.title = String(opts.title || 'Document preview');
@@ -428,6 +465,8 @@
     mount();
     doc.body.style.overflow = 'hidden';
     if (S.kind === 'pdf') openPdf();
+    else if (S.kind === 'image') openImage();
+    else if (S.kind === 'text') openText();
     else openDocx();
   }
 

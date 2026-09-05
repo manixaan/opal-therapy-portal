@@ -1299,7 +1299,7 @@
     var atts = (i.attachments || []);
     if (atts.length) {
       fileCell += '<ul class="oj-atts">' + atts.map(function (a) {
-        return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" target="_blank" rel="noopener" title="Open">' + esc(a.fileName) + '</a>'
+        return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" title="Preview" onclick="event.preventDefault(); OnboardingJourney.packPreviewAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">' + esc(a.fileName) + '</a>'
           + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
       }).join('') + '</ul>';
     }
@@ -1903,10 +1903,21 @@
     var i = all.filter(function (x) { return x.id === id; })[0];
     if (!i || !i.file || !i.file.previewUrl) return;
     var kind = i.file.previewKind;
-    if ((kind === 'pdf' || kind === 'docx') && global.DocPreview && typeof global.DocPreview.open === 'function') {
-      global.DocPreview.open({ kind: kind, url: i.file.previewUrl + '?rev=' + Date.now(), downloadUrl: i.file.downloadUrl, title: i.title, meta: (i.file.source === 'own' ? 'Your copy' : 'Library copy') + (i.file.fileName ? ' · ' + i.file.fileName : '') });
+    if ((kind === 'pdf' || kind === 'docx' || kind === 'image' || kind === 'text') && global.DocPreview && typeof global.DocPreview.open === 'function') {
+      global.DocPreview.open({ kind: kind, url: i.file.previewUrl + '?rev=' + Date.now(), downloadUrl: i.file.downloadUrl, title: i.title, meta: (i.file.source === 'own' ? 'Your copy' : i.file.source === 'body' ? 'Library text' : 'Library copy') + (i.file.fileName ? ' · ' + i.file.fileName : '') });
     } else {
       global.open(i.file.previewUrl, '_blank', 'noopener');
+    }
+  }
+  function packPreviewAttachment(id, attachmentId) {
+    var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
+    var i = all.filter(function (x) { return x.id === id; })[0];
+    var a = i && (i.attachments || []).filter(function (x) { return x.id === attachmentId; })[0];
+    if (!a) return;
+    if ((a.previewKind === 'pdf' || a.previewKind === 'docx' || a.previewKind === 'image') && global.DocPreview && typeof global.DocPreview.open === 'function') {
+      global.DocPreview.open({ kind: a.previewKind, url: a.previewUrl + '?rev=' + Date.now(), downloadUrl: a.downloadUrl, title: i.title, meta: 'Attachment · ' + a.fileName });
+    } else {
+      global.open(a.downloadUrl || a.previewUrl, '_blank', 'noopener');
     }
   }
   async function packAddOpen(phase) {
@@ -2128,7 +2139,7 @@
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
-    packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
+    packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
