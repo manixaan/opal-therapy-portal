@@ -293,67 +293,62 @@ describe('an item on Assign Learning offers three actions, and only three', () =
 //  learner's page could carry.
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('learner, preview and edit walk the same steps', () => {
+describe('the reader gets the whole induction on one page; the editor keeps its steps', () => {
   const player = fn('renderAssignment');
   const editor = fn('renderLaEditor');
 
-  test('both modes render through the shared header, rail and nav', () => {
-    for (const shared of ['indHeader(', 'indNav(', 'indStep(']) {
+  test('both modes render through the shared header and section renderer', () => {
+    for (const shared of ['indHeader(', 'indSectionRead(']) {
       expect(`player ${shared}:${player.includes(shared)}`).toBe(`player ${shared}:true`);
-      expect(`editor ${shared}:${editor.includes(shared)}`).toBe(`editor ${shared}:true`);
     }
-    expect(fn('indHeader')).toContain('indRail(');
+    expect(editor).toContain('indHeader(');
+    // The rail is the editor's alone: a reader has nothing to step between.
+    expect(fn('indHeader')).toContain("(mode === 'edit' ? indRail(mode, step, sections) : '')");
   });
 
-  test('the step model is shared: each section and a close; edit alone keeps its settings step', () => {
-    expect(fn('indStepCount')).toContain('+ 2');
-    // A reader has no workflow settings, so the learner and the preview open
-    // straight onto the first section; the editor's step 0 is where the
-    // title and description are fields.
-    expect(fn('indFirstStep')).toContain("'edit' ? 0 : 1");
-    for (const body of [player, editor]) {
-      expect(body).toContain('step > sections.length');
-    }
-    expect(editor).toContain('if (step === 0)');
-    // No introduction screen stands before the learner's first section.
+  test('the reader sees every section in order, then the closing block — no tabs, no Next', () => {
+    expect(player).toContain('rh2-ind-flat');
+    expect(player).toContain('indSectionRead(s, i + 1, sections.length, true)');
+    expect(player).toContain('indFinishRead(a, sections, mode)');
+    expect(player).not.toContain('indNav(');
+    expect(player).not.toContain('indStep(');
+    expect(player).not.toContain('indRail(');
+    // No introduction screen, no welcome-back question, no step cursor.
     expect(player).not.toContain('indOverviewRead');
     expect(VISIBLE).not.toContain('indOverviewRead');
+    expect(VISIBLE).not.toContain('indChoiceRead');
+    expect(VISIBLE).not.toContain('alResumeStep');
+    // The flat page drops the "Section n of m" label; the section title is a
+    // heading only when there is more than one section to tell apart.
+    expect(fn('indSectionRead')).toContain("secCount > 1 ? '<h2 class=\"rh2-ind-sectitle\">'");
+    expect(CSS).toMatch(/\.rh2-ind-flatsec \+ \.rh2-ind-flatsec\s*\{[^}]*border-top/);
   });
 
-  test('Next and Back exist, are bounded, and are the same control', () => {
+  test('the editor still walks one section per step, bounded, with a jumpable rail', () => {
+    expect(fn('indStepCount')).toContain('+ 2');
+    expect(fn('indFirstStep')).toContain("'edit' ? 0 : 1");
+    expect(editor).toContain('indNav(');
+    expect(editor).toContain('indStep(');
+    expect(editor).toContain('step > sections.length');
+    expect(editor).toContain('if (step === 0)');
+    expect(editor).toContain('indSectionEdit(sections[step - 1]');
     const nav = fn('indNav');
     expect(nav).toContain('RH2.indGo(-1)');
     expect(nav).toContain('RH2.indGo(1)');
-    expect(nav).toContain('Back');
-    expect(nav).toContain('Next');
-    // The editor cannot go back past its settings step and no mode can go on
-    // past the close; a READER's Back on the first section is never dead —
-    // it leaves the induction the way it was entered.
     expect(nav).toContain("(step === 0 ? 'disabled ' : '')");
     expect(nav).toContain("(step === last ? 'disabled ' : '')");
-    expect(nav).toContain("backOut ? 'RH2.alBack()' : 'RH2.indGo(-1)'");
     expect(fn('indGo')).toContain('Math.min(n - 1');
     expect(fn('indGo')).toContain('indFirstStep(mode)');
-  });
-
-  test('a section is a SCREEN, not a card in a stack', () => {
-    // The old player rendered every section at once and hid the content in
-    // accordions. One section per step is the change; a forEach over all of
-    // them inside the renderer would be the regression.
-    expect(player).toContain('indSectionRead(sections[step - 1]');
-    expect(editor).toContain('indSectionEdit(sections[step - 1]');
-    expect(player).not.toMatch(/sections\s*\|\|\s*\[\]\)\.forEach/);
-    expect(VISIBLE).not.toContain('RH2.alToggle(');
-  });
-
-  test('every mode can jump to a named step, so nothing is a dead end', () => {
     expect(fn('indRail')).toContain('RH2.indJump(');
-    expect(fn('indTocRow')).toContain('RH2.indJump(');
-  });
-
-  test('the rail marks the current step by more than colour', () => {
     expect(fn('indRail')).toContain('aria-current="step"');
     expect(CSS).toMatch(/\.rh2-ind-railbtn\.is-on\s*\{[^}]*border-color/);
+  });
+
+  test('what is still owed scrolls to the item itself, on the same page', () => {
+    expect(fn('indFinishRead')).toContain('RH2.alJumpItem(');
+    expect(fn('indFinishRead')).not.toContain('indTocRow(');
+    expect(fn('indSectionRead')).toContain('id="rh2-item-');
+    expect(fn('alJumpItem')).toContain("getElementById('rh2-item-'");
   });
 });
 
@@ -523,10 +518,10 @@ describe('preview shows the learner experience and changes nothing', () => {
     expect(fn('renderAssignment')).toContain('Preview &mdash; read only, nothing is saved');
   });
 
-  test('it opens on the first section, exactly as the learner does', () => {
+  test('it opens on the whole induction, exactly as the learner does', () => {
     // No Start-Preview screen, no introduction: the preview IS the learner
     // journey, from its first real screen.
-    expect(prev).toContain('step: again ? S.assignment.step : 1');
+    expect(prev).toContain('previewDone: again ? S.assignment.previewDone : {}');
     expect(VISIBLE).not.toContain('Start the preview');
   });
 
@@ -561,34 +556,46 @@ describe('the induction is one clear interaction path', () => {
     expect(card).not.toContain('rh2-btn');
   });
 
-  test('a started induction asks continue-or-restart once, and restart only navigates', () => {
-    expect(fn('openAssignment')).toContain("status === 'in_progress'");
-    expect(fn('indChoiceRead')).toContain('Continue where you left off');
-    expect(fn('indChoiceRead')).toContain('Restart from beginning');
-    // Restart replays from the first section; recorded progress is never
-    // reset or re-posted by choosing it. (alChoice has a flat body, so the
-    // bounded match below is exactly that body.)
-    const choice = (HUB.match(/function alChoice\(which\) \{[^{}]*\}/) || [''])[0];
-    expect(choice).toContain('st.choice = null');
-    expect(choice).not.toContain('api(');
-    expect(fn('alResumeStep')).toContain('alItemDone');
+  test('a started induction says In progress and offers Restart induction, which really resets', () => {
+    // Opening an assigned induction starts it, so the chip reads In progress
+    // from the first look.
+    expect(fn('openAssignment')).toContain("status === 'assigned'");
+    expect(fn('openAssignment')).toContain("'/start'");
+    expect(fn('laStatusChip')).toContain("a.status === 'in_progress'");
+    expect(fn('laStatusChip')).toContain('In progress');
+    // Restart is the learner's own act on a started induction — never in
+    // preview, never on a completed record — and it goes through the server.
+    const finish = fn('indFinishRead');
+    expect(finish).toContain("mode === 'learner' && a.status === 'in_progress'");
+    expect(finish).toContain('RH2.alRestart()');
+    expect(finish).toContain('Restart induction');
+    const restart = fn('alRestart');
+    expect(restart).toContain('confirm(');
+    expect(restart).toContain("'/restart'");
+    expect(restart).toContain("a.status !== 'in_progress') return");
+    expect(restart).toContain('completed_items: {}');
+    expect(restart).toContain('loadMyLearning()');
+    // No client-side "restart" that only moved a cursor remains.
+    expect(VISIBLE).not.toContain('alChoice');
+    expect(VISIBLE).not.toContain('Restart from beginning');
   });
 
-  test('re-entering the open induction keeps the reader\'s place', () => {
+  test('re-entering the open induction keeps its loaded data', () => {
     expect(fn('openAssignment')).toContain('sameId');
-    expect(fn('openAssignment')).toContain('step: sameId ? S.assignment.step : 1');
+    expect(fn('openAssignment')).toContain('data: sameId ? S.assignment.data : null');
   });
 
-  test('passive items carry no buttons — reading past a section records it', () => {
+  test('passive items carry no buttons — Mark as Complete records them', () => {
     const body = fn('alItemBody');
     expect(body).not.toContain('Mark complete');
     expect(body).not.toContain('Open resource');
-    expect(fn('indGo')).toContain('alAutoSection');
-    // Only readings and tasks are recorded by passing; never arriving at the
-    // closing screen, and never an acknowledgement or a knowledge check.
-    const auto = fn('alAutoSection');
-    expect(auto).toContain("it.type === 'content' || it.type === 'task'");
-    expect(fn('indGo')).toContain('to <= indSections(mode).length');
+    // With no Next to page past, the one deliberate completion sweeps up every
+    // counted reading, task and resource; acknowledgements and knowledge
+    // checks stay the learner's own acts.
+    const finish = fn('alFinish');
+    expect(finish).toContain("(t === 'content' || t === 'task' || t === 'resource')");
+    expect(finish).not.toContain("'acknowledgement'");
+    expect(VISIBLE).not.toContain('alAutoSection');
   });
 
   test('a resource item is a launch tile: the walkthrough directly, or the resource', () => {
@@ -612,9 +619,9 @@ describe('the induction is one clear interaction path', () => {
     // closing sweep still marks complete — an induction nobody actually took.
     expect(fn('alWalkModule')).toContain("item.type === 'task' && item.walkthrough_key");
     expect(fn('indSectionRead')).toContain("it.type === 'resource' || mod");
-    // Paging past a section never records a walkthrough task — only its
-    // walkthrough finishing, or the deliberate closing sweep, does.
-    expect(fn('alAutoSection')).toContain('!it.walkthrough_key');
+    // A walkthrough task records when its walkthrough finishes, or at the
+    // deliberate closing sweep — nothing on the page ticks it by itself.
+    expect(fn('alWalkReturn')).toContain('finished');
     // A non-resource tile with no resolvable walkthrough opens nothing,
     // rather than a phantom resource page.
     expect(fn('alOpenWalk')).toContain("if (item.type !== 'resource') return;");
@@ -877,8 +884,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r18');
-    expect(SHELL).toContain('/resourcehub.js?v=r33');
+    expect(SHELL).toContain('/resourcehub.css?v=r19');
+    expect(SHELL).toContain('/resourcehub.js?v=r34');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

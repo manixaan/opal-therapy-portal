@@ -4718,13 +4718,6 @@
     var from = Math.max(first, Math.min(n - 1, Number(st.step) || 0));
     var to = Math.max(first, Math.min(n - 1, from + Number(delta || 0)));
     st.step = to;
-    if (st.choice) st.choice = null;
-    // Reading past a section IS doing it: one Next forward records the
-    // section's passive readings and tasks. Arriving at the closing screen
-    // never records anything — completing is that screen's own deliberate act.
-    if (mode === 'learner' && to === from + 1 && to <= indSections(mode).length) {
-      alAutoSection(from);
-    }
     indScrollTop();
     render();
   }
@@ -4734,7 +4727,6 @@
     var st = indState(mode);
     if (!st) return;
     st.step = Math.max(indFirstStep(mode), Math.min(indStepCount(indSections(mode)) - 1, Number(i) || 0));
-    if (st.choice) st.choice = null;
     indScrollTop();
     render();
   }
@@ -4800,7 +4792,9 @@
           '<div class="rh2-row-sub">' + meta.progress.done + ' of ' + meta.progress.total +
             ' required modules &middot; ' + meta.progress.percent + '%</div>'
         : '') +
-      indRail(mode, step, sections) +
+      // The rail is the editor's: a reader gets the whole induction on one
+      // page, so there is nothing to step between.
+      (mode === 'edit' ? indRail(mode, step, sections) : '') +
     '</header>';
   }
 
@@ -4825,27 +4819,16 @@
     return req.length ? req : all;
   }
 
-  /** Where an in-progress reader left off: the first section still owing work. */
-  function alResumeStep(sections) {
-    var counted = alCountedItems(sections);
-    for (var i = 0; i < counted.length; i++) {
-      if (!alItemDone(counted[i].item.key)) return counted[i].section;
-    }
-    return (sections || []).length || 1;
-  }
-
   async function openAssignment(id) {
     // Re-entering the induction that is already open — back from a resource,
-    // back from a walkthrough, a history restore — keeps the reader's place.
-    // A fresh open starts on the first section and may ask continue-or-restart.
+    // back from a walkthrough, a history restore — keeps its loaded data.
     var sameId = !!(S.assignment && !S.assignment.preview &&
       S.assignment.id === String(id || '') && S.assignment.data);
     S.assignment = {
       id: String(id || ''), data: sameId ? S.assignment.data : null,
       loading: !sameId, err: '', backView: 'learning',
-      step: sameId ? S.assignment.step : 1,
       quizAnswers: sameId ? S.assignment.quizAnswers : {}, quizResult: null, ackArmed: false,
-      busy: false, preview: false, previewDone: {}, celebrate: false, choice: null,
+      busy: false, preview: false, previewDone: {}, celebrate: false,
     };
     S.view = 'assignment';
     render();
@@ -4864,10 +4847,6 @@
     // A previously started induction asks ONCE: continue where you left off,
     // or restart from the beginning. Never on re-entry, never for a fresh
     // start, never for a completed one being revisited.
-    if (!sameId && d.assignment && d.assignment.status === 'in_progress') {
-      var resume = alResumeStep((d.content && d.content.sections) || []);
-      if (resume > 1) S.assignment.choice = { resume: resume };
-    }
     // Opening an untouched assignment starts it — deliberate, visible in the
     // owner's dashboard as In progress from the first real look.
     if (d.assignment && d.assignment.status === 'assigned') {
@@ -4880,17 +4859,6 @@
           loadMyLearning();
         });
     }
-    render();
-  }
-
-  /** The continue-or-restart answer. Restart replays from the first section —
-   *  it navigates; it never touches or resets the recorded progress. */
-  function alChoice(which) {
-    var st = S.assignment;
-    if (!st || !st.choice) return;
-    st.step = which === 'continue' ? st.choice.resume : 1;
-    st.choice = null;
-    indScrollTop();
     render();
   }
 
@@ -4913,11 +4881,10 @@
       // the Admin > Learning tab.
       id: null, data: null, loading: true, err: '',
       backView: again ? S.assignment.backView : (S.view === 'learning' ? 'learning' : 'admin'),
-      step: again ? S.assignment.step : 1,
       // Un-submitted quiz picks survive a detour, exactly as the learner's do.
       quizAnswers: again ? S.assignment.quizAnswers : {}, quizResult: null, ackArmed: false,
       busy: false, preview: true, previewWfId: String(wfId || ''),
-      previewDone: again ? S.assignment.previewDone : {}, celebrate: false, choice: null,
+      previewDone: again ? S.assignment.previewDone : {}, celebrate: false,
     };
     S.view = 'assignment';
     render();
@@ -4999,34 +4966,6 @@
   }
 
   /**
-   * Reading past a section records its passive items — readings and tasks. No
-   * button asked for this; the reading itself was the work. Resources record
-   * when they are opened, walkthroughs when they finish, and acknowledgements
-   * and knowledge checks only ever through their own interactions.
-   */
-  function alAutoSection(sectionStep) {
-    var st = S.assignment;
-    if (!st || st.preview || !st.data) return;
-    var a = st.data.assignment;
-    if (!a || a.status === 'completed') return;
-    var s = (indSections('learner') || [])[sectionStep - 1];
-    if (!s) return;
-    var todo = (s.items || []).filter(function (it) {
-      // A task that carries a walkthrough records like a resource — when its
-      // walkthrough finishes, or at the deliberate closing sweep — never by
-      // merely paging past it.
-      return (it.type === 'content' || it.type === 'task') && !it.walkthrough_key && !alItemDone(it.key);
-    });
-    if (!todo.length) return;
-    (async function () {
-      for (var i = 0; i < todo.length; i++) {
-        var d = await alComplete(todo[i].key, {}, { quiet: true, stay: true });
-        if (!d) break;
-      }
-    })();
-  }
-
-  /**
    * The one deliberate completion: the closing screen's Mark as Complete. It
    * records every counted reading, task and resource still open — the reader
    * has been through the sections — and the server flips the assignment
@@ -5048,6 +4987,39 @@
       if (!d) return;
     }
     render();
+  }
+
+  /**
+   * The learner's own reset. The server clears every recorded item on this
+   * assignment and zeroes the counters; it stays theirs and stays In progress.
+   * Deliberate and confirmed — it is the one action here that undoes work.
+   */
+  async function alRestart() {
+    var st = S.assignment;
+    if (!st || st.preview || !st.data || st.busy) return;
+    var a = st.data.assignment;
+    if (!a || a.status !== 'in_progress') return;
+    if (!confirm('Restart this induction? Everything you have ticked off in it is cleared and you start again from the top.')) return;
+    st.busy = true;
+    render();
+    var d = await api('/api/learning/my/' + encodeURIComponent(st.id) + '/restart', { method: 'POST' });
+    st.busy = false;
+    if (!d.ok) { alert(d.error || 'The induction could not be restarted.'); return render(); }
+    st.data = { assignment: d.assignment, content: d.content, completed_items: {} };
+    st.quizAnswers = {};
+    st.quizResult = null;
+    st.ackArmed = false;
+    loadMyLearning();
+    indScrollTop();
+    render();
+  }
+
+  /** Bring one item into view — the closing block lists what is still owed. */
+  function alJumpItem(key) {
+    try {
+      var el = global.document.getElementById('rh2-item-' + String(key || ''));
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (e) { /* scrolling is never fatal */ }
   }
 
   function alAckArm(key) { S.assignment.ackArmed = String(key); render(); }
@@ -5259,26 +5231,16 @@
     return out + '</div>';
   }
 
-  /** The one question a previously started induction asks — then gets out of
-   *  the way. Both answers only move the cursor; nothing is reset. */
-  function indChoiceRead(a) {
-    var pct = pick(a, 'progress_percent') || 0;
-    return '<div class="rh2-ind-steplbl">Welcome back</div>' +
-      '<h2 class="rh2-ind-sectitle">Pick up where you left off?</h2>' +
-      '<p class="rh2-quiet">Your progress is saved' + (pct ? ' — ' + pct + '% done' : '') +
-        '. Restarting replays the induction from the first section; nothing you have done is lost.</p>' +
-      '<div class="rh2-learn-actions">' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.alChoice(\'continue\')">Continue where you left off</button>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.alChoice(\'restart\')">Restart from beginning</button>' +
-      '</div>';
-  }
-
-  /** One section, one screen. The unit of an induction in every mode. */
-  function indSectionRead(s, step, secCount) {
+  /** One section. In the editor it is one screen; a reader sees every
+   *  section on the one page (`flat`), where the section title is a heading
+   *  only when there is more than one section to tell apart. */
+  function indSectionRead(s, step, secCount, flat) {
     if (!s) return '<div class="rh2-empty">This section is empty.</div>';
     var items = s.items || [];
-    var out = '<div class="rh2-ind-steplbl">Section ' + step + ' of ' + secCount + '</div>' +
-      '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>';
+    var out = flat
+      ? (secCount > 1 ? '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>' : '')
+      : '<div class="rh2-ind-steplbl">Section ' + step + ' of ' + secCount + '</div>' +
+        '<h2 class="rh2-ind-sectitle">' + esc(s.title) + '</h2>';
     if (!items.length) return out + '<p class="rh2-quiet">There is nothing in this section yet.</p>';
     return out + '<ol class="rh2-ind-items">' + items.map(function (it) {
       var done = alItemDone(it.key);
@@ -5299,13 +5261,13 @@
         var verb = mod
           ? ((done ? 'Replay' : 'Open') + ' the interactive walkthrough')
           : ('Open' + (it.resource_title ? ': ' + it.resource_title : ' the resource'));
-        return '<li class="rh2-ind-item rh2-ind-item-launch' + (done ? ' is-done' : '') + '">' +
+        return '<li class="rh2-ind-item rh2-ind-item-launch' + (done ? ' is-done' : '') + '" id="rh2-item-' + esc(it.key) + '">' +
           '<button type="button" class="rh2-ind-launch" onclick="RH2.alOpenWalk(\'' + esc(it.key) + '\')">' +
             '<span class="rh2-ind-item-head">' + head + '</span>' +
             '<span class="rh2-ind-launch-hint">' + esc(verb) + ' &rarr;</span>' +
           '</button>' + alItemBody(it, done) + '</li>';
       }
-      return '<li class="rh2-ind-item' + (done ? ' is-done' : '') + '">' +
+      return '<li class="rh2-ind-item' + (done ? ' is-done' : '') + '" id="rh2-item-' + esc(it.key) + '">' +
         '<div class="rh2-ind-item-head">' + head + '</div>' + alItemBody(it, done) + '</li>';
     }).join('') + '</ol>';
   }
@@ -5332,7 +5294,11 @@
       out += '<h2 class="rh2-ind-sectitle">Nearly there</h2>' +
         '<p class="rh2-quiet">' + interactive.length + ' step' + (interactive.length === 1 ? ' needs' : 's need') +
         ' you before this can be completed:</p><ol class="rh2-ind-toc">' + interactive.map(function (e, i) {
-          return indTocRow(e.item.title, (sections[e.section - 1] || {}).title || '', e.section, i + 1);
+          // Everything is on this page: the row scrolls to the item itself.
+          return '<li><button type="button" class="rh2-ind-tocbtn" onclick="RH2.alJumpItem(\'' + esc(e.item.key) + '\')">' +
+            '<span class="rh2-ind-item-no">' + (i + 1) + '</span>' +
+            '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(e.item.title) + '</span>' +
+            '<span class="rh2-row-sub">' + esc((sections[e.section - 1] || {}).title || '') + '</span></span></button></li>';
         }).join('') + '</ol>';
     } else {
       out += '<h2 class="rh2-ind-sectitle">That is the whole induction</h2>' +
@@ -5341,8 +5307,14 @@
           (S.assignment.busy ? 'disabled ' : '') +
           'onclick="RH2.alFinish()">Mark as Complete</button></div>';
     }
+    // A started induction can be restarted by the person doing it: every
+    // recorded item is cleared server-side and they begin again from the top.
+    var restart = (mode === 'learner' && a.status === 'in_progress')
+      ? '<button type="button" class="rh2-btn" ' + (S.assignment.busy ? 'disabled ' : '') +
+        'onclick="RH2.alRestart()">Restart induction</button>'
+      : '';
     return out + '<div class="rh2-learn-actions"><button type="button" class="rh2-btn" onclick="RH2.alBack()">' +
-      (mode === 'preview' ? 'Close preview' : 'Back to My Learning') + '</button></div>';
+      (mode === 'preview' ? 'Close preview' : 'Back to My Learning') + '</button>' + restart + '</div>';
   }
 
   function renderAssignment() {
@@ -5356,7 +5328,6 @@
 
     var a = st.data.assignment || {};
     var sections = (st.data.content && st.data.content.sections) || [];
-    var step = indStep(mode, sections);
 
     out += '<div class="rh2-learn-player-top">' + backBtn +
       (st.preview
@@ -5380,20 +5351,24 @@
         done: pick(a, 'required_done') || 0,
         total: pick(a, 'required_total') || 0,
       },
-    }, sections, step);
+    }, sections, 0);
 
     if (!st.preview && pick(a, 'owner_note')) {
       out += '<p class="rh2-quiet rh2-learn-note">' + esc(pick(a, 'owner_note')) + '</p>';
     }
 
-    out += '<section class="rh2-card rh2-ind-stage">';
-    if (st.choice) out += indChoiceRead(a);
-    else if (step > sections.length) out += indFinishRead(a, sections, mode);
-    else out += indSectionRead(sections[step - 1], step, sections.length);
+    // The whole induction on one page: every section's items in order, then
+    // the closing block (Mark as Complete, or what is still owed). No steps,
+    // no tabs — a reader scrolls, and their place is simply what is ticked.
+    out += '<section class="rh2-card rh2-ind-stage rh2-ind-flat">';
+    out += sections.length
+      ? sections.map(function (s, i) {
+          return '<div class="rh2-ind-flatsec">' + indSectionRead(s, i + 1, sections.length, true) + '</div>';
+        }).join('')
+      : '<div class="rh2-empty">There is nothing in this induction yet.</div>';
+    out += '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishRead(a, sections, mode) + '</div>';
     out += '</section>';
-
-    // While the continue-or-restart question is up, it is the only control.
-    return out + (st.choice ? '' : indNav(mode, step, sections.length)) + '</div>';
+    return out + '</div>';
   }
 
   // ── Owner: learning console (Admin → Learning) ─────────────────────────────
@@ -7788,8 +7763,9 @@
     openAssignment: openAssignment,
     reloadMyLearning: function () { S.myl.rows = null; loadMyLearning(); },
     alBack: alBack,
-    alChoice: alChoice,
     alFinish: alFinish,
+    alRestart: alRestart,
+    alJumpItem: alJumpItem,
     alOpenWalk: alOpenWalk,
     alAckArm: alAckArm,
     alAckCancel: alAckCancel,

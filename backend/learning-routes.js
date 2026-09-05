@@ -1374,6 +1374,49 @@ router.post('/api/learning/my/:id/start', safe(async (req, res) => {
   res.json({ assignment: assignmentRow(a, { forEmployee: true }) });
 }));
 
+/**
+ * Restart: the learner's own deliberate reset of an induction they have
+ * started. Every recorded item is cleared and the counters return to zero;
+ * the assignment stays in_progress (started_at is history, not progress).
+ * A completed induction is never un-completed from here — completion is a
+ * record the Owner relies on — so it answers 409 like a stray complete does.
+ */
+router.post('/api/learning/my/:id/restart', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const a = await loadMyAssignment(req, req.params.id, client);
+    if (!a) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    if (a.status === 'completed') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This learning is already completed' });
+    }
+    const cleared = await client.query(
+      `DELETE FROM learning_item_progress WHERE assignment_id = $1`, [a.id]);
+    await client.query(
+      `UPDATE learning_assignments
+          SET status = 'in_progress', started_at = COALESCE(started_at, NOW()),
+              progress_percent = 0, required_done = 0, last_activity_at = NOW()
+        WHERE id = $1`, [a.id]);
+    await client.query('COMMIT');
+    await audit(req, 'learning.assignment_restarted', a.id, { itemsCleared: cleared.rowCount || 0 });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  // The same shape GET /my/:id answers, so the player can swap it straight in.
+  const fresh = await loadMyAssignment(req, req.params.id);
+  if (!fresh) return res.status(404).json({ error: 'Not found' });
+  res.json({
+    assignment: { ...assignmentRow(fresh, { forEmployee: true }), assigned_by_name: fresh.assigned_by_name },
+    content: await attachResourceSlugs(lc.serialiseForEmployee(fresh.content), orgOf(req)),
+    completed_items: {},
+  });
+}));
+
 router.post('/api/learning/my/:id/items/:itemKey/complete', safe(async (req, res) => {
   const itemKey = str(req.params.itemKey, lc.LIMITS.key);
   if (!itemKey) return res.status(404).json({ error: 'Not found' });

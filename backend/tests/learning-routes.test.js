@@ -121,6 +121,7 @@ const EMPLOYEE_ENDPOINTS = [
   ['GET',  '/api/learning/my'],
   ['GET',  `/api/learning/my/${AS_ID}`],
   ['POST', `/api/learning/my/${AS_ID}/start`],
+  ['POST', `/api/learning/my/${AS_ID}/restart`],
   ['POST', `/api/learning/my/${AS_ID}/items/i-x/complete`],
 ];
 
@@ -180,7 +181,65 @@ test('any authenticated role may read their own learning', async () => {
 test('read_only cannot write progress (global choke point)', async () => {
   const agent = await loginAs(READ_ONLY);
   expect((await agent.post(`/api/learning/my/${AS_ID}/start`)).status).toBe(403);
+  expect((await agent.post(`/api/learning/my/${AS_ID}/restart`)).status).toBe(403);
   expect((await agent.post(`/api/learning/my/${AS_ID}/items/i-x/complete`).send({})).status).toBe(403);
+});
+
+// ═══ Restart ═════════════════════════════════════════════════════════════════
+
+/** A transaction client whose SELECT ... FOR UPDATE answers with `assignment`. */
+function mockRestartClient(assignment) {
+  const client = {
+    query: jest.fn(async (sql) => {
+      if (/FROM learning_assignments a/.test(sql)) return { rows: assignment ? [assignment] : [], rowCount: assignment ? 1 : 0 };
+      if (/DELETE FROM learning_item_progress/.test(sql)) return { rows: [], rowCount: 3 };
+      return { rows: [], rowCount: 0 };
+    }),
+    release: jest.fn(),
+  };
+  db.pool.connect.mockResolvedValue(client);
+  return client;
+}
+
+test('restart is refused on a completed induction — completion is a record', async () => {
+  const agent = await loginAs(THERAPIST);
+  const client = mockRestartClient({ id: AS_ID, user_id: THERAPIST.id, status: 'completed', content: { sections: [] } });
+  const res = await agent.post(`/api/learning/my/${AS_ID}/restart`);
+  expect(res.status).toBe(409);
+  expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  expect(client.query.mock.calls.some(([sql]) => /DELETE FROM learning_item_progress/.test(sql))).toBe(false);
+  expect(client.release).toHaveBeenCalled();
+});
+
+test('restart clears every recorded item, zeroes the counters, and keeps the induction In progress', async () => {
+  const agent = await loginAs(THERAPIST);
+  const row = { id: AS_ID, user_id: THERAPIST.id, status: 'in_progress', content: { sections: [] }, assigned_by_name: 'Owner' };
+  const client = mockRestartClient(row);
+  // The post-commit re-read and the audit write go through the pool.
+  db.pool.query.mockImplementation(async (sql) => {
+    if (/FROM learning_assignments a/.test(sql)) return { rows: [row], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
+  const res = await agent.post(`/api/learning/my/${AS_ID}/restart`);
+  expect(res.status).toBe(200);
+  const sqls = client.query.mock.calls.map(([sql]) => String(sql));
+  expect(sqls.some((s) => /DELETE FROM learning_item_progress WHERE assignment_id/.test(s))).toBe(true);
+  const upd = sqls.find((s) => /UPDATE learning_assignments/.test(s));
+  expect(upd).toMatch(/status = 'in_progress'/);
+  expect(upd).toMatch(/progress_percent = 0, required_done = 0/);
+  expect(upd).not.toMatch(/completed_at/);
+  expect(sqls).toContain('COMMIT');
+  expect(res.body.completed_items).toEqual({});
+  expect(res.body.assignment).toMatchObject({ id: AS_ID, status: 'in_progress' });
+});
+
+test('an unknown or foreign assignment cannot be restarted (404, nothing deleted)', async () => {
+  const agent = await loginAs(THERAPIST);
+  const client = mockRestartClient(null);
+  const res = await agent.post(`/api/learning/my/${AS_ID}/restart`);
+  expect(res.status).toBe(404);
+  expect(client.query.mock.calls.some(([sql]) => /DELETE/.test(sql))).toBe(false);
+  expect(client.query).toHaveBeenCalledWith('ROLLBACK');
 });
 
 test('an assignment the caller does not own answers 404 (not 403)', async () => {

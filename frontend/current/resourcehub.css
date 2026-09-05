@@ -1488,3 +1488,8 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
   .rh2-wsdrop-face { padding: 11px 16px; font-size: 13px; }
   .rh2-libtools .rh2-libhint { flex-basis: 100%; }
 }
+
+/* Reader's induction: every section on one page, then the closing block. */
+.rh2-ind-flat { gap: 20px; }
+.rh2-ind-flatsec { display: flex; flex-direction: column; gap: 12px; }
+.rh2-ind-flatsec + .rh2-ind-flatsec { padding-top: 20px; border-top: 1px solid var(--border-soft); }

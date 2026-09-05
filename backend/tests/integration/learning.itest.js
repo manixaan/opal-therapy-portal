@@ -853,3 +853,55 @@ test('the library reports the duration the Owner authored, for the card to show'
   expect(wf.estimated_minutes).toBe(5);
   expect(wf.module_count).toBe(4);
 });
+
+test('the employee can restart a started induction: progress cleared, still theirs, still in progress', async () => {
+  const owner = await agentFor('owner', org.id);
+  const emp = await agentFor('therapist', org.id);
+  const other = await agentFor('therapist', org.id, { name: 'Someone Else' });
+
+  const wf = await createWorkflow(owner);
+  const out = await assign(owner, wf.id, [emp.user.id]);
+  const asgId = out.assigned[0].id;
+
+  // Not started yet: restart is harmless and leaves it in progress.
+  expect((await emp.agent.post(`/api/learning/my/${asgId}/restart`)).status).toBe(200);
+
+  await emp.agent.post(`/api/learning/my/${asgId}/items/i-read/complete`).send({});
+  await emp.agent.post(`/api/learning/my/${asgId}/items/i-ack/complete`).send({ acknowledged: true });
+  const before = await emp.agent.get(`/api/learning/my/${asgId}`);
+  expect(before.body.assignment.progress_percent).toBe(66);
+  expect(Object.keys(before.body.completed_items)).toHaveLength(2);
+
+  // Nobody else can restart it — it does not exist for them.
+  expect((await other.agent.post(`/api/learning/my/${asgId}/restart`)).status).toBe(404);
+
+  const r = await emp.agent.post(`/api/learning/my/${asgId}/restart`);
+  expect(r.status).toBe(200);
+  expect(r.body.assignment.status).toBe('in_progress');
+  expect(r.body.assignment.progress_percent).toBe(0);
+  expect(r.body.assignment.required_done).toBe(0);
+  expect(r.body.assignment.required_total).toBe(3);
+  expect(r.body.completed_items).toEqual({});
+  expect(r.body.content.sections.length).toBeGreaterThan(0);
+
+  const after = await emp.agent.get(`/api/learning/my/${asgId}`);
+  expect(after.body.completed_items).toEqual({});
+  expect(after.body.assignment.progress_percent).toBe(0);
+
+  // Progress can be earned again from scratch.
+  const again = await emp.agent.post(`/api/learning/my/${asgId}/items/i-read/complete`).send({});
+  expect(again.body.assignment.progress_percent).toBe(33);
+
+  // A completed induction is a record: restart is refused and nothing changes.
+  await emp.agent.post(`/api/learning/my/${asgId}/items/i-ack/complete`).send({ acknowledged: true });
+  await emp.agent.post(`/api/learning/my/${asgId}/items/i-quiz/complete`).send({ answers: [1, 0] });
+  expect((await emp.agent.get(`/api/learning/my/${asgId}`)).body.assignment.status).toBe('completed');
+  expect((await emp.agent.post(`/api/learning/my/${asgId}/restart`)).status).toBe(409);
+  const kept = await emp.agent.get(`/api/learning/my/${asgId}`);
+  expect(kept.body.assignment.status).toBe('completed');
+  expect(Object.keys(kept.body.completed_items)).toHaveLength(3);
+
+  // The Owner's record shows the restart.
+  const log = await db.pool.query(`SELECT action FROM audit_logs WHERE action = 'learning.assignment_restarted'`);
+  expect(log.rows.length).toBeGreaterThanOrEqual(1);
+});
