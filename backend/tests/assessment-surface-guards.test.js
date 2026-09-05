@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r41'], ['resourcehub.css', 'r23'],
+      ['resourcehub.js', 'r42'], ['resourcehub.css', 'r23'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -663,7 +663,10 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 6], ['workshop.css', 3],
+      ['workshop.js', 7], ['workshop.css', 3],
+      // 1: themed confirm/alert/prompt dialogs — every native browser dialog
+      // in the portal goes through dialog.js so it reads as the portal.
+      ['dialog.js', 1], ['dialog.css', 1],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
@@ -678,11 +681,11 @@ describe('changed assets are cache-busted', () => {
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 16], ['onboarding-journey.css', 11],
+      ['onboarding-journey.js', 17], ['onboarding-journey.css', 11],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
-      ['profile.js', 1],
+      ['profile.js', 2],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
@@ -697,7 +700,7 @@ describe('changed assets are cache-busted', () => {
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
-      ['templates.js', 5], ['templates.css', 5],
+      ['templates.js', 6], ['templates.css', 5],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

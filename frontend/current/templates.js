@@ -1320,7 +1320,7 @@
     },
 
     remove: async function (id) {
-      if (!global.confirm('Delete this document? The template itself is not affected.')) return;
+      if (!await portalConfirm('Delete this document? The template itself is not affected.', { danger: true })) return;
       var r = await api(API + '/documents/' + encodeURIComponent(id), { method: 'DELETE' });
       if (!r.ok) { toast('Could not delete', r.error); return; }
       loadDocuments();

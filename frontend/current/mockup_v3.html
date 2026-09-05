@@ -12,6 +12,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+<link rel="stylesheet" href="/dialog.css?v=1" />
+<script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
 <script src="/scheduler.js?v=p9" defer></script>
 <link rel="stylesheet" href="/resourcehub.css?v=r23" />
@@ -28,12 +30,12 @@
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=8" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=11" />
-<script src="/resourcehub.js?v=r41" defer></script>
+<script src="/resourcehub.js?v=r42" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
 <script src="/induction-modules.js?v=3" defer></script>
 <script src="/induction.js?v=6" defer></script>
-<script src="/workshop.js?v=6" defer></script>
+<script src="/workshop.js?v=7" defer></script>
 <!-- Shared document viewer (pdf.js + docx-preview overlay). Used by the
      Resource Hub file previews; self-contained, injects its own styles. -->
 <script src="/docpreview.js?v=4" defer></script>
@@ -49,7 +51,7 @@
 <script src="/letter.js?v=2" defer></script>
 <!-- Resource Hub → Templates. Loaded after docx-preview: the live preview
      renders the composed document with it, exactly as the FCA wizard does. -->
-<script src="/templates.js?v=5" defer></script>
+<script src="/templates.js?v=6" defer></script>
 <!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
      feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
 <script src="/whodas.js?v=5" defer></script>
@@ -63,12 +65,12 @@
 <!-- The three-stage journey (offer → documentation → induction): the Owner's
      board, Start Onboarding and each record. onboarding.js hands its
      management surface to this module and keeps Packages. -->
-<script src="/onboarding-journey.js?v=16" defer></script>
+<script src="/onboarding-journey.js?v=17" defer></script>
 <!-- Interview Preparation: the Owner's structured recruitment interviews.
      Every /api/interviews route requires the `interviews.access` permission,
      which only the Owner holds by default, so this module renders nothing
      (and can fetch nothing) for anyone the Owner has not authorised. -->
-<script src="/interview.js?v=1" defer></script>
+<script src="/interview.js?v=2" defer></script>
 <!-- Travel: the routing engine behind every travel estimate, the DAY_SEGMENTS
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
@@ -77,7 +79,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=1" defer></script>
+<script src="/profile.js?v=2" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -8480,7 +8482,7 @@ async function rhSaveDraft(alsoSubmit) {
 
 async function rhDraftAction(id, action, quiet) {
   var body;
-  if (action === 'request-changes') body = JSON.stringify({ comment: prompt('What should change?') || 'Please revise' });
+  if (action === 'request-changes') body = JSON.stringify({ comment: await portalPrompt('What should change?') || 'Please revise' });
   if (action === 'decline') body = JSON.stringify({ comment: 'Not suitable for the shared library' });
   await fetch('/api/resources/ai-drafts/' + id + '/' + action, {
     method: 'POST', credentials: 'include',
@@ -8675,11 +8677,11 @@ async function rhSavePurchase(alsoSubmit) {
 
 async function rhPurchaseAction(id, action) {
   var body;
-  if (action === 'approve') body = JSON.stringify({ comment: prompt('Approval note (optional):') || undefined });
-  if (action === 'request-changes') body = JSON.stringify({ comment: prompt('What should change?') || 'Please revise' });
-  if (action === 'decline') body = JSON.stringify({ comment: prompt('Reason (optional):') || undefined });
-  if (action === 'mark-ordered') body = JSON.stringify({ poReference: prompt('Purchase order / reference:') || undefined });
-  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: prompt('Invoice / receipt reference (optional):') || undefined });
+  if (action === 'approve') body = JSON.stringify({ comment: await portalPrompt('Approval note (optional):') || undefined });
+  if (action === 'request-changes') body = JSON.stringify({ comment: await portalPrompt('What should change?') || 'Please revise' });
+  if (action === 'decline') body = JSON.stringify({ comment: await portalPrompt('Reason (optional):') || undefined });
+  if (action === 'mark-ordered') body = JSON.stringify({ poReference: await portalPrompt('Purchase order / reference:') || undefined });
+  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: await portalPrompt('Invoice / receipt reference (optional):') || undefined });
   await fetch('/api/purchases/' + id + '/' + action, {
     method: 'POST', credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
@@ -8801,7 +8803,7 @@ async function acctRefreshContactSuggestions(btn) {
   acctRenderContacts();
 }
 async function acctManualMap(id, suggestedXeroId) {
-  var xeroId = prompt('Xero ContactID to map to this Splose client:', suggestedXeroId || '');
+  var xeroId = await portalPrompt('Xero ContactID to map to this Splose client:', suggestedXeroId || '');
   if (!xeroId) return;
   var r = await acctPost('/contacts/' + id + '/map', { xeroContactId: xeroId.trim() });
   if (typeof showToast === 'function') showToast(r.status === 200 ? 'Mapping saved' : 'Mapping failed', r.json.error || '');
@@ -8873,7 +8875,7 @@ async function acctSyncXero(btn) {
   acctRenderOverview();
 }
 async function acctDisconnectXero(btn) {
-  if (!confirm('Disconnect Xero? Cached finance data is kept but no further sync will occur.')) return;
+  if (!await portalConfirm('Disconnect Xero? Cached finance data is kept but no further sync will occur.', { danger: true })) return;
   await acctPost('/xero/disconnect', {});
   acctRenderConnection();
 }
@@ -8929,7 +8931,7 @@ async function acctReviewCandidate(id, status) {
   acctRenderCandidates();
 }
 async function acctCreateDraft(id, btn) {
-  if (!confirm('Create a DRAFT invoice in Xero for this candidate? It will never be authorised or sent by the portal.')) return;
+  if (!await portalConfirm('Create a DRAFT invoice in Xero for this candidate? It will never be authorised or sent by the portal.')) return;
   btn.disabled = true;
   var r = await acctPost('/candidates/' + id + '/create-draft-invoice', {});
   if (typeof showToast === 'function') showToast(r.status === 201 ? 'Draft created in Xero' : 'Draft creation blocked',
@@ -9019,7 +9021,7 @@ window.connectOutlookFromSettings = async function (btn) {
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = 'Connect Outlook'; }
     if (typeof showToast === 'function') showToast('Could not start Outlook sign-in', String(err.message || err));
-    else alert('Could not start Outlook sign-in: ' + (err.message || err));
+    else portalAlert('Could not start Outlook sign-in: ' + (err.message || err));
   }
 };
 
@@ -9072,7 +9074,7 @@ function applyReadOnlyGuards() {
   //    Wrapped on load (functions are declared later in this file).
   const explain = () => {
     if (typeof showToast === 'function') showToast('Read-only account', 'This action is not available for read-only access');
-    else alert('Read-only account — this action is not available.');
+    else portalAlert('Read-only account — this action is not available.');
   };
   const wrapWrites = () => {
     ['openQuickAdd', 'submitLeaveModal', 'submitCPDModal', 'submitDocumentModal',
@@ -15948,7 +15950,7 @@ async function startOutlookSync() {
     btn.disabled = false;
     btn.classList.remove('loading');
     btn.textContent = 'Connect Outlook & Sync Events';
-    alert('Failed to connect to Outlook. Please try again.');
+    portalAlert('Failed to connect to Outlook. Please try again.');
   }
 }
 
@@ -15997,7 +15999,7 @@ async function completeOutlookSync() {
     console.log('📊 Sync complete:', syncData);
 
     if (syncData.eventsSynced > 0) {
-      alert(`Synced ${syncData.eventsSynced} events from Outlook!`);
+      portalAlert(`Synced ${syncData.eventsSynced} events from Outlook!`);
     }
 
     // Refresh the connection-status UI
@@ -16010,7 +16012,7 @@ async function completeOutlookSync() {
 
   } catch (error) {
     console.error('Sync completion error:', error);
-    alert('Sync had a problem. Refresh the page (Cmd-Shift-R) to see your events.');
+    portalAlert('Sync had a problem. Refresh the page (Cmd-Shift-R) to see your events.');
   } finally {
     window.__syncInFlight = false;
   }
@@ -16031,12 +16033,12 @@ async function refreshOutlookSync() {
     const data = await response.json();
     console.log('✅ Refreshed:', data);
 
-    alert(`Refreshed. Found ${data.eventsFound} events in Outlook.`);
+    portalAlert(`Refreshed. Found ${data.eventsFound} events in Outlook.`);
     initOutlookSync();
 
   } catch (error) {
     console.error('Refresh error:', error);
-    alert('Failed to refresh. Please try again.');
+    portalAlert('Failed to refresh. Please try again.');
   }
 }
 
@@ -16047,12 +16049,12 @@ async function refreshOutlookSync() {
 async function resyncAllEvents() {
   if (window.__syncInFlight) {
     console.log('⏭️ Another sync is already running — please wait for it to finish');
-    alert('A sync is already running. Please wait for it to finish before starting another.');
+    portalAlert('A sync is already running. Please wait for it to finish before starting another.');
     return;
   }
   console.log('🗑️ Starting complete re-sync (clear + fetch)...');
 
-  const confirmed = confirm('This will clear all events and re-sync from your Outlook calendar (last 2 years). Continue?');
+  const confirmed = await portalConfirm('This will clear all events and re-sync from your Outlook calendar (last 2 years). Continue?', { danger: true });
   if (!confirmed) {
     console.log('User cancelled re-sync');
     return;
@@ -16102,14 +16104,14 @@ async function resyncAllEvents() {
       btn.textContent = 'Clear & Re-sync All (2 Years)';
     }
 
-    alert(`Complete re-sync done.\n\nCleared: ${clearData.deletedCount} old events\nSynced: ${syncData.upserted ?? syncData.eventsSynced ?? '?'} fresh events from Outlook\n\nRefreshing calendar...`);
+    portalAlert(`Complete re-sync done.\n\nCleared: ${clearData.deletedCount} old events\nSynced: ${syncData.upserted ?? syncData.eventsSynced ?? '?'} fresh events from Outlook\n\nRefreshing calendar...`);
 
     // Reload page to show new events
     setTimeout(() => window.location.reload(), 1000);
 
   } catch (error) {
     console.error('❌ Re-sync error:', error);
-    alert(`Failed to re-sync:\n\n${error.message}\n\nPlease try again.`);
+    portalAlert(`Failed to re-sync:\n\n${error.message}\n\nPlease try again.`);
 
     // Reset button
     const btn = document.querySelector('button[onclick="resyncAllEvents()"]');
@@ -16128,10 +16130,10 @@ async function resyncAllEvents() {
 
 async function fixCalendar() {
   if (window.__syncInFlight) {
-    alert('A sync is already running. Please wait for it to finish.');
+    portalAlert('A sync is already running. Please wait for it to finish.');
     return;
   }
-  const confirmed = confirm('This will remove stale Outlook events (events deleted in Outlook that still appear here).\n\nYour app-created events will NOT be touched. Continue?');
+  const confirmed = await portalConfirm('This will remove stale Outlook events (events deleted in Outlook that still appear here).\n\nYour app-created events will NOT be touched. Continue?', { danger: true });
   if (!confirmed) return;
 
   window.__syncInFlight = true;
@@ -16147,11 +16149,11 @@ async function fixCalendar() {
     const data = await res.json();
     const removed = data.stalePruned ?? data.removed ?? '?';
     const deduped = data.deduped ?? '?';
-    alert(`Fix complete.\n\nStale events removed: ${removed}\nDuplicates removed: ${deduped}\n\nRefreshing calendar...`);
+    portalAlert(`Fix complete.\n\nStale events removed: ${removed}\nDuplicates removed: ${deduped}\n\nRefreshing calendar...`);
     await loadOutlookEventsToCalendar();
   } catch (err) {
     console.error('❌ fixCalendar error:', err);
-    alert(`Fix failed:\n\n${err.message}`);
+    portalAlert(`Fix failed:\n\n${err.message}`);
   } finally {
     window.__syncInFlight = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Fix calendar (remove stale events)'; }
@@ -19306,10 +19308,10 @@ async function admLoadPurchases() {
 async function admPurchaseAction(id, action) {
   var body;
   if (action === 'mark-ordered') body = JSON.stringify({
-    poReference: prompt('Purchase order / reference:') || undefined,
-    supplier: prompt('Confirm supplier (optional):') || undefined,
+    poReference: await portalPrompt('Purchase order / reference:') || undefined,
+    supplier: await portalPrompt('Confirm supplier (optional):') || undefined,
   });
-  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: prompt('Invoice / receipt reference (optional):') || undefined });
+  if (action === 'mark-received') body = JSON.stringify({ invoiceReference: await portalPrompt('Invoice / receipt reference (optional):') || undefined });
   await fetch('/api/purchases/' + id + '/' + action, {
     method: 'POST', credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
@@ -22509,7 +22511,7 @@ async function loadOrgSettings() {
 
 // ── Integration status (real check) ──────────────────────────
 async function disconnectOutlookFromSettings(btn) {
-  if (!confirm('Disconnect Outlook for YOUR account?\n\nSync stops and the connection is removed. Locally mirrored events are kept, and nothing changes in Outlook itself. You can reconnect at any time.')) return;
+  if (!await portalConfirm('Disconnect Outlook for YOUR account?\n\nSync stops and the connection is removed. Locally mirrored events are kept, and nothing changes in Outlook itself. You can reconnect at any time.', { danger: true })) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Disconnecting…'; }
   try {
     var r = await fetch('/api/outlook/disconnect', { method: 'POST', credentials: 'include' });
@@ -22624,7 +22626,7 @@ async function teamCreateProfile(userId, name, btn) {
 }
 
 async function teamSetSploseId(profileId, btn) {
-  var id = prompt('Splose practitioner ID for this therapist:\n(Practice owner: find it in Splose → Team, or ask the developer.)');
+  var id = await portalPrompt('Splose practitioner ID for this therapist:\n(Practice owner: find it in Splose → Team, or ask the developer.)');
   if (!id || !id.trim()) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
@@ -22738,7 +22740,7 @@ async function loadUserListForOwner() {
 
 // ── Admin actions ─────────────────────────────────────────────
 async function adminApprove(userId, userName) {
-  if (!confirm('Approve account for ' + userName + '? They will receive an email and can sign in immediately.')) return;
+  if (!await portalConfirm('Approve account for ' + userName + '? They will receive an email and can sign in immediately.')) return;
   try {
     var r = await fetch('/api/admin/users/' + userId + '/approve', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
@@ -22748,7 +22750,7 @@ async function adminApprove(userId, userName) {
 }
 
 async function adminActivate(userId, userName) {
-  if (!confirm('Re-activate account for ' + userName + '?')) return;
+  if (!await portalConfirm('Re-activate account for ' + userName + '?')) return;
   try {
     var r = await fetch('/api/admin/users/' + userId + '/activate', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
@@ -22758,7 +22760,7 @@ async function adminActivate(userId, userName) {
 }
 
 async function adminDeactivate(userId, userName) {
-  if (!confirm('Permanently deactivate ' + userName + '? Their data is preserved but they cannot sign in.\n\nYou can restore them later.')) return;
+  if (!await portalConfirm('Permanently deactivate ' + userName + '? Their data is preserved but they cannot sign in.\n\nYou can restore them later.', { danger: true })) return;
   try {
     var r = await fetch('/api/admin/users/' + userId + '/deactivate', { method: 'PATCH', credentials: 'include' });
     var d = await r.json().catch(function() { return {}; });
@@ -22958,8 +22960,8 @@ async function saveNewPassword() {
 }
 
 // ── Sign out all sessions ─────────────────────────────────────
-function signOutAll() {
-  if (confirm('Sign out of all sessions? You will need to log in again on all devices.')) {
+async function signOutAll() {
+  if (await portalConfirm('Sign out of all sessions? You will need to log in again on all devices.')) {
     fetch('/api/auth/sign-out-all', { method: 'POST', credentials: 'include' })
       .finally(function() { window.location.href = '/login'; });
   }
@@ -23145,7 +23147,7 @@ async function copyPendingInviteLink(id, btn) {
 }
 
 async function revokeInvite(id, btn) {
-  if (!confirm('Revoke this invite? The link will stop working.')) return;
+  if (!await portalConfirm('Revoke this invite? The link will stop working.', { danger: true })) return;
   if (btn) { btn.disabled=true; btn.textContent='Revoking…'; }
   try {
     var res = await fetch('/api/invites/' + id, { method: 'DELETE', credentials: 'include' });
@@ -23170,8 +23172,8 @@ async function resendInvite(id, btn) {
 }
 
 // ── Bug report ────────────────────────────────────────────────
-function openBugReport() {
-  var msg = prompt('Describe the issue you encountered:\n(Your report will be logged with your email and timestamp.)');
+async function openBugReport() {
+  var msg = await portalPrompt('Describe the issue you encountered:\n(Your report will be logged with your email and timestamp.)');
   if (!msg || !msg.trim()) return;
   fetch('/api/support/bug-report', {
     method: 'POST', credentials: 'include',
@@ -23566,7 +23568,7 @@ function detectAndMarkRuralTrips() {
 
           if (alreadyBooked) {
             var dayLabel = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) : 'that day';
-            var proceed = window.confirm(
+            var proceed = await portalConfirm(
               'Duplicate booking warning\n\n' +
               (patient.first || 'This client') + ' may already have an appointment on ' + dayLabel + '.\n\n' +
               'Do you want to proceed anyway?'

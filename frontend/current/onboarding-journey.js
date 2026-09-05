@@ -410,8 +410,8 @@
     return res;
   }
   function defaultsFlag(code, phase, field, value) { var b = { phase: phase }; b[field] = value; return defaultsAct('/items/' + encodeURIComponent(code), b, 'PATCH'); }
-  function defaultsRename(code, phase, current) {
-    var title = global.prompt('Document name in this package\'s default pack:', current || '');
+  async function defaultsRename(code, phase, current) {
+    var title = await portalPrompt('Document name in this package\'s default pack:', current || '');
     if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
     return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, title: title.trim() }, 'PATCH', 'Renamed for every new onboarding of this package.');
   }
@@ -426,7 +426,7 @@
     input.value = '';
     return defaultsAct('/items/' + encodeURIComponent(code) + '/file', { phase: phase, fileName: file.name, fileMime: mime, fileData: b64 }, 'POST', 'File uploaded — it now goes out in every new onboarding that includes this document.');
   }
-  function defaultsRestore(phase) { if (!global.confirm('Restore this package\'s default pack? Every tweak for this phase is cleared.')) return; return defaultsAct('/restore', { phase: phase }, 'POST', 'Defaults restored.'); }
+  async function defaultsRestore(phase) { if (!await portalConfirm('Restore this package\'s default pack? Every tweak for this phase is cleared.')) return; return defaultsAct('/restore', { phase: phase }, 'POST', 'Defaults restored.'); }
   function defaultsPreview(code, phase) {
     var i = (S.defaults.phases[phase].items || []).filter(function (x) { return x.code === code; })[0];
     if (!i || !i.file || !i.file.previewUrl) return;
@@ -1349,8 +1349,8 @@
   }
   function uploadLetter(input) { return uploadTo(input, '/offer/letter', 'Edited letter'); }
   function uploadSigned(input) { return refreshRecordAfter(uploadTo(input, '/offer/signed', 'Signed letter')); }
-  function discardLetter() {
-    if (!global.confirm('Discard the uploaded edit and go back to the generated letter?')) return;
+  async function discardLetter() {
+    if (!await portalConfirm('Discard the uploaded edit and go back to the generated letter?', { danger: true })) return;
     return act('/offer/letter', {}, 'Using the generated letter again.', 'DELETE');
   }
 
@@ -1372,29 +1372,29 @@
       if (res.delivery.webLink) global.open(res.delivery.webLink, '_blank', 'noopener');
     }
   }
-  function markSent() {
-    if (!global.confirm('Mark the letter of offer as sent? The record moves to waiting for the signed copy.')) return;
+  async function markSent() {
+    if (!await portalConfirm('Mark the letter of offer as sent? The record moves to waiting for the signed copy.')) return;
     return act('/offer/mark-sent', {}, 'Marked as sent. Waiting for the signed letter.');
   }
   function unmarkSent() { return act('/offer/unmark-sent', {}, 'Back to not sent.'); }
-  function verifyOffer() {
-    if (!global.confirm('Verify the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.')) return;
+  async function verifyOffer() {
+    if (!await portalConfirm('Verify the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.')) return;
     return act('/offer/verify', {}, function (r) { return (r.release && r.release.message) || 'Verified.'; });
   }
-  function declineOffer() {
-    var reason = global.prompt('Record that the candidate declined. Reason (optional):');
+  async function declineOffer() {
+    var reason = await portalPrompt('Record that the candidate declined. Reason (optional):');
     if (reason === null) return;
     return act('/offer/decline', { reason: reason || undefined }, 'Recorded as declined.');
   }
 
-  function withdrawOffer() {
-    var reason = global.prompt('Withdraw this letter of offer? You can add a reason for the record (optional).');
+  async function withdrawOffer() {
+    var reason = await portalPrompt('Withdraw this letter of offer? You can add a reason for the record (optional).');
     if (reason === null) return;
     return act('/offer/withdraw', { reason: reason || undefined }, 'Offer withdrawn.');
   }
 
-  function skipOffer() {
-    if (!global.confirm('Skip the letter of offer and release the onboarding documentation now?')) return;
+  async function skipOffer() {
+    if (!await portalConfirm('Skip the letter of offer and release the onboarding documentation now?')) return;
     return act('/offer/skip', {}, function (r) { return r.release && r.release.message ? r.release.message : 'Letter marked as not required.'; });
   }
 
@@ -1402,13 +1402,13 @@
     return act('/release', {}, function (r) { return (r.release && r.release.message) || r.error || 'Released.'; });
   }
 
-  function runTask(code) {
-    if (code === 'portal_access' && !global.confirm('Activate portal access for this person now? Their account becomes a staff account with the agreed role.')) return;
+  async function runTask(code) {
+    if (code === 'portal_access' && !await portalConfirm('Activate portal access for this person now? Their account becomes a staff account with the agreed role.')) return;
     return act('/tasks/' + encodeURIComponent(code) + '/run', {}, 'Portal access activated.');
   }
-  function task(code, verb) {
+  async function task(code, verb) {
     var note;
-    if (verb === 'skip') { note = global.prompt('Skip this task? Add a short reason for the record.'); if (note === null) return; }
+    if (verb === 'skip') { note = await portalPrompt('Skip this task? Add a short reason for the record.'); if (note === null) return; }
     return act('/tasks/' + encodeURIComponent(code) + '/' + verb, { note: note || undefined }, verb === 'complete' ? 'Task done.' : null);
   }
   function assignTask(code, assigneeUserId, dueAt) {
@@ -1434,23 +1434,23 @@
     var ind = (S.record && S.record.induction && S.record.induction.items) || [];
     return ind.some(function (i) { return i.id === id; }) ? 'induction' : 'documentation';
   }
-  function packRestoreDefaults(phase) {
-    if (!global.confirm('Restore the default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack for this person? Removed defaults come back; added documents are removed.')) return;
+  async function packRestoreDefaults(phase) {
+    if (!await portalConfirm('Restore the default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack for this person? Removed defaults come back; added documents are removed.')) return;
     return refreshRecordAfter(packAct('/restore-defaults', {}, 'Defaults restored.', 'POST', phase));
   }
-  function approvePayrollSetup() {
-    if (!global.confirm('Approve the payroll setup? Bank details are approved with it.')) return;
+  async function approvePayrollSetup() {
+    if (!await portalConfirm('Approve the payroll setup? Bank details are approved with it.')) return;
     return returnsAct('/payroll-setup/approve', {}, 'Payroll setup approved.');
   }
   function packPrepare() { return refreshRecordAfter(packAct('/prepare', {}, 'Pack prepared.')); }
-  function packItem(id, verb) {
+  async function packItem(id, verb) {
     var reason;
-    if (verb === 'remove') { reason = global.prompt('Remove this document from this person\'s pack? Reason (optional):'); if (reason === null) return; }
+    if (verb === 'remove') { reason = await portalPrompt('Remove this document from this person\'s pack? Reason (optional):'); if (reason === null) return; }
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, { reason: reason || undefined }, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.', 'POST', phaseOfItem(id)));
   }
   function packFlag(id, field, value) { var body = {}; body[field] = value; return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), body, null, 'PATCH', phaseOfItem(id))); }
-  function packRename(id, current) {
-    var title = global.prompt('Document name as it will appear in the pack:', current || '');
+  async function packRename(id, current) {
+    var title = await portalPrompt('Document name as it will appear in the pack:', current || '');
     if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), { title: title.trim() }, 'Renamed.', 'PATCH', phaseOfItem(id)));
   }
@@ -1542,8 +1542,8 @@
     }
     return refreshRecordAfter(Promise.resolve(res));
   }
-  function packMarkSent(phase) {
-    if (!global.confirm(phase === 'induction' ? 'Mark the Internal Induction Pack as sent? The record tracks the induction items from here.' : 'Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
+  async function packMarkSent(phase) {
+    if (!await portalConfirm(phase === 'induction' ? 'Mark the Internal Induction Pack as sent? The record tracks the induction items from here.' : 'Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
     return refreshRecordAfter(packAct('/mark-sent', {}, phase === 'induction' ? 'Internal Induction Sent.' : 'Marked as sent. Waiting for the returned documentation.', 'POST', phase));
   }
   function packUnmarkSent(phase) { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.', 'POST', phase)); }
@@ -1615,8 +1615,8 @@
     if (!itemId) return toast('Choose which document this is.', true);
     return returnsAct('/returns/' + encodeURIComponent(docId) + '/assign', { packItemId: itemId }, 'Assigned and re-read.');
   }
-  function archiveReturn(docId) {
-    if (!global.confirm('Archive this document as not part of the onboarding pack?')) return;
+  async function archiveReturn(docId) {
+    if (!await portalConfirm('Archive this document as not part of the onboarding pack?')) return;
     return returnsAct('/returns/' + encodeURIComponent(docId) + '/archive', {}, 'Archived.');
   }
   function resolveConflict(fieldId, n) {
@@ -1626,24 +1626,24 @@
     return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'choose', candidateId: picked.value }, 'Applied to the profile.');
   }
   function acceptField(fieldId) { return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'accept' }, 'Confirmed and applied.'); }
-  function correctField(fieldId, seed) {
-    var value = global.prompt('Enter the correct value:', seed || '');
+  async function correctField(fieldId, seed) {
+    var value = await portalPrompt('Enter the correct value:', seed || '');
     if (value === null || !value.trim()) return;
     return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'correct', value: value.trim() }, 'Corrected and applied.');
   }
   function rejectField(fieldId) { return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'reject' }, 'Ignored.'); }
-  function verifyItem(itemId) {
-    var ref = global.prompt('Verified against the register. Reference (optional):');
+  async function verifyItem(itemId) {
+    var ref = await portalPrompt('Verified against the register. Reference (optional):');
     if (ref === null) return;
     return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/verify', { reference: ref || undefined }, 'Verified.');
   }
-  function rejectItem(itemId) {
-    var reason = global.prompt('Reject this document. Reason:');
+  async function rejectItem(itemId) {
+    var reason = await portalPrompt('Reject this document. Reason:');
     if (reason === null) return;
     return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/reject', { reason: reason || undefined }, 'Rejected.');
   }
-  function approvePayroll() {
-    if (!global.confirm('Approve these bank details for payroll?')) return;
+  async function approvePayroll() {
+    if (!await portalConfirm('Approve these bank details for payroll?')) return;
     return returnsAct('/payroll/approve', {}, 'Approved for payroll.');
   }
 
@@ -1657,7 +1657,7 @@
   }
 
   async function cancelRecord() {
-    var reason = global.prompt('Cancel this onboarding? Give a reason for the record.');
+    var reason = await portalPrompt('Cancel this onboarding? Give a reason for the record.');
     if (reason === null) return;
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.recordId) + '/cancel', { method: 'POST', body: { reason: reason || 'Cancelled by the practice' } });
     if (!res.ok) return toast(res.error, true);

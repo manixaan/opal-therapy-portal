@@ -100,7 +100,7 @@ describe('every value reaching innerHTML is escaped', () => {
     // candidate name and `key` a template key. Both reach only a confirm()
     // dialog and a URL segment respectively — never innerHTML.
     expect(JS).toMatch(/var who = row \? row\.candidateName : 'this applicant';/);
-    expect(JS).toMatch(/global\.confirm\('Permanently delete the interview record for ' \+ who/);
+    expect(JS).toMatch(/await portalConfirm\('Permanently delete the interview record for ' \+ who/);
     expect(JS).not.toMatch(/innerHTML[\s\S]{0,200}\+ who \+/);
   });
 
@@ -234,7 +234,7 @@ describe('the form does not over-validate — it is a note-taking tool', () => {
   test('completing with blank questions warns and proceeds — it never blocks', () => {
     const complete = JS.slice(JS.indexOf('async function completeInterview'), JS.indexOf('async function reopenInterview'));
     expect(complete).toMatch(/questions are still blank/);
-    expect(complete).toMatch(/global\.confirm\(/);
+    expect(complete).toMatch(/await portalConfirm\(/);
     expect(complete).toMatch(/Completing an interview with blank questions is fine/);
   });
 
@@ -374,7 +374,7 @@ describe('module conventions', () => {
 describe('the shell actually loads and gates the module', () => {
   test('the stylesheet and script are linked', () => {
     expect(SHELL).toContain('<link rel="stylesheet" href="/interview.css?v=1" />');
-    expect(SHELL).toContain('<script src="/interview.js?v=1" defer></script>');
+    expect(SHELL).toContain('<script src="/interview.js?v=2" defer></script>');
   });
 
   test('the tab and its view exist, and the mount point is inside the view', () => {

@@ -223,8 +223,8 @@ async function pfApproveLeave(id) {
 }
 
 async function pfRejectLeave(id) {
-  const reason = prompt('Reason for rejection (optional):') ?? null;
-  if (reason === null && !confirm('Reject without a reason?')) return;
+  const reason = await portalPrompt('Reason for rejection (optional):') ?? null;
+  if (reason === null && !await portalConfirm('Reject without a reason?')) return;
   try {
     const r = await fetch(`/api/profile/leave/${id}/reject`, {
       method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include',
@@ -409,8 +409,8 @@ async function pfApproveCPD(id) {
 }
 
 async function pfRejectCPD(id) {
-  const comments = prompt('Reason for rejection (optional):') ?? null;
-  if (comments === null && !confirm('Reject without a reason?')) return;
+  const comments = await portalPrompt('Reason for rejection (optional):') ?? null;
+  if (comments === null && !await portalConfirm('Reject without a reason?')) return;
   try {
     const r = await fetch(`/api/profile/cpd/${id}/reject`, {
       method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include',
@@ -617,7 +617,7 @@ async function submitDocumentModal() {
 }
 
 async function pfDeleteDocument(id) {
-  if (!confirm('Remove this document?')) return;
+  if (!await portalConfirm('Remove this document?', { danger: true })) return;
   try {
     const r = await fetch(`/api/profile/documents/${id}`, { method:'DELETE', credentials:'include' });
     if (!r.ok) throw new Error((await r.json()).error);
@@ -1495,7 +1495,7 @@ async function pfVerifyCredential(id) {
 }
 
 async function pfDeleteCredential(id) {
-  if (!confirm('Remove this credential?')) return;
+  if (!await portalConfirm('Remove this credential?', { danger: true })) return;
   try {
     const r = await fetch(`/api/profile/credentials/${id}`, { method:'DELETE', credentials:'include' });
     if (!r.ok) throw new Error((await r.json()).error);

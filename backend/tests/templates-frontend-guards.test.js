@@ -70,12 +70,12 @@ describe('the shell wires the surface', () => {
     // drag-to-reorder, multi-article A4 pagination fix.
     // css v=5: the stepper and outline styles.
     expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=5" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=5" defer></script>');
+    expect(SHELL).toContain('<script src="/templates.js?v=6" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=5'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=6'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {
@@ -88,7 +88,7 @@ describe('the shell wires the surface', () => {
     // The pin is shared by every feature that edits the file — the shell
     // ships the union under the newest version. r29 makes the Owner's
     // preview launch its walkthrough tiles for real.
-    expect(SHELL).toContain('<script src="/resourcehub.js?v=r41" defer></script>');
+    expect(SHELL).toContain('<script src="/resourcehub.js?v=r42" defer></script>');
   });
 });
 

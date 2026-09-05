@@ -81,7 +81,7 @@
 
   function toast(title, msg, kind) {
     if (typeof global.showToast === 'function') global.showToast(title, msg, kind);
-    else if (kind === 'error') global.alert(title + '\n\n' + msg);
+    else if (kind === 'error') portalAlert(title + '\n\n' + msg);
   }
 
   async function api(path, opts) {
@@ -266,7 +266,7 @@
   }
 
   async function archive(id) {
-    if (!global.confirm('Archive this walkthrough? Staff stop seeing it immediately. Completions are kept.')) return;
+    if (!await portalConfirm('Archive this walkthrough? Staff stop seeing it immediately. Completions are kept.')) return;
     var res = await api('/api/walkthroughs/' + encodeURIComponent(id) + '/archive', { method: 'POST' });
     if (!res.ok) { fail(res, 'The walkthrough could not be archived.'); return; }
     open();
@@ -279,7 +279,7 @@
   }
 
   async function remove(id) {
-    if (!global.confirm('Delete this walkthrough permanently? Only one that was never published and never taken can be deleted.')) return;
+    if (!await portalConfirm('Delete this walkthrough permanently? Only one that was never published and never taken can be deleted.', { danger: true })) return;
     var res = await api('/api/walkthroughs/' + encodeURIComponent(id), { method: 'DELETE' });
     if (!res.ok) { fail(res, 'The walkthrough could not be deleted.'); return; }
     open();
@@ -308,8 +308,8 @@
     playCurrent();
   }
 
-  function closeDock() {
-    if (W.dirty && !global.confirm('You have unsaved changes. Close the editor anyway?')) return;
+  async function closeDock() {
+    if (W.dirty && !await portalConfirm('You have unsaved changes. Close the editor anyway?')) return;
     stopPicking();
     if (global.OpalInduction) global.OpalInduction.close();
     var el = doc.getElementById('wk-dock');
@@ -583,9 +583,9 @@
     touch(true);
   }
 
-  function removeStep(i) {
+  async function removeStep(i) {
     if (W.steps.length <= 1) { toast('Not removed', 'A walkthrough needs at least one step.'); return; }
-    if (!global.confirm('Delete this step?')) return;
+    if (!await portalConfirm('Delete this step?', { danger: true })) return;
     W.steps.splice(i, 1);
     if (W.idx >= W.steps.length) W.idx = W.steps.length - 1;
     touch(true);

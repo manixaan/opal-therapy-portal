@@ -610,7 +610,7 @@ describe('the induction is one clear interaction path', () => {
     expect(finish).toContain('RH2.alRestart()');
     expect(finish).toContain('Restart induction');
     const restart = fn('alRestart');
-    expect(restart).toContain('confirm(');
+    expect(restart).toContain('portalConfirm(');
     expect(restart).toContain("'/restart'");
     expect(restart).toContain("a.status !== 'in_progress') return");
     expect(restart).toContain('completed_items: {}');
@@ -965,7 +965,7 @@ describe('the shell', () => {
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
     expect(SHELL).toContain('/resourcehub.css?v=r23');
-    expect(SHELL).toContain('/resourcehub.js?v=r41');
+    expect(SHELL).toContain('/resourcehub.js?v=r42');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

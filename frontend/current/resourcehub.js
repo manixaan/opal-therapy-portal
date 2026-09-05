@@ -1660,7 +1660,7 @@
 
   async function libFolderArchive(id, name) {
     if (S.lib.busy) return;
-    if (!global.confirm('Remove the folder "' + name + '"? Its resources move to Needs Review — nothing is deleted.')) return;
+    if (!await portalConfirm('Remove the folder "' + name + '"? Its resources move to Needs Review — nothing is deleted.', { danger: true })) return;
     S.lib.busy = 'folder';
     render();
     var d = await api('/api/rh2/library/folders/' + encodeURIComponent(id), { method: 'DELETE' });
@@ -4843,7 +4843,7 @@
       st.err = '';
       // Background recording (reading past a section) fails silently — the
       // closing screen's own completion still covers whatever was missed.
-      if (!(opts && opts.quiet)) alert(d.error || 'Saving your progress failed — please try again.');
+      if (!(opts && opts.quiet)) portalAlert(d.error || 'Saving your progress failed — please try again.');
       render();
       return null;
     }
@@ -4892,12 +4892,12 @@
     if (!st || st.preview || !st.data || st.busy) return;
     var a = st.data.assignment;
     if (!a || a.status !== 'in_progress') return;
-    if (!confirm('Restart this induction? Everything you have ticked off in it is cleared and you start again from the top.')) return;
+    if (!await portalConfirm('Restart this induction? Everything you have ticked off in it is cleared and you start again from the top.')) return;
     st.busy = true;
     render();
     var d = await api('/api/learning/my/' + encodeURIComponent(st.id) + '/restart', { method: 'POST' });
     st.busy = false;
-    if (!d.ok) { alert(d.error || 'The induction could not be restarted.'); return render(); }
+    if (!d.ok) { portalAlert(d.error || 'The induction could not be restarted.'); return render(); }
     st.data = { assignment: d.assignment, content: d.content, completed_items: {} };
     st.quizAnswers = {};
     st.quizResult = null;
@@ -4932,7 +4932,7 @@
     var answers = [];
     for (var i = 0; i < questionCount; i++) {
       if (picks[i] === undefined) {
-        alert('Please answer every question before submitting.');
+        portalAlert('Please answer every question before submitting.');
         return;
       }
       answers.push(picks[i]);
@@ -5756,28 +5756,28 @@
 
   async function laDuplicate(id) {
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/duplicate', { method: 'POST' });
-    if (!d.ok) { alert(d.error || 'Duplicating failed.'); return; }
+    if (!d.ok) { portalAlert(d.error || 'Duplicating failed.'); return; }
     await loadLa();
     laEdit(d.workflow.id);
   }
 
   async function laArchive(id) {
-    if (!confirm('Archive this workflow? It can no longer be assigned; existing assignments and completion history are kept.')) return;
+    if (!await portalConfirm('Archive this workflow? It can no longer be assigned; existing assignments and completion history are kept.')) return;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/archive', { method: 'POST' });
-    if (!d.ok) alert(d.error || 'Archiving failed.');
+    if (!d.ok) portalAlert(d.error || 'Archiving failed.');
     loadLa();
   }
 
   async function laUnarchive(id) {
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/unarchive', { method: 'POST' });
-    if (!d.ok) alert(d.error || 'Unarchiving failed.');
+    if (!d.ok) portalAlert(d.error || 'Unarchiving failed.');
     loadLa();
   }
 
   async function laDelete(id) {
-    if (!confirm('Delete this draft workflow permanently? Only drafts that were never assigned can be deleted.')) return;
+    if (!await portalConfirm('Delete this draft workflow permanently? Only drafts that were never assigned can be deleted.', { danger: true })) return;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id), { method: 'DELETE' });
-    if (!d.ok) alert(d.error || 'Deleting failed.');
+    if (!d.ok) portalAlert(d.error || 'Deleting failed.');
     loadLa();
   }
 
@@ -6004,7 +6004,7 @@
     // undo history; a fresh open starts one.
     var keepUndo = (S.la.editor && S.la.editor.id === id) ? (S.la.editor._undo || []) : [];
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
-    if (!d.ok) { alert(d.error || 'The workflow could not be opened.'); return; }
+    if (!d.ok) { portalAlert(d.error || 'The workflow could not be opened.'); return; }
     // The walkthrough shelf, so a task step in an EXISTING induction can name
     // one and open its editor. Fetched once per editor session and never
     // fatal: an induction stays editable if the shelf is unavailable.
@@ -6239,10 +6239,10 @@
   }
 
   /** Discard this editor's unsaved work and load what the server now holds. */
-  function laEditorReload() {
+  async function laEditorReload() {
     var ed = S.la.editor;
     if (!ed) return;
-    if (ed._dirty && !confirm('Discard your unsaved changes and load the latest version?')) return;
+    if (ed._dirty && !await portalConfirm('Discard your unsaved changes and load the latest version?', { danger: true })) return;
     laEdit(ed.id);
   }
 
@@ -6348,16 +6348,16 @@
     var found = (S.la.walkthroughs || []).filter(function (w) { return w.key === key; })[0];
 
     if (!found) {
-      if (!confirm('The walkthroughs that ship with the portal have not been imported yet, so this one ' +
+      if (!await portalConfirm('The walkthroughs that ship with the portal have not been imported yet, so this one ' +
                    'cannot be edited.\n\nImport them now? Nothing changes for staff — they carry on ' +
                    'seeing exactly what they see today.')) return;
       var d = await api('/api/tutorials/seed', { method: 'POST' });
-      if (!d.ok) { alert(d.error || 'The walkthroughs could not be imported.'); return; }
+      if (!d.ok) { portalAlert(d.error || 'The walkthroughs could not be imported.'); return; }
       var wl = await api('/api/walkthroughs');
       S.la.walkthroughs = (wl.ok && wl.walkthroughs) || [];
       found = S.la.walkthroughs.filter(function (w) { return w.key === key; })[0];
       if (!found) {
-        alert('Imported, but "' + key + '" was not among them — the step may name a walkthrough that no ' +
+        portalAlert('Imported, but "' + key + '" was not among them — the step may name a walkthrough that no ' +
               'longer exists. Its Settings can point it at another one.');
         render();
         return;
@@ -6392,11 +6392,11 @@
     // start of writing it.
     laEditStart('s-' + (ed.sections.length - 1));
   }
-  function laSecRemove(si) {
+  async function laSecRemove(si) {
     var ed = S.la.editor;
     var s = ed.sections[si];
     if (!s) return;
-    if (s.items.length && !confirm('Remove the section "' + s.title + '" and its ' + s.items.length + ' item(s)?')) return;
+    if (s.items.length && !await portalConfirm('Remove the section "' + s.title + '" and its ' + s.items.length + ' item(s)?', { danger: true })) return;
     ed.sections.splice(si, 1);
     // Editing/settings keys are positional; a removal renumbers everything after it.
     ed.editing = null;
@@ -7564,9 +7564,9 @@
   }
 
   async function laCancelAssignment(id) {
-    if (!confirm('Cancel this learning assignment? The employee will no longer see it. Progress is kept for the record.')) return;
+    if (!await portalConfirm('Cancel this learning assignment? The employee will no longer see it. Progress is kept for the record.', { danger: true })) return;
     var d = await api('/api/learning/assignments/' + encodeURIComponent(id) + '/cancel', { method: 'POST' });
-    if (!d.ok) { alert(d.error || 'Cancelling failed.'); return; }
+    if (!d.ok) { portalAlert(d.error || 'Cancelling failed.'); return; }
     S.la.openAssignment = null;
     S.la.openData = null;
     loadLaAssignments();
@@ -7574,9 +7574,9 @@
   }
 
   async function laPushLatest(id) {
-    if (!confirm('Update this assignment to the latest version of the workflow? Completed modules that still exist are kept.')) return;
+    if (!await portalConfirm('Update this assignment to the latest version of the workflow? Completed modules that still exist are kept.')) return;
     var d = await api('/api/learning/assignments/' + encodeURIComponent(id) + '/push-latest', { method: 'POST' });
-    if (!d.ok) { alert(d.error || 'The update failed.'); return; }
+    if (!d.ok) { portalAlert(d.error || 'The update failed.'); return; }
     laOpenAssignment(id);
     loadLaAssignments();
   }

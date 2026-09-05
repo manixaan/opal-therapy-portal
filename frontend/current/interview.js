@@ -1405,7 +1405,7 @@
     if (!skipFlush && hasUnsaved()) {
       var saved = await flush();
       if (!saved) {
-        var leave = global.confirm(
+        var leave = await portalConfirm(
           'Some changes have not saved yet. Leave the interview anyway?\n\n'
           + 'Nothing typed is deleted — but unsaved text will not be in the record.');
         if (!leave) return;
@@ -1434,7 +1434,7 @@
     var progress = progressOf(S.template, mergedResponses());
     var blank = progress.total - progress.answered;
     if (blank > 0) {
-      var proceed = global.confirm(
+      var proceed = await portalConfirm(
         blank + ' of ' + progress.total + ' questions are still blank.\n\n'
         + 'Completing an interview with blank questions is fine — this is a note-taking tool, not a form. '
         + 'Complete it now?');
@@ -1463,7 +1463,7 @@
   }
 
   async function archiveRecord(id) {
-    if (!global.confirm('Archive this interview? It stays readable and can be restored at any time.')) return;
+    if (!await portalConfirm('Archive this interview? It stays readable and can be restored at any time.')) return;
     var res = await api('/records/' + encodeURIComponent(id) + '/archive', { method: 'POST' });
     if (!res.ok) { toast(res.error, true); return; }
     toast('Interview archived');
@@ -1480,8 +1480,8 @@
   async function deleteRecord(id) {
     var row = S.records.filter(function (r) { return r.id === id; })[0];
     var who = row ? row.candidateName : 'this applicant';
-    if (!global.confirm('Permanently delete the interview record for ' + who + '?\n\n'
-      + 'This cannot be undone. Archive it instead if you may need it later.')) return;
+    if (!await portalConfirm('Permanently delete the interview record for ' + who + '?\n\n'
+      + 'This cannot be undone. Archive it instead if you may need it later.', { danger: true })) return;
     var res = await api('/records/' + encodeURIComponent(id), { method: 'DELETE' });
     if (!res.ok) { toast(res.error, true); return; }
     toast('Interview deleted');
