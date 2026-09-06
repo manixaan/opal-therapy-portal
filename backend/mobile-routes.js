@@ -10,9 +10,10 @@
  *
  * Scoping model — deliberately NARROWER than the portal:
  *   every endpoint returns the CALLER'S OWN day only. Appointments/travel
- *   come from the caller's own therapist_profile_id (owner/admin included —
- *   the mobile Today view is personal, not a practice dashboard; the master
- *   calendar stays a portal feature). Tasks/reminders/voice notes are
+ *   come from the caller's own therapist_profile_id AND from events the
+ *   caller's user owns directly (owner/admin included — the mobile Today
+ *   view is personal, not a practice dashboard; the master calendar stays a
+ *   portal feature). Tasks/reminders/voice notes are
  *   user_id-scoped exactly like snapshot-routes.js. Anything not owned by
  *   the caller answers 404, indistinguishable from "does not exist". The
  *   client can never select a therapist/practitioner scope.
@@ -143,17 +144,38 @@ function formatMobileAppointment(ev) {
  * no therapist profile, so the rest of an aggregate still renders.
  */
 async function loadOwnAppointments(req, date, days = 1) {
-  const profileId = req.user.therapist_profile_id;
-  if (!profileId) {
-    return { appointments: [], rawEvents: [], warnings: ['no_therapist_profile'] };
-  }
+  const profileId = req.user.therapist_profile_id || null;
   const { startUtc, endUtc } = perthDayWindow(date, days);
-  const events = await db.getEventsForTherapists([profileId], {
-    startDate: startUtc.toISOString(),
-    endDate: endUtc.toISOString(),
-  });
-  const kept = (events || []).filter((e) => !e.is_deleted);
-  return { appointments: kept.map(formatMobileAppointment), rawEvents: kept, warnings: [] };
+
+  // Two sources, same owner, same rule as loadOwnEvent below and the
+  // portal's own calendar (GET /api/events is user_id-scoped):
+  //   1. events on the caller's therapist profile (practice-assigned diary);
+  //   2. events the caller's USER owns directly — the portal shows these to
+  //      an owner/admin who has no therapist profile, so the phone must too,
+  //      or the same person sees a full calendar on the web and an empty day
+  //      here. Nothing widens beyond the caller.
+  const [profileEvents, ownRes] = await Promise.all([
+    profileId
+      ? db.getEventsForTherapists([profileId], { startDate: startUtc.toISOString(), endDate: endUtc.toISOString() })
+      : Promise.resolve([]),
+    pool.query(
+      `SELECT * FROM events
+        WHERE user_id = $1
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+          AND start_time >= $2 AND end_time <= $3
+          ${profileId ? 'AND (therapist_profile_id IS NULL OR therapist_profile_id <> $4)' : ''}
+        ORDER BY start_time ASC`,
+      profileId ? [req.user.id, startUtc.toISOString(), endUtc.toISOString(), profileId]
+                : [req.user.id, startUtc.toISOString(), endUtc.toISOString()]),
+  ]);
+  const seen = new Set();
+  const kept = [...(profileEvents || []), ...(ownRes?.rows || [])]
+    .filter((e) => !e.is_deleted && !seen.has(e.id) && seen.add(e.id))
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+  // The "not linked" notice is for an account that has NO diary of either
+  // kind — not for an owner whose appointments simply live on their user.
+  const warnings = !profileId && kept.length === 0 ? ['no_therapist_profile'] : [];
+  return { appointments: kept.map(formatMobileAppointment), rawEvents: kept, warnings };
 }
 
 // ── Travel derivation (local data only — never recalculated externally) ──────

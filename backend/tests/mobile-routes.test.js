@@ -312,6 +312,28 @@ describe('GET /api/mobile/today', () => {
     expect(db.getEventsForTherapists.mock.calls[0][1].startDate).toBe('2026-08-09T16:00:00.000Z');
   });
 
+  test('owner with NO therapist profile still sees appointments their user owns — like the portal calendar', async () => {
+    const OWNER = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ow02', email: 'owner2@opaltherapy.com.au', role: 'owner', therapist_profile_id: null };
+    USERS[OWNER.id] = OWNER;
+    const OWN_EVENT = { ...EVENT_A, id: 'dddddddd-3333-4333-8333-333333333340', user_id: OWNER.id, therapist_profile_id: null, title: 'Owner session' };
+    const OTHER_USERS_EVENT = { ...EVENT_B };
+    const base = db.pool.query.getMockImplementation();
+    db.pool.query.mockImplementation(async (sql, params) => {
+      if (/FROM events\s+WHERE user_id = \$1/.test(String(sql))) {
+        // Emulates the user_id filter: only the caller's own rows come back.
+        return { rows: [OWN_EVENT, OTHER_USERS_EVENT].filter((e) => e.user_id === params[0]) };
+      }
+      return base(sql, params);
+    });
+    const agent = await loginAs(OWNER);
+    const res = await agent.get('/api/mobile/today?date=2026-08-10');
+    expect(res.status).toBe(200);
+    expect(res.body.appointments.map((a) => a.id)).toEqual([OWN_EVENT.id]);
+    expect(res.body.warnings ?? []).toEqual([]); // the route omits the key when there is nothing to warn about
+    // No profile → the profile-scoped query is never issued.
+    expect(db.getEventsForTherapists).not.toHaveBeenCalled();
+  });
+
   test('account without a therapist profile gets empty diary + warning, not an error', async () => {
     const noProfile = { ...USER_A, therapist_profile_id: null };
     db.getUser.mockImplementation(async () => ({ ...noProfile }));
