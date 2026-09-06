@@ -192,8 +192,16 @@ describe('Payroll Setup and Phase 3', () => {
     if (!rec.body.induction.readiness.ready) console.log('BLOCKERS', JSON.stringify(rec.body.induction.readiness.blockers));
     expect(rec.body.induction.readiness.ready).toBe(true);
     expect(rec.body.journey.stages[1].state).toBe('complete');
-    expect(rec.body.journey.next.action).toBe('prepare_induction');
-    expect(rec.body.journey.summary.induction.label).toBe('Ready to send');
+    // Since dd842e5 the portal sets the person up itself the moment the last
+    // required document is verified: portal access is already activated, so
+    // the journey's next line is the first open Internal Setup task rather
+    // than a manual "prepare the induction" step.
+    expect(rec.body.record.status).toBe('activated');
+    expect(rec.body.journey.next).toMatchObject({ actor: 'admin', action: 'task' });
+    const { rows: acct } = await db.pool.query(
+      "SELECT status, note FROM onboarding_internal_tasks WHERE code = 'portal_access' AND assignment_id = $1", [rec.body.record.id]);
+    expect(acct[0]).toMatchObject({ status: 'done' });
+    expect(acct[0].note).toMatch(/Activated by the portal/);
     // The account item follows its task.
     expect(rec.body.induction.items.find((i) => i.code === 'IND_OUTLOOK_ACTIVE').progress).toBe('verified');
 
@@ -239,6 +247,15 @@ describe('Payroll Setup and Phase 3', () => {
     // Remaining required items: policy acknowledgements (auto on return), training (task), handbook is optional.
     const open = rec.body.induction.items.filter((i) => i.status === 'included' && i.required && i.progress !== 'verified' && i.progress !== 'sent' && i.progress !== 'n/a');
     for (const i of open.filter((x) => x.itemKind === 'document')) await agent.post(`${base}/induction/items/${i.id}/remove`).send({ reason: 'covered in person' }).catch(() => {});
+    // The portal created the whole Internal Setup checklist when it activated
+    // the person, and the record closes only when every task on it is done —
+    // so the remaining manual ones (payroll, systems, equipment) are ticked
+    // here before the walkthrough, exactly as an admin would.
+    const internal = rec.body.internalTasks || rec.body.tasks || [];
+    for (const t of internal.filter((x) => ['pending', 'in_progress'].includes(x.status) && x.code !== 'induction_walkthrough')) {
+      const done = await agent.post(`${base}/tasks/${t.code}/complete`).send({ note: 'done in test' });
+      expect([200, 201]).toContain(done.status);
+    }
     await agent.post(`${base}/tasks/induction_walkthrough/complete`);
     rec = await agent.get(base);
     expect(rec.body.record.status).toBe('completed');

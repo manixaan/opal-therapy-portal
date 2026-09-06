@@ -1169,6 +1169,15 @@ for (const [verb, spec] of Object.entries(TASK_VERBS)) {
       targetType: 'onboarding_assignment', targetId: assignment.id,
       metadata: { assignmentId: assignment.id, taskCode: task.code, recordStatus: status },
     });
+    // The last task closing the record is a lifecycle event in its own right,
+    // and it must be auditable wherever it happens — not only when the
+    // returns path closes it (the pre-auto-setup flow).
+    if (status === 'completed' && assignment.status !== 'completed') {
+      await auditOnboarding(req, 'onboarding_completed', {
+        targetType: 'onboarding_assignment', targetId: assignment.id,
+        metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, closedByTask: task.code },
+      });
+    }
     res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
   }));
 }
