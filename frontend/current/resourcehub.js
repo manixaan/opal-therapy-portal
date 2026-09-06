@@ -4675,6 +4675,13 @@
     return 'edit';
   }
 
+  /** The sections a mode reads: the editor's draft, else the assignment's content. */
+  function indSections(mode) {
+    if ((mode || indMode()) === 'edit') return (S.la.editor && S.la.editor.sections) || [];
+    var d = S.assignment && S.assignment.data;
+    return (d && d.content && d.content.sections) || [];
+  }
+
   /** A step change is a page change: start it at the top, not mid-paragraph. */
   function indScrollTop() {
     try {
