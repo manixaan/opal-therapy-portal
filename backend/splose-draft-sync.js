@@ -480,8 +480,132 @@ function createWatcher(deps) {
   return { run, state };
 }
 
+// ── Auto-sync (publish on its own after a quiet period) ──────────────────────
+//
+// "Sync Splose" stays for review, but a change should not have to wait for
+// it: every queued change nudges a per-user timer, and when the calendar has
+// been quiet for `delayMs` (never longer than `maxWaitMs` after the first
+// nudge) the publishable part of that user's queue is written through the
+// same paced publisher. The lag is the rate-limit protection: a burst of
+// drags collapses into one run, runs never overlap (one at a time across all
+// users, at least `minGapMs` apart), and each run is itself spaced 1.5 s per
+// call, so the pollers keep their headroom under Splose's 60 calls a minute.
+//
+// Only changes that need nothing from the user go automatically: moves and
+// cancellations always; a new booking only when it already names its client
+// and service. Rows that failed once, and creates still waiting for a
+// service, stay in the review list — the auto run never retries a failure,
+// so a wrong row cannot burn the rate limit every minute.
+
+const AUTO_SYNC_DELAY_MS    = 45 * 1000;
+const AUTO_SYNC_MAX_WAIT_MS = 3 * 60 * 1000;
+const AUTO_SYNC_MIN_GAP_MS  = 15 * 1000;
+
+/** Pure: which live rows may be published without a review step. */
+function autoPublishable(rows) {
+  return (rows || []).filter((r) => {
+    if (r.status !== 'pending') return false;
+    if (Number(r.attempts || 0) > 0) return false;
+    if (r.action === 'create') {
+      const p = r.payload || {};
+      return !!(p.patientId && p.serviceId);
+    }
+    return r.action === 'update' || r.action === 'cancel';
+  });
+}
+
+function createAutoSync(deps) {
+  const {
+    db, publisher,
+    delayMs = AUTO_SYNC_DELAY_MS,
+    maxWaitMs = AUTO_SYNC_MAX_WAIT_MS,
+    minGapMs = AUTO_SYNC_MIN_GAP_MS,
+    now = () => Date.now(),
+    log = () => {},
+  } = deps;
+
+  const timers = new Map();   // userId → { handle, firstTouchAt, dueAt }
+  let chain = Promise.resolve();
+  let lastRunEndedAt = 0;
+  let stopped = false;
+
+  function schedule(userId, waitMs, firstTouchAt) {
+    const key = String(userId);
+    const cur = timers.get(key);
+    if (cur && cur.handle) clearTimeout(cur.handle);
+    const handle = setTimeout(() => { fire(key).catch((e) => log('Splose auto-sync: ' + e.message)); }, Math.max(0, waitMs));
+    if (handle && typeof handle.unref === 'function') handle.unref();
+    timers.set(key, { handle, firstTouchAt, dueAt: now() + Math.max(0, waitMs) });
+  }
+
+  /** A change was queued for this user: (re)start their quiet-period timer. */
+  function touch(userId) {
+    if (stopped) return;
+    const key = String(userId);
+    const cur = timers.get(key);
+    const first = cur && cur.firstTouchAt ? cur.firstTouchAt : now();
+    // Debounce, but never let a busy calendar postpone its sync for ever.
+    const wait = Math.min(delayMs, Math.max(0, first + maxWaitMs - now()));
+    schedule(key, wait, first);
+  }
+
+  async function fire(key) {
+    timers.delete(key);
+    if (stopped) return null;
+    // Someone is already publishing this user (a manual Sync Splose, say):
+    // come back after another quiet period rather than colliding.
+    if (publisher.status(key)) { schedule(key, delayMs, now()); return null; }
+    const sinceLast = now() - lastRunEndedAt;
+    if (sinceLast < minGapMs) { schedule(key, minGapMs - sinceLast, now()); return null; }
+
+    const run = chain.then(async () => {
+      if (stopped) return null;
+      const { rows } = await db.pool.query(
+        `SELECT id, action, status, attempts, payload FROM splose_sync_queue
+          WHERE user_id = $1 AND status IN ('pending', 'failed')`, [key]
+      );
+      const ready = autoPublishable(rows);
+      if (!ready.length) return { skipped: true, reason: 'nothing_ready' };
+      const batchId = require('crypto').randomUUID();
+      if (db.logAuditEvent) {
+        await db.logAuditEvent({
+          actorUserId: null, action: 'splose_sync_auto_started', targetType: 'splose_sync_queue', targetId: batchId,
+          metadata: { forUser: key, queueIds: ready.length, trigger: 'auto' },
+        }).catch(() => {});
+      }
+      log(`Splose auto-sync: writing ${ready.length} change(s) for ${key}`);
+      try {
+        return await publisher.publish(key, { queueIds: ready.map(r => String(r.id)), batchId, auto: true });
+      } finally {
+        lastRunEndedAt = now();
+      }
+    });
+    chain = run.catch(() => {});
+    return run;
+  }
+
+  function status(userId) {
+    const t = timers.get(String(userId));
+    return t ? { dueAt: new Date(t.dueAt).toISOString(), firstTouchAt: new Date(t.firstTouchAt).toISOString() } : null;
+  }
+
+  /** Tests and shutdown: drop every timer; nothing further fires. */
+  function stop() {
+    stopped = true;
+    for (const t of timers.values()) if (t.handle) clearTimeout(t.handle);
+    timers.clear();
+  }
+
+  return { touch, status, stop, _fire: fire };
+}
+
 module.exports = {
   coalesceChange,
+  autoPublishable,
+  createAutoSync,
+  AUTO_SYNC_DELAY_MS,
+  AUTO_SYNC_MAX_WAIT_MS,
+  AUTO_SYNC_MIN_GAP_MS,
   planPublish,
   summariseError,
   detectExternalChanges,

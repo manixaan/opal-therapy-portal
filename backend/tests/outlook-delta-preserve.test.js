@@ -211,8 +211,10 @@ describe('upsertOutlookEvent — an existing row is never wiped by a partial pay
     primeExistingRow();
     await db.upsertOutlookEvent(USER_ID, { outlookId: OL_ID, title: 'Session' });
     const [sql, params] = writeCall();
-    expect(sql).toMatch(/start_time\s*=\s*COALESCE\(\$2,\s*start_time\)/);
-    expect(sql).toMatch(/end_time\s*=\s*COALESCE\(\$3,\s*end_time\)/);
+    // The timing columns keep their COALESCE (absent = preserve), now inside a
+    // CASE that also shields an unpushed app-side move from an older echo.
+    expect(sql).toMatch(/start_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN start_time ELSE COALESCE\(\$2,\s*start_time\) END/);
+    expect(sql).toMatch(/end_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN end_time\s+ELSE COALESCE\(\$3,\s*end_time\)\s+END/);
     expect(params[UPD.start]).toBeUndefined();
     expect(params[UPD.end]).toBeUndefined();
   });

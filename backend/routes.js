@@ -2362,6 +2362,7 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
           },
         });
         sploseQueued = qrow ? qrow.id : null;
+        if (qrow) require('./splose-sync-routes').notifyQueued(targetUser.id);
         await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
           [localDbId, String(sp.patientId), sp.patientName || null]).catch(() => {});
       } catch (qErr) {
@@ -2505,10 +2506,11 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
              FROM events e WHERE e.id = $1`, [dbId]);
         const l = link.rows[0];
         if (l && (l.splose_id || Number(l.live) > 0)) {
-          await draftSync.enqueueChange(db, {
+          const qrow = await draftSync.enqueueChange(db, {
             userId: l.user_id, createdBy: req.session.userId, eventId: dbId, action: 'update',
             payload: { start: new Date(l.start_time).toISOString(), end: new Date(l.end_time).toISOString(), summary: title || undefined },
           });
+          if (qrow) require('./splose-sync-routes').notifyQueued(l.user_id);
         }
       } catch (qErr) { console.warn('⚠️  Splose draft queue (update) failed (non-fatal):', qErr.message); }
     }
@@ -2637,11 +2639,12 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
         const live = await db.pool.query(
           `SELECT id FROM splose_sync_queue WHERE event_id = $1 AND status IN ('pending','failed') LIMIT 1`, [dbId]);
         if (sploseLinkedId || live.rows.length) {
-          await draftSync.enqueueChange(db, {
+          const qrow = await draftSync.enqueueChange(db, {
             userId: req.session.userId, createdBy: req.session.userId, eventId: dbId, action: 'cancel',
             payload: { reasonId: req.body && req.body.reasonId ? Number(req.body.reasonId) : null, summary: title,
                        start: startTime ? new Date(startTime).toISOString() : null, end: endTime ? new Date(endTime).toISOString() : null },
           });
+          if (qrow) require('./splose-sync-routes').notifyQueued(req.session.userId);
         }
       } catch (qErr) { console.warn('⚠️  Splose draft queue (cancel) failed (non-fatal):', qErr.message); }
     }

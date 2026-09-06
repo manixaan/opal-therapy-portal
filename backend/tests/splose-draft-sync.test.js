@@ -222,3 +222,117 @@ describe('createPublisher — paced, ordered, one failure never stops the run', 
     expect(pub.status('u1')).toBeNull();
   });
 });
+
+describe('autoPublishable — what the server may write without a review step', () => {
+  const { autoPublishable } = require('../splose-draft-sync');
+  test('moves and cancels go; a create only with client and service; failures and retries never', () => {
+    const rows = [
+      { id: 'a', action: 'update', status: 'pending', attempts: 0, payload: {} },
+      { id: 'b', action: 'cancel', status: 'pending', attempts: 0, payload: {} },
+      { id: 'c', action: 'create', status: 'pending', attempts: 0, payload: { patientId: 41, serviceId: 125320 } },
+      { id: 'd', action: 'create', status: 'pending', attempts: 0, payload: { patientId: 41 } },
+      { id: 'e', action: 'update', status: 'failed',  attempts: 1, payload: {} },
+      { id: 'f', action: 'update', status: 'pending', attempts: 2, payload: {} },
+      { id: 'g', action: 'update', status: 'publishing', attempts: 0, payload: {} },
+    ];
+    expect(autoPublishable(rows).map(r => r.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('createAutoSync — a quiet period, then one paced run', () => {
+  const { createAutoSync } = require('../splose-draft-sync');
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function harness(queueRows, opts = {}) {
+    const publishes = [];
+    const audits = [];
+    let busy = null;
+    const publisher = {
+      status: (u) => (busy && busy.user === String(u) ? busy : null),
+      publish: async (u, o) => { publishes.push({ user: String(u), ...o }); return { total: o.queueIds.length }; },
+    };
+    const db = {
+      pool: { query: async (sql, params) => (/FROM splose_sync_queue/.test(sql) ? { rows: queueRows.filter(r => r.user_id === params[0]) } : { rows: [] }) },
+      logAuditEvent: async (e) => { audits.push(e); },
+    };
+    const auto = createAutoSync({ db, publisher, delayMs: 30, maxWaitMs: 200, minGapMs: 0, ...opts });
+    return { auto, publishes, audits, setBusy: (u) => { busy = u ? { user: String(u) } : null; } };
+  }
+  const pend = (id, user, action = 'update', payload = {}) => ({ id, user_id: user, action, status: 'pending', attempts: 0, payload });
+
+  test('several changes in quick succession collapse into one run after the quiet period', async () => {
+    const h = harness([pend('q1', 'u1'), pend('q2', 'u1')]);
+    h.auto.touch('u1'); await wait(10); h.auto.touch('u1'); await wait(10); h.auto.touch('u1');
+    expect(h.auto.status('u1')).not.toBeNull();
+    await wait(20);
+    expect(h.publishes).toHaveLength(0);          // still inside the quiet period
+    await wait(40);
+    expect(h.publishes).toHaveLength(1);
+    expect(h.publishes[0]).toMatchObject({ user: 'u1', auto: true, queueIds: ['q1', 'q2'] });
+    expect(h.audits[0]).toMatchObject({ action: 'splose_sync_auto_started', metadata: { forUser: 'u1', trigger: 'auto' } });
+    expect(h.auto.status('u1')).toBeNull();
+    h.auto.stop();
+  });
+
+  test('a calendar that never goes quiet still syncs by the maximum wait', async () => {
+    const h = harness([pend('q1', 'u1')], { delayMs: 30, maxWaitMs: 90 });
+    const started = Date.now();
+    const keepTouching = setInterval(() => h.auto.touch('u1'), 10);
+    h.auto.touch('u1');
+    while (!h.publishes.length && Date.now() - started < 400) await wait(10);
+    clearInterval(keepTouching);
+    expect(h.publishes).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(250);
+    h.auto.stop();
+  });
+
+  test('only publishable rows are sent; nothing ready means no call at all', async () => {
+    const h = harness([
+      pend('ok', 'u1', 'cancel'),
+      { id: 'bad', user_id: 'u1', action: 'update', status: 'failed', attempts: 1, payload: {} },
+      pend('noservice', 'u1', 'create', { patientId: 41 }),
+      pend('theirs', 'u2', 'update'),
+    ]);
+    h.auto.touch('u1');
+    await wait(60);
+    expect(h.publishes).toHaveLength(1);
+    expect(h.publishes[0].queueIds).toEqual(['ok']);
+    const h2 = harness([{ id: 'bad', user_id: 'u1', action: 'update', status: 'failed', attempts: 1, payload: {} }]);
+    h2.auto.touch('u1');
+    await wait(60);
+    expect(h2.publishes).toHaveLength(0);
+    h.auto.stop(); h2.auto.stop();
+  });
+
+  test('while a manual Sync Splose is running for that user, the auto run waits for another quiet period', async () => {
+    const h = harness([pend('q1', 'u1')]);
+    h.setBusy('u1');
+    h.auto.touch('u1');
+    await wait(50);
+    expect(h.publishes).toHaveLength(0);
+    expect(h.auto.status('u1')).not.toBeNull();   // rescheduled, not dropped
+    h.setBusy(null);
+    await wait(50);
+    expect(h.publishes).toHaveLength(1);
+    h.auto.stop();
+  });
+
+  test('runs for different users are spaced by the minimum gap, never overlapping', async () => {
+    const h = harness([pend('a', 'u1'), pend('b', 'u2')], { delayMs: 10, minGapMs: 60 });
+    h.auto.touch('u1'); h.auto.touch('u2');
+    await wait(30);
+    expect(h.publishes).toHaveLength(1);
+    await wait(100);
+    expect(h.publishes).toHaveLength(2);
+    expect(new Set(h.publishes.map(p => p.user)).size).toBe(2);
+    h.auto.stop();
+  });
+
+  test('stop() drops every pending timer', async () => {
+    const h = harness([pend('q1', 'u1')]);
+    h.auto.touch('u1');
+    h.auto.stop();
+    await wait(60);
+    expect(h.publishes).toHaveLength(0);
+  });
+});

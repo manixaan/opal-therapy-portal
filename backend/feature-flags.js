@@ -65,6 +65,15 @@ function isSploseCalendarSyncEnabled() {
 function isSploseDraftSyncEnabled() { return resolveFlag('ENABLE_SPLOSE_DRAFT_SYNC'); }
 
 /**
+ * Splose AUTO-SYNC: queued calendar changes are written to Splose on their
+ * own once the calendar has been quiet for a while (splose-draft-sync.js
+ * createAutoSync), instead of only when "Sync Splose" is pressed. Needs the
+ * draft sync on. Standard staged-rollout resolution — on in development/test,
+ * off in staging/production until set to 'true'.
+ */
+function isSploseAutoSyncEnabled() { return isSploseDraftSyncEnabled() && resolveFlag('ENABLE_SPLOSE_AUTO_SYNC'); }
+
+/**
  * WHODAS 2.0 digital assessment module.
  *
  * Fails closed in EVERY environment, development included — only the exact
@@ -86,6 +95,7 @@ function featureFlagState() {
     automaticRemoteDelete: isAutomaticRemoteDeleteEnabled(),
     sploseCalendarSync: isSploseCalendarSyncEnabled(),
     sploseDraftSync: isSploseDraftSyncEnabled(),
+    sploseAutoSync: isSploseAutoSyncEnabled(),
     whodasAssessment: isWhodasAssessmentEnabled(),
   };
 }
@@ -107,6 +117,7 @@ module.exports = {
   isAutomaticRemoteDeleteEnabled,
   isSploseCalendarSyncEnabled,
   isSploseDraftSyncEnabled,
+  isSploseAutoSyncEnabled,
   isWhodasAssessmentEnabled,
   featureFlagState,
   featureDisabledError,

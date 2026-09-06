@@ -166,3 +166,26 @@ describe('new-row insert semantics', () => {
     expect(row.title).toBe('');
   });
 });
+
+describe('an app-side move that has not reached Outlook yet', () => {
+  test('survives an older Outlook echo while pending, and yields once it has been pushed', async () => {
+    const u = await seedUser();
+    const row = await db.upsertOutlookEvent(u.id, FULL(OL(20)));
+    // The portal moved it; the Outlook write failed, so the row is app/pending.
+    await db.updateEvent(row.id, { startTime: '2026-07-02T09:00:00Z', endTime: '2026-07-02T10:00:00Z', lastModifiedBy: 'app' });
+    await db.updateEvent(row.id, { syncStatus: 'pending' });
+
+    // Graph's delta still carries the old time.
+    const echoed = await db.upsertOutlookEvent(u.id, { outlookId: OL(20), startTime: '2026-07-01T09:50:00Z', endTime: '2026-07-01T10:53:00Z' });
+    expect(new Date(echoed.start_time).toISOString()).toBe(new Date('2026-07-02T09:00:00Z').toISOString());
+    expect(echoed.last_modified_by).toBe('app');
+    expect(echoed.sync_status).toBe('pending');
+
+    // Once the write went through, Outlook is the mirror again and its copy wins.
+    await db.updateEvent(row.id, { syncStatus: 'synced' });
+    const later = await db.upsertOutlookEvent(u.id, { outlookId: OL(20), startTime: '2026-07-03T09:00:00Z', endTime: '2026-07-03T10:00:00Z' });
+    expect(new Date(later.start_time).toISOString()).toBe(new Date('2026-07-03T09:00:00Z').toISOString());
+    expect(later.last_modified_by).toBe('outlook');
+    expect(later.sync_status).toBe('synced');
+  });
+});

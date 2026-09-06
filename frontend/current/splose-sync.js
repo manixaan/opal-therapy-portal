@@ -28,6 +28,8 @@
   var S = {
     enabled: false,
     writeEnabled: false,
+    autoSync: false,        // server writes the queue itself after a quiet period
+    watching: false,
     pending: [],            // rows from /api/splose-sync/pending
     pendingByEvent: {},     // eventId → row
     services: null, reasons: null, cases: {},
@@ -98,6 +100,7 @@
     return fetchJson('/api/splose-sync/status').then(function (r) {
       if (!r.ok) return null;
       S.writeEnabled = r.json.writeEnabled === true;
+      S.autoSync = r.json.autoSyncEnabled === true;
       S.publishing = r.json.running || null;
       if (!S.publishing && r.json.lastRun && S.lastRunShown !== r.json.lastRun.finishedAt) {
         S.lastRunShown = r.json.lastRun.finishedAt;
@@ -185,7 +188,9 @@
       if (chip) {
         if (!row) { chip.remove(); return; }
         chip.textContent = row.status === 'failed' ? '!' : '↑';
-        chip.title = row.status === 'failed' ? ('Splose sync failed: ' + (row.error || '')) : ('Not yet in Splose — ' + row.action);
+        chip.title = row.status === 'failed' ? ('Splose sync failed: ' + (row.error || ''))
+          : (S.autoSync && !needsReview(row)) ? ('Writing to Splose shortly — ' + row.action)
+          : ('Not yet in Splose — ' + row.action);
         chip.classList.toggle('failed', row.status === 'failed');
       }
     });
@@ -404,6 +409,8 @@
   }
 
   function watchPublish() {
+    if (S.watching) return Promise.resolve();
+    S.watching = true;
     return new Promise(function (resolve) {
       var tick = function () {
         refreshStatus().then(function (st) {
@@ -417,12 +424,25 @@
               toast(ok + ' change' + (ok === 1 ? '' : 's') + ' written to Splose' + (S.lastRun.failed ? ' · ' + S.lastRun.failed + ' failed' : ''), S.lastRun.failed > 0);
             }
             if (typeof global.loadOutlookEventsToCalendar === 'function') { try { global.loadOutlookEventsToCalendar(); } catch (e) {} }
+            S.watching = false;
             resolve();
           });
         });
       };
       setTimeout(tick, 800);
     });
+  }
+
+  // A queued row the server will not write on its own: it failed once, or it
+  // is a new booking that still needs a service chosen in the review list.
+  function needsReview(row) {
+    if (!row) return false;
+    if (row.status === 'failed') return true;
+    if (row.action === 'create') {
+      var p = row.payload || {};
+      return !(p.patientId && p.serviceId);
+    }
+    return false;
   }
 
   // ── Leaving with unsynced changes ─────────────────────────────────────────
@@ -436,7 +456,8 @@
     global.switchTab = function (name) {
       var args = arguments;
       var self = this;
-      var n = S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
+      // With auto-sync on, only rows that need a human choice are worth a prompt.
+      var n = S.pending.filter(function (c) { return c.status !== 'publishing' && (!S.autoSync || needsReview(c)); }).length;
       if (!leaving && canUse() && isCalendarActive() && name !== 'calendar' && n > 0 && !S.publishing) {
         leaving = true;
         confirmDialog('You have ' + n + ' change' + (n === 1 ? '' : 's') + ' on the calendar that ' + (n === 1 ? 'has' : 'have') + ' not been written to Splose yet. Write ' + (n === 1 ? 'it' : 'them') + ' now?', { title: 'Sync Splose?', ok: 'Review and write', cancel: 'Later' })
@@ -450,7 +471,7 @@
       return orig.apply(self, args);
     };
     global.addEventListener('beforeunload', function (e) {
-      var n = S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
+      var n = S.pending.filter(function (c) { return c.status !== 'publishing' && (!S.autoSync || needsReview(c)); }).length;
       if (canUse() && n > 0) { e.preventDefault(); e.returnValue = ''; }
     });
   }
@@ -500,7 +521,8 @@
               if (typeof global.loadOutlookEventsToCalendar === 'function') global.loadOutlookEventsToCalendar();
               return;
             }
-            toast(r.json.savedToOutlook ? 'Moved — Outlook updated. Sync Splose when the week is right.' : 'Moved — saved. Outlook will catch up; Sync Splose when the week is right.');
+            var tail = S.autoSync ? 'Splose will follow shortly.' : 'Sync Splose when the week is right.';
+            toast(r.json.savedToOutlook ? 'Moved — Outlook updated. ' + tail : 'Moved — saved. Outlook will catch up; ' + tail);
             refreshPending();
           });
       } catch (e) { /* the visual move already happened; nothing else to undo */ }
@@ -599,7 +621,13 @@
       refreshPending();
       pollAlerts();
       // Modest polling, paused while hidden: pending every 60 s, alerts every 2 min.
-      S.pollTimer = setInterval(function () { if (!doc.hidden) refreshPending(); }, 60000);
+      // The status poll also catches an automatic run the server started on
+      // its own, so the tiles and the count update when it finishes.
+      S.pollTimer = setInterval(function () {
+        if (doc.hidden) return;
+        refreshPending();
+        refreshStatus().then(function (st) { if (st && st.running) watchPublish(); });
+      }, 60000);
       setInterval(function () { pollAlerts(); }, 120000);
       doc.addEventListener('visibilitychange', function () { if (!doc.hidden) { refreshPending(); pollAlerts(); } });
       // Re-decorate whenever the grid is repainted.

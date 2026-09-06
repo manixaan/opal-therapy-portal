@@ -59,8 +59,19 @@ describe('flag resolution matrix', () => {
     const f = freshFlags({ NODE_ENV: 'staging', ENABLE_OUTLOOK_WRITE: 'true' });
     expect(f.featureFlagState()).toEqual({
       outlookWrite: true, sploseWrite: false, automaticRemoteDelete: false,
-      sploseCalendarSync: false, sploseDraftSync: false, whodasAssessment: false,
+      sploseCalendarSync: false, sploseDraftSync: false, sploseAutoSync: false, whodasAssessment: false,
     });
+  });
+
+  test('auto-sync needs the draft sync: on its own it stays off', () => {
+    const on = freshFlags({ NODE_ENV: 'staging', ENABLE_SPLOSE_DRAFT_SYNC: 'true', ENABLE_SPLOSE_AUTO_SYNC: 'true' });
+    expect(on.isSploseAutoSyncEnabled()).toBe(true);
+    const noDraft = freshFlags({ NODE_ENV: 'staging', ENABLE_SPLOSE_AUTO_SYNC: 'true' });
+    expect(noDraft.isSploseAutoSyncEnabled()).toBe(false);
+    const dev = freshFlags({ NODE_ENV: 'development' });
+    expect(dev.isSploseAutoSyncEnabled()).toBe(true);
+    const devOff = freshFlags({ NODE_ENV: 'development', ENABLE_SPLOSE_AUTO_SYNC: 'false' });
+    expect(devOff.isSploseAutoSyncEnabled()).toBe(false);
   });
 });
 

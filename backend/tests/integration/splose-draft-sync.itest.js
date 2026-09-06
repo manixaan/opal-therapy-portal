@@ -67,6 +67,9 @@ beforeEach(async () => {
   process.env.ENABLE_SPLOSE_DRAFT_SYNC = 'true';
   process.env.ENABLE_SPLOSE_WRITE = 'true';
   process.env.ENABLE_OUTLOOK_WRITE = 'true';
+  // Off unless a test turns it on: the manual-publish tests count pending rows.
+  process.env.ENABLE_SPLOSE_AUTO_SYNC = 'false';
+  delete process.env.SPLOSE_AUTO_SYNC_DELAY_MS;
 });
 afterAll(async () => { require('../../auth')._resetLoginRateLimit(); await closePool(); });
 
@@ -354,5 +357,71 @@ describe('changes made inside Splose', () => {
     const id = await seedAlert(user, null, 'created', { start: START, end: END }, 'n1');
     const r = await other.post(`/api/splose-sync/alerts/${id}/ack`).send({ verdict: 'valid' });
     expect(r.status).toBe(404);
+  });
+});
+
+describe('auto-sync — the queue writes itself after a quiet period', () => {
+  async function waitForQueue(pred, ms = 3000) {
+    const started = Date.now();
+    while (Date.now() - started < ms) {
+      const { rows } = await db.pool.query(`SELECT status, error FROM splose_sync_queue`);
+      if (pred(rows)) return rows;
+      await new Promise(r => setTimeout(r, 25));
+    }
+    return (await db.pool.query(`SELECT status, error FROM splose_sync_queue`)).rows;
+  }
+
+  test('a complete booking reaches Splose without Sync Splose being pressed, and is audited as automatic', async () => {
+    process.env.ENABLE_SPLOSE_AUTO_SYNC = 'true';
+    process.env.SPLOSE_AUTO_SYNC_DELAY_MS = '40';
+    process.env.SPLOSE_AUTO_SYNC_MIN_GAP_MS = '0';
+    require('../../splose-sync-routes')._resetPublisher();
+    const app = buildApp();
+    const { agent } = await agentFor(app);
+    const st0 = await agent.get('/api/splose-sync/status');
+    expect(st0.body.autoSyncEnabled).toBe(true);
+
+    const booked = await bookClient(agent, { serviceId: 125320 });
+    const st1 = await agent.get('/api/splose-sync/status');
+    expect(st1.body.autoSync).toMatchObject({ dueAt: expect.any(String) });
+
+    const rows = await waitForQueue(r => r.length === 1 && r[0].status === 'done');
+    expect(rows).toEqual([{ status: 'done', error: null }]);
+    expect(mockSplose.createAppointment).toHaveBeenCalledWith(expect.objectContaining({ patientId: 41, serviceId: 125320 }));
+    const ev = await db.pool.query(`SELECT splose_id FROM events WHERE id = $1`, [booked.dbId]);
+    expect(ev.rows[0].splose_id).toBe('7001');
+    const audit = await db.pool.query(`SELECT action FROM audit_logs WHERE action = 'splose_sync_auto_started'`);
+    expect(audit.rows).toHaveLength(1);
+    const pend = await agent.get('/api/splose-sync/pending');
+    expect(pend.body.count).toBe(0);
+  });
+
+  test('a booking with no service is left for the review list; a move on it is not written either', async () => {
+    process.env.ENABLE_SPLOSE_AUTO_SYNC = 'true';
+    process.env.SPLOSE_AUTO_SYNC_DELAY_MS = '40';
+    process.env.SPLOSE_AUTO_SYNC_MIN_GAP_MS = '0';
+    require('../../splose-sync-routes')._resetPublisher();
+    const app = buildApp();
+    const { agent } = await agentFor(app);
+    const booked = await bookClient(agent);
+    await agent.patch(`/api/outlook/events/${booked.dbId}`).send({ startTime: '2026-09-15T01:00:00.000Z', endTime: '2026-09-15T02:00:00.000Z' });
+    await new Promise(r => setTimeout(r, 200));
+    const rows = await db.pool.query(`SELECT action, status, attempts FROM splose_sync_queue`);
+    expect(rows.rows).toEqual([{ action: 'create', status: 'pending', attempts: 0 }]);
+    expect(mockSplose.createAppointment).not.toHaveBeenCalled();
+    expect(mockSplose.updateAppointment).not.toHaveBeenCalled();
+  });
+
+  test('with the flag off nothing is scheduled', async () => {
+    process.env.SPLOSE_AUTO_SYNC_DELAY_MS = '40';
+    const app = buildApp();
+    const { agent } = await agentFor(app);
+    await bookClient(agent, { serviceId: 125320 });
+    const st = await agent.get('/api/splose-sync/status');
+    expect(st.body.autoSyncEnabled).toBe(false);
+    expect(st.body.autoSync).toBeNull();
+    await new Promise(r => setTimeout(r, 120));
+    const rows = await db.pool.query(`SELECT status FROM splose_sync_queue`);
+    expect(rows.rows).toEqual([{ status: 'pending' }]);
   });
 });

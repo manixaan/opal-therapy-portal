@@ -695,7 +695,9 @@ describe('changed assets are cache-busted', () => {
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
-      ['splose-sync.js', 1], ['splose-sync.css', 1],
+      // 2 (js): the commitMove wrapper now persists moves (the shell exposes
+      // pendingMove on window) and the module knows about auto-sync.
+      ['splose-sync.js', 2], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
@@ -780,5 +782,24 @@ describe('a draft can be deleted, carefully', () => {
     expect(whodasCss).toMatch(/\.whodas-btn--danger/);
     // The button's accessible name is the word Delete, in both surfaces.
     expect(CODE).toMatch(/assess-btn--danger[^>]*data-assess="delete-record"[^>]*>Delete</);
+  });
+});
+
+describe('calendar move persistence — the shell state splose-sync.js depends on', () => {
+  test('pendingMove is declared with var so window.pendingMove exists for the commitMove wrapper', () => {
+    // A top-level `let` never becomes a window property; the wrapper in
+    // splose-sync.js read undefined and every drag stayed visual-only, then
+    // snapped back on the next refresh (6 Sep 2026).
+    expect(SHELL).toMatch(/^var pendingMove = null;/m);
+    expect(SHELL).not.toMatch(/^let pendingMove\b/m);
+    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+    expect(sync).toMatch(/global\.pendingMove/);
+    expect(sync).toMatch(/global\.SESSIONS/);
+    expect(SHELL).toMatch(/^window\.SESSIONS = SESSIONS;/m);
+  });
+
+  test('Outlook tiles are DOM-stamped so a re-render sweeps phantoms the registry lost', () => {
+    expect(SHELL).toMatch(/dataset\.outlookTile = '1'/);
+    expect(SHELL).toMatch(/querySelectorAll\('\[data-outlook-tile\]'\)/);
   });
 });

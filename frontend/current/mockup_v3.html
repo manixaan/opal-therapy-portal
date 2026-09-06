@@ -80,7 +80,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=1" defer></script>
+<script src="/splose-sync.js?v=2" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
@@ -14917,7 +14917,11 @@ function fmtMin(min) {
 }
 
 /* ---------- Impact modal ---------- */
-let pendingMove = null;  // holds {id, day, startMin, duration, impact}
+// `var`, not `let`: splose-sync.js reads window.pendingMove inside its
+// commitMove wrapper to persist a drag / resize / time edit. A top-level `let`
+// never becomes a window property, so the wrapper saw undefined and every move
+// stayed visual-only — and snapped back on the next grid refresh.
+var pendingMove = null;  // holds {id, day, startMin, duration, impact}
 
 function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   const s = SESSIONS[id];
@@ -16400,6 +16404,11 @@ function __clearOutlookTiles() {
       delete SESSIONS[id];
     }
   });
+  // Belt and braces: any Outlook-stamped tile still in the grid whose registry
+  // entry is gone (or was replaced) would otherwise survive as a phantom copy.
+  document.querySelectorAll('[data-outlook-tile]').forEach(el => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+  });
   // Also clear DAY_DATA so the Today subview doesn't keep stale rows.
   __ALL_DAYS.forEach(d => {
     if (DAY_DATA[d]) DAY_DATA[d].sessions = [];
@@ -17209,6 +17218,7 @@ function addAllDayChip(day, opts) {
   el.setAttribute('role', 'button');
   el.tabIndex = 0;
   SESSIONS[id] = Object.assign({}, opts, { id, element: el, col: cell, allDay: true, outlookSynced: true });
+  el.dataset.outlookTile = '1';
   const open = function () { if (typeof openBlockDetail === 'function') openBlockDetail(id); };
   el.onclick = open;
   el.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
@@ -17759,7 +17769,12 @@ function mergeEventsIntoDayData(eventsByDay) {
             startTimeIso: session.startTimeIso,
             endTimeIso: session.endTimeIso,
           });
-          if (SESSIONS[id]) SESSIONS[id].outlookSynced = true;
+          if (SESSIONS[id]) {
+            SESSIONS[id].outlookSynced = true;
+            // DOM stamp so a re-render can sweep the tile even if its registry
+            // entry was lost (a drag mid-refresh once left a duplicate behind).
+            if (SESSIONS[id].element) SESSIONS[id].element.dataset.outlookTile = '1';
+          }
         });
       }
 

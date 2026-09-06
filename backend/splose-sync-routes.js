@@ -67,6 +67,33 @@ function publisher() {
   return _publisher;
 }
 
+// Auto-sync shares the publisher (one `running` map, so an automatic run and
+// a manual Sync Splose can never overlap for the same user).
+let _autoSync = null;
+function autoSync() {
+  if (!_autoSync) {
+    const num = (v, d) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
+    _autoSync = draftSync.createAutoSync({
+      db, publisher: publisher(),
+      delayMs:   num(process.env.SPLOSE_AUTO_SYNC_DELAY_MS,    draftSync.AUTO_SYNC_DELAY_MS),
+      maxWaitMs: num(process.env.SPLOSE_AUTO_SYNC_MAX_WAIT_MS, draftSync.AUTO_SYNC_MAX_WAIT_MS),
+      minGapMs:  num(process.env.SPLOSE_AUTO_SYNC_MIN_GAP_MS,  draftSync.AUTO_SYNC_MIN_GAP_MS),
+      log: (m) => console.log('📤 ' + m),
+    });
+  }
+  return _autoSync;
+}
+
+/**
+ * Called by the calendar routes after a change is queued. Starts (or
+ * restarts) that user's quiet-period timer; a no-op when auto-sync is off.
+ */
+function notifyQueued(userId) {
+  if (!userId || !flags.isSploseAutoSyncEnabled()) return false;
+  autoSync().touch(userId);
+  return true;
+}
+
 router.use('/api/splose-sync', requireAuth, denyReadOnly, requireDraftSync);
 
 function rowView(r) {
@@ -148,6 +175,8 @@ router.get('/api/splose-sync/status', safe(async (req, res) => {
     lastRun: pub.lastResult(userId),
     counts: byStatus,
     writeEnabled: flags.isSploseWriteEnabled(),
+    autoSyncEnabled: flags.isSploseAutoSyncEnabled(),
+    autoSync: flags.isSploseAutoSyncEnabled() ? autoSync().status(userId) : null,
   });
 }));
 
@@ -288,4 +317,5 @@ router.get('/api/splose/cancellation-reasons', requireAuth, denyReadOnly, safe(a
 
 module.exports = router;
 module.exports._applyExternalChange = applyExternalChange;
-module.exports._resetPublisher = () => { _publisher = null; };
+module.exports.notifyQueued = notifyQueued;
+module.exports._resetPublisher = () => { if (_autoSync) _autoSync.stop(); _autoSync = null; _publisher = null; };
