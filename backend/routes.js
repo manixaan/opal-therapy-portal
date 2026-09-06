@@ -18,6 +18,8 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const outlookApi = require('./outlook-oauth');
 const sploseApi = require('./splose-api');
+const draftSync = require('./splose-draft-sync');
+const flagsDraft = () => require('./feature-flags');
 const { getPermissions, requireAuth, requireRole, requirePermission, hasPermission } = require('./permissions');
 const { classifyEventType } = require('./sync-utils');
 const { collectCascadeTravelBlocks } = require('./travel-cascade');
@@ -1515,6 +1517,7 @@ router.get('/api/splose/sync-status', requireAuth, denySploseToReadOnly, (req, r
   res.json({
     ...sploSyncState,
     calendarSyncEnabled: require('./feature-flags').isSploseCalendarSyncEnabled(),
+    draftSyncEnabled: require('./feature-flags').isSploseDraftSyncEnabled(),
   });
 });
 
@@ -2342,10 +2345,34 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       console.warn('⚠️  Local DB save failed (non-fatal):', dbErr.message);
     }
 
+    // Draft-and-publish (058): a client booking that names its Splose client
+    // is queued for "Sync Splose" — nothing is written to Splose here.
+    let sploseQueued = null;
+    if (localDbId && req.body.splose && req.body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
+      try {
+        const sp = req.body.splose;
+        const qrow = await draftSync.enqueueChange(db, {
+          userId: targetUser.id, createdBy: req.session.userId, eventId: localDbId, action: 'create',
+          payload: {
+            start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
+            patientId: sp.patientId, serviceId: sp.serviceId || null, locationId: sp.locationId || null,
+            practitionerId: sp.practitionerId || null, caseId: sp.caseId || null,
+            note: typeof sp.note === 'string' ? sp.note.slice(0, 500) : '',
+            summary: title, sessionType: sp.sessionType || null,
+          },
+        });
+        sploseQueued = qrow ? qrow.id : null;
+        await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
+          [localDbId, String(sp.patientId), sp.patientName || null]).catch(() => {});
+      } catch (qErr) {
+        console.warn('⚠️  Splose draft queue failed (non-fatal):', qErr.message);
+      }
+    }
+
     console.log(`✅ Outlook event created: ${result.outlookId} — "${title}"`);
     // dbId (additive, 2026-08-09): the local row id, so the frontend can offer
     // Cmd+Z undo (DELETE /api/outlook/events/:dbId) for a fresh booking.
-    res.status(201).json({ ok: true, outlookId: result.outlookId, dbId: localDbId });
+    res.status(201).json({ sploseQueued, ok: true, outlookId: result.outlookId, dbId: localDbId });
   } catch (err) {
     if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook create event error:', err.response?.data || err.message);
@@ -2468,6 +2495,24 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     // 1. Persist the local change FIRST — it must survive an Outlook failure.
     await db.updateEvent(dbId, { title, startTime, endTime, location, lastModifiedBy: 'app' });
 
+    // Draft-and-publish (058): a time change on a Splose-linked (or Splose-
+    // queued) appointment is queued for the next "Sync Splose".
+    if ((startTime || endTime) && flagsDraft().isSploseDraftSyncEnabled()) {
+      try {
+        const link = await db.pool.query(
+          `SELECT e.splose_id, e.start_time, e.end_time, e.user_id,
+                  (SELECT COUNT(*) FROM splose_sync_queue q WHERE q.event_id = e.id AND q.status IN ('pending','failed')) AS live
+             FROM events e WHERE e.id = $1`, [dbId]);
+        const l = link.rows[0];
+        if (l && (l.splose_id || Number(l.live) > 0)) {
+          await draftSync.enqueueChange(db, {
+            userId: l.user_id, createdBy: req.session.userId, eventId: dbId, action: 'update',
+            payload: { start: new Date(l.start_time).toISOString(), end: new Date(l.end_time).toISOString(), summary: title || undefined },
+          });
+        }
+      } catch (qErr) { console.warn('⚠️  Splose draft queue (update) failed (non-fatal):', qErr.message); }
+    }
+
     // 2. Propagate to Outlook (partial update — only defined fields are sent).
     try {
       const user = await db.getUser(req.session.userId);
@@ -2530,12 +2575,13 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
 
     const ev = await db.pool.query(
-      'SELECT outlook_id, title, start_time, end_time FROM events WHERE id = $1 AND user_id = $2',
+      'SELECT outlook_id, title, start_time, end_time, splose_id, user_id FROM events WHERE id = $1 AND user_id = $2',
       [dbId, req.session.userId]
     );
     if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
 
     const { outlook_id: outlookId, title, start_time: startTime, end_time: endTime } = ev.rows[0];
+    const sploseLinkedId = ev.rows[0].splose_id;
 
     // ── Collect the travel-block cascade ────────────────────────────────────
     // Candidates: every surviving event for this user explicitly linked to the
@@ -2580,6 +2626,24 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
         travelBlocksDeleted: cascade.length,
         travelBlockIds, travelBlockTitles,
       });
+    }
+
+    // Draft-and-publish (058): cancelling a Splose-linked appointment queues a
+    // Splose cancellation (reason chosen at review); a pending create that
+    // never reached Splose is simply discarded. The local soft-delete below
+    // still happens, so the queue row survives via the events FK (soft delete).
+    if (flagsDraft().isSploseDraftSyncEnabled()) {
+      try {
+        const live = await db.pool.query(
+          `SELECT id FROM splose_sync_queue WHERE event_id = $1 AND status IN ('pending','failed') LIMIT 1`, [dbId]);
+        if (sploseLinkedId || live.rows.length) {
+          await draftSync.enqueueChange(db, {
+            userId: req.session.userId, createdBy: req.session.userId, eventId: dbId, action: 'cancel',
+            payload: { reasonId: req.body && req.body.reasonId ? Number(req.body.reasonId) : null, summary: title,
+                       start: startTime ? new Date(startTime).toISOString() : null, end: endTime ? new Date(endTime).toISOString() : null },
+          });
+        }
+      } catch (qErr) { console.warn('⚠️  Splose draft queue (cancel) failed (non-fatal):', qErr.message); }
     }
 
     // ── Best-effort Graph deletes (event + cascaded travel blocks) ──────────

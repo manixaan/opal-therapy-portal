@@ -9,8 +9,9 @@
  *  - Pagination: id_gt / id_lt query params — NO "limit" param (server rejects it)
  *  - Date range: startDate / endDate (YYYY-MM-DD) — NOT start_date / end_date
  *  - Envelope:  { data: [...], links: { previousPage?, nextPage? } }
- *  - Write:     POST /appointments, PUT /appointments/{id}, POST /patients
- *  - Cancellation is READ-ONLY from API — must be done in Splose UI
+ *  - Write:     POST /appointments, PUT /appointments/{id}, POST /patients,
+ *               POST /appointments/{id}/cancellation (reasonId required —
+ *               documented Sept 2026; proven live by scripts/splose-cancel-probe.js)
  */
 
 const axios = require('axios');
@@ -330,6 +331,37 @@ async function updateAppointment(id, data) {
   return normaliseAppointment(response.data);
 }
 
+/**
+ * Cancel an appointment. WRITE — behind ENABLE_SPLOSE_WRITE like every other
+ * mutation. Splose requires a cancellation reason id (see
+ * getCancellationReasons); the reason drives short-notice charging on the
+ * Splose side, so callers must not invent one.
+ */
+async function cancelAppointment(id, reasonId, note) {
+  const flags = require('./feature-flags');
+  if (!flags.isSploseWriteEnabled()) {
+    throw flags.featureDisabledError('ENABLE_SPLOSE_WRITE', 'Splose appointment cancellation');
+  }
+  if (!reasonId) {
+    const err = new Error('A Splose cancellation reason is required');
+    err.code = 'CANCELLATION_REASON_REQUIRED';
+    throw err;
+  }
+  const c = client();
+  const response = await c.post(`/appointments/${id}/cancellation`, {
+    reasonId: Number(reasonId),
+    note: note || '',
+  });
+  invalidateCache('/appointments');
+  return response.data;
+}
+
+/** Cancellation reasons (read, cached) — [{ id, reason, code, archived }]. */
+async function getCancellationReasons() {
+  const items = await fetchAllPages('/cancellation-reasons');
+  return items.filter(r => !r.archived && !r.deletedAt);
+}
+
 // ─── Busy times ───────────────────────────────────────────────────────────────
 
 async function getBusyTimes(startDate, endDate, practitionerId = null) {
@@ -572,6 +604,8 @@ module.exports = {
   getAppointment,
   createAppointment,
   updateAppointment,
+  cancelAppointment,
+  getCancellationReasons,
   getBusyTimes,
   getBusyTimeTypes,
   createBusyTime,

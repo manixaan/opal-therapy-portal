@@ -572,6 +572,10 @@ app.use('/', require('./onboarding-routes'));
 // Travel Logbook (read-only Splose aggregation, role-scoped server-side)
 app.use('/', require('./travel-routes'));
 
+// Splose draft-and-publish sync (migration 058): queued calendar changes,
+// "Sync Splose" publishing, and alerts for changes made inside Splose.
+app.use('/', require('./splose-sync-routes'));
+
 // Snapshot Day (personal reminders + daily tasks; strictly user-scoped)
 app.use('/', require('./snapshot-routes'));
 app.use('/', require('./scheduler-routes'));
@@ -1009,6 +1013,29 @@ if (require('./feature-flags').isSploseCalendarSyncEnabled()) {
   }, 8000);
 } else {
   console.log('ℹ️  Splose calendar sync disabled (ENABLE_SPLOSE_CALENDAR_SYNC=false) — calendar is Outlook-only; Splose serves patient data only');
+}
+
+// ── Splose WATCHER (migration 058) ──────────────────────────────────────────
+// Every 2 minutes: compare Splose against the portal's Splose-linked events
+// and record anything cancelled, moved, deleted or newly created inside
+// Splose. Alerts only — it never changes an event on its own; the user
+// confirms each one in the calendar. Off when the draft-sync flag is off or
+// there is no API key.
+const SPLOSE_WATCH_INTERVAL_MS = 2 * 60 * 1000;
+if (require('./feature-flags').isSploseDraftSyncEnabled() && process.env.SPLOSE_API_KEY) {
+  const { createWatcher } = require('./splose-draft-sync');
+  const watcher = createWatcher({
+    db, sploseApi: require('./splose-api'), io,
+    log: (m) => console.log('👀 ' + m),
+  });
+  app.set('sploseWatcher', watcher);
+  setTimeout(() => {
+    console.log('⏱️  Splose change watcher started (every 2 minutes)');
+    setInterval(() => { watcher.run().catch(() => {}); }, SPLOSE_WATCH_INTERVAL_MS);
+    watcher.run().catch(() => {});
+  }, 12000);
+} else {
+  console.log('ℹ️  Splose change watcher off (ENABLE_SPLOSE_DRAFT_SYNC=false or no SPLOSE_API_KEY)');
 }
 
 // ===== OUTLOOK WEBHOOK INFRASTRUCTURE =====

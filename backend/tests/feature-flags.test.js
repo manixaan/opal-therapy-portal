@@ -59,7 +59,7 @@ describe('flag resolution matrix', () => {
     const f = freshFlags({ NODE_ENV: 'staging', ENABLE_OUTLOOK_WRITE: 'true' });
     expect(f.featureFlagState()).toEqual({
       outlookWrite: true, sploseWrite: false, automaticRemoteDelete: false,
-      sploseCalendarSync: false, whodasAssessment: false,
+      sploseCalendarSync: false, sploseDraftSync: false, whodasAssessment: false,
     });
   });
 });

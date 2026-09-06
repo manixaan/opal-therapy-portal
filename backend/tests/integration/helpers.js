@@ -19,6 +19,8 @@ if (!poolDbName || !poolDbName.endsWith('_test')) {
 
 const ALL_TABLES = [
   'opa_messages', 'opa_conversations', 'opa_feature_knowledge',
+  // Splose draft-and-publish (migration 058) — both reference events/users.
+  'splose_change_alerts', 'splose_sync_queue',
   'sync_log', 'conflicts', 'events',
   'user_notifications', 'user_settings', 'org_settings',
   'leave_requests', 'cpd_activities', 'credentials', 'pd_documents',

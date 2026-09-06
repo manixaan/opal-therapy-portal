@@ -692,6 +692,10 @@ describe('changed assets are cache-busted', () => {
       // 1: travel.js is new — the travel domain lifted out of the shell.
       // Same reason again: a first pin is still a pin.
       ['travel.js', 1],
+      // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
+      // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
+      // Splose-side change alerts). A first pin is still a pin.
+      ['splose-sync.js', 1], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
