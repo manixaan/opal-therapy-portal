@@ -24,7 +24,11 @@ jest.mock('../email', () => ({
   sendPasswordResetEmail: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('../outlook-oauth', () => ({}));
-jest.mock('../splose-api',    () => ({}));
+jest.mock('../splose-api',    () => ({
+  getPatient:    jest.fn(),
+  getPatients:   jest.fn(),
+  fetchAllCases: jest.fn(),
+}));
 
 const request = require('supertest');
 const bcrypt  = require('bcryptjs');
@@ -33,6 +37,7 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('../database');
 const provider = require('../clinical-note-provider');
+const sploseApi = require('../splose-api');
 const caseNoteRoutes = require('../case-note-routes');
 
 function buildApp() {
@@ -60,8 +65,9 @@ const USER_A = {
   role: 'therapist', is_active: true, account_status: 'active', email_verified: true,
   organisation_id: 'cccccccc-2222-4222-8222-222222222222',
   therapist_profile_id: TP_A, permissions: null, name: 'Therapist A',
+  tp_splose_practitioner_id: 'prac-A',
 };
-const USER_B = { ...USER_A, id: 'bbbbbbbb-1111-4111-8111-111111111111', email: 'cn.b@opal.test', therapist_profile_id: TP_B, name: 'Therapist B' };
+const USER_B = { ...USER_A, id: 'bbbbbbbb-1111-4111-8111-111111111111', email: 'cn.b@opal.test', therapist_profile_id: TP_B, name: 'Therapist B', tp_splose_practitioner_id: 'prac-B' };
 const USERS = { [USER_A.id]: USER_A, [USER_B.id]: USER_B };
 
 const EVENT_A = {
@@ -144,6 +150,7 @@ function installPoolMock() {
         warnings: JSON.parse(params[9]), note_body: params[10],
         style_version: params[11], provider_id: params[12], model_id: params[13],
         ai_interaction_id: params[14] || null,
+        splose_patient_id: params[15] || null,
         generation_source: 'ai_assisted', review_status: 'review_required',
         reviewed_by: null, reviewed_at: null,
         status: 'draft', generated_at: new Date().toISOString(),
@@ -1028,5 +1035,154 @@ describe('persistence-failure containment — no dangling review_required, no fa
     expect(interactionStore.get(INTERACTION_2).review_status).toBe('ai_generated');
     // The ORIGINAL interaction is untouched — nothing was superseded.
     expect(interactionStore.get(INTERACTION_1).review_status).toBe('review_required');
+  });
+});
+
+// ═══ Client link (migration 059) — a Splose client instead of an appointment ═
+
+const CLIENT_A = {
+  id: 'pt-1', firstname: 'Liam', lastname: 'Carter', fullName: 'Liam Carter',
+  ndisNumber: '430000001', mobilePhone: '0400000000', email: 'liam@example.test',
+  suburb: 'Testville', formattedAddress: '7 Example Street, Testville WA 6000', _raw: {},
+};
+const CLIENT_B = { ...CLIENT_A, id: 'pt-2', fullName: 'Ava Nguyen', firstname: 'Ava', lastname: 'Nguyen' };
+const CASES = [
+  { id: 'c1', patientId: 'pt-1', practitionerId: 'prac-A', isOpen: true },
+  { id: 'c2', patientId: 'pt-2', practitionerId: 'prac-B', isOpen: true },
+  { id: 'c3', patientId: 'pt-3', practitionerId: 'prac-A', isOpen: false }, // closed → not on caseload
+];
+const PATIENTS = { 'pt-1': CLIENT_A, 'pt-2': CLIENT_B, 'pt-3': { ...CLIENT_A, id: 'pt-3', fullName: 'Closed Case' } };
+
+function installSploseMock() {
+  sploseApi.fetchAllCases.mockResolvedValue(CASES);
+  sploseApi.getPatients.mockResolvedValue(Object.values(PATIENTS));
+  sploseApi.getPatient.mockImplementation(async (id) => {
+    if (!PATIENTS[id]) { const err = new Error('not found'); err.response = { status: 404 }; throw err; }
+    return PATIENTS[id];
+  });
+}
+
+const generateForClient = (agent, clientId, body = {}) => agent
+  .post('/api/mobile/case-note-drafts/generate')
+  .send({ transcript: TRANSCRIPT, linkedClientId: clientId, ...body });
+
+describe('client-linked drafts', () => {
+  beforeEach(() => installSploseMock());
+
+  test('a caseload client links: header from Splose, dictation date, generic service, NO billing line', async () => {
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { ...SECTIONS, plan: [...SECTIONS.plan], warnings: [] }; });
+    const agent = await loginAs(USER_A);
+    const res = await generateForClient(agent, 'pt-1');
+    expect(res.status).toBe(201);
+    const d = res.body.caseNoteDraft;
+    expect(d.linkedClientId).toBe('pt-1');
+    expect(d.linkedEventId).toBeNull();
+    expect(d.header.clientName).toBe('Liam Carter');
+    expect(d.header.clientAddress).toBe('7 Example Street, Testville WA 6000');
+    expect(d.header.serviceLine).toMatch(/Therapy Session$/);
+    expect(d.header.sessionDateLabel).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    expect(d.noteBody.startsWith('Liam Carter\n7 Example Street, Testville WA 6000')).toBe(true);
+    expect(d.noteBody).not.toMatch(/time billed/i); // nothing to derive it from
+    expect(d.noteBody).toContain('Identify:');
+    expect(d.noteBody).toContain('Session details:');
+    expect(d.noteBody).toContain('Plan:');
+    // Provider saw a date and the generic label only — no name, no id, no address.
+    expect(seen.session.serviceLabel).toBe('Therapy Session');
+    // (The transcript itself is the therapist's dictation and may carry the
+    // name — that is by design. Everything ELSE sent must be identity-free.)
+    const { transcript: _t, ...rest } = seen;
+    const wire = JSON.stringify(rest);
+    expect(wire).not.toContain('Liam');
+    expect(wire).not.toContain('pt-1');
+    expect(wire).not.toContain('Example Street');
+    // Listed for the portal's Case Notes tab under the same account.
+    const list = await agent.get('/api/mobile/case-note-drafts');
+    expect(list.body.caseNoteDrafts.map((x) => x.id)).toContain(d.id);
+    // Audit carries ids only.
+    const evt = db.logAuditEvent.mock.calls.find((c) => c[0].action === 'mobile.case_note_generated')[0];
+    expect(evt.metadata.linkedClientId).toBe('pt-1');
+    expect(JSON.stringify(evt)).not.toContain('Liam');
+  });
+
+  test("a client on another practitioner's caseload, a closed case, and an unknown id are all invalid_link — and Splose is never asked about them", async () => {
+    const agent = await loginAs(USER_A);
+    const foreign = await generateForClient(agent, 'pt-2');
+    const closed = await generateForClient(agent, 'pt-3');
+    const unknown = await generateForClient(agent, 'pt-404');
+    for (const r of [foreign, closed, unknown]) {
+      expect(r.status).toBe(400);
+      expect(r.body.code).toBe('invalid_link');
+    }
+    expect(foreign.body).toEqual(unknown.body);
+    expect(sploseApi.getPatient).not.toHaveBeenCalled();
+    expect(draftStore.size).toBe(0);
+  });
+
+  test('exactly one link: both ids or neither is invalid_link before any lookup', async () => {
+    const agent = await loginAs(USER_A);
+    const both = await generate(agent, { linkedClientId: 'pt-1' });
+    const neither = await agent.post('/api/mobile/case-note-drafts/generate').send({ transcript: TRANSCRIPT });
+    expect(both.status).toBe(400);
+    expect(both.body.code).toBe('invalid_link');
+    expect(neither.status).toBe(400);
+    expect(neither.body.code).toBe('invalid_link');
+    expect(sploseApi.fetchAllCases).not.toHaveBeenCalled();
+    expect(draftStore.size).toBe(0);
+  });
+
+  test('read_only and unmapped therapists are refused with a policy code, not a missing-client 400', async () => {
+    const RO = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ro01', email: 'cn.ro@opal.test', role: 'read_only' };
+    const UNMAPPED = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111un01', email: 'cn.un@opal.test', tp_splose_practitioner_id: null };
+    USERS[RO.id] = RO; USERS[UNMAPPED.id] = UNMAPPED;
+    // read_only never reaches the route: requireAuth's single write choke
+    // point refuses every non-auth POST for that role first.
+    const ro = await generateForClient(await loginAs(RO), 'pt-1');
+    expect(ro.status).toBe(403);
+    expect(ro.body.error).toMatch(/read-only/i);
+    const un = await generateForClient(await loginAs(UNMAPPED), 'pt-1');
+    expect(un.status).toBe(403);
+    expect(un.body.code).toBe('practitioner_mapping_required');
+    expect(sploseApi.getPatient).not.toHaveBeenCalled();
+    expect(draftStore.size).toBe(0);
+  });
+
+  test('owner links any practice client without a caseload filter', async () => {
+    const OWNER = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ow01', email: 'cn.owner@opal.test', role: 'owner', tp_splose_practitioner_id: null };
+    USERS[OWNER.id] = OWNER;
+    const res = await generateForClient(await loginAs(OWNER), 'pt-2');
+    expect(res.status).toBe(201);
+    expect(res.body.caseNoteDraft.header.clientName).toBe('Ava Nguyen');
+    expect(sploseApi.fetchAllCases).not.toHaveBeenCalled();
+  });
+
+  test('Splose unreachable is a retryable 502 client_lookup_failed with no row, not a 400', async () => {
+    sploseApi.fetchAllCases.mockRejectedValue(new Error('ECONNRESET splose.example'));
+    const agent = await loginAs(USER_A);
+    const res = await generateForClient(agent, 'pt-1');
+    expect(res.status).toBe(502);
+    expect(res.body.code).toBe('client_lookup_failed');
+    expect(res.body.error).toContain('transcript is safe');
+    expect(res.body.error).not.toContain('splose.example');
+    expect(draftStore.size).toBe(0);
+  });
+
+  test('regenerating a client-linked draft reuses the stored snapshot — no Splose call, still no billing', async () => {
+    const agent = await loginAs(USER_A);
+    const created = (await generateForClient(agent, 'pt-1')).body.caseNoteDraft;
+    sploseApi.getPatient.mockClear();
+    sploseApi.fetchAllCases.mockClear();
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { ...SECTIONS, sessionDetails: 'Regenerated detail.', plan: [], warnings: [] }; });
+    const res = await agent.post(`/api/mobile/case-note-drafts/${created.id}/regenerate`).send({ instruction: 'more_concise' });
+    expect(res.status).toBe(200);
+    const d = res.body.caseNoteDraft;
+    expect(d.header).toEqual(created.header);
+    expect(d.linkedClientId).toBe('pt-1');
+    expect(d.noteBody).toContain('Regenerated detail.');
+    expect(d.noteBody).not.toMatch(/time billed/i);
+    expect(seen.session.serviceLabel).toBe('Therapy Session');
+    expect(sploseApi.getPatient).not.toHaveBeenCalled();
+    expect(sploseApi.fetchAllCases).not.toHaveBeenCalled();
   });
 });

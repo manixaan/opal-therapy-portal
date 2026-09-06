@@ -11,9 +11,17 @@
  * back, composes the Opal-format note deterministically, and stores a
  * PRIVATE DRAFT.
  *
+ * A draft links to EITHER an owned appointment (linkedEventId) OR a Splose
+ * client on the caller's caseload (linkedClientId, migration 059). With a
+ * client link there is no event to derive a service title, duration or
+ * travel from: the header carries the client's name and address from Splose
+ * and the dictation date, the service line is the generic "Therapy Session",
+ * and the billing line is omitted.
+ *
  * Hard rules enforced here:
  * - Metadata (client name, address, service line, date, billing) comes from
- *   the linked event — model output can never set or override it.
+ *   the linked event or the Splose client record — model output can never
+ *   set or override it.
  * - Billing/time lines appear only when derivable from event data
  *   (duration from start/end, travel from travel_time_minutes); otherwise
  *   they are omitted entirely — never guessed.
@@ -37,6 +45,7 @@ const { pool } = require('./database');
 const { requireAuth } = require('./permissions');
 const provider = require('./clinical-note-provider');
 const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-style');
+const caseload = require('./splose-caseload');
 const log = require('./logger').createLogger('case-note');
 
 router.use('/api/mobile/case-note-drafts', requireAuth);
@@ -260,6 +269,22 @@ function buildHeader(ev) {
   };
 }
 
+/**
+ * Header snapshot from a Splose client record. There is no appointment, so
+ * the session date is the dictation date (Perth) and the service line is the
+ * generic label — nothing about duration or travel exists to be derived.
+ */
+const CLIENT_SERVICE_LABEL = 'Therapy Session';
+function buildClientHeader(client, now = new Date()) {
+  const iso = now.toISOString();
+  return {
+    clientName: client.fullName || null,
+    clientAddress: isRoutableAddress(client.formattedAddress) ? client.formattedAddress : null,
+    serviceLine: `${perthDateShort(iso)} ${CLIENT_SERVICE_LABEL}`,
+    sessionDateLabel: perthDateSlash(iso),
+  };
+}
+
 /** Billing line only where the event actually carries the data. */
 function buildBillingLine(ev) {
   const start = new Date(ev.start_time).getTime();
@@ -355,7 +380,8 @@ function formatDraft(row) {
   return {
     id: row.id,
     voiceNoteId: row.voice_note_id,
-    linkedEventId: row.linked_event_id,
+    linkedEventId: row.linked_event_id || null,
+    linkedClientId: row.splose_patient_id || null,
     transcript: row.transcript,
     header: row.header || {},
     identify: row.identify,
@@ -401,9 +427,14 @@ function validInstruction(instruction) {
  * route wrappers own their own request vocabulary — and does everything from
  * "an owned event and a clean transcript" to "a persisted, linked draft".
  *
+ * Exactly one of `ev` (an owned event row) or `client` (a caseload client
+ * from splose-caseload) is supplied; the route wrappers resolve and
+ * authorise whichever the phone linked.
+ *
  * @returns {{ok: true, draft: object}|{ok: false, status: number, body: object}}
  */
-async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNoteId }) {
+async function generateGovernedDraft(req, { ev, client, transcript, instruction, voiceNoteId }) {
+  if (!ev && !client) throw new Error('generate_requires_link');
   // Fail closed BEFORE anything leaves the server. Routed through the same
   // helper as the mid-flight case so both produce one indistinguishable
   // 'unavailable' shape: from the phone's point of view "the switch was
@@ -413,7 +444,10 @@ async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNo
     return { ok: false, ...generationFailure(new Error('generation_disabled'), req) };
   }
 
-  const header = buildHeader(ev);
+  const header = ev ? buildHeader(ev) : buildClientHeader(client);
+  // A client link has no event title to strip a name from — the generic
+  // label is already name-free.
+  const serviceLabel = ev ? providerServiceLabel(ev) : CLIENT_SERVICE_LABEL;
 
   let raw;
   try {
@@ -423,7 +457,7 @@ async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNo
       instruction: instruction || undefined,
       // Minimum context: date + name-stripped service label only. No names,
       // no address, no ids — the transcript is the only clinical carrier.
-      session: { dateLabel: header.sessionDateLabel, serviceLabel: providerServiceLabel(ev) },
+      session: { dateLabel: header.sessionDateLabel, serviceLabel },
       // Attribution. Without these the ai_interactions row is written with a
       // null actor, and no AI call can be traced to a person — which defeats
       // the governance layer and breaks the review linkage below.
@@ -436,7 +470,8 @@ async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNo
 
   const screened = screenNarrative(raw, header);
   const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
-  const noteBody = composeNoteBody(header, sections, buildBillingLine(ev));
+  // No event → no derivable duration or travel → no billing line. Ever.
+  const noteBody = composeNoteBody(header, sections, ev ? buildBillingLine(ev) : null);
   const identity = provider.providerIdentity();
 
   let draft;
@@ -452,13 +487,13 @@ async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNo
          (user_id, organisation_id, voice_note_id, linked_event_id, transcript, header,
           identify, session_details, plan, warnings, note_body,
           style_version, provider_id, model_id, generated_at,
-          ai_interaction_id, generation_source, review_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required') RETURNING *`,
-      [req.user.id, orgOf(req), voiceNoteId || null, ev.id, transcript, JSON.stringify(header),
+          ai_interaction_id, generation_source, review_status, splose_patient_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required',$16) RETURNING *`,
+      [req.user.id, orgOf(req), voiceNoteId || null, ev ? ev.id : null, transcript, JSON.stringify(header),
        sections.identify, sections.sessionDetails, JSON.stringify(sections.plan),
        JSON.stringify(sections.warnings), noteBody,
        CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
-       raw.metadata?.interactionId || null]);
+       raw.metadata?.interactionId || null, client ? client.id : null]);
     draft = rows[0];
     if (!draft) throw new Error('insert_returned_no_row');
   } catch (err) {
@@ -488,7 +523,8 @@ async function generateGovernedDraft(req, { ev, transcript, instruction, voiceNo
   }
 
   await audit(req, 'mobile.case_note_generated', draft.id, {
-    linkedEventId: ev.id,
+    linkedEventId: ev ? ev.id : null,
+    linkedClientId: client ? client.id : null,
     styleVersion: CURRENT_STYLE_VERSION,
     modelId: identity.modelId,
     aiInteractionId: draft.ai_interaction_id || null,
@@ -510,12 +546,50 @@ router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (re
     return res.status(400).json({ error: 'Unknown instruction' });
   }
 
-  const ev = await loadOwnEvent(req, b.linkedEventId);
-  if (!ev) {
+  // Exactly one link. Two would leave the header's provenance ambiguous;
+  // none would create an unattributable clinical note.
+  const hasEvent = b.linkedEventId !== undefined && b.linkedEventId !== null;
+  const hasClient = b.linkedClientId !== undefined && b.linkedClientId !== null;
+  if (hasEvent === hasClient) {
     return res.status(400).json({
-      error: 'linkedEventId does not reference an appointment you can access',
+      error: 'Link the note to exactly one appointment (linkedEventId) or one client (linkedClientId)',
       code: 'invalid_link',
     });
+  }
+
+  let ev = null;
+  let client = null;
+  if (hasEvent) {
+    ev = await loadOwnEvent(req, b.linkedEventId);
+    if (!ev) {
+      return res.status(400).json({
+        error: 'linkedEventId does not reference an appointment you can access',
+        code: 'invalid_link',
+      });
+    }
+  } else {
+    try {
+      client = await caseload.loadOwnClient(req, b.linkedClientId);
+    } catch (err) {
+      if (err instanceof caseload.CaseloadError) {
+        return res.status(err.status).json({ error: err.message, code: err.code });
+      }
+      // Splose unreachable is a transport fault, not a bad link: the phone
+      // keeps the transcript and may retry. Message only — never the id.
+      log.error('case-note client lookup failed', { error: err.message });
+      return res.status(502).json({
+        error: "We couldn't check that client with Splose just now. Your transcript is safe — please try again.",
+        code: 'client_lookup_failed',
+        status: 'failed',
+        requestId: requestIdOf(req),
+      });
+    }
+    if (!client) {
+      return res.status(400).json({
+        error: 'linkedClientId does not reference a client on your caseload',
+        code: 'invalid_link',
+      });
+    }
   }
   if (b.voiceNoteId !== undefined && b.voiceNoteId !== null) {
     if (!isUuid(b.voiceNoteId)) return res.status(400).json({ error: 'voiceNoteId must be a UUID' });
@@ -528,6 +602,7 @@ router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (re
 
   const result = await generateGovernedDraft(req, {
     ev,
+    client,
     transcript: b.transcript.trim(),
     instruction: b.instruction,
     voiceNoteId: b.voiceNoteId,
@@ -699,8 +774,10 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
   }
 
   // Re-fetch the event for header/billing; if it has since vanished, reuse
-  // the stored header snapshot rather than failing the regeneration.
-  const ev = await loadOwnEvent(req, row.linked_event_id);
+  // the stored header snapshot rather than failing the regeneration. A
+  // client-linked draft has no event: its snapshot (taken from Splose at
+  // generation) is reused as-is — no live Splose call on the regenerate path.
+  const ev = row.linked_event_id ? await loadOwnEvent(req, row.linked_event_id) : null;
   const header = ev ? buildHeader(ev) : (row.header || {});
   const billing = ev ? buildBillingLine(ev) : null;
 
@@ -710,7 +787,10 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
       transcript: row.transcript, // always the original dictation
       styleVersion: CURRENT_STYLE_VERSION,
       instruction: instruction || undefined,
-      session: { dateLabel: header.sessionDateLabel, serviceLabel: ev ? providerServiceLabel(ev) : undefined },
+      session: {
+        dateLabel: header.sessionDateLabel,
+        serviceLabel: ev ? providerServiceLabel(ev) : (row.splose_patient_id ? CLIENT_SERVICE_LABEL : undefined),
+      },
       userId: req.user.id,
       organisationId: orgOf(req),
     });

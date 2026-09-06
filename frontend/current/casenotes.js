@@ -134,7 +134,7 @@
   var API_BASE = '/api/mobile/case-note-drafts';
   var STATUS_LINE = 'Draft — saved in Opal only. Nothing is sent to Splose or Outlook.';
   var EMPTY_STATE = 'No case-note drafts yet. Notes recorded in the Opa mobile app appear here for review.';
-  var METADATA_NOTE = 'These details come from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.';
+  var METADATA_NOTE = 'These details come from the linked client record in Splose, or from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.';
   var GENERATION_OFF = 'Note generation is not enabled yet — you can still edit and save.';
   var NOT_EDITABLE = 'This note is no longer editable';
 
@@ -511,9 +511,9 @@
       return '<div class="cn-meta-row"><span class="cn-meta-label">' + esc(r.label) + '</span>' +
         '<span class="cn-meta-value">' + esc(r.value) + '</span></div>';
     }).join('');
-    if (!rows) rows = '<div class="cn-meta-row"><span class="cn-meta-value cn-quiet">No appointment details were stored with this draft.</span></div>';
+    if (!rows) rows = '<div class="cn-meta-row"><span class="cn-meta-value cn-quiet">No client or appointment details were stored with this draft.</span></div>';
     return '<section class="cn-meta" aria-labelledby="cn-meta-h">' +
-      '<h3 id="cn-meta-h" class="cn-meta-head">' + icn('calendar', 13) + ' Appointment details' +
+      '<h3 id="cn-meta-h" class="cn-meta-head">' + icn('calendar', 13) + ' Client and session details' +
         '<span class="cn-readonly-tag">' + icn('lock', 11) + ' read-only</span></h3>' +
       rows +
       '<p class="cn-meta-note">' + esc(METADATA_NOTE) + '</p>' +

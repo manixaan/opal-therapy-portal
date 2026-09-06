@@ -304,6 +304,32 @@ async function loadOwnVoiceNote(req, id) {
 
 // ═══ GET /api/mobile/today — one-round-trip day aggregate ════════════════════
 
+// ═══ Clients (Splose caseload) ═══════════════════════════════════════════════
+//
+// The picker behind "Link a client" on the case-note capture screen. Same
+// scoping as GET /api/splose/my-patients, through the shared splose-caseload
+// module: read_only refused, therapists see their own open cases only,
+// unmapped therapists fail closed. Compact shape — id, name, suburb — no
+// NDIS number, phone, email or full address leaves for the phone.
+router.get('/api/mobile/clients', safe(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const caseload = require('./splose-caseload');
+  try {
+    const { clients, scope } = await caseload.listOwnClients(req);
+    res.json({
+      clients: clients.map((c) => ({ id: c.id, fullName: c.fullName, suburb: c.suburb })),
+      count: clients.length,
+      scope,
+    });
+  } catch (err) {
+    if (err instanceof caseload.CaseloadError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    log.error('mobile clients lookup failed', { error: err.message });
+    res.status(502).json({ error: "Couldn't load your clients from Splose just now.", code: 'client_lookup_failed' });
+  }
+}));
+
 router.get('/api/mobile/today', safe(async (req, res) => {
   const date = parseDateParam(req.query.date);
   if (!date) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });

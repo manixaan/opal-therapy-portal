@@ -29,7 +29,11 @@ jest.mock('../email', () => ({
 }));
 
 jest.mock('../outlook-oauth', () => ({}));
-jest.mock('../splose-api',    () => ({}));
+jest.mock('../splose-api',    () => ({
+  getPatient:    jest.fn(),
+  getPatients:   jest.fn(),
+  fetchAllCases: jest.fn(),
+}));
 
 const request = require('supertest');
 const bcrypt  = require('bcryptjs');
@@ -37,6 +41,7 @@ const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('../database');
+const sploseApi = require('../splose-api');
 
 function buildMobileApp() {
   const app = express();
@@ -229,6 +234,7 @@ describe('authentication boundaries', () => {
     ['GET', '/api/mobile/calendar'],
     ['GET', '/api/mobile/travel'],
     ['GET', `/api/mobile/appointments/${EVENT_A.id}`],
+    ['GET', '/api/mobile/clients'],
     ['GET', '/api/mobile/voice-notes'],
     ['POST', '/api/mobile/voice-notes'],
     ['PATCH', `/api/mobile/voice-notes/${EVENT_A.id}`],
@@ -600,3 +606,66 @@ describe('voice notes', () => {
 // workflow). Its coverage lives in tests/case-note-routes.test.js, and
 // tests/ai-single-gateway-guards.test.js pins that no AI generation can
 // return to this file.
+
+// ═══ /api/mobile/clients — the "Link a client" picker ═══════════════════════
+
+describe('GET /api/mobile/clients', () => {
+  const PATIENTS = [
+    { id: 'pt-1', firstname: 'Liam', lastname: 'Carter', fullName: 'Liam Carter', suburb: 'Willetton',
+      ndisNumber: '430000001', mobilePhone: '0400000000', email: 'liam@example.test',
+      formattedAddress: '12 Smith Street, Willetton WA 6155' },
+    { id: 'pt-2', firstname: 'Ava', lastname: 'Nguyen', fullName: 'Ava Nguyen', suburb: 'Perth',
+      ndisNumber: '430000002', mobilePhone: '0400000001', email: 'ava@example.test',
+      formattedAddress: '1 Test Terrace, Perth WA 6000' },
+  ];
+  const CASES = [
+    { id: 'c1', patientId: 'pt-1', practitionerId: 'prac-A', isOpen: true },
+    { id: 'c2', patientId: 'pt-2', practitionerId: 'prac-B', isOpen: true },
+  ];
+  const MAPPED_A = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ma01', email: 'mapped.a@opaltherapy.com.au', tp_splose_practitioner_id: 'prac-A' };
+  const READ_ONLY = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ro01', email: 'ro@opaltherapy.com.au', role: 'read_only', tp_splose_practitioner_id: 'prac-A' };
+  const OWNER = { ...USER_A, id: 'aaaaaaaa-1111-4111-8111-11111111ow01', email: 'owner@opaltherapy.com.au', role: 'owner' };
+
+  beforeEach(() => {
+    Object.assign(USERS, { [MAPPED_A.id]: MAPPED_A, [READ_ONLY.id]: READ_ONLY, [OWNER.id]: OWNER });
+    sploseApi.getPatients.mockResolvedValue(PATIENTS);
+    sploseApi.fetchAllCases.mockResolvedValue(CASES);
+  });
+
+  test('therapist gets ONLY their open-case clients, in a compact identity-minimal shape', async () => {
+    const res = await (await loginAs(MAPPED_A)).get('/api/mobile/clients');
+    expect(res.status).toBe(200);
+    expect(res.body.scope).toBe('caseload');
+    expect(res.body.clients).toEqual([{ id: 'pt-1', fullName: 'Liam Carter', suburb: 'Willetton' }]);
+    const raw = JSON.stringify(res.body);
+    for (const leak of ['ndisNumber', '430000001', 'mobilePhone', 'email', 'Smith Street', 'pt-2', 'Ava']) {
+      expect(raw).not.toContain(leak);
+    }
+  });
+
+  test('owner gets the practice directory, sorted by name', async () => {
+    const res = await (await loginAs(OWNER)).get('/api/mobile/clients');
+    expect(res.status).toBe(200);
+    expect(res.body.scope).toBe('practice');
+    expect(res.body.clients.map((c) => c.fullName)).toEqual(['Ava Nguyen', 'Liam Carter']);
+    expect(sploseApi.fetchAllCases).not.toHaveBeenCalled();
+  });
+
+  test('read_only is refused; an unmapped therapist fails closed — Splose is never called', async () => {
+    const ro = await (await loginAs(READ_ONLY)).get('/api/mobile/clients');
+    expect(ro.status).toBe(403);
+    expect(ro.body.code).toBe('splose_read_only_denied');
+    const un = await (await loginAs(USER_A)).get('/api/mobile/clients'); // USER_A has no mapping
+    expect(un.status).toBe(403);
+    expect(un.body.code).toBe('practitioner_mapping_required');
+    expect(sploseApi.getPatients).not.toHaveBeenCalled();
+  });
+
+  test('Splose unreachable is a 502 with no detail leaked', async () => {
+    sploseApi.getPatients.mockRejectedValue(new Error('ECONNREFUSED splose.internal:443'));
+    const res = await (await loginAs(MAPPED_A)).get('/api/mobile/clients');
+    expect(res.status).toBe(502);
+    expect(res.body.code).toBe('client_lookup_failed');
+    expect(JSON.stringify(res.body)).not.toContain('splose.internal');
+  });
+});
