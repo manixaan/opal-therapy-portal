@@ -332,6 +332,19 @@ describe('GET /api/mobile/today', () => {
     expect(res.body.warnings ?? []).toEqual([]); // the route omits the key when there is nothing to warn about
     // No profile → the profile-scoped query is never issued.
     expect(db.getEventsForTherapists).not.toHaveBeenCalled();
+
+    // A quiet day is not an unlinked account: with appointments on other
+    // days, an empty window must NOT raise the "not linked" notice.
+    db.pool.query.mockImplementation(async (sql, params) => {
+      const q = String(sql);
+      if (/FROM events\s+WHERE user_id = \$1/.test(q) && !/LIMIT 1/.test(q)) return { rows: [] }; // nothing in this window
+      if (/SELECT 1 FROM events WHERE user_id = \$1/.test(q)) return { rows: [{ '?column?': 1 }] }; // but a diary exists
+      return base(sql, params);
+    });
+    const quiet = await agent.get('/api/mobile/today?date=2026-09-06');
+    expect(quiet.status).toBe(200);
+    expect(quiet.body.appointments).toEqual([]);
+    expect(quiet.body.warnings ?? []).toEqual([]);
   });
 
   test('account without a therapist profile gets empty diary + warning, not an error', async () => {

@@ -173,8 +173,17 @@ async function loadOwnAppointments(req, date, days = 1) {
     .filter((e) => !e.is_deleted && !seen.has(e.id) && seen.add(e.id))
     .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   // The "not linked" notice is for an account that has NO diary of either
-  // kind — not for an owner whose appointments simply live on their user.
-  const warnings = !profileId && kept.length === 0 ? ['no_therapist_profile'] : [];
+  // kind — not for an owner whose appointments live on their user, and not
+  // for a quiet day (a Sunday with nothing on is not "unlinked"). So with no
+  // profile and an empty window, ask whether this user owns ANY appointment
+  // before warning.
+  let warnings = [];
+  if (!profileId && kept.length === 0) {
+    const any = await pool.query(
+      `SELECT 1 FROM events WHERE user_id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE) LIMIT 1`,
+      [req.user.id]);
+    if (!any.rows.length) warnings = ['no_therapist_profile'];
+  }
   return { appointments: kept.map(formatMobileAppointment), rawEvents: kept, warnings };
 }
 
