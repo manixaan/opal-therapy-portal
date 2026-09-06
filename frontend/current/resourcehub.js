@@ -5412,8 +5412,7 @@
           'onchange="RH2.aslToggleSel(\'' + esc(w.id) + '\')">'
         : '') +
       '<span class="rh2-row-title">' + esc(w.title) + '</span>' +
-        (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>'
-          : (w.has_unpublished_changes ? '<span class="rh2-chip rh2-chip-warn">Draft changes</span>' : '<span class="rh2-chip rh2-chip-ok">Up to date</span>')) +
+        (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>' : '') +
       '</div>' +
       '<div class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
         ' · ' + (w.module_count || 0) + ' modules' +
