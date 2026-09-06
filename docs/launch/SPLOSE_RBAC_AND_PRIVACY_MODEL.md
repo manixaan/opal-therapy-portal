@@ -27,6 +27,7 @@ route bypassed the read-only flag entirely. This is the enforced model now.
 | GET `/api/splose/busy-times` | same practitioner scoping | `scopeSplosePractitioner('query')` |
 | GET `/api/splose/availabilities/:practitionerId` | owner/admin any · therapist own id only | `scopeSplosePractitioner('params')` |
 | GET `/api/splose/patients`, `/patients/:id` | **owner/admin only** (whole-practice PII: names, addresses, NDIS numbers, phones) | `requireSploseAdmin` |
+| GET `/api/splose/my-patients` | owner/admin: the practice directory · therapist: **only clients whose open Splose case names their linked practitioner** (`scope: 'caseload'`; unmapped → 403 `practitioner_mapping_required`; other id → 403). Feeds the Smart Booking picker (added 6 Sep 2026). | `denySploseToReadOnly + scopeSplosePractitioner('query')` + case filter |
 | GET `/api/splose/cases`, `/contacts` | **owner/admin only** | `requireSploseAdmin` |
 | GET `/api/splose/invoices`, `/payments`, `/support-activities`, `/support-items` | **owner/admin only** (financial) | `requireSploseAdmin` |
 | GET `/api/splose/dormant-cases` | **owner/admin only** (whole-practice PII + activity) | `requireSploseAdmin` |
@@ -49,11 +50,13 @@ launch, "a therapist's data" is defined as **appointments (and busy times /
 availabilities) belonging to their linked Splose practitioner id** — which
 includes the patient names/addresses embedded in those appointments via the
 enriched payload. The whole-practice patient directory is owner/admin-only;
-consequently the Smart Booking patient picker now shows an honest
-"not available for your role" state for therapists (it booked as Ann's
-practitioner id anyway — a separate Stage 2 fix). If therapists need richer
-client access later, build explicit per-client assignment, not a proxy
-reopen.
+consequently the Smart Booking patient picker showed an honest
+"not available for your role" state for therapists until 6 Sep 2026. The
+explicit per-client assignment now comes from Splose itself: a therapist's
+picker (`GET /api/splose/my-patients`) lists only clients whose **open case is
+assigned to their practitioner**. The directory itself stays owner/admin-only;
+a client with no case under the therapist is invisible to them, which is also
+what the Splose publisher needs to book against.
 
 ## Data minimisation changes
 

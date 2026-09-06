@@ -206,6 +206,55 @@ describe('therapist boundaries stay closed after hardening', () => {
     }
   });
 
+  test('my-patients: a therapist sees only clients whose open case is theirs; the directory stays closed', async () => {
+    const splose = require('../../splose-api');
+    splose.getPatients.mockResolvedValueOnce([
+      { id: 1, firstname: 'Mine', lastname: 'One', suburb: 'Willetton', _rawAddressFields: { suburb: 'Willetton' } },
+      { id: 2, firstname: 'Theirs', lastname: 'Two', suburb: 'Baldivis', _rawAddressFields: {} },
+      { id: 3, firstname: 'Closed', lastname: 'Three', suburb: 'Perth', _rawAddressFields: {} },
+    ]);
+    splose.fetchAllCases.mockResolvedValueOnce([
+      { id: 10, patientId: 1, practitionerId: 88167, isOpen: true },
+      { id: 11, patientId: 2, practitionerId: 19521, isOpen: true },
+      { id: 12, patientId: 3, practitionerId: 88167, isOpen: false },
+      { id: 13, patientId: 2, practitionerId: 88167, isOpen: true, archived: true },
+    ]);
+    const app = buildApp();
+    const { agent, user } = await agentFor(app, 'therapist');
+    await linkPractitioner(user.id, '88167');
+    // Re-login so the session picks up the new mapping.
+    await agent.post('/api/auth/login').send({ email: user.email, password: PASSWORD });
+    const r = await agent.get('/api/splose/my-patients');
+    expect(r.status).toBe(200);
+    expect(r.body.scope).toBe('caseload');
+    expect(r.body.data.map(p => p.id)).toEqual([1]);
+    expect(r.body.data[0]._rawAddressFields).toBeUndefined();
+    // A supplied practitioner id cannot widen the scope.
+    expect((await agent.get('/api/splose/my-patients?practitionerId=19521')).status).toBe(403);
+    // The whole-practice directory is still closed to the therapist.
+    expect((await agent.get('/api/splose/patients')).status).toBe(403);
+  });
+
+  test('my-patients fails closed for an unlinked therapist and for read-only; owner/admin get the practice list', async () => {
+    const app = buildApp();
+    const { agent: unlinked } = await agentFor(app, 'therapist');
+    const r = await unlinked.get('/api/splose/my-patients');
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('practitioner_mapping_required');
+    const { agent: ro } = await agentFor(app, 'read_only');
+    expect((await ro.get('/api/splose/my-patients')).status).toBe(403);
+    const splose = require('../../splose-api');
+    splose.getPatients.mockResolvedValue([{ id: 1, firstname: 'A', lastname: 'B', _rawAddressFields: {} }]);
+    for (const role of ['owner', 'admin']) {
+      const { agent } = await agentFor(app, role);
+      const ok = await agent.get('/api/splose/my-patients');
+      expect(ok.status).toBe(200);
+      expect(ok.body.scope).toBe('practice');
+      expect(ok.body.data).toHaveLength(1);
+    }
+    splose.getPatients.mockResolvedValue([]);
+  });
+
   test('owner retains every area admin lost', async () => {
     const app = buildApp();
     const { agent } = await agentFor(app, 'owner');

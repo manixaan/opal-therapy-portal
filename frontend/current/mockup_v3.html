@@ -9369,19 +9369,31 @@ async function loadSplosePatients() {
   list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">Loading patients from Splose…</div>';
 
   try {
-    const resp = await fetch('/api/splose/patients', { credentials: 'include' });
+    // Owner/admin: the practice directory. Therapist: only the clients whose
+    // open Splose case is assigned to their practitioner (server-scoped).
+    const resp = await fetch('/api/splose/my-patients', { credentials: 'include' });
     if (resp.status === 403) {
-      // Backend privacy boundary: the patient directory is owner/admin-only.
-      // Not an error and not retryable — show an honest access state.
+      // Fail-closed states: not linked to a Splose practitioner yet, or a
+      // read-only account. Not an error and not retryable.
       PATIENTS = [];
+      const why = await resp.json().catch(() => ({}));
+      const unmapped = why.code === 'practitioner_mapping_required';
       list.innerHTML = `<div class="empty-state" style="padding:20px;text-align:center;">
-        <div style="color:var(--muted);font-size:12.5px;">The patient directory is not available for your role.</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Ask the practice owner if you need a booking made.</div>
+        <div style="color:var(--muted);font-size:12.5px;">${unmapped ? 'Your account is not linked to a Splose practitioner yet.' : 'The client list is not available for your role.'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">${unmapped ? 'Ask the practice owner to link it under Settings › Users &amp; Roles.' : 'Ask the practice owner if you need a booking made.'}</div>
       </div>`;
       return;
     }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const { data } = await resp.json();
+    const { data, scope } = await resp.json();
+    if (scope === 'caseload' && !(data || []).length) {
+      PATIENTS = [];
+      list.innerHTML = `<div class="empty-state" style="padding:20px;text-align:center;">
+        <div style="color:var(--muted);font-size:12.5px;">No clients are assigned to you in Splose yet.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">A client appears here once they have an open case with you as the practitioner. Open the case in Splose, then reload.</div>
+      </div>`;
+      return;
+    }
 
     PATIENTS = (data || []).map(p => {
       // Build full street address from Splose patient fields

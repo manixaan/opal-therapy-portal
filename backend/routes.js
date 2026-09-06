@@ -1995,6 +1995,32 @@ router.get('/api/splose/patients', requireAuth, requireSploseAdmin, async (req, 
 });
 
 /**
+ * GET /api/splose/my-patients
+ * The clients a signed-in user may book: owner/admin get the practice
+ * directory; a therapist gets ONLY the clients whose open Splose case is
+ * assigned to their linked practitioner (Splose's own per-client assignment —
+ * the explicit model docs/launch/SPLOSE_RBAC_AND_PRIVACY_MODEL.md asked for
+ * instead of reopening the directory). Unmapped therapists fail closed.
+ */
+router.get('/api/splose/my-patients', requireAuth, denySploseToReadOnly, scopeSplosePractitioner('query'), async (req, res) => {
+  try {
+    const own = (req.user.role === 'owner' || req.user.role === 'admin') ? null : String(req.query.practitionerId);
+    const patients = await sploseApi.getPatients();
+    let mine = patients;
+    if (own) {
+      const cases = (await sploseApi.fetchAllCases()).filter(c => !c.archived && !c.deletedAt && c.isOpen !== false);
+      const allowed = new Set(cases.filter(c => String(c.practitionerId) === own).map(c => String(c.patientId)));
+      mine = patients.filter(p => allowed.has(String(p.id)));
+    }
+    const data = mine.map(({ _rawAddressFields, ...p }) => p);
+    res.json({ data, count: data.length, scope: own ? 'caseload' : 'practice' });
+  } catch (err) {
+    console.error('Splose my-patients error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch your clients' });
+  }
+});
+
+/**
  * POST /api/splose/patients
  */
 router.post('/api/splose/patients', requireAuth, requireSploseAdmin, async (req, res) => {
