@@ -251,6 +251,19 @@ async function syncProgress(req, assignment) {
   if (docDone && !assignment.documentation_completed_at) {
     await odb.pool.query('UPDATE onboarding_assignments SET documentation_completed_at = NOW(), updated_at = NOW() WHERE id = $1', [assignment.id]);
   }
+  // Stage 2 complete: the portal sets the person up by itself (account,
+  // activation, Microsoft 365 links). Runs again on later syncs until the
+  // record is activated, so a blocker that clears is picked up.
+  if (docDone && !['activated', 'completed', 'cancelled', 'archived'].includes(assignment.status)) {
+    try {
+      await require('./onboarding-autosetup').afterDocumentationComplete({
+        req, assignment: await odb.getAssignment(assignment.organisation_id, assignment.id),
+        actor: req.user ? { id: req.user.id, name: req.user.name, email: req.user.email } : null,
+      });
+    } catch (err) {
+      log.error('automatic set-up failed', { error: err, assignmentId: assignment.id });
+    }
+  }
   const ind = inductionRules.inductionComplete(after.filter((i) => i.phase === 'induction'));
   if (assignment.induction_sent_at && ind.complete && !assignment.induction_completed_at) {
     await odb.pool.query('UPDATE onboarding_assignments SET induction_completed_at = NOW(), updated_at = NOW() WHERE id = $1', [assignment.id]);

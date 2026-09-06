@@ -255,3 +255,23 @@ describe('decommission', () => {
     await expect(graph.decommission('obj-1')).resolves.toEqual({ disabled: true, licencesReleased: 0 });
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE REPORTING LINE
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('setManager', () => {
+  test('puts the manager reference on the user, nothing else', async () => {
+    const calls = graphSequence([{ data: {} }]);
+    await expect(graph.setManager('obj-1', 'mgr-9')).resolves.toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('put');
+    expect(calls[0].url).toContain('/users/obj-1/manager/$ref');
+    expect(calls[0].data).toEqual({ '@odata.id': 'https://graph.microsoft.com/v1.0/users/mgr-9' });
+  });
+
+  test('a missing grant is reported as grant_missing, not swallowed', async () => {
+    graphSequence([{ status: 403 }]);
+    await expect(graph.setManager('obj-1', 'mgr-9')).rejects.toMatchObject({ code: 'grant_missing' });
+  });
+});

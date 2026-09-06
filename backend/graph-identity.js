@@ -335,6 +335,14 @@ async function createUser({ displayName, givenName, surname, upn, nickname, pass
   return { id: data.id, upn: data.userPrincipalName || upn };
 }
 
+/** The reporting line in Microsoft 365: Outlook, Teams and the org chart read it. */
+async function setManager(objectId, managerObjectId) {
+  await graph('put', `/users/${encodeURIComponent(objectId)}/manager/$ref`, {
+    '@odata.id': `${GRAPH}/users/${encodeURIComponent(managerObjectId)}`,
+  });
+  return true;
+}
+
 /** Disable sign-in and end every live session. Never deletes. */
 async function disableUser(objectId) {
   await graph('patch', `/users/${encodeURIComponent(objectId)}`, { accountEnabled: false });
@@ -419,6 +427,7 @@ module.exports = {
   licenceAvailability,
   findUserByPrincipalName,
   createUser,
+  setManager,
   assignLicence,
   removeAllLicences,
   disableUser,

@@ -304,12 +304,12 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect(xml).toContain('$92,000 per annum');
     expect(xml).not.toMatch(/\[PORTAL/);
     const dl = await agent.get(`${base}/offer/letter/download`);
-    expect(dl.headers['content-disposition']).toMatch(/^attachment; filename="Letter%20of%20Offer%20-%20Jane%20Smith/);
+    expect(dl.headers['content-disposition']).toMatch(/^attachment; filename="Letter of Offer - Jane Smith/);
     // The same letter as a PDF — read from the .docx, named like it.
     const pdfRes = await agent.get(`${base}/offer/letter/download.pdf`).buffer().parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
     expect(pdfRes.status).toBe(200);
     expect(pdfRes.headers['content-type']).toBe('application/pdf');
-    expect(pdfRes.headers['content-disposition']).toMatch(/^attachment; filename="Letter%20of%20Offer%20-%20Jane%20Smith.*\.pdf"$/);
+    expect(pdfRes.headers['content-disposition']).toMatch(/^attachment; filename="Letter of Offer - Jane Smith/);
     expect(pdfRes.body.slice(0, 5).toString('latin1')).toBe('%PDF-');
     expect(detailLetter(await agent.get(base)).pdfUrl).toBe(`${base}/offer/letter/download.pdf`);
 
@@ -572,6 +572,90 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     const board = await agent.get('/api/onboarding/journey/board');
     expect(board.body.summary.complete).toBe(1);
     expect(board.body.summary.live).toBe(0);
+  });
+
+  /**
+   * Every document born from a requirement has come back and been verified —
+   * both phases, since the policy acknowledgements in Phase 3 block activation
+   * too. The requirements themselves are left for the sync to complete.
+   */
+  async function completeDocumentation(agent, recordId) {
+    await db.pool.query(
+      `UPDATE onboarding_pack_items SET required = TRUE, employee_returns = TRUE, requires_verification = TRUE, returned_at = NOW(),
+              verification_status = 'verified', verified_at = NOW()
+        WHERE assignment_id = $1 AND status = 'included' AND requirement_code IS NOT NULL`, [recordId]);
+    // Requirements the pack does not carry are settled elsewhere; the ones it does carry must be completed BY the sync.
+    await db.pool.query(
+      `UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW()
+        WHERE assignment_id = $1 AND template_code NOT IN (SELECT requirement_code FROM onboarding_pack_items WHERE assignment_id = $1 AND requirement_code IS NOT NULL)`, [recordId]);
+  }
+  const fakeReq = (user) => ({ user, ip: '127.0.0.1', headers: {}, get: () => '' });
+
+  test('Stage 2 completing sets the person up by itself: requirements synced, portal access activated, tasks ticked', async () => {
+    const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { record } = await start(agent);
+    const base = `/api/onboarding/journey/records/${record.id}`;
+    await agent.post(`${base}/offer/skip`);
+    expect((await agent.post(`${base}/release`)).status).toBe(201);
+    await completeDocumentation(agent, record.id);
+
+    const sync = require('../../onboarding-returns-routes')._internals.syncProgress;
+    const before = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
+    const out = await sync(fakeReq(owner), before.rows[0]);
+    expect(out.documentationComplete).toBe(true);
+
+    const after = await agent.get(base);
+    expect(after.body.record.status).toBe('activated');
+    const byCode = Object.fromEntries(after.body.tasks.map((t) => [t.code, t]));
+    expect(byCode.portal_account.status).toBe('done');
+    expect(byCode.portal_access).toMatchObject({ status: 'done', note: expect.stringMatching(/by the portal/) });
+    expect(byCode.work_email.status).toBe('pending'); // no Microsoft 365 account yet — an Owner's deliberate step
+    // The requirements the pack verified were completed by the sync, not by hand.
+    const { rows } = await db.pool.query(
+      `SELECT r.status FROM onboarding_requirements r JOIN onboarding_pack_items i ON i.requirement_code = r.template_code AND i.assignment_id = r.assignment_id
+        WHERE r.assignment_id = $1 AND i.verification_status = 'verified'`, [record.id]);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.status === 'complete')).toBe(true);
+    // The person is staff now.
+    const u = await db.pool.query('SELECT role, account_status FROM users WHERE id = $1', [after.body.record.userId]);
+    expect(u.rows[0]).toMatchObject({ role: 'therapist', account_status: 'active' });
+    // Running the sync again changes nothing and throws nothing.
+    const again = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
+    await sync(fakeReq(owner), again.rows[0]);
+    expect((await agent.get(base)).body.record.status).toBe('activated');
+  });
+
+  test('with a blocking requirement still open, the portal waits and says what on the task — then finishes when it clears', async () => {
+    const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { record } = await start(agent);
+    const base = `/api/onboarding/journey/records/${record.id}`;
+    await agent.post(`${base}/offer/skip`);
+    await agent.post(`${base}/release`);
+    await completeDocumentation(agent, record.id);
+    // One blocking requirement the pack cannot vouch for stays open.
+    const { rows: blk } = await db.pool.query(
+      `UPDATE onboarding_requirements SET status = 'not_started', completed_at = NULL
+        WHERE id = (SELECT id FROM onboarding_requirements WHERE assignment_id = $1 AND blocks_activation = TRUE
+                      AND template_code NOT IN (SELECT requirement_code FROM onboarding_pack_items WHERE assignment_id = $1 AND requirement_code IS NOT NULL) LIMIT 1)
+        RETURNING title`, [record.id]);
+    expect(blk).toHaveLength(1);
+
+    const sync = require('../../onboarding-returns-routes')._internals.syncProgress;
+    const a1 = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
+    await sync(fakeReq(owner), a1.rows[0]);
+    let rec = await agent.get(base);
+    expect(rec.body.record.status).not.toBe('activated');
+    const waiting = rec.body.tasks.find((t) => t.code === 'portal_access');
+    expect(waiting.status).toBe('pending');
+    expect(waiting.note).toContain('Waiting on');
+    expect(waiting.note).toContain(blk[0].title);
+
+    await db.pool.query(`UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW() WHERE assignment_id = $1 AND status = 'not_started'`, [record.id]);
+    const a2 = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
+    await sync(fakeReq(owner), a2.rows[0]);
+    rec = await agent.get(base);
+    expect(rec.body.record.status).toBe('activated');
+    expect(rec.body.tasks.find((t) => t.code === 'portal_access').status).toBe('done');
   });
 
   test('activation refuses while a blocking requirement is open, and says so on the task', async () => {

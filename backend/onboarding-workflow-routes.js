@@ -1861,6 +1861,15 @@ router.post('/api/onboarding/assignments/:id/m365',
     });
 
     const refreshed = await odb.getAssignment(orgOf(req), assignment.id);
+    // The set-up task is done, and the reporting line follows the account.
+    let managerLink = null;
+    try {
+      const autosetup = require('./onboarding-autosetup');
+      await autosetup._internals.finishTask(assignment.id, 'work_email', { actorId: req.user.id, note: `Microsoft 365 account ${result.upn}`, detail: { m365ObjectId: result.objectId, upn: result.upn } });
+      managerLink = await autosetup.linkManager(refreshed, { actorId: req.user.id });
+    } catch (err) {
+      log.warn('post-provision set-up skipped', { error: err, assignmentId: assignment.id });
+    }
     // The plaintext leaves the server exactly once, here.
     noStore(res);
     res.status(201).json({
@@ -1874,6 +1883,7 @@ router.post('/api/onboarding/assignments/:id/m365',
         : `The account was created but the licence could not be assigned: ${result.licenceError?.message || 'unknown error'} `
           + 'Use "Assign licence" to try again.',
       temporaryPassword: tempPassword,
+      managerLinked: !!(managerLink && managerLink.linked), managerName: managerLink && managerLink.managerName ? managerLink.managerName : null,
       signInUrl: 'https://www.office.com',
       notice: 'This is the only time this password is shown. They will be asked to choose their own the first time they sign in.',
     });
