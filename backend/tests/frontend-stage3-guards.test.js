@@ -1371,7 +1371,7 @@ describe('case notes review surface', () => {
 
   test('assets are linked next to the other extracted asset pairs', () => {
     expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=1" />');
-    expect(HTML).toContain('<script src="/casenotes.js?v=1" defer></script>');
+    expect(HTML).toContain('<script src="/casenotes.js?v=2" defer></script>');
   });
 
   test('nav tab + view mount exist and are wired the same way as other tabs', () => {
@@ -1438,7 +1438,7 @@ describe('case notes review surface', () => {
     expect(CN_JS).toContain("esc(draft.transcript || '')");
     expect(CN_JS).toContain('<pre class="cn-tx-text">');
     // ...and are labelled as appointment metadata, not AI authorship
-    expect(CN_JS).toContain('These details come from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.');
+    expect(CN_JS).toContain('These details come from the linked client record in Splose, or from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.');
     expect(CN_CSS).toContain('.cn-readonly-tag');
     expect(CN_CSS).toContain('.cn-editable-tag');
   });
