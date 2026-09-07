@@ -45,6 +45,7 @@ const letter = require('./onboarding-offer-letter');
 const offerDocx = require('./onboarding-offer-docx');
 const offerEmail = require('./onboarding-offer-email');
 const offerTemplate = require('./onboarding-offer-template');
+const documentCheck = require('./onboarding-document-check');
 const graphMail = require('./graph-mail');
 const { auditOnboarding } = require('./onboarding-audit');
 const { requireAuth, requirePermission, hasPermission } = require('./permissions');
@@ -116,6 +117,7 @@ function documentRow(d) {
     id: d.id, kind: d.kind, fileName: d.file_name, mime: d.file_mime, size: d.file_size_bytes,
     sha256: d.file_sha256, uploadedAt: d.uploaded_at, uploadedByName: d.uploaded_by_name || null,
     previewKind: d.file_mime === 'application/pdf' ? 'pdf' : (d.file_mime === offerDocx.DOCX_MIME ? 'docx' : null),
+    check: d.check_result || null, checkSummary: documentCheck.summarise(d.check_result),
   };
 }
 
@@ -255,6 +257,7 @@ async function recordDetail(req, assignment) {
     id: d.id, title: d.title, fileName: d.file_name, mime: d.file_mime, size: d.file_size_bytes, status: d.status, uploadedAt: d.uploaded_at,
     textStatus: d.text_status, packItemId: d.pack_item_id || null, matchStatus: d.match_status || 'pending', documentKind: d.document_kind || null,
     signatureStatus: d.signature_status || 'unknown',
+    check: d.check_result || null, checkSummary: documentCheck.summarise(d.check_result),
     previewKind: d.file_mime === 'application/pdf' ? 'pdf' : String(d.file_mime || '').includes('wordprocessingml') ? 'docx' : null,
     previewUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/preview`,
     downloadUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/download`,
@@ -971,22 +974,16 @@ router.post('/api/onboarding/journey/records/:id/offer/signed', requirePermissio
     fileName: up.fileName, fileMime: up.fileMime, buffer: up.buffer, uploadedBy: req.user.id,
   });
   await jdb.markSignedReceived(offer.id);
+  // The portal reads the letter before it counts: the acceptance block's
+  // fields are listed and the blank ones flagged. Nothing advances here —
+  // the Owner submits it (verify) once the reading is in front of them.
+  const check = await documentCheck.checkDocument({ buffer: up.buffer, mime: up.fileMime, expect: documentCheck.LETTER_OF_OFFER_EXPECT, keepValues: true });
+  await jdb.setOfferDocumentCheck(doc.id, check);
   await auditOnboarding(req, 'offer_signed_received', {
     targetType: 'onboarding_offer', targetId: offer.id,
-    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes },
+    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes, check: { status: check.status, method: check.method, fields: check.fields.length, issues: check.issues.map((i) => i.code) } },
   });
-  // The stored signed letter IS the acceptance: Phase 1 settles and the
-  // document pack is prepared without a separate verification click.
-  const verified = await jdb.verifyOffer(offer.id, req.user.id);
-  await odb.pool.query(
-    `UPDATE onboarding_assignments SET offer_accepted_at = COALESCE(offer_accepted_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
-    [assignment.id]
-  );
-  await auditOnboarding(req, 'offer_verified', {
-    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified ? verified.version : offer.version, trigger: 'signed_upload' },
-  });
-  const prepared = await preparePackFor(req, assignment);
-  res.status(201).json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), prepared });
+  res.status(201).json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), check });
 }));
 
 async function serveSigned(req, res, disposition) {
@@ -1015,7 +1012,13 @@ router.post('/api/onboarding/journey/records/:id/offer/verify', requirePermissio
   if (!assignment) return notFound(res);
   const offer = await jdb.getCurrentOffer(assignment.id);
   if (!offer || offer.status !== 'signed_received') {
-    return res.status(409).json({ error: 'Upload the signed letter before verifying it.', code: 'no_signed_letter' });
+    return res.status(409).json({ error: 'Upload the signed letter before submitting it.', code: 'no_signed_letter' });
+  }
+  // The reading flagged something: the Owner submits anyway, knowingly, or replaces the letter.
+  const signedDoc = await jdb.getLiveOfferDocument(offer.id, 'signed');
+  const check = signedDoc ? signedDoc.check_result : null;
+  if (check && check.status !== 'ok' && req.body?.acknowledge !== true) {
+    return res.status(409).json({ error: documentCheck.summarise(check), code: 'check_attention', check });
   }
   const verified = await jdb.verifyOffer(offer.id, req.user.id);
   await odb.pool.query(
@@ -1023,7 +1026,7 @@ router.post('/api/onboarding/journey/records/:id/offer/verify', requirePermissio
     [assignment.id]
   );
   await auditOnboarding(req, 'offer_verified', {
-    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified.version },
+    targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id, version: verified.version, checkStatus: check ? check.status : null, acknowledged: !!(check && check.status !== 'ok') },
   });
   // Phase 2 begins by itself: this person's document pack is derived from
   // the role, employment type and determinations, ready for the Owner to review.

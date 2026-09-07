@@ -92,12 +92,27 @@ async function pageTexts(pdfjs, data) {
   return texts;
 }
 
+/** Per-page text items with their position (points, origin bottom-left) — for reading a form's values beside its labels. */
+async function pageItems(pdfjs, data) {
+  const doc = await openDocument(pdfjs, data);
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i += 1) {
+    const page = await doc.getPage(i);
+    const t = await page.getTextContent();
+    pages.push(t.items.filter((it) => it.str && it.str.trim()).map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, h: it.height })));
+  }
+  await doc.destroy().catch(() => {});
+  return pages;
+}
+
 (async () => {
   const pdfjs = await import(pathToFileURL(path.join(PDFJS_ROOT, 'legacy/build/pdf.mjs')).href);
   const data = new Uint8Array(workerData.data);
   const result = workerData.op === 'text'
     ? await pageTexts(pdfjs, data)
-    : await inspect(pdfjs, data);
+    : workerData.op === 'items'
+      ? await pageItems(pdfjs, data)
+      : await inspect(pdfjs, data);
   parentPort.postMessage({ ok: true, result });
 })().catch((err) => {
   parentPort.postMessage({ ok: false, error: err ? err.message : 'pdf worker failed' });

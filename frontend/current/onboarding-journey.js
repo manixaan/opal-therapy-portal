@@ -857,7 +857,7 @@
       case 'prepare_email': return btn('Preview the letter', 'OnboardingJourney.previewLetter()', 'oj-btn-primary') + btn('Go to Email 1', 'OnboardingJourney.scrollTo(\'oj-email\')');
       case 'send_in_outlook': return (d.offer && d.offer.email && d.offer.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.offer.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.markSent()') : '');
-      case 'verify_offer': return btn('View the signed letter', 'OnboardingJourney.previewSigned()') + (c.assign ? btn('Verify', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '');
+      case 'verify_offer': return btn('View the signed letter', 'OnboardingJourney.previewSigned()') + (c.assign ? btn('Submit the signed letter', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '');
       case 'release': return c.assign ? btn('Release the documentation', 'OnboardingJourney.release()', 'oj-btn-primary') : '';
       case 'review_pack': return btn('Review the document pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-primary');
       case 'send_pack_in_outlook': return (d.pack && d.pack.email && d.pack.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.pack.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
@@ -1064,15 +1064,19 @@
     }
     body += '</li>';
 
-    // ── The signed letter: one upload, and Phase 1 is done ──
+    // ── The signed letter: upload, the portal reads it, the Owner submits ──
     var Sg = d.signed; var done = o.status === 'accepted';
     body += '<li class="oj-step ' + stepState(done, !done) + '"><div class="oj-step-head"><span class="oj-step-n">4</span><strong>Signed letter</strong></div>';
     if (Sg) {
       body += '<p class="oj-quiet">' + esc(Sg.fileName) + ' · received ' + esc(fmtDateTime(Sg.uploadedAt)) + '</p>'
-        + '<div class="oj-actions">' + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
+        + documentCheckBlock(Sg.check)
+        + '<div class="oj-actions">'
+        + (c.assign && !done ? btn('Submit — accept the offer and start Phase 2', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '')
+        + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
         + (c.assign && !done ? '<label class="oj-btn oj-file">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label>' : '') + '</div>';
     } else if (c.assign) {
-      body += '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
+      body += '<p class="oj-quiet">Upload the letter the candidate returned. The portal reads the acceptance block — name, signature, date — and flags anything left blank before you submit it.</p>'
+        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
     }
     body += '</li></ol>';
 
@@ -1084,6 +1088,27 @@
         }).join('') + '</ul></details>';
     }
     return stagePanel(1, 'Letter of Offer', st, body);
+  }
+
+  /**
+   * What the portal read in an uploaded document: each fillable field and
+   * whether it was filled, and the blanks it flags. Never a green tick for
+   * something it could not read.
+   */
+  function documentCheckBlock(check) {
+    if (!check) return '';
+    var cls = check.status === 'ok' ? 'is-ok' : check.status === 'attention' ? 'is-warn' : 'is-quiet';
+    var head = check.status === 'ok' ? 'Read and complete' : check.status === 'attention' ? 'Needs a look before you submit' : check.status === 'unreadable' ? 'Could not be read automatically' : 'Nothing fillable to check';
+    var out = '<div class="oj-doccheck ' + cls + '"><div class="oj-doccheck-head"><strong>' + esc(head) + '</strong>';
+    if (check.issues && check.issues.length) out += '<ul class="oj-doccheck-issues">' + check.issues.map(function (i) { return '<li>' + esc(i.message) + '</li>'; }).join('') + '</ul>';
+    out += '</div>';
+    if (check.fields && check.fields.length) {
+      out += '<ul class="oj-doccheck-fields">' + check.fields.map(function (f) {
+        return '<li class="' + (f.filled ? 'is-filled' : 'is-blank') + '"><span class="oj-doccheck-mark" aria-hidden="true">' + (f.filled ? '✓' : '—') + '</span><span>' + esc(f.label) + '</span>'
+          + (f.preview ? '<span class="oj-quiet">' + esc(f.preview) + '</span>' : !f.filled ? '<span class="oj-quiet">blank</span>' : '') + '</li>';
+      }).join('') + '</ul>';
+    }
+    return out + '</div>';
   }
 
   function offerLabel(o) {
@@ -1186,7 +1211,7 @@
     var expected = P.items.filter(function (i) { return i.status === 'included' && i.itemKind === 'document' && i.employeeReturns; });
     var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
     var unrecognised = active.filter(function (x) { return x.matchStatus === 'unrecognised'; });
-    var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one, works out which document it is, ticks it off and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
+    var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one — its fillable fields, then which document it is — flags anything left blank, ticks off what is complete and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
       + (!sent ? '<p class="oj-quiet">The pack has not been marked as sent yet. You can still upload anything the employee has already returned.</p>' : '')
       + '<div class="oj-actions">'
       + '<label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
@@ -1195,7 +1220,7 @@
     if (active.length) {
       out += '<ul class="oj-returns-list">' + active.map(function (x) {
         var item = P.items.filter(function (i) { return i.id === x.packItemId; })[0];
-        return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">' + (item ? '→ ' + esc(item.title) : x.matchStatus === 'unrecognised' ? '<span class="oj-warn">not recognised — name it under Requires Your Attention</span>' : 'reading…') + (x.signatureStatus === 'missing' ? ' · <span class="oj-warn">no signature</span>' : '') + '</span> '
+        return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">' + (item ? '→ ' + esc(item.title) : x.matchStatus === 'unrecognised' ? '<span class="oj-warn">not recognised — name it under Requires Your Attention</span>' : 'reading…') + (x.signatureStatus === 'missing' ? ' · <span class="oj-warn">no signature</span>' : '') + (x.check && x.check.status === 'attention' ? ' · <span class="oj-warn">' + esc(x.checkSummary || 'blank fields') + '</span>' : x.check && x.check.status === 'unreadable' ? ' · <span class="oj-quiet">' + esc(x.checkSummary) + '</span>' : x.check && x.check.status === 'ok' ? ' · ' + esc(x.checkSummary) : '') + '</span> '
           + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>') + '</li>';
       }).join('') + '</ul>';
     }
@@ -2067,8 +2092,13 @@
   }
   function unmarkSent() { return act('/offer/unmark-sent', {}, 'Back to not sent.'); }
   async function verifyOffer() {
-    if (!await portalConfirm('Verify the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.')) return;
-    return act('/offer/verify', {}, function (r) { return (r.release && r.release.message) || 'Verified.'; });
+    var Sg = S.record && S.record.signed; var check = Sg && Sg.check;
+    var flagged = check && check.status !== 'ok';
+    var q = flagged
+      ? 'The portal\'s reading of the signed letter flagged: ' + (check.issues || []).map(function (i) { return i.message; }).join('; ') + '. Submit it anyway? Phase 1 completes and the onboarding documentation is released to the employee.'
+      : 'Submit the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.';
+    if (!await portalConfirm(q, flagged ? { danger: true } : undefined)) return;
+    return act('/offer/verify', flagged ? { acknowledge: true } : {}, function (r) { return (r.release && r.release.message) || 'Submitted — the offer is accepted.'; });
   }
   async function declineOffer() {
     var reason = await portalPrompt('Record that the candidate declined. Reason (optional):');

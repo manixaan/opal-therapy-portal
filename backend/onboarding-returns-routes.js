@@ -27,6 +27,7 @@ const wdb = require('./onboarding-workflow-db');
 const pdb = require('./onboarding-pack-db');
 const rdb = require('./onboarding-returns-db');
 const extraction = require('./onboarding-extraction');
+const documentCheck = require('./onboarding-document-check');
 const reconcile = require('./onboarding-reconcile');
 const attention = require('./onboarding-attention');
 const sync = require('./onboarding-profile-sync');
@@ -198,6 +199,12 @@ async function processReturns(req, assignment) {
     // Attention → missing signature); the item simply stays unverified.
     if (signatureMissing) { if (item.verification_status !== 'pending') await rdb.setItemVerification(item.id, { status: 'pending', mode: null, reason: null }); continue; }
     if (unsettled) { await rdb.setItemVerification(item.id, { status: 'pending', mode: null, reason: null }); continue; }
+    // The portal's own reading found blank fields: the item is never verified silently.
+    const check = doc.check_result;
+    if (check && check.status === 'attention' && item.verification_mode !== 'owner') {
+      if (item.verification_status !== 'attention') await rdb.setItemVerification(item.id, { status: 'attention', mode: 'auto', reason: str(`Blank fields: ${check.issues.map((i) => i.message).join('; ')}`, 250) });
+      continue;
+    }
     if (!item.requires_verification || (!statutory && (readings.length > 0 || !keys.length))) {
       if (item.verification_status !== 'verified') { await rdb.setItemVerification(item.id, { status: 'verified', mode: 'auto', reason: null, note: 'Verified automatically: recognised, read reliably, nothing in conflict' }); out.autoVerified += 1; }
     } else if (!statutory && keys.length && !readings.length && item.verification_status === 'pending') {
@@ -242,7 +249,7 @@ async function syncProgress(req, assignment) {
     } else if (it.item_kind === 'document' && it.employee_returns && !it.requires_verification && it.returned_at && it.verification_status === 'pending') {
       // An acknowledgement that came back (signed) is complete on return.
       const doc = (await rdb.listReturns(assignment.id)).find((d) => d.id === it.returned_document_id);
-      if (doc && doc.signature_status !== 'missing') await rdb.setItemVerification(it.id, { status: 'verified', mode: 'auto', reason: null, note: 'Returned and acknowledged' });
+      if (doc && doc.signature_status !== 'missing' && !(doc.check_result && doc.check_result.status === 'attention')) await rdb.setItemVerification(it.id, { status: 'verified', mode: 'auto', reason: null, note: 'Returned and acknowledged' });
     }
   }
   const after = await pdb.listItems(assignment.id);
@@ -357,6 +364,8 @@ router.post('/api/onboarding/journey/records/:id/returns', requirePermission('on
       buffer: f.buffer, uploadedBy: req.user.id, textStatus: 'pending',
     });
     if (f.packItemId && isUuid(f.packItemId) && !duplicate) await rdb.assignDocumentToItem(row.id, f.packItemId);
+    // Read the fillable parts before anything is ticked off: blank fields are flagged, not assumed.
+    if (!duplicate) await rdb.setDocumentCheck(row.id, await documentCheck.checkDocument({ buffer: f.buffer, mime: f.fileMime }));
     stored.push({ id: row.id, fileName: row.file_name, duplicate, fromZip: f.fromZip });
     if (!duplicate) await auditOnboarding(req, 'returned_document_uploaded', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: row.id, sha256: row.file_sha256, bytes: row.file_size_bytes, fromZip: !!f.fromZip } });
   }

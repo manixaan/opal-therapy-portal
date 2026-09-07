@@ -138,6 +138,11 @@ function pdfPageTexts(buffer) {
   return runPdfWorker('text', buffer);
 }
 
+/** Per-page text items with positions ({ str, x, y, w, h }), for reading a form's values beside its labels. */
+function pdfPageItems(buffer) {
+  return runPdfWorker('items', buffer);
+}
+
 async function inspectDocx(buffer) {
   const out = { parts: 0, hasDocumentXml: false, textChars: 0, encrypted: false, corrupt: false, error: null };
   if (sniffMagic(buffer) === 'ole') {
@@ -284,6 +289,7 @@ async function pdfText(buffer) {
 module.exports = {
   MIME_BY_FORMAT,
   pdfPageTexts,
+  pdfPageItems,
   sha256,
   sniffMagic,
   scanForIdentifiers,

@@ -162,7 +162,7 @@ function projectOffer(assignment, offer, now) {
     case 'signed_received':
       out.summary = 'The signed letter is in — waiting for you to verify it.';
       out.items.push({ kind: 'review', label: 'Verify the signed letter of offer', at: offer.signed_received_at });
-      out.next = { actor: 'admin', action: 'verify_offer', label: 'Check the signed letter and verify it' };
+      out.next = { actor: 'admin', action: 'verify_offer', label: 'Check the signed letter and submit it' };
       break;
     case 'accepted':
       out.state = 'complete';

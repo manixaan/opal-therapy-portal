@@ -243,6 +243,11 @@ async function storeOfferDocument({ organisationId, offerId, assignmentId, kind,
   });
 }
 
+/** The portal's reading of an uploaded document — kept beside it. */
+async function setOfferDocumentCheck(docId, check, q = pool) {
+  await q.query(`UPDATE onboarding_offer_documents SET check_result = $2 WHERE id = $1`, [docId, check ? JSON.stringify(check) : null]);
+}
+
 async function getLiveOfferDocument(offerId, kind, q = pool) {
   if (!isUuid(offerId)) return null;
   const { rows } = await q.query(
@@ -447,6 +452,7 @@ async function deleteStartDraft(organisationId, id, q = pool) {
 }
 
 module.exports = {
+  setOfferDocumentCheck,
   listStartDrafts,
   getStartDraft,
   createStartDraft,

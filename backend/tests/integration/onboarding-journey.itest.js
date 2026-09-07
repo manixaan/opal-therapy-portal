@@ -352,22 +352,32 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     // Terms are frozen once sent.
     expect((await agent.put(`${base}/offer`).send({ terms: { ...START_BODY, positionTitle: 'Changed' } })).status).toBe(409);
 
-    // The signed letter comes back and is stored.
+    // The signed letter comes back and is stored. The portal reads it — a bare
+    // PDF with no text layer cannot be read — and nothing advances until the
+    // Owner submits it.
     const signedBytes = Buffer.from('%PDF-1.4 signed letter');
     const up = await agent.post(`${base}/offer/signed`).send({ fileName: 'Jane Smith signed LOO.pdf', fileMime: 'application/pdf', fileData: signedBytes.toString('base64') });
     expect(up.status).toBe(201);
-    // The stored signed letter is the acceptance: no separate verification click.
-    expect(up.body.offer.status).toBe('accepted');
+    expect(up.body.offer.status).toBe('signed_received');
     expect(up.body.signed).toMatchObject({ kind: 'signed', fileName: 'Jane Smith signed LOO.pdf', previewKind: 'pdf', size: signedBytes.length });
-    expect(up.body.prepared.status).toBe('prepared');
+    expect(up.body.signed.check.status).toBe('unreadable');
+    expect(up.body.check.status).toBe('unreadable');
+    expect(up.body.journey.next).toMatchObject({ actor: 'admin', action: 'verify_offer' });
     const served = await agent.get(`${base}/offer/signed/download`);
     expect(served.status).toBe(200);
     expect(served.headers['content-type']).toBe('application/pdf');
     expect(Buffer.from(served.body).toString()).toBe('%PDF-1.4 signed letter');
 
-    // Phase 1 settled on upload; the document pack was derived without another click.
-    expect((await agent.post(`${base}/offer/verify`)).status).toBe(409);
-    const verified = { body: up.body };
+    // Submit: a flagged reading has to be acknowledged, then Phase 1 settles
+    // and the document pack is derived.
+    const refused = await agent.post(`${base}/offer/verify`).send({});
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('check_attention');
+    const verified = await agent.post(`${base}/offer/verify`).send({ acknowledge: true });
+    expect(verified.status).toBe(200);
+    expect(verified.body.offer.status).toBe('accepted');
+    expect(verified.body.prepared.status).toBe('prepared');
+    expect((await agent.post(`${base}/offer/verify`).send({ acknowledge: true })).status).toBe(409);
     expect(verified.body.prepared.total).toBeGreaterThan(8);
     expect(verified.body.record.status).toBe('created');
     expect(verified.body.journey.stage.key).toBe('documentation');

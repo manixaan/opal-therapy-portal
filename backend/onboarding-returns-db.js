@@ -176,12 +176,17 @@ async function listReturns(assignmentId, { includeArchived = false } = {}, q = p
   const { rows } = await q.query(
     `SELECT id, organisation_id, assignment_id, title, file_name, file_mime, file_size_bytes, file_sha256, storage_backend, storage_key,
             page_count, text_status, text_chars, sensitivity, status, uploaded_by, uploaded_at, archived_at,
-            pack_item_id, match_status, match_confidence, document_kind, signature_status, pd_document_id
+            pack_item_id, match_status, match_confidence, document_kind, signature_status, pd_document_id, check_result
        FROM onboarding_returned_documents
       WHERE assignment_id = $1 ${includeArchived ? '' : "AND status = 'active'"}
       ORDER BY uploaded_at ASC, id ASC`, [assignmentId]
   );
   return rows;
+}
+
+/** The portal's reading of a returned document — which fields were filled, which were blank. */
+async function setDocumentCheck(docId, check, q = pool) {
+  await q.query(`UPDATE onboarding_returned_documents SET check_result = $2 WHERE id = $1`, [docId, check ? JSON.stringify(check) : null]);
 }
 
 async function setDocumentMatch(docId, { packItemId, matchStatus, matchConfidence, documentKind, signatureStatus }, q = pool) {
@@ -344,6 +349,7 @@ async function getPayrollApproval(userId, q = pool) {
 }
 
 module.exports = {
+  setDocumentCheck,
   upsertCandidate, listCandidates, revealCandidate,
   upsertResolved, listResolved, getResolvedRaw, revealResolved, resolveByOwner, markFieldsApplied,
   listReturns, setDocumentMatch, assignDocumentToItem, markItemReturned, setItemVerification,

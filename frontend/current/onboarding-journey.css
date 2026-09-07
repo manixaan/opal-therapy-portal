@@ -448,3 +448,16 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-fmt-btn.is-i { font-style: italic; font-family: Georgia, serif; }
 .oj-fmt-btn.is-u { text-decoration: underline; }
 .oj-fmt-hint { font-size: 11.5px; color: var(--ink-soft); margin-left: 6px; }
+
+/* What the portal read in an uploaded document, before the Owner submits it. */
+.oj-doccheck { border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 8px 12px; margin: 6px 0 8px; font-size: 12.5px; background: var(--panel); }
+.oj-doccheck.is-ok { border-left-color: #2f8f5b; }
+.oj-doccheck.is-warn { border-left-color: #c9762b; background: #fff9f3; }
+.oj-doccheck.is-quiet { border-left-color: #a9b3b0; }
+.oj-doccheck-head { display: flex; flex-direction: column; gap: 4px; }
+.oj-doccheck-issues { margin: 0; padding-left: 18px; color: #8a4b12; }
+.oj-doccheck-fields { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 3px 16px; }
+.oj-doccheck-fields li { display: flex; gap: 8px; align-items: baseline; }
+.oj-doccheck-fields li.is-blank { color: #8a4b12; }
+.oj-doccheck-mark { width: 14px; text-align: center; font-weight: 700; }
+.oj-doccheck-fields li.is-filled .oj-doccheck-mark { color: #2f8f5b; }
