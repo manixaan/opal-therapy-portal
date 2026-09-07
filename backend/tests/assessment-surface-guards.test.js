@@ -695,8 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 12: the drive inside a wide gap is still painted, arriving at the next session.
-      ['travel.js', 12],
+      // 13: live travel preview while booking; a back-to-back keeps its earliest start.
+      ['travel.js', 13],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -849,7 +849,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
-    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove', 'calendarWeekLocations', 'isLeaveDay', 'applyLeaveShading']) {
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove', 'calendarWeekLocations', 'isLeaveDay', 'applyLeaveShading', 'bspTravelPreview', 'clearBspTravelPreview']) {
       expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
     }
     // The engine reads the answers at the day's ends, not the between legs.

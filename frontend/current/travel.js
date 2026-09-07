@@ -689,6 +689,90 @@ function travelChainAfterMove(sessionId) {
   if (spec) setTravelOverride(sessionId, 'after', spec);
 }
 
+/* ---------- Live travel preview while booking ----------
+   While Smart Booking is open, the calendar shows the drive from the previous
+   session on that day to the address being typed, and — when the booking was
+   started from a travel leg ("add a stop") — keeps the start at or after the
+   earliest time that drive allows. Re-runs on every day / time / duration /
+   location change; nothing here is persisted. */
+function _bspPredecessor(day, startMin) {
+  const ctx = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.travelFrom) || null;
+  if (ctx && ctx.sessionId && window.SESSIONS && window.SESSIONS[ctx.sessionId] && window.SESSIONS[ctx.sessionId].day === day) {
+    return { s: window.SESSIONS[ctx.sessionId], explicit: true };
+  }
+  const before = sessionsForDay(day).filter(s => sessionEndMin(s) <= startMin && !isTravelBlock(s));
+  return before.length ? { s: before[before.length - 1], explicit: false } : null;
+}
+function _bspTargetAddress() {
+  const typed = (document.getElementById('bsp-location') || {}).value || '';
+  if (typed.trim()) return typed.trim();
+  const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
+  return p ? (p.address || p.suburb || '') : '';
+}
+function clearBspTravelPreview() {
+  document.querySelectorAll('.travel-overlay.preview').forEach(el => el.remove());
+}
+function bspTravelPreview() {
+  clearBspTravelPreview();
+  const panel = document.getElementById('booking-side-panel');
+  if (!panel || !panel.classList.contains('open')) return;
+  const day = (document.querySelector('.bsp-day-chip.active') || {}).dataset ? document.querySelector('.bsp-day-chip.active').dataset.day : null;
+  const startEl = document.getElementById('bsp-start');
+  if (!day || !startEl || !startEl.value) return;
+  const [sh, sm] = startEl.value.split(':').map(Number);
+  let startMin = sh * 60 + (sm || 0);
+  const pred = _bspPredecessor(day, startMin);
+  if (!pred) return;
+  const fromKey = locTravelKey(sessionLocation(pred.s));
+  const toKey = _bspTargetAddress();
+  if (!fromKey || !toKey) return;
+  const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
+  const predEnd = sessionEndMin(pred.s);
+  const earliest = Math.ceil((predEnd + travel) / 15) * 15;
+  // An explicit back-to-back keeps its start at or after the drive allows.
+  if (pred.explicit && startMin < earliest) {
+    startMin = earliest;
+    startEl.value = String(Math.floor(earliest / 60)).padStart(2, '0') + ':' + String(earliest % 60).padStart(2, '0');
+    if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
+    if (typeof renderCalendarPreviewBlocks === 'function') {
+      const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10);
+      renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(startMin / 60), startM: startMin % 60, startMin, durationMin: dur, score: 100 }]);
+    }
+    const text = document.getElementById('bsp-prefill-text');
+    if (text && !/earliest start/.test(text.textContent)) text.textContent += ' · earliest start after the drive';
+  }
+  if (travel <= 0 || startMin < predEnd) return;
+  const col = document.getElementById('day-' + day);
+  if (!col) return;
+  const legStart = Math.max(predEnd, startMin - travel);
+  const el = document.createElement('div');
+  el.className = 'travel-overlay between preview';
+  el.style.top = tToY(Math.floor(legStart / 60), legStart % 60) + 'px';
+  const px = (startMin - legStart) / 60 * HOUR_PX;
+  el.style.height = Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) + 'px';
+  const tight = (startMin - predEnd) < travel;
+  if (tight) el.style.borderLeftColor = '#9c3322';
+  const toSub = addrSuburb(toKey) || 'next session';
+  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : 'Travel') + '</span>' +
+    '<span class="t-label">' + travel + ' min · ' + _tpEsc(sessionLocation(pred.s).suburb || 'previous') + ' → ' + _tpEsc(toSub) + '</span>';
+  el.title = (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address';
+  col.appendChild(el);
+}
+// Hook the panel: every timing / location change re-runs the preview.
+(function installBspTravelPreview() {
+  const wrap = (name, after) => {
+    const orig = window[name];
+    if (typeof orig !== 'function' || orig.__travelWrapped) return;
+    const w = function () { const out = orig.apply(this, arguments); try { after(); } catch (e) { /* preview only */ } return out; };
+    w.__travelWrapped = true; window[name] = w;
+  };
+  const run = () => setTimeout(bspTravelPreview, 0);
+  wrap('_bspUpdateLivePreview', run);
+  wrap('clearPreviewBlocks', clearBspTravelPreview);
+  document.addEventListener('input',  e => { if (e.target && e.target.id === 'bsp-location') run(); });
+  document.addEventListener('change', e => { if (e.target && e.target.id === 'bsp-location') run(); });
+})();
+
 /* After a stop is booked: the new session inherits the predecessor's `after`
    (where the day was going to end), so the chain forms without another step.
    The predecessor keeps its own answer — if the stop is later cancelled, the
