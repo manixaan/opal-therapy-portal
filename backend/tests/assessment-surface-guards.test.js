@@ -699,7 +699,9 @@ describe('changed assets are cache-busted', () => {
       // pendingMove on window) and the module knows about auto-sync.
       // 3 (js): idle nudge after a minute of unsynced changes; the tab-leave
       // prompt counts every waiting change again.
-      ['splose-sync.js', 3], ['splose-sync.css', 1],
+      // 4 (js): the service chooser reads the proxy's `title` field — it was
+      // rendering every option blank.
+      ['splose-sync.js', 4], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the

@@ -144,7 +144,13 @@
 
   function loadReference() {
     var jobs = [];
-    if (!S.services) jobs.push(fetchJson('/api/splose/services').then(function (r) { S.services = r.ok ? (r.json.data || []) : []; }));
+    // The proxy maps Splose's `name` to `title`; keep only live appointment
+    // services (support-activity and archived ones cannot be booked).
+    if (!S.services) jobs.push(fetchJson('/api/splose/services').then(function (r) {
+      S.services = (r.ok ? (r.json.data || []) : [])
+        .filter(function (s) { return !s.archived && (!s.for || /appointment/i.test(String(s.for))); })
+        .map(function (s) { return { id: s.id, name: s.title || s.name || ('Service ' + s.id) }; });
+    }));
     if (!S.reasons) jobs.push(fetchJson('/api/splose/cancellation-reasons').then(function (r) { S.reasons = r.ok ? (r.json.data || []) : []; }));
     return Promise.all(jobs);
   }
