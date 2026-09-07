@@ -364,8 +364,9 @@
     } else {
       var phase = view === 2 ? 'documentation' : 'induction';
       var em = view === 2 ? d.emails.documentation : d.emails.induction;
-      body = defaultsTable(d, phase)
-        + '<section class="oj-panel"><h3 class="oj-sub">' + (view === 2 ? 'Email 2' : 'Email 3') + '</h3><pre class="oj-pre">' + esc(em.subject) + '\n\n' + esc(em.body) + '</pre></section>';
+      // The email first, then the documents that go with it — the order the employee meets them.
+      body = '<section class="oj-panel"><h3 class="oj-sub">' + (view === 2 ? 'Email 2' : 'Email 3') + '</h3><pre class="oj-pre">' + esc(em.subject) + '\n\n' + esc(em.body) + '</pre></section>'
+        + defaultsTable(d, phase);
     }
     pane.innerHTML = '<div class="oj-record-head"><div><h2>' + esc(d.package.title) + '</h2><p class="oj-quiet">' + esc(titleCase(d.package.roleCategory || '')) + ' · ' + esc(titleCase(d.package.employmentType || '')) + ' · default copy — nothing here is sent to anyone</p></div></div>'
       + stepper + '<div class="oj-stages">' + body + '</div>';
