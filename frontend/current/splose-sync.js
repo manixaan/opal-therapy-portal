@@ -30,6 +30,8 @@
     writeEnabled: false,
     autoSync: false,        // server writes the queue itself after a quiet period
     watching: false,
+    pendingSince: 0,        // when the queue last went from empty to non-empty
+    nudgeTimer: null, lastNudgeAt: 0,
     pending: [],            // rows from /api/splose-sync/pending
     pendingByEvent: {},     // eventId → row
     services: null, reasons: null, cases: {},
@@ -92,7 +94,37 @@
       renderButton();
       decorateTiles();
       if (S.panelOpen) renderPanel();
+      trackNudge();
     }).catch(function () {});
+  }
+
+  // ── Idle nudge ────────────────────────────────────────────────────────────
+  // Changes waiting a full minute without Sync Splose being pressed get one
+  // reminder, then another every five minutes while they are still waiting.
+  var NUDGE_AFTER_MS = 60 * 1000, NUDGE_REPEAT_MS = 5 * 60 * 1000;
+  function unsyncedCount() {
+    return S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
+  }
+  function trackNudge() {
+    var n = unsyncedCount();
+    if (!n) { S.pendingSince = 0; S.lastNudgeAt = 0; if (S.nudgeTimer) { clearTimeout(S.nudgeTimer); S.nudgeTimer = null; } return; }
+    if (!S.pendingSince) S.pendingSince = Date.now();
+    if (S.nudgeTimer) return;
+    var since = Math.max(S.pendingSince, S.lastNudgeAt);
+    var wait = Math.max(0, since + (S.lastNudgeAt ? NUDGE_REPEAT_MS : NUDGE_AFTER_MS) - Date.now());
+    S.nudgeTimer = setTimeout(function () { S.nudgeTimer = null; showNudge(); }, wait);
+  }
+  function showNudge() {
+    var n = unsyncedCount();
+    if (!n || S.publishing || S.panelOpen || leaving || doc.hidden) { trackNudge(); return; }
+    S.lastNudgeAt = Date.now();
+    leaving = true;
+    confirmDialog('You have ' + n + ' unsynced calendar change' + (n === 1 ? '' : 's') + '. Please sync ' + (n === 1 ? 'it' : 'them') + ' to Splose.', { title: 'Unsynced changes', ok: 'Sync now', cancel: 'Later' })
+      .then(function (yes) {
+        leaving = false;
+        if (yes) { if (!isCalendarActive() && typeof global.switchTab === 'function') global.switchTab('calendar'); openPanel(); }
+        trackNudge();
+      });
   }
 
   function refreshStatus() {
@@ -456,8 +488,9 @@
     global.switchTab = function (name) {
       var args = arguments;
       var self = this;
-      // With auto-sync on, only rows that need a human choice are worth a prompt.
-      var n = S.pending.filter(function (c) { return c.status !== 'publishing' && (!S.autoSync || needsReview(c)); }).length;
+      // Every waiting change prompts on leaving the calendar (owner's call,
+      // 7 Sep 2026), even ones auto-sync would write shortly.
+      var n = unsyncedCount();
       if (!leaving && canUse() && isCalendarActive() && name !== 'calendar' && n > 0 && !S.publishing) {
         leaving = true;
         confirmDialog('You have ' + n + ' change' + (n === 1 ? '' : 's') + ' on the calendar that ' + (n === 1 ? 'has' : 'have') + ' not been written to Splose yet. Write ' + (n === 1 ? 'it' : 'them') + ' now?', { title: 'Sync Splose?', ok: 'Review and write', cancel: 'Later' })
@@ -471,7 +504,7 @@
       return orig.apply(self, args);
     };
     global.addEventListener('beforeunload', function (e) {
-      var n = S.pending.filter(function (c) { return c.status !== 'publishing' && (!S.autoSync || needsReview(c)); }).length;
+      var n = unsyncedCount();
       if (canUse() && n > 0) { e.preventDefault(); e.returnValue = ''; }
     });
   }

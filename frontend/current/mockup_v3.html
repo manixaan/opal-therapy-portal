@@ -80,7 +80,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=2" defer></script>
+<script src="/splose-sync.js?v=3" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
@@ -12512,6 +12512,9 @@ async function confirmBooking() {
           // so the backend can queue the appointment for "Sync Splose".
           ...((isClientSession && patient?.id) ? { splose: {
             patientId: patient.id, patientName: _patName, sessionType: type,
+            // The booking type already knows its Splose service; sending it
+            // lets the queue publish without a review-time choice.
+            serviceId: (typeof SESSION_TYPE_DATA !== 'undefined' && SESSION_TYPE_DATA[type] && SESSION_TYPE_DATA[type].serviceId) ? Number(SESSION_TYPE_DATA[type].serviceId) : null,
             caseId: BOOKING_STATE.selectedCaseId || null,
             note: (BOOKING_STATE.formData && BOOKING_STATE.formData.note) || '',
           } } : {}),
