@@ -32,6 +32,7 @@ const odb = require('./onboarding-db');
 const wdb = require('./onboarding-workflow-db');
 const pdb = require('./onboarding-pack-db');
 const pack = require('./onboarding-pack');
+const placeholderPdf = require('./onboarding-placeholder-pdf');
 const packEmail = require('./onboarding-pack-email');
 const graphMail = require('./graph-mail');
 const { auditOnboarding } = require('./onboarding-audit');
@@ -99,6 +100,7 @@ function itemRow(row, assignmentId, attachments = []) {
     sendsDocument: row.sends_document, employeeReturns: row.employee_returns,
     requiresVerification: row.requires_verification, required: row.required,
     origin: row.origin, requirementCode: row.requirement_code || null,
+    group: row.origin === 'added' ? 'added' : pack.groupOf(row.code), parentCode: pack.parentOf(row.code),
     status: row.status, removedReason: row.removed_reason || null, sortOrder: row.sort_order,
     library: row.document_id ? {
       documentId: row.document_id, code: row.library_code, title: row.library_title,
@@ -108,6 +110,7 @@ function itemRow(row, assignmentId, attachments = []) {
     officialSourceUrl: row.official_source_url || row.library_source_url || null,
     file: {
       ...file,
+      placeholder: placeholderPdf.isPlaceholderName(file.fileName),
       ownCopy: row.file_name ? {
         fileName: row.file_name, size: row.file_size_bytes, sha256: row.file_sha256,
         uploadedAt: row.file_uploaded_at, uploadedByName: row.file_uploaded_by_name || null,
@@ -169,6 +172,7 @@ async function packDetail(req, assignment, phase = 'documentation') {
       sending: included.filter((i) => i.sendsDocument).length,
       sendable: included.filter((i) => i.sendsDocument && i.file.previewUrl).length,
       missingFiles: included.filter((i) => i.sendsDocument && !i.file.previewUrl).length,
+      placeholders: included.filter((i) => i.sendsDocument && i.file.placeholder).length,
       returns: included.filter((i) => i.employeeReturns).length,
       verifies: included.filter((i) => i.requiresVerification).length,
       removed: items.length - included.length,
@@ -205,6 +209,7 @@ async function preparePack(assignment) {
   // when it comes, is what sets one) and an employment profile from the offer.
   await ensureProfileOwner(assignment);
   const version = await odb.getPackageVersion(assignment.package_version_id);
+  await ensurePlaceholderDocuments(assignment.organisation_id);
   const library = await odb.listDocuments(assignment.organisation_id);
   const byCode = new Map(library.map((d) => [d.code, d]));
   const out = { inserted: 0, total: 0 };
@@ -219,6 +224,43 @@ async function preparePack(assignment) {
   await pdb.setPackPrepared(assignment.id);
   await odb.pool.query('UPDATE onboarding_assignments SET induction_pack_prepared_at = COALESCE(induction_pack_prepared_at, NOW()) WHERE id = $1', [assignment.id]);
   return out;
+}
+
+/**
+ * Every attachment in the documentation pack has a file behind it: where the
+ * library holds none yet, a placeholder PDF is published against the library
+ * document, so the pack assembles and sends end to end and Edit Onboarding
+ * replaces it once with the real form.
+ */
+async function ensurePlaceholderDocuments(organisationId) {
+  const library = await odb.listDocuments(organisationId);
+  const byCode = new Map(library.map((d) => [d.code, d]));
+  for (const item of pack.DOCUMENTATION_PACK) {
+    if (!item.sends || !item.documentCode) continue;
+    let doc = byCode.get(item.documentCode);
+    if (doc && doc.current_file_name) continue;
+    if (!doc) {
+      doc = await odb.upsertDocument(organisationId, {
+        code: item.documentCode, title: item.title, category: 'Employment', classification: 'OPAL_FORM', audience: 'employee',
+        ownerControlled: true, contentStatus: 'available', status: 'published',
+      }, null);
+    }
+    const fileName = `${placeholderPdf.PLACEHOLDER_PREFIX}${item.title}.pdf`;
+    const bytes = await placeholderPdf.buildPlaceholderPdf({ title: item.title, note: item.description || '' });
+    const version = await odb.createDocumentVersion(doc.id, {
+      title: item.title, fileName, fileMime: 'application/pdf', fileData: bytes.toString('base64'), fileSizeBytes: bytes.length,
+      effectiveDate: new Date().toISOString().slice(0, 10), changeNote: 'Placeholder published by the portal — replace with the practice document',
+    }, null);
+    await odb.publishDocumentVersion(doc.id, version.id, null);
+    await odb.pool.query(`UPDATE onboarding_documents SET content_status = 'available', status = 'published', updated_at = NOW() WHERE id = $1`, [doc.id]);
+    log.info('placeholder published for a pack document', { code: item.documentCode });
+  }
+}
+
+/** The attachments in the pack that still have no file at all — nothing is sent while any remain. */
+async function missingFilesFor(assignment, phase) {
+  const rows = (await pdb.listItems(assignment.id, undefined, phase)).filter((r) => r.status === 'included' && r.sends_document);
+  return rows.filter((r) => { const f = pdb.describeItemFile(r); return f.source === 'none' || f.source === 'link'; }).map((r) => r.title);
 }
 
 /** A users row for the record, created once; the employment profile from the offer terms. */
@@ -583,6 +625,8 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const rawBody = (typeof req.body?.body === 'string' && req.body.body.trim()) ? req.body.body.slice(0, 20000) : (assignment[C.body] || d.body);
     const body = E.restampDueDate(rawBody, assignment[C.dueAt], dueAt);
   
+    const missing = await missingFilesFor(assignment, phase);
+    if (missing.length) return res.status(409).json({ error: `Attach a file for every document before sending: ${missing.join(', ')}.`, code: 'missing_files', missing });
     const built = await buildZipForRecord(req, { ...assignment, [C.dueAt]: dueAt }, phase);
     if (!built.manifest.length) {
       return res.status(409).json({ error: 'None of the documents in the pack has a file to send. Upload files or remove those items first.', code: 'empty_pack', omissions: built.omissions });
@@ -630,6 +674,8 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     if (!assignment) return notFound(res);
     if (!packEditable(assignment, phase)) return res.status(409).json({ error: 'This pack is not waiting to be sent.', code: 'not_sendable' });
     if (!(await phase1Settled(assignment))) return res.status(409).json({ error: 'The letter of offer has not been verified yet.', code: 'phase1_open' });
+    const missing = await missingFilesFor(assignment, phase);
+    if (missing.length) return res.status(409).json({ error: `Attach a file for every document before marking the pack as sent: ${missing.join(', ')}.`, code: 'missing_files', missing });
     const dueAt = assignment[C.dueAt] || P.email.dueDateFrom(new Date());
     await markSent(assignment.id, phase, { actorId: req.user.id, toEmail: assignment.applicant_email, dueAt });
     await wdb.recordDispatch({

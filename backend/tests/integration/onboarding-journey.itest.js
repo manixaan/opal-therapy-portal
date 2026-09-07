@@ -585,7 +585,7 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
   });
 
   /**
-   * Every document born from a requirement has come back and been verified —
+   * Every document in the pack (the fixed Phase 2 list, and the induction items born from a requirement) has come back and been verified —
    * both phases, since the policy acknowledgements in Phase 3 block activation
    * too. The requirements themselves are left for the sync to complete.
    */
@@ -593,7 +593,7 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     await db.pool.query(
       `UPDATE onboarding_pack_items SET required = TRUE, employee_returns = TRUE, requires_verification = TRUE, returned_at = NOW(),
               verification_status = 'verified', verified_at = NOW()
-        WHERE assignment_id = $1 AND status = 'included' AND requirement_code IS NOT NULL`, [recordId]);
+        WHERE assignment_id = $1 AND status = 'included' AND (requirement_code IS NOT NULL OR phase = 'documentation')`, [recordId]);
     // Requirements the pack does not carry are settled elsewhere; the ones it does carry must be completed BY the sync.
     await db.pool.query(
       `UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW()

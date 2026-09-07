@@ -465,6 +465,7 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
   if (closed) current = { key: 'closed', number: 0, label: assignment.status === 'cancelled' ? 'Cancelled' : 'Archived' };
   else if (s3.state === 'complete') current = { key: 'complete', number: 4, label: 'Complete' };
   else if (s3.state === 'active') current = STAGES[2];
+  else if (s2.state === 'active' && ['starter_pack_sent', 'documents_received'].includes(assignment.status)) current = { ...STAGES[1], number: 2.5, label: 'Awaiting returned documentation' };
   else if (s2.state === 'active') current = STAGES[1];
   else if (s1.substage === 'waiting') current = { ...STAGES[0], number: 1.5, label: 'Awaiting signed offer' };
   else current = STAGES[0];

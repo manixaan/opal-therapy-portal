@@ -54,16 +54,16 @@ async function loadRecord(req) {
 /** document kind → pack item codes it answers, in preference order. */
 const KIND_TO_CODES = {
   contract: ['PACK_CONTRACT'], new_employee_details: ['PACK_NEW_EMPLOYEE_DETAILS'], super_choice: ['PACK_SUPER_CHOICE'],
-  tax_summary: ['REQ_TAX_SETUP'], fair_work_statement: ['REQ_FWIS', 'REQ_CEIS', 'REQ_FTCIS'],
-  passport: ['PACK_PASSPORT_VISA', 'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK'], visa: ['PACK_PASSPORT_VISA', 'REQ_RIGHT_TO_WORK'],
+  tax_summary: ['REQ_TAX_SETUP'], fair_work_statement: ['PACK_FWIS', 'REQ_FWIS', 'REQ_CEIS', 'REQ_FTCIS'],
+  passport: ['REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'PACK_PASSPORT_VISA'], visa: ['REQ_RIGHT_TO_WORK', 'PACK_PASSPORT_VISA'],
   drivers_licence: ['REQ_DRIVERS_LICENCE', 'REQ_IDENTITY'], police_check: ['PACK_POLICE_CHECK', 'REQ_POLICE_CHECK'],
-  ndis_screening: ['REQ_NDIS_SCREENING'], wwcc: ['REQ_WWCC'], ahpra: ['REQ_AHPRA'], first_aid: ['PACK_FIRST_AID'], cpr: ['PACK_CPR'],
-  vehicle: ['REQ_VEHICLE'], insurance: ['REQ_PII', 'REQ_VEHICLE'], identity_other: ['REQ_IDENTITY'],
+  ndis_screening: ['REQ_NDIS_SCREENING'], wwcc: ['REQ_WWCC'], ahpra: ['REQ_AHPRA'], first_aid: ['PACK_FIRST_AID'], cpr: ['PACK_FIRST_AID', 'PACK_CPR'],
+  vehicle: ['REQ_DRIVERS_LICENCE', 'REQ_VEHICLE'], insurance: ['REQ_PII', 'REQ_VEHICLE'], identity_other: ['REQ_IDENTITY'],
   privacy_agreement: ['IND_PRIVACY_AGREEMENT'], code_of_conduct: ['IND_CODE_OF_CONDUCT'], handbook_acknowledgement: ['IND_HANDBOOK'],
 };
 const FILENAME_HINTS = [
   [/contract/i, 'contract'], [/employee.?details|new.?employee|personal.?details/i, 'new_employee_details'], [/super/i, 'super_choice'],
-  [/tax|tfn|ato/i, 'tax_summary'], [/passport/i, 'passport'], [/visa|vevo/i, 'visa'], [/licen[cs]e/i, 'drivers_licence'],
+  [/fwis|fair.?work/i, 'fair_work_statement'], [/tax|tfn|ato/i, 'tax_summary'], [/passport/i, 'passport'], [/visa|vevo/i, 'visa'], [/licen[cs]e/i, 'drivers_licence'],
   [/police|npc/i, 'police_check'], [/ndis|screening/i, 'ndis_screening'], [/wwcc|working.?with.?children/i, 'wwcc'], [/ahpra/i, 'ahpra'],
   [/first.?aid/i, 'first_aid'], [/cpr/i, 'cpr'], [/vehicle|rego|registration/i, 'vehicle'], [/insurance|indemnity/i, 'insurance'],
   [/privacy|confidential/i, 'privacy_agreement'], [/code.?of.?conduct/i, 'code_of_conduct'], [/handbook/i, 'handbook_acknowledgement'],
@@ -142,6 +142,8 @@ async function processReturns(req, assignment) {
   // 3. Match every active document to its pack item.
   for (const d of docs) {
     const c = classifications.get(d.id) || null;
+    // Held by the Owner (taken out of a slot): the automation does not put it back.
+    if (d.match_status === 'manual' && !d.pack_item_id) { out.unrecognised += 1; continue; }
     const m = matchDocument(d, c, packItems);
     if (m.item) {
       await rdb.setDocumentMatch(d.id, { packItemId: m.item.id, matchStatus: d.match_status === 'manual' ? 'manual' : 'matched', matchConfidence: m.confidence, documentKind: m.kind, signatureStatus: c ? c.signed : null });
@@ -410,6 +412,18 @@ router.post('/api/onboarding/journey/records/:id/returns/:docId/assign', require
   await rdb.markItemReturned(item.id, doc.id);
   await auditOnboarding(req, 'returned_document_assigned', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: doc.id, itemId: item.id } });
   const processed = await processReturns(req, assignment).catch((err) => { log.warn('reprocess after assign failed', { error: err }); return null; });
+  res.json({ ok: true, processed, attention: await attentionFor(await odb.getAssignment(orgOf(req), assignment.id)) });
+}));
+
+/** The Owner says a document is not what it was placed as: back to the unplaced list, for them to place. */
+router.post('/api/onboarding/journey/records/:id/returns/:docId/unassign', requirePermission('onboarding.review'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const doc = await wdb.getReturnedDocument(assignment.id, req.params.docId);
+  if (!doc) return notFound(res);
+  await rdb.unassignDocument(doc.id);
+  await auditOnboarding(req, 'returned_document_unassigned', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: doc.id, previousItemId: doc.pack_item_id || null } });
+  const processed = await processReturns(req, assignment).catch((err) => { log.warn('reprocess after unassign failed', { error: err }); return null; });
   res.json({ ok: true, processed, attention: await attentionFor(await odb.getAssignment(orgOf(req), assignment.id)) });
 }));
 

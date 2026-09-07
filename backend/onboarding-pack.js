@@ -38,33 +38,52 @@ const R = {
 };
 
 /**
- * Pack items the requirement templates do not carry, or carry as a portal
- * form rather than a document. `documentCode` names the library document
- * whose current file goes in the ZIP, when one is published.
+ * THE DOCUMENTATION PACK — the same list for every package, every role and
+ * every contract type. Four documents go out in the ZIP; the New Employee
+ * Details come back with the supporting documents grouped beneath it.
+ *
+ *   group 'attachment'  — sent in the ZIP (and, mostly, returned completed)
+ *   group 'supporting'  — the employee's own documents, returned with the
+ *                         New Employee Details (parentCode)
+ *
+ * `documentCode` names the library document whose current file goes in the
+ * ZIP; where the library has none yet, a placeholder is published in its
+ * place so the pack can be assembled and sent end to end. `requiredRule`
+ * decides whether an item is required for this person; it is still listed
+ * for everyone ("if applicable" when not required).
  */
-const SUPPLEMENT = [
-  { code: 'PACK_CONTRACT', title: 'Contract of Employment', section: 'welcome_employment', sortOrder: 5,
-    documentCode: 'DOC_CONTRACT_TEMPLATE', sends: true, returns: true, verifies: true, required: true, rule: R.ALL,
+const DOCUMENTATION_PACK = [
+  { code: 'PACK_CONTRACT', title: 'Contract of Employment', section: 'welcome_employment', sortOrder: 10, group: 'attachment',
+    documentCode: 'DOC_CONTRACT_TEMPLATE', sends: true, returns: true, verifies: true,
     description: 'Sent for signature; the signed contract comes back with the pack.' },
-  { code: 'PACK_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details Form', section: 'personal_details', sortOrder: 120,
-    documentCode: 'DOC_NEW_EMPLOYEE_DETAILS', sends: true, returns: true, verifies: true, required: true, rule: R.ALL,
-    description: 'Personal, emergency contact and bank details.' },
-  { code: 'PACK_SUPER_CHOICE', title: 'Superannuation Standard Choice Form', section: 'payroll_tax_super', sortOrder: 140,
-    documentCode: 'DOC_SUPER_CHOICE', sends: true, returns: true, verifies: true, required: true, rule: R.ALL,
-    description: 'ATO NAT 13080. Completed and returned; the Tax File Number declaration is done online instead.' },
-  { code: 'PACK_PASSPORT_VISA', title: 'Passport / visa documentation', section: 'identity', sortOrder: 220,
-    sends: false, returns: true, verifies: true, required: true, rule: R.ALL,
-    description: 'A copy of the passport, and the visa where the right to work depends on one.' },
-  { code: 'PACK_POLICE_CHECK', title: 'National Police Check', section: 'screening', sortOrder: 330,
-    sends: false, returns: true, verifies: true, required: true, rule: R.ALL,
-    description: 'Issued within the last 12 months.' },
-  { code: 'PACK_FIRST_AID', title: 'First Aid Certificate', section: 'screening', sortOrder: 360,
-    sends: false, returns: true, verifies: true, required: false, rule: R.PARTICIPANT_FACING,
-    description: 'A current certificate (HLTAID011 or equivalent).' },
-  { code: 'PACK_CPR', title: 'CPR Certificate', section: 'screening', sortOrder: 370,
-    sends: false, returns: true, verifies: true, required: false, rule: R.PARTICIPANT_FACING,
-    description: 'A current CPR certificate (HLTAID009 or equivalent), renewed annually.' },
+  { code: 'PACK_SUPER_CHOICE', title: 'Superannuation Form', section: 'payroll_tax_super', sortOrder: 20, group: 'attachment',
+    documentCode: 'DOC_SUPER_CHOICE', sends: true, returns: true, verifies: true,
+    description: 'ATO Superannuation Standard Choice Form, completed and returned.' },
+  { code: 'PACK_FWIS', title: 'FWIS (and FTCIS/CEIS)', section: 'welcome_employment', sortOrder: 30, group: 'attachment',
+    documentCode: 'DOC_FWIS', sends: true, returns: false, verifies: false,
+    description: 'Fair Work Information Statement, with the Fixed Term Contract or Casual Employment Information Statement where it applies. For reading; nothing comes back.' },
+  { code: 'PACK_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details', section: 'personal_details', sortOrder: 40, group: 'attachment',
+    documentCode: 'DOC_NEW_EMPLOYEE_DETAILS', sends: true, returns: true, verifies: true,
+    description: 'Personal, emergency contact and bank details, returned together with the supporting documents below.' },
+  // Supporting documents, returned with the New Employee Details.
+  { code: 'REQ_RIGHT_TO_WORK', title: 'Right to Work Verification (passport or visa details)', section: 'identity', sortOrder: 110, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
+  { code: 'REQ_IDENTITY', title: 'Identity Verification (evidence of passport)', section: 'identity', sortOrder: 120, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
+  { code: 'PACK_POLICE_CHECK', title: 'Police Check', section: 'screening', sortOrder: 130, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Issued within the last twelve months.' },
+  { code: 'REQ_NDIS_SCREENING', title: 'NDIS Worker Screening', section: 'screening', sortOrder: 140, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
+  { code: 'REQ_WWCC', title: 'WWCC', section: 'screening', sortOrder: 150, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Working with Children Check.' },
+  { code: 'REQ_DRIVERS_LICENCE', title: "Driver's licence + Vehicle Details", section: 'screening', sortOrder: 160, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Licence, and vehicle registration and insurance where the role uses a vehicle.' },
+  { code: 'PACK_FIRST_AID', title: 'First Aid Certificate / CPR Certificate', section: 'screening', sortOrder: 170, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.PARTICIPANT_FACING, description: 'Current certificates (HLTAID011 and HLTAID009 or equivalent).' },
+  { code: 'REQ_AHPRA', title: 'AHPRA Reg', section: 'professional', sortOrder: 180, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.OT, description: 'Current AHPRA registration.' },
+  { code: 'REQ_TAX_SETUP', title: 'Employee Tax Details Summary (from myGov)', section: 'payroll_tax_super', sortOrder: 190, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: null, description: 'Emailed after completing the Tax File Number declaration online; not part of the ZIP.' },
 ];
+const GROUP_BY_CODE = new Map(DOCUMENTATION_PACK.map((d) => [d.code, d.group]));
+const PARENT_BY_CODE = new Map(DOCUMENTATION_PACK.map((d) => [d.code, d.parentCode || null]));
+/** Which part of the Phase 2 list an item belongs to: 'attachment', 'supporting', or 'added' for the Owner's extras. */
+function groupOf(code) { return GROUP_BY_CODE.get(code) || 'added'; }
+function parentOf(code) { return PARENT_BY_CODE.get(code) || null; }
+
+/** Kept for the tests and the older records that still carry these items. */
+const SUPPLEMENT = DOCUMENTATION_PACK;
 
 /** The induction pack's own items. Instructions go out; agreements come back signed; accounts and training are tracked, not sent. */
 const INDUCTION_SUPPLEMENT = [
@@ -168,26 +187,30 @@ function itemFromRequirement(item, index) {
  * @returns {object[]} items in pack order
  */
 function buildDefaultItems(versionContent, facts, libraryByCode = new Map(), phase = 'documentation') {
-  const { applied } = engine.selectApplicable(versionContent, facts);
   const items = [];
-  applied.forEach((req, i) => {
-    if (phaseOf(req) !== phase) return;
-    const it = itemFromRequirement(req, i);
-    if (it) items.push({ ...it, phase, itemKind: 'document' });
-  });
+  if (phase === 'induction') {
+    const { applied } = engine.selectApplicable(versionContent, facts);
+    applied.forEach((req, i) => {
+      if (phaseOf(req) !== phase) return;
+      const it = itemFromRequirement(req, i);
+      if (it) items.push({ ...it, phase, itemKind: 'document' });
+    });
+  }
 
-  const supplement = phase === 'induction' ? INDUCTION_SUPPLEMENT : SUPPLEMENT;
+  // The documentation pack is the one fixed list; the induction pack keeps its own supplement.
+  const supplement = phase === 'induction' ? INDUCTION_SUPPLEMENT : DOCUMENTATION_PACK;
   for (const s of supplement) {
-    if (!engine.evaluateRule(s.rule, facts)) continue;
+    if (s.rule && !engine.evaluateRule(s.rule, facts)) continue;
     const lib = s.documentCode ? libraryByCode.get(s.documentCode) : null;
     // The supplement owns its document: a requirement the seed generated for
     // the same library document (an acknowledgement row) would send it twice.
     if (lib) {
       for (let i = items.length - 1; i >= 0; i -= 1) if (items[i].documentId === lib.id) items.splice(i, 1);
     }
+    const required = s.requiredRule === null ? false : s.requiredRule ? engine.evaluateRule(s.requiredRule, facts) : s.required !== false;
     items.push({
-      code: s.code, title: s.title, description: s.description, section: s.section,
-      sends: s.sends, returns: s.returns, verifies: s.verifies, required: s.required,
+      code: s.code, title: s.title, description: s.description || null, section: s.section,
+      sends: s.sends, returns: s.returns, verifies: s.verifies, required,
       requirementCode: null, phase, itemKind: s.itemKind || 'document', linkedTaskCode: s.linkedTaskCode || null,
       documentId: lib ? lib.id : null,
       documentVersionId: lib ? (lib.current_version_id || null) : null,
@@ -226,10 +249,9 @@ function applyDefaults(items, defaults, phase) {
   const byCode = new Map(rows.map((d) => [d.code, d]));
   const out = [];
   for (const raw of items) {
-    // The Owner sets the three switches deliberately in Edit Onboarding:
-    // until they do, a derived item is not required, comes back from
-    // nobody and is verified by nobody. Whether a file is SENT stays derived.
-    const it = { ...raw, required: false, returns: false, verifies: false };
+    // Each item carries what it means (sent, returned, verified, required)
+    // from the list itself; a saved tweak overrides it.
+    const it = { ...raw };
     const d = byCode.get(it.code);
     if (!d) { out.push(it); continue; }
     if (d.action === 'remove') continue;
@@ -372,6 +394,7 @@ async function buildPackZip(resolved, meta) {
 }
 
 module.exports = {
+  DOCUMENTATION_PACK, groupOf, parentOf,
   SUPPLEMENT, INDUCTION_SUPPLEMENT, INDUCTION_SECTIONS, REPLACED_BY_SUPPLEMENT, NOT_A_DOCUMENT, TITLE_OVERRIDES, phaseOf,
   itemFromRequirement, buildDefaultItems, applyDefaults, sampleFactsFor, buildPackZip, buildReadme, safeStem, extFor,
 };

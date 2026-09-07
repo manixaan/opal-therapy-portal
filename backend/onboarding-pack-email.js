@@ -17,6 +17,21 @@ Thank you for signing and returning your Letter of Offer. We're delighted to mov
 
 Attached as a ZIP folder is your Opal Therapy Onboarding Documentation Pack. This pack includes your official employment contract, required employment and government documentation, and the screening and credential documentation required for your role.
 
+Attachments: ZIP folder including –
+- Contract of Employment
+- Superannuation Form
+- FWIS (and FTCIS/CEIS)
+- New Employee Details which will include:
+   o Bank details
+   o Right to Work Verification (passport or visa details)
+   o Identity Verification (evidence of passport)
+   o Police Check
+   o NDIS Worker Screening
+   o WWCC
+   o Driver's licence + Vehicle Details
+   o First Aid Certificate/CPR Certificate
+   o AHPRA Reg
+
 Please download and extract the ZIP folder, carefully review each document, and complete and sign all documentation applicable to you. Please return the completed documentation within seven days, by [DD/MM/YYYY].
 
 Tax File Number Declaration

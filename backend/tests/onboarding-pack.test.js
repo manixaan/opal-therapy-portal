@@ -52,64 +52,53 @@ const library = new Map([
 ]);
 
 describe('the default pack', () => {
-  test('an OT gets the clinical, screening and mobile items; an admin casual does not', () => {
+  const ADMIN = { employment_type: 'casual', role_category: 'administration', is_treating_therapist: false, child_related_work: 'no', ndis_risk_assessed_role: 'no', mobile_community_role: false, uses_own_vehicle: false };
+  const ATTACHMENTS = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS'];
+  const SUPPORTING = ['REQ_RIGHT_TO_WORK', 'REQ_IDENTITY', 'PACK_POLICE_CHECK', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'REQ_AHPRA', 'REQ_TAX_SETUP'];
+
+  test('every package, role and contract type gets the one documentation list: four attachments, then the supporting documents', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
-    const admin = pack.buildDefaultItems(contentFor('PKG_ADMIN_CASUAL'), facts({
-      employment_type: 'casual', role_category: 'administration', is_treating_therapist: false,
-      child_related_work: 'no', ndis_risk_assessed_role: 'no', mobile_community_role: false, uses_own_vehicle: false,
-    }), library);
-    const codes = (x) => x.map((i) => i.code);
-
-    expect(codes(ot)).toEqual(expect.arrayContaining([
-      'PACK_CONTRACT', 'PACK_NEW_EMPLOYEE_DETAILS', 'PACK_SUPER_CHOICE', 'REQ_FWIS', 'REQ_TAX_SETUP',
-      'PACK_PASSPORT_VISA', 'PACK_POLICE_CHECK', 'REQ_AHPRA',
-      'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'REQ_VEHICLE', 'PACK_FIRST_AID', 'PACK_CPR',
-    ]));
-    expect(codes(ot)).not.toContain('REQ_CEIS');
-    expect(codes(ot)).not.toContain('REQ_FTCIS');
-
-    expect(codes(admin)).toEqual(expect.arrayContaining(['PACK_CONTRACT', 'REQ_CEIS', 'REQ_FWIS', 'PACK_POLICE_CHECK', 'PACK_PASSPORT_VISA']));
-    for (const clinical of ['REQ_AHPRA', 'REQ_WWCC', 'REQ_NDIS_SCREENING', 'REQ_DRIVERS_LICENCE', 'REQ_VEHICLE', 'PACK_FIRST_AID', 'PACK_CPR']) {
-      expect(`${clinical}:${codes(admin).includes(clinical)}`).toBe(`${clinical}:false`);
+    const admin = pack.buildDefaultItems(contentFor('PKG_ADMIN_CASUAL'), facts(ADMIN), library);
+    expect(ot.map((i) => i.code)).toEqual([...ATTACHMENTS, ...SUPPORTING]);
+    expect(admin.map((i) => i.code)).toEqual(ot.map((i) => i.code));
+    expect(ot.every((i) => i.phase === 'documentation' && i.itemKind === 'document')).toBe(true);
+    expect(new Set(ot.map((i) => i.code)).size).toBe(ot.length);
+    // The requirement-derived paper (portal forms, statements) no longer leaks into the pack.
+    for (const gone of ['REQ_FWIS', 'REQ_CEIS', 'REQ_FTCIS', 'REQ_PERSONAL_DETAILS', 'REQ_BANK_DETAILS', 'PACK_PASSPORT_VISA', 'PACK_CPR', 'REQ_VEHICLE']) {
+      expect(`${gone}:${ot.some((i) => i.code === gone)}`).toBe(`${gone}:false`);
     }
-    // A fixed-term contract brings its information statement.
-    const ft = pack.buildDefaultItems(contentFor('PKG_OT_FIXED_TERM'), facts({ employment_type: 'fixed_term' }), library);
-    expect(codes(ft)).toContain('REQ_FTCIS');
+    // Grouping: attachments go in the ZIP; the rest sit under the New Employee Details.
+    for (const c of ATTACHMENTS) expect(pack.groupOf(c)).toBe('attachment');
+    for (const c of SUPPORTING) { expect(pack.groupOf(c)).toBe('supporting'); expect(pack.parentOf(c)).toBe('PACK_NEW_EMPLOYEE_DETAILS'); }
+    expect(pack.groupOf('DEF_ABC')).toBe('added');
   });
 
-  test('portal forms the supplement replaces do not appear twice; non-documents never appear', () => {
-    const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
-    const codes = ot.map((i) => i.code);
-    for (const gone of ['REQ_PERSONAL_DETAILS', 'REQ_BANK_DETAILS', 'REQ_SUPER_SETUP', 'REQ_CONTRACT', 'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'REQ_PAYROLL_SETUP', 'REQ_OPAL_INDUCTION', 'REQ_WHS_INDUCTION', 'REQ_NDIS_ORIENTATION', 'REQ_HANDBOOK', 'REQ_NDIS_CODE']) {
-      expect(`${gone}:${codes.includes(gone)}`).toBe(`${gone}:false`);
-    }
-    expect(new Set(codes).size).toBe(codes.length);
-  });
-
-  test('each item says what it means: sends, returns, verifies, required', () => {
+  test('each item says what it means: sends, returns, verifies, required — and required follows the role', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
     const by = Object.fromEntries(ot.map((i) => [i.code, i]));
-    // The induction pack carries the policy acknowledgements, the handbook, the NDIS Code and the agreements.
+    expect(by.PACK_CONTRACT).toMatchObject({ sends: true, returns: true, verifies: true, required: true, documentId: 'lib-contract', documentVersionId: 'v-contract' });
+    expect(by.PACK_FWIS).toMatchObject({ sends: true, returns: false, verifies: false, required: true, documentCode: 'DOC_FWIS' });
+    expect(by.PACK_NEW_EMPLOYEE_DETAILS).toMatchObject({ sends: true, returns: true, verifies: true, required: true });
+    expect(by.PACK_SUPER_CHOICE).toMatchObject({ sends: true, returns: true, verifies: true, documentId: 'lib-super' });
+    expect(by.REQ_AHPRA).toMatchObject({ sends: false, returns: true, verifies: true, required: true });
+    expect(by.PACK_FIRST_AID).toMatchObject({ sends: false, returns: true, verifies: true, required: true });
+    expect(by.REQ_TAX_SETUP).toMatchObject({ sends: false, returns: true, required: false });
+    const admin = Object.fromEntries(pack.buildDefaultItems(contentFor('PKG_ADMIN_CASUAL'), facts(ADMIN), library).map((i) => [i.code, i]));
+    expect(admin.REQ_AHPRA.required).toBe(false);
+    expect(admin.PACK_FIRST_AID.required).toBe(false);
+    expect(admin.PACK_POLICE_CHECK.required).toBe(true);
+    // The induction pack keeps its own list.
     const ind = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library, 'induction');
     expect(ind.map((i) => i.code)).toEqual(expect.arrayContaining(['REQ_HANDBOOK', 'REQ_NDIS_CODE', 'IND_SPLOSE_SETUP', 'IND_PRIVACY_AGREEMENT', 'IND_SPLOSE_ACTIVE', 'IND_TRAINING']));
     expect(ind.find((i) => i.code === 'IND_SPLOSE_ACTIVE')).toMatchObject({ itemKind: 'account', linkedTaskCode: 'systems_access', sends: false });
     expect(ind.every((i) => i.phase === 'induction')).toBe(true);
-    expect(by.PACK_CONTRACT).toMatchObject({ sends: true, returns: true, verifies: true, required: true, documentId: 'lib-contract', documentVersionId: 'v-contract' });
-    expect(by.REQ_FWIS).toMatchObject({ sends: true, returns: false, verifies: false, required: true });
-    expect(by.REQ_AHPRA).toMatchObject({ sends: false, returns: true, verifies: true, required: true });
-    expect(by.PACK_PASSPORT_VISA).toMatchObject({ sends: false, returns: true, verifies: true });
-    expect(by.REQ_TAX_SETUP).toMatchObject({ sends: false, returns: true, verifies: true });
-    expect(by.PACK_FIRST_AID.required).toBe(false);
-    expect(by.PACK_SUPER_CHOICE.documentId).toBe('lib-super');
-    // Ordered: contract first, screening after identity.
     expect(ot[0].code).toBe('PACK_CONTRACT');
-    expect(ot.findIndex((i) => i.code === 'PACK_PASSPORT_VISA')).toBeLessThan(ot.findIndex((i) => i.code === 'REQ_WWCC'));
   });
 
-  test('package-level additions travel with the pack once, and unknown facts fail closed', () => {
+  test('package-level additions travel with the pack once', () => {
     const content = contentFor('PKG_ADMIN_PERMANENT');
     content.starterPack.documents = [{ documentId: 'lib-extra', documentCode: 'DOC_EXTRA', title: 'Parking guide', position: 1 }];
-    const items = pack.buildDefaultItems(content, facts({ role_category: 'administration', is_treating_therapist: false, mobile_community_role: false, uses_own_vehicle: false, child_related_work: 'no', ndis_risk_assessed_role: 'no' }), library);
+    const items = pack.buildDefaultItems(content, facts(ADMIN), library);
     expect(items.filter((i) => i.documentId === 'lib-extra')).toHaveLength(1);
     expect(items.find((i) => i.documentId === 'lib-extra')).toMatchObject({ sends: true, returns: false, required: false });
   });
@@ -126,15 +115,14 @@ describe('package defaults (Edit onboarding)', () => {
     ], 'documentation');
     const codes = out.map((i) => i.code);
     expect(codes).not.toContain('PACK_FIRST_AID');
-    expect(out.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false, sends: true, returns: false });
+    expect(out.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false, sends: true, returns: true });
     expect(out[out.length - 1]).toMatchObject({ code: 'DEF_ABC', title: 'Parking map', phase: 'documentation', documentId: 'lib-map', returns: false });
-    // Until the Owner sets them, the three switches are No on every derived item; sending stays derived.
+    // Untouched, an item keeps what the list says about it.
     const untouched = pack.applyDefaults(derived, [], 'documentation');
-    expect(untouched.every((i) => i.required === false && i.returns === false && i.verifies === false)).toBe(true);
-    expect(untouched.find((i) => i.code === 'PACK_CONTRACT').sends).toBe(true);
-    const set = pack.applyDefaults(derived, [{ phase: 'documentation', code: 'PACK_CONTRACT', action: 'override', required: true, employee_returns: true, requires_verification: true }], 'documentation');
-    expect(set.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ required: true, returns: true, verifies: true });
+    expect(untouched.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ required: true, returns: true, verifies: true, sends: true });
+    expect(untouched.find((i) => i.code === 'PACK_FWIS')).toMatchObject({ returns: false, verifies: false });
   });
+
   test('sample facts follow the package: an OT package is treating, mobile and child-related; an admin one is not', () => {
     const ot = pack.sampleFactsFor({ role_category: 'occupational_therapist', employment_type: 'casual' }, { ndisProviderStatus: 'unregistered' });
     const admin = pack.sampleFactsFor({ role_category: 'administration', employment_type: 'full_time' }, { ndisProviderStatus: 'unregistered' });

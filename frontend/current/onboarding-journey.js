@@ -382,23 +382,19 @@
     var included = items.filter(function (i) { return i.status === 'included'; }); var removed = items.filter(function (i) { return i.status !== 'included'; });
     var groups = {}; included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
     var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
-    var flag = function (i, field, value) {
-      if (!edit) return yesNo(value);
-      return '<button type="button" class="oj-toggle ' + (value ? 'is-on' : '') + '" onclick="OnboardingJourney.defaultsFlag(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + field + '\',' + (value ? 'false' : 'true') + ')">' + (value ? 'Yes' : 'No') + '</button>';
-    };
     var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<div id="oj-defaults-add" hidden></div>'
       + (edit ? '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>' : '')
-      + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>Required</th><th>Employee returns</th><th>Verified by us</th><th>File</th><th></th></tr></thead><tbody>'
-      + (edit ? '<tr class="oj-pack-addrow"><td colspan="6">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
+      + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>File</th><th></th></tr></thead><tbody>'
+      + (edit ? '<tr class="oj-pack-addrow"><td colspan="3">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
-      out += '<tr class="oj-pack-section"><td colspan="6">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      out += '<tr class="oj-pack-section"><td colspan="3">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
       groups[k].forEach(function (i) {
         var f = i.file || {};
         var fileCell = i.itemKind !== 'document' ? '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the set-up task' : 'Follows the induction task') + '</span>'
-          : f.previewUrl ? '<span class="oj-quiet">' + esc(f.fileName || 'Library') + '</span>' : !i.sendsDocument ? '<span class="oj-quiet">Employee supplies their own</span>'
+          : f.previewUrl ? (/^PLACEHOLDER - /.test(f.fileName || '') ? '<span class="oj-chip is-warn">Placeholder</span> ' : '') + '<span class="oj-quiet">' + esc(f.fileName || 'Library') + '</span>' : !i.sendsDocument ? '<span class="oj-quiet">Employee supplies their own</span>'
           : f.source === 'link' && i.officialSourceUrl ? '<span class="oj-warn">No file</span> <a href="' + esc(i.officialSourceUrl) + '" target="_blank" rel="noopener" class="oj-quiet">official source ↗</a>' : '<span class="oj-warn">No file yet</span>';
         var fileActs = [];
         if (f.previewUrl) fileActs.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small oj-btn-quiet'));
@@ -408,7 +404,6 @@
         if (edit) { rowActs.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         var droppable = edit && i.itemKind === 'document';
         out += '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="defaults:' + esc(i.code) + ':' + esc(phase) + '" title="Drop a file here to attach it"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
-          + '<td>' + flag(i, 'required', i.required) + '</td><td>' + flag(i, 'employeeReturns', i.employeeReturns) + '</td><td>' + flag(i, 'requiresVerification', i.requiresVerification) + '</td>'
           + '<td class="oj-filecell"><div>' + fileCell + '</div>' + (fileActs.length ? '<div class="oj-actions oj-actions-tight oj-file-acts">' + fileActs.join('') + '</div>' : '') + '</td>'
           + '<td class="oj-rowacts"><div class="oj-actions oj-actions-tight">' + rowActs.join('') + '</div></td></tr>';
       });
@@ -429,7 +424,6 @@
     var pane = doc.getElementById('oj-view'); if (pane && S.defaults) drawDefaults(pane);
     return res;
   }
-  function defaultsFlag(code, phase, field, value) { var b = { phase: phase }; b[field] = value; return defaultsAct('/items/' + encodeURIComponent(code), b, 'PATCH'); }
   async function defaultsRename(code, phase, current) {
     var title = await portalPrompt('Document name in this package\'s default pack:', current || '');
     if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
@@ -1169,37 +1163,174 @@
     return stagePanel(2, 'Onboarding Documentation', st, body);
   }
 
-  function yesNo(v) { return v ? '<span class="oj-yes">Yes</span>' : '<span class="oj-no">No</span>'; }
 
   function packPanel(d) {
-    var P = d.pack; var r = d.record; var c = P.can || d.can; var E = P.email || {};
-    var editable = P.editable && c.assign;
+    var P = d.pack; var r = d.record; var c = P.can || d.can;
     var sent = r.status === 'starter_pack_sent' || r.status === 'documents_received';
-    var drafted = !!E.draftId;
     var out = '';
 
     if (!P.prepared) {
-      out += '<p class="oj-quiet">The document pack is being prepared from the role and employment type.</p>';
+      out += '<p class="oj-quiet">The document pack is being prepared.</p>';
       if (c.assign) out += '<div class="oj-actions">' + btn('Prepare the pack now', 'OnboardingJourney.packPrepare()', 'oj-btn-primary') + '</div>';
       return out;
     }
+    // Stage 2.5 — the pack is out; what comes back is read, placed and checked here.
+    if (sent) return returnsPanel(d);
 
-    // ── Sent banner ──
-    if (sent) {
-      out += '<div class="oj-sent-banner"><strong>Onboarding Documents Sent</strong>'
-        + '<span>Due: ' + esc(fmtDate(E.dueAt)) + '</span>'
-        + '<span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + ' to ' + esc(E.sentTo || r.applicantEmail || '') + (P.zip ? ' · ' + P.zip.documentCount + ' document(s)' : '') + '</span>'
-        + '</div>';
-      if (r.status === 'starter_pack_sent') {
-        out += '<p class="oj-quiet">Waiting for the completed documentation to come back. ' + P.counts.returns + ' item(s) are expected to be returned.</p>';
-        if (c.assign) out += '<div class="oj-actions">' + btn('Not sent after all', 'OnboardingJourney.packUnmarkSent()', 'oj-btn-quiet') + (P.zip ? '<a class="oj-btn" href="' + esc(P.zip.downloadUrl) + '">Download the ZIP that went out</a>' : '') + '</div>';
+    // Stage 2 — the email first, then the documents that go with it.
+    out += packEmailEditor(d, P, 'documentation');
+    out += attachmentsList(d, P);
+    return out;
+  }
+
+  /** The Phase 2 list, in the words of the email: the four attachments, and what the New Employee Details bring back. */
+  function attachmentsList(d, P) {
+    var c = P.can || d.can; var editable = P.editable && c.assign; var phase = 'documentation';
+    var included = P.items.filter(function (i) { return i.status === 'included'; });
+    var attachments = included.filter(function (i) { return i.group === 'attachment'; });
+    var supporting = included.filter(function (i) { return i.group === 'supporting'; });
+    var added = included.filter(function (i) { return i.group === 'added'; });
+    var out = '<div class="oj-attach" id="oj-attachments">'
+      + '<div class="oj-pack-head"><div><strong>Attachments: ZIP folder including –</strong> <span class="oj-quiet">' + P.counts.sending + ' document(s) go out in the ZIP; ' + P.counts.returns + ' item(s) come back.</span>'
+      + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) have no file yet — attach one before the email can be sent.</span>' : '')
+      + (P.counts.placeholders ? '<br><span class="oj-quiet">' + P.counts.placeholders + ' placeholder(s) stand in for documents not uploaded yet — replace them in Edit onboarding, or here for this person only.</span>' : '') + '</div>'
+      + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
+      + (editable ? '<p class="oj-drophint">Drag a file from your computer onto a document to attach it — no need to browse.</p>' : '')
+      + '<ol class="oj-attach-list">';
+    attachments.concat(added).forEach(function (i) {
+      out += attachmentRow(i, editable, i.code === 'PACK_NEW_EMPLOYEE_DETAILS' ? supporting : null);
+    });
+    out += '</ol><div id="oj-pack-add-' + phase + '" hidden></div></div>';
+    return out;
+  }
+
+  function fileChip(i, editable) {
+    var f = i.file || {};
+    if (f.placeholder) return '<span class="oj-chip is-warn">Placeholder — replace with the real document</span>';
+    if (f.previewUrl) return '<span class="oj-chip ' + (f.source === 'own' ? 'is-you' : 'is-quiet') + '">' + (f.source === 'own' ? 'Your copy' : f.source === 'body' ? 'Text' : 'Library') + '</span> <span class="oj-quiet">' + esc(f.fileName || '') + '</span>';
+    if (f.source === 'link' && i.officialSourceUrl) return '<span class="oj-warn">No file</span> <a href="' + esc(i.officialSourceUrl) + '" target="_blank" rel="noopener" class="oj-quiet">official source ↗</a>';
+    return '<span class="oj-warn">No file yet</span>';
+  }
+
+  function attachmentRow(i, editable, supporting) {
+    var f = i.file || {};
+    var acts = [];
+    if (f.previewUrl) acts.push(btn('Preview', 'OnboardingJourney.packPreview(\'' + jsq(i.id) + '\')', 'oj-btn-small'));
+    if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
+    if (editable) {
+      acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl && !f.placeholder ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      if (i.group === 'added') acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
+    }
+    var atts = (i.attachments || []);
+    var extra = atts.length ? '<ul class="oj-atts">' + atts.map(function (a) {
+      return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" title="Preview" onclick="event.preventDefault(); OnboardingJourney.packPreviewAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">' + esc(a.fileName) + '</a>'
+        + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
+    }).join('') + '</ul>' : '';
+    var sub = '';
+    if (supporting) {
+      sub = '<p class="oj-quiet oj-attach-subhead">which will include:</p><ul class="oj-attach-sub">'
+        + '<li>Bank details <span class="oj-quiet">— in the form</span></li>'
+        + supporting.map(function (x) { return '<li>' + esc(x.title) + (x.required ? '' : ' <span class="oj-quiet">(if applicable)</span>') + (x.description ? ' <span class="oj-quiet">— ' + esc(x.description) + '</span>' : '') + '</li>'; }).join('')
+        + '</ul>';
+    }
+    var droppable = editable && (!i.itemKind || i.itemKind === 'document');
+    return '<li class="oj-attach-item' + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="pack:' + esc(i.id) + '" title="Drop a file here to attach it"' : '') + '>'
+      + '<div class="oj-attach-main"><strong>' + esc(i.title) + '</strong>' + (i.group === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '')
+      + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '')
+      + '<div class="oj-attach-file">' + fileChip(i, editable) + extra + '</div>' + sub + '</div>'
+      + '<div class="oj-actions oj-actions-tight oj-attach-acts">' + acts.join('') + '</div></li>';
+  }
+
+  /**
+   * Stage 2.5 — the returned documentation. The same list as the pack, one
+   * slot per document: upload a file, a folder or a ZIP and the portal reads
+   * each one, works out which document it is and checks its fillable fields;
+   * what it cannot place is listed for the Owner to put in the right slot.
+   */
+  function returnsPanel(d) {
+    var P = d.pack; var r = d.record; var c = P.can || d.can; var E = P.email || {};
+    var active = (d.returnedDocuments || []).filter(function (x) { return x.status === 'active'; });
+    var included = P.items.filter(function (i) { return i.status === 'included'; });
+    var expected = included.filter(function (i) { return i.employeeReturns; });
+    var unplaced = active.filter(function (x) { return !x.packItemId; });
+    var out = '<div class="oj-sent-banner"><strong>Onboarding Documents Sent</strong>'
+      + '<span>Due: ' + esc(fmtDate(E.dueAt)) + '</span>'
+      + '<span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + ' to ' + esc(E.sentTo || r.applicantEmail || '') + (P.zip ? ' · ' + P.zip.documentCount + ' document(s)' : '') + '</span></div>'
+      + '<div class="oj-actions">' + (P.zip ? '<a class="oj-btn" href="' + esc(P.zip.downloadUrl) + '">Download the ZIP that went out</a>' : '')
+      + (c.assign && r.status === 'starter_pack_sent' ? btn('Not sent after all', 'OnboardingJourney.packUnmarkSent()', 'oj-btn-quiet') : '') + '</div>';
+
+    if (c.review) {
+      out += '<div class="oj-returns oj-droprow" id="oj-returns-documentation" data-drop="returns"><strong>Upload what came back</strong> <span class="oj-quiet">— one file, many, a whole folder, or the ZIP. The portal reads each one, works out which document it is, checks its fillable fields for blanks and inconsistencies, and places it below. Anything it cannot place is listed here for you to put in the right slot.</span>'
+        + '<div class="oj-actions">'
+        + '<label class="oj-btn oj-btn-primary oj-file">Upload files or a ZIP<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
+        + '<label class="oj-btn oj-file">Upload a folder<input type="file" multiple webkitdirectory directory hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
+        + (active.length ? btn('Re-read everything', 'OnboardingJourney.processReturns()', 'oj-btn-quiet') : '') + '</div>';
+      if (unplaced.length) {
+        var opts = expected.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + '</option>'; }).join('');
+        out += '<div class="oj-unplaced"><strong>Not placed yet (' + unplaced.length + ')</strong> <span class="oj-quiet">— the portal could not tell which document these are. Choose the slot for each.</span><ul>'
+          + unplaced.map(function (x) {
+            return '<li><span>' + esc(x.title || x.fileName) + '</span> ' + (x.checkSummary ? '<span class="oj-quiet">' + esc(x.checkSummary) + '</span> ' : '')
+              + '<select id="oj-place-' + esc(x.id) + '"><option value="">— Which document is this? —</option>' + opts + '</select> '
+              + btn('Place it', 'OnboardingJourney.placeReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-primary')
+              + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '')
+              + btn('Not one of ours', 'OnboardingJourney.archiveReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') + '</li>';
+          }).join('') + '</ul></div>';
       }
+      out += '</div>';
     }
 
-    out += packTable(d, P, 'documentation');
-    if (sent) return out;
-    out += packEmailEditor(d, P, 'documentation');
+    var attachments = included.filter(function (i) { return i.group === 'attachment'; });
+    var supporting = included.filter(function (i) { return i.group === 'supporting'; });
+    var added = included.filter(function (i) { return i.group === 'added'; });
+    var t = P.tracking || { done: 0, total: expected.length };
+    out += '<div class="oj-pack-head"><div><strong>Returned documentation</strong> <span class="oj-quiet">' + t.done + ' of ' + t.total + ' complete' + (P.counts.attention ? ' · <span class="oj-warn">' + P.counts.attention + ' need a look</span>' : '') + '</span></div></div>'
+      + '<ol class="oj-attach-list is-returns">';
+    attachments.concat(added).forEach(function (i) {
+      out += returnRow(d, i, c);
+      if (i.code === 'PACK_NEW_EMPLOYEE_DETAILS' && supporting.length) {
+        out += '<li class="oj-attach-item is-subhead"><span class="oj-quiet">which will include:</span></li>';
+        out += '<li class="oj-attach-item is-sub"><div class="oj-attach-main"><strong>Bank details</strong> <span class="oj-quiet">— in the form</span></div></li>';
+        supporting.forEach(function (x) { out += returnRow(d, x, c, true); });
+      }
+    });
+    out += '</ol>';
+    var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
+    out += '<p class="oj-returns-pending">' + (pending.length
+      ? '<strong>Still to come back (' + pending.length + ' of ' + expected.length + '):</strong> ' + esc(pending.map(function (i) { return i.title; }).join(' · '))
+      : '<strong>Everything expected has come back.</strong>' + (unplaced.length ? ' ' + unplaced.length + ' file(s) still need placing.' : '')) + '</p>';
     return out;
+  }
+
+  /** One slot in the returned-documentation list. */
+  function returnRow(d, i, c, sub) {
+    var docs = (d.returnedDocuments || []).filter(function (x) { return x.status === 'active' && x.packItemId === i.id; });
+    var body = '';
+    if (!i.employeeReturns) {
+      body = '<span class="oj-quiet">For reading only — nothing comes back.</span>';
+    } else if (!docs.length) {
+      body = '<span class="oj-quiet">' + (i.required ? 'Waiting for it to come back.' : 'If applicable — nothing received yet.') + '</span>';
+    } else {
+      body = '<ul class="oj-return-files">' + docs.map(function (x) {
+        var flags = [];
+        if (x.signatureStatus === 'missing') flags.push('<span class="oj-warn">no signature</span>');
+        if (x.check && x.check.status === 'attention') flags.push('<span class="oj-warn">' + esc(x.checkSummary || 'blank fields') + '</span>');
+        else if (x.check && x.check.status === 'unreadable') flags.push('<span class="oj-quiet">' + esc(x.checkSummary) + '</span>');
+        else if (x.check && x.check.status === 'ok') flags.push('<span class="oj-ok">' + esc(x.checkSummary) + '</span>');
+        return '<li><span>' + esc(x.title || x.fileName) + '</span>' + (flags.length ? ' <span class="oj-quiet">· ' + flags.join(' · ') + '</span>' : '') + ' '
+          + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>')
+          + (c.review ? btn('Not this one', 'OnboardingJourney.unplaceReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
+      }).join('') + '</ul>';
+      if (i.attentionReason) body += '<div class="oj-warn oj-attach-reason">' + esc(i.attentionReason) + '</div>';
+      if (i.verificationNote && i.progress === 'verified') body += '<div class="oj-quiet oj-attach-reason">' + esc(i.verificationNote) + '</div>';
+    }
+    var acts = [];
+    if (i.employeeReturns && c.review) acts.push('<label class="oj-btn oj-btn-small oj-file">' + (docs.length ? 'Upload another' : 'Upload for this document') + '<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this, \'' + jsq(i.id) + '\')"></label>');
+    if (i.employeeReturns && docs.length && i.progress !== 'verified' && c.verify) acts.push(btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-primary') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+    return '<li class="oj-attach-item' + (sub ? ' is-sub' : '') + ' is-' + esc(i.progress || 'n/a') + '">'
+      + '<div class="oj-attach-main"><strong>' + esc(i.title) + '</strong>' + (i.employeeReturns && !i.required ? ' <span class="oj-quiet">(if applicable)</span>' : '') + (i.employeeReturns ? ' ' + progressChip(i) : '')
+      + '<div class="oj-attach-file">' + body + '</div></div>'
+      + '<div class="oj-actions oj-actions-tight oj-attach-acts">' + acts.join('') + '</div></li>';
   }
 
   /**
@@ -1275,7 +1406,8 @@
     if (c.assign) {
       out += '<div class="oj-field"><label for="oj-pe-subject">Subject</label><input id="oj-pe-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-pe-body">Message</label>' + emailToolbar('oj-pe-body') + '<textarea id="oj-pe-body" rows="16" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea>'
-        + '<small>The ZIP is built from the pack above and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
+        + '<small>The ZIP is built from the attachments below and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
+        + (P.counts && P.counts.missingFiles ? '<div class="ob-note is-warn">' + P.counts.missingFiles + ' document(s) below have no file yet. Attach a file for each before the email can be prepared or sent.</div>' : '')
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the ZIP and opens a new message with the wording filled in — drag the ZIP into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
         + (E.outlook && !E.outlook.available
@@ -2354,7 +2486,7 @@
   }
   var RETURN_EXTS = { pdf: 1, docx: 1, doc: 1, png: 1, jpg: 1, jpeg: 1, txt: 1, zip: 1 };
   /** Files, a folder or a ZIP → the returns endpoint, in batches the server accepts (12 files, ~10 MB each request). */
-  async function uploadReturns(input) {
+  async function uploadReturns(input, packItemId) {
     var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
     input.value = '';
     if (!files.length) return;
@@ -2382,7 +2514,7 @@
     toast('Reading ' + payload.length + ' file(s)' + (batches.length > 1 ? ' in ' + batches.length + ' batches' : '') + '…');
     var totals = { stored: 0, matched: 0, applied: 0, check: 0, rejected: [] }; var last = null;
     for (var b = 0; b < batches.length; b += 1) {
-      var body = { files: batches[b].map(function (p) { return { fileName: p.fileName, fileMime: p.fileMime, fileData: p.fileData, title: p.title }; }) };
+      var body = { files: batches[b].map(function (p) { return { fileName: p.fileName, fileMime: p.fileMime, fileData: p.fileData, title: p.title, packItemId: packItemId || undefined }; }) };
       var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/returns', { method: 'POST', body: body });
       if (!res.ok) { toast(res.error, true); break; }
       last = res;
@@ -2408,6 +2540,16 @@
     var itemId = sel ? sel.value : '';
     if (!itemId) return toast('Choose which document this is.', true);
     return returnsAct('/returns/' + encodeURIComponent(docId) + '/assign', { packItemId: itemId }, 'Assigned and re-read.');
+  }
+  function placeReturn(docId) {
+    var sel = doc.getElementById('oj-place-' + docId);
+    var itemId = sel ? sel.value : '';
+    if (!itemId) return toast('Choose which document this is.', true);
+    return returnsAct('/returns/' + encodeURIComponent(docId) + '/assign', { packItemId: itemId }, 'Placed and re-read.');
+  }
+  async function unplaceReturn(docId) {
+    if (!await portalConfirm('Take this file out of its slot? It goes back to Not placed yet, where you can put it in the right one.')) return;
+    return returnsAct('/returns/' + encodeURIComponent(docId) + '/unassign', {}, 'Unplaced.');
   }
   async function archiveReturn(docId) {
     if (!await portalConfirm('Archive this document as not part of the onboarding pack?')) return;
@@ -2497,7 +2639,7 @@
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
     emailMark: emailMark, emailKey: emailKey, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
-    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, archiveReturn: archiveReturn,
+    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
     loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,
@@ -2506,7 +2648,7 @@
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
     scrollTo: scrollTo, copy: copy, viewPhase: viewPhase,
-    openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsFlag: defaultsFlag, defaultsRename: defaultsRename,
+    openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsRename: defaultsRename,
     defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsUpload: defaultsUpload, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
     refresh: rerender,
     _state: S,

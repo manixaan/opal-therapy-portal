@@ -133,20 +133,27 @@ describe('the default pack', () => {
     const codes = (p) => p.items.filter((i) => i.status === 'included').map((i) => i.code);
 
     expect(ot.pack.prepared).toBe(true);
-    expect(codes(ot.pack)).toEqual(expect.arrayContaining(['PACK_CONTRACT', 'PACK_NEW_EMPLOYEE_DETAILS', 'PACK_SUPER_CHOICE', 'REQ_FWIS', 'REQ_AHPRA', 'REQ_WWCC', 'REQ_NDIS_SCREENING', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'PACK_CPR', 'PACK_PASSPORT_VISA', 'PACK_POLICE_CHECK']));
-    expect(codes(admin.pack)).toEqual(expect.arrayContaining(['PACK_CONTRACT', 'REQ_CEIS', 'REQ_FWIS']));
-    expect(codes(admin.pack)).not.toContain('REQ_AHPRA');
-    expect(codes(admin.pack)).not.toContain('PACK_FIRST_AID');
+    // The one documentation list, for every role and contract type.
+    const LIST = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS', 'REQ_RIGHT_TO_WORK', 'REQ_IDENTITY', 'PACK_POLICE_CHECK', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'REQ_AHPRA', 'REQ_TAX_SETUP'];
+    expect(codes(ot.pack)).toEqual(LIST);
+    expect(codes(admin.pack)).toEqual(LIST);
+    expect(admin.pack.items.find((i) => i.code === 'REQ_AHPRA').required).toBe(false);
+    expect(ot.pack.items.find((i) => i.code === 'REQ_AHPRA').required).toBe(true);
+    expect(ot.pack.items.find((i) => i.code === 'REQ_AHPRA')).toMatchObject({ group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS' });
 
     const contract = ot.pack.items.find((i) => i.code === 'PACK_CONTRACT');
-    expect(contract).toMatchObject({ sendsDocument: true, employeeReturns: true, requiresVerification: true, required: true, origin: 'default' });
-    expect(contract.file).toMatchObject({ source: 'library', previewKind: 'pdf' });
+    expect(contract).toMatchObject({ sendsDocument: true, employeeReturns: true, requiresVerification: true, required: true, origin: 'default', group: 'attachment' });
+    expect(contract.file).toMatchObject({ source: 'library', previewKind: 'pdf', placeholder: false });
     expect(contract.file.previewUrl).toBe(`${ot.base}/pack/items/${contract.id}/preview`);
-    // A library document with no file yet says so instead of pretending.
+    // A library document with no file yet gets a placeholder published for it, flagged as such, so the pack can go out end to end.
     const superChoice = ot.pack.items.find((i) => i.code === 'PACK_SUPER_CHOICE');
-    expect(superChoice.file.source).toBe('link');
-    expect(superChoice.file.previewUrl).toBeNull();
-    expect(ot.pack.counts.missingFiles).toBeGreaterThan(0);
+    expect(superChoice.file).toMatchObject({ source: 'library', placeholder: true, previewKind: 'pdf' });
+    expect(superChoice.file.fileName).toBe('PLACEHOLDER - Superannuation Form.pdf');
+    expect(ot.pack.counts.missingFiles).toBe(0);
+    expect(ot.pack.counts.placeholders).toBeGreaterThan(0);
+    const ph = await agent.get(superChoice.file.previewUrl).buffer().parse(binary);
+    expect(ph.status).toBe(200);
+    expect(ph.body.slice(0, 5).toString()).toBe('%PDF-');
   });
 
   test('every document previews from the portal', async () => {
@@ -169,7 +176,7 @@ describe('editing one person\'s pack', () => {
     const jane = await settled(agent, OT);
     const other = await settled(agent, { ...OT, name: 'Kim Lee', personalEmail: 'kim@example.com' });
     const contract = jane.pack.items.find((i) => i.code === 'PACK_CONTRACT');
-    const fwis = jane.pack.items.find((i) => i.code === 'REQ_FWIS');
+    const fwis = jane.pack.items.find((i) => i.code === 'PACK_FWIS');
 
     const renamed = await agent.patch(`${jane.base}/pack/items/${contract.id}`).send({ title: 'Contract of Employment — Jane Smith' });
     expect(renamed.status).toBe(200);
@@ -187,9 +194,9 @@ describe('editing one person\'s pack', () => {
     expect(removed.body.pack.items.find((i) => i.id === fwis.id)).toMatchObject({ status: 'removed', removedReason: 'given in person' });
 
     const lib = await agent.get(`${jane.base}/pack/library`);
-    const notice = lib.body.documents.find((d) => d.code === 'POL_COLLECTION_NOTICE');
-    expect(notice.alreadyInPack).toBe(true);
-    expect((await agent.post(`${jane.base}/pack/items`).send({ documentId: notice.id })).status).toBe(409);
+    const contractDoc = lib.body.documents.find((d) => d.code === 'DOC_CONTRACT_TEMPLATE');
+    expect(contractDoc.alreadyInPack).toBe(true);
+    expect((await agent.post(`${jane.base}/pack/items`).send({ documentId: contractDoc.id })).status).toBe(409);
     const leave = lib.body.documents.find((d) => d.code === 'POL_LEAVE');
     expect(leave.alreadyInPack).toBe(false);
     const added = await agent.post(`${jane.base}/pack/items`).send({ documentId: leave.id, employeeReturns: false, required: false });
@@ -227,7 +234,7 @@ describe('editing one person\'s pack', () => {
     // Kim's pack is exactly as it was.
     const kim = await agent.get(`${other.base}/pack`);
     expect(kim.body.pack.items.find((i) => i.code === 'PACK_CONTRACT').title).toBe('Contract of Employment');
-    expect(kim.body.pack.items.find((i) => i.code === 'REQ_FWIS').status).toBe('included');
+    expect(kim.body.pack.items.find((i) => i.code === 'PACK_FWIS').status).toBe('included');
     expect(kim.body.pack.items.some((i) => i.title === 'Parking map')).toBe(false);
 
     // Renaming is refused with an empty name; a viewer cannot edit at all.
@@ -263,9 +270,9 @@ describe('Prepare Onboarding Email', () => {
     expect(new Date(p.email.dueAt).getTime() - Date.now()).toBeGreaterThan(6 * 86400000);
     expect(p.email.body).toContain(`by ${due}.`);
     expect(p.email.body).toContain('PS. Call me');
-    expect(p.zip).toMatchObject({ documentCount: 3 });
-    expect(p.zip.manifest.map((m) => m.fileName)).toEqual(['01 - Contract of Employment — Jane Smith.pdf', '02 - Fair Work Information Statement.pdf', '03 - New Employee Details Form.pdf']);
-    expect(p.zip.omissions.some((o) => o.code === 'PACK_SUPER_CHOICE')).toBe(true);
+    expect(p.zip).toMatchObject({ documentCount: 4 });
+    expect(p.zip.manifest.map((m) => m.fileName)).toEqual(['01 - Contract of Employment — Jane Smith.pdf', '02 - Superannuation Form.pdf', '03 - FWIS (and FTCIS CEIS).pdf', '04 - New Employee Details.pdf']);
+    expect(p.zip.omissions).toEqual([]);
     expect(p.editable).toBe(true);
 
     const call = createDraft.mock.calls[0][0];
@@ -275,13 +282,13 @@ describe('Prepare Onboarding Email', () => {
     expect(call.html).toContain(`by ${due}.`);
     const zip = await JSZip.loadAsync(call.attachment);
     expect(Object.keys(zip.files)).toContain('01 - Contract of Employment — Jane Smith.pdf');
-    expect(await zip.file('00 - Read Me First.txt').async('string')).toContain('• Passport / visa documentation — your own copy');
+    expect(await zip.file('00 - Read Me First.txt').async('string')).toContain('• Right to Work Verification (passport or visa details) — your own copy');
 
     // The stored ZIP is what the download serves, and the draft is stale once the pack changes.
     const dl = await agent.get(`${jane.base}/pack/zip`).buffer().parse(binary);
     expect(dl.headers['content-type']).toBe('application/zip');
     expect(dl.body.equals(call.attachment)).toBe(true);
-    const fwis = p.items.find((i) => i.code === 'REQ_FWIS');
+    const fwis = p.items.find((i) => i.code === 'PACK_FWIS');
     const removed = await agent.post(`${jane.base}/pack/items/${fwis.id}/remove`);
     expect(removed.body.pack.email.draftId).toBeNull();
     await agent.post(`${jane.base}/pack/email/draft`);

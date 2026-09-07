@@ -461,3 +461,29 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-doccheck-fields li.is-blank { color: #8a4b12; }
 .oj-doccheck-mark { width: 14px; text-align: center; font-weight: 700; }
 .oj-doccheck-fields li.is-filled .oj-doccheck-mark { color: #2f8f5b; }
+
+/* Phase 2: the attachments list, in the words of the email; Phase 2.5: the same list as return slots. */
+.oj-attach { margin-top: 8px; }
+.oj-attach-list { list-style: none; margin: 0; padding: 0; counter-reset: att; }
+.oj-attach-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--panel); font-size: 13.5px; }
+.oj-attach-item:not(.is-sub):not(.is-subhead) { counter-increment: att; }
+.oj-attach-item:not(.is-sub):not(.is-subhead) > .oj-attach-main::before { content: counter(att) '.'; font-weight: 800; color: var(--accent); margin-right: 8px; }
+.oj-attach-item.is-sub { margin-left: 28px; padding: 7px 12px; background: #fcfbf8; }
+.oj-attach-item.is-subhead { margin-left: 28px; border: 0; padding: 0 0 2px; background: transparent; font-size: 12.5px; }
+.oj-attach-item.oj-droprow.is-dragover { box-shadow: inset 0 0 0 2px var(--accent); background: #eef5f1; }
+.oj-attach-main { flex: 1; min-width: 0; }
+.oj-attach-file { margin-top: 4px; font-size: 12.5px; }
+.oj-attach-acts { flex: none; justify-content: flex-end; }
+.oj-attach-subhead { margin: 8px 0 2px; font-size: 12.5px; }
+.oj-attach-sub { margin: 0; padding-left: 18px; font-size: 12.5px; }
+.oj-attach-sub li { margin: 2px 0; }
+.oj-attach-reason { margin-top: 4px; font-size: 12.5px; }
+.oj-chip.is-warn { background: #fff3e6; color: #8a4b12; border-color: #f2cfa8; }
+.oj-ok { color: #2f7d4f; }
+.oj-return-files { list-style: none; margin: 0; padding: 0; }
+.oj-return-files li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 2px 0; }
+.oj-unplaced { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #fff9f3; border: 1px solid #f2cfa8; }
+.oj-unplaced ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.oj-unplaced li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+.oj-unplaced select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+@media (max-width: 640px) { .oj-attach-item { flex-direction: column; } .oj-attach-acts { justify-content: flex-start; } }

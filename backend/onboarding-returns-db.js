@@ -208,6 +208,18 @@ async function assignDocumentToItem(docId, packItemId, q = pool) {
   return rows[0] || null;
 }
 
+/** The Owner takes a document out of its slot: it is held for them to place, and the automation leaves it alone. */
+async function unassignDocument(docId, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_returned_documents SET pack_item_id = NULL, match_status = 'manual', match_confidence = NULL WHERE id = $1 RETURNING *`, [docId]
+  );
+  await q.query(
+    `UPDATE onboarding_pack_items SET returned_document_id = NULL, returned_at = NULL, verification_status = 'pending', verification_mode = NULL, attention_reason = NULL, updated_at = NOW()
+      WHERE returned_document_id = $1`, [docId]
+  );
+  return rows[0] || null;
+}
+
 async function markItemReturned(itemId, docId, q = pool) {
   await q.query(
     `UPDATE onboarding_pack_items SET returned_document_id = $2, returned_at = COALESCE(returned_at, NOW()), updated_at = NOW() WHERE id = $1`,
@@ -349,7 +361,7 @@ async function getPayrollApproval(userId, q = pool) {
 }
 
 module.exports = {
-  setDocumentCheck,
+  setDocumentCheck, unassignDocument,
   upsertCandidate, listCandidates, revealCandidate,
   upsertResolved, listResolved, getResolvedRaw, revealResolved, resolveByOwner, markFieldsApplied,
   listReturns, setDocumentMatch, assignDocumentToItem, markItemReturned, setItemVerification,
