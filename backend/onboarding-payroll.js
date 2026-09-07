@@ -36,7 +36,7 @@ const money = (n) => (n == null ? null : `$${Number(n).toLocaleString('en-AU', {
  * @param {object|null} p.payroll   raw payroll row bits { bank_status, bank_verified_at, tax_setup_status, super_status, payroll_approved_at, payroll_approved_by_name }
  * @param {object} p.assignment
  */
-function buildPayrollSetup({ profile, fields = [], payroll = null, assignment = {} }) {
+function buildPayrollSetup({ profile, fields = [], payroll = null, assignment = {}, integration = null }) {
   const pe = (profile && profile.personal) || {};
   const e = (profile && profile.employment) || {};
   const pay = (profile && profile.payroll) || {};
@@ -76,7 +76,7 @@ function buildPayrollSetup({ profile, fields = [], payroll = null, assignment = 
   return {
     status, label: labels[status], ready, approved, rows, blockers,
     approvedAt: approved ? payroll.payroll_approved_at : null, approvedByName: approved ? payroll.payroll_approved_by_name || null : null,
-    integration: { available: false, system: 'Xero Payroll', note: 'Payroll integration is not connected yet. Once approved, create the employee in Xero from these details; the internal task records it.' },
+    integration: integration || { available: false, system: 'Xero Payroll', note: 'The Xero payroll connection is not configured. Once approved, create the employee in Xero from these details; the internal task records it.' },
     readyCount: rows.filter((r) => r.status === 'ready').length, total: rows.length,
   };
 }

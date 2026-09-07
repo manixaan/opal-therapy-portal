@@ -1397,27 +1397,212 @@
 
   /** Payroll Setup — confirm, do not retype. */
   function payrollPanel(d) {
-    // Coming soon: the payroll set is gathered underneath, but the review and
-    // approval are switched off until the payroll integration is connected.
-    return '<section class="oj-panel oj-stage oj-coming-soon" id="oj-payroll" aria-disabled="true"><header><h2><span class="oj-stage-n">$</span>Payroll Setup</h2><span class="oj-chip is-quiet">Coming soon</span></header>'
-      + '<p class="oj-quiet">Payroll set-up will be prepared here from the onboarding information once the payroll integration is connected.</p></section>';
+    if (!d.payroll) return '';
+    return payrollPanelFull(d);
+  }
+
+  /** The Xero states as chips. Verified is done; anything needing a person is "you". */
+  function xeroStateClass(state) {
+    if (state === 'SYNCED') return 'is-done';
+    if (state === 'SYNC_IN_PROGRESS') return 'is-employee';
+    if (['ADMIN_REVIEW', 'APPROVED_FOR_XERO', 'POSSIBLE_DUPLICATE', 'MANUAL_XERO_ACTION_REQUIRED', 'SYNC_FAILED_ACTION_REQUIRED', 'CHANGES_REQUESTED'].indexOf(state) >= 0) return 'is-you';
+    if (state === 'SYNC_FAILED_RETRYABLE') return 'is-danger';
+    return 'is-quiet';
+  }
+
+  function optionList(items, selectedId, labelFn) {
+    return '<option value="">— choose —</option>' + (items || []).map(function (x) {
+      return '<option value="' + esc(x.id) + '"' + (x.id === selectedId ? ' selected' : '') + '>' + esc(labelFn ? labelFn(x) : x.name) + '</option>';
+    }).join('');
+  }
+
+  /** The Owner's employment and pay configuration, edited in place. */
+  function payrollConfigForm(d) {
+    var X = d.payroll.xero; var c = X.config || X.defaultConfig || {}; var R = S.payrollRef;
+    var locked = !X.can.configure;
+    var f = function (label, id, value, opts) {
+      opts = opts || {};
+      return '<div class="oj-field"><label for="oj-px-' + id + '">' + esc(label) + '</label><input id="oj-px-' + id + '" type="' + (opts.type || 'text') + '" value="' + esc(value == null ? '' : value) + '"' + (opts.step ? ' step="' + opts.step + '"' : '') + (locked ? ' disabled' : '') + (opts.maxlength ? ' maxlength="' + opts.maxlength + '"' : '') + '>' + (opts.hint ? '<small>' + esc(opts.hint) + '</small>' : '') + '</div>';
+    };
+    var sel = function (label, id, options, hint) {
+      return '<div class="oj-field"><label for="oj-px-' + id + '">' + esc(label) + '</label><select id="oj-px-' + id + '"' + (locked ? ' disabled' : '') + '>' + options + '</select>' + (hint ? '<small>' + esc(hint) + '</small>' : '') + '</div>';
+    };
+    var enumOpts = function (values, selected, labels) {
+      return values.map(function (v) { return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + esc(labels && labels[v] ? labels[v] : v) + '</option>'; }).join('');
+    };
+    var basisLabels = { FULLTIME: 'Full-time', PARTTIME: 'Part-time', CASUAL: 'Casual' };
+    var scaleLabels = { REGULAR: 'Regular', SENIORORPENSIONER: 'Senior or pensioner', FOREIGN: 'Foreign resident', WORKINGHOLIDAYMAKER: 'Working holiday maker', ACTORSARTISTSENTERTAINERS: 'Actors, artists, entertainers', HORTICULTURISTORSHEARER: 'Horticulturist or shearer' };
+    var xeroLists = R ? '' : '<div class="ob-note is-info">Xero lists (payroll calendars, earnings rates, leave types, super funds) have not been loaded. ' + (X.health && X.health.connected ? btn('Load from Xero', 'OnboardingJourney.loadPayrollReference()', 'oj-btn-small') : '<strong>The Xero payroll connection is not available.</strong>') + '</div>';
+    var leaveRows = (c.leaveLines || []).map(function (l, i) {
+      return '<tr><td>' + esc(l.leaveTypeName || l.leaveTypeId) + '</td><td>' + esc(l.calculationType) + '</td><td>' + esc(l.annualNumberOfUnits == null ? '' : l.annualNumberOfUnits) + '</td><td>' + esc(l.fullTimeNumberOfUnitsPerPeriod == null ? '' : l.fullTimeNumberOfUnitsPerPeriod) + '</td><td>' + (locked ? '' : '<button type="button" class="oj-link" onclick="OnboardingJourney.removePayrollLeave(' + i + ')">Remove</button>') + '</td></tr>';
+    }).join('');
+    return '<div class="oj-step" id="oj-payroll-config"><div class="oj-step-head"><span class="oj-step-n">1</span><strong>Employment and pay configuration</strong>' + (X.config ? '<span class="oj-chip is-done">Saved</span>' : '<span class="oj-chip is-you">Needs your input</span>') + '</div>'
+      + '<p class="oj-quiet">Prefilled from the offer terms. Nothing here is inferred by the portal: you choose the Xero earnings rate, calendar, tax scale and leave lines, and approve the salary or rate.</p>'
+      + xeroLists
+      + '<div class="oj-form-grid">'
+      + f('Employee number (optional)', 'employeeNumber', c.employeeNumber, { maxlength: 60 })
+      + f('Job title', 'jobTitle', c.jobTitle, { maxlength: 150 })
+      + sel('Employment basis', 'employmentBasis', enumOpts(['FULLTIME', 'PARTTIME', 'CASUAL'], c.employmentBasis, basisLabels))
+      + sel('Income type', 'incomeType', enumOpts(['SALARYANDWAGES', 'WORKINGHOLIDAYMAKER'], c.incomeType, { SALARYANDWAGES: 'Salary and wages', WORKINGHOLIDAYMAKER: 'Working holiday maker' }))
+      + sel('Pay basis', 'payBasis', enumOpts(['annual', 'hourly'], c.payBasis, { annual: 'Annual salary', hourly: 'Hourly rate' }))
+      + f('Annual salary', 'annualSalary', c.annualSalary, { type: 'number', step: '0.01', hint: 'Salaried only' })
+      + f('Hourly rate', 'hourlyRate', c.hourlyRate, { type: 'number', step: '0.01', hint: 'Hourly only' })
+      + f('Ordinary hours per week', 'unitsPerWeek', c.unitsPerWeek, { type: 'number', step: '0.01', hint: 'Leave blank for casual as rostered' })
+      + sel('Xero payroll calendar', 'payrollCalendarId', R ? optionList(R.calendars, c.payrollCalendarId, function (x) { return x.name + ' (' + x.calendarType + ')'; }) : '<option value="' + esc(c.payrollCalendarId || '') + '">' + esc(c.payrollCalendarName || (c.payrollCalendarId ? c.payrollCalendarId : 'load the Xero lists')) + '</option>', 'Opal normally pays fortnightly; the id is read from Xero, never typed.')
+      + sel('Xero ordinary earnings rate', 'earningsRateId', R ? optionList(R.earningsRates, c.earningsRateId, function (x) { return x.name + (x.rateType ? ' · ' + x.rateType : ''); }) : '<option value="' + esc(c.earningsRateId || '') + '">' + esc(c.earningsRateName || (c.earningsRateId ? c.earningsRateId : 'load the Xero lists')) + '</option>')
+      + sel('Tax scale type', 'taxScaleType', enumOpts(['REGULAR', 'SENIORORPENSIONER', 'FOREIGN', 'WORKINGHOLIDAYMAKER', 'ACTORSARTISTSENTERTAINERS', 'HORTICULTURISTORSHEARER'], c.taxScaleType, scaleLabels), 'Suggested from the residency the employee declared; confirm it.')
+      + sel('TFN exemption (only if no TFN was given)', 'tfnExemptionType', '<option value="">— not applicable —</option>' + enumOpts(['NOTQUOTED', 'PENDING', 'PENSIONER', 'UNDER18'], c.tfnExemptionType))
+      + f('Bank statement text', 'statementText', c.statementText || 'Opal Therapy wages', { maxlength: 18 })
+      + f('Payroll email (optional)', 'payrollEmail', c.payrollEmail, { type: 'email', hint: 'Defaults to the personal email on the profile' })
+      + f('Employee group (optional)', 'employeeGroupName', c.employeeGroupName, { maxlength: 100 })
+      + f('Additional withholding per pay (optional)', 'upwardVariationTaxWithholdingAmount', c.upwardVariationTaxWithholdingAmount, { type: 'number', step: '0.01', hint: 'Only with the employee\'s written instruction' })
+      + sel('Employer default super fund', 'defaultSuperFundId', R ? optionList(R.superFunds, c.defaultSuperFundId, function (x) { return x.name + ' (' + x.type + (x.usi ? ' · ' + x.usi : '') + ')'; }) : '<option value="' + esc(c.defaultSuperFundId || '') + '">' + esc(c.defaultSuperFundId || 'load the Xero lists') + '</option>', 'Used only when the employee chose the practice default fund.')
+      + '<div class="oj-field"><label><input type="checkbox" id="oj-px-eligibleToReceiveLeaveLoading"' + (c.eligibleToReceiveLeaveLoading ? ' checked' : '') + (locked ? ' disabled' : '') + '> Eligible for leave loading</label></div>'
+      + '</div>'
+      + '<h4>Leave lines</h4><div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Leave type</th><th>Calculation</th><th>Annual units</th><th>Full-time units per period</th><th></th></tr></thead><tbody>' + (leaveRows || '<tr><td colspan="5" class="oj-quiet">No leave lines. Casual employees normally have none.</td></tr>') + '</tbody></table></div>'
+      + (locked || !R ? '' : '<div class="oj-form-grid oj-leave-add"><div class="oj-field"><label for="oj-px-leaveType">Add a leave type</label><select id="oj-px-leaveType">' + optionList(R.leaveTypes, null, function (x) { return x.name + (x.normalEntitlement ? ' · ' + x.normalEntitlement + ' ' + (x.typeOfUnits || 'units') + '/yr' : ''); }) + '</select></div><div class="oj-field"><label for="oj-px-leaveAnnual">Annual units</label><input id="oj-px-leaveAnnual" type="number" step="0.01"></div><div class="oj-field"><label for="oj-px-leavePeriod">Full-time units per period</label><input id="oj-px-leavePeriod" type="number" step="0.01"></div><div class="oj-field"><label>&nbsp;</label>' + btn('Add leave line', 'OnboardingJourney.addPayrollLeave()', 'oj-btn-small') + '</div></div>')
+      + ((c.warnings || []).length ? '<div class="ob-note is-warn">' + esc(c.warnings.join(' ')) + '</div>' : '')
+      + (locked ? '<p class="oj-quiet">Locked: the employee exists in Xero. Changes now happen in Xero and on the profile.</p>' : '<div class="oj-actions">' + btn('Save configuration', 'OnboardingJourney.savePayrollConfig()', 'oj-btn-primary') + '</div>')
+      + '</div>';
+  }
+
+  /** The approved snapshot the Owner is sending: masked, never a secret. */
+  function payrollSnapshotView(s) {
+    if (!s) return '';
+    var row = function (k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v == null || v === '' ? '—' : v) + '</dd>'; };
+    var i = s.identity || {}; var a = i.address || {}; var e = s.employment || {}; var b = s.bank || {}; var t = s.tax || {}; var su = s.super || {};
+    return '<dl class="oj-terms oj-snapshot">'
+      + row('Legal name', [i.firstName, i.middleNames, i.lastName].filter(Boolean).join(' ')) + row('Date of birth', i.dateOfBirth) + row('Payroll email', i.email) + row('Mobile', i.mobile)
+      + row('Home address', [a.line1, a.line2, a.city, a.region, a.postcode].filter(Boolean).join(', '))
+      + row('Start date', e.startDate) + row('Employment basis', e.employmentBasis) + row('Income type', e.incomeType)
+      + row('Pay', e.payBasis === 'annual' ? '$' + e.annualSalary + ' per annum · ' + e.unitsPerWeek + ' hrs/week' : '$' + e.hourlyRate + ' per hour' + (e.unitsPerWeek ? ' · ' + e.unitsPerWeek + ' hrs/week' : ''))
+      + row('Earnings rate', e.earningsRateName || e.earningsRateId) + row('Payroll calendar', (e.payrollCalendarName || e.payrollCalendarId) + (e.calendarType ? ' (' + e.calendarType + ')' : ''))
+      + row('Leave lines', (e.leaveLines || []).map(function (l) { return l.leaveTypeName || l.leaveTypeId; }).join(', ') || 'None')
+      + row('Bank account', (b.accountName || '') + ' · BSB ' + (b.bsbMasked || '') + ' · ••••' + (b.accountLast4 || '') + ' · "' + (b.statementText || '') + '"')
+      + row('Tax', (t.residencyStatus || '') + ' · scale ' + (t.taxScaleType || '') + ' · TFN ' + (t.tfnProvided ? '*** *** ' + (t.tfnLast3 || '') : 'exemption ' + (t.tfnExemptionType || '?')) + ' · tax-free threshold ' + (t.taxFreeThresholdClaimed ? 'claimed' : 'not claimed') + ' · study loan ' + (t.hasLoanOrStudentDebt ? 'yes' : 'no'))
+      + row('Super', su.choice === 'employer_default' ? 'Employer default fund' : (su.fundName || '') + (su.usi ? ' · USI ' + su.usi : '') + (su.fundAbn ? ' · ABN ' + su.fundAbn : '') + (su.memberNumberMasked ? ' · member ' + su.memberNumberMasked : '') + (su.choice === 'smsf' ? ' · SMSF ' + (su.smsfEsa || '') + ' · BSB ' + (su.smsfBsbMasked || '') + ' ••••' + (su.smsfAccountLast4 || '') : ''))
+      + '</dl>';
+  }
+
+  /** The Xero stage: state, health, actions, verification, manual actions. */
+  function payrollXeroSection(d) {
+    var X = d.payroll.xero; var H = X.health || {}; var can = X.can || {};
+    var body = '<div class="oj-step" id="oj-payroll-xero"><div class="oj-step-head"><span class="oj-step-n">2</span><strong>Xero Payroll</strong><span class="oj-chip ' + xeroStateClass(X.state) + '">' + esc(X.label) + '</span></div>';
+    body += '<p class="oj-quiet">Connection: ' + (!H.configured ? 'not configured — set XERO_PAYROLL_CLIENT_ID and XERO_PAYROLL_CLIENT_SECRET.' : H.connected ? 'connected to ' + esc(H.tenantName || 'Xero') + ' (tenant …' + esc(H.tenantIdSuffix || '') + ')' : 'not connected — ' + esc(H.reason || '')) + (H.configured && !H.syncEnabled ? ' · <strong>employee creation is switched off</strong> (ENABLE_XERO_PAYROLL_SYNC).' : '') + ' · ' + esc(X.apiVersion || '') + '</p>';
+    if (X.reason) body += '<div class="ob-note ' + (X.state === 'SYNCED' ? 'is-info' : 'is-warn') + '">' + esc(X.reason) + '</div>';
+    if (X.lastError) body += '<div class="ob-note is-warn"><strong>' + esc(X.lastError.code) + '</strong> at step ' + esc(X.lastStep || '?') + ': ' + esc(X.lastError.message) + (X.validationMessages && X.validationMessages.length ? '<ul>' + X.validationMessages.map(function (m) { return '<li>' + esc(m) + '</li>'; }).join('') + '</ul>' : '') + (X.retryAfter ? '<div class="oj-quiet">Retry after ' + esc(fmtDateTime(X.retryAfter)) + '</div>' : '') + '</div>';
+    if (X.duplicateCandidates && X.state === 'POSSIBLE_DUPLICATE') {
+      body += '<div class="ob-note is-warn"><strong>Possible duplicate.</strong> Nothing was created. Decide which is right:<ul>' + X.duplicateCandidates.map(function (c) {
+        return '<li>' + esc(c.name) + (c.status ? ' (' + esc(c.status) + ')' : '') + (c.startDate ? ' · started ' + esc(c.startDate) : '') + ' — ' + esc(c.reasons.join(', ')) + ' ' + btn('Link this employee', 'OnboardingJourney.resolvePayrollDuplicate(\'link_existing\', \'' + jsq(c.employeeId) + '\')', 'oj-btn-small') + '</li>';
+      }).join('') + '</ul><div class="oj-actions">' + btn('None of these — create a new employee', 'OnboardingJourney.resolvePayrollDuplicate(\'create_new\')', 'oj-btn-small') + '</div></div>';
+    }
+    if (X.snapshot) body += '<details class="oj-details"><summary>Approved set (version ' + esc(X.snapshotVersion) + ', ' + esc(fmtDateTime(X.approvedAt)) + ')</summary>' + payrollSnapshotView(X.snapshot) + '</details>';
+    if (X.xeroEmployeeId) body += '<p class="oj-quiet">Xero EmployeeID ' + esc(X.xeroEmployeeId) + (X.syncedAt ? ' · verified ' + esc(fmtDateTime(X.syncedAt)) : '') + (X.lastRecheckAt ? ' · last checked ' + esc(fmtDateTime(X.lastRecheckAt)) : '') + ' · attempts ' + esc(X.attempts) + '</p>';
+    if (X.verification && X.verification.checks) {
+      body += '<ul class="oj-checks">' + X.verification.checks.map(function (k) { return '<li><span>' + esc(k.label) + '</span><span class="oj-chip ' + (k.ok ? 'is-done' : k.key === 'stp2' ? 'is-quiet' : 'is-danger') + '">' + esc(k.ok ? 'Verified' : (k.detail || 'Mismatch')) + '</span></li>'; }).join('') + '</ul>';
+    }
+    if (X.state === 'SYNCED' || X.nextPayRun.state !== 'UNKNOWN') body += '<p><strong>Next pay run:</strong> <span class="oj-chip ' + (X.nextPayRun.state === 'READY_FOR_NEXT_PAY_RUN' || X.nextPayRun.state === 'INCLUDED_IN_DRAFT' ? 'is-done' : 'is-you') + '">' + esc(X.nextPayRun.label) + '</span></p>';
+    var open = (X.manualActions || []).filter(function (a) { return !a.completedAt; });
+    var done = (X.manualActions || []).filter(function (a) { return a.completedAt; });
+    if (open.length) body += '<div class="ob-note is-warn"><strong>To do in Xero:</strong><ul>' + open.map(function (a) { return '<li>' + esc(a.text) + ' ' + btn('Mark manual action complete', 'OnboardingJourney.completePayrollAction(\'' + jsq(a.code) + '\')', 'oj-btn-small') + '</li>'; }).join('') + '</ul></div>';
+    if (done.length) body += '<p class="oj-quiet">Done in Xero: ' + esc(done.map(function (a) { return a.code.replace(/_/g, ' '); }).join(', ')) + '</p>';
+    var acts = '';
+    if (can.requestChanges) acts += btn('Request changes', 'OnboardingJourney.requestPayrollChanges()', 'oj-btn-quiet');
+    if (can.approve) acts += btn('Approve for Xero', 'OnboardingJourney.approvePayrollSetup()', 'oj-btn-primary');
+    if (can.sync) acts += btn(X.attempts > 0 ? 'Retry sync' : 'Sync to Xero', 'OnboardingJourney.syncPayroll(' + (X.attempts > 0 ? 'true' : 'false') + ')', 'oj-btn-primary');
+    if (can.recheck) acts += btn('Recheck Xero', 'OnboardingJourney.recheckPayroll()');
+    if (acts) body += '<div class="oj-actions">' + acts + '</div>';
+    if (X.privacyNotice) body += '<p class="oj-quiet">Privacy notice: ' + (X.privacyNotice.acceptedAt ? 'accepted ' + esc(fmtDateTime(X.privacyNotice.acceptedAt)) + ' (version ' + esc(X.privacyNotice.version) + ')' : 'not yet recorded — the employee accepts it when saving their bank, tax or super details') + '</p>';
+    if (X.operations && X.operations.length) body += '<details class="oj-details"><summary>Xero requests (' + X.operations.length + ')</summary><ul class="oj-quiet">' + X.operations.map(function (o) { return '<li>' + esc(fmtDateTime(o.started_at)) + ' · ' + esc(o.method) + ' ' + esc(o.resource) + ' · ' + esc(o.step) + ' · ' + esc(o.outcome) + (o.http_status ? ' (' + esc(o.http_status) + ')' : '') + (o.error_code ? ' · ' + esc(o.error_code) : '') + '</li>'; }).join('') + '</ul></details>';
+    return body + '</div>';
   }
 
   function payrollPanelFull(d) {
     var P = d.payroll;
     if (!P) return '';
-    var state = P.approved ? 'complete' : P.ready ? 'active' : 'parallel';
+    var X = P.xero;
+    var state = X && X.state === 'SYNCED' ? 'complete' : (P.approved || P.ready) ? 'active' : 'parallel';
     var cls = function (x) { return x === 'ready' ? 'is-done' : x === 'conflict' ? 'is-danger' : x === 'review' ? 'is-you' : 'is-quiet'; };
     var lbl = { ready: 'Ready', missing: 'Missing', conflict: 'Conflict', review: 'Needs confirmation' };
     var body = '<div class="oj-table-wrap"><table class="oj-pack oj-payroll"><tbody>' + P.rows.map(function (r) {
       return '<tr><th scope="row">' + esc(r.label) + '</th><td>' + (r.value ? esc(r.value) : '<span class="oj-quiet">—</span>') + '</td><td><span class="oj-chip ' + cls(r.status) + '">' + esc(lbl[r.status] || r.status) + '</span></td></tr>';
     }).join('') + '</tbody></table></div>';
-    if (P.approved) body += '<p class="oj-quiet">Approved ' + esc(fmtDateTime(P.approvedAt)) + (P.approvedByName ? ' by ' + esc(P.approvedByName) : '') + '. ' + esc(P.integration.note) + '</p>';
-    else if (P.ready) body += '<div class="oj-actions">' + btn('Approve Payroll Setup', 'OnboardingJourney.approvePayrollSetup()', 'oj-btn-primary') + '</div><p class="oj-quiet">' + esc(P.integration.note) + '</p>';
-    else body += '<div class="ob-note is-warn"><strong>Payroll cannot proceed yet.</strong> ' + esc(P.blockers.join(' · ')) + '. Resolve these in Requires Your Attention or wait for the documents.</div>';
-    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-payroll"><header><h2><span class="oj-stage-n">$</span>Payroll Setup</h2><span class="oj-chip ' + (P.approved ? 'is-done' : P.ready ? 'is-you' : 'is-quiet') + '">' + esc(P.label) + '</span></header>'
+    if (P.approved) body += '<p class="oj-quiet">Approved ' + esc(fmtDateTime(P.approvedAt)) + (P.approvedByName ? ' by ' + esc(P.approvedByName) : '') + '.</p>';
+    else if (!P.ready) body += '<div class="ob-note is-warn"><strong>Payroll cannot proceed yet.</strong> ' + esc(P.blockers.join(' · ')) + '. Resolve these in Requires Your Attention or wait for the documents.</div>';
+    if (X) body += payrollConfigForm(d) + payrollXeroSection(d);
+    else body += '<p class="oj-quiet">' + esc(P.integration.note) + '</p>';
+    var chip = X && X.state !== 'NOT_STARTED' ? '<span class="oj-chip ' + xeroStateClass(X.state) + '">' + esc(X.label) + '</span>' : '<span class="oj-chip ' + (P.approved ? 'is-done' : P.ready ? 'is-you' : 'is-quiet') + '">' + esc(P.label) + '</span>';
+    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-payroll"><header><h2><span class="oj-stage-n">$</span>Payroll &amp; Xero Setup</h2>' + chip + '</header>'
       + '<p class="oj-stage-summary">' + P.readyCount + ' of ' + P.total + ' lines ready. Everything here was gathered during onboarding; confirm it rather than typing it again.</p>' + body + '</section>';
   }
+
+  // ── Payroll & Xero actions ───────────────────────────────────────────────
+  function payrollConfigFromForm() {
+    var v = function (id) { var el = doc.getElementById('oj-px-' + id); return el ? el.value : null; };
+    var num = function (id) { var x = v(id); return x === '' || x == null ? null : Number(x); };
+    var cb = doc.getElementById('oj-px-eligibleToReceiveLeaveLoading');
+    var current = (S.record && S.record.payroll && S.record.payroll.xero && (S.record.payroll.xero.config || S.record.payroll.xero.defaultConfig)) || {};
+    var R = S.payrollRef;
+    var pick = function (list, id) { return (list || []).filter(function (x) { return x.id === id; })[0]; };
+    var cal = R && pick(R.calendars, v('payrollCalendarId')); var er = R && pick(R.earningsRates, v('earningsRateId'));
+    return {
+      employeeNumber: v('employeeNumber'), jobTitle: v('jobTitle'), employmentBasis: v('employmentBasis'), employmentType: 'EMPLOYEE', incomeType: v('incomeType'),
+      payBasis: v('payBasis'), annualSalary: num('annualSalary'), hourlyRate: num('hourlyRate'), unitsPerWeek: num('unitsPerWeek'),
+      payrollCalendarId: v('payrollCalendarId'), payrollCalendarName: cal ? cal.name : current.payrollCalendarName, calendarType: cal ? cal.calendarType : current.calendarType,
+      earningsRateId: v('earningsRateId'), earningsRateName: er ? er.name : current.earningsRateName,
+      taxScaleType: v('taxScaleType'), tfnExemptionType: v('tfnExemptionType') || null, statementText: v('statementText'), payrollEmail: v('payrollEmail') || null,
+      employeeGroupName: v('employeeGroupName') || null, upwardVariationTaxWithholdingAmount: num('upwardVariationTaxWithholdingAmount'),
+      defaultSuperFundId: v('defaultSuperFundId') || null, eligibleToReceiveLeaveLoading: !!(cb && cb.checked),
+      leaveLines: S.payrollLeave || current.leaveLines || [],
+    };
+  }
+  async function loadPayrollReference() {
+    var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/payroll-setup/xero/reference');
+    if (!res.ok) { toast(res.error, true); return; }
+    S.payrollRef = res.reference;
+    rerender();
+  }
+  function addPayrollLeave() {
+    var R = S.payrollRef; if (!R) return;
+    var id = doc.getElementById('oj-px-leaveType').value; if (!id) return;
+    var lt = R.leaveTypes.filter(function (x) { return x.id === id; })[0];
+    var annual = doc.getElementById('oj-px-leaveAnnual').value; var period = doc.getElementById('oj-px-leavePeriod').value;
+    var current = payrollConfigFromForm();
+    S.payrollLeave = (current.leaveLines || []).concat([{ leaveTypeId: id, leaveTypeName: lt ? lt.name : id, calculationType: 'BASEDONORDINARYEARNINGS', annualNumberOfUnits: annual === '' ? null : Number(annual), fullTimeNumberOfUnitsPerPeriod: period === '' ? null : Number(period) }]);
+    S.payrollDraft = current; S.payrollDraft.leaveLines = S.payrollLeave;
+    S.record.payroll.xero.config = S.record.payroll.xero.config ? S.payrollDraft : null;
+    S.record.payroll.xero.defaultConfig = S.payrollDraft;
+    rerender();
+  }
+  function removePayrollLeave(i) {
+    var current = payrollConfigFromForm();
+    S.payrollLeave = (current.leaveLines || []).filter(function (_, k) { return k !== i; });
+    current.leaveLines = S.payrollLeave;
+    if (S.record.payroll.xero.config) S.record.payroll.xero.config = current; else S.record.payroll.xero.defaultConfig = current;
+    rerender();
+  }
+  async function savePayrollConfig() {
+    var body = payrollConfigFromForm();
+    S.payrollLeave = null;
+    var res = await returnsAct('/payroll-setup/config', body, 'Configuration saved.', 'PUT');
+    if (res && !res.ok && res.errors) toast(res.errors.join(' · '), true);
+  }
+  async function requestPayrollChanges() {
+    var reason = window.prompt('What should the employee change? They will see this message.');
+    if (!reason || !reason.trim()) return;
+    return returnsAct('/payroll-setup/request-changes', { reason: reason.trim() }, 'Changes requested; the payroll forms are open for the employee again.');
+  }
+  async function syncPayroll(retry) {
+    if (!await portalConfirm(retry ? 'Retry the Xero sync? The same operation continues from where it stopped; nothing is created twice.' : 'Create this employee in Xero Payroll now? Their tax file number and bank details are sent to Xero over the server connection and this action is recorded.')) return;
+    toast('Talking to Xero…');
+    return returnsAct(retry ? '/payroll-setup/retry' : '/payroll-setup/sync', {}, function (res) { var x = res.payroll && res.payroll.xero; return x ? x.label + (x.nextPayRun && x.nextPayRun.state !== 'UNKNOWN' ? ' · ' + x.nextPayRun.label : '') : 'Done.'; });
+  }
+  function recheckPayroll() { return returnsAct('/payroll-setup/recheck', {}, function (res) { var x = res.payroll && res.payroll.xero; return x ? 'Rechecked: ' + x.label + ' · ' + x.nextPayRun.label : 'Rechecked.'; }); }
+  async function resolvePayrollDuplicate(resolution, employeeId) {
+    if (!await portalConfirm(resolution === 'link_existing' ? 'Link the onboarding record to this existing Xero employee? Their Xero record will be updated with the approved set.' : 'Create a new employee even though a similar one exists in Xero?', { danger: resolution === 'create_new' })) return;
+    return returnsAct('/payroll-setup/resolve-duplicate', { resolution: resolution, employeeId: employeeId || null }, 'Recorded. You can sync now.');
+  }
+  function completePayrollAction(code) { return returnsAct('/payroll-setup/manual-actions/' + encodeURIComponent(code) + '/complete', {}, 'Recorded.'); }
 
   /** Phase 3 — readiness, the induction pack, Email 3, tracking. */
   function phase3Panel(d) {
@@ -1830,8 +2015,8 @@
     return refreshRecordAfter(packAct('/restore-defaults', {}, 'Defaults restored.', 'POST', phase));
   }
   async function approvePayrollSetup() {
-    if (!await portalConfirm('Approve the payroll setup? Bank details are approved with it.')) return;
-    return returnsAct('/payroll-setup/approve', {}, 'Payroll setup approved.');
+    if (!await portalConfirm('Approve the payroll set for Xero? Bank details are approved with it, and the set is frozen as the version that will be sent.')) return;
+    return returnsAct('/payroll-setup/approve', {}, 'Approved for Xero.');
   }
   function packPrepare() { return refreshRecordAfter(packAct('/prepare', {}, 'Pack prepared.')); }
   async function packItem(id, verb) {
@@ -2172,6 +2357,8 @@
     uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
+    loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,
+    requestPayrollChanges: requestPayrollChanges, syncPayroll: syncPayroll, recheckPayroll: recheckPayroll, resolvePayrollDuplicate: resolvePayrollDuplicate, completePayrollAction: completePayrollAction,
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,

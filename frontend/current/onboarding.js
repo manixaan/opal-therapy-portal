@@ -2820,6 +2820,26 @@
 
   // ── Employee: forms ───────────────────────────────────────────────────────
 
+  /**
+   * The payroll privacy notice (APP 5), shown with every payroll form. The
+   * tick is required by the server, which records the version accepted with
+   * the payroll data.
+   */
+  var PAYROLL_NOTICE_VERSION = 'payroll-xero-2026-09';
+  function payrollNotice(d) {
+    return '<div class="ob-note is-info" id="ob-payroll-notice">'
+      + '<strong>How we use your payroll details.</strong> Opal Therapy collects your bank account, tax and '
+      + 'superannuation details to pay you and to meet its tax and super obligations. Once the practice owner '
+      + 'approves them, they are sent over a secure server connection to Xero, the payroll system, to create '
+      + 'your employee record. Full values are visible only to the practice owner or an authorised admin, '
+      + 'and every access is recorded. To correct anything after you have saved it, ask the practice and the '
+      + 'form will be reopened for you. Notice version ' + PAYROLL_NOTICE_VERSION + '.'
+      + '<div class="ob-check ob-mt-3"><input type="checkbox" id="ob-payroll-notice-ok" name="payrollNoticeAccepted"'
+      + (d && d.privacyNoticeAcceptedAt ? ' checked' : '') + '>'
+      + '<label for="ob-payroll-notice-ok">I have read this and agree to my details being sent to Xero for payroll</label></div>'
+      + '</div>';
+  }
+
   var FORMS = {
     personal_details: function (values) {
       var d = values || {};
@@ -2873,6 +2893,7 @@
         + '<div class="ob-sensitive-note">These details are encrypted before they are stored. '
         + 'After you save them, only the last four digits are ever shown — to you or to anyone at '
         + 'the practice.</div>'
+        + payrollNotice(d)
         + (have ? '<div class="ob-note">Currently on file: <span class="ob-masked">'
           + esc(d.bsbMasked || '') + '</span> <span class="ob-masked">••••'
           + esc(have) + '</span>. Entering new details replaces them.</div>' : '')
@@ -2892,6 +2913,7 @@
         + '<div class="ob-sensitive-note">Your tax file number is encrypted before it is stored, and '
         + 'is never displayed again — not to you and not to the practice. It is released once, to '
         + 'payroll, and that release is recorded.</div>'
+        + payrollNotice(d)
         + '<div class="ob-field"><span class="ob-strong" id="ob-tax-method-label">'
         + 'How would you like to provide your tax details?</span>'
         + '<div class="ob-radio-group ob-mt-3" role="radiogroup" aria-labelledby="ob-tax-method-label">'
@@ -2944,6 +2966,7 @@
         + '<div class="ob-note is-info">Super now has to reach your fund within days of each payday, '
         + 'so settling this before your first pay matters. If you do not nominate a fund we will ask '
         + 'the ATO whether you have a stapled fund that follows you between jobs.</div>'
+        + payrollNotice(d)
         + '<div class="ob-field"><span class="ob-strong" id="ob-super-label">Where should your super go?</span>'
         + '<div class="ob-radio-group ob-mt-3" role="radiogroup" aria-labelledby="ob-super-label">'
         + radio('superChoiceType', 'apra_fund', 'My existing super fund',

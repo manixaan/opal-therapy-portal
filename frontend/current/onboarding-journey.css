@@ -410,3 +410,13 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-att a:hover { text-decoration: underline; }
 .oj-pack-empty td { font-size: 12.5px; color: var(--ink-soft); font-style: italic; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 6px; }
 .oj-pack-empty.is-dragover td { background: #eef5f1; border-color: var(--accent); color: var(--ink); }
+
+/* ── Payroll & Xero Setup ─────────────────────────────────────────────────── */
+.oj-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; margin: 10px 0; }
+.oj-form-grid .oj-field { margin: 0; }
+.oj-form-grid .oj-field small { display: block; color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+.oj-leave-add { align-items: end; }
+.oj-details { margin: 10px 0; }
+.oj-details summary { cursor: pointer; color: var(--ink-soft); font-size: 13px; }
+.oj-snapshot { margin-top: 8px; }
+#oj-payroll-config h4 { margin: 14px 0 6px; font-size: 13px; }

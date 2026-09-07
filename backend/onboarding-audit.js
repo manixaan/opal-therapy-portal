@@ -72,6 +72,13 @@ const ALLOWED_FIELDS = Object.freeze([
   // The licence tier and the Entra object id are identifiers; the address
   // lives on the user row and the password has no key here, ever.
   'licence', 'licenceAssigned', 'licencesReleased', 'm365ObjectId', 'm365Disabled',
+
+  // ── Payroll & Xero Setup (migration 062) ───────────────────────────────
+  // Xero identifiers, the workflow state, the step that ran and the safe
+  // error code. There is no key for a TFN, a BSB, an account number, a
+  // member number, a token or a request body, and there never will be.
+  'syncId', 'operationId', 'snapshotVersion', 'xeroEmployeeId', 'nextPayRunState',
+  'step', 'errorCode', 'manualAction', 'duplicateResolution', 'attempt',
 ]);
 
 const ALLOWED = new Set(ALLOWED_FIELDS);

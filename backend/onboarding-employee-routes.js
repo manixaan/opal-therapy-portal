@@ -662,6 +662,16 @@ router.post('/api/onboarding/me/requirements/:rid/confirm-live-source', safe(asy
 
 const AU_STATES = ['WA', 'SA', 'NT', 'QLD', 'NSW', 'ACT', 'VIC', 'TAS'];
 
+/**
+ * The applicant accepted the payroll privacy notice with the form they just
+ * saved. Recorded with the payroll data (version + time) so the approval and
+ * the Xero sync can show what they consented to.
+ */
+async function recordPayrollNotice(userId) {
+  const { PRIVACY_NOTICE_VERSION } = require('./xero-payroll-mapping');
+  await require('./xero-payroll-db').recordPrivacyNotice(userId, PRIVACY_NOTICE_VERSION);
+}
+
 function validateForm(formKey, b) {
   switch (formKey) {
     case 'personal_details':
@@ -678,11 +688,13 @@ function validateForm(formKey, b) {
       if (!b.emergencyRelationship) return 'Please tell us their relationship to you';
       return null;
     case 'bank_details':
+      if (b.payrollNoticeAccepted !== true) return 'Please confirm you have read how your payroll details are used and shared with Xero';
       if (!b.accountHolderName) return 'The account holder name is required';
       if (!engine.isValidBsb(b.bsb)) return 'A BSB is six digits, for example 062-000';
       if (!engine.isValidAccountNumber(b.accountNumber)) return 'An account number is between 5 and 10 digits';
       return null;
     case 'tax_setup': {
+      if (b.payrollNoticeAccepted !== true) return 'Please confirm you have read how your payroll details are used and shared with Xero';
       const method = b.taxSubmissionMethod;
       if (!['employer_electronic_form', 'ato_online_services', 'paper_form', 'exemption'].includes(method)) {
         return 'Please choose how you are providing your tax details';
@@ -700,6 +712,7 @@ function validateForm(formKey, b) {
       return null;
     }
     case 'super_setup': {
+      if (b.payrollNoticeAccepted !== true) return 'Please confirm you have read how your payroll details are used and shared with Xero';
       const choice = b.superChoiceType;
       if (!['apra_fund', 'smsf', 'employer_default', 'stapled'].includes(choice)) {
         return 'Please choose how your superannuation should be paid';
@@ -780,6 +793,7 @@ router.post('/api/onboarding/me/requirements/:rid/form', safe(async (req, res) =
       break;
     case 'bank_details': {
       const saved = await odb.savePayrollBank(uid, org, { ...b, assignmentId: assignment.id }, uid);
+      await recordPayrollNotice(uid);
       summary = { provided: true, accountNumberLast4: saved.account_number_last4 };
       break;
     }
@@ -789,6 +803,7 @@ router.post('/api/onboarding/me/requirements/:rid/form', safe(async (req, res) =
       await odb.savePayrollTax(uid, org, {
         ...b, assignmentId: assignment.id, taxSetupStatus: status,
       }, uid);
+      await recordPayrollNotice(uid);
       summary = { provided: true, method: b.taxSubmissionMethod, status };
       break;
     }
@@ -797,6 +812,7 @@ router.post('/api/onboarding/me/requirements/:rid/form', safe(async (req, res) =
         ...b, assignmentId: assignment.id,
         superStatus: b.superChoiceType === 'employer_default' ? 'default_fund_applied' : 'employee_nominated',
       }, uid);
+      await recordPayrollNotice(uid);
       summary = { provided: true, choice: b.superChoiceType };
       break;
     }

@@ -433,19 +433,19 @@ describe('the complete workflow', () => {
     })).status).toBe(200);
 
     const bank = await form('REQ_BANK_DETAILS', {
-      accountHolderName: 'Test Casual', bsb: '062-000', accountNumber: '12345678',
+      payrollNoticeAccepted: true, accountHolderName: 'Test Casual', bsb: '062-000', accountNumber: '12345678',
     });
     expect(bank.status).toBe(200);
 
     const tax = await form('REQ_TAX_SETUP', {
       taxSubmissionMethod: 'employer_electronic_form',
       residencyStatus: 'australian_resident',
-      tfn: VALID_TFN, claimsTaxFreeThreshold: true, hasStudyLoan: false,
+      payrollNoticeAccepted: true, tfn: VALID_TFN, claimsTaxFreeThreshold: true, hasStudyLoan: false,
     });
     expect(tax.status).toBe(200);
 
     expect((await form('REQ_SUPER_SETUP', {
-      superChoiceType: 'apra_fund', superFundName: 'Test Super',
+      payrollNoticeAccepted: true, superChoiceType: 'apra_fund', superFundName: 'Test Super',
       superFundAbn: VALID_ABN, superFundUsi: 'TST0100AU',
       superMemberNumber: 'M123456', superAccountName: 'Test Casual',
     })).status).toBe(200);
@@ -951,11 +951,11 @@ describe('sensitive data handling', () => {
     for (const s of mine.body.sections) for (const r of s.requirements) byCode[r.code] = r;
 
     await applicant.post(`/api/onboarding/me/requirements/${byCode.REQ_BANK_DETAILS.id}/form`).send({
-      accountHolderName: 'Payroll Subject', bsb: '062-000', accountNumber: '12345678',
+      payrollNoticeAccepted: true, accountHolderName: 'Payroll Subject', bsb: '062-000', accountNumber: '12345678',
     }).expect(200);
     await applicant.post(`/api/onboarding/me/requirements/${byCode.REQ_TAX_SETUP.id}/form`).send({
       taxSubmissionMethod: 'employer_electronic_form',
-      residencyStatus: 'australian_resident', tfn: VALID_TFN, claimsTaxFreeThreshold: true,
+      payrollNoticeAccepted: true, residencyStatus: 'australian_resident', tfn: VALID_TFN, claimsTaxFreeThreshold: true,
     }).expect(200);
 
     return { owner, applicant, assignmentId };
@@ -1076,13 +1076,13 @@ describe('sensitive data handling', () => {
     const badTfn = await applicant.post(`/api/onboarding/me/requirements/${byCode.REQ_TAX_SETUP.id}/form`)
       .send({
         taxSubmissionMethod: 'employer_electronic_form',
-        residencyStatus: 'australian_resident', tfn: '111111111',
+        payrollNoticeAccepted: true, residencyStatus: 'australian_resident', tfn: '111111111',
       });
     expect(badTfn.status).toBe(400);
     expect(badTfn.body.error).toMatch(/tax file number/i);
 
     const badBsb = await applicant.post(`/api/onboarding/me/requirements/${byCode.REQ_BANK_DETAILS.id}/form`)
-      .send({ accountHolderName: 'X', bsb: '123', accountNumber: '12345678' });
+      .send({ payrollNoticeAccepted: true, accountHolderName: 'X', bsb: '123', accountNumber: '12345678' });
     expect(badBsb.status).toBe(400);
 
     const { rows: none } = await db.pool.query('SELECT COUNT(*)::int AS n FROM payroll_profiles');

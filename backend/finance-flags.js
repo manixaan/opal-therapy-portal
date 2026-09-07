@@ -52,6 +52,16 @@ const isPaymentCreateEnabled = () =>
 const isAutoReconciliationEnabled = () =>
   isXeroWriteEnabled() && writeFlag('ENABLE_XERO_AUTO_RECONCILIATION');
 const isWebhooksEnabled = () => writeFlag('ENABLE_XERO_WEBHOOKS');
+// Payroll & Xero Setup (onboarding). Creating an employee in Xero Payroll is a
+// write, so it sits behind the master write gate AND its own flag. Reading
+// reference data (calendars, pay items, super funds) only needs the Custom
+// Connection to be configured.
+const isPayrollSyncEnabled = () =>
+  isXeroWriteEnabled() && writeFlag('ENABLE_XERO_PAYROLL_SYNC');
+// Creating a missing regulated super fund needs the payroll.settings write
+// scope on the Custom Connection; it is opt-in on top of the sync itself.
+const isPayrollSuperFundCreateEnabled = () =>
+  isPayrollSyncEnabled() && writeFlag('ENABLE_XERO_PAYROLL_SUPERFUND_CREATE');
 
 /** Sanitised snapshot for diagnostics / boot logs / UI. */
 function financeFlagState() {
@@ -67,6 +77,8 @@ function financeFlagState() {
     paymentCreate: isPaymentCreateEnabled(),
     autoReconciliation: isAutoReconciliationEnabled(),
     webhooks: isWebhooksEnabled(),
+    payrollSync: isPayrollSyncEnabled(),
+    payrollSuperFundCreate: isPayrollSuperFundCreateEnabled(),
   };
 }
 
@@ -94,6 +106,8 @@ module.exports = {
   isPaymentCreateEnabled,
   isAutoReconciliationEnabled,
   isWebhooksEnabled,
+  isPayrollSyncEnabled,
+  isPayrollSuperFundCreateEnabled,
   financeFlagState,
   financeDisabledError,
 };
