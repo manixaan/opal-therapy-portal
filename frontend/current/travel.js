@@ -724,15 +724,27 @@ function bspTravelPreview() {
   let startMin = sh * 60 + (sm || 0);
   const pred = _bspPredecessor(day, startMin);
   if (!pred) return;
+  const predEnd = sessionEndMin(pred.s);
+  const col = document.getElementById('day-' + day);
+  // The leg currently leaving the previous session (home, or the next
+  // session) is what this booking would replace: hide it the moment the
+  // panel is open for a slot after that session, before any address exists,
+  // so the old return leg never sits under the placeholder.
+  document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
   const fromKey = locTravelKey(sessionLocation(pred.s));
   const toKey = _bspTargetAddress();
-  if (!fromKey || !toKey) return;
+  if (!col) return;
+  if (!fromKey || !toKey) {
+    // No destination yet: a placeholder where the drive will go.
+    const ph = document.createElement('div');
+    ph.className = 'travel-overlay between preview placeholder';
+    ph.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
+    ph.style.height = '16px';
+    ph.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">' + (fromKey ? 'type the address to see the drive from ' + _tpEsc(sessionLocation(pred.s).suburb || 'the previous session') : 'previous session has no address') + '</span>';
+    col.appendChild(ph);
+    return;
+  }
   const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
-  const predEnd = sessionEndMin(pred.s);
-  // The leg currently leaving the previous session (home, or the next
-  // session) is what this booking would replace: hide it while the panel is
-  // open so only the drive to the address being typed is on the grid.
-  document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
   const earliest = Math.ceil((predEnd + travel) / 15) * 15;
   // An explicit back-to-back keeps its start at or after the drive allows.
   if (pred.explicit && startMin < earliest) {
@@ -746,8 +758,7 @@ function bspTravelPreview() {
     const text = document.getElementById('bsp-prefill-text');
     if (text && !/earliest start/.test(text.textContent)) text.textContent += ' · earliest start after the drive';
   }
-  const col = document.getElementById('day-' + day);
-  if (!col || startMin < predEnd) return;
+  if (startMin < predEnd) return;
   if (travel <= 0) {
     // Same place as the previous session: say so instead of drawing nothing.
     const note = document.createElement('div');
