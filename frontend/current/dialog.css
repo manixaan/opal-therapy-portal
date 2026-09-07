@@ -2,7 +2,11 @@
    Hub dialog so every "are you sure?" in the portal reads as the portal. */
 
 .pd-backdrop {
-  position: fixed; inset: 0; z-index: 2400;
+  /* Above every panel that can ask a question (the Splose sync panel and
+     its alerts sit at 9000) but below toasts (9998+). At 2400 the "Confirm
+     cancellations" step rendered BEHIND the sync panel and could not be
+     answered (7 Sep 2026). */
+  position: fixed; inset: 0; z-index: 9700;
   background: rgba(20, 24, 23, 0.5);
   display: flex; align-items: flex-start; justify-content: center;
   padding: 12vh 16px; overflow: auto;

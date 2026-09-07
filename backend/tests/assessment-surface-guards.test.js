@@ -666,7 +666,9 @@ describe('changed assets are cache-busted', () => {
       ['workshop.js', 7], ['workshop.css', 3],
       // 1: themed confirm/alert/prompt dialogs — every native browser dialog
       // in the portal goes through dialog.js so it reads as the portal.
-      ['dialog.js', 1], ['dialog.css', 1],
+      // dialog.css 2: the confirm/alert layer moved above the Splose sync
+      // panel (9000) so its questions are answerable.
+      ['dialog.js', 1], ['dialog.css', 2],
       // 7: the Onboarding three-tab consolidation changed the sub-view route
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
