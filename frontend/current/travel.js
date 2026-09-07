@@ -871,8 +871,9 @@ function _renderTravelPanel(seg) {
   var to       = seg.toLoc   || {};
   var fromSub  = from.suburb || from.label || 'Base';
   var toSub    = to.suburb   || to.label   || 'Destination';
-  var fromAddr = from.addr   || from.formattedAddress || fromSub + ' WA';
-  var toAddr   = to.addr     || to.formattedAddress   || toSub   + ' WA';
+  // Segments carry the street address as `address`; older callers used `addr`.
+  var fromAddr = from.address || from.addr || from.formattedAddress || '';
+  var toAddr   = to.address   || to.addr   || to.formattedAddress   || '';
 
   // Determine source type
   var fromSession = seg.fromSessionId ? (window.SESSIONS && window.SESSIONS[seg.fromSessionId]) : null;
@@ -927,8 +928,11 @@ function _renderTravelPanel(seg) {
       var sel = current && current.kind === 'base' && current.id === k;
       html += '<button type="button" class="tp-plan-opt' + (sel ? ' on' : '') + '" data-plan="base" data-key="' + _tpEsc(k) + '">' + _tpEsc(LOCATIONS[k].label || k) + '</button>';
     });
-    html += '<button type="button" class="tp-plan-opt' + (current && current.kind === 'address' ? ' on' : '') + '" data-plan="address">Another address…</button>';
     html += '</div>';
+    // A one-off address for this day only — the base itself is left alone.
+    html += '<div class="tp-plan-oneoff"><label>' + (side === 'before' ? 'Or start this day from' : 'Or finish this day at') +
+      ' <input type="text" class="tp-addr" data-plan="address" autocomplete="off" placeholder="Start typing an address…" value="' + _tpEsc(current && current.kind === 'address' ? current.address : '') + '"></label>' +
+      '<div class="tp-plan-hint">Pick from the suggestions. Changes this day only; your travel bases in My Profile stay as they are.</div></div>';
     if (side === 'after') {
       var pts = (window.PATIENTS || []).slice().sort(function (a, b) { return (a.last + a.first).localeCompare(b.last + b.first); });
       html += '<div class="tp-plan-stop"><label>Or add a stop at another client ';
@@ -944,27 +948,23 @@ function _renderTravelPanel(seg) {
   html += '<div class="tp-section-title">Route</div>';
   html += '<div class="tp-route-block">';
 
-  // From
-  html += '<div class="tp-route-row">';
-  html += '<div><div class="tp-route-dot from"></div><div class="tp-route-line"></div></div>';
-  html += '<div>';
-  if (fromSession && !isTravelBlock(fromSession)) {
-    html += '<div class="tp-location-name">After: '+ (fromSession.patient || fromSession.title || 'Session') + '</div>';
-  }
-  html += '<div class="tp-location-name">' + fromSub + '</div>';
-  if (fromAddr && fromAddr !== fromSub + ' WA') html += '<div class="tp-location-addr">' + fromAddr + '</div>';
-  html += '</div></div>';
-
-  // To
-  html += '<div class="tp-route-row">';
-  html += '<div class="tp-route-dot to"></div>';
-  html += '<div>';
-  if (toSession && !isTravelBlock(toSession)) {
-    html += '<div class="tp-location-name">Next: '+ (toSession.patient || toSession.title || 'Session') + '</div>';
-  }
-  html += '<div class="tp-location-name">' + toSub + '</div>';
-  if (toAddr && toAddr !== toSub + ' WA') html += '<div class="tp-location-addr">' + toAddr + '</div>';
-  html += '</div></div>';
+  // Each end: the full address, and for a client session an editable field
+  // that changes the client's location on the appointment itself.
+  var endHtml = function (sess, loc, sub, addr, role) {
+    var h = '<div>';
+    var isClient = sess && !isTravelBlock(sess);
+    if (isClient) h += '<div class="tp-location-name">' + role + ': ' + _tpEsc(sess.patient || sess.title || 'Session') + '</div>';
+    else h += '<div class="tp-location-name">' + _tpEsc(loc.label || sub) + '</div>';
+    if (isClient && sess.dbId) {
+      h += '<label class="tp-addr-edit">Client location <input type="text" class="tp-addr" data-session-addr="' + _tpEsc(sess.id) + '" autocomplete="off" placeholder="Start typing the client\'s address…" value="' + _tpEsc(addr) + '"></label>';
+      h += '<div class="tp-plan-hint">Saved to this appointment (and its Outlook copy). Travel recalculates.</div>';
+    } else {
+      h += '<div class="tp-location-addr">' + _tpEsc(addr || (sub ? sub + ' WA' : 'Address not set')) + '</div>';
+    }
+    return h + '</div>';
+  };
+  html += '<div class="tp-route-row"><div><div class="tp-route-dot from"></div><div class="tp-route-line"></div></div>' + endHtml(fromSession, from, fromSub, fromAddr, 'After') + '</div>';
+  html += '<div class="tp-route-row"><div class="tp-route-dot to"></div>' + endHtml(toSession, to, toSub, toAddr, 'Next') + '</div>';
 
   html += '</div>'; // tp-route-block
 
@@ -978,7 +978,7 @@ function _renderTravelPanel(seg) {
 
   // Google Maps button
   if (typeof mapsLink === 'function') {
-    var mapsUrl = mapsLink(fromAddr || fromSub + ' WA', toAddr || toSub + ' WA');
+    var mapsUrl = mapsLink(fromAddr || (fromSub + ' WA'), toAddr || (toSub + ' WA'));
     html += '<a class="tp-maps-btn" href="' + mapsUrl + '" target="_blank" rel="noopener">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
     html += 'Open in Google Maps</a>';
@@ -991,6 +991,7 @@ function _renderTravelPanel(seg) {
 
   body.innerHTML = html;
   _wireTravelPlan(body, seg);
+  _wireRouteAddressEdits(body, seg);
 }
 
 function _tpFmtTime(h, m) {
@@ -1035,17 +1036,77 @@ function _wireTravelPlan(body, seg) {
     b.addEventListener('click', function () { setTravelOverride(sessionId, side, { kind: 'base', id: b.getAttribute('data-key') }).then(function (ok) { if (ok) rerender(); }); });
   });
   var addr = box.querySelector('[data-plan="address"]');
-  if (addr) addr.addEventListener('click', function () {
-    var ask = (typeof portalPrompt === 'function') ? portalPrompt : function (m) { return Promise.resolve(window.prompt(m)); };
-    ask(side === 'before' ? 'Where is the therapist coming from? A suburb or a full address.' : 'Where does the therapist go after this session? A suburb or a full address.', '', { title: 'Another address', label: 'Address or suburb', ok: 'Use this' })
-      .then(function (v) {
-        if (!v || !String(v).trim()) return;
-        var a = String(v).trim();
-        setTravelOverride(sessionId, side, { kind: 'address', address: a, suburb: (typeof addrSuburb === 'function' ? addrSuburb(a) : null) || a, label: a }).then(function (ok) { if (ok) rerender(); });
-      });
-  });
+  if (addr) {
+    var applyOneOff = function (a, lat, lng) {
+      a = String(a || '').trim(); if (!a) return;
+      var spec = { kind: 'address', address: a, suburb: (typeof addrSuburb === 'function' ? addrSuburb(a) : null) || a, label: a };
+      if (lat && lng) { spec.lat = Number(lat); spec.lng = Number(lng); }
+      setTravelOverride(sessionId, side, spec).then(function (ok) { if (ok) rerender(); });
+    };
+    if (typeof attachPlacesAutocomplete === 'function') attachPlacesAutocomplete(addr, applyOneOff);
+    addr.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyOneOff(addr.value, addr.dataset.lat, addr.dataset.lng); } });
+  }
   var reset = box.querySelector('[data-plan="reset"]');
   if (reset) reset.addEventListener('click', function () { setTravelOverride(sessionId, side, null).then(function (ok) { if (ok) rerender(); }); });
   var stop = box.querySelector('[data-plan="stop"]');
   if (stop) stop.addEventListener('change', function () { if (stop.value) addStopAfterSession(sessionId, stop.value); });
+}
+
+/* Client location inputs in the Route block (both ends may be sessions). */
+function _wireRouteAddressEdits(body, seg) {
+  body.querySelectorAll('[data-session-addr]').forEach(function (input) {
+    var sid = input.getAttribute('data-session-addr');
+    var apply = function (a, lat, lng) {
+      a = String(a || '').trim(); if (!a) return;
+      saveSessionAddress(sid, a, lat, lng).then(function (ok) {
+        if (!ok) return;
+        var s = window.SESSIONS && window.SESSIONS[sid];
+        var segs = s ? computeDayTravelSegments(s.day) : [];
+        var again = segs.find(function (x) { return x.kind === seg.kind && (x.fromSessionId === seg.fromSessionId) && (x.toSessionId === seg.toSessionId); }) || segs.find(function (x) { return x.kind === seg.kind; });
+        if (again) _renderTravelPanel(again);
+      });
+    };
+    if (typeof attachPlacesAutocomplete === 'function') attachPlacesAutocomplete(input, apply);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apply(input.value, input.dataset.lat, input.dataset.lng); } });
+  });
+}
+
+/* Change a client session's location from the travel panel: the same effect
+   as the detail panel's address save — the appointment (and its Outlook copy)
+   carries the new address, the tile chip updates, travel recalculates. */
+async function saveSessionAddress(sessionId, newAddr, lat, lng) {
+  var s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s) return false;
+  newAddr = String(newAddr || '').trim(); if (!newAddr) return false;
+  lat = parseFloat(lat) || null; lng = parseFloat(lng) || null;
+  var fromPlaces = !!(lat && lng);
+  var oldAddr = s.address;
+  s.address = newAddr; s.lat = lat; s.lng = lng; s.addressSource = 'manual';
+  s.location = newAddr;
+  s.locationObj = { formattedAddress: newAddr, latitude: lat, longitude: lng, source: 'manual', isMissing: false, isManualOverride: true,
+                    isValidForRouting: (typeof isValidRoutingLocation === 'function' ? isValidRoutingLocation(newAddr) : true) || fromPlaces };
+  delete s.__loc;
+  invalidateRouteCacheFor(oldAddr); invalidateRouteCacheFor(newAddr);
+  try {
+    var key = s.sploseId ? 'manual_addr_splose_' + s.sploseId : (s.dbId ? 'manual_addr_db_' + s.dbId : null);
+    if (key) localStorage.setItem(key, JSON.stringify({ formattedAddress: newAddr, lat: lat, lng: lng, savedAt: new Date().toISOString() }));
+  } catch (e) { /* storage unavailable */ }
+  if (s.element) {
+    var ok = s.locationObj.isValidForRouting;
+    s.element.classList.toggle('has-addr', ok);
+    s.element.classList.toggle('missing-addr', !ok && (typeof sessionNeedsFullAddress === 'function' ? sessionNeedsFullAddress(s) : false));
+    var chip = s.element.querySelector('.addr-chip'); if (ok && chip) chip.remove();
+  }
+  if (s.dbId) {
+    try {
+      var r = await fetch('/api/outlook/events/' + encodeURIComponent(s.dbId) + '/location', {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: newAddr, lat: lat, lng: lng }),
+      });
+      if (!r.ok) { var j = await r.json().catch(function () { return {}; }); showToast('Address kept locally', j.error || 'Could not write it to the appointment.'); }
+    } catch (e) { showToast('Address kept locally', e.message); }
+  }
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  showToast('Client location updated', fromPlaces ? 'Pinned from Google Maps. Travel recalculated.' : 'Travel recalculated.');
+  return true;
 }

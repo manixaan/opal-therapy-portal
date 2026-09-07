@@ -692,9 +692,9 @@ describe('changed assets are cache-busted', () => {
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
-      // 2: per-session travel answers (before / after), the day-base prompt
-      // and "add a stop" into Smart Booking.
-      ['travel.js', 2],
+      // 3: the travel panel shows full addresses, edits the client's location
+      // on the appointment, and takes a one-off start/finish address for the day.
+      ['travel.js', 3],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -834,7 +834,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
-    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking']) {
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits']) {
       expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
     }
     // The engine reads the answers at the day's ends, not the between legs.
