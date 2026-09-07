@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=5" defer></script>
+<script src="/travel.js?v=6" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -84,7 +84,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=4" defer></script>
+<script src="/profile.js?v=5" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -4222,8 +4222,8 @@ window.opIcon = function (name, size) {
             </svg>Perth metro office</label>
           <!-- One field: start typing and pick the exact address from the
                Google suggestions. The suburb is read from the chosen address. -->
-          <input type="text" id="wb-office-addr" value="100 Burrendah Blvd, Willetton WA 6155" placeholder="Start typing the office address…" autocomplete="off" oninput="setOfficeBase('addr', this.value)">
-          <span class="wb-hint" id="wb-office-hint">Willetton · office base</span>
+          <input type="text" id="wb-office-addr" value="" placeholder="No office yet — coming soon" autocomplete="off" disabled style="opacity:0.55;" oninput="setOfficeBase('addr', this.value)">
+          <span class="wb-hint" id="wb-office-hint">Coming soon · not used for travel yet</span>
         </div>
 
         <!-- Dynamic list of home bases -->
@@ -15549,12 +15549,15 @@ function rebuildLocationCatalogue() {
   const next = {};
   // Perth metro office (single, always present)
   if (WORK_BASES.office) {
+    // The practice has no office yet (7 Sep 2026): listed so the shape is
+    // ready, but not selectable as a day base until one exists.
     next.office = {
-      label:  WORK_BASES.office.label || 'Perth metro office',
+      label:  (WORK_BASES.office.label || 'Perth metro office') + ' (coming soon)',
       icon:   WORK_BASES.office.icon  || '',
       color:  WORK_BASES.office.color || '#8b80c8',
       region: WORK_BASES.office.region || 'central',
-      source: 'office'
+      source: 'office',
+      comingSoon: true
     };
   }
   // User-added home bases (local + remote)
@@ -15640,13 +15643,16 @@ function renderWorkLocationEditor() {
   lbl.textContent = `Week ${wk} · ${fmtDayDate(mon)} – ${fmtDayDate(fri)} ${mon.getFullYear()}`;
   sub.textContent = relLabel ? '· ' + relLabel : '(AWST)';
 
+  // Home bases are added, renamed and removed at runtime: rebuild the
+  // catalogue each render so the dropdown always shows the current names.
+  if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
   host.innerHTML = WL_DAYS.map((d, i) => {
     const date = addDays(mon, i);
     const locKey = weekObj[d];
     const loc = locKey ? LOCATIONS[locKey] : null;
     const opts = Object.entries(LOCATIONS)
       .filter(([k]) => k !== 'unset')
-      .map(([k, v]) => `<option value="${k}"${k === locKey ? ' selected' : ''}>${v.icon} ${v.label}</option>`)
+      .map(([k, v]) => `<option value="${k}"${k === locKey ? ' selected' : ''}${v.comingSoon && k !== locKey ? ' disabled' : ''}>${v.icon} ${v.label}</option>`)
       .join('');
     const locBlock = loc
       ? `<div class="wl-loc" style="background:${loc.color};">

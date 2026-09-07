@@ -425,9 +425,14 @@ function dayAnchorBase(day) {
       };
     }
   }
-  // Fallback: Perth metro office
-  const o = WORK_BASES.office || {};
-  return { suburb: o.suburb || 'Willetton', label: o.label || 'Perth metro office', addr: o.addr || null, region: o.region || 'central', remote: false };
+  // Fallback: the first local home base with an address (the office is
+  // "coming soon" and not a real place yet); the office only if nothing else.
+  const home = ((typeof WORK_BASES !== 'undefined' && WORK_BASES.homes) || []).find(h => h.kind !== 'remote' && (h.addr || h.suburb));
+  if (home) {
+    return { suburb: home.suburb || null, label: home.label || 'Home', addr: home.addr || null, region: home.region || suburbRegion(home.suburb) || 'central', remote: false };
+  }
+  const o = (typeof WORK_BASES !== 'undefined' && WORK_BASES.office) || {};
+  return { suburb: o.suburb || null, label: o.label || 'Perth metro office', addr: o.addr || null, region: o.region || 'central', remote: !o.addr && !o.suburb };
 }
 
 /* ---------- Normalized travel-segment store ----------
@@ -527,8 +532,9 @@ function ensureDayBase(day) {
   try {
     const wk = (typeof wlThisWeek === 'function') ? wlThisWeek() : null;
     if (!wk || (wk[day] && wk[day] !== 'unset')) return Promise.resolve(wk ? wk[day] : null);
+    if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
     const opts = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {})
-      .filter(k => k !== 'leave' && k !== 'unset')
+      .filter(k => k !== 'leave' && k !== 'unset' && !LOCATIONS[k].comingSoon)
       .map(k => ({ key: k, label: LOCATIONS[k].label || k }));
     if (!opts.length) return Promise.resolve(null);
     const dayName = ({ mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' })[day] || day;
@@ -932,7 +938,8 @@ function _renderTravelPanel(seg) {
     var side = seg.kind === 'start' ? 'before' : 'after';
     var current = sessionTravelOverride(planSession, side);
     var cur = describeTravelPoint(current, seg.day);
-    var bases = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {}).filter(function (k) { return k !== 'leave' && k !== 'unset'; });
+    if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
+    var bases = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {}).filter(function (k) { return k !== 'leave' && k !== 'unset' && !LOCATIONS[k].comingSoon; });
     html += '<div class="tp-section-title">' + (side === 'before' ? 'Before this session, coming from' : 'After this session, go to') + '</div>';
     html += '<div class="tp-plan" data-session="' + _tpEsc(planSession.id) + '" data-side="' + side + '">';
     html += '<div class="tp-plan-current">' + _tpEsc(cur) + (current ? ' <button type="button" class="tp-plan-reset" data-plan="reset">Use day default</button>' : '') + '</div>';

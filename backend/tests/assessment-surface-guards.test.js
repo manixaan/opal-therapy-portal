@@ -688,16 +688,16 @@ describe('changed assets are cache-busted', () => {
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
-      // 4: travel legs redraw once the saved bases arrive.
-      ['profile.js', 4],
+      // 5: the office field stays disabled (coming soon) when bases load.
+      ['profile.js', 5],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 5: suburb parser drops the country; estimates floor at 15 min; failed
-      // route lookups are retried after a minute.
-      ['travel.js', 5],
+      // 6: the office is 'coming soon' — day anchors fall back to the first
+      // home base, and the choosers skip coming-soon entries.
+      ['travel.js', 6],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -826,6 +826,16 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/function wireBaseAddressAutocomplete\(\)/);
     expect(SHELL).toMatch(/attachPlacesAutocomplete\(office, \(addr, lat, lng\) => setOfficeBase\('addr', addr, lat, lng\)\)/);
     expect(SHELL).toMatch(/h\.suburb = \(typeof addrSuburb === 'function' \? addrSuburb\(h\.addr\) : ''\)/);
+  });
+
+  test('the office is coming soon: not selectable as a day base; home bases appear by their current name', () => {
+    expect(SHELL).toMatch(/comingSoon: true/);
+    expect(SHELL).toMatch(/\$\{v\.comingSoon && k !== locKey \? ' disabled' : ''\}/);
+    // The dropdown is rebuilt from the live bases on every render.
+    const editor = SHELL.slice(SHELL.indexOf('host.innerHTML = WL_DAYS.map'), SHELL.indexOf('host.innerHTML = WL_DAYS.map') + 400);
+    expect(SHELL.slice(SHELL.indexOf('host.innerHTML = WL_DAYS.map') - 400, SHELL.indexOf('host.innerHTML = WL_DAYS.map'))).toMatch(/rebuildLocationCatalogue\(\)/);
+    expect(editor).toMatch(/LOCATIONS/);
+    expect(SHELL).toMatch(/id="wb-office-addr"[^>]*disabled/);
   });
 
   test('an empty week shows a plain grid — no first-time overlay card (owner\'s call, 7 Sep 2026)', () => {
