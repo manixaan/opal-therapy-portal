@@ -815,6 +815,13 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/'therapy':\s+\{ cat: 'client',[^\n]*serviceId: 125320/);
   });
 
+  test('the empty-week overlay never adds a grid row under the calendar', () => {
+    const css = SHELL.slice(SHELL.indexOf('.cal-empty-state {'), SHELL.indexOf('.cal-empty-state .ces-card'));
+    expect(css).toMatch(/position: absolute/);
+    expect(css).not.toMatch(/grid-row\s*:/);     // declarations only — the comment explains the old bug
+    expect(css).not.toMatch(/grid-column\s*:/);
+  });
+
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
     for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking']) {

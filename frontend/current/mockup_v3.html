@@ -2280,12 +2280,16 @@ window.opIcon = function (name, size) {
   /* First-time empty state — shown when no sessions exist for the visible week.
      Spans the visible day columns. */
   .cal-empty-state {
-    grid-column: 2 / -1;
-    grid-row: 2;
-    align-self: stretch; justify-self: stretch;
+    /* Laid OVER the day columns, never as a grid item. As a grid item with
+       an explicit grid-row it was placed before the auto-placed columns and
+       created a second body row — a tall blank band under 11 PM whenever the
+       visible week had no sessions (recurred 7 Sep 2026 once the last test
+       events were removed). */
+    position: absolute; left: 50px; right: 0; top: 0; bottom: 0;
     display: flex; align-items: center; justify-content: center;
     pointer-events: none; /* clicks fall through to day columns */
-    padding: 30px 20px;
+    padding: 70px 20px 30px;
+    z-index: 3;
   }
   .cal-empty-state .ces-card {
     pointer-events: auto;
