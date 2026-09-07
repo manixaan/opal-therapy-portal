@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=6" defer></script>
+<script src="/travel.js?v=7" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12487,6 +12487,9 @@ async function confirmBooking() {
   // A day with no base yet: ask once where the therapist is based, so the
   // first and last travel legs have somewhere to start and end.
   if (typeof ensureDayBase === 'function') { try { await ensureDayBase(slot.day); } catch (_) {} }
+  // Chain: if this booking becomes the day's last session, it inherits where
+  // the day was going to end (travel.js, concept §4).
+  BOOKING_STATE.chainAfter = (typeof travelInheritSpecFor === 'function') ? travelInheritSpecFor(slot.day, slot.startH * 60 + (slot.startM || 0)) : null;
 
   if (btn) { btn.disabled = true; btn.textContent = 'Creating appointment…'; }
 
@@ -12570,6 +12573,9 @@ async function confirmBooking() {
         if (BOOKING_STATE.travelFrom && typeof applyTravelChainAfterBooking === 'function') {
           const _tf = BOOKING_STATE.travelFrom; BOOKING_STATE.travelFrom = null;
           applyTravelChainAfterBooking(oResult.dbId, _tf);
+        } else if (BOOKING_STATE.chainAfter && typeof travelChainInherit === 'function') {
+          const _ca = BOOKING_STATE.chainAfter; BOOKING_STATE.chainAfter = null;
+          travelChainInherit(oResult.dbId, _ca);
         }
         console.log('✅ Outlook event created:', outlookId);
       } else {
@@ -13739,6 +13745,8 @@ async function performDeleteEvent(id, cascadeIds) {
   const s = SESSIONS[id];
   if (!s) return;
   const dbId = s.dbId;
+  // Chain: a last session's "after" passes back to the one that becomes last.
+  const gapClose = (typeof travelGapClosingFor === 'function') ? travelGapClosingFor(id) : null;
 
   // Optimistic: pull the event tile and its travel-block tiles off the canvas
   const cols = new Set();
@@ -13795,6 +13803,8 @@ async function performDeleteEvent(id, cascadeIds) {
         },
       });
     }
+
+    if (gapClose && typeof setTravelOverride === 'function') setTravelOverride(gapClose.sessionId, 'after', gapClose.spec);
 
     const n = json.travelBlocksDeleted || 0;
     showToast((n ? `Event deleted (with ${n} travel block${n === 1 ? '' : 's'})` : 'Event deleted') + ' (Cmd+Z to undo)');
@@ -15064,6 +15074,8 @@ function commitMove() {
   // Travel + gap overlays need to be refreshed now that the block has moved/resized
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(newDay);
   if (typeof refreshDayOverlays === 'function' && origDay && origDay !== newDay) refreshDayOverlays(origDay);
+  // Chain: moved to the end of a day → take over where that day was going to end.
+  if (typeof travelChainAfterMove === 'function') setTimeout(() => travelChainAfterMove(id), 0);
 }
 
 function titleBase(s) {

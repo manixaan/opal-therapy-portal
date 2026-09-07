@@ -695,9 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 6: the office is 'coming soon' — day anchors fall back to the first
-      // home base, and the choosers skip coming-soon entries.
-      ['travel.js', 6],
+      // 7: chain maintenance — inherit on insert and move, close the gap on delete.
+      ['travel.js', 7],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -847,7 +846,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
-    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits']) {
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove']) {
       expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
     }
     // The engine reads the answers at the day's ends, not the between legs.
@@ -859,6 +858,11 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/travel: \(event\.custom_metadata && event\.custom_metadata\.travel\) \|\| null/);
     expect(SHELL).toMatch(/await ensureDayBase\(slot\.day\)/);
     expect(SHELL).toMatch(/applyTravelChainAfterBooking\(oResult\.dbId, _tf\)/);
+    // Chain maintenance is wired into booking, delete and move.
+    expect(SHELL).toMatch(/BOOKING_STATE\.chainAfter = /);
+    expect(SHELL).toMatch(/travelChainInherit\(oResult\.dbId, _ca\)/);
+    expect(SHELL).toMatch(/travelGapClosingFor\(id\)/);
+    expect(SHELL).toMatch(/travelChainAfterMove\(id\)/);
     // Deleting a tile redraws the legs around where it was.
     const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);
     expect(del).toMatch(/refreshAllOverlays\(\)/);

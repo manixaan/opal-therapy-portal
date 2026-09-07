@@ -609,6 +609,62 @@ function addStopAfterSession(sessionId, patientId) {
   }, 60);
 }
 
+/* ---------- Chain maintenance (concept §4) ----------
+   Insert: a session that becomes the LAST of its day inherits the previous
+   last session's `after` (where the day was going to end), unless it has one.
+   Delete: when the last session goes, its `after` passes back to the session
+   that is now last (if that one has none of its own).
+   Move: a session dragged to the end of a day inherits the same way. */
+
+/* Before a booking is saved: what the new session should inherit, if its slot
+   lands after everything else on that day. Returns a spec or null. */
+function travelInheritSpecFor(day, startMin) {
+  const sessions = sessionsForDay(day);
+  if (!sessions.length) return null;
+  const last = sessions[sessions.length - 1];
+  if (startMin < sessionEndMin(last)) return null;      // not going to be the last
+  return sessionTravelOverride(last, 'after');
+}
+
+/* After a booking is saved: write the inherited `after` onto the new event. */
+async function travelChainInherit(newDbId, spec) {
+  if (!newDbId || !spec) return;
+  try {
+    await fetch('/api/events/' + encodeURIComponent(newDbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ before: null, after: spec }),
+    });
+  } catch (e) { /* best effort — the default is the same base most days */ }
+}
+
+/* Before a delete: if the doomed session is last on its day and carries an
+   `after`, hand it to the session that becomes last (only if that one has no
+   answer of its own). Returns { sessionId, spec } to apply, or null. */
+function travelGapClosingFor(sessionId) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s) return null;
+  const spec = sessionTravelOverride(s, 'after');
+  if (!spec) return null;
+  const sessions = sessionsForDay(s.day);
+  const idx = sessions.findIndex(x => x.id === sessionId);
+  if (idx !== sessions.length - 1 || idx < 1) return null;
+  const pred = sessions[idx - 1];
+  if (!pred.dbId || sessionTravelOverride(pred, 'after')) return null;
+  return { sessionId: pred.id, spec };
+}
+
+/* After a move: if the moved session is now last on its day with no `after`
+   of its own, take over the one the previous last session held. */
+function travelChainAfterMove(sessionId) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s || !s.dbId || sessionTravelOverride(s, 'after')) return;
+  const sessions = sessionsForDay(s.day);
+  if (!sessions.length || sessions[sessions.length - 1].id !== sessionId || sessions.length < 2) return;
+  const prevLast = sessions[sessions.length - 2];
+  const spec = sessionTravelOverride(prevLast, 'after');
+  if (spec) setTravelOverride(sessionId, 'after', spec);
+}
+
 /* After a stop is booked: the new session inherits the predecessor's `after`
    (where the day was going to end), so the chain forms without another step.
    The predecessor keeps its own answer — if the stop is later cancelled, the
