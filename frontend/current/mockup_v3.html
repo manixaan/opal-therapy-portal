@@ -13748,6 +13748,9 @@ async function performDeleteEvent(id, cascadeIds) {
     if (tid) __removeSessionTile(tid, cols);
   });
   cols.forEach((col) => { if (typeof reflowDayOverlaps === 'function' && col) reflowDayOverlaps(col); });
+  // Travel legs are derived from the tiles: with this one gone, redraw the
+  // day so its start/end legs and the neighbours' between-legs disappear too.
+  if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
 
   const drawer = document.getElementById('detail-drawer');
   if (drawer && drawer.classList.contains('show') && typeof closeBlockDetail === 'function') closeBlockDetail();
@@ -13770,6 +13773,7 @@ async function performDeleteEvent(id, cascadeIds) {
       if (tid) __removeSessionTile(tid, extraCols);
     });
     extraCols.forEach((col) => { if (typeof reflowDayOverlaps === 'function' && col) reflowDayOverlaps(col); });
+    if (extraCols.size && typeof refreshAllOverlays === 'function') refreshAllOverlays();
 
     // Cmd+Z undo: the backend restore un-tombstones the event + exactly the
     // travel-block ids this delete cascaded (captured from the response).

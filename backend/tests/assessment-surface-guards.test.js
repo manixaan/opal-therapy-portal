@@ -859,6 +859,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/travel: \(event\.custom_metadata && event\.custom_metadata\.travel\) \|\| null/);
     expect(SHELL).toMatch(/await ensureDayBase\(slot\.day\)/);
     expect(SHELL).toMatch(/applyTravelChainAfterBooking\(oResult\.dbId, _tf\)/);
+    // Deleting a tile redraws the legs around where it was.
+    const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);
+    expect(del).toMatch(/refreshAllOverlays\(\)/);
     // Legs are redrawn with every week render, so a reload keeps them.
     const rcw = SHELL.slice(SHELL.indexOf('function renderCurrentWeek()'), SHELL.indexOf('function _saveWeekPos()'));
     expect(rcw).toMatch(/refreshAllOverlays\(\)/);
