@@ -695,8 +695,9 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 4: overlays cover weekend columns.
-      ['travel.js', 4],
+      // 5: suburb parser drops the country; estimates floor at 15 min; failed
+      // route lookups are retried after a minute.
+      ['travel.js', 5],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

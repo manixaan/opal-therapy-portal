@@ -170,8 +170,13 @@ async function fetchRoute(origin, destination, mode) {
     }
     if (!result) {
       // Synchronous fallback via suburb table → caller still gets something useful.
+      // Held for a minute only: a failed or unroutable lookup (a half-typed
+      // base address, a network blip) must not pin a leg for 10 minutes.
       const estMin = estimateTravelMinFromTable(origin, destination);
-      result = { durationMin: estMin, distanceMeters: estMin * 850, source: 'estimate' };
+      result = { durationMin: estMin, distanceMeters: estMin * 850, source: 'estimate',
+                 fetchedAt: Date.now() - (CACHE_TTL_MS - 60 * 1000) };
+      ROUTE_CACHE.set(key, result);
+      return result;
     }
     result.fetchedAt = Date.now();
     ROUTE_CACHE.set(key, result);
@@ -192,17 +197,24 @@ function estimateTravelMinFromTable(fromAddr, toAddr) {
   const k1 = `${f}-${t}`, k2 = `${t}-${f}`;
   if (SUBURB_TRAVEL_FALLBACK[k1] != null) return SUBURB_TRAVEL_FALLBACK[k1];
   if (SUBURB_TRAVEL_FALLBACK[k2] != null) return SUBURB_TRAVEL_FALLBACK[k2];
-  return regionDistance(suburbRegion(f), suburbRegion(t));
+  // Two different suburbs in the same region are still a drive. Without this
+  // floor a cold cache estimated 0, no leg was drawn, and a failed Routes call
+  // left it that way.
+  return Math.max(15, regionDistance(suburbRegion(f), suburbRegion(t)) || 0);
 }
 
 /* Best-effort suburb extractor — handles "100 Burrendah Blvd, Willetton WA 6155"
    and bare "Willetton" strings alike. */
 function addrSuburb(addr) {
   if (!addr) return '';
+  // Google formats addresses as "4 Jarrah Ln, Mount Claremont WA 6010, Australia":
+  // drop the trailing country first, or "Australia" is read as the suburb
+  // (7 Sep 2026 — every estimate for such an address came out as 0).
+  let a = String(addr).trim().replace(/,\s*(Australia|AU)\s*$/i, '').trim();
   // If it looks like a bare suburb, return it.
-  if (!/,/.test(addr) && addr.split(/\s+/).length <= 3) return String(addr).trim();
-  const m = String(addr).match(/,\s*([A-Za-z ]+?)\s+(?:WA|Western Australia)?\s*\d{0,4}\s*$/i);
-  return m ? m[1].trim() : String(addr).split(',').pop().replace(/\bWA\b.*$/i, '').trim();
+  if (!/,/.test(a) && a.split(/\s+/).length <= 3) return a.replace(/\s+(WA|Western Australia)\s*\d{0,4}$/i, '').trim();
+  const m = a.match(/,\s*([A-Za-z' ]+?)\s+(?:WA|Western Australia)?\s*\d{0,4}\s*$/i);
+  return m ? m[1].trim() : a.split(',').pop().replace(/\bWA\b.*$/i, '').replace(/\d{4}\s*$/, '').trim();
 }
 
 /* Synchronous facade used by UI renderers. Returns cached minutes when warm,
