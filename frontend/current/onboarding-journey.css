@@ -371,32 +371,50 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-lt-help code { font-family: inherit; background: #eef3f0; color: #2f5651; padding: 1px 5px; border-radius: 4px; }
 .oj-lt-insert { font-size: 12.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; }
 .oj-lt-insert select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
-.oj-lt-page { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 28px 34px; display: flex; flex-direction: column; gap: 2px; }
-.oj-lt-text {
-  display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 13.5px; line-height: 1.5; color: #263633;
-  padding: 4px 8px; margin: 0 -8px; border: 1px solid transparent; border-radius: 6px; background: transparent; resize: none; overflow: hidden;
+/* The page: a carbon copy of the preview — the letter's own type, edited in place. */
+.oj-lt-sheet { background: #e9ecea; border: 1px solid var(--border); border-radius: 10px; padding: 18px; overflow-x: auto; }
+.oj-lt-page.is-doc {
+  background: #fff; margin: 0 auto; max-width: 100%; width: 8.5in; min-height: 11in; box-sizing: border-box;
+  padding: 0.55in 0.8in 0.6in; box-shadow: 0 1px 3px rgba(0,0,0,.18), 0 8px 24px rgba(0,0,0,.08);
+  font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.35; color: #1f2523; counter-reset: ltnum ltnum2;
 }
-.oj-lt-text:hover { border-color: var(--border); background: #fbfaf7; }
-.oj-lt-text:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(47, 86, 81, .12); resize: vertical; overflow: auto; }
-.oj-lt-para { padding: 2px 0; }
-.oj-lt-para.is-h1 .oj-lt-text { font-weight: 800; font-size: 20px; color: #2f5651; margin-top: 10px; }
-.oj-lt-para.is-h2 .oj-lt-text { font-weight: 700; font-size: 15.5px; color: #2f5651; margin-top: 8px; }
-.oj-lt-para.is-list { padding-left: 22px; position: relative; }
-.oj-lt-para.is-list::before { content: '•'; position: absolute; left: 6px; top: 6px; color: #2f5651; }
-.oj-lt-page { counter-reset: ltnum; }
-.oj-lt-para:not(.is-num) { counter-reset: ltnum; }
-.oj-lt-para.is-num { padding-left: 26px; position: relative; counter-increment: ltnum; }
-.oj-lt-para.is-num::before { content: counter(ltnum) '.'; position: absolute; left: 2px; top: 6px; color: #2f5651; font-size: 13px; }
-.oj-lt-table { display: flex; flex-direction: column; border: 1px solid #d9e2de; border-radius: 6px; overflow: hidden; margin: 8px 0 10px; }
-.oj-lt-row { display: grid; grid-template-columns: 220px 1fr; border-top: 1px solid #d9e2de; }
+.oj-lt-header, .oj-lt-footer { display: flex; justify-content: space-between; gap: 12px; font-size: 8pt; color: #566e70; user-select: none; }
+.oj-lt-header { font-weight: 700; border-bottom: 1px solid #d9e2de; padding-bottom: 4px; margin-bottom: 14px; text-transform: uppercase; letter-spacing: .02em; }
+.oj-lt-footer { color: #62716e; border-top: 1px solid #d9e2de; padding-top: 4px; margin-top: 26px; }
+.oj-lt-block { min-height: 1.35em; padding: 1px 4px; margin: 0 -4px 6pt; border-radius: 3px; outline: none; white-space: pre-wrap; word-wrap: break-word; cursor: text; }
+.oj-lt-block:hover { background: #fbfaf7; box-shadow: inset 0 0 0 1px #e3e8e5; }
+.oj-lt-block:focus { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.oj-lt-block.is-title { font-size: 30pt; font-weight: 700; color: #2f5651; margin-bottom: 8pt; line-height: 1.15; }
+.oj-lt-block.is-subtitle { font-size: 13pt; color: #566e70; margin-bottom: 12pt; }
+.oj-lt-block.is-h1 { font-size: 19pt; font-weight: 700; color: #2f5651; margin-top: 16pt; margin-bottom: 8pt; line-height: 1.2; }
+.oj-lt-block.is-h2 { font-size: 14pt; font-weight: 700; color: #2f5651; margin-top: 13pt; margin-bottom: 5pt; line-height: 1.2; }
+.oj-lt-block.is-h3 { font-size: 11.5pt; font-weight: 700; color: #566e70; margin-top: 10pt; margin-bottom: 3pt; }
+.oj-lt-block.is-h4 { font-weight: 700; margin-top: 8pt; margin-bottom: 2pt; }
+.oj-lt-block.is-caption { font-size: 8.5pt; color: #62716e; }
+.oj-lt-block.is-bullet, .oj-lt-block.is-bullet2, .oj-lt-block.is-num, .oj-lt-block.is-num2 { position: relative; padding-left: 26px; margin-bottom: 3pt; }
+.oj-lt-block.is-bullet2 { padding-left: 46px; }
+.oj-lt-block.is-bullet::before, .oj-lt-block.is-bullet2::before { content: '•'; position: absolute; left: 8px; color: #2f5651; }
+.oj-lt-block.is-bullet2::before { left: 28px; }
+.oj-lt-block:not(.is-num) { counter-reset: ltnum; }
+.oj-lt-block:not(.is-num2) { counter-reset: ltnum2; }
+.oj-lt-block.is-num { counter-increment: ltnum; }
+.oj-lt-block.is-num2 { counter-increment: ltnum2; }
+.oj-lt-block.is-num::before { content: counter(ltnum) '.'; position: absolute; left: 4px; }
+.oj-lt-block.is-num2::before { content: counter(ltnum2) '.'; position: absolute; left: 4px; }
+.oj-lt-block[data-placeholder]:empty::before { content: attr(data-placeholder); color: #a9b3b0; font-style: italic; position: static; }
+.oj-lt-table { display: flex; flex-direction: column; border: 1px solid #c9d5d0; margin: 4pt 0 10pt; }
+.oj-lt-row { display: grid; grid-template-columns: 34% 1fr; border-top: 1px solid #c9d5d0; }
 .oj-lt-row:first-child { border-top: 0; }
-.oj-lt-row .oj-lt-text { margin: 0; border-radius: 0; font-size: 12.5px; padding: 7px 10px; }
-.oj-lt-row .is-th { background: #2f5651; color: #fff; font-weight: 600; }
-.oj-lt-row .is-th:hover { background: #3a6a63; }
-.oj-lt-row .is-th:focus { background: #3a6a63; box-shadow: inset 0 0 0 2px #fff; }
-.oj-lt-row .is-td { background: #fff; }
-.oj-lt-row .is-td::placeholder { color: #a9b3b0; font-style: italic; }
+.oj-lt-row .oj-lt-block { margin: 0; border-radius: 0; font-size: 9pt; padding: 5px 8px; min-height: 1.6em; }
+.oj-lt-row .oj-lt-block:first-child { background: #2f5651; color: #fff; font-weight: 700; }
+.oj-lt-row .oj-lt-block:first-child:hover { background: #3a6a63; box-shadow: none; }
+.oj-lt-row .oj-lt-block:first-child:focus { background: #3a6a63; box-shadow: inset 0 0 0 2px #fff; }
+.oj-lt-row .oj-lt-block:first-child .oj-lt-tag { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.4); }
 .oj-lt-td-empty { background: #fff; }
+/* A portal-filled field: one chip, moved or deleted whole, never typed over. */
+.oj-lt-tag { display: inline; background: #e8f1ec; color: #2f5651; border: 1px solid #c5d9cf; border-radius: 3px; padding: 0 3px; margin: 0; font-size: .92em; font-weight: 600; white-space: nowrap; user-select: all; cursor: default; }
+.oj-lt-tag.is-demo { font-size: 12px; }
+.oj-lt-block:focus .oj-lt-tag { box-shadow: 0 0 0 1px rgba(47,86,81,.15); }
 
 /* ── Drag and drop onto pack rows ───────────────────────────────────────── */
 .oj-droprow { transition: background .12s, box-shadow .12s; }

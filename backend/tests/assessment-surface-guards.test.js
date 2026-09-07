@@ -679,11 +679,11 @@ describe('changed assets are cache-busted', () => {
       // the consolidation reuses the existing ob-* styles unchanged.
       // 10: the management surface is delegated to onboarding-journey.js;
       // open()/nav() carry a record id. The CSS stays at 8.
-      ['onboarding.js', 13], ['onboarding.css', 8],
+      ['onboarding.js', 14], ['onboarding.css', 8],
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 37], ['onboarding-journey.css', 24],
+      ['onboarding-journey.js', 38], ['onboarding-journey.css', 25],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.

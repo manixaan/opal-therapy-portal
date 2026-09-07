@@ -1701,28 +1701,62 @@
   //  THE LETTER'S WORDING — edit any paragraph; save makes it the standard
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var LT = { data: null, lastFocus: null };
-  var HEADING_STYLES = { OPALHeading1: 'h1', OPALHeading2: 'h2', OPALTableHeader: 'th' };
+  var LT = { data: null, lastFocus: null, range: null };
 
   function templateChipText(t) {
     if (!t || t.source !== 'practice') return 'Generated from the template';
     return 'Your wording, v' + t.version;
   }
 
-  /** Segments → the text a person edits: fields appear as {{Field name}}. */
-  function segmentsToText(segs, labels) {
-    return (segs || []).map(function (s) { return s.type === 'tag' ? '{{' + (labels[s.tag] || s.tag) + '}}' : s.text; }).join('');
+  /**
+   * The editor is a carbon copy of the preview: the letter drawn as a page,
+   * in the template's own type, and every paragraph edited in place the way
+   * a Word document is. The portal-filled controls are chips — they can be
+   * moved or deleted as a whole but their wording is not typed over.
+   */
+  var LT_KIND = {
+    OPALDocumentTitle: 'title', OPALSubtitle: 'subtitle', OPALHeading1: 'h1', OPALHeading2: 'h2', OPALHeading3: 'h3',
+    OPALHeading4: 'h4', OPALTableHeader: 'th', OPALTableBody: 'td', OPALBullet: 'bullet', OPALBullet2: 'bullet2',
+    OPALNumberedList: 'num', OPALNumberedList2: 'num2', OPALCaption: 'caption',
+  };
+
+  /** Segments → the HTML inside one editable block: text with line breaks, controls as chips. */
+  function segmentsToHtml(segs, labels) {
+    return (segs || []).map(function (s) {
+      if (s.type === 'tag') return '<span class="oj-lt-tag" contenteditable="false" data-tag="' + esc(s.tag) + '" title="Filled in by the portal for each person">' + esc(labels[s.tag] || s.tag) + '</span>';
+      return esc(s.text).replace(/\n/g, '<br>');
+    }).join('');
   }
-  /** The edited text → segments. An unknown {{name}} stays as plain text. */
-  function textToSegments(text, tagByLabel) {
+
+  /** One editable block's DOM → segments. Chips become tags, <br> and nested blocks become line breaks. */
+  function blockToSegments(el) {
     var out = [];
-    String(text || '').split(/(\{\{[^{}]+\}\})/).forEach(function (piece) {
-      if (!piece) return;
-      var m = /^\{\{([^{}]+)\}\}$/.exec(piece);
-      var tag = m && tagByLabel[m[1].trim().toLowerCase()];
-      if (tag) out.push({ type: 'tag', tag: tag });
-      else if (out.length && out[out.length - 1].type === 'text') out[out.length - 1].text += piece;
-      else out.push({ type: 'text', text: piece });
+    var push = function (text) {
+      if (!text) return;
+      if (out.length && out[out.length - 1].type === 'text') out[out.length - 1].text += text;
+      else out.push({ type: 'text', text: text });
+    };
+    var walk = function (node, first) {
+      if (node.nodeType === 3) { push(node.nodeValue.replace(/\u00a0/g, ' ')); return; }
+      if (node.nodeType !== 1) return;
+      if (node.classList && node.classList.contains('oj-lt-tag')) { out.push({ type: 'tag', tag: node.getAttribute('data-tag') }); return; }
+      if (node.nodeName === 'BR') { push('\n'); return; }
+      var block = /^(DIV|P)$/.test(node.nodeName);
+      if (block && !first) push('\n');
+      for (var c = node.firstChild, i = 0; c; c = c.nextSibling, i++) walk(c, i === 0 && (first || !block));
+    };
+    for (var c = el.firstChild, i = 0; c; c = c.nextSibling, i++) walk(c, i === 0);
+    return out;
+  }
+
+  function normaliseSegments(segs) {
+    var out = [];
+    (segs || []).forEach(function (s) {
+      if (s.type === 'tag') { out.push({ type: 'tag', tag: s.tag }); return; }
+      var t = String(s.text || '');
+      if (!t) return;
+      if (out.length && out[out.length - 1].type === 'text') out[out.length - 1].text += t;
+      else out.push({ type: 'text', text: t });
     });
     return out;
   }
@@ -1731,47 +1765,51 @@
     if (!global.Onboarding || typeof global.Onboarding.openModal !== 'function') return;
     var res = await api('/api/onboarding/journey/offer-template');
     if (!res.ok) { toast(res.error, true); return; }
-    LT.data = res;
+    LT.data = res; LT.lastFocus = null; LT.range = null;
     var labels = {}; res.tags.forEach(function (t) { labels[t.tag] = t.label; });
     var t = res.template;
     var TH = 'OPALTableHeader', TD = 'OPALTableBody';
-    var paras = res.paragraphs.filter(function (p) { return p.segments.length || p.style === TD; });
-    var box = function (p, extraCls) {
-      var text = segmentsToText(p.segments, labels);
-      var kind = HEADING_STYLES[p.style] || '';
-      return '<textarea class="oj-lt-text' + (kind ? ' is-' + kind : '') + (extraCls ? ' ' + extraCls : '') + '" id="oj-lt-' + p.index + '" data-index="' + p.index + '" data-original="' + esc(text) + '"'
-        + ' rows="' + Math.max(text.split('\n').length, Math.min(8, Math.ceil(text.length / 95)) || 1) + '" maxlength="' + res.maxParagraphChars + '" placeholder="' + (p.style === TD ? 'Left blank in the letter' : '') + '" onfocus="OnboardingJourney.letterFocus(this)">' + esc(text) + '</textarea>';
+    var paras = res.paragraphs;
+    var block = function (p, tagName, extraCls) {
+      var kind = LT_KIND[p.style] || 'body';
+      return '<' + tagName + ' class="oj-lt-block is-' + kind + (extraCls ? ' ' + extraCls : '') + '" contenteditable="true" spellcheck="true"'
+        + ' id="oj-lt-' + p.index + '" data-index="' + p.index + '"'
+        + (p.style === TD ? ' data-placeholder="Left blank in the letter"' : '')
+        + ' onfocus="OnboardingJourney.letterFocus(this)" onkeyup="OnboardingJourney.letterCaret(this)" onmouseup="OnboardingJourney.letterCaret(this)"'
+        + ' onkeydown="OnboardingJourney.letterKey(event)" onpaste="OnboardingJourney.letterPaste(event)">'
+        + segmentsToHtml(p.segments, labels) + '</' + tagName + '>';
     };
     var rows = ''; var i = 0;
     while (i < paras.length) {
       var p = paras[i];
       if (p.style === TH) {
         // A table: label / value pairs until the labels stop.
-        rows += '<div class="oj-lt-table">';
+        rows += '<div class="oj-lt-table" role="table">';
         while (i < paras.length && paras[i].style === TH) {
           var label = paras[i]; var value = paras[i + 1] && paras[i + 1].style === TD ? paras[i + 1] : null;
-          rows += '<div class="oj-lt-row">' + box(label, 'is-th') + (value ? box(value, 'is-td') : '<span class="oj-lt-td-empty"></span>') + '</div>';
+          rows += '<div class="oj-lt-row" role="row">' + block(label, 'div', 'is-cell') + (value ? block(value, 'div', 'is-cell') : '<div class="oj-lt-td-empty"></div>') + '</div>';
           i += value ? 2 : 1;
         }
         rows += '</div>';
         continue;
       }
-      var kindCls = HEADING_STYLES[p.style] ? ' is-' + HEADING_STYLES[p.style] : /NumberedList/.test(p.style) ? ' is-num' : /Bullet/.test(p.style) ? ' is-list' : '';
-      rows += '<div class="oj-lt-para' + kindCls + '">' + box(p) + '</div>';
+      rows += block(p, 'div');
       i += 1;
     }
-    var fields = res.tags.map(function (x) { return '<option value="' + esc(x.label) + '">' + esc(x.label) + '</option>'; }).join('');
+    var fields = res.tags.map(function (x) { return '<option value="' + esc(x.tag) + '">' + esc(x.label) + '</option>'; }).join('');
     global.Onboarding.openModal({
       title: 'Edit the Letter of Offer',
-      subtitle: 'Click any line of the letter to change it. Save makes it the standard letter for every offer from now on.',
+      subtitle: 'The letter as the employee sees it. Click into any line and type, as in Word. Save makes it the standard letter for every offer from now on.',
       wide: true,
       body: '<div class="oj-lt">'
         + '<div class="oj-lt-bar"><span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>'
         + '<label class="oj-lt-insert">Insert a field <select onchange="OnboardingJourney.letterInsert(this)"><option value="">Choose…</option>' + fields + '</select></label></div>'
-        + '<p class="oj-lt-help">Anything in <code>{{double braces}}</code> is filled in by the portal for each person — the candidate\'s name, the salary, the dates. Leave those as they are, or move them; the words around them are yours to change.</p>'
-        + '<div class="oj-lt-page">'
+        + '<p class="oj-lt-help">The <span class="oj-lt-tag is-demo">highlighted fields</span> are filled in by the portal for each person — the candidate\'s name, the salary, the dates. Move or delete them like a word; the text around them is yours to change.</p>'
+        + '<div class="oj-lt-sheet"><div class="oj-lt-page is-doc">'
+        + '<div class="oj-lt-header" aria-hidden="true"><span>OPAL THERAPY</span><span>Letter of Offer</span><span>' + esc(labels.OPAL_LOO_CANDIDATE_FULL_NAME || 'Candidate full name') + '</span></div>'
         + rows
-        + '</div>'
+        + '<div class="oj-lt-footer" aria-hidden="true"><span>Opal Therapy | Confidential</span><span>Page 1</span></div>'
+        + '</div></div>'
         + '<div id="oj-lt-error" class="ob-note is-danger" role="alert" hidden></div>'
         + '</div>',
       footer: '<div class="oj-actions oj-actions-tight">'
@@ -1782,25 +1820,57 @@
     });
   }
 
-  function letterFocus(el) { LT.lastFocus = el; }
+  function letterFocus(el) { LT.lastFocus = el; letterCaret(el); }
+  /** Remember where the caret is, so Insert a field can put the chip there after the select steals focus. */
+  function letterCaret(el) {
+    var sel = global.getSelection && global.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var r = sel.getRangeAt(0);
+    if (el.contains(r.commonAncestorContainer)) LT.range = r.cloneRange();
+  }
+  /** Enter is a line break within the paragraph — the paragraphs themselves are the letter's, not added here. */
+  function letterKey(ev) {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    if (!doc.execCommand('insertLineBreak')) doc.execCommand('insertHTML', false, '<br>');
+  }
+  /** Pasted text arrives as words, never as someone else's formatting. */
+  function letterPaste(ev) {
+    ev.preventDefault();
+    var text = (ev.clipboardData || global.clipboardData).getData('text/plain');
+    if (text) doc.execCommand('insertText', false, text);
+  }
   function letterInsert(sel) {
-    var label = sel.value; sel.value = '';
-    var ta = LT.lastFocus; if (!label || !ta || !doc.body.contains(ta)) return;
-    var token = '{{' + label + '}}';
-    var a = ta.selectionStart || 0, b = ta.selectionEnd || a;
-    ta.value = ta.value.slice(0, a) + token + ta.value.slice(b);
-    ta.focus(); ta.selectionStart = ta.selectionEnd = a + token.length;
+    var tag = sel.value; sel.value = '';
+    var ta = LT.lastFocus; if (!tag || !ta || !doc.body.contains(ta)) return;
+    var labels = {}; (LT.data && LT.data.tags || []).forEach(function (t) { labels[t.tag] = t.label; });
+    var chip = doc.createElement('span');
+    chip.className = 'oj-lt-tag'; chip.setAttribute('contenteditable', 'false'); chip.setAttribute('data-tag', tag);
+    chip.title = 'Filled in by the portal for each person'; chip.textContent = labels[tag] || tag;
+    var r = LT.range && ta.contains(LT.range.commonAncestorContainer) ? LT.range : null;
+    if (r) { r.deleteContents(); r.insertNode(chip); } else ta.appendChild(chip);
+    // Put the caret just after the chip so typing carries on.
+    var after = doc.createRange(); after.setStartAfter(chip); after.collapse(true);
+    var s = global.getSelection(); s.removeAllRanges(); s.addRange(after);
+    LT.range = after.cloneRange(); ta.focus();
   }
 
   async function saveLetterEditor() {
     var d = LT.data; if (!d) return;
-    var tagByLabel = {}; d.tags.forEach(function (t) { tagByLabel[t.label.toLowerCase()] = t.tag; tagByLabel[t.tag.toLowerCase()] = t.tag; });
+    var original = {}; d.paragraphs.forEach(function (p) { original[p.index] = normaliseSegments(p.segments); });
+    var endsWithBreak = function (segs) { var l = segs[segs.length - 1]; return !!l && l.type === 'text' && /\n$/.test(l.text); };
     var edits = [];
-    var areas = doc.querySelectorAll('.oj-lt textarea.oj-lt-text');
-    for (var i = 0; i < areas.length; i++) {
-      var ta = areas[i];
-      if (ta.value === ta.getAttribute('data-original')) continue;
-      edits.push({ index: Number(ta.getAttribute('data-index')), segments: textToSegments(ta.value, tagByLabel) });
+    var blocks = doc.querySelectorAll('.oj-lt .oj-lt-block');
+    for (var i = 0; i < blocks.length; i++) {
+      var el = blocks[i]; var index = Number(el.getAttribute('data-index'));
+      var segs = normaliseSegments(blockToSegments(el));
+      // The browser leaves a trailing line break behind after editing; it is not a change.
+      if (endsWithBreak(segs) && !endsWithBreak(original[index] || [])) {
+        var last = segs[segs.length - 1];
+        last.text = last.text.replace(/\n$/, ''); if (!last.text) segs.pop();
+      }
+      if (JSON.stringify(segs) === JSON.stringify(original[index] || [])) continue;
+      edits.push({ index: index, segments: segs });
     }
     var errEl = doc.getElementById('oj-lt-error');
     if (!edits.length) { global.Onboarding.closeModal(); toast('Nothing changed.'); return; }
@@ -2345,7 +2415,7 @@
     filter: setFilter,
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
-    openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterInsert: letterInsert,
+    openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterCaret: letterCaret, letterKey: letterKey, letterPaste: letterPaste, letterInsert: letterInsert,
     packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
     openInMailApp: openInMailApp,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,

@@ -1471,9 +1471,10 @@
       + '<div class="ob-section-card">'
       + '  <div class="ob-section-head"><h2>Who is joining?</h2></div>'
       + '  <div class="ob-section-body"><div class="ob-form">'
-        // WHO, then WHAT THEY DO, then — recommended from those two — WHICH
-        // PACKAGE. The package used to be the first question, which asked the
-        // Owner to make the technical choice before the human one.
+        // WHO, then WHAT THEY DO, then WHICH PACKAGE. The package used to be
+        // the first question, which asked the Owner to make the technical
+        // choice before the human one. The Owner picks the package themselves;
+        // the portal does not recommend one from the role and employment type.
       + '  <div class="ob-form-row">'
       + '    <div class="ob-field"><label for="ob-a-name">Full name<span class="ob-req-mark" aria-hidden="true">*</span></label>'
       + '      <input type="text" id="ob-a-name" name="applicantName" required maxlength="200"'
@@ -1494,12 +1495,12 @@
       + '  </div>'
       + '  <div class="ob-form-row is-thirds">'
       + '    <div class="ob-field"><label for="ob-a-rolecat">Role category</label>'
-      + '      <select id="ob-a-rolecat" name="roleCategory" onchange="Onboarding.recommendPackage()">'
+      + '      <select id="ob-a-rolecat" name="roleCategory">'
       + '        <option value="occupational_therapist">Occupational therapist</option>'
       + '        <option value="administration">Administration</option>'
       + '      </select></div>'
       + '    <div class="ob-field"><label for="ob-a-emptype">Employment type<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-      + '      <select id="ob-a-emptype" name="employmentType" required onchange="Onboarding.recommendPackage()">'
+      + '      <select id="ob-a-emptype" name="employmentType" required>'
       + '        <option value="full_time">Full-time</option>'
       + '        <option value="part_time">Part-time</option>'
       + '        <option value="casual">Casual</option>'
@@ -1516,7 +1517,7 @@
           + '" data-role="' + esc(p.roleCategory || '') + '">' + esc(p.title) + '</option>';
       }).join('')
       + '    </select>'
-      + '    <p class="ob-hint" id="ob-a-package-hint" aria-live="polite"></p>'
+      + '    <p class="ob-hint" id="ob-a-package-hint">Choose the package that matches this role.</p>'
       + '  </div></div>'
       + '  <div class="ob-form-row is-single"><div class="ob-field">'
       + '    <label for="ob-a-role">Portal access when they join</label>'
@@ -1598,38 +1599,7 @@
       + '</div>'
       + '</div>';
 
-    recommendPackage();
     refreshEmailTemplate();
-  }
-
-  /**
-   * Suggest the package that matches the role and employment type chosen.
-   *
-   * A SUGGESTION, not a selection: it moves the dropdown and says why, and the
-   * Owner can change it back. Silently pre-selecting would be the same
-   * mechanic with the check removed.
-   *
-   * The scoring lives on the server, so this and the API agree by construction
-   * rather than by two implementations happening to match.
-   */
-  async function recommendPackage() {
-    var hint = doc.getElementById('ob-a-package-hint');
-    var select = doc.getElementById('ob-a-package');
-    if (!hint || !select) return;
-
-    var v = startValues();
-    var qs = 'roleCategory=' + encodeURIComponent(v.roleCategory || '')
-      + '&employmentType=' + encodeURIComponent(v.employmentType || '');
-    var res = await api('/api/onboarding/packages/recommend?' + qs);
-    if (!res.ok || !res.recommended) {
-      hint.textContent = 'Choose the package that matches this role.';
-      return;
-    }
-    // Only move the selection while the Owner has not overridden it.
-    if (!select.dataset.touched) select.value = res.recommended.packageId;
-    hint.textContent = 'Recommended: ' + res.recommended.title + '. '
-      + res.recommended.reason + ' You can choose a different one.';
-    select.onchange = function () { select.dataset.touched = '1'; };
   }
 
   /**
@@ -4692,7 +4662,6 @@
     openPackage: openPackage,
     downloadPackageZip: downloadPackageZip,
     backToPackages: backToPackages,
-    recommendPackage: recommendPackage,
     // journey
     journeyAction: journeyAction,
     generatePack: generatePack,
