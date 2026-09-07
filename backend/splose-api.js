@@ -237,10 +237,12 @@ async function getLocations() {
 
 // ─── Appointments ─────────────────────────────────────────────────────────────
 
-async function getAppointments(startDate, endDate, practitionerId = null) {
+async function getAppointments(startDate, endDate, practitionerId = null, opts = {}) {
   // Splose /appointments accepts NO date filter params — cursor-only pagination.
-  // We fetch all appointments and filter by date client-side.
-  const allItems = await fetchAllPages('/appointments');
+  // We fetch all appointments and filter by date client-side. opts.fresh skips
+  // the 10-minute list cache (the change watcher must never judge Splose from
+  // a copy taken before the portal's own write).
+  const allItems = await fetchAllPages('/appointments', {}, opts);
   const start = startDate ? new Date(startDate) : null;
   const end   = endDate   ? new Date(endDate + 'T23:59:59') : null;
 
@@ -336,6 +338,7 @@ async function updateAppointment(id, data) {
   if (data.note !== undefined) payload.note     = data.note;
   if (data.serviceId)         payload.serviceId = data.serviceId;
   const response = await c.put(`/appointments/${id}`, payload);
+  invalidateCache('/appointments'); // the cached list now describes the past
   return normaliseAppointment(response.data);
 }
 

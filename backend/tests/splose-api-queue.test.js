@@ -43,6 +43,21 @@ describe('splose-api throttled queue', () => {
     expect(order).toEqual(['/services', '/locations']);
   });
 
+  test('an appointment update drops the cached appointment list, and the watcher can read fresh', async () => {
+    process.env.ENABLE_SPLOSE_WRITE = 'true';
+    const mockPut = jest.fn(async () => ({ data: { id: 5, start: '2026-09-10T03:15:00.000Z', end: '2026-09-10T04:15:00.000Z', patients: [] } }));
+    jest.resetModules();
+    require('axios').create.mockImplementation(() => ({ get: mockGet, put: mockPut, post: jest.fn(), patch: jest.fn(), delete: jest.fn() }));
+    api = require('../splose-api'); api.invalidateCache();
+    mockGet.mockResolvedValueOnce(page([{ id: 5, start: '2026-09-08T01:00:00.000Z', end: '2026-09-08T02:00:00.000Z', patients: [] }]));
+    expect((await api.getAppointments('2026-09-01', '2026-09-30')).map(a => a.start)).toEqual(['2026-09-08T01:00:00.000Z']);
+    await api.updateAppointment(5, { start: '2026-09-10T03:15:00.000Z', end: '2026-09-10T04:15:00.000Z' });
+    // The stale list is gone: the next read goes to Splose again.
+    mockGet.mockResolvedValueOnce(page([{ id: 5, start: '2026-09-10T03:15:00.000Z', end: '2026-09-10T04:15:00.000Z', patients: [] }]));
+    expect((await api.getAppointments('2026-09-01', '2026-09-30', null, { fresh: true })).map(a => a.start)).toEqual(['2026-09-10T03:15:00.000Z']);
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
+
   test('fresh:true bypasses the list cache and refreshes it', async () => {
     mockGet.mockResolvedValueOnce(page([{ id: 10, patientId: 1, practitionerId: 1 }]));
     expect((await api.fetchAllCases()).map(c => c.id)).toEqual([10]);

@@ -101,7 +101,7 @@ function minutesApart(aIso, bIso) {
  * Returns [{ kind, sploseAppointmentId, eventId, userId, practitionerId,
  *            fingerprint, details }]
  */
-function detectExternalChanges({ localEvents, sploseAppointments, pendingEventIds, now, recentHours = 24 }) {
+function detectExternalChanges({ localEvents, sploseAppointments, pendingEventIds, now, recentHours = 24, graceMinutes = 3 }) {
   const pending = pendingEventIds || new Set();
   const nowMs = (now || new Date()).getTime();
   const bySplose = new Map();
@@ -128,6 +128,9 @@ function detectExternalChanges({ localEvents, sploseAppointments, pendingEventId
       continue;
     }
     if (pending.has(ev.id)) continue;
+    // Just written by the portal: give Splose a moment to reflect it before
+    // reading a difference as a Splose-side move.
+    if (ev.last_synced_to_splose && nowMs - new Date(ev.last_synced_to_splose).getTime() < graceMinutes * 60000) continue;
     if (minutesApart(ev.start_time, appt.start) >= 1 || minutesApart(ev.end_time, appt.end) >= 1) {
       alerts.push({ ...base, kind: 'moved', practitionerId: appt.practitionerId,
         fingerprint: 'moved:' + appt.start + '/' + appt.end,
@@ -429,13 +432,13 @@ function createWatcher(deps) {
     try {
       const startDate = new Date(t0.getTime() - 1 * 86400000).toISOString().slice(0, 10);
       const endDate   = new Date(t0.getTime() + windowDays * 86400000).toISOString().slice(0, 10);
-      const appts = await sploseApi.getAppointments(startDate, endDate);
+      const appts = await sploseApi.getAppointments(startDate, endDate, null, { fresh: true });
       if (appts && appts._fetchComplete === false) {
         state.lastError = 'Splose page fetch incomplete — skipped';
         return { skipped: true, reason: 'incomplete' };
       }
       const { rows: local } = await db.pool.query(
-        `SELECT id, user_id, splose_id, start_time, end_time, title FROM events
+        `SELECT id, user_id, splose_id, start_time, end_time, title, last_synced_to_splose FROM events
           WHERE splose_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = FALSE)
             AND start_time >= $1::timestamptz AND start_time <= $2::timestamptz`,
         [new Date(t0.getTime() - 1 * 86400000).toISOString(), new Date(t0.getTime() + windowDays * 86400000).toISOString()]

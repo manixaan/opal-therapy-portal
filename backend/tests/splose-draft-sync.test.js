@@ -94,6 +94,19 @@ describe('detectExternalChanges — what changed inside Splose', () => {
     });
     expect(r).toEqual([]);
   });
+  test('a portal write Splose has not caught up with yet is not a Splose-side move (grace period)', () => {
+    const justWritten = { ...local('e2', '11', '2026-09-08T03:30:00.000Z', '2026-09-08T04:30:00.000Z'), last_synced_to_splose: '2026-09-07T23:58:30Z' };
+    const r = detectExternalChanges({
+      localEvents: [justWritten],
+      sploseAppointments: [appt(11, '2026-09-08T03:00:00.000Z', '2026-09-08T04:00:00.000Z', { createdAt: '2026-08-01T00:00:00Z' })],
+      pendingEventIds: new Set(), now,
+    });
+    expect(r).toEqual([]);
+    // Once the grace period has passed the difference is real again.
+    const old = { ...justWritten, last_synced_to_splose: '2026-09-07T23:00:00Z' };
+    const r2 = detectExternalChanges({ localEvents: [old], sploseAppointments: [appt(11, '2026-09-08T03:00:00.000Z', '2026-09-08T04:00:00.000Z', { createdAt: '2026-08-01T00:00:00Z' })], pendingEventIds: new Set(), now });
+    expect(r2.map(a => a.kind)).toEqual(['moved']);
+  });
   test('historical Splose bookings are not "created" alerts', () => {
     const r = detectExternalChanges({
       localEvents: [], sploseAppointments: [appt(50, '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z', { createdAt: '2026-01-01T00:00:00Z' })],

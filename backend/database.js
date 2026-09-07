@@ -783,13 +783,29 @@ async function updateUserTokens(userId, accessToken, refreshToken, expiresIn) {
   return row;
 }
 
+/**
+ * Event times are stored as UTC wall-clock in TIMESTAMP (no-tz) columns.
+ * Postgres silently DROPS an offset on input to such a column, so a value like
+ * "2026-09-10T11:15:00+08:00" (what the calendar sends for a drag) was stored
+ * as 11:15 and read back as 11:15Z — eight hours late, and that shifted time
+ * was then published to Splose (7 Sep 2026). Normalise every inbound time to
+ * a UTC ISO string first; Date objects and 'Z' strings pass through unchanged.
+ */
+function toUtcIso(value) {
+  if (value === undefined || value === null || value === '') return value;
+  const d = value instanceof Date ? value : new Date(value);
+  return isNaN(d.getTime()) ? value : d.toISOString();
+}
+
 // Create an event
 async function createEvent(userId, eventData) {
   const {
-    title, description, startTime, endTime, location, eventType,
+    title, description, location, eventType,
     sploseId, outlookId, clientName, regionalTag, travelDistance,
     categories
   } = eventData;
+  const startTime = toUtcIso(eventData.startTime);
+  const endTime   = toUtcIso(eventData.endTime);
 
   const query = `
     INSERT INTO events (
@@ -834,9 +850,11 @@ async function getEvents(userId, filters = {}) {
 // Update an event
 async function updateEvent(eventId, eventData) {
   const {
-    title, description, startTime, endTime, location,
+    title, description, location,
     sploseId, outlookId, syncStatus, lastModifiedBy
   } = eventData;
+  const startTime = toUtcIso(eventData.startTime);
+  const endTime   = toUtcIso(eventData.endTime);
 
   const query = `
     UPDATE events
