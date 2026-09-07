@@ -110,6 +110,14 @@ Expected output: `origin/develop`. If it says `origin/main`, fix it now:
 git branch --set-upstream-to=origin/develop main
 ```
 
+Because the local branch is called `main` and the remote one `develop`, git's
+default refuses a bare `git push`. Tell this clone to push to the upstream
+branch regardless of name (repo-local setting, one time):
+
+```bash
+git config push.default upstream
+```
+
 ## Step 5 — One-command setup
 
 ```bash

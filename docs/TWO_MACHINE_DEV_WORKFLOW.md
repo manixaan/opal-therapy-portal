@@ -61,6 +61,13 @@ git checkout -b main origin/develop
 ```
 
 ```bash
+git config push.default upstream
+```
+
+(the names differ — `main` locally, `develop` remotely — and git's default
+`simple` mode refuses a bare `git push` in that case; `upstream` mode allows it.)
+
+```bash
 npm run setup -- --demo
 ```
 
