@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=7" defer></script>
+<script src="/travel.js?v=8" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -15702,6 +15702,8 @@ function wlSetLocation(day, locKey) {
   const wk = wlThisWeek();
   if (locKey) wk[day] = locKey; else delete wk[day];
   renderWorkLocationEditor();
+  // The calendar's travel legs anchor on this: redraw them at once.
+  if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
   if (typeof debouncedSaveWorkSchedule === 'function') debouncedSaveWorkSchedule();
 }
 function wlCopyDayToWeek(day) {

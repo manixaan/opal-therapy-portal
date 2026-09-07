@@ -695,8 +695,9 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 7: chain maintenance — inherit on insert and move, close the gap on delete.
-      ['travel.js', 7],
+      // 8: the engine reads day bases from the week the calendar shows, and a
+      // base or day-location edit in the profile repaints the legs at once.
+      ['travel.js', 8],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -846,7 +847,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
-    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove']) {
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove', 'calendarWeekLocations']) {
       expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
     }
     // The engine reads the answers at the day's ends, not the between legs.
@@ -863,6 +864,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/travelChainInherit\(oResult\.dbId, _ca\)/);
     expect(SHELL).toMatch(/travelGapClosingFor\(id\)/);
     expect(SHELL).toMatch(/travelChainAfterMove\(id\)/);
+    // The engine never reads the profile editor's week cursor directly.
+    expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
+    expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
     // Deleting a tile redraws the legs around where it was.
     const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);
     expect(del).toMatch(/refreshAllOverlays\(\)/);

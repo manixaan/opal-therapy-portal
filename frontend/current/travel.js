@@ -410,8 +410,23 @@ function stripSuburb(s) {
 
 /* The day-anchor base is the location the therapist starts/ends the day at —
    determined by the Mon–Fri work-location dropdown in My Profile. */
+/* The work-location object for the week the CALENDAR is showing. The profile
+   editor keeps its own cursor (WL_CURRENT_MONDAY); reading that from the
+   calendar meant a base edit or a day change showed up on the wrong week, or
+   not at all, until the two cursors happened to agree (7 Sep 2026). */
+function calendarWeekLocations() {
+  try {
+    const mon = window.__currentWeekMonday;
+    if (mon && typeof weekKeyFor === 'function' && typeof WORK_LOCATION !== 'undefined') {
+      const local = new Date(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate());
+      const key = weekKeyFor(local);
+      return WORK_LOCATION[key] || (WORK_LOCATION[key] = {});
+    }
+  } catch (e) { /* fall through */ }
+  return (typeof wlThisWeek === 'function') ? wlThisWeek() : {};
+}
 function dayAnchorBase(day) {
-  const weekObj = (typeof wlThisWeek === 'function') ? wlThisWeek() : {};
+  const weekObj = calendarWeekLocations();
   const locKey = weekObj && weekObj[day];
   if (locKey && locKey !== 'leave' && locKey !== 'unset') {
     const base = getBase(locKey);
@@ -530,7 +545,7 @@ async function setTravelOverride(sessionId, side, spec) {
    (owner's call, 7 Sep 2026: ask, don't silently assume the office). */
 function ensureDayBase(day) {
   try {
-    const wk = (typeof wlThisWeek === 'function') ? wlThisWeek() : null;
+    const wk = calendarWeekLocations();
     if (!wk || (wk[day] && wk[day] !== 'unset')) return Promise.resolve(wk ? wk[day] : null);
     if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
     const opts = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {})
@@ -540,7 +555,16 @@ function ensureDayBase(day) {
     const dayName = ({ mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' })[day] || day;
     return travelChooser('Where are you based on ' + dayName + '?',
       'Travel to the first session and back from the last one is worked out from here. You can change it any day in My Profile › Work locations.', opts)
-      .then(key => { if (key && typeof wlSetLocation === 'function') wlSetLocation(day, key); return key; });
+      .then(key => {
+        if (key) {
+          // Write to the calendar's week (not the profile editor's cursor) and save.
+          wk[day] = key;
+          if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
+          if (typeof debouncedSaveWorkSchedule === 'function') debouncedSaveWorkSchedule();
+          refreshAllOverlays();
+        }
+        return key;
+      });
   } catch (e) { return Promise.resolve(null); }
 }
 
@@ -722,7 +746,7 @@ function computeDayTravelSegments(day) {
         startMin, endMin,
         travelMin: travel, freeMin: 0,
         fromSessionId: null, toSessionId: first.id,
-        anchorBaseId: startPt.baseId || (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        anchorBaseId: startPt.baseId || calendarWeekLocations()[day] || 'office',
         overridden: !!sessionTravelOverride(first, 'before'),
         cacheKey: routeKey(baseKey, firstKey, 'driving')
       });
@@ -794,7 +818,7 @@ function computeDayTravelSegments(day) {
         startMin, endMin,
         travelMin: travel, freeMin: 0,
         fromSessionId: last.id, toSessionId: null,
-        anchorBaseId: endPt.baseId || (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        anchorBaseId: endPt.baseId || calendarWeekLocations()[day] || 'office',
         overridden: !!sessionTravelOverride(last, 'after'),
         cacheKey: routeKey(lastKey, baseKeyEnd, 'driving')
       });
@@ -899,7 +923,9 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
    exists — see the note in renderSegmentOverlay. */
 
 function refreshAllOverlays() {
-  // Every rendered column, weekends included — a Saturday session gets its legs too.
+  // Bases or day locations may have changed: drop every session's cached
+  // location so home-based blocks re-anchor, then redraw every rendered column.
+  Object.values(window.SESSIONS || {}).forEach(s => { if (s) delete s.__loc; });
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => { if (document.getElementById('day-' + d)) refreshDayOverlays(d); });
 }
 
