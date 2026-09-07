@@ -80,6 +80,29 @@ describe('assessDeletionSafety', () => {
   });
 });
 
+describe('partitionDeltaRemovals — the portal\'s own deletions are not an anomaly', () => {
+  const { partitionDeltaRemovals } = require('../sync-safety');
+  test('ids already tombstoned locally, or unknown, are acknowledged rather than judged', () => {
+    const r = partitionDeltaRemovals(['a', 'b', 'c', 'd'], [
+      { outlook_id: 'a', is_deleted: true },   // cancelled from the portal earlier
+      { outlook_id: 'b', is_deleted: false },  // a real Outlook-side deletion
+      { outlook_id: 'c', is_deleted: null },   // live (NULL = not deleted)
+      // 'd' never existed locally
+    ]);
+    expect(r.toDelete).toEqual(['b', 'c']);
+    expect(r.alreadyGone).toEqual(['a', 'd']);
+  });
+  test('THE REGRESSION: cancelling every appointment from the portal leaves nothing to judge', () => {
+    const r = partitionDeltaRemovals(['x', 'y', 'z'], [
+      { outlook_id: 'x', is_deleted: true }, { outlook_id: 'y', is_deleted: true }, { outlook_id: 'z', is_deleted: true },
+    ]);
+    expect(r.toDelete).toEqual([]);
+    // With no candidates the guard is never consulted and the delta token is saved.
+    const { assessDeletionSafety } = require('../sync-safety');
+    expect(assessDeletionSafety({ source: 'outlook_delta', fetchComplete: true, liveCount: 0, deletionCandidates: r.toDelete.length, localLinkedCount: 0 }).safe).toBe(true);
+  });
+});
+
 describe('recordSafetyBlock', () => {
   test('writes an audit row, notifies owners + affected user, updates state', async () => {
     const audits = [];

@@ -158,6 +158,23 @@ function detectExternalChanges({ localEvents, sploseAppointments, pendingEventId
   return alerts;
 }
 
+/**
+ * Portal bookings that never reached Splose and have nothing queued: a client
+ * session (client_id set, booked in the portal) with no splose_id and no live
+ * queue row. Pure; the watcher feeds it rows and live queue event ids.
+ */
+function detectUnlinked({ localEvents, pendingEventIds }) {
+  const pending = pendingEventIds || new Set();
+  return (localEvents || [])
+    .filter(ev => ev && !ev.splose_id && ev.client_id && ev.created_by_source === 'app' && !ev.is_deleted && !pending.has(ev.id))
+    .map(ev => ({
+      kind: 'unlinked', eventId: ev.id, userId: ev.user_id, practitionerId: null,
+      // No Splose id exists yet; the local id keys the alert so it is recorded once.
+      sploseAppointmentId: 'local:' + ev.id, fingerprint: 'unlinked',
+      details: { title: ev.title, start: ev.start_time, end: ev.end_time, clientId: ev.client_id },
+    }));
+}
+
 // ── Queue ────────────────────────────────────────────────────────────────────
 
 /**
@@ -289,7 +306,23 @@ function createPublisher(deps) {
         }
         const sploseId = event.splose_id || row.splose_appointment_id;
         if (!sploseId) { const e = new Error('This appointment has not been created in Splose yet'); e.code = 'NOT_IN_SPLOSE'; throw e; }
+        // Check before write: what does Splose hold right now? A cancelled or
+        // vanished appointment makes a cancel a no-op and a move impossible.
+        let live = null, gone = false;
+        if (typeof sploseApi.getAppointment === 'function') {
+          try { live = await sploseApi.getAppointment(sploseId); }
+          catch (err) { const st = err.response && err.response.status; if (st === 404) gone = true; else throw err; }
+          if (live && isCancelledAppointment(live)) gone = true;
+        }
+        if (gone) {
+          if (row.action === 'cancel') return { sploseId: String(sploseId), alreadyGone: true };
+          const e = new Error('Splose had already cancelled this appointment, so the move was dropped and the portal copy was cancelled to match');
+          e.code = 'SPLOSE_GONE'; throw e;
+        }
         if (row.action === 'update') {
+          if (live && live.start && live.end && minutesApart(live.start, p.start || event.start_time) < 1 && minutesApart(live.end, p.end || event.end_time) < 1) {
+            return { sploseId: String(sploseId), unchanged: true }; // already where we want it
+          }
           await sploseApi.updateAppointment(sploseId, {
             start: p.start || event.start_time, end: p.end || event.end_time,
             ...(p.note !== undefined ? { note: p.note } : {}),
@@ -386,6 +419,29 @@ function createPublisher(deps) {
           ).catch(() => {});
           state.results.push({ id: row.id, ok: true, action: row.action, sploseId });
         } catch (err) {
+          if (err.code === 'SPLOSE_GONE') {
+            // Reconcile rather than fail: Splose is the record, and it says the
+            // appointment is gone. Drop the queued change and cancel the portal copy.
+            await db.pool.query(
+              `UPDATE splose_sync_queue SET status = 'discarded', error = $2, updated_at = NOW() WHERE id = $1`,
+              [row.id, err.message]
+            );
+            await db.pool.query(
+              `UPDATE events SET is_deleted = TRUE, deleted_at = NOW(), last_modified_by = 'splose', updated_at = NOW() WHERE id = $1`,
+              [row.event_id]
+            );
+            if (typeof deps.onLocalCancelled === 'function') { try { await deps.onLocalCancelled(row.event_id, userId); } catch (_) { /* best effort */ } }
+            await db.pool.query(
+              `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'deleted', 'splose', 'app', 'success', $2)`,
+              [row.event_id, err.message]
+            ).catch(() => {});
+            state.results.push({ id: row.id, ok: true, action: row.action, reconciled: 'cancelled_in_splose', note: err.message });
+            log(`Splose publish: row ${row.id} reconciled — ${err.message}`);
+            state.done++;
+            emit(userId, { phase: 'progress', ...state });
+            if (i < plan.length - 1 && gapMs > 0) await sleep(gapMs);
+            continue;
+          }
           const msg = summariseError(err);
           await db.pool.query(
             `UPDATE splose_sync_queue SET status = 'failed', error = $2, updated_at = NOW() WHERE id = $1`,
@@ -468,6 +524,15 @@ function createWatcher(deps) {
       // has not been written yet must not come back as a new booking.
       for (const r of pendingRows) if (r.splose_id) pendingEventIds.add('splose:' + String(r.splose_id));
       const alerts = detectExternalChanges({ localEvents: local, sploseAppointments: appts, pendingEventIds, now: t0, recentHours });
+      // Portal bookings that never reached Splose and have nothing queued.
+      const { rows: unlinkedRows } = await db.pool.query(
+        `SELECT id, user_id, title, start_time, end_time, client_id, created_by_source, is_deleted, splose_id FROM events
+          WHERE splose_id IS NULL AND client_id IS NOT NULL AND created_by_source = 'app'
+            AND (is_deleted IS NULL OR is_deleted = FALSE)
+            AND start_time >= $1::timestamptz AND start_time <= $2::timestamptz`,
+        [new Date(t0.getTime() - 1 * 86400000).toISOString(), new Date(t0.getTime() + windowDays * 86400000).toISOString()]
+      );
+      alerts.push(...detectUnlinked({ localEvents: unlinkedRows, pendingEventIds }));
 
       let inserted = 0;
       const notify = new Map();
@@ -632,6 +697,7 @@ module.exports = {
   planPublish,
   summariseError,
   detectExternalChanges,
+  detectUnlinked,
   enqueueChange,
   listPending,
   createPublisher,

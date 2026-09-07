@@ -44,6 +44,22 @@ function getSyncSafetyConfig() {
  * @param {object} [config]              override thresholds (tests)
  * @returns {{safe: boolean, reason: string, stats: object}}
  */
+/**
+ * Split a delta's @removed ids into the ones that still have a LIVE local row
+ * (real deletions to assess) and the ones the portal already tombstoned or
+ * never held (its own cancellations echoing back, or noise). Only the first
+ * group is a deletion candidate. Without this, cancelling every appointment
+ * from the portal made the next delta look like an "empty remote result",
+ * the guard blocked, the delta token was never saved, and the mirror stopped
+ * syncing until a restart (7 Sep 2026: last_synced_at frozen for 20 hours).
+ */
+function partitionDeltaRemovals(deletedIds, localRows) {
+  const live = new Set((localRows || []).filter(r => !r.is_deleted).map(r => String(r.outlook_id)));
+  const toDelete = [], alreadyGone = [];
+  for (const id of deletedIds || []) (live.has(String(id)) ? toDelete : alreadyGone).push(id);
+  return { toDelete, alreadyGone };
+}
+
 function assessDeletionSafety(p, config = getSyncSafetyConfig()) {
   const stats = {
     source: p.source,
@@ -160,6 +176,7 @@ async function recordSafetyBlock(deps, { source, reason, stats, userId }) {
 }
 
 module.exports = {
+  partitionDeltaRemovals,
   getSyncSafetyConfig,
   assessDeletionSafety,
   recordSafetyBlock,

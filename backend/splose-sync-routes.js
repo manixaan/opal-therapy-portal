@@ -60,6 +60,16 @@ function publisher() {
   if (!_publisher) {
     _publisher = draftSync.createPublisher({
       db, sploseApi, io: getIo(),
+      // When a queued move finds Splose already cancelled the appointment, the
+      // portal copy is cancelled to match; keep the Outlook mirror in step.
+      onLocalCancelled: async (eventId, userId) => {
+        if (!flags.isOutlookWriteEnabled()) return;
+        const r = await db.pool.query('SELECT outlook_id FROM events WHERE id = $1', [eventId]);
+        const outlookId = r.rows[0] && r.rows[0].outlook_id;
+        if (!outlookId) return;
+        const token = await outlookTokenFor(userId);
+        if (token) await outlookApi.deleteOutlookEvent(token, outlookId);
+      },
       gapMs: process.env.NODE_ENV === 'test' ? 0 : draftSync.DEFAULT_GAP_MS,
       log: (m) => console.log('📤 ' + m),
     });
@@ -280,6 +290,20 @@ async function applyExternalChange(alert, userId) {
       if (token) { try { await outlookApi.updateOutlookEvent(token, outlookId, { startTime: d.to.start, endTime: d.to.end }); outlook = true; } catch (_) { /* best effort */ } }
     }
     return { kind: 'moved', changed: r.rows.length > 0, outlook };
+  }
+  if (alert.kind === 'unlinked') {
+    // Queue the portal booking for Splose. The service is chosen at review if
+    // the booking type did not carry one.
+    if (!alert.event_id) return { kind: 'unlinked', changed: false };
+    const ev = await db.pool.query(`SELECT id, user_id, title, start_time, end_time, client_id, splose_id FROM events WHERE id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)`, [alert.event_id]);
+    const e = ev.rows[0];
+    if (!e || e.splose_id || !e.client_id) return { kind: 'unlinked', changed: false };
+    const qrow = await draftSync.enqueueChange(db, {
+      userId: e.user_id, createdBy: userId, eventId: e.id, action: 'create',
+      payload: { start: new Date(e.start_time).toISOString(), end: new Date(e.end_time).toISOString(), patientId: Number(e.client_id) || e.client_id, serviceId: null, summary: e.title },
+    });
+    try { require('./splose-sync-routes').notifyQueued(e.user_id); } catch (_) { /* optional */ }
+    return { kind: 'unlinked', changed: !!qrow, queued: qrow ? qrow.id : null };
   }
   if (alert.kind === 'created') {
     if (!d.start || !d.end) return { kind: 'created', changed: false };

@@ -135,6 +135,54 @@ describe('migration 058', () => {
   });
 });
 
+describe('migration 061 — reconciliation guarantees', () => {
+  test('two live portal rows can never share a Splose id; a cancelled one may', async () => {
+    const app = buildApp();
+    const { user } = await agentFor(app);
+    await db.pool.query(`INSERT INTO events (user_id, title, start_time, end_time, event_type, splose_id) VALUES ($1, 'A', $2, $3, 'therapy', '5150')`, [user.id, START, END]);
+    await expect(db.pool.query(`INSERT INTO events (user_id, title, start_time, end_time, event_type, splose_id) VALUES ($1, 'B', $2, $3, 'therapy', '5150')`, [user.id, START, END]))
+      .rejects.toThrow(/events_one_live_row_per_splose_id/);
+    await db.pool.query(`INSERT INTO events (user_id, title, start_time, end_time, event_type, splose_id, is_deleted) VALUES ($1, 'C', $2, $3, 'therapy', '5150', TRUE)`, [user.id, START, END]);
+    const n = await db.pool.query(`SELECT COUNT(*)::int AS n FROM events WHERE splose_id = '5150'`);
+    expect(n.rows[0].n).toBe(2);
+  });
+  test("alerts accept the 'unlinked' kind", async () => {
+    const app = buildApp();
+    const { user } = await agentFor(app);
+    const r = await db.pool.query(
+      `INSERT INTO splose_change_alerts (user_id, event_id, splose_appointment_id, kind, fingerprint, details) VALUES ($1, NULL, 'local:x', 'unlinked', 'unlinked', '{}') RETURNING id`, [user.id]);
+    expect(r.rows).toHaveLength(1);
+  });
+});
+
+describe('unlinked bookings', () => {
+  test('a portal booking with no Splose id is offered; "queue it" creates the pending row', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    // A portal client booking that never reached Splose (no queue row).
+    const ev = await db.pool.query(
+      `INSERT INTO events (user_id, title, start_time, end_time, event_type, client_id, created_by_source, source)
+       VALUES ($1, 'Client Appointment — Casey L', $2, $3, 'therapy', '41', 'app', 'app') RETURNING id`, [user.id, START, END]);
+    const watcher = require('../../splose-draft-sync').createWatcher({ db, sploseApi: require('../../splose-api'), now: () => new Date('2026-09-13T00:00:00Z') });
+    const run = await watcher.run();
+    expect(run.alerts).toBe(1);
+    const alerts = await agent.get('/api/splose-sync/alerts');
+    const a = alerts.body.alerts.find(x => x.kind === 'unlinked');
+    expect(a).toBeTruthy();
+    expect(a.eventId).toBe(ev.rows[0].id);
+    // Running again does not duplicate it.
+    expect((await watcher.run()).alerts).toBe(0);
+
+    const ack = await agent.post(`/api/splose-sync/alerts/${a.id}/ack`).send({ verdict: 'valid' });
+    expect(ack.status).toBe(200);
+    expect(ack.body.applied).toMatchObject({ kind: 'unlinked', changed: true });
+    const pend = await agent.get('/api/splose-sync/pending');
+    expect(pend.body.count).toBe(1);
+    expect(pend.body.changes[0]).toMatchObject({ action: 'create', eventId: ev.rows[0].id });
+    expect(pend.body.changes[0].payload.patientId).toBe(41);
+  });
+});
+
 describe('queueing from the calendar routes', () => {
   test('a client booking queues a create; a move amends it; a delete discards it', async () => {
     const app = buildApp();

@@ -856,7 +856,19 @@ async function runDeltaSyncForAllUsers() {
         // (delta tokens are consume-once) — nothing is lost, an owner is
         // notified, and manual cleanup can confirm a genuine mass-change.
         let deltaDeletionsBlocked = false;
+        // Only @removed ids that still have a LIVE local row are deletions to
+        // judge. The portal's own cancellations come back here too (it deleted
+        // them from Outlook itself) and are already tombstoned locally — they
+        // are acknowledged, never counted, so they cannot trip the guard.
+        let toDelete = deleted;
         if (deleted.length > 0) {
+          const { partitionDeltaRemovals } = require('./sync-safety');
+          const rows = await db.pool.query(
+            `SELECT outlook_id, is_deleted FROM events WHERE user_id = $1 AND outlook_id = ANY($2::text[])`,
+            [user.id, deleted.map(String)]);
+          ({ toDelete } = partitionDeltaRemovals(deleted, rows.rows));
+        }
+        if (toDelete.length > 0) {
           const { assessDeletionSafety, recordSafetyBlock } = require('./sync-safety');
           const linked = await db.pool.query(
             `SELECT COUNT(*) AS n FROM events
@@ -865,8 +877,8 @@ async function runDeltaSyncForAllUsers() {
           const verdict = assessDeletionSafety({
             source: 'outlook_delta',
             fetchComplete: !!newToken, // delta paging finished ⇒ Graph returned a deltaLink
-            liveCount: Number(linked.rows[0].n) - deleted.length,
-            deletionCandidates: deleted.length,
+            liveCount: Number(linked.rows[0].n) - toDelete.length,
+            deletionCandidates: toDelete.length,
             localLinkedCount: Number(linked.rows[0].n),
           });
           if (!verdict.safe) {
@@ -878,8 +890,8 @@ async function runDeltaSyncForAllUsers() {
           }
         }
         if (!deltaDeletionsBlocked) {
-          for (let i = 0; i < deleted.length; i += BATCH) {
-            await Promise.all(deleted.slice(i, i + BATCH).map(async outlookId => {
+          for (let i = 0; i < toDelete.length; i += BATCH) {
+            await Promise.all(toDelete.slice(i, i + BATCH).map(async outlookId => {
               const g = await db.softDeleteEventByOutlookId(user.id, outlookId);
               if (g) removed++;
             }));
@@ -892,8 +904,8 @@ async function runDeltaSyncForAllUsers() {
         stats.cancelled += cancelled;
         stats.removed += removed;
         if (deltaDeletionsBlocked) {
-          stats.blockedDeletions += deleted.length;
-          stats.warnings.push({ userId: user.id, warning: 'deletions_blocked_by_safety', count: deleted.length });
+          stats.blockedDeletions += toDelete.length;
+          stats.warnings.push({ userId: user.id, warning: 'deletions_blocked_by_safety', count: toDelete.length });
         }
 
         if (upserted > 0 || cancelled > 0 || removed > 0) {

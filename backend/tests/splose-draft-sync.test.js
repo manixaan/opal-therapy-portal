@@ -271,6 +271,89 @@ describe('createPublisher — paced, ordered, one failure never stops the run', 
   });
 });
 
+describe('createPublisher — check before write', () => {
+  function fakeDb(queueRows) {
+    const updates = [];
+    return {
+      updates,
+      pool: {
+        query: async (sql, params) => {
+          if (/FROM splose_sync_queue q JOIN events e/.test(sql)) return { rows: queueRows };
+          if (/UPDATE splose_sync_queue/.test(sql)) { updates.push({ sql: sql.replace(/\s+/g, ' ').trim(), params }); return { rowCount: 1 }; }
+          if (/UPDATE events/.test(sql)) { updates.push({ sql: sql.replace(/\s+/g, ' ').trim(), params }); return { rowCount: 1 }; }
+          return { rows: [] };
+        },
+      },
+    };
+  }
+  const row = (id, action, payload, extra = {}) => ({
+    id, action, payload, user_id: 'u1', event_id: 'ev-' + id,
+    start_time: '2026-09-08T01:00:00.000Z', end_time: '2026-09-08T02:00:00.000Z', splose_id: '77', title: 'T', ...extra,
+  });
+  const liveAppt = (extra = {}) => ({ id: 77, start: '2026-09-08T01:00:00.000Z', end: '2026-09-08T02:00:00.000Z', patients: [{ patientId: 1, status: 'Booked' }], ...extra });
+
+  test('a move whose appointment Splose already cancelled is reconciled: row discarded, portal copy cancelled, Outlook told', async () => {
+    const cancelledLocally = [];
+    const sploseApi = {
+      getAppointment: async () => liveAppt({ patients: [{ patientId: 1, status: 'Cancelled' }] }),
+      updateAppointment: jest.fn(),
+    };
+    const db = fakeDb([row('m1', 'update', { start: '2026-09-09T01:00:00.000Z', end: '2026-09-09T02:00:00.000Z' })]);
+    const pub = createPublisher({ db, sploseApi, gapMs: 0, sleep: async () => {}, onLocalCancelled: async (eventId) => { cancelledLocally.push(eventId); } });
+    const state = await pub.publish('u1');
+    expect(sploseApi.updateAppointment).not.toHaveBeenCalled();
+    expect(state.failed).toBe(0);
+    expect(state.results[0]).toMatchObject({ ok: true, reconciled: 'cancelled_in_splose' });
+    expect(db.updates.some(u => /status = 'discarded'/.test(u.sql))).toBe(true);
+    expect(db.updates.some(u => /UPDATE events SET is_deleted = TRUE/.test(u.sql) && u.params[0] === 'ev-m1')).toBe(true);
+    expect(cancelledLocally).toEqual(['ev-m1']);
+  });
+
+  test('a cancel for an appointment Splose no longer has (404) or already cancelled is done without a write', async () => {
+    const cancel = jest.fn();
+    const sploseApi = {
+      getAppointment: async (id) => { if (String(id) === '77') { const e = new Error('nf'); e.response = { status: 404 }; throw e; } return liveAppt({ id: 78, patients: [{ status: 'Cancelled' }] }); },
+      cancelAppointment: cancel, getCancellationReasons: async () => [{ id: 66, reason: 'Other' }],
+    };
+    const db = fakeDb([row('c1', 'cancel', {}), row('c2', 'cancel', {}, { splose_id: '78' })]);
+    const pub = createPublisher({ db, sploseApi, gapMs: 0, sleep: async () => {} });
+    const state = await pub.publish('u1');
+    expect(cancel).not.toHaveBeenCalled();
+    expect(state.results.map(r => r.ok)).toEqual([true, true]);
+  });
+
+  test('a move to where Splose already is makes no call; a real move still writes', async () => {
+    const update = jest.fn(async () => ({}));
+    const sploseApi = { getAppointment: async () => liveAppt(), updateAppointment: update };
+    const db = fakeDb([
+      row('same', 'update', { start: '2026-09-08T01:00:00.000Z', end: '2026-09-08T02:00:00.000Z' }),
+      row('moved', 'update', { start: '2026-09-08T03:00:00.000Z', end: '2026-09-08T04:00:00.000Z' }),
+    ]);
+    const pub = createPublisher({ db, sploseApi, gapMs: 0, sleep: async () => {} });
+    const state = await pub.publish('u1');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(state.results.find(r => r.id === 'same').ok).toBe(true);
+    expect(state.failed).toBe(0);
+  });
+});
+
+describe('detectUnlinked — portal bookings Splose never received', () => {
+  const { detectUnlinked } = require('../splose-draft-sync');
+  test('only live portal client bookings with no Splose id and nothing queued', () => {
+    const rows = [
+      { id: 'a', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'app', title: 'A', start_time: 's', end_time: 'e' },
+      { id: 'b', user_id: 'u1', splose_id: '9', client_id: '41', created_by_source: 'app' },      // linked
+      { id: 'c', user_id: 'u1', splose_id: null, client_id: null, created_by_source: 'app' },    // not a client session
+      { id: 'd', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'outlook' }, // mirrored, not booked here
+      { id: 'e', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'app' },    // queued already
+      { id: 'f', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'app', is_deleted: true },
+    ];
+    const r = detectUnlinked({ localEvents: rows, pendingEventIds: new Set(['e']) });
+    expect(r.map(a => a.eventId)).toEqual(['a']);
+    expect(r[0]).toMatchObject({ kind: 'unlinked', sploseAppointmentId: 'local:a', fingerprint: 'unlinked', details: { clientId: '41' } });
+  });
+});
+
 describe('autoPublishable — what the server may write without a review step', () => {
   const { autoPublishable } = require('../splose-draft-sync');
   test('moves and cancels go; a create only with client and service; failures and retries never', () => {

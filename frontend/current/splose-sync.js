@@ -576,6 +576,7 @@
     moved: 'was moved in Splose',
     deleted: 'was deleted in Splose',
     created: 'was booked directly in Splose',
+    unlinked: 'is in the portal but was never written to Splose',
   };
 
   function pollAlerts() {
@@ -611,17 +612,22 @@
     var when = a.kind === 'moved'
       ? 'From ' + fmtPerth(d.from && d.from.start) + ' to <b>' + esc(fmtPerth(d.to && d.to.start)) + '</b>'
       : fmtPerth(d.start || (d.from && d.from.start));
+    var unlinked = a.kind === 'unlinked';
     b.innerHTML =
       '<div class="sa-backdrop"></div><div class="sa-card">' +
-      '<div class="sa-eyebrow">Change made in Splose</div>' +
+      '<div class="sa-eyebrow">' + (unlinked ? 'Out of step with Splose' : 'Change made in Splose') + '</div>' +
       '<h2 id="splose-alert-title">' + esc(a.title || 'A client appointment') + ' ' + esc(KIND_TEXT[a.kind] || 'changed in Splose') + '</h2>' +
       '<div class="sa-when">' + when + (d.reason ? ' · reason: ' + esc(d.reason) : '') + '</div>' +
-      '<p class="sa-rule">Bookings are made and changed in the portal, not in Splose. The portal only found this out by checking. Was this change meant to happen?</p>' +
+      (unlinked
+        ? '<p class="sa-rule">This booking exists only in the portal: nothing is queued for it and Splose has no appointment. Should it be written to Splose?</p>'
+        : '<p class="sa-rule">Bookings are made and changed in the portal, not in Splose. The portal only found this out by checking. Was this change meant to happen?</p>') +
       '<div class="sa-actions">' +
-        '<button type="button" class="btn" data-verdict="invalid">No — it was a mistake</button>' +
-        '<button type="button" class="btn primary" data-verdict="valid">Yes — apply it to the calendar</button>' +
+        '<button type="button" class="btn" data-verdict="invalid">' + (unlinked ? 'Leave it portal-only' : 'No — it was a mistake') + '</button>' +
+        '<button type="button" class="btn primary" data-verdict="valid">' + (unlinked ? 'Queue it for Splose' : 'Yes — apply it to the calendar') + '</button>' +
       '</div>' +
-      '<div class="sa-foot">Yes: the portal and Outlook are updated to match Splose. No: the portal keeps its own copy, the owner is told, and the correction is made in Splose.</div>' +
+      '<div class="sa-foot">' + (unlinked
+        ? 'Queue: it joins the changes waiting to be written and syncs like any booking (a service may need choosing). Leave: it stays a portal-only block and is not asked about again.'
+        : 'Yes: the portal and Outlook are updated to match Splose. No: the portal keeps its own copy, the owner is told, and the correction is made in Splose.') + '</div>' +
       '</div>';
     b.hidden = false;
     b.querySelectorAll('[data-verdict]').forEach(function (btn) {
