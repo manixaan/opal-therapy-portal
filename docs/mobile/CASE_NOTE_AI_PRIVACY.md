@@ -6,10 +6,12 @@
 
 | Sent | Value |
 | --- | --- |
-| Dictated transcript | Verbatim, exactly as the therapist reviewed it on the phone (≤8000 chars) |
+| Dictated transcript | As reviewed on the phone (≤8000 chars), **de-identified**: every known person — the linked client, the dictating therapist, other active staff, and any word the therapist confirmed as a person at the names check — is replaced by a role token (`[CLIENT]`, `[CLIENT_MOTHER]`, `[THERAPIST]`, `[PERSON]`) before transmission (`backend/ai/deidentify.js`, migration 060) |
 | Session date | `DD/MM/YYYY` label only |
 | Service label | The appointment title (e.g. "Therapy Session (OT)") |
 | Style prompt | The versioned `OPAL_CASE_NOTE_STYLE_V1` text + optional regenerate modifier |
+
+**Names check (migration 060).** The phone asks `POST /api/mobile/case-note-drafts/names-check` before generation. No model is called: the portal answers which people it will hide and which words it could not decide about (honorifics, "named X", capitalised mid-sentence words). The therapist answers "person" or "not a name" for each; the answers travel with generation, are stored on the draft, and are replayed on regeneration. The model is instructed to keep tokens verbatim; names are restored **server-side after generation**. A result that carries a token the portal never issued, or a known full name in the clear, is refused (`422 names_not_hidden`) rather than guessed at. Practice-wide Splose contacts are deliberately not in the hidden set (hundreds of unrelated names would make phonetic matching hide ordinary words).
 
 **Deliberately NOT transmitted:** client full name, address, DOB, event/user/organisation ids, therapist identity, billing amounts, travel data, appointment location, or any other appointment metadata. Those are merged into the note **server-side after generation** (`case-note-routes.js` `buildHeader`/`buildBillingLine`/`composeNoteBody`). The transcript itself is the only clinical carrier — whatever the therapist chooses to dictate. **No audio is ever sent to the backend or the provider** (transcription is on-device; the API has no audio field).
 

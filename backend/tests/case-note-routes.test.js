@@ -151,6 +151,7 @@ function installPoolMock() {
         style_version: params[11], provider_id: params[12], model_id: params[13],
         ai_interaction_id: params[14] || null,
         splose_patient_id: params[15] || null,
+        deidentification: params[16] ? JSON.parse(params[16]) : null,
         generation_source: 'ai_assisted', review_status: 'review_required',
         reviewed_by: null, reviewed_at: null,
         status: 'draft', generated_at: new Date().toISOString(),
@@ -168,6 +169,7 @@ function installPoolMock() {
         plan: JSON.parse(params[5]), warnings: JSON.parse(params[6]), note_body: params[7],
         style_version: params[8], provider_id: params[9], model_id: params[10],
         ai_interaction_id: params[11] || null,
+        deidentification: params[12] ? JSON.parse(params[12]) : null,
         review_status: 'review_required', reviewed_by: null, reviewed_at: null,
         generated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       });
@@ -394,7 +396,9 @@ test('client name is stripped from the service label sent to the provider', asyn
   expect(seen.session.serviceLabel).not.toMatch(/Liam/i);
   expect(seen.session.serviceLabel).not.toMatch(/Carter/i);
   expect(seen.session.serviceLabel).toContain('Therapy Session');
-  expect(JSON.stringify(seen)).not.toContain('Liam Carter');
+  // identity is the in-process de-identification map (see the names-check
+  // tests); everything else the provider is handed must be name-free.
+  expect(JSON.stringify({ ...seen, identity: undefined })).not.toContain('Liam Carter');
   // The header (never sent to the model) keeps the full title.
   const d = (await generate(agent, { linkedEventId: named.id })).body.caseNoteDraft;
   expect(d.header.serviceLine).toContain('Liam Carter');
@@ -535,7 +539,7 @@ test('provider receives only transcript + date/service context — no names, ids
     dateLabel: '10/08/2026',
     serviceLabel: EVENT_A.title,
   });
-  const flat = JSON.stringify(seen);
+  const flat = JSON.stringify({ ...seen, identity: undefined }); // identity = in-process de-identification map
   expect(flat).not.toContain('Liam Carter');               // full client name not sent
   expect(flat).not.toContain('Example Street');            // address not sent
   expect(flat).not.toContain(EVENT_A.id);                  // ids not sent
@@ -808,7 +812,7 @@ describe('the deprecated alias POST /api/mobile/ai/case-note', () => {
     });
     expect(seen.session.dateLabel).toBe('10/08/2026');
     expect(seen.session.serviceLabel).toContain('Therapy Session');
-    const flat = JSON.stringify(seen);
+    const flat = JSON.stringify({ ...seen, identity: undefined }); // identity = in-process de-identification map
     expect(flat).not.toContain('01/01/1999');
     expect(flat).not.toContain('Client-invented label');
     expect(flat).not.toContain(EVENT_A.id);
@@ -1091,7 +1095,12 @@ describe('client-linked drafts', () => {
     expect(seen.session.serviceLabel).toBe('Therapy Session');
     // (The transcript itself is the therapist's dictation and may carry the
     // name — that is by design. Everything ELSE sent must be identity-free.)
-    const { transcript: _t, ...rest } = seen;
+    // `identity` is the de-identification map: it names the client so the
+    // PROVIDER can hide them, and never leaves the process (pinned in
+    // tests/clinical-note-deidentify.test.js). Everything else handed to the
+    // provider must already be name-free.
+    const { transcript: _t, identity, ...rest } = seen;
+    expect(identity.people[0]).toEqual({ name: 'Liam Carter', role: 'client' });
     const wire = JSON.stringify(rest);
     expect(wire).not.toContain('Liam');
     expect(wire).not.toContain('pt-1');
@@ -1184,5 +1193,108 @@ describe('client-linked drafts', () => {
     expect(seen.session.serviceLabel).toBe('Therapy Session');
     expect(sploseApi.getPatient).not.toHaveBeenCalled();
     expect(sploseApi.fetchAllCases).not.toHaveBeenCalled();
+  });
+});
+
+
+// ═══ De-identification (migration 060) ══════════════════════════════════════
+//
+// The route builds the identity (client + therapist + staff) and hands it to
+// the provider; the provider is overridden here, so what these pin is the
+// contract at the seam: which people travel, how the therapist's names-check
+// decisions are validated, that they are persisted with the draft, and that
+// regeneration replays them.
+
+describe('names check and de-identification', () => {
+  const NAMED = 'Liam arrived with his mum Priya. He played with Tobias. Mrs Delacroix from school called.';
+
+  test('names-check answers hidden tokens and candidates without touching the provider', async () => {
+    process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
+    let providerCalls = 0;
+    provider._setProviderForTests(async () => { providerCalls++; throw new Error('should not be called'); });
+    const agent = await loginAs(USER_A);
+    const res = await agent.post('/api/mobile/case-note-drafts/names-check')
+      .send({ transcript: NAMED, linkedEventId: EVENT_A.id });
+    expect(res.status).toBe(200);
+    expect(providerCalls).toBe(0);
+    expect(res.body.preview).toBe('[CLIENT] arrived with his mum Priya. He played with Tobias. Mrs Delacroix from school called.');
+    expect(res.body.hidden).toEqual([{ token: 'CLIENT', label: 'Client', count: 1 }]);
+    expect(res.body.candidates.map((c) => c.word).sort()).toEqual(['Delacroix', 'Priya', 'Tobias']);
+  });
+
+  test('names-check requires auth and exactly one link', async () => {
+    const anon = await request(app).post('/api/mobile/case-note-drafts/names-check').send({ transcript: NAMED, linkedEventId: EVENT_A.id });
+    expect(anon.status).toBe(401);
+    const agent = await loginAs(USER_A);
+    const none = await agent.post('/api/mobile/case-note-drafts/names-check').send({ transcript: NAMED });
+    expect(none.status).toBe(400);
+    expect(none.body.code).toBe('invalid_link');
+    const notMine = await agent.post('/api/mobile/case-note-drafts/names-check').send({ transcript: NAMED, linkedEventId: EVENT_B.id });
+    expect(notMine.status).toBe(400);
+  });
+
+  test('generate passes client + therapist + decisions to the provider and stores them on the draft', async () => {
+    process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
+    let seen = null;
+    provider._setProviderForTests(async (opts) => {
+      seen = opts.identity;
+      return {
+        identify: 'Client attended.', sessionDetails: 'Worked on transfers.', plan: [], warnings: [],
+        metadata: { interactionId: null },
+        deidentification: { tokens: [{ token: 'CLIENT', role: 'client', count: 1 }, { token: 'PERSON', role: 'person', count: 1 }], candidateCount: 0, version: 1 },
+      };
+    });
+    const agent = await loginAs(USER_A);
+    const res = await generate(agent, {
+      transcript: NAMED,
+      confirmedNames: ['Tobias', 'Priya', 42, '', 'x'.repeat(200)],
+      ignoredWords: ['Delacroix'],
+    });
+    expect(res.status).toBe(201);
+    expect(seen.people.map((p) => p.role)).toEqual(['client', 'therapist']);
+    expect(seen.people[0].name).toBe('Liam Carter');
+    expect(seen.people[1].name).toBe('Therapist A');
+    // Cleaned: non-strings dropped, empties dropped, long values capped.
+    expect(seen.confirmedNames).toEqual(['Tobias', 'Priya', 'x'.repeat(60)]);
+    expect(seen.ignoredWords).toEqual(['Delacroix']);
+
+    const row = draftStore.get(res.body.draftId);
+    expect(row.deidentification).toMatchObject({
+      version: 1, confirmedNames: ['Tobias', 'Priya', 'x'.repeat(60)], ignoredWords: ['Delacroix'],
+      tokens: [{ token: 'CLIENT', count: 1 }, { token: 'PERSON', count: 1 }],
+    });
+    // The audit carries counts only.
+    const auditCall = db.logAuditEvent.mock.calls.find((c) => c[0].action === 'mobile.case_note_generated');
+    expect(auditCall[0].metadata).toMatchObject({ namesHidden: 2, namesConfirmed: 3, namesIgnored: 1 });
+    expect(JSON.stringify(auditCall[0].metadata)).not.toMatch(/Tobias|Priya|Liam/);
+  });
+
+  test('regenerate replays the stored decisions', async () => {
+    process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
+    const identities = [];
+    provider._setProviderForTests(async (opts) => {
+      identities.push(opts.identity);
+      return { identify: 'A.', sessionDetails: 'B.', plan: [], warnings: [], metadata: { interactionId: null }, deidentification: { tokens: [], candidateCount: 0, version: 1 } };
+    });
+    const agent = await loginAs(USER_A);
+    const gen = await generate(agent, { transcript: NAMED, confirmedNames: ['Tobias'], ignoredWords: ['Delacroix'] });
+    expect(gen.status).toBe(201);
+    const re = await agent.post(`/api/mobile/case-note-drafts/${gen.body.draftId}/regenerate`).send({});
+    expect(re.status).toBe(200);
+    expect(identities).toHaveLength(2);
+    expect(identities[1].confirmedNames).toEqual(['Tobias']);
+    expect(identities[1].ignoredWords).toEqual(['Delacroix']);
+    expect(identities[1].people[0]).toEqual({ name: 'Liam Carter', role: 'client' });
+  });
+
+  test('a names_not_hidden refusal is a 422 with no draft row', async () => {
+    process.env.CLINICAL_NOTE_AI_ENABLED = 'true';
+    provider._setProviderForTests(async () => { throw new Error('names_not_hidden'); });
+    const agent = await loginAs(USER_A);
+    const res = await generate(agent, { transcript: NAMED });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('names_not_hidden');
+    expect(res.body.status).toBe('blocked');
+    expect(draftStore.size).toBe(0);
   });
 });

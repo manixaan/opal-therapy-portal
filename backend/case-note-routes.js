@@ -179,6 +179,18 @@ function generationFailure(err, req, variant = 'generate') {
     };
   }
 
+  if (err?.message === 'names_not_hidden') {
+    return {
+      status: 422,
+      body: {
+        error: `Opa couldn't keep every name hidden for this dictation, so it was not formatted. ${safety}`,
+        code: 'names_not_hidden',
+        status: 'blocked',
+        requestId,
+      },
+    };
+  }
+
   if (err?.message === 'content_blocked') {
     return {
       status: 422,
@@ -433,7 +445,63 @@ function validInstruction(instruction) {
  *
  * @returns {{ok: true, draft: object}|{ok: false, status: number, body: object}}
  */
-async function generateGovernedDraft(req, { ev, client, transcript, instruction, voiceNoteId }) {
+// ═══ De-identification (backend/ai/deidentify.js) ═══════════════════════════
+//
+// The people a note may name: the linked client (from the Splose record or
+// the appointment's client_name), the dictating therapist, and the other
+// active staff of the organisation. Each becomes a role token before the
+// transcript leaves the server. Practice-wide Splose contacts are NOT
+// included: hundreds of unrelated names would make phonetic matching hide
+// ordinary words.
+
+const MAX_NAME_DECISIONS = 30;
+const MAX_NAME_CHARS = 60;
+
+function cleanNameList(v) {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x) => typeof x === 'string').map((x) => x.trim().slice(0, MAX_NAME_CHARS))
+    .filter(Boolean).slice(0, MAX_NAME_DECISIONS);
+}
+
+async function identityPeople(req, { clientName }) {
+  const people = [];
+  if (clientName) people.push({ name: clientName, role: 'client' });
+  if (req.user && req.user.name) people.push({ name: req.user.name, role: 'therapist' });
+  const org = orgOf(req);
+  if (org) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT name FROM users WHERE organisation_id = $1 AND id <> $2 AND is_active = TRUE AND name IS NOT NULL LIMIT 200`,
+        [org, req.user.id]);
+      rows.forEach((r) => { if (r.name && r.name.trim().length >= 4) people.push({ name: r.name.trim(), role: 'staff' }); });
+    } catch (err) {
+      // Staff names are a bonus layer; the client and therapist are the ones that matter.
+      log.warn(`staff names unavailable for de-identification (reason: ${err?.message || 'unknown'})`);
+    }
+  }
+  return people;
+}
+
+function identityFor(people, b) {
+  return {
+    people,
+    confirmedNames: cleanNameList(b && b.confirmedNames),
+    ignoredWords: cleanNameList(b && b.ignoredWords),
+  };
+}
+
+/** What the draft row remembers so regeneration replays the same decisions. */
+function deidentificationRecord(identity, summary) {
+  return {
+    version: 1,
+    confirmedNames: identity.confirmedNames,
+    ignoredWords: identity.ignoredWords,
+    tokens: (summary && summary.tokens) || [],
+    candidateCount: summary ? summary.candidateCount : 0,
+  };
+}
+
+async function generateGovernedDraft(req, { ev, client, transcript, instruction, voiceNoteId, nameDecisions }) {
   if (!ev && !client) throw new Error('generate_requires_link');
   // Fail closed BEFORE anything leaves the server. Routed through the same
   // helper as the mid-flight case so both produce one indistinguishable
@@ -448,6 +516,7 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
   // A client link has no event title to strip a name from — the generic
   // label is already name-free.
   const serviceLabel = ev ? providerServiceLabel(ev) : CLIENT_SERVICE_LABEL;
+  const identity = identityFor(await identityPeople(req, { clientName: header.clientName }), nameDecisions);
 
   let raw;
   try {
@@ -456,8 +525,10 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
       styleVersion: CURRENT_STYLE_VERSION,
       instruction: instruction || undefined,
       // Minimum context: date + name-stripped service label only. No names,
-      // no address, no ids — the transcript is the only clinical carrier.
+      // no address, no ids — the transcript is the only clinical carrier,
+      // and its names are tokenised by the provider before it leaves.
       session: { dateLabel: header.sessionDateLabel, serviceLabel },
+      identity,
       // Attribution. Without these the ai_interactions row is written with a
       // null actor, and no AI call can be traced to a person — which defeats
       // the governance layer and breaks the review linkage below.
@@ -472,7 +543,7 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
   const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
   // No event → no derivable duration or travel → no billing line. Ever.
   const noteBody = composeNoteBody(header, sections, ev ? buildBillingLine(ev) : null);
-  const identity = provider.providerIdentity();
+  const providerIdent = provider.providerIdentity();
 
   let draft;
   try {
@@ -487,13 +558,14 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
          (user_id, organisation_id, voice_note_id, linked_event_id, transcript, header,
           identify, session_details, plan, warnings, note_body,
           style_version, provider_id, model_id, generated_at,
-          ai_interaction_id, generation_source, review_status, splose_patient_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required',$16) RETURNING *`,
+          ai_interaction_id, generation_source, review_status, splose_patient_id, deidentification)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required',$16,$17) RETURNING *`,
       [req.user.id, orgOf(req), voiceNoteId || null, ev ? ev.id : null, transcript, JSON.stringify(header),
        sections.identify, sections.sessionDetails, JSON.stringify(sections.plan),
        JSON.stringify(sections.warnings), noteBody,
-       CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
-       raw.metadata?.interactionId || null, client ? client.id : null]);
+       CURRENT_STYLE_VERSION, providerIdent.providerId, providerIdent.modelId,
+       raw.metadata?.interactionId || null, client ? client.id : null,
+       JSON.stringify(deidentificationRecord(identity, raw.deidentification))]);
     draft = rows[0];
     if (!draft) throw new Error('insert_returned_no_row');
   } catch (err) {
@@ -526,13 +598,66 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
     linkedEventId: ev ? ev.id : null,
     linkedClientId: client ? client.id : null,
     styleVersion: CURRENT_STYLE_VERSION,
-    modelId: identity.modelId,
+    modelId: providerIdent.modelId,
     aiInteractionId: draft.ai_interaction_id || null,
     transcriptChars: transcript.length,
     warningCount: sections.warnings.length,
+    // Counts only — never the names or the tokens' text.
+    namesHidden: (raw.deidentification?.tokens || []).reduce((n, t) => n + (t.count || 0), 0),
+    namesConfirmed: identity.confirmedNames.length,
+    namesIgnored: identity.ignoredWords.length,
   });
   return { ok: true, draft };
 }
+
+/**
+ * POST /api/mobile/case-note-drafts/names-check
+ *
+ * The names check, without a model call. Body: { transcript, linkedEventId |
+ * linkedClientId, confirmedNames?, ignoredWords? }. Answers what would be
+ * hidden (role tokens with counts) and which words still need the therapist
+ * to say whether they are a person. Nothing leaves the server.
+ */
+router.post('/api/mobile/case-note-drafts/names-check', safe(async (req, res) => {
+  const b = req.body || {};
+  if (!(typeof b.transcript === 'string' && b.transcript.trim())) {
+    return res.status(400).json({ error: 'transcript is required' });
+  }
+  if (b.transcript.length > MAX_TRANSCRIPT_CHARS) {
+    return res.status(400).json({ error: `transcript must be ${MAX_TRANSCRIPT_CHARS} characters or fewer` });
+  }
+  const hasEvent = b.linkedEventId !== undefined && b.linkedEventId !== null;
+  const hasClient = b.linkedClientId !== undefined && b.linkedClientId !== null;
+  if (hasEvent === hasClient) {
+    return res.status(400).json({ error: 'Link the note to exactly one appointment or one client', code: 'invalid_link' });
+  }
+  let clientName = null;
+  if (hasEvent) {
+    const ev = await loadOwnEvent(req, b.linkedEventId);
+    if (!ev) return res.status(400).json({ error: 'linkedEventId does not reference an appointment you can access', code: 'invalid_link' });
+    clientName = ev.client_name || null;
+  } else {
+    let client;
+    try {
+      client = await caseload.loadOwnClient(req, b.linkedClientId);
+    } catch (err) {
+      if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+      log.error('names-check client lookup failed', { error: err.message });
+      return res.status(502).json({ error: "We couldn't check that client with Splose just now. Please try again.", code: 'client_lookup_failed' });
+    }
+    if (!client) return res.status(400).json({ error: 'linkedClientId does not reference a client on your caseload', code: 'invalid_link' });
+    clientName = client.fullName || null;
+  }
+  const identity = identityFor(await identityPeople(req, { clientName }), b);
+  const preview = provider.previewNames({ transcript: b.transcript.trim(), identity });
+  res.json({
+    preview: preview.text,
+    hidden: preview.hidden,
+    candidates: preview.candidates,
+    confirmedNames: identity.confirmedNames,
+    ignoredWords: identity.ignoredWords,
+  });
+}));
 
 router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (req, res) => {
   const b = req.body || {};
@@ -606,6 +731,7 @@ router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (re
     transcript: b.transcript.trim(),
     instruction: b.instruction,
     voiceNoteId: b.voiceNoteId,
+    nameDecisions: { confirmedNames: b.confirmedNames, ignoredWords: b.ignoredWords },
   });
   if (!result.ok) return res.status(result.status).json(result.body);
 
@@ -780,6 +906,9 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
   const ev = row.linked_event_id ? await loadOwnEvent(req, row.linked_event_id) : null;
   const header = ev ? buildHeader(ev) : (row.header || {});
   const billing = ev ? buildBillingLine(ev) : null;
+  // Same people, same names-check decisions as the original generation.
+  const stored = row.deidentification || {};
+  const identity = identityFor(await identityPeople(req, { clientName: header.clientName }), stored);
 
   let raw;
   try {
@@ -791,6 +920,7 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
         dateLabel: header.sessionDateLabel,
         serviceLabel: ev ? providerServiceLabel(ev) : (row.splose_patient_id ? CLIENT_SERVICE_LABEL : undefined),
       },
+      identity,
       userId: req.user.id,
       organisationId: orgOf(req),
     });
@@ -801,7 +931,7 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
 
   const screened = screenNarrative(raw, header);
   const sections = { ...screened.sections, warnings: [...raw.warnings, ...screened.extraWarnings] };
-  const identity = provider.providerIdentity();
+  const providerIdent = provider.providerIdentity();
   const noteBody = composeNoteBody(header, sections, billing);
 
   // Captured BEFORE the update: this is the interaction whose text is being
@@ -823,14 +953,14 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
       `UPDATE case_note_drafts
           SET header = $3, identify = $4, session_details = $5, plan = $6, warnings = $7,
               note_body = $8, style_version = $9, provider_id = $10, model_id = $11,
-              ai_interaction_id = $12,
+              ai_interaction_id = $12, deidentification = $13,
               review_status = 'review_required', reviewed_by = NULL, reviewed_at = NULL,
               generated_at = NOW(), updated_at = NOW()
         WHERE id = $1 AND user_id = $2 RETURNING *`,
       [row.id, req.user.id, JSON.stringify(header), sections.identify, sections.sessionDetails,
        JSON.stringify(sections.plan), JSON.stringify(sections.warnings), noteBody,
-       CURRENT_STYLE_VERSION, identity.providerId, identity.modelId,
-       raw.metadata?.interactionId || null]);
+       CURRENT_STYLE_VERSION, providerIdent.providerId, providerIdent.modelId,
+       raw.metadata?.interactionId || null, JSON.stringify(deidentificationRecord(identity, raw.deidentification))]);
     updated = rows[0];
     if (!updated) throw new Error('update_matched_no_row');
   } catch (err) {
@@ -868,7 +998,7 @@ router.post('/api/mobile/case-note-drafts/:id/regenerate', aiRateLimit, safe(asy
 
   await audit(req, 'mobile.case_note_regenerated', row.id, {
     styleVersion: CURRENT_STYLE_VERSION,
-    modelId: identity.modelId,
+    modelId: providerIdent.modelId,
     instruction: instruction || null,
     aiInteractionId: updated.ai_interaction_id || null,
     supersededInteractionId: supersededId || null,

@@ -43,6 +43,33 @@
 
 const gateway = require('./ai/ai-gateway');
 const { STYLE_PROFILES, INSTRUCTION_MODIFIERS } = require('./case-note-style');
+const deid = require('./ai/deidentify');
+
+/**
+ * DE-IDENTIFICATION (backend/ai/deidentify.js). When the caller supplies
+ * `identity` — the people this note may name — every known name is replaced
+ * by a role token before the transcript leaves, the model is told to keep
+ * tokens verbatim, and the names go back into the sections afterwards. A
+ * result that carries a token we never issued, or a known name in the clear,
+ * is refused ('names_not_hidden'): the therapist writes that note by hand.
+ */
+const TOKEN_INSTRUCTION = '\n\nPEOPLE ARE TOKENISED. The dictation refers to people by bracketed role tokens such as '
+  + '[CLIENT], [CLIENT_MOTHER], [THERAPIST] or [PERSON]. Reproduce every token EXACTLY as written, including the '
+  + 'square brackets, wherever that person is referred to. Never invent a token, never expand one into a name, '
+  + 'never guess a name. Treat [CLIENT] as the participant the note is about.';
+
+/** Names check without a model call: what would be hidden, what needs confirming. */
+function previewNames({ transcript, identity }) {
+  const map = deid.buildIdentityMap(identity && identity.people);
+  const r = deid.deidentify(transcript || '', map, {
+    confirmedNames: identity && identity.confirmedNames, ignoredWords: identity && identity.ignoredWords,
+  });
+  return {
+    text: r.text,
+    hidden: r.entries.map((e) => ({ token: e.token, label: deid.describeToken(e.token), count: e.count })),
+    candidates: r.candidates,
+  };
+}
 
 const FEATURE = 'clinical_note_generation';
 
@@ -123,10 +150,10 @@ function validateResult(input) {
  * @throws Error('generation_disabled') | Error('provider_error')
  */
 async function generateCaseNote({
-  transcript, styleVersion, instruction, session, userId, organisationId, modelKey,
+  transcript, styleVersion, instruction, session, userId, organisationId, modelKey, identity,
 } = {}) {
   if (_providerOverride) {
-    return _providerOverride({ transcript, styleVersion, instruction, session });
+    return _providerOverride({ transcript, styleVersion, instruction, session, identity });
   }
   if (!isEnabled()) throw new Error('generation_disabled');
 
@@ -136,6 +163,22 @@ async function generateCaseNote({
   const modifier = instruction && INSTRUCTION_MODIFIERS[instruction]
     ? `\n\nTHERAPIST ADJUSTMENT FOR THIS REGENERATION: ${INSTRUCTION_MODIFIERS[instruction]}`
     : '';
+
+  // Names out. `identity` absent means the caller chose not to de-identify
+  // (legacy path); present means every known name is tokenised and the
+  // result is checked on the way back.
+  let sendText = transcript;
+  let deidMap = null;
+  let deidSummary = null;
+  if (identity && Array.isArray(identity.people)) {
+    const map = deid.buildIdentityMap(identity.people);
+    const r = deid.deidentify(transcript, map, {
+      confirmedNames: identity.confirmedNames, ignoredWords: identity.ignoredWords,
+    });
+    sendText = r.text;
+    deidMap = r.map;
+    deidSummary = { tokens: r.entries, candidateCount: r.candidates.length, version: 1 };
+  }
 
   const context = [
     session?.dateLabel ? `Session date: ${session.dateLabel}` : null,
@@ -157,7 +200,7 @@ async function generateCaseNote({
       // Declaring it keeps the human-review requirement derived from what the
       // answer IS rather than from which module happened to ask.
       outputType: 'clinical_document',
-      system: stylePrompt + modifier,
+      system: stylePrompt + modifier + (deidMap ? TOKEN_INSTRUCTION : ''),
       // Forced tool use guarantees the structured shape and suppresses any
       // conversational preamble. `strict: true` is deliberately not set —
       // AWS model cards currently list structured outputs as unsupported on
@@ -169,15 +212,19 @@ async function generateCaseNote({
       timeoutMs: clampInt(process.env.CLINICAL_NOTE_TIMEOUT_MS, 60000, 5000, 120000),
       messages: [{
         role: 'user',
-        content: `${context ? `${context}\n\n` : ''}Dictated session notes (verbatim):\n\n${transcript}`,
+        content: `${context ? `${context}\n\n` : ''}Dictated session notes (verbatim):\n\n${sendText}`,
       }],
     });
 
     if (!res.toolUse || res.toolUse.name !== 'case_note') throw new Error('malformed');
+    let sections = validateResult(res.toolUse.input);
+    if (deidMap) {
+      sections = restoreNames(sections, deidMap);
+    }
     // `metadata` carries provenance only — model, provider, source region,
     // interaction id, review requirement. Never the prompt or a raw response:
     // the caller cannot persist what it is never handed.
-    return { ...validateResult(res.toolUse.input), metadata: res.metadata };
+    return { ...sections, metadata: res.metadata, deidentification: deidSummary };
   } catch (err) {
     if (err instanceof gateway.AiPolicyError) {
       // Policy refusal is a configuration state, not a transport failure —
@@ -195,10 +242,33 @@ async function generateCaseNote({
     // available right now".
     if (err?.message === 'guardrail_not_configured') throw new Error('generation_disabled');
     if (err?.message === 'provider_error') throw err;
+    // The model's answer could not be safely re-identified. Not retryable:
+    // the same dictation would produce the same problem.
+    if (err?.message === 'names_not_hidden') throw err;
     // Everything else (malformed structure, validation failure) is sanitised.
     console.warn(`[clinical-note] generation failed (reason: ${err?.message || 'unknown'})`);
     throw new Error('provider_error');
   }
+}
+
+/** Names back into every section; refuse anything we cannot account for. */
+function restoreNames(sections, map) {
+  const one = (text) => {
+    const r = deid.reidentify(text, map);
+    if (!r.ok) throw new Error('names_not_hidden');
+    return r.text;
+  };
+  // A known full name in the clear in the MODEL's output means it was never
+  // hidden on the way in (or was reconstructed) — either way, refuse.
+  const leak = [sections.identify, sections.sessionDetails, ...sections.plan, ...sections.warnings]
+    .some((t) => deid.containsKnownName(t, map));
+  if (leak) throw new Error('names_not_hidden');
+  return {
+    identify: one(sections.identify),
+    sessionDetails: one(sections.sessionDetails),
+    plan: sections.plan.map(one),
+    warnings: sections.warnings.map(one),
+  };
 }
 
 /**
@@ -234,6 +304,7 @@ function _setProviderForTests(fn) {
 module.exports = {
   FEATURE,
   generateCaseNote,
+  previewNames,
   isEnabled,
   configError,
   providerIdentity,
