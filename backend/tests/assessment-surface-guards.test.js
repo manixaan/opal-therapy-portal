@@ -695,8 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 10: leave days are shaded on the calendar; booking into one asks first.
-      ['travel.js', 10],
+      // 11: the caseload dropdown says when it is empty instead of showing nothing.
+      ['travel.js', 11],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -802,6 +802,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // splose-sync.js read undefined and every drag stayed visual-only, then
     // snapped back on the next refresh (6 Sep 2026).
     expect(SHELL).toMatch(/^var pendingMove = null;/m);
+    // Same trap: travel.js reads window.PATIENTS for the caseload dropdown.
+    expect(SHELL).toMatch(/^var PATIENTS = \[\];/m);
+    expect(SHELL).not.toMatch(/^let PATIENTS\b/m);
     expect(SHELL).not.toMatch(/^let pendingMove\b/m);
     const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
     expect(sync).toMatch(/global\.pendingMove/);

@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=10" defer></script>
+<script src="/travel.js?v=11" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -9337,7 +9337,10 @@ async function loadSploseAppointmentsIntoSessions() {
 }
 
 /* ---------- Patient list — loaded live from Splose via backend proxy ---------- */
-let PATIENTS = []; // Populated by loadSplosePatients() on boot
+// `var`, not `let`: travel.js reads window.PATIENTS for the caseload dropdown
+// behind a travel leg. A top-level `let` never becomes a window property, so
+// the dropdown was empty (7 Sep 2026) — the same trap as pendingMove.
+var PATIENTS = []; // Populated by loadSplosePatients() on boot
 
 // Infer a Perth metro region from suburb (best-effort fallback)
 function inferRegion(suburb = '') {

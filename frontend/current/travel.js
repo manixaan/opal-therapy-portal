@@ -1061,12 +1061,12 @@ function _renderTravelPanel(seg) {
       ' <input type="text" class="tp-addr" data-plan="address" autocomplete="off" placeholder="Start typing an address…" value="' + _tpEsc(current && current.kind === 'address' ? current.address : '') + '"></label>' +
       '<div class="tp-plan-hint">Pick from the suggestions. Changes this day only; your travel bases in My Profile stay as they are.</div></div>';
     if (side === 'after') {
-      var pts = (window.PATIENTS || []).slice().sort(function (a, b) { return (a.last + a.first).localeCompare(b.last + b.first); });
+      var pts = (window.PATIENTS || []).slice().sort(function (a, b) { return ((a.last || '') + (a.first || '')).localeCompare((b.last || '') + (b.first || '')); });
       html += '<div class="tp-plan-stop"><label>Or add a stop at another client ';
-      html += '<select data-plan="stop"><option value="">Choose from my caseload…</option>' +
-        pts.map(function (p) { return '<option value="' + _tpEsc(p.id) + '">' + _tpEsc(p.first + ' ' + p.last) + (p.suburb ? ' · ' + _tpEsc(p.suburb) : '') + '</option>'; }).join('') +
+      html += '<select data-plan="stop"' + (pts.length ? '' : ' disabled') + '><option value="">' + (pts.length ? 'Choose from my caseload…' : 'No clients in your caseload yet') + '</option>' +
+        pts.map(function (p) { return '<option value="' + _tpEsc(p.id) + '">' + _tpEsc((p.first || '') + ' ' + (p.last || '')) + (p.suburb ? ' · ' + _tpEsc(p.suburb) : '') + '</option>'; }).join('') +
         '</select></label>';
-      html += '<div class="tp-plan-hint">Picking a client opens Smart Booking at the earliest start the travel allows.</div></div>';
+      html += '<div class="tp-plan-hint">' + (pts.length ? 'Picking a client opens Smart Booking at the earliest start the travel allows.' : 'A client appears once they have an open case with you in Splose.') + '</div></div>';
     }
     html += '</div>';
   }
