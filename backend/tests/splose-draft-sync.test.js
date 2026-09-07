@@ -198,7 +198,8 @@ describe('createPublisher — paced, ordered, one failure never stops the run', 
         if (createCalls === 1) { const e = new Error('rate'); e.response = { status: 429 }; throw e; }
         return { id: 900 };
       },
-      cancelAppointment: async () => { const e = new Error('bad'); e.response = { status: 404 }; throw e; },
+      // A real failure (404/409 on a cancel now count as done — see the next test).
+      cancelAppointment: async () => { const e = new Error('Splose gateway error'); e.response = { status: 502 }; throw e; },
       getCancellationReasons: async () => [{ id: 66, reason: 'Other' }],
       getLocations: async () => [{ id: 9456, archived: false }],
       fetchAllCases: async () => [{ id: 300, patientId: 1, status: 'Active' }],
@@ -211,12 +212,25 @@ describe('createPublisher — paced, ordered, one failure never stops the run', 
     const result = await pub.publish('u1');
     expect(result.failed).toBe(1);
     expect(result.results).toEqual([
-      { id: 'x1', ok: false, action: 'cancel', error: 'Splose no longer has this appointment' },
+      { id: 'x1', ok: false, action: 'cancel', error: 'Splose gateway error' },
       { id: 'c1', ok: true, action: 'create', sploseId: '900' },
     ]);
     expect(sleeps).toContain(5000);                       // the 429 back-off
     const failed = db.updates.find(u => /status = 'failed'/.test(u.sql));
-    expect(failed.params[1]).toBe('Splose no longer has this appointment');
+    expect(failed.params[1]).toBe('Splose gateway error');
+  });
+
+  test('a cancel Splose answers 409 (already cancelled) or 404 (gone) is recorded as done, not failed', async () => {
+    const sploseApi = {
+      getCancellationReasons: async () => [{ id: 57066, reason: 'Other' }],
+      cancelAppointment: async (id) => { const e = new Error('conflict'); e.response = { status: String(id) === '77' ? 409 : 404 }; throw e; },
+    };
+    const db = fakeDb([row('c1', 'cancel', {}, { splose_id: '77' }), row('c2', 'cancel', {}, { splose_id: '78' })]);
+    const pub = createPublisher({ db, sploseApi, gapMs: 0, sleep: async () => {} });
+    const state = await pub.publish('u1');
+    expect(state.failed).toBe(0);
+    expect(state.results.map(r => r.ok)).toEqual([true, true]);
+    expect(db.updates.filter(u => /status = 'done'/.test(u.sql))).toHaveLength(2);
   });
 
   test('a create with no service or no case fails that row with a plain reason', async () => {

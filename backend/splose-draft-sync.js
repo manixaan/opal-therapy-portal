@@ -65,6 +65,7 @@ function summariseError(err) {
   if (status === 429) return 'Splose asked us to slow down (rate limit)';
   if (status === 401 || status === 403) return 'Splose rejected the practice API key';
   if (status === 404) return 'Splose no longer has this appointment';
+  if (status === 409) return 'Splose already has this appointment in that state';
   if (status === 400 || status === 422) {
     const d = err.response.data;
     const msg = d && (d.message || d.error || (Array.isArray(d.errors) && d.errors.map(e => e.message || e).join('; ')));
@@ -298,7 +299,17 @@ function createPublisher(deps) {
         }
         if (row.action === 'cancel') {
           const reasonId = p.reasonId || await defaultReasonId();
-          await sploseApi.cancelAppointment(sploseId, reasonId, p.cancelNote || 'Cancelled from the Opal portal');
+          try {
+            await sploseApi.cancelAppointment(sploseId, reasonId, p.cancelNote || 'Cancelled from the Opal portal');
+          } catch (err) {
+            const st = err.response && err.response.status;
+            // 409: Splose already holds it cancelled. 404: Splose no longer has
+            // it at all. Either way the appointment is gone from the diary, which
+            // is what this row asked for — record it as done, not as a failure
+            // to retry for ever.
+            if (st === 409 || st === 404) return { sploseId: String(sploseId), alreadyGone: true };
+            throw err;
+          }
           return { sploseId: String(sploseId) };
         }
         throw new Error('Unknown action ' + row.action);

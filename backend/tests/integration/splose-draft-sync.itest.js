@@ -239,7 +239,7 @@ describe('publishing', () => {
     await agent.delete(`/api/outlook/events/${linked[0].id}`).send({ reasonId: 57064 });
     await agent.delete(`/api/outlook/events/${linked[1].id}`).send({});
     mockSplose.cancelAppointment.mockImplementation(async (id) => {
-      if (String(id) === '6200') { const e = new Error('gone'); e.response = { status: 404 }; throw e; }
+      if (String(id) === '6200') { const e = new Error('Splose gateway error'); e.response = { status: 502 }; throw e; }
       return 1;
     });
 
@@ -267,7 +267,7 @@ describe('publishing', () => {
 
     const after = await agent.get('/api/splose-sync/pending');
     expect(after.body.count).toBe(1);
-    expect(after.body.changes[0]).toMatchObject({ action: 'cancel', status: 'failed', error: 'Splose no longer has this appointment' });
+    expect(after.body.changes[0]).toMatchObject({ action: 'cancel', status: 'failed', error: 'Splose gateway error' });
 
     const audit = await db.pool.query(`SELECT action FROM audit_logs WHERE action = 'splose_sync_publish_started'`);
     expect(audit.rows).toHaveLength(1);
