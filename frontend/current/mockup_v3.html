@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=8" defer></script>
+<script src="/travel.js?v=9" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12536,6 +12536,7 @@ async function confirmBooking() {
     const _outlookCategory = OUTLOOK_CATEGORY_BY_TYPE[type] || null;
     const _outlookLocation = (isClientSession && patient?.address) ? patient.address : '';
     let outlookId   = null;
+    let newDbId     = null; // the saved row, so the optimistic tile is editable at once
     let outlookNote = '';
     try {
       const oResp = await fetch('/api/outlook/events', {
@@ -12565,6 +12566,7 @@ async function confirmBooking() {
       const oResult = await oResp.json();
       if (oResp.ok) {
         outlookId   = oResult.outlookId;
+        newDbId     = oResult.dbId || null;
         outlookNote = 'Added to Outlook calendar ✓';
         __registerBookingUndo(oResult.dbId, _outlookTitle);
         if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
@@ -12591,7 +12593,11 @@ async function confirmBooking() {
     const col = document.getElementById('day-' + slot.day);
     if (col) {
       const sub = patient ? `${patient.first} ${patient.last}` : (TYPE_LABEL[type] || '');
-      addSession(col, {
+      // The optimistic tile is the SAVED appointment: it carries the row id
+      // (so an address or travel answer set on it persists), the address it
+      // was booked with, and the Outlook stamp (so the next reload replaces
+      // it instead of leaving a duplicate).
+      const _optId = addSession(col, {
         day: slot.day, type,
         startH: slot.startH, startM: slot.startM,
         endH: eh, endM: em,
@@ -12600,7 +12606,14 @@ async function confirmBooking() {
         patientId: patient?.id,
         region: patient?.region || 'central',
         suburb: patient?.suburb || '',
+        dbId: newDbId, outlookId,
+        address: _outlookLocation || null, location: _outlookLocation || null,
+        startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
       });
+      if (_optId && SESSIONS[_optId]) {
+        SESSIONS[_optId].outlookSynced = true;
+        if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
+      }
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
     }
 
@@ -17519,7 +17532,15 @@ function groupEventsByDay(events) {
         // event.location). NEVER fall back to description or a hardcoded sync label —
         // Outlook descriptions often contain subscription metadata, meeting HTML, etc.
         // that is irrelevant to the therapist and should never appear in the tile.
-        const rawLoc = (event.location || '').trim();
+        // A manual address the user saved in the browser survives even when
+        // the row has none yet (the write failed, or the tile had no id then).
+        let rawLoc = (event.location || '').trim();
+        if (!rawLoc) {
+          try {
+            const m = JSON.parse(localStorage.getItem('manual_addr_db_' + event.id) || 'null');
+            if (m && m.formattedAddress) rawLoc = String(m.formattedAddress).trim();
+          } catch (_) {}
+        }
         const hasLocation = rawLoc.length > 0;
 
         // Build a structured location object for the detail panel.

@@ -1179,6 +1179,7 @@ function _wireRouteAddressEdits(body, seg) {
 async function saveSessionAddress(sessionId, newAddr, lat, lng) {
   var s = window.SESSIONS && window.SESSIONS[sessionId];
   if (!s) return false;
+  if (!s.dbId) { showToast('Not saved yet', 'This appointment has not finished saving. Try again in a moment.'); return false; }
   newAddr = String(newAddr || '').trim(); if (!newAddr) return false;
   lat = parseFloat(lat) || null; lng = parseFloat(lng) || null;
   var fromPlaces = !!(lat && lng);

@@ -695,9 +695,9 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 8: the engine reads day bases from the week the calendar shows, and a
-      // base or day-location edit in the profile repaints the legs at once.
-      ['travel.js', 8],
+      // 9: an address edit on a tile with no saved row is refused with a
+      // message instead of being kept in memory only.
+      ['travel.js', 9],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -867,6 +867,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // The engine never reads the profile editor's week cursor directly.
     expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
     expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
+    // The optimistic booking tile is the saved row: id, address, Outlook stamp.
+    expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
+    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = true;/);
+    expect(SHELL).toMatch(/manual_addr_db_' \+ event\.id/);
     // Deleting a tile redraws the legs around where it was.
     const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);
     expect(del).toMatch(/refreshAllOverlays\(\)/);
