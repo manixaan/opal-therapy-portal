@@ -691,9 +691,9 @@ describe('changed assets are cache-busted', () => {
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
-      // 1: travel.js is new — the travel domain lifted out of the shell.
-      // Same reason again: a first pin is still a pin.
-      ['travel.js', 1],
+      // 2: per-session travel answers (before / after), the day-base prompt
+      // and "add a stop" into Smart Booking.
+      ['travel.js', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -812,6 +812,22 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/serviceId: \(BOOKING_LEAVES\[BOOKING_STATE\.serviceType\] && BOOKING_LEAVES\[BOOKING_STATE\.serviceType\]\.serviceId\)/);
     // Static fallback leaves carry ids too.
     expect(SHELL).toMatch(/'therapy':\s+\{ cat: 'client',[^\n]*serviceId: 125320/);
+  });
+
+  test('travel legs honour per-session before/after answers and the day-base prompt', () => {
+    const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking']) {
+      expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
+    }
+    // The engine reads the answers at the day's ends, not the between legs.
+    expect(travel).toMatch(/resolveTravelPoint\(sessionTravelOverride\(first, 'before'\), day\) \|\| base/);
+    expect(travel).toMatch(/resolveTravelPoint\(sessionTravelOverride\(last, 'after'\), day\) \|\| base/);
+    // Answers are saved on the event, never sent to Splose or Outlook.
+    expect(travel).toMatch(/\/api\/events\/' \+ encodeURIComponent\(s\.dbId\) \+ '\/travel'/);
+    // The shell carries them onto sessions and asks for a base before booking.
+    expect(SHELL).toMatch(/travel: \(event\.custom_metadata && event\.custom_metadata\.travel\) \|\| null/);
+    expect(SHELL).toMatch(/await ensureDayBase\(slot\.day\)/);
+    expect(SHELL).toMatch(/applyTravelChainAfterBooking\(oResult\.dbId, _tf\)/);
   });
 
   test('Outlook tiles are DOM-stamped so a re-render sweeps phantoms the registry lost', () => {

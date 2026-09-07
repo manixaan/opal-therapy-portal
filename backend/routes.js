@@ -2413,6 +2413,59 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
 });
 
 /**
+ * PATCH /api/events/:dbId/travel
+ * The session's own answer to where the therapist is before it and where they
+ * go after it (custom_metadata.travel). Portal-only: travel legs never reach
+ * Splose or Outlook. Body: { before: spec|null, after: spec|null } where spec
+ * is { kind:'base', id } or { kind:'address', address, suburb?, label? }.
+ */
+function cleanTravelSpec(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v !== 'object') return undefined;
+  if (v.kind === 'base') {
+    if (typeof v.id !== 'string' || !v.id || v.id.length > 64) return undefined;
+    return { kind: 'base', id: v.id };
+  }
+  if (v.kind === 'address') {
+    const address = typeof v.address === 'string' ? v.address.trim().slice(0, 200) : '';
+    if (!address) return undefined;
+    const out = { kind: 'address', address };
+    if (typeof v.suburb === 'string' && v.suburb.trim()) out.suburb = v.suburb.trim().slice(0, 80);
+    if (typeof v.label  === 'string' && v.label.trim())  out.label  = v.label.trim().slice(0, 80);
+    return out;
+  }
+  return undefined;
+}
+router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role === 'read_only' || req.user.role === 'pre_employee') {
+      return res.status(403).json({ error: 'Your account cannot change bookings' });
+    }
+    const before = cleanTravelSpec(req.body ? req.body.before : null);
+    const after  = cleanTravelSpec(req.body ? req.body.after  : null);
+    if (before === undefined || after === undefined) {
+      return res.status(400).json({ error: 'before/after must be null, { kind: "base", id } or { kind: "address", address }' });
+    }
+    const travel = {};
+    if (before) travel.before = before;
+    if (after)  travel.after  = after;
+    const r = await db.pool.query(
+      `UPDATE events
+          SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('travel', $3::jsonb),
+              updated_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)
+        RETURNING id, custom_metadata`,
+      [req.params.dbId, req.session.userId, JSON.stringify(travel)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Event not found' });
+    res.json({ ok: true, travel: (r.rows[0].custom_metadata || {}).travel || {} });
+  } catch (err) {
+    console.error('Event travel plan error:', err.message);
+    res.status(500).json({ error: 'Could not save the travel plan' });
+  }
+});
+
+/**
  * PATCH /api/outlook/events/:dbId/location
  * Write the routing address back to the corresponding Outlook event.
  * Also persists the manual_location override to the local DB row so it

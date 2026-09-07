@@ -456,6 +456,158 @@ function isTravelBlock(s) {
   return false;
 }
 
+/* ---------- Per-session travel answers (before / after) ----------
+   A client session can say where the therapist is coming from and where they
+   go next. The answers live on the event (custom_metadata.travel) and travel
+   with it; absent means "the day's base". Between-session legs always chain
+   in time order, so only the first session's `before` and the last session's
+   `after` are read — a stop added after a session simply becomes the next
+   session, and the old `after` passes to it (see applyTravelChainAfterBooking).
+   Shape: { kind: 'base', id } | { kind: 'address', address, suburb, label }. */
+function sessionTravelOverride(s, side) {
+  const t = s && s.travel;
+  const v = t && t[side];
+  return (v && typeof v === 'object' && v.kind) ? v : null;
+}
+function resolveTravelPoint(spec, day) {
+  if (!spec) return null;
+  if (spec.kind === 'base') {
+    const b = (typeof getBase === 'function') ? getBase(spec.id) : null;
+    if (!b) return null;
+    return { suburb: b.suburb || null, label: b.label || 'Base', addr: b.addr || null,
+             region: b.region || suburbRegion(b.suburb) || 'central', remote: b.kind === 'remote', baseId: spec.id };
+  }
+  if (spec.kind === 'address') {
+    const addr = String(spec.address || '').trim();
+    if (!addr) return null;
+    const suburb = spec.suburb || (typeof addrSuburb === 'function' ? addrSuburb(addr) : null) || addr;
+    return { suburb, label: spec.label || suburb, addr, region: suburbRegion(suburb) || 'central', remote: false, baseId: null };
+  }
+  return null;
+}
+function describeTravelPoint(spec, day) {
+  const p = resolveTravelPoint(spec, day);
+  if (p) return p.label + (p.suburb && p.suburb !== p.label ? ' · ' + p.suburb : '');
+  const b = dayAnchorBase(day);
+  return (b.label || 'Base') + (b.suburb && b.suburb !== b.label ? ' · ' + b.suburb : '') + ' (day default)';
+}
+/* Persist an answer on the event and redraw. side: 'before' | 'after'. spec null = back to default. */
+async function setTravelOverride(sessionId, side, spec) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
+  const next = Object.assign({}, s.travel || {});
+  if (spec) next[side] = spec; else delete next[side];
+  try {
+    const r = await fetch('/api/events/' + encodeURIComponent(s.dbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ before: next.before || null, after: next.after || null }),
+    });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('Could not save travel plan', j.error || ('HTTP ' + r.status)); return false; }
+  } catch (e) { showToast('Could not save travel plan', e.message); return false; }
+  s.travel = next;
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  return true;
+}
+
+/* Ask once for the day's base when a booking lands on a day that has none
+   (owner's call, 7 Sep 2026: ask, don't silently assume the office). */
+function ensureDayBase(day) {
+  try {
+    const wk = (typeof wlThisWeek === 'function') ? wlThisWeek() : null;
+    if (!wk || (wk[day] && wk[day] !== 'unset')) return Promise.resolve(wk ? wk[day] : null);
+    const opts = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {})
+      .filter(k => k !== 'leave' && k !== 'unset')
+      .map(k => ({ key: k, label: LOCATIONS[k].label || k }));
+    if (!opts.length) return Promise.resolve(null);
+    const dayName = ({ mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' })[day] || day;
+    return travelChooser('Where are you based on ' + dayName + '?',
+      'Travel to the first session and back from the last one is worked out from here. You can change it any day in My Profile › Work locations.', opts)
+      .then(key => { if (key && typeof wlSetLocation === 'function') wlSetLocation(day, key); return key; });
+  } catch (e) { return Promise.resolve(null); }
+}
+
+/* A small themed chooser (dialog.css look) — resolves the chosen key or null. */
+function travelChooser(title, message, options) {
+  return new Promise(resolve => {
+    const el = document.createElement('div');
+    el.className = 'pd-backdrop';
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    el.innerHTML = '<section class="pd-dialog" role="dialog" aria-modal="true" aria-labelledby="tc-title">' +
+      '<div class="pd-head"><h2 class="pd-title" id="tc-title">' + esc(title) + '</h2></div>' +
+      '<div class="pd-body"><p>' + esc(message) + '</p><div class="tc-opts">' +
+        options.map(o => '<button type="button" class="pd-btn tc-opt" data-key="' + esc(o.key) + '" style="display:block;width:100%;text-align:left;margin:6px 0;">' + esc(o.label) + '</button>').join('') +
+      '</div></div>' +
+      '<div class="pd-foot"><button type="button" class="pd-btn" data-key="">Not now</button></div></section>';
+    document.body.appendChild(el); document.body.classList.add('pd-open');
+    let done = false;
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); finish(null); } };
+    const finish = (k) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey, true);
+      el.remove(); document.body.classList.remove('pd-open'); resolve(k || null);
+    };
+    el.querySelectorAll('[data-key]').forEach(b => b.addEventListener('click', () => finish(b.getAttribute('data-key'))));
+    el.addEventListener('mousedown', e => { if (e.target === el) finish(null); });
+    document.addEventListener('keydown', onKey, true);
+    const first = el.querySelector('.tc-opt'); if (first) first.focus();
+  });
+}
+
+/* "Add a stop": open Smart Booking for a client straight after a session, at
+   the earliest start the travel allows, carrying the travelling-from context. */
+function addStopAfterSession(sessionId, patientId) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  const p = (window.PATIENTS || []).find(x => String(x.id) === String(patientId));
+  if (!s || !p) return;
+  const fromLoc = sessionLocation(s);
+  const fromKey = locTravelKey(fromLoc);
+  const toKey   = p.address || p.suburb;
+  const travel  = (fromKey && toKey && fromKey !== toKey) ? travelMinutes(fromKey, toKey) : 0;
+  const endMin  = sessionEndMin(s);
+  const earliest = Math.ceil((endMin + travel) / 15) * 15;
+  const dur = 60, finish = earliest + dur;
+  const ctx = { sessionId: s.id, dbId: s.dbId || null, label: (s.patient || s.title || 'the previous session'), suburb: fromLoc.suburb || '', travelMin: travel, patientId: p.id };
+  if (typeof closeTravelPanel === 'function') closeTravelPanel();
+  if (typeof openBookingPanel !== 'function') return;
+  openBookingPanel({ day: s.day, date: (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[s.day] : null,
+                     startH: Math.floor(earliest / 60), startM: earliest % 60, endH: Math.floor(finish / 60), endM: finish % 60, travelFrom: ctx });
+  // openBookingPanel resets the wizard; select the client and stamp the context afterwards.
+  setTimeout(() => {
+    if (typeof BOOKING_STATE !== 'undefined') BOOKING_STATE.travelFrom = ctx;
+    if (typeof selectBookingLeaf === 'function' && typeof BOOKING_LEAVES !== 'undefined') {
+      const cur = BOOKING_STATE.serviceType && BOOKING_LEAVES[BOOKING_STATE.serviceType];
+      if (!cur || cur.cat !== 'client') {
+        const firstClientLeaf = Object.keys(BOOKING_LEAVES).find(k => BOOKING_LEAVES[k].cat === 'client');
+        if (firstClientLeaf) selectBookingLeaf(firstClientLeaf);
+      }
+    }
+    const card = document.querySelector('.patient-card[data-patient-id="' + String(p.id).replace(/"/g, '') + '"]');
+    if (card) card.click();
+    const strip = document.getElementById('bsp-prefill-strip'), text = document.getElementById('bsp-prefill-text');
+    if (strip && text) {
+      strip.style.display = '';
+      text.textContent += ' · travelling from ' + ctx.label + (ctx.suburb ? ', ' + ctx.suburb : '') + (travel ? ' · ' + travel + ' min' : '');
+    }
+  }, 60);
+}
+
+/* After a stop is booked: the new session inherits the predecessor's `after`
+   (where the day was going to end), so the chain forms without another step.
+   The predecessor keeps its own answer — if the stop is later cancelled, the
+   day closes back to where it used to. */
+async function applyTravelChainAfterBooking(newDbId, ctx) {
+  if (!newDbId || !ctx) return;
+  const pred = ctx.sessionId && window.SESSIONS ? window.SESSIONS[ctx.sessionId] : null;
+  const inherit = pred ? sessionTravelOverride(pred, 'after') : null;
+  if (!inherit) return; // the day default carries over on its own
+  try {
+    await fetch('/api/events/' + encodeURIComponent(newDbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ before: null, after: inherit }),
+    });
+  } catch (e) { /* best effort — the default is the same base most days */ }
+}
+
 function computeDayTravelSegments(day) {
   const sessions = sessionsForDay(day);
   const segs = [];
@@ -479,21 +631,25 @@ function computeDayTravelSegments(day) {
   // gives the Routes API a precise origin/destination rather than the suburb
   // centroid, which matters for the 5-10 min disparity between, say,
   // "Willetton 6155" and "31 Yale Rd, Willetton WA 6155".
-  const baseKey  = base.addr  || base.suburb;
+  // The first session may say where the day starts (travel.before); the day's
+  // base is the default. Between legs always chain in time order.
+  const startPt  = resolveTravelPoint(sessionTravelOverride(first, 'before'), day) || base;
+  const baseKey  = startPt.addr  || startPt.suburb;
   const firstKey = locTravelKey(firstLoc);
-  if (!base.remote && baseKey && firstKey && baseKey !== firstKey) {
+  if (!startPt.remote && baseKey && firstKey && baseKey !== firstKey) {
     const travel = travelMinutes(baseKey, firstKey);
     if (travel > 0) {
       const endMin   = sessionStartMin(first);
       const startMin = Math.max(0, endMin - travel);
       segs.push({
         day, kind: 'start',
-        fromLoc: { suburb: base.suburb, label: base.label, region: base.region, address: base.addr || null },
+        fromLoc: { suburb: startPt.suburb, label: startPt.label, region: startPt.region, address: startPt.addr || null },
         toLoc:   { suburb: firstLoc.suburb, label: firstLoc.label, region: firstLoc.region, address: firstLoc.address || null },
         startMin, endMin,
         travelMin: travel, freeMin: 0,
         fromSessionId: null, toSessionId: first.id,
-        anchorBaseId: (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        anchorBaseId: startPt.baseId || (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        overridden: !!sessionTravelOverride(first, 'before'),
         cacheKey: routeKey(baseKey, firstKey, 'driving')
       });
     }
@@ -549,8 +705,10 @@ function computeDayTravelSegments(day) {
   const last = sessions[sessions.length - 1];
   const lastLoc = sessionLocation(last);
   const lastKey = locTravelKey(lastLoc);
-  const baseKeyEnd = base.addr || base.suburb;
-  if (!base.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
+  // The last session may say where the day ends (travel.after).
+  const endPt = resolveTravelPoint(sessionTravelOverride(last, 'after'), day) || base;
+  const baseKeyEnd = endPt.addr || endPt.suburb;
+  if (!endPt.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
     const travel = travelMinutes(lastKey, baseKeyEnd);
     if (travel > 0) {
       const startMin = sessionEndMin(last);
@@ -558,11 +716,12 @@ function computeDayTravelSegments(day) {
       segs.push({
         day, kind: 'end',
         fromLoc: { suburb: lastLoc.suburb, label: lastLoc.label, region: lastLoc.region, address: lastLoc.address || null },
-        toLoc:   { suburb: base.suburb,    label: base.label,    region: base.region,    address: base.addr || null },
+        toLoc:   { suburb: endPt.suburb,   label: endPt.label,   region: endPt.region,   address: endPt.addr || null },
         startMin, endMin,
         travelMin: travel, freeMin: 0,
         fromSessionId: last.id, toSessionId: null,
-        anchorBaseId: (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        anchorBaseId: endPt.baseId || (typeof wlThisWeek === 'function' && wlThisWeek()[day]) || 'office',
+        overridden: !!sessionTravelOverride(last, 'after'),
         cacheKey: routeKey(lastKey, baseKeyEnd, 'driving')
       });
     }
@@ -752,6 +911,35 @@ function _renderTravelPanel(seg) {
     html += '</div>';
   }
 
+  // Before / After — the session's own answer to where the day starts or ends.
+  // Only the day's ends carry one; between-session legs chain in time order.
+  var planSession = seg.kind === 'start' ? toSession : seg.kind === 'end' ? fromSession : null;
+  if (planSession && !isTravelBlock(planSession) && planSession.dbId) {
+    var side = seg.kind === 'start' ? 'before' : 'after';
+    var current = sessionTravelOverride(planSession, side);
+    var cur = describeTravelPoint(current, seg.day);
+    var bases = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {}).filter(function (k) { return k !== 'leave' && k !== 'unset'; });
+    html += '<div class="tp-section-title">' + (side === 'before' ? 'Before this session, coming from' : 'After this session, go to') + '</div>';
+    html += '<div class="tp-plan" data-session="' + _tpEsc(planSession.id) + '" data-side="' + side + '">';
+    html += '<div class="tp-plan-current">' + _tpEsc(cur) + (current ? ' <button type="button" class="tp-plan-reset" data-plan="reset">Use day default</button>' : '') + '</div>';
+    html += '<div class="tp-plan-opts">';
+    bases.forEach(function (k) {
+      var sel = current && current.kind === 'base' && current.id === k;
+      html += '<button type="button" class="tp-plan-opt' + (sel ? ' on' : '') + '" data-plan="base" data-key="' + _tpEsc(k) + '">' + _tpEsc(LOCATIONS[k].label || k) + '</button>';
+    });
+    html += '<button type="button" class="tp-plan-opt' + (current && current.kind === 'address' ? ' on' : '') + '" data-plan="address">Another address…</button>';
+    html += '</div>';
+    if (side === 'after') {
+      var pts = (window.PATIENTS || []).slice().sort(function (a, b) { return (a.last + a.first).localeCompare(b.last + b.first); });
+      html += '<div class="tp-plan-stop"><label>Or add a stop at another client ';
+      html += '<select data-plan="stop"><option value="">Choose from my caseload…</option>' +
+        pts.map(function (p) { return '<option value="' + _tpEsc(p.id) + '">' + _tpEsc(p.first + ' ' + p.last) + (p.suburb ? ' · ' + _tpEsc(p.suburb) : '') + '</option>'; }).join('') +
+        '</select></label>';
+      html += '<div class="tp-plan-hint">Picking a client opens Smart Booking at the earliest start the travel allows.</div></div>';
+    }
+    html += '</div>';
+  }
+
   // Route display
   html += '<div class="tp-section-title">Route</div>';
   html += '<div class="tp-route-block">';
@@ -802,6 +990,7 @@ function _renderTravelPanel(seg) {
   html += '</div>';
 
   body.innerHTML = html;
+  _wireTravelPlan(body, seg);
 }
 
 function _tpFmtTime(h, m) {
@@ -827,3 +1016,36 @@ function _tpFmtTime(h, m) {
 //  was removed 2026-08-09.)
 // ═══════════════════════════════════════════════════════════════
 refreshAllOverlays();
+
+
+/* ---------- Before / After controls behind the travel panel ---------- */
+function _tpEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+function _wireTravelPlan(body, seg) {
+  var box = body.querySelector('.tp-plan');
+  if (!box) return;
+  var sessionId = box.getAttribute('data-session'), side = box.getAttribute('data-side');
+  var rerender = function () {
+    var s = window.SESSIONS && window.SESSIONS[sessionId];
+    if (!s) return;
+    var segs = computeDayTravelSegments(s.day);
+    var again = segs.find(function (x) { return x.kind === seg.kind; });
+    if (again) _renderTravelPanel(again); else closeTravelPanel();
+  };
+  box.querySelectorAll('[data-plan="base"]').forEach(function (b) {
+    b.addEventListener('click', function () { setTravelOverride(sessionId, side, { kind: 'base', id: b.getAttribute('data-key') }).then(function (ok) { if (ok) rerender(); }); });
+  });
+  var addr = box.querySelector('[data-plan="address"]');
+  if (addr) addr.addEventListener('click', function () {
+    var ask = (typeof portalPrompt === 'function') ? portalPrompt : function (m) { return Promise.resolve(window.prompt(m)); };
+    ask(side === 'before' ? 'Where is the therapist coming from? A suburb or a full address.' : 'Where does the therapist go after this session? A suburb or a full address.', '', { title: 'Another address', label: 'Address or suburb', ok: 'Use this' })
+      .then(function (v) {
+        if (!v || !String(v).trim()) return;
+        var a = String(v).trim();
+        setTravelOverride(sessionId, side, { kind: 'address', address: a, suburb: (typeof addrSuburb === 'function' ? addrSuburb(a) : null) || a, label: a }).then(function (ok) { if (ok) rerender(); });
+      });
+  });
+  var reset = box.querySelector('[data-plan="reset"]');
+  if (reset) reset.addEventListener('click', function () { setTravelOverride(sessionId, side, null).then(function (ok) { if (ok) rerender(); }); });
+  var stop = box.querySelector('[data-plan="stop"]');
+  if (stop) stop.addEventListener('change', function () { if (stop.value) addStopAfterSession(sessionId, stop.value); });
+}
