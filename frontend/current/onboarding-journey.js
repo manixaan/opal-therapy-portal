@@ -1037,7 +1037,7 @@
       + (drafted ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>';
     if (before && c.assign) {
       body += '<div class="oj-field"><label for="oj-e-subject">Subject</label><input id="oj-e-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
-        + '<div class="oj-field"><label for="oj-e-body">Message</label><textarea id="oj-e-body" rows="14">' + esc(E.body || '') + '</textarea>'
+        + '<div class="oj-field"><label for="oj-e-body">Message</label>' + emailToolbar('oj-e-body') + '<textarea id="oj-e-body" rows="14" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea>'
         + '<small>The letter is attached automatically. Edit freely — what you send is what is kept on the record.</small></div>'
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the letter and opens a new message with the wording filled in — drag the letter into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
@@ -1249,7 +1249,7 @@
       + (drafted ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>';
     if (c.assign) {
       out += '<div class="oj-field"><label for="oj-pe-subject">Subject</label><input id="oj-pe-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
-        + '<div class="oj-field"><label for="oj-pe-body">Message</label><textarea id="oj-pe-body" rows="16">' + esc(E.body || '') + '</textarea>'
+        + '<div class="oj-field"><label for="oj-pe-body">Message</label>' + emailToolbar('oj-pe-body') + '<textarea id="oj-pe-body" rows="16" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea>'
         + '<small>The ZIP is built from the pack above and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the ZIP and opens a new message with the wording filled in — drag the ZIP into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
@@ -1622,7 +1622,7 @@
     if (!sent && c.assign) {
       body += '<div class="oj-step is-active" id="oj-induction-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Phase 3 email — to ' + esc(d.record.applicantEmail || '') + '</strong>' + (E.draftId ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>'
         + '<div class="oj-field"><label for="oj-ie-subject">Subject</label><input id="oj-ie-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
-        + '<div class="oj-field"><label for="oj-ie-body">Message</label><textarea id="oj-ie-body" rows="14">' + esc(E.body || '') + '</textarea><small>The induction ZIP is built from the pack above and attached. The due date is seven days from the day the draft is created.</small></div>'
+        + '<div class="oj-field"><label for="oj-ie-body">Message</label>' + emailToolbar('oj-ie-body') + '<textarea id="oj-ie-body" rows="14" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea><small>The induction ZIP is built from the pack above and attached. The due date is seven days from the day the draft is created.</small></div>'
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + '</div>' : '')
         + '<div class="oj-actions">' + (E.outlook && !E.outlook.available ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'ie\', \'/api/onboarding/journey/records/' + jsq(d.record.id) + '/induction/zip\')', R.ready ? 'oj-btn-primary' : '') : '') + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready && !(E.outlook && !E.outlook.available) ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
         + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
@@ -1990,7 +1990,7 @@
   function openInMailApp(prefix, attachmentUrl) {
     var r = S.record && S.record.record; if (!r) return;
     var sub = doc.getElementById('oj-' + prefix + '-subject'); var body = doc.getElementById('oj-' + prefix + '-body');
-    var subject = sub ? sub.value.trim() : ''; var text = body ? body.value : '';
+    var subject = sub ? sub.value.trim() : ''; var text = body ? stripEmailMarks(body.value) : '';
     if (attachmentUrl) {
       var a = doc.createElement('a'); a.href = attachmentUrl; a.download = ''; a.style.display = 'none';
       doc.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1000);
@@ -1998,6 +1998,49 @@
     var href = 'mailto:' + encodeURIComponent(r.applicantEmail || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
     setTimeout(function () { global.location.href = href; }, attachmentUrl ? 400 : 0);
     toast(attachmentUrl ? 'Your mail app is opening — attach the file that just downloaded, then send.' : 'Your mail app is opening.');
+  }
+
+  /**
+   * The three emails are plain text with light marks — **bold**, *italic*,
+   * __underline__ — rendered when the Outlook draft is made. The toolbar
+   * wraps (or unwraps) whatever is selected in the textarea.
+   */
+  function stripEmailMarks(text) {
+    return String(text || '').replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '$1').replace(/__(?=\S)([\s\S]*?\S)__/g, '$1').replace(/(^|[^\w*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?![\w*])/g, '$1$2');
+  }
+  function emailToolbar(textareaId) {
+    var b = function (mark, label, title, cls) {
+      return '<button type="button" class="oj-fmt-btn ' + cls + '" title="' + title + '" aria-label="' + title + '" onmousedown="event.preventDefault()" onclick="OnboardingJourney.emailMark(\'' + textareaId + '\', \'' + mark + '\')">' + label + '</button>';
+    };
+    return '<div class="oj-fmt-bar" role="toolbar" aria-label="Formatting">' + b('**', 'B', 'Bold (Ctrl+B)', 'is-b') + b('*', 'I', 'Italic (Ctrl+I)', 'is-i') + b('__', 'U', 'Underline (Ctrl+U)', 'is-u')
+      + '<span class="oj-fmt-hint">Select words, then press a button. Shows as **bold**, *italic*, __underline__ here and as formatting in the email.</span></div>';
+  }
+  function emailMark(textareaId, mark) {
+    var ta = doc.getElementById(textareaId); if (!ta) return;
+    var a = ta.selectionStart, b = ta.selectionEnd, v = ta.value;
+    var sel = v.slice(a, b);
+    // Trim the selection to the words, so the mark never wraps a space.
+    var lead = (/^\s*/.exec(sel) || [''])[0].length, trail = (/\s*$/.exec(sel) || [''])[0].length;
+    if (sel.trim()) { a += lead; b -= trail; sel = v.slice(a, b); }
+    var n = mark.length; var next, ca, cb;
+    if (sel.length >= 2 * n && sel.slice(0, n) === mark && sel.slice(-n) === mark) {
+      next = sel.slice(n, -n); ca = a; cb = a + next.length;                                       // unwrap inside
+    } else if (v.slice(a - n, a) === mark && v.slice(b, b + n) === mark) {
+      next = sel; a -= n; b += n; ca = a; cb = a + next.length;                                      // unwrap around
+    } else {
+      next = mark + sel + mark; ca = sel ? a : a + n; cb = sel ? a + next.length : a + n;            // wrap; empty → caret between marks
+    }
+    ta.focus();
+    if (typeof ta.setRangeText === 'function') ta.setRangeText(next, a, b, 'preserve');
+    else ta.value = v.slice(0, a) + next + v.slice(b);
+    ta.selectionStart = ca; ta.selectionEnd = cb;
+  }
+  /** Ctrl/Cmd+B, I, U inside an email textarea. */
+  function emailKey(ev) {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    var mark = { b: '**', i: '*', u: '__' }[ev.key.toLowerCase()];
+    if (!mark) return;
+    ev.preventDefault(); emailMark(ev.target.id, mark);
   }
 
   function readEmail() {
@@ -2423,7 +2466,7 @@
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
-    packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
+    emailMark: emailMark, emailKey: emailKey, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
     uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,

@@ -62,11 +62,6 @@ function restampDueDate(body, previousDueAt, dueAt) {
 }
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-function bodyToHtml(text) {
-  const paras = String(text || '').replace(/\r\n?/g, '\n').split(/\n{2,}/);
-  return '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a">'
-    + paras.map((p) => `<p style="margin:0 0 12px">${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
-    + '</div>';
-}
+const { bodyToHtml } = require('./onboarding-email-markup');
 
 module.exports = { SUBJECT, BODY, RETURN_DAYS, composePackEmail, dueDateFrom, restampDueDate, ddmmyyyy, bodyToHtml };

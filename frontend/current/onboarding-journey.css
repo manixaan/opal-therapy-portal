@@ -438,3 +438,13 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-details summary { cursor: pointer; color: var(--ink-soft); font-size: 13px; }
 .oj-snapshot { margin-top: 8px; }
 #oj-payroll-config h4 { margin: 14px 0 6px; font-size: 13px; }
+
+/* Formatting bar above an email message: bold, italic, underline as light marks in the text. */
+.oj-fmt-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 4px 0 2px; }
+.oj-fmt-btn { width: 28px; height: 26px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; line-height: 1; }
+.oj-fmt-btn:hover { background: #f1f4f2; border-color: #c5d2cc; }
+.oj-fmt-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.oj-fmt-btn.is-b { font-weight: 800; }
+.oj-fmt-btn.is-i { font-style: italic; font-family: Georgia, serif; }
+.oj-fmt-btn.is-u { text-decoration: underline; }
+.oj-fmt-hint { font-size: 11.5px; color: var(--ink-soft); margin-left: 6px; }
