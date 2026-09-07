@@ -57,28 +57,22 @@ Utility scripts and components from earlier phases.
 
 ## 🚀 Getting Started
 
-### **Step 1: Set Up Backend** (Takes 60-90 minutes)
-1. Open: `backend/setup/SETUP_INDEX.md`
-2. Follow the 7 steps in order
-3. Each step has Mac/Windows instructions
+One command brings a fresh clone to a running localhost — dependencies,
+`backend/.env` with generated secrets, a migrated local database and
+development logins:
 
-### **Step 2: Test Everything** 
-1. Go to: `backend/setup/STEP_7_TEST_BACKEND.md`
-2. Run the 7 verification tests
-3. All should pass ✅
-
-### **Step 3: Keep Server Running**
 ```bash
-cd backend
+npm run setup -- --demo
 npm start
-# Keep this terminal open while working on the app
 ```
 
-### **Step 4: Use the Frontend**
-- Open `frontend/current/mockup_v3.html` in your browser
-- Connect to your running backend
+Then open http://localhost:5001 and sign in as `owner@opaltherapy.dev`
+(password `OwnerDev2026!`). Prerequisites, the branch model for working from
+more than one machine, and the release path are in
+**[docs/TWO_MACHINE_DEV_WORKFLOW.md](docs/TWO_MACHINE_DEV_WORKFLOW.md)**.
 
----
+The step-by-step guides under `backend/setup/STEP_*.md` predate the setup
+script and are kept for reference only.
 
 ## 📋 Quick Reference
 
