@@ -43,7 +43,12 @@ let   _lastRequestAt = 0;
 let   _queue         = Promise.resolve();
 
 function _throttledGet(axiosInstance, path, config = {}) {
-  _queue = _queue.then(async () => {
+  // The queue is a promise chain. It must be chained on a SETTLED promise:
+  // chaining on the previous call's own promise meant one rejection (a 400,
+  // a network blip, the 15 s timeout) left `_queue` rejected for ever, so
+  // every later Splose read in the process failed with that stale error
+  // until a restart (7 Sep 2026 — the caseload picker's persistent 500).
+  const run = _queue.then(async () => {
     const now = Date.now();
     const wait = Math.max(0, _lastRequestAt + RATE_LIMIT_MS - now);
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
@@ -70,7 +75,8 @@ function _throttledGet(axiosInstance, path, config = {}) {
     }
     throw lastErr;
   });
-  return _queue;
+  _queue = run.catch(() => {});
+  return run;
 }
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
@@ -100,13 +106,15 @@ function invalidateCache(key) {
 // wait for the same promise rather than firing duplicate requests.
 const _inflight = new Map();
 
-async function fetchAllPages(path, params = {}) {
+async function fetchAllPages(path, params = {}, opts = {}) {
   // Only cache parameterless full-list fetches (appointments, cases, patients…)
   const hasParams = Object.keys(params).length > 0;
   const cacheKey = hasParams ? null : path;
 
   if (cacheKey) {
-    const cached = _cacheGet(cacheKey);
+    // opts.fresh: skip the cached copy (the result still refreshes the cache)
+    // — for reads that must reflect something the user just did in Splose.
+    const cached = opts.fresh ? null : _cacheGet(cacheKey);
     if (cached) return cached;
     // If an identical fetch is already running, wait for it
     if (_inflight.has(cacheKey)) return _inflight.get(cacheKey);
@@ -542,8 +550,8 @@ async function getCase(id) {
   return response.data;
 }
 
-async function fetchAllCases() {
-  return fetchAllPages('/cases');
+async function fetchAllCases(opts = {}) {
+  return fetchAllPages('/cases', {}, opts);
 }
 
 // ─── Support activities ───────────────────────────────────────────────────────

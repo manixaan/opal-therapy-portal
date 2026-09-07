@@ -9384,7 +9384,10 @@ async function loadSplosePatients() {
       </div>`;
       return;
     }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) {
+      const why = await resp.json().catch(() => ({}));
+      throw new Error(why.details || why.error || `HTTP ${resp.status}`);
+    }
     const { data, scope } = await resp.json();
     if (scope === 'caseload' && !(data || []).length) {
       PATIENTS = [];

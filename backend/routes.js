@@ -2008,7 +2008,9 @@ router.get('/api/splose/my-patients', requireAuth, denySploseToReadOnly, scopeSp
     const patients = await sploseApi.getPatients();
     let mine = patients;
     if (own) {
-      const cases = (await sploseApi.fetchAllCases()).filter(c => !c.archived && !c.deletedAt && c.isOpen !== false);
+      // fresh: a case the therapist just opened in Splose must show straight
+      // away, not after the 10-minute list cache expires.
+      const cases = (await sploseApi.fetchAllCases({ fresh: true })).filter(c => !c.archived && !c.deletedAt && c.isOpen !== false);
       const allowed = new Set(cases.filter(c => String(c.practitionerId) === own).map(c => String(c.patientId)));
       mine = patients.filter(p => allowed.has(String(p.id)));
     }
@@ -2016,7 +2018,7 @@ router.get('/api/splose/my-patients', requireAuth, denySploseToReadOnly, scopeSp
     res.json({ data, count: data.length, scope: own ? 'caseload' : 'practice' });
   } catch (err) {
     console.error('Splose my-patients error:', err.message);
-    res.status(500).json({ error: 'Failed to fetch your clients' });
+    res.status(500).json({ error: 'Failed to fetch your clients', details: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
