@@ -133,10 +133,12 @@ describe('the default pack', () => {
     const codes = (p) => p.items.filter((i) => i.status === 'included').map((i) => i.code);
 
     expect(ot.pack.prepared).toBe(true);
-    // The one documentation list, for every role and contract type.
+    // The one documentation list, for every role and contract type (CEIS / FTCIS follow the contract type).
     const LIST = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS', 'REQ_RIGHT_TO_WORK', 'REQ_IDENTITY', 'PACK_POLICE_CHECK', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'REQ_AHPRA', 'REQ_TAX_SETUP'];
-    expect(codes(ot.pack)).toEqual(LIST);
-    expect(codes(admin.pack)).toEqual(LIST);
+    expect(codes(ot.pack).filter((c) => c !== 'PACK_CEIS' && c !== 'PACK_FTCIS')).toEqual(LIST);
+    expect(codes(admin.pack).filter((c) => c !== 'PACK_CEIS' && c !== 'PACK_FTCIS')).toEqual(LIST);
+    expect(codes(ot.pack).includes('PACK_CEIS')).toBe(OT.employmentType === 'casual');
+    expect(codes(admin.pack).includes('PACK_CEIS')).toBe(ADMIN.employmentType === 'casual');
     expect(admin.pack.items.find((i) => i.code === 'REQ_AHPRA').required).toBe(false);
     expect(ot.pack.items.find((i) => i.code === 'REQ_AHPRA').required).toBe(true);
     expect(ot.pack.items.find((i) => i.code === 'REQ_AHPRA')).toMatchObject({ group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS' });
@@ -145,12 +147,14 @@ describe('the default pack', () => {
     expect(contract).toMatchObject({ sendsDocument: true, employeeReturns: true, requiresVerification: true, required: true, origin: 'default', group: 'attachment' });
     expect(contract.file).toMatchObject({ source: 'library', previewKind: 'pdf', placeholder: false });
     expect(contract.file.previewUrl).toBe(`${ot.base}/pack/items/${contract.id}/preview`);
-    // A library document with no file yet gets a placeholder published for it, flagged as such, so the pack can go out end to end.
+    // A library document with no file yet gets the shipped Stage 2 file published for it, so the pack goes out end to end.
     const superChoice = ot.pack.items.find((i) => i.code === 'PACK_SUPER_CHOICE');
-    expect(superChoice.file).toMatchObject({ source: 'library', placeholder: true, previewKind: 'pdf' });
-    expect(superChoice.file.fileName).toBe('PLACEHOLDER - Superannuation Form.pdf');
+    expect(superChoice.file).toMatchObject({ source: 'library', placeholder: false, previewKind: 'pdf', fileName: 'Superannuation Form.pdf' });
+    const ned = ot.pack.items.find((i) => i.code === 'PACK_NEW_EMPLOYEE_DETAILS');
+    // The fixture seeded a practice file for this one: it stays — a shipped file never overrides the practice's own.
+    expect(ned.file).toMatchObject({ source: 'library', placeholder: false });
     expect(ot.pack.counts.missingFiles).toBe(0);
-    expect(ot.pack.counts.placeholders).toBeGreaterThan(0);
+    expect(ot.pack.counts.placeholders).toBe(0);
     const ph = await agent.get(superChoice.file.previewUrl).buffer().parse(binary);
     expect(ph.status).toBe(200);
     expect(ph.body.slice(0, 5).toString()).toBe('%PDF-');
@@ -270,8 +274,7 @@ describe('Prepare Onboarding Email', () => {
     expect(new Date(p.email.dueAt).getTime() - Date.now()).toBeGreaterThan(6 * 86400000);
     expect(p.email.body).toContain(`by ${due}.`);
     expect(p.email.body).toContain('PS. Call me');
-    expect(p.zip).toMatchObject({ documentCount: 4 });
-    expect(p.zip.manifest.map((m) => m.fileName)).toEqual(['01 - Contract of Employment — Jane Smith.pdf', '02 - Superannuation Form.pdf', '03 - FWIS (and FTCIS CEIS).pdf', '04 - New Employee Details.pdf']);
+    expect(p.zip.manifest.map((m) => m.fileName).filter((n) => !/CEIS|FTCIS\)/.test(n) || /FWIS/.test(n))).toEqual(['01 - Contract of Employment — Jane Smith.pdf', '02 - Superannuation Form.pdf', '03 - FWIS (and FTCIS CEIS).pdf', `${String(p.zip.documentCount).padStart(2, '0')} - New Employee Details.pdf`]);
     expect(p.zip.omissions).toEqual([]);
     expect(p.editable).toBe(true);
 

@@ -116,8 +116,8 @@ describe('Edit onboarding', () => {
     // Upload the file behind a default that has none; it publishes to the library and reaches new records.
     const fresh = await agent.get(`/api/onboarding/journey/defaults/${otFull.id}`);
     const superItem = fresh.body.phases.documentation.items.find((i) => i.code === 'PACK_SUPER_CHOICE');
-    // Records already prepared published a placeholder for it; the real file replaces that.
-    expect(!superItem.file.previewUrl || /^PLACEHOLDER - /.test(superItem.file.fileName || '')).toBe(true);
+    // Records already prepared published the shipped Stage 2 file for it; the practice's upload replaces that.
+    expect(superItem.file.previewUrl).toBeTruthy();
     const up = await agent.post(`/api/onboarding/journey/defaults/${otFull.id}/items/PACK_SUPER_CHOICE/file`).send({ phase: 'documentation', fileName: 'super-choice.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF-1.4 super').toString('base64') });
     expect(up.status).toBe(201);
     expect(up.body.items.find((i) => i.code === 'PACK_SUPER_CHOICE').file.previewUrl).toBeTruthy();

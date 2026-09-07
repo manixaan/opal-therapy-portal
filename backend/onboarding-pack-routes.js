@@ -233,29 +233,47 @@ async function preparePack(assignment) {
  * replaces it once with the real form.
  */
 async function ensurePlaceholderDocuments(organisationId) {
+  const fs = require('fs'); const path = require('path');
+  const SHIPPED_DIR = path.join(__dirname, 'onboarding-templates', 'stage2');
+  const MIME = { pdf: 'application/pdf', docx: offerDocxMime() };
   const library = await odb.listDocuments(organisationId);
   const byCode = new Map(library.map((d) => [d.code, d]));
   for (const item of pack.DOCUMENTATION_PACK) {
     if (!item.sends || !item.documentCode) continue;
     let doc = byCode.get(item.documentCode);
-    if (doc && doc.current_file_name) continue;
+    const current = doc ? doc.current_file_name : null;
+    // A file the practice uploaded stays. A placeholder gives way to a shipped file once one exists.
+    if (current && !(placeholderPdf.isPlaceholderName(current) && item.shippedFile)) continue;
+    const shippedPath = item.shippedFile ? path.join(SHIPPED_DIR, item.shippedFile) : null;
+    const shipped = shippedPath && fs.existsSync(shippedPath) ? shippedPath : null;
+    if (current && !shipped) continue; // a placeholder already, nothing better shipped
     if (!doc) {
       doc = await odb.upsertDocument(organisationId, {
         code: item.documentCode, title: item.title, category: 'Employment', classification: 'OPAL_FORM', audience: 'employee',
         ownerControlled: true, contentStatus: 'available', status: 'published',
       }, null);
     }
-    const fileName = `${placeholderPdf.PLACEHOLDER_PREFIX}${item.title}.pdf`;
-    const bytes = await placeholderPdf.buildPlaceholderPdf({ title: item.title, note: item.description || '' });
+    let fileName; let fileMime; let bytes; let note;
+    if (shipped) {
+      bytes = fs.readFileSync(shipped);
+      fileName = `${item.title.replace(/[\\/:*?"<>|]+/g, ' ').trim()}.${item.shippedFile.split('.').pop()}`;
+      fileMime = MIME[item.shippedFile.split('.').pop()] || 'application/octet-stream';
+      note = 'Published by the portal from the shipped Stage 2 documents — replace in Edit Onboarding when the practice document changes';
+    } else {
+      bytes = await placeholderPdf.buildPlaceholderPdf({ title: item.title, note: item.description || '' });
+      fileName = `${placeholderPdf.PLACEHOLDER_PREFIX}${item.title}.pdf`; fileMime = 'application/pdf';
+      note = 'Placeholder published by the portal — replace with the practice document';
+    }
     const version = await odb.createDocumentVersion(doc.id, {
-      title: item.title, fileName, fileMime: 'application/pdf', fileData: bytes.toString('base64'), fileSizeBytes: bytes.length,
-      effectiveDate: new Date().toISOString().slice(0, 10), changeNote: 'Placeholder published by the portal — replace with the practice document',
+      title: item.title, fileName, fileMime, fileData: bytes.toString('base64'), fileSizeBytes: bytes.length,
+      effectiveDate: new Date().toISOString().slice(0, 10), changeNote: note,
     }, null);
     await odb.publishDocumentVersion(doc.id, version.id, null);
     await odb.pool.query(`UPDATE onboarding_documents SET content_status = 'available', status = 'published', updated_at = NOW() WHERE id = $1`, [doc.id]);
-    log.info('placeholder published for a pack document', { code: item.documentCode });
+    log.info(shipped ? 'shipped file published for a pack document' : 'placeholder published for a pack document', { code: item.documentCode });
   }
 }
+function offerDocxMime() { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
 
 /** The attachments in the pack that still have no file at all — nothing is sent while any remain. */
 async function missingFilesFor(assignment, phase) {

@@ -44,6 +44,8 @@ Thumbs.db
 # rule above silently excluded them when the feature was committed, which left
 # three test suites unable to load and the generator with nothing to fill in.
 !backend/fca/templates/*.docx
+!backend/onboarding-templates/stage2/*.docx
+!backend/onboarding-templates/stage2/*.pdf
 # WHODAS instrument binaries: the boot-time integrity check (whodas/template-registry.js)
 # and the whodas test suites require these exact files by pinned sha256.
 !backend/whodas/templates/*.pdf

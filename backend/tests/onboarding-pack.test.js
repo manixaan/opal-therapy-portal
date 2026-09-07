@@ -60,7 +60,12 @@ describe('the default pack', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
     const admin = pack.buildDefaultItems(contentFor('PKG_ADMIN_CASUAL'), facts(ADMIN), library);
     expect(ot.map((i) => i.code)).toEqual([...ATTACHMENTS, ...SUPPORTING]);
-    expect(admin.map((i) => i.code)).toEqual(ot.map((i) => i.code));
+    // A casual starter also gets the CEIS; a fixed-term starter the FTCIS; nobody gets both.
+    expect(admin.map((i) => i.code)).toEqual(['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_CEIS', 'PACK_NEW_EMPLOYEE_DETAILS', ...SUPPORTING]);
+    const fixed = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({ employment_type: 'fixed_term' }), library);
+    expect(fixed.map((i) => i.code)).toContain('PACK_FTCIS');
+    expect(fixed.map((i) => i.code)).not.toContain('PACK_CEIS');
+    expect(pack.DOCUMENTATION_PACK.filter((d) => d.sends).every((d) => d.shippedFile)).toBe(true);
     expect(ot.every((i) => i.phase === 'documentation' && i.itemKind === 'document')).toBe(true);
     expect(new Set(ot.map((i) => i.code)).size).toBe(ot.length);
     // The requirement-derived paper (portal forms, statements) no longer leaks into the pack.

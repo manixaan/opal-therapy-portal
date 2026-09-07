@@ -47,23 +47,32 @@ const R = {
  *                         New Employee Details (parentCode)
  *
  * `documentCode` names the library document whose current file goes in the
- * ZIP; where the library has none yet, a placeholder is published in its
- * place so the pack can be assembled and sent end to end. `requiredRule`
+ * ZIP; where the library has none yet, the file shipped with the portal
+ * (`shippedFile`, backend/onboarding-templates/stage2) is published for it —
+ * or a placeholder where nothing is shipped — so the pack can be assembled
+ * and sent end to end. CEIS and FTCIS go only to the contract types that
+ * call for them (rule). `requiredRule`
  * decides whether an item is required for this person; it is still listed
  * for everyone ("if applicable" when not required).
  */
 const DOCUMENTATION_PACK = [
   { code: 'PACK_CONTRACT', title: 'Contract of Employment', section: 'welcome_employment', sortOrder: 10, group: 'attachment',
-    documentCode: 'DOC_CONTRACT_TEMPLATE', sends: true, returns: true, verifies: true,
+    documentCode: 'DOC_CONTRACT_TEMPLATE', shippedFile: 'contract-of-employment.docx', sends: true, returns: true, verifies: true,
     description: 'Sent for signature; the signed contract comes back with the pack.' },
   { code: 'PACK_SUPER_CHOICE', title: 'Superannuation Form', section: 'payroll_tax_super', sortOrder: 20, group: 'attachment',
-    documentCode: 'DOC_SUPER_CHOICE', sends: true, returns: true, verifies: true,
+    documentCode: 'DOC_SUPER_CHOICE', shippedFile: 'superannuation-standard-choice-form.pdf', sends: true, returns: true, verifies: true,
     description: 'ATO Superannuation Standard Choice Form, completed and returned.' },
   { code: 'PACK_FWIS', title: 'FWIS (and FTCIS/CEIS)', section: 'welcome_employment', sortOrder: 30, group: 'attachment',
-    documentCode: 'DOC_FWIS', sends: true, returns: false, verifies: false,
-    description: 'Fair Work Information Statement, with the Fixed Term Contract or Casual Employment Information Statement where it applies. For reading; nothing comes back.' },
+    documentCode: 'DOC_FWIS', shippedFile: 'fair-work-information-statement.pdf', sends: true, returns: false, verifies: false,
+    description: 'Fair Work Information Statement. For reading; nothing comes back. The Casual or Fixed Term statement below goes with it where the contract type calls for one.' },
+  { code: 'PACK_CEIS', title: 'Casual Employment Information Statement (CEIS)', section: 'welcome_employment', sortOrder: 31, group: 'attachment', rule: R.CASUAL,
+    documentCode: 'DOC_CEIS', shippedFile: 'casual-employment-information-statement.pdf', sends: true, returns: false, verifies: false,
+    description: 'Goes out with the FWIS to casual starters. For reading; nothing comes back.' },
+  { code: 'PACK_FTCIS', title: 'Fixed Term Contract Information Statement (FTCIS)', section: 'welcome_employment', sortOrder: 32, group: 'attachment', rule: R.FIXED_TERM,
+    documentCode: 'DOC_FTCIS', shippedFile: 'fixed-term-contract-information-statement.pdf', sends: true, returns: false, verifies: false,
+    description: 'Goes out with the FWIS to fixed-term starters. For reading; nothing comes back.' },
   { code: 'PACK_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details', section: 'personal_details', sortOrder: 40, group: 'attachment',
-    documentCode: 'DOC_NEW_EMPLOYEE_DETAILS', sends: true, returns: true, verifies: true,
+    documentCode: 'DOC_NEW_EMPLOYEE_DETAILS', shippedFile: 'new-employee-details.docx', sends: true, returns: true, verifies: true,
     description: 'Personal, emergency contact and bank details, returned together with the supporting documents below.' },
   // Supporting documents, returned with the New Employee Details.
   { code: 'REQ_RIGHT_TO_WORK', title: 'Right to Work Verification (passport or visa details)', section: 'identity', sortOrder: 110, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
