@@ -873,6 +873,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);
     expect(SHELL).toMatch(/applyLeaveShading\(\);\n/);
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
+    // After a booking the grid reloads from the server, so the saved row is shown
+    // even though the week jump re-renders from the stale cache.
+    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 14000);
+    expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
     expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = true;/);

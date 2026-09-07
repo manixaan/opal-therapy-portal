@@ -12474,6 +12474,7 @@ async function confirmBooking() {
       if (typeof resetWizard === 'function') resetWizard();
       if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
       if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
+      if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
       showToast(`${outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
 
       // Note: no manual delta sync needed — the backend POST /api/outlook/events
@@ -12646,6 +12647,10 @@ async function confirmBooking() {
     if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function') {
       gotoWeekOf(DAY_DATES[slot.day]);
     }
+    // The row is already in the local DB (the POST writes it synchronously):
+    // reload so the saved appointment is what the grid shows. The week jump
+    // above re-renders from the cached list, which does not have it yet.
+    if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
 
     // Trigger a background delta sync so the new event lands in the local DB
