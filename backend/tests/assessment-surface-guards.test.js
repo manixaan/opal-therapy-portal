@@ -695,8 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 11: the caseload dropdown says when it is empty instead of showing nothing.
-      ['travel.js', 11],
+      // 12: the drive inside a wide gap is still painted, arriving at the next session.
+      ['travel.js', 12],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -869,6 +869,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // The engine never reads the profile editor's week cursor directly.
     expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
     expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
+    // Smart Booking: a client session needs a location unless Unsure is ticked.
+    expect(SHELL).toMatch(/id="bsp-location-unsure"/);
+    expect(SHELL).toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
+    expect(travel).toMatch(/kind: 'between', startMin: Math\.max\(seg\.startMin, seg\.endMin - seg\.travelMin\)/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);
     expect(SHELL).toMatch(/applyLeaveShading\(\);\n/);

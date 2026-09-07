@@ -862,8 +862,16 @@ function renderSegmentOverlay(col, seg) {
     // FREE-TIME/GAP OVERLAY REMOVED (2026-08-09, Antony's directive): the
     // green hatched "Free window / Idle gap" bands and cards made the calendar
     // look crowded. Gap SEGMENTS are still computed — the Snapshot report and
-    // idle-slot suggestion engine read them from DAY_SEGMENTS — but nothing is
-    // painted on the calendar canvas. Travel-leg indicators below still render.
+    // idle-slot suggestion engine read them from DAY_SEGMENTS.
+    // The DRIVE inside a wide gap is still a leg, though: without this the
+    // travel between two sessions vanished as soon as the gap grew past 45
+    // minutes (a stop added later in the day "deleted" the return leg,
+    // 7 Sep 2026). Paint it arriving at the next session.
+    if (seg.fromSessionId && seg.toSessionId && seg.travelMin > 0) {
+      renderSegmentOverlay(col, Object.assign({}, seg, {
+        kind: 'between', startMin: Math.max(seg.startMin, seg.endMin - seg.travelMin), endMin: seg.endMin, freeMin: 0,
+      }));
+    }
     return;
   }
   // Travel kinds: 'start' | 'between' | 'end'

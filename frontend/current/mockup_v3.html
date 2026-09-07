@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=11" defer></script>
+<script src="/travel.js?v=12" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -4545,8 +4545,9 @@ window.opIcon = function (name, size) {
 
           <!-- Location -->
           <div class="bsp-loc-field">
-            <label class="bsp-field-label">Location <span class="bsp-optional">optional</span></label>
+            <label class="bsp-field-label">Location <span class="bsp-optional" id="bsp-location-req">required for client sessions</span></label>
             <input type="text" id="bsp-location" placeholder="Start typing an address…" autocomplete="off">
+            <label class="bsp-loc-unsure"><input type="checkbox" id="bsp-location-unsure"> Unsure — I'll set it on the calendar later</label>
           </div>
         </div>
 
@@ -12556,7 +12557,18 @@ async function confirmBooking() {
       ? `Client Appointment — ${_patName}`
       : (_patName ? `${TYPE_LABEL[type] || 'Session'} — ${_patName}` : (TYPE_LABEL[type] || 'Session'));
     const _outlookCategory = OUTLOOK_CATEGORY_BY_TYPE[type] || null;
-    const _outlookLocation = (isClientSession && patient?.address) ? patient.address : '';
+    // Location: what was typed in the panel, else the client's address on file.
+    // Required for a client session (travel is built from it) unless the
+    // therapist ticks Unsure — then it is set later from the calendar.
+    const _typedLoc = (_t && _t.location) || '';
+    const _outlookLocation = isClientSession ? (_typedLoc || patient?.address || '') : '';
+    const _unsure = !!document.getElementById('bsp-location-unsure')?.checked;
+    if (isClientSession && !_outlookLocation && !_unsure) {
+      resetBtn();
+      showToast('Where is the session?', 'Type the address, or tick "Unsure" to set it on the calendar later.', 'warn');
+      document.getElementById('bsp-location')?.focus();
+      return;
+    }
     let outlookId   = null;
     let newDbId     = null; // the saved row, so the optimistic tile is editable at once
     let outlookNote = '';
@@ -12651,6 +12663,7 @@ async function confirmBooking() {
     // reload so the saved appointment is what the grid shows. The week jump
     // above re-renders from the cached list, which does not have it yet.
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+    const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
     showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
 
     // Trigger a background delta sync so the new event lands in the local DB
@@ -20737,6 +20750,8 @@ window.showQuickAdd = function(...args) {
   transition: border-color 0.15s; box-sizing: border-box;
 }
 .bsp-loc-field input[type="text"]:focus { border-color: #3d6cae; background: white; }
+.bsp-loc-unsure { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft, #5c554d); cursor: pointer; }
+.bsp-loc-unsure input { margin: 0; }
 
 /* cat-form spacing */
 .cat-form { padding: 0 0 4px 0; }
