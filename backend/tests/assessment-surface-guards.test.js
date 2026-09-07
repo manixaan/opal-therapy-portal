@@ -802,6 +802,16 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/^window\.SESSIONS = SESSIONS;/m);
   });
 
+  test('booking types mirror Splose appointment services, each leaf carrying its service id', () => {
+    expect(SHELL).toMatch(/async function loadSploseServices\(\)/);
+    expect(SHELL).toMatch(/fetch\('\/api\/splose\/services'/);
+    expect(SHELL).toMatch(/id="bk-direct-services"/);
+    // The queued create must always name its service, or auto-sync cannot write it.
+    expect(SHELL).toMatch(/serviceId: \(BOOKING_LEAVES\[BOOKING_STATE\.serviceType\] && BOOKING_LEAVES\[BOOKING_STATE\.serviceType\]\.serviceId\)/);
+    // Static fallback leaves carry ids too.
+    expect(SHELL).toMatch(/'therapy':\s+\{ cat: 'client',[^\n]*serviceId: 125320/);
+  });
+
   test('Outlook tiles are DOM-stamped so a re-render sweeps phantoms the registry lost', () => {
     expect(SHELL).toMatch(/dataset\.outlookTile = '1'/);
     expect(SHELL).toMatch(/querySelectorAll\('\[data-outlook-tile\]'\)/);

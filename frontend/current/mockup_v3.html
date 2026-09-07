@@ -4366,9 +4366,17 @@ window.opIcon = function (name, size) {
 
           <details class="bk-group" open>
             <summary>Direct services</summary>
-            <button class="bk-item" data-leaf="therapy" onclick="selectBookingLeaf('therapy')">Therapy session</button>
-            <button class="bk-item" data-leaf="assessment" onclick="selectBookingLeaf('assessment')">Assessment session</button>
-            <button class="bk-item" data-leaf="initial" onclick="selectBookingLeaf('initial')">Initial assessment consultation</button>
+            <!-- Mirrors Splose: replaced at boot by the practice's live
+                 appointment services (loadSploseServices), one leaf per
+                 service so every client booking carries its service id.
+                 These static leaves are the offline fallback. -->
+            <div id="bk-direct-services">
+              <button class="bk-item" data-leaf="therapy" onclick="selectBookingLeaf('therapy')">Therapy session</button>
+              <button class="bk-item" data-leaf="assessment" onclick="selectBookingLeaf('assessment')">Assessment session</button>
+              <button class="bk-item" data-leaf="initial" onclick="selectBookingLeaf('initial')">Initial assessment consultation</button>
+              <button class="bk-item" data-leaf="mdt" onclick="selectBookingLeaf('mdt')">MDT meeting</button>
+              <button class="bk-item" data-leaf="telehealth" onclick="selectBookingLeaf('telehealth')">Telehealth</button>
+            </div>
           </details>
 
           <details class="bk-group">
@@ -4385,8 +4393,6 @@ window.opIcon = function (name, size) {
             <button class="bk-item" data-leaf="emails" onclick="selectBookingLeaf('emails')">Emails</button>
             <button class="bk-item" data-leaf="phone-calls" onclick="selectBookingLeaf('phone-calls')">Phone calls</button>
           </details>
-
-          <button class="bk-item bk-single" data-leaf="telehealth" onclick="selectBookingLeaf('telehealth')">Telehealth</button>
 
           <details class="bk-group">
             <summary>Provider travel</summary>
@@ -9436,6 +9442,7 @@ async function loadSplosePatients() {
 // Kick off patient load once the page is interactive
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadSplosePatients, 800); // slight delay so auth cookie is set first
+  setTimeout(loadSploseServices, 900); // booking types mirror Splose's appointment services
 });
 
 function initials(p) { return (p.first[0] + p.last[0]).toUpperCase(); }
@@ -9799,9 +9806,12 @@ function getSelectedPatient() {
   return null;
 }
 function getSelectedType() {
-  // Session type follows the Booking Type choice — no separate step.
+  // Session type follows the Booking Type choice — no separate step. A leaf
+  // mirrored from Splose carries its own type; legacy ids map by name.
   const st = BOOKING_STATE ? BOOKING_STATE.serviceType : null;
-  return (st === 'assessment' || st === 'initial') ? st : 'therapy';
+  const leaf = st && typeof BOOKING_LEAVES !== 'undefined' ? BOOKING_LEAVES[st] : null;
+  if (leaf && leaf.type) return leaf.type;
+  return (st === 'assessment' || st === 'initial' || st === 'mdt') ? st : 'therapy';
 }
 function getSelectedTypeDuration() {
   return TYPE_DURATION[getSelectedType()] || 60;
@@ -12121,10 +12131,14 @@ function resetBookingState() {
 // Each leaf maps onto one of the original category flows; custom-flow leaves
 // pre-fill the event name so the user only confirms time and place.
 var BOOKING_LEAVES = {
-  'therapy':         { cat: 'client',      label: 'Therapy session' },
-  'assessment':      { cat: 'client',      label: 'Assessment session' },
-  'initial':         { cat: 'client',      label: 'Initial assessment consultation' },
-  'telehealth':      { cat: 'client',      label: 'Telehealth session' },
+  // Client-session leaves carry the Splose service they book against and the
+  // portal session type (colour, duration, clustering). Replaced at boot by
+  // the live Splose service list — see loadSploseServices().
+  'therapy':         { cat: 'client',      label: 'Therapy session',                 type: 'therapy',    serviceId: 125320 },
+  'assessment':      { cat: 'client',      label: 'Assessment session',              type: 'assessment', serviceId: 131003 },
+  'initial':         { cat: 'client',      label: 'Initial assessment consultation', type: 'initial',    serviceId: 125821 },
+  'mdt':             { cat: 'client',      label: 'MDT meeting',                     type: 'mdt',        serviceId: 166733 },
+  'telehealth':      { cat: 'client',      label: 'Telehealth session',              type: 'therapy',    serviceId: 487597 },
   'fca':             { cat: 'custom',      label: 'FCA report', prefill: 'FCA report' },
   'at-report':       { cat: 'custom',      label: 'AT report', prefill: 'AT report' },
   'progress-report': { cat: 'custom',      label: 'Progress report', prefill: 'Progress report' },
@@ -12136,6 +12150,49 @@ var BOOKING_LEAVES = {
   'supervision':     { cat: 'custom',      label: 'Supervision', prefill: 'Supervision' },
   'lunch':           { cat: 'custom',      label: 'Lunch', prefill: 'Lunch' },
 };
+/* Portal session type for a Splose service, from its name. Drives colour,
+   default duration and clustering; the Splose service itself is what gets
+   booked, so nothing is lost when a name matches none of these. */
+function sploseServiceType(title) {
+  var t = String(title || '');
+  if (/initial/i.test(t)) return 'initial';
+  if (/assessment/i.test(t)) return 'assessment';
+  if (/mdt/i.test(t)) return 'mdt';
+  return 'therapy';
+}
+
+/* Mirror Splose's appointment services into the Direct services group so the
+   booking types a therapist sees are exactly the practice's own, each leaf
+   carrying its service id. Support activities (reports, case noting) and
+   provider travel stay portal-side. Falls back to the static leaves when the
+   list cannot be loaded. */
+async function loadSploseServices() {
+  var box = document.getElementById('bk-direct-services');
+  if (!box) return;
+  try {
+    var resp = await fetch('/api/splose/services', { credentials: 'include' });
+    if (!resp.ok) return;
+    var data = (await resp.json()).data || [];
+    var live = data.filter(function (s) { return !s.archived && /appointment/i.test(String(s.for || 'appointment')); });
+    if (!live.length) return;
+    live.sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
+    // Drop the static client leaves; keep everything else (reports, admin…).
+    Object.keys(BOOKING_LEAVES).forEach(function (k) { if (BOOKING_LEAVES[k].cat === 'client') delete BOOKING_LEAVES[k]; });
+    var html = '';
+    live.forEach(function (s) {
+      var id = 'svc-' + s.id;
+      var title = s.title || s.name || ('Service ' + s.id);
+      BOOKING_LEAVES[id] = { cat: 'client', label: title, type: sploseServiceType(title), serviceId: Number(s.id), duration: Number(s.duration) || null };
+      html += '<button class="bk-item" data-leaf="' + id + '" onclick="selectBookingLeaf(\'' + id + '\')">' + escapeHtml(title) + '</button>';
+    });
+    box.innerHTML = html;
+    window.SPLOSE_SERVICES = live;
+    console.log('✅ Booking types mirror ' + live.length + ' Splose appointment services');
+  } catch (e) {
+    console.warn('Splose services unavailable — static booking types kept:', e.message);
+  }
+}
+
 function selectBookingLeaf(id) {
   var leaf = BOOKING_LEAVES[id]; if (!leaf) return;
   document.querySelectorAll('.bk-item').forEach(function (b) { b.classList.toggle('active', b.dataset.leaf === id); });
@@ -12514,7 +12571,8 @@ async function confirmBooking() {
             patientId: patient.id, patientName: _patName, sessionType: type,
             // The booking type already knows its Splose service; sending it
             // lets the queue publish without a review-time choice.
-            serviceId: (typeof SESSION_TYPE_DATA !== 'undefined' && SESSION_TYPE_DATA[type] && SESSION_TYPE_DATA[type].serviceId) ? Number(SESSION_TYPE_DATA[type].serviceId) : null,
+            serviceId: (BOOKING_LEAVES[BOOKING_STATE.serviceType] && BOOKING_LEAVES[BOOKING_STATE.serviceType].serviceId)
+              || ((typeof SESSION_TYPE_DATA !== 'undefined' && SESSION_TYPE_DATA[type] && SESSION_TYPE_DATA[type].serviceId) ? Number(SESSION_TYPE_DATA[type].serviceId) : null),
             caseId: BOOKING_STATE.selectedCaseId || null,
             note: (BOOKING_STATE.formData && BOOKING_STATE.formData.note) || '',
           } } : {}),
