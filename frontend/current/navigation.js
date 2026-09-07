@@ -78,6 +78,8 @@
     'calendar', 'profile', 'casenotes', 'resources', 'book',
     'contacts', 'activity', 'billing', 'ndis', 'dormant',
     'travel', 'logbook', 'accounting', 'settings', 'support', 'purchases',
+    // Invoices (owner-only): calendar-driven NDIS invoicing. A plain tab.
+    'invoicing',
     // Interview Preparation. A normal tab that may carry a record id, the same
     // shape as 'casenotes': '#interviews' is the library, and
     // '#interviews/record/<id>' is one interview. It is NOT a PAGE_TAB — an

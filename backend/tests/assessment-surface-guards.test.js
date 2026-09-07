@@ -673,7 +673,8 @@ describe('changed assets are cache-busted', () => {
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
-      ['navigation.js', 10],
+      // 11: 'invoicing' joins KNOWN_TABS so #invoicing survives normaliseRoute.
+      ['navigation.js', 11],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -697,6 +698,9 @@ describe('changed assets are cache-busted', () => {
       // on the appointment, and takes a one-off start/finish address for the day.
       // 11: the caseload dropdown says when it is empty instead of showing nothing.
       ['travel.js', 11],
+      // 1: invoicing.js/.css are new — the owner-only Invoices tab (week
+      // board over every calendar, batch + individual invoices, rule book).
+      ['invoicing.js', 1], ['invoicing.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

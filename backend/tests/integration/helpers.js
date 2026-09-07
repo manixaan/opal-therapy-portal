@@ -87,6 +87,9 @@ const ALL_TABLES = [
   // Resource Hub → Templates document instances (migration 043). References
   // users and organisations, so it truncates before both.
   'template_documents',
+  // Invoicing (migration 063) — lines before invoices; settings and counters
+  // stand alone. All reference organisations/users/events listed later.
+  'invoice_lines', 'invoices', 'invoice_client_settings', 'invoice_counters',
   'users', 'organisations',
 ];
 

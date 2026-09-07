@@ -237,6 +237,50 @@ function computeTravel(q) {
   return { lines, warnings, blocked: false, capMinutes: cap, divisor };
 }
 
+// ── Day travel pooling (multi-client runs) ─────────────────────────────────
+/**
+ * PAPL p.25 method for a therapist's day: pool every leg (to the first
+ * client, between clients, and the return if paid), divide by the number of
+ * clients seen, then let computeTravel apply the per-participant cap.
+ *
+ * @param {object} q
+ * @param {Array}  q.sessions  time-ordered: [{ eventId, legMinutes, legKm, billable }]
+ *                             legMinutes/legKm = the leg ARRIVING at that session
+ * @param {number} [q.returnMinutes]  last client → usual place of work
+ * @param {number} [q.returnKm]
+ * @param {boolean} [q.returnPaid=true]  worker is paid for the return leg
+ * @returns { shares: {eventId → {minutes, km}}, pooledMinutes, pooledKm, divisor, warnings }
+ */
+function planDayTravel(q) {
+  const warnings = [];
+  const sessions = Array.isArray(q.sessions) ? q.sessions : [];
+  const billable = sessions.filter(s => s.billable !== false);
+  const shares = {};
+  if (!billable.length) return { shares, pooledMinutes: 0, pooledKm: 0, divisor: 0, warnings: ['no_billable_sessions'] };
+
+  let minutes = 0, km = 0;
+  sessions.forEach((s, i) => {
+    // A leg that arrives at a non-billable session (cancelled, admin) still
+    // had to be driven; it is only claimable if the NEXT billable session
+    // absorbs it. Keep it in the pool and flag it for review.
+    const m = Math.max(0, Number(s.legMinutes) || 0);
+    const k = Math.max(0, Number(s.legKm) || 0);
+    if (s.billable === false && (m > 0 || k > 0)) warnings.push('leg_to_non_billable_session_pooled');
+    minutes += m; km += k;
+  });
+  if (q.returnPaid !== false) {
+    minutes += Math.max(0, Number(q.returnMinutes) || 0);
+    km += Math.max(0, Number(q.returnKm) || 0);
+  } else if ((Number(q.returnMinutes) || 0) > 0) {
+    warnings.push('return_leg_unpaid_not_claimed');
+  }
+  const divisor = billable.length;
+  const shareMin = round2(minutes / divisor);
+  const shareKm = round2(km / divisor);
+  billable.forEach(s => { shares[s.eventId] = { minutes: shareMin, km: shareKm }; });
+  return { shares, pooledMinutes: minutes, pooledKm: round2(km), divisor, warnings };
+}
+
 // ── Group ──────────────────────────────────────────────────────────────────
 /** p.32 — per-participant limit is the item limit divided by group size. */
 function groupPerParticipantLimit(limit, groupSize, item) {
@@ -392,6 +436,7 @@ module.exports = {
   assessCancellation,
   subtractBusinessDays,
   computeTravel,
+  planDayTravel,
   groupPerParticipantLimit,
   buildClaim,
   buildWeeklyClaims,

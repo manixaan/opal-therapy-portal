@@ -30,6 +30,7 @@
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=8" />
 <link rel="stylesheet" href="/splose-sync.css?v=1" />
+<link rel="stylesheet" href="/invoicing.css?v=1" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=24" />
 <script src="/resourcehub.js?v=r44" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
@@ -77,6 +78,8 @@
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
 <script src="/travel.js?v=11" defer></script>
+<!-- Invoices (owner-only): calendar-driven NDIS invoicing, batch + individual, rule book -->
+<script src="/invoicing.js?v=1" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -90,7 +93,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=1" defer></script>
-<script src="/navigation.js?v=10" defer></script>
+<script src="/navigation.js?v=11" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -4025,6 +4028,7 @@ window.opIcon = function (name, size) {
   <button class="tab" data-tab="support" style="display:none;">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg> Support Tickets
   </button>
+  <button class="tab" data-tab="invoicing" data-owner-only="1" style="display:none" title="Invoices — calendar-driven NDIS invoicing for every practitioner"><svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg> Invoices</button>
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
   </button>
@@ -5249,6 +5253,11 @@ window.opIcon = function (name, size) {
   <div class="acct-section" id="acct-pricing"><div id="acct-pricing-body" class="acct-note">Loading…</div></div>
   <div class="acct-section" id="acct-synclog"><div id="acct-synclog-body" class="acct-note">Loading…</div></div>
 </div>
+</section>
+
+<!-- ============ INVOICES TAB (owner-only) ============ -->
+<section class="view" id="view-invoicing">
+  <div id="inv-root"><div class="inv-page"><div class="inv-empty">Loading invoices…</div></div></div>
 </section>
 
 <!-- ============ BILLING DASHBOARD TAB ============ -->
@@ -19371,7 +19380,7 @@ var ROLE_NAV = {
       ['People', ['onboarding']],
       ['Recruitment', ['interviews']],
       ['Travel', ['travel', 'logbook']],
-      ['Business', ['accounting', 'settings', 'support']],
+      ['Business', ['invoicing', 'accounting', 'settings', 'support']],
     ] },
   },
   admin: {

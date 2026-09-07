@@ -640,6 +640,9 @@ const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
 app.use('/', accountingRoutes);
 
+// Invoicing (owner-only): calendar-driven NDIS invoices — see invoicing-routes.js
+app.use('/', require('./invoicing-routes'));
+
 console.log('✅ Routes registered');
 
 // Boot up the server and listen for requests

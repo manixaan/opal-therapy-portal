@@ -130,6 +130,16 @@
       ],
       "port": 5015,
       "autoPort": false
+    },
+    {
+      "name": "opal-invoicing-5023",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd \"/Users/antonyxavier/Documents/Claude/Projects/Therapy Scheduling Application/.claude/worktrees/ndis-billing-rules\" && PORT=5023 DB_NAME=therapy_scheduler_ndisbilling_test NODE_ENV=development ENABLE_OUTLOOK_WRITE=false ENABLE_SPLOSE_CALENDAR_SYNC=false ALLOWED_ORIGINS=http://localhost:5023,http://127.0.0.1:5023 APP_BASE_URL=http://localhost:5023 RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+      ],
+      "port": 5023,
+      "autoPort": false
     }
   ]
 }

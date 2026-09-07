@@ -150,6 +150,37 @@ describe('computeTravel (PAPL p.25 speech pathologist example, OT rates)', () =>
   });
 });
 
+describe('planDayTravel — pooled multi-client run (PAPL p.25 method)', () => {
+  const sessions = [
+    { eventId: 'a', legMinutes: 20, legKm: 15 },
+    { eventId: 'b', legMinutes: 15, legKm: 10 },
+    { eventId: 'c', legMinutes: 25, legKm: 20 },
+  ];
+  test('three clients, paid return: 90 min and 70 km split three ways', () => {
+    const p = R.planDayTravel({ sessions, returnMinutes: 30, returnKm: 25, returnPaid: true });
+    expect(p.pooledMinutes).toBe(90);
+    expect(p.pooledKm).toBe(70);
+    expect(p.divisor).toBe(3);
+    expect(p.shares.a).toEqual({ minutes: 30, km: 23.33 });
+  });
+  test('unpaid return is dropped and flagged', () => {
+    const p = R.planDayTravel({ sessions, returnMinutes: 30, returnKm: 25, returnPaid: false });
+    expect(p.pooledMinutes).toBe(60);
+    expect(p.shares.b.minutes).toBe(20);
+    expect(p.warnings).toContain('return_leg_unpaid_not_claimed');
+  });
+  test('a cancelled client drops out of the divisor but its leg stays pooled with a flag', () => {
+    const p = R.planDayTravel({ sessions: [sessions[0], { ...sessions[1], billable: false }, sessions[2]], returnMinutes: 30, returnKm: 25 });
+    expect(p.divisor).toBe(2);
+    expect(p.shares.b).toBeUndefined();
+    expect(p.shares.a.minutes).toBe(45);
+    expect(p.warnings).toContain('leg_to_non_billable_session_pooled');
+  });
+  test('no billable sessions → nothing to share', () => {
+    expect(R.planDayTravel({ sessions: [] }).warnings).toContain('no_billable_sessions');
+  });
+});
+
 describe('buildClaim', () => {
   const base = {
     id: 'ev1', start: '2026-09-08T00:00:00Z', end: '2026-09-08T01:00:00Z', status: 'completed',

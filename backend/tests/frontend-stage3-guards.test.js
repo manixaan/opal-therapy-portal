@@ -247,7 +247,7 @@ describe('role-based navigation (RBAC)', () => {
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
     expect(HTML).toContain("primary: ['profile', 'calendar', 'casenotes', 'resources']");
     // Support Tickets (2026-08-09) joined the owner Business group
-    expect(HTML).toContain("['Business', ['accounting', 'settings', 'support']]");
+    expect(HTML).toContain("['Business', ['invoicing', 'accounting', 'settings', 'support']]");
     // admin gets a Travel menu only — no business/practice groups
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
