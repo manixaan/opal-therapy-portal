@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=13" defer></script>
+<script src="/travel.js?v=14" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -3908,7 +3908,8 @@ window.opIcon = function (name, size) {
 .tp-addr { display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border, #d9e1dc); background: var(--panel, #fff); color: var(--ink); box-sizing: border-box; }
 .tp-addr:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(42,111,98,.15); }
 .tp-route-row .pac-panel { z-index: 5; }
-.travel-overlay.preview { opacity: .85; outline: 1px dashed rgba(61,108,174,.6); pointer-events: none; }
+.travel-overlay.preview { outline: 1.5px dashed rgba(61,108,174,.7); pointer-events: none; }
+.travel-overlay.suppressed { display: none !important; }
 </style>
 </head>
 <body>

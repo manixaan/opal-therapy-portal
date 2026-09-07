@@ -695,8 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 13: live travel preview while booking; a back-to-back keeps its earliest start.
-      ['travel.js', 13],
+      // 14: the preview replaces the leg it would supersede instead of sitting beside it.
+      ['travel.js', 14],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -873,6 +873,8 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/id="bsp-location-unsure"/);
     expect(SHELL).toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
     expect(travel).toMatch(/kind: 'between', startMin: Math\.max\(seg\.startMin, seg\.endMin - seg\.travelMin\)/);
+    expect(travel).toMatch(/classList\.add\('suppressed'\)/);
+    expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);
     expect(SHELL).toMatch(/applyLeaveShading\(\);\n/);

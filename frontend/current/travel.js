@@ -711,6 +711,7 @@ function _bspTargetAddress() {
 }
 function clearBspTravelPreview() {
   document.querySelectorAll('.travel-overlay.preview').forEach(el => el.remove());
+  document.querySelectorAll('.travel-overlay.suppressed').forEach(el => el.classList.remove('suppressed'));
 }
 function bspTravelPreview() {
   clearBspTravelPreview();
@@ -728,6 +729,10 @@ function bspTravelPreview() {
   if (!fromKey || !toKey) return;
   const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
   const predEnd = sessionEndMin(pred.s);
+  // The leg currently leaving the previous session (home, or the next
+  // session) is what this booking would replace: hide it while the panel is
+  // open so only the drive to the address being typed is on the grid.
+  document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
   const earliest = Math.ceil((predEnd + travel) / 15) * 15;
   // An explicit back-to-back keeps its start at or after the drive allows.
   if (pred.explicit && startMin < earliest) {
@@ -741,9 +746,18 @@ function bspTravelPreview() {
     const text = document.getElementById('bsp-prefill-text');
     if (text && !/earliest start/.test(text.textContent)) text.textContent += ' · earliest start after the drive';
   }
-  if (travel <= 0 || startMin < predEnd) return;
   const col = document.getElementById('day-' + day);
-  if (!col) return;
+  if (!col || startMin < predEnd) return;
+  if (travel <= 0) {
+    // Same place as the previous session: say so instead of drawing nothing.
+    const note = document.createElement('div');
+    note.className = 'travel-overlay between preview';
+    note.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
+    note.style.height = '14px';
+    note.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">no drive · same place as the previous session</span>';
+    col.appendChild(note);
+    return;
+  }
   const legStart = Math.max(predEnd, startMin - travel);
   const el = document.createElement('div');
   el.className = 'travel-overlay between preview';
@@ -984,6 +998,8 @@ function renderSegmentOverlay(col, seg) {
     fromLabel: seg.fromLoc.label || from, toLabel: seg.toLoc.label || to,
     fromAddr: seg.fromLoc.addr || '', toAddr: seg.toLoc.addr || ''
   });
+  el.dataset.fromSession = seg.fromSessionId || '';
+  el.dataset.toSession   = seg.toSessionId   || '';
   el.onclick = (ev) => {
     ev.stopPropagation();
     openTravelPanel(seg);
