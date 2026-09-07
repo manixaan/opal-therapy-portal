@@ -84,7 +84,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=2" defer></script>
+<script src="/profile.js?v=3" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -4215,9 +4215,10 @@ window.opIcon = function (name, size) {
             <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
             </svg>Perth metro office</label>
-          <input type="text" id="wb-office-addr"   value="100 Burrendah Blvd, Willetton WA 6155" oninput="setOfficeBase('addr', this.value)">
-          <input type="text" id="wb-office-suburb" value="Willetton"                             oninput="setOfficeBase('suburb', this.value)" style="max-width:140px;" placeholder="Suburb">
-          <span class="wb-hint">Single office base</span>
+          <!-- One field: start typing and pick the exact address from the
+               Google suggestions. The suburb is read from the chosen address. -->
+          <input type="text" id="wb-office-addr" value="100 Burrendah Blvd, Willetton WA 6155" placeholder="Start typing the office address…" autocomplete="off" oninput="setOfficeBase('addr', this.value)">
+          <span class="wb-hint" id="wb-office-hint">Willetton · office base</span>
         </div>
 
         <!-- Dynamic list of home bases -->
@@ -15081,10 +15082,17 @@ const WORK_BASES = {
 };
 
 /* Office-base field handler */
-function setOfficeBase(field, value) {
+function setOfficeBase(field, value, lat, lng) {
   if (!WORK_BASES.office) return;
   const oldAddr = WORK_BASES.office.addr, oldSub = WORK_BASES.office.suburb;
-  if (field === 'addr')   WORK_BASES.office.addr   = (value || '').trim();
+  if (field === 'addr') {
+    // One field: the suburb is read from the address (a Google pick or typed).
+    WORK_BASES.office.addr   = (value || '').trim();
+    WORK_BASES.office.suburb = (typeof addrSuburb === 'function' ? addrSuburb(WORK_BASES.office.addr) : '') || WORK_BASES.office.suburb;
+    if (lat && lng) { WORK_BASES.office.lat = Number(lat); WORK_BASES.office.lng = Number(lng); }
+    const hint = document.getElementById('wb-office-hint');
+    if (hint) hint.textContent = (WORK_BASES.office.suburb || 'Suburb unknown') + (lat && lng ? ' · pinned' : ' · office base');
+  }
   if (field === 'suburb') WORK_BASES.office.suburb = (value || '').trim();
   WORK_BASES.office.region = suburbRegion(WORK_BASES.office.suburb) || WORK_BASES.office.region;
   // Drop any cached route involving the old OR new address so overlays reflect the edit.
@@ -15135,12 +15143,20 @@ function removeHomeBase(id) {
   showToast('Home base removed', `${removed.label} and any day that used it have been cleared.`);
   if (typeof debouncedSaveWorkSchedule === 'function') debouncedSaveWorkSchedule();
 }
-function setHomeBase(id, field, value) {
+function setHomeBase(id, field, value, lat, lng) {
   const h = homeBaseById(id);
   if (!h) return;
   const oldAddr = h.addr, oldSub = h.suburb;
   if (field === 'label')  h.label  = (value || '').trim() || h.label;
-  if (field === 'addr')   h.addr   = (value || '').trim();
+  if (field === 'addr') {
+    // One field: the suburb is read from the address (a Google pick or typed).
+    h.addr   = (value || '').trim();
+    h.suburb = (typeof addrSuburb === 'function' ? addrSuburb(h.addr) : '') || '';
+    h.region = suburbRegion(h.suburb) || h.region;
+    if (lat && lng) { h.lat = Number(lat); h.lng = Number(lng); } else if (!value) { delete h.lat; delete h.lng; }
+    const row = document.querySelector('.wb-field[data-base="' + id + '"] .wb-hint');
+    if (row) row.textContent = h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing';
+  }
   if (field === 'suburb') { h.suburb = (value || '').trim(); h.region = suburbRegion(h.suburb) || h.region; }
   if (field === 'kind')   {
     h.kind = value === 'remote' ? 'remote' : 'local';
@@ -15171,7 +15187,7 @@ function renderHomeBases() {
       : 'e.g. 12 Example St, Riverton WA 6148';
     const hint = h.kind === 'remote'
       ? 'Remote · no travel cost'
-      : (h.addr ? 'Saved · used as travel anchor' : 'Set address to enable travel routing');
+      : (h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing');
     return `
       <div class="wb-field base-${h.kind}" data-base="${h.id}">
         <input type="text" value="${escapeAttr(h.label)}" onchange="setHomeBase('${h.id}','label',this.value)" style="max-width:160px;font-weight:600;" title="Label shown in the Mon–Fri dropdown">
@@ -15179,8 +15195,7 @@ function renderHomeBases() {
           <option value="local"${h.kind === 'local' ? ' selected' : ''}>Local</option>
           <option value="remote"${h.kind === 'remote' ? ' selected' : ''}>Remote</option>
         </select>
-        <input type="text" value="${escapeAttr(h.addr)}" placeholder="${addrPlaceholder}" oninput="setHomeBase('${h.id}','addr',this.value)" ${h.kind === 'remote' ? 'disabled style="opacity:0.55;"' : ''}>
-        <input type="text" value="${escapeAttr(h.suburb)}" placeholder="Suburb" oninput="setHomeBase('${h.id}','suburb',this.value)" style="max-width:130px;" ${h.kind === 'remote' ? 'disabled style="opacity:0.55;"' : ''}>
+        <input type="text" class="wb-addr" data-base-id="${h.id}" value="${escapeAttr(h.addr)}" placeholder="${addrPlaceholder}" autocomplete="off" oninput="setHomeBase('${h.id}','addr',this.value)" ${h.kind === 'remote' ? 'disabled style="opacity:0.55;"' : ''}>
         <span class="wb-hint">${hint}</span>
         <button class="wb-remove" onclick="removeHomeBase('${h.id}')" title="Remove this base">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -15190,6 +15205,21 @@ function renderHomeBases() {
       </div>`;
   }).join('');
   host.innerHTML = rows || `<div style="font-size:12px;color:var(--ink-soft);padding:6px 0;">No home bases yet — add one to route travel from home.</div>`;
+  wireBaseAddressAutocomplete();
+}
+
+/* One field per base, Google-powered: attach the portal's Places suggestion
+   panel to every base address input (office + homes). A pick fills the exact
+   address and pins lat/lng; the suburb is read from the address. Safe to call
+   repeatedly — the helper marks inputs it has already wired. */
+function wireBaseAddressAutocomplete() {
+  if (typeof attachPlacesAutocomplete !== 'function') return;
+  const office = document.getElementById('wb-office-addr');
+  if (office) attachPlacesAutocomplete(office, (addr, lat, lng) => setOfficeBase('addr', addr, lat, lng));
+  document.querySelectorAll('#wb-homes .wb-addr').forEach(el => {
+    const id = el.dataset.baseId;
+    attachPlacesAutocomplete(el, (addr, lat, lng) => setHomeBase(id, 'addr', addr, lat, lng));
+  });
 }
 function escapeAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
@@ -20205,6 +20235,7 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
 function initGooglePlacesAutocomplete() {
   const qaInput = document.getElementById('qa-custom-address');
   if (qaInput) attachPlacesAutocomplete(qaInput);
+  if (typeof wireBaseAddressAutocomplete === 'function') wireBaseAddressAutocomplete();
   // If the detail panel is open, wire it too (handles SDK-loaded-after-panel case)
   const bdAddrInput = document.getElementById('bd-addr-input');
   if (bdAddrInput && window.__bdCurrentSessionId) {

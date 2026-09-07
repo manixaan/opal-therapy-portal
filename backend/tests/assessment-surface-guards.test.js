@@ -687,7 +687,8 @@ describe('changed assets are cache-busted', () => {
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
-      ['profile.js', 2],
+      // 3: travel bases are one Google-powered address field; no suburb box.
+      ['profile.js', 3],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
@@ -813,6 +814,14 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/serviceId: \(BOOKING_LEAVES\[BOOKING_STATE\.serviceType\] && BOOKING_LEAVES\[BOOKING_STATE\.serviceType\]\.serviceId\)/);
     // Static fallback leaves carry ids too.
     expect(SHELL).toMatch(/'therapy':\s+\{ cat: 'client',[^\n]*serviceId: 125320/);
+  });
+
+  test('travel bases are one address field each, with Google suggestions and a derived suburb', () => {
+    expect(SHELL).not.toMatch(/wb-office-suburb/);
+    expect(SHELL).not.toMatch(/setHomeBase\('\$\{h\.id\}','suburb'/);
+    expect(SHELL).toMatch(/function wireBaseAddressAutocomplete\(\)/);
+    expect(SHELL).toMatch(/attachPlacesAutocomplete\(office, \(addr, lat, lng\) => setOfficeBase\('addr', addr, lat, lng\)\)/);
+    expect(SHELL).toMatch(/h\.suburb = \(typeof addrSuburb === 'function' \? addrSuburb\(h\.addr\) : ''\)/);
   });
 
   test('an empty week shows a plain grid — no first-time overlay card (owner\'s call, 7 Sep 2026)', () => {

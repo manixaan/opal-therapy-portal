@@ -1588,10 +1588,11 @@ async function loadWorkSchedule() {
     if (travelBases && typeof travelBases === 'object') {
       if (travelBases.office) {
         Object.assign(WORK_BASES.office, travelBases.office);
-        var addrEl   = document.getElementById('wb-office-addr');
-        var suburbEl = document.getElementById('wb-office-suburb');
-        if (addrEl   && travelBases.office.addr)   addrEl.value   = travelBases.office.addr;
-        if (suburbEl && travelBases.office.suburb) suburbEl.value = travelBases.office.suburb;
+        var addrEl = document.getElementById('wb-office-addr');
+        if (addrEl && travelBases.office.addr) addrEl.value = travelBases.office.addr;
+        var hintEl = document.getElementById('wb-office-hint');
+        if (hintEl) hintEl.textContent = (travelBases.office.suburb || 'Suburb unknown') + (travelBases.office.lat ? ' · pinned' : ' · office base');
+        if (typeof wireBaseAddressAutocomplete === 'function') wireBaseAddressAutocomplete();
       }
       if (Array.isArray(travelBases.homes) && travelBases.homes.length) {
         WORK_BASES.homes = travelBases.homes;
