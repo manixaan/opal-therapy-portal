@@ -346,7 +346,7 @@
     S.defaults = d;
     drawDefaults(pane);
   }
-  function openDefaults(id) { nav('defaults', id); }
+  function openDefaults(id) { S.defaultsSavedAt = null; nav('defaults', id); }
 
   function drawDefaults(pane) {
     var d = S.defaults; var view = S.defaultsPhase || 1;
@@ -368,7 +368,10 @@
       body = '<section class="oj-panel"><h3 class="oj-sub">' + (view === 2 ? 'Email 2' : 'Email 3') + '</h3><pre class="oj-pre">' + esc(em.subject) + '\n\n' + esc(em.body) + '</pre></section>'
         + defaultsTable(d, phase);
     }
-    pane.innerHTML = '<div class="oj-record-head"><div><h2>' + esc(d.package.title) + '</h2><p class="oj-quiet">' + esc(titleCase(d.package.roleCategory || '')) + ' · ' + esc(titleCase(d.package.employmentType || '')) + ' · default copy — nothing here is sent to anyone</p></div></div>'
+    pane.innerHTML = '<div class="oj-record-head"><div><h2>' + esc(d.package.title) + ' <span class="oj-chip is-warn">Master default</span></h2><p class="oj-quiet">' + esc(titleCase(d.package.roleCategory || '')) + ' · ' + esc(titleCase(d.package.employmentType || '')) + '</p></div>'
+      + '<div class="oj-record-head-actions">' + btn('Done — back to packages', 'OnboardingJourney.nav(\'defaults\')', 'oj-btn-primary') + '</div></div>'
+      + '<div class="ob-note is-warn oj-master-note"><strong>You are editing the master default for this package.</strong> Every onboarding you start with this package begins from what is set here — the letter wording, the documents and their files. Records already started keep their own copy. '
+      + '<span id="oj-master-saved" class="oj-quiet">' + (S.defaultsSavedAt ? 'Saved ' + esc(fmtDateTime(S.defaultsSavedAt)) + '.' : 'Each change saves as you make it.') + '</span></div>'
       + stepper + '<div class="oj-stages">' + body + '</div>';
   }
   function viewDefaultsPhase(n) { S.defaultsPhase = n; var pane = doc.getElementById('oj-view'); if (pane && S.defaults) drawDefaults(pane); }
@@ -421,6 +424,7 @@
     S.busy = false;
     if (!res.ok) { toast(res.error, true); return res; }
     if (res.items && S.defaults) S.defaults.phases[res.phase].items = res.items;
+    S.defaultsSavedAt = new Date().toISOString();
     if (okMessage) toast(okMessage);
     var pane = doc.getElementById('oj-view'); if (pane && S.defaults) drawDefaults(pane);
     return res;

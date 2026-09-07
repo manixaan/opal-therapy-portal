@@ -48,6 +48,8 @@ async function loadPackage(req) {
 /** The derived default items for a package with its tweaks applied, shaped for the editor. */
 async function defaultItems(req, pkg, phase) {
   const version = await odb.getCurrentPackageVersion(pkg.id);
+  // The shipped Stage 2 files are published into the library the first time anyone looks, so the master default is never shown empty.
+  if (phase === 'documentation') await require('./onboarding-pack-routes')._internals.ensurePlaceholderDocuments(orgOf(req));
   const library = await odb.listDocuments(orgOf(req));
   const byCode = new Map(library.map((d) => [d.code, d]));
   const byId = new Map(library.map((d) => [d.id, d]));

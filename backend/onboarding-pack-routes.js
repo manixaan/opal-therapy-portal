@@ -772,4 +772,4 @@ registerPackRoutes('documentation');
 registerPackRoutes('induction');
 
 module.exports = router;
-module.exports._internals = { PHASES, preparePack, ensureProfileOwner, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };
+module.exports._internals = { PHASES, preparePack, ensureProfileOwner, ensurePlaceholderDocuments, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };

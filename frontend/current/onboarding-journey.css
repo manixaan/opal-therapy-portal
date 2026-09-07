@@ -487,3 +487,5 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-unplaced li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
 .oj-unplaced select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 @media (max-width: 640px) { .oj-attach-item { flex-direction: column; } .oj-attach-acts { justify-content: flex-start; } }
+
+.oj-master-note { margin: 0 0 12px; font-size: 13px; }
