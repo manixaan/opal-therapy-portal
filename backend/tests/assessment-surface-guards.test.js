@@ -815,11 +815,11 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/'therapy':\s+\{ cat: 'client',[^\n]*serviceId: 125320/);
   });
 
-  test('the empty-week overlay never adds a grid row under the calendar', () => {
-    const css = SHELL.slice(SHELL.indexOf('.cal-empty-state {'), SHELL.indexOf('.cal-empty-state .ces-card'));
-    expect(css).toMatch(/position: absolute/);
-    expect(css).not.toMatch(/grid-row\s*:/);     // declarations only — the comment explains the old bug
-    expect(css).not.toMatch(/grid-column\s*:/);
+  test('an empty week shows a plain grid — no first-time overlay card (owner\'s call, 7 Sep 2026)', () => {
+    expect(SHELL).not.toMatch(/ces-card|Fresh week|openAutoSchedule/);
+    expect(SHELL).not.toMatch(/\.cal-empty-state\s*\{/);
+    // The call sites survive as a no-op that clears any leftover overlay.
+    expect(SHELL).toMatch(/function refreshCalendarEmptyState\(\)/);
   });
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {

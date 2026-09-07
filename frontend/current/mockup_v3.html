@@ -2277,53 +2277,6 @@ window.opIcon = function (name, size) {
   .cal-grid.hide-weekends.view-week #day-sun { display: none !important; }
   /* Week-start ordering is driven by inline `order` set in applyWeekStart() */
 
-  /* First-time empty state — shown when no sessions exist for the visible week.
-     Spans the visible day columns. */
-  .cal-empty-state {
-    /* Laid OVER the day columns, never as a grid item. As a grid item with
-       an explicit grid-row it was placed before the auto-placed columns and
-       created a second body row — a tall blank band under 11 PM whenever the
-       visible week had no sessions (recurred 7 Sep 2026 once the last test
-       events were removed). */
-    position: absolute; left: 50px; right: 0; top: 0; bottom: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none; /* clicks fall through to day columns */
-    padding: 70px 20px 30px;
-    z-index: 3;
-  }
-  .cal-empty-state .ces-card {
-    pointer-events: auto;
-    max-width: 460px;
-    background: linear-gradient(135deg, #f5f0eb 0%, #f2ede7 100%);
-    border: 1.5px dashed var(--accent);
-    border-radius: 14px;
-    padding: 22px 26px;
-    text-align: center;
-    box-shadow: 0 4px 16px rgba(45,122,122,0.08);
-  }
-  .cal-empty-state .ces-emoji {
-    font-size: 32px; line-height: 1;
-    margin-bottom: 8px;
-  }
-  .cal-empty-state .ces-title {
-    font-size: 15px; font-weight: 700;
-    color: var(--accent-deep); margin: 0 0 6px;
-  }
-  .cal-empty-state .ces-sub {
-    font-size: 13px; color: var(--ink-soft);
-    line-height: 1.5; margin: 0 0 14px;
-  }
-  .cal-empty-state .ces-cta {
-    background: var(--accent); color: white;
-    border: none; border-radius: 8px;
-    padding: 9px 18px; font-weight: 600; font-size: 13px;
-    cursor: pointer;
-  }
-  .cal-empty-state .ces-cta:hover { background: var(--accent-deep); }
-  .cal-empty-state .ces-tips {
-    font-size: 11.5px; color: var(--muted);
-    margin-top: 12px; line-height: 1.5;
-  }
   /* ─── Day column headers — compact single-line "MON 4" (Outlook style) ─── */
   .cal-head {
     padding: 6px 4px 5px; text-align: center;
@@ -13234,53 +13187,14 @@ function reflowDayOverlaps(col) {
   refreshCalendarEmptyState();
 })();
 
-/* ---------- Empty-state overlay ---------- */
-/* Shown over the day columns when SESSIONS has no entries for the visible
-   week. Removed automatically on the first addSession() call. The overlay
-   uses pointer-events:none on the wrapper so clicks fall through to day
-   columns once the upcoming click-empty-slot quick-add lands; the inner
-   card re-enables pointer events for its CTAs. */
+/* ---------- Empty-state overlay: REMOVED (7 Sep 2026, owner's call) ----------
+   A blank week is a blank week: the therapist selects and drags a cell range
+   to create the first appointment. Kept as a no-op that clears any leftover
+   overlay so the existing call sites stay valid. */
 function refreshCalendarEmptyState() {
   const grid = document.getElementById('cal-grid');
-  if (!grid) return;
-  const isEmpty = Object.keys(SESSIONS).length === 0;
-  let overlay = grid.querySelector('.cal-empty-state');
-  if (isEmpty) {
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'cal-empty-state';
-      overlay.innerHTML = `
-        <div class="ces-card">
-          <div class="ces-emoji">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 32px; height: 32px;">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-            </svg>
-          </div>
-          <div class="ces-title">Fresh week — let's fill it.</div>
-          <div class="ces-sub">
-            No sessions on the calendar yet. Pick a path:
-          </div>
-          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-            <button class="ces-cta" onclick="switchTab('book')">＋ Book one client</button>
-            <button class="ces-cta" style="background:#0f7c6c;" onclick="openAutoSchedule()">Auto-fit multiple clients</button>
-          </div>
-          <div class="ces-tips">
-            Each session asks for a <strong>location</strong> (online or in-person → default address from Splose, or custom).
-            Travel chips appear automatically between in-person sessions.
-          </div>
-        </div>
-      `;
-      grid.appendChild(overlay);
-    }
-  } else if (overlay) {
-    overlay.remove();
-  }
-}
-
-/* Stub — wired up in step 3 of the auto-schedule feature. Surfaced now so
-   the empty-state CTA doesn't error before the full flow lands. */
-function openAutoSchedule() {
-  showToast('Auto-fit coming next', 'Multi-client optimiser is in build — ping if you want me to prioritise.');
+  const overlay = grid && grid.querySelector('.cal-empty-state');
+  if (overlay) overlay.remove();
 }
 
 /* =========================================================
