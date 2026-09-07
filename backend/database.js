@@ -925,10 +925,16 @@ async function upsertOutlookEvent(userId, eventData) {
     return { skipped: 'seriesMaster', outlookId: eventData.outlookId };
   }
   const {
-    outlookId, startTime, endTime, location, categories,
+    outlookId, location, categories,
     iCalUId, changeKey, lastModifiedAt, isCancelled,
     sploseId,
   } = eventData;
+  // Same rule as createEvent/updateEvent: a "+08:00" time from the booking
+  // panel must become its UTC instant before it reaches a TIMESTAMP column,
+  // or the row sits eight hours late until the Outlook echo corrects it
+  // (7 Sep 2026 — a stop booked for 9 AM showed at 5 PM for a minute).
+  const startTime = toUtcIso(eventData.startTime);
+  const endTime   = toUtcIso(eventData.endTime);
 
   // ── ABSENT vs EMPTY (data-loss fix, 2026-08-10) ───────────────────────────
   // Graph delta payloads are PARTIAL: an updated event carries only the

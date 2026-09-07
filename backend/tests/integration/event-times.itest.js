@@ -23,6 +23,15 @@ describe('event times normalise to UTC on write', () => {
     expect(moved.end_time.toISOString()).toBe('2026-09-10T04:15:00.000Z');
   });
 
+  test('the Outlook upsert (the booking route\'s save path) normalises a +08:00 time too', async () => {
+    const u = await seedUser();
+    const row = await db.upsertOutlookEvent(u.id, { outlookId: 'OL-book-1', title: 'Client Appointment — Casey L', startTime: '2026-09-08T09:00:00+08:00', endTime: '2026-09-08T10:00:00+08:00', createdBySource: 'app', eventType: 'therapy' });
+    expect(row.start_time.toISOString()).toBe('2026-09-08T01:00:00.000Z');
+    expect(row.end_time.toISOString()).toBe('2026-09-08T02:00:00.000Z');
+    const again = await db.upsertOutlookEvent(u.id, { outlookId: 'OL-book-1', startTime: '2026-09-08T11:00:00+08:00', endTime: '2026-09-08T12:00:00+08:00' });
+    expect(again.start_time.toISOString()).toBe('2026-09-08T03:00:00.000Z');
+  });
+
   test('Z strings and Date objects are unchanged; absent times are preserved', async () => {
     const u = await seedUser();
     const ev = await db.createEvent(u.id, { title: 'T', startTime: new Date('2026-09-08T01:00:00Z'), endTime: '2026-09-08T02:00:00.000Z', eventType: 'therapy' });
