@@ -688,13 +688,15 @@ describe('changed assets are cache-busted', () => {
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
-      ['profile.js', 3],
+      // 4: travel legs redraw once the saved bases arrive.
+      ['profile.js', 4],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      ['travel.js', 3],
+      // 4: overlays cover weekend columns.
+      ['travel.js', 4],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -846,6 +848,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/travel: \(event\.custom_metadata && event\.custom_metadata\.travel\) \|\| null/);
     expect(SHELL).toMatch(/await ensureDayBase\(slot\.day\)/);
     expect(SHELL).toMatch(/applyTravelChainAfterBooking\(oResult\.dbId, _tf\)/);
+    // Legs are redrawn with every week render, so a reload keeps them.
+    const rcw = SHELL.slice(SHELL.indexOf('function renderCurrentWeek()'), SHELL.indexOf('function _saveWeekPos()'));
+    expect(rcw).toMatch(/refreshAllOverlays\(\)/);
   });
 
   test('Outlook tiles are DOM-stamped so a re-render sweeps phantoms the registry lost', () => {

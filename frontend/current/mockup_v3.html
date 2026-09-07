@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=3" defer></script>
+<script src="/travel.js?v=4" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -84,7 +84,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=3" defer></script>
+<script src="/profile.js?v=4" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -17102,6 +17102,10 @@ function renderCurrentWeek() {
       detectAndMarkCalendarConflicts();
       detectAndMarkRuralTrips();
     }
+    // Travel legs are derived from the tiles just painted. Without this the
+    // legs only appeared after a booking or a profile edit, and a page reload
+    // (or week navigation) showed the sessions with no travel around them.
+    if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
   });
 }
 

@@ -825,7 +825,8 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
    exists — see the note in renderSegmentOverlay. */
 
 function refreshAllOverlays() {
-  ['mon','tue','wed','thu','fri'].forEach(d => refreshDayOverlays(d));
+  // Every rendered column, weekends included — a Saturday session gets its legs too.
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => { if (document.getElementById('day-' + d)) refreshDayOverlays(d); });
 }
 
 function previewAllTravel() {

@@ -1603,6 +1603,10 @@ async function loadWorkSchedule() {
     if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
     if (typeof renderHomeBases          === 'function') renderHomeBases();
     if (typeof refreshAlarm             === 'function') refreshAlarm();
+    // The bases and the week's day locations just arrived: legs that were
+    // drawn from defaults are redrawn from the real anchors.
+    Object.values(window.SESSIONS || {}).forEach(function (s) { delete s.__loc; });
+    if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
   } catch (e) {
     console.warn('loadWorkSchedule error:', e.message);
   }
