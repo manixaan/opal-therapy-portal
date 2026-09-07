@@ -283,8 +283,10 @@ async function applyExternalChange(alert, userId) {
   }
   if (alert.kind === 'created') {
     if (!d.start || !d.end) return { kind: 'created', changed: false };
-    const exists = await db.pool.query(`SELECT id FROM events WHERE splose_id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE) LIMIT 1`, [alert.splose_appointment_id]);
-    if (exists.rows.length) return { kind: 'created', changed: false, eventId: exists.rows[0].id };
+    // Any local row for this Splose id — live OR cancelled — means the portal
+    // already knows the appointment; never insert a second copy.
+    const exists = await db.pool.query(`SELECT id, is_deleted FROM events WHERE splose_id = $1 ORDER BY is_deleted NULLS FIRST, updated_at DESC LIMIT 1`, [alert.splose_appointment_id]);
+    if (exists.rows.length) return { kind: 'created', changed: false, eventId: exists.rows[0].id, alreadyCancelled: exists.rows[0].is_deleted === true };
     const r = await db.pool.query(
       `INSERT INTO events (user_id, title, start_time, end_time, event_type, splose_id, client_id, source, sync_status, last_modified_by, last_synced_to_splose)
        VALUES ($1, $2, $3, $4, 'therapy', $5, $6, 'splose', 'synced', 'splose', NOW()) RETURNING id`,

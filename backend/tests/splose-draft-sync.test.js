@@ -107,6 +107,27 @@ describe('detectExternalChanges — what changed inside Splose', () => {
     const r2 = detectExternalChanges({ localEvents: [old], sploseAppointments: [appt(11, '2026-09-08T03:00:00.000Z', '2026-09-08T04:00:00.000Z', { createdAt: '2026-08-01T00:00:00Z' })], pendingEventIds: new Set(), now });
     expect(r2.map(a => a.kind)).toEqual(['moved']);
   });
+  test('an appointment the portal cancelled is never re-imported as "created" (soft-deleted or still queued)', () => {
+    // Soft-deleted locally, Splose copy still live for a moment.
+    const r1 = detectExternalChanges({
+      localEvents: [{ ...local('e9', '77', '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z'), is_deleted: true }],
+      sploseAppointments: [appt(77, '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z')],
+      pendingEventIds: new Set(), now,
+    });
+    expect(r1).toEqual([]);
+    // Soft-deleted locally AND gone from Splose: not a "deleted" alert either.
+    const r2 = detectExternalChanges({
+      localEvents: [{ ...local('e9', '77', '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z'), is_deleted: true }],
+      sploseAppointments: [], pendingEventIds: new Set(), now,
+    });
+    expect(r2).toEqual([]);
+    // Cancel queued but not yet written; the local row is already gone from the window.
+    const r3 = detectExternalChanges({
+      localEvents: [], sploseAppointments: [appt(77, '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z')],
+      pendingEventIds: new Set(['splose:77']), now,
+    });
+    expect(r3).toEqual([]);
+  });
   test('historical Splose bookings are not "created" alerts', () => {
     const r = detectExternalChanges({
       localEvents: [], sploseAppointments: [appt(50, '2026-09-08T01:00:00.000Z', '2026-09-08T02:00:00.000Z', { createdAt: '2026-01-01T00:00:00Z' })],

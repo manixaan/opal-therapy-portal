@@ -112,6 +112,10 @@ function detectExternalChanges({ localEvents, sploseAppointments, pendingEventId
   for (const ev of localEvents || []) {
     if (!ev.splose_id) continue;
     known.add(String(ev.splose_id));
+    // A soft-deleted local event is the portal's own cancellation: its Splose
+    // appointment is known (so it is never re-imported as "created") and
+    // nothing about it is a Splose-side change.
+    if (ev.is_deleted) continue;
     const appt = bySplose.get(String(ev.splose_id));
     const base = { eventId: ev.id, userId: ev.user_id, sploseAppointmentId: String(ev.splose_id) };
     if (!appt) {
@@ -141,6 +145,7 @@ function detectExternalChanges({ localEvents, sploseAppointments, pendingEventId
 
   for (const a of sploseAppointments || []) {
     if (known.has(String(a.id))) continue;
+    if (pending.has('splose:' + String(a.id))) continue; // the portal is cancelling it right now
     if (isCancelledAppointment(a)) continue;
     const created = a.createdAt ? new Date(a.createdAt).getTime() : NaN;
     if (isNaN(created) || nowMs - created > recentHours * 3600000) continue;
@@ -438,15 +443,19 @@ function createWatcher(deps) {
         return { skipped: true, reason: 'incomplete' };
       }
       const { rows: local } = await db.pool.query(
-        `SELECT id, user_id, splose_id, start_time, end_time, title, last_synced_to_splose FROM events
-          WHERE splose_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = FALSE)
+        `SELECT id, user_id, splose_id, start_time, end_time, title, last_synced_to_splose, is_deleted FROM events
+          WHERE splose_id IS NOT NULL
             AND start_time >= $1::timestamptz AND start_time <= $2::timestamptz`,
         [new Date(t0.getTime() - 1 * 86400000).toISOString(), new Date(t0.getTime() + windowDays * 86400000).toISOString()]
       );
       const { rows: pendingRows } = await db.pool.query(
-        `SELECT event_id FROM splose_sync_queue WHERE status IN ('pending', 'publishing', 'failed')`
+        `SELECT q.event_id, e.splose_id FROM splose_sync_queue q LEFT JOIN events e ON e.id = q.event_id
+          WHERE q.status IN ('pending', 'publishing', 'failed')`
       );
       const pendingEventIds = new Set(pendingRows.map(r => r.event_id));
+      // Splose ids with a live queue row are also "the portal's" — a cancel that
+      // has not been written yet must not come back as a new booking.
+      for (const r of pendingRows) if (r.splose_id) pendingEventIds.add('splose:' + String(r.splose_id));
       const alerts = detectExternalChanges({ localEvents: local, sploseAppointments: appts, pendingEventIds, now: t0, recentHours });
 
       let inserted = 0;
