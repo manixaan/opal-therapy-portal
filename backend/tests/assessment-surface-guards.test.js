@@ -679,11 +679,11 @@ describe('changed assets are cache-busted', () => {
       // the consolidation reuses the existing ob-* styles unchanged.
       // 10: the management surface is delegated to onboarding-journey.js;
       // open()/nav() carry a record id. The CSS stays at 8.
-      ['onboarding.js', 12], ['onboarding.css', 8],
+      ['onboarding.js', 13], ['onboarding.css', 8],
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 36], ['onboarding-journey.css', 23],
+      ['onboarding-journey.js', 37], ['onboarding-journey.css', 24],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
@@ -695,9 +695,8 @@ describe('changed assets are cache-busted', () => {
       ['reports.js', 1],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
-      // 9: an address edit on a tile with no saved row is refused with a
-      // message instead of being kept in memory only.
-      ['travel.js', 9],
+      // 10: leave days are shaded on the calendar; booking into one asks first.
+      ['travel.js', 10],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -847,7 +846,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
 
   test('travel legs honour per-session before/after answers and the day-base prompt', () => {
     const travel = fs.readFileSync(path.join(FRONTEND, 'travel.js'), 'utf8');
-    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove', 'calendarWeekLocations']) {
+    for (const fn of ['sessionTravelOverride', 'resolveTravelPoint', 'setTravelOverride', 'ensureDayBase', 'addStopAfterSession', 'applyTravelChainAfterBooking', 'saveSessionAddress', '_wireRouteAddressEdits', 'travelInheritSpecFor', 'travelChainInherit', 'travelGapClosingFor', 'travelChainAfterMove', 'calendarWeekLocations', 'isLeaveDay', 'applyLeaveShading']) {
       expect(travel).toMatch(new RegExp('function ' + fn + '\\('));
     }
     // The engine reads the answers at the day's ends, not the between legs.
@@ -867,6 +866,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // The engine never reads the profile editor's week cursor directly.
     expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
     expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
+    // Leave days: shaded column + header tag on every week render; booking asks first.
+    expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);
+    expect(SHELL).toMatch(/applyLeaveShading\(\);\n/);
+    expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
     expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = true;/);

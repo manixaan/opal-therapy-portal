@@ -927,6 +927,31 @@ function refreshAllOverlays() {
   // location so home-based blocks re-anchor, then redraw every rendered column.
   Object.values(window.SESSIONS || {}).forEach(s => { if (s) delete s.__loc; });
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => { if (document.getElementById('day-' + d)) refreshDayOverlays(d); });
+  applyLeaveShading();
+}
+
+/* ---------- Leave days ----------
+   A day whose work location is "On leave" is shaded on the calendar (a quiet
+   hatch on the column, an "On leave" tag in the header) so it reads as
+   unavailable at a glance. Nothing is blocked: booking on a leave day asks
+   first (confirmBooking). Client reminders around leave come later. */
+function isLeaveDay(day) {
+  const wk = calendarWeekLocations();
+  return !!(wk && wk[day] === 'leave');
+}
+function applyLeaveShading() {
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
+    const on = isLeaveDay(d);
+    const col = document.getElementById('day-' + d);
+    if (col) col.classList.toggle('on-leave', on);
+    const head = document.querySelector('.cal-head[data-day="' + d + '"]');
+    if (head) {
+      head.classList.toggle('on-leave', on);
+      let tag = head.querySelector('.leave-tag');
+      if (on && !tag) { tag = document.createElement('div'); tag.className = 'leave-tag'; tag.textContent = 'On leave'; head.appendChild(tag); }
+      if (!on && tag) tag.remove();
+    }
+  });
 }
 
 function previewAllTravel() {

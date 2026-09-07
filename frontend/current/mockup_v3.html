@@ -30,7 +30,7 @@
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=8" />
 <link rel="stylesheet" href="/splose-sync.css?v=1" />
-<link rel="stylesheet" href="/onboarding-journey.css?v=23" />
+<link rel="stylesheet" href="/onboarding-journey.css?v=24" />
 <script src="/resourcehub.js?v=r44" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
@@ -62,11 +62,11 @@
 <script src="/assessment.js?v=3" defer></script>
 <!-- Onboarding Packages: the new-starter surface and the owner's
      management console. Renders into #ob-root inside #view-onboarding. -->
-<script src="/onboarding.js?v=12" defer></script>
+<script src="/onboarding.js?v=13" defer></script>
 <!-- The three-stage journey (offer → documentation → induction): the Owner's
      board, Start Onboarding and each record. onboarding.js hands its
      management surface to this module and keeps Packages. -->
-<script src="/onboarding-journey.js?v=36" defer></script>
+<script src="/onboarding-journey.js?v=37" defer></script>
 <!-- Interview Preparation: the Owner's structured recruitment interviews.
      Every /api/interviews route requires the `interviews.access` permission,
      which only the Owner holds by default, so this module renders nothing
@@ -76,7 +76,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=9" defer></script>
+<script src="/travel.js?v=10" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -2311,6 +2311,18 @@ window.opIcon = function (name, size) {
   }
   /* Subtle wash over today's whole column — identifiable without a heavy border */
   .cal-col.today { background: rgba(15, 124, 108, 0.04); }
+  /* On leave: a quiet diagonal hatch over the whole column and a tag in the
+     header. Tiles and legs still render above it; nothing is disabled. */
+  .cal-col.on-leave {
+    background-color: #f6f4f0;
+    background-image: repeating-linear-gradient(135deg, rgba(110,103,94,0.10) 0 6px, transparent 6px 16px);
+  }
+  .cal-head.on-leave .day-name, .cal-head.on-leave .day-num { color: #6e675e; }
+  .cal-head .leave-tag {
+    display: inline-block; margin-top: 2px; padding: 1px 7px; border-radius: 999px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+    color: #6e675e; background: rgba(110,103,94,0.12);
+  }
   .cal-head.today .day-name { color: var(--accent); font-weight: 600; letter-spacing: 0.6px; }
   /* Clickable day header in week view — drill-down to Day View */
   .cal-head[data-day] { cursor: pointer; transition: background 120ms; }
@@ -12487,6 +12499,12 @@ async function confirmBooking() {
   // A day with no base yet: ask once where the therapist is based, so the
   // first and last travel legs have somewhere to start and end.
   if (typeof ensureDayBase === 'function') { try { await ensureDayBase(slot.day); } catch (_) {} }
+  // On leave that day? Ask before booking a client into it.
+  if (typeof isLeaveDay === 'function' && isLeaveDay(slot.day)) {
+    const ask = (typeof portalConfirm === 'function') ? portalConfirm : (m) => Promise.resolve(window.confirm(m));
+    const go = await ask('This day is marked On leave in My Profile. Book the appointment anyway?', { title: 'On leave', ok: 'Book anyway', cancel: 'Cancel' });
+    if (!go) return;
+  }
   // Chain: if this booking becomes the day's last session, it inherits where
   // the day was going to end (travel.js, concept §4).
   BOOKING_STATE.chainAfter = (typeof travelInheritSpecFor === 'function') ? travelInheritSpecFor(slot.day, slot.startH * 60 + (slot.startM || 0)) : null;
@@ -16614,6 +16632,7 @@ function __renderWeekHeader() {
       col.classList.toggle('today', ymd === todayKey);
     }
   });
+  if (typeof applyLeaveShading === 'function') applyLeaveShading();
 
   // Update the BSP booking panel day chips to show the actual date for each
   // day in the visible week (e.g. "Wed 1" instead of just "Wed")
