@@ -80,6 +80,22 @@ describe('assessDeletionSafety', () => {
   });
 });
 
+describe('explicit removals (Graph delta @removed)', () => {
+  const { assessDeletionSafety } = require('../sync-safety');
+  const cfg = { maxAutoDelete: 10, maxDeletePercent: 30 };
+  test('a complete, named, small batch passes even when it empties the mirror', () => {
+    const v = assessDeletionSafety({ source: 'outlook_delta', fetchComplete: true, liveCount: 0, deletionCandidates: 3, localLinkedCount: 3, explicitRemovals: true }, cfg);
+    expect(v).toMatchObject({ safe: true, reason: 'explicit_small_batch' });
+  });
+  test('still blocked when paging was incomplete or the batch is above the ceiling', () => {
+    expect(assessDeletionSafety({ source: 'outlook_delta', fetchComplete: false, liveCount: 0, deletionCandidates: 3, localLinkedCount: 3, explicitRemovals: true }, cfg).safe).toBe(false);
+    expect(assessDeletionSafety({ source: 'outlook_delta', fetchComplete: true, liveCount: 0, deletionCandidates: 11, localLinkedCount: 11, explicitRemovals: true }, cfg).safe).toBe(false);
+  });
+  test('a full-list reconcile (not explicit) keeps the empty-remote rule', () => {
+    expect(assessDeletionSafety({ source: 'outlook_reconcile', fetchComplete: true, liveCount: 0, deletionCandidates: 3, localLinkedCount: 3 }, cfg)).toMatchObject({ safe: false, reason: 'empty_remote_result' });
+  });
+});
+
 describe('partitionDeltaRemovals — the portal\'s own deletions are not an anomaly', () => {
   const { partitionDeltaRemovals } = require('../sync-safety');
   test('ids already tombstoned locally, or unknown, are acknowledged rather than judged', () => {

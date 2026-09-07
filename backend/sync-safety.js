@@ -83,6 +83,15 @@ function assessDeletionSafety(p, config = getSyncSafetyConfig()) {
 
   // Upstream returned nothing while we hold linked records: overwhelmingly more
   // likely an API fault / auth-scope change than a real "everything cancelled".
+  // EXCEPT when the removals are EXPLICIT — a Graph delta names each removed
+  // id and finished paging (deltaLink) — and the batch is under the ceiling.
+  // A small mailbox whose few events were all deleted is not an anomaly; the
+  // ratio rules below would otherwise stall the mirror for ever because a
+  // blocked delta never saves its token (7 Sep 2026: three test events).
+  stats.explicitRemovals = !!p.explicitRemovals;
+  if (p.explicitRemovals && p.fetchComplete && p.deletionCandidates <= config.maxAutoDelete) {
+    return { safe: true, reason: 'explicit_small_batch', stats };
+  }
   if (p.liveCount === 0 && p.localLinkedCount > 0) {
     return { safe: false, reason: 'empty_remote_result', stats };
   }

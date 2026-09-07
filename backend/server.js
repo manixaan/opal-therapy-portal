@@ -880,6 +880,7 @@ async function runDeltaSyncForAllUsers() {
             liveCount: Number(linked.rows[0].n) - toDelete.length,
             deletionCandidates: toDelete.length,
             localLinkedCount: Number(linked.rows[0].n),
+            explicitRemovals: true, // Graph named each @removed id
           });
           if (!verdict.safe) {
             deltaDeletionsBlocked = true;
