@@ -80,7 +80,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=5" defer></script>
+<script src="/splose-sync.js?v=6" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
@@ -12427,6 +12427,7 @@ async function confirmBooking() {
         if (oResp.ok) {
           outlookId = oResult.outlookId;
           __registerBookingUndo(oResult.dbId, outlookTitle);
+          if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
           console.log('✅ Outlook event created:', outlookId);
         } else {
           console.warn('⚠️ Outlook write failed (non-fatal):', oResult.error);
@@ -12558,6 +12559,7 @@ async function confirmBooking() {
         outlookId   = oResult.outlookId;
         outlookNote = 'Added to Outlook calendar ✓';
         __registerBookingUndo(oResult.dbId, _outlookTitle);
+        if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
         // Booked as a stop after another session: the new session inherits
         // where the day was going to end (travel.js).
         if (BOOKING_STATE.travelFrom && typeof applyTravelChainAfterBooking === 'function') {

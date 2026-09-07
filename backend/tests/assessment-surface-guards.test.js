@@ -705,7 +705,8 @@ describe('changed assets are cache-busted', () => {
       // 4 (js): the service chooser reads the proxy's `title` field — it was
       // rendering every option blank.
       // 5 (js): the alert dialog knows the 'unlinked' kind (portal-only booking).
-      ['splose-sync.js', 5], ['splose-sync.css', 1],
+      // 6 (js): the queue count refreshes with every calendar reload, not on the 60 s poll.
+      ['splose-sync.js', 6], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the

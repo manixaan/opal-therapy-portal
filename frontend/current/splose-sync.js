@@ -515,6 +515,23 @@
     });
   }
 
+  // ── Instant count ─────────────────────────────────────────────────────────
+  // Every booking, cancellation or Splose-side answer ends by reloading the
+  // calendar. Refresh the queue right after, so the Sync Splose count and the
+  // tile markers change with the calendar instead of on the next 60 s poll.
+  function installReloadHook() {
+    if (global.__sploseSyncReloadHook) return;
+    global.__sploseSyncReloadHook = true;
+    var orig = global.loadOutlookEventsToCalendar;
+    if (typeof orig !== 'function') return;
+    global.loadOutlookEventsToCalendar = function () {
+      var out = orig.apply(this, arguments);
+      var after = function () { refreshPending(); };
+      if (out && typeof out.then === 'function') out.then(after, after); else setTimeout(after, 0);
+      return out;
+    };
+  }
+
   // ── Making a move real ────────────────────────────────────────────────────
 
   var DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -661,6 +678,7 @@
       if (!S.enabled) return;
       installTabGuard();
       installMovePersist();
+      installReloadHook();
       ensureButton();
       refreshStatus().then(function (st) { if (st && st.running) watchPublish(); });
       refreshPending();
