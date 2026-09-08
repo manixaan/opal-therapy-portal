@@ -56,7 +56,8 @@ const DEFAULT_OWNER_EMAIL = 'owner@opaltherapy.dev';
  *   users     columns that reference users — rewritten to the target owner
  *   deferred  self/forward references NULLed on insert and applied in a
  *             second pass (parent_id in a folder tree, duplicate_of, …)
- *   natural   a UNIQUE constraint other than the pk. A target row holding the
+ *   natural   a UNIQUE constraint or index other than the pk (one key, or a
+ *             list of keys). A target row holding the
  *             same natural key under a different id (a tag seeded locally, an
  *             induction the app's "Import existing inductions" created) is
  *             removed before the upsert so the seeded id wins
@@ -65,10 +66,10 @@ const DEFAULT_OWNER_EMAIL = 'owner@opaltherapy.dev';
 const TABLES = [
   { name: 'compliance_requirements', pk: ['id'], natural: ['organisation_id', 'code'], org: 'organisation_id', users: ['last_verified_by'], deferred: ['stored_document_id'] },
   { name: 'resource_tags', pk: ['id'], natural: ['category', 'name'] },
-  { name: 'resource_folders', pk: ['id'], org: 'organisation_id', users: ['created_by'], deferred: ['parent_id'] },
-  { name: 'resources', pk: ['id'], org: 'organisation_id', users: ['created_by', 'approved_by', 'content_owner'], deferred: ['duplicate_of', 'superseded_by'] },
+  { name: 'resource_folders', pk: ['id'], natural: ['organisation_id', 'slug'], org: 'organisation_id', users: ['created_by'], deferred: ['parent_id'] },
+  { name: 'resources', pk: ['id'], natural: [['organisation_id', 'slug'], ['organisation_id', 'external_ref']], org: 'organisation_id', users: ['created_by', 'approved_by', 'content_owner'], deferred: ['duplicate_of', 'superseded_by'] },
   { name: 'resource_versions', pk: ['id'], natural: ['resource_id', 'version'], parent: 'resource_id', users: ['created_by'] },
-  { name: 'resource_files', pk: ['id'], parent: 'resource_id', users: ['uploaded_by'], omit: ['file_data'] },
+  { name: 'resource_files', pk: ['id'], natural: ['resource_id', 'storage_key'], parent: 'resource_id', users: ['uploaded_by'], omit: ['file_data'] },
   { name: 'resource_tag_links', pk: ['resource_id', 'tag_id'], parent: 'resource_id' },
   { name: 'resource_folder_assignments', pk: ['resource_id'], org: 'organisation_id' },
   { name: 'resource_collections', pk: ['id'], natural: ['organisation_id', 'key'], org: 'organisation_id' },
@@ -80,7 +81,7 @@ const TABLES = [
   { name: 'learning_path_items', pk: ['id'], natural: ['path_id', 'resource_id'], parent: 'path_id' },
   { name: 'learning_workflows', pk: ['id'], org: 'organisation_id', users: ['created_by'] },
   { name: 'learning_workflow_versions', pk: ['id'], natural: ['workflow_id', 'version'], parent: 'workflow_id', users: ['published_by'] },
-  { name: 'walkthrough_modules', pk: ['id'], org: 'organisation_id', users: ['created_by'] },
+  { name: 'walkthrough_modules', pk: ['id'], natural: ['organisation_id', 'key'], org: 'organisation_id', users: ['created_by'] },
   { name: 'walkthrough_module_versions', pk: ['id'], natural: ['module_id', 'version'], parent: 'module_id', users: ['published_by'] },
   { name: 'onboarding_documents', pk: ['id'], natural: ['organisation_id', 'code'], org: 'organisation_id', users: ['created_by'] },
   { name: 'onboarding_document_versions', pk: ['id'], natural: ['document_id', 'version'], parent: 'document_id', users: ['published_by'] },
@@ -109,11 +110,12 @@ function withTextDates(pg) {
 
 async function columnTypes(client, table) {
   const { rows } = await client.query(
-    `SELECT column_name, data_type, udt_name, is_nullable
+    `SELECT column_name, data_type, udt_name, is_nullable, character_maximum_length
        FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1
       ORDER BY ordinal_position`, [table]);
   if (!rows.length) throw new Error(`Table "${table}" does not exist — run the migrations first (npm run migrate)`);
-  return Object.fromEntries(rows.map((r) => [r.column_name, { type: r.udt_name, nullable: r.is_nullable === 'YES' }]));
+  return Object.fromEntries(rows.map((r) => [r.column_name,
+    { type: r.udt_name, nullable: r.is_nullable === 'YES', maxLength: r.character_maximum_length }]));
 }
 
 // ── Context: which organisation and which owner ───────────────────────────────
@@ -192,21 +194,24 @@ function readSeeds(dir = SEED_DIR) {
   return { manifest: JSON.parse(fs.readFileSync(manifestPath, 'utf8')), content };
 }
 
-// The state file is keyed by database name: one machine may hold several
-// local databases (a dev one, a QA one) at different points of sync.
-function dbKey(client) {
-  return client.database || (client.options && client.options.database) || 'default';
+// The state file is keyed by database name — one machine may hold several
+// local databases at different points of sync — and remembers the database's
+// OID, so a database dropped and recreated under the same name reads as
+// never synced rather than as one full of unexported edits.
+async function dbIdentity(client) {
+  const { rows } = await client.query('SELECT current_database() AS name, oid::text AS oid FROM pg_database WHERE datname = current_database()');
+  return rows[0];
 }
-function readState(file = STATE_FILE, key) {
+function readState(file = STATE_FILE, id) {
   try {
-    const all = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return all[key] || null;
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'))[id.name];
+    return entry && entry.oid === id.oid ? entry : null;
   } catch { return null; }
 }
-function writeState(fp, file = STATE_FILE, key) {
+function writeState(fp, file = STATE_FILE, id) {
   let all = {};
   try { all = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* first write */ }
-  all[key] = { fingerprint: fp, at: new Date().toISOString() };
+  all[id.name] = { oid: id.oid, fingerprint: fp, at: new Date().toISOString() };
   fs.writeFileSync(file, JSON.stringify(all, null, 2) + '\n');
 }
 
@@ -214,7 +219,7 @@ async function exportContent(client, opts = {}) {
   const ctx = await resolveContext(client, opts.ownerEmail);
   const content = await readContent(client, ctx);
   const counts = writeSeeds(content, opts.dir);
-  writeState(fingerprint(content), opts.stateFile, dbKey(client));
+  writeState(fingerprint(content), opts.stateFile, await dbIdentity(client));
   return { counts, fingerprint: fingerprint(content) };
 }
 
@@ -270,24 +275,107 @@ async function applyDeferred(client, t, rows, types) {
 }
 
 /**
- * Remove target rows that would collide with a seeded row on a natural key
- * while carrying a different primary key. Runs children-first, before any
- * upsert, so the seed's ids are the ones that survive.
+ * A target row that holds a seeded row's natural key under a different id
+ * (a package the migrations seeded with a random id, a tag created locally,
+ * an induction the app's "Import existing inductions" made) is ADOPTED, not
+ * dropped: it is moved aside so the seeded row can land, and once every table
+ * is in, whatever referenced the old row — an onboarding assignment, a
+ * learner's progress — is repointed to the seeded id before the old row goes.
+ *
+ * Moving aside means rewriting the last natural-key column (a text code or an
+ * integer version) to a throwaway value. A natural key made only of foreign
+ * keys (a path item: path + resource) names the same logical row, so that
+ * one is simply deleted.
  */
-async function purgeNaturalCollisions(client, t, rows, types, ctx) {
-  const nat = (t.natural || []).filter((c) => types[c]);
-  if (!nat.length || !rows.length) return 0;
-  let removed = 0;
-  for (const r of rows) {
+function naturalKeys(t, types) {
+  if (!t.natural) return [];
+  const list = Array.isArray(t.natural[0]) ? t.natural : [t.natural];
+  return list.map((k) => k.filter((c) => types[c])).filter((k) => k.length);
+}
+
+async function displaceCollisions(client, t, rows, types, ctx) {
+  if (!rows.length || t.pk.length !== 1) return [];
+  const pk = t.pk[0];
+  const displaced = [];
+  for (const nat of naturalKeys(t, types)) for (const r of rows) {
     const vals = nat.map((c) => (c === t.org ? ctx.orgId : r[c]));
     if (vals.some((v) => v == null)) continue;
     const where = nat.map((c, i) => `"${c}" = $${i + 1}${castFor(types[c].type)}`).join(' AND ');
-    const pkNe = t.pk.map((c, i) => `"${c}" <> $${nat.length + i + 1}${castFor(types[c].type)}`).join(' OR ');
-    const { rowCount } = await client.query(
-      `DELETE FROM "${t.name}" WHERE ${where} AND (${pkNe})`, [...vals, ...t.pk.map((c) => r[c])]);
-    removed += rowCount;
+    const { rows: hits } = await client.query(
+      `SELECT "${pk}" AS id FROM "${t.name}" WHERE ${where} AND "${pk}" <> $${nat.length + 1}`, [...vals, r[pk]]);
+    for (const hit of hits) {
+      const keyCol = nat[nat.length - 1];
+      const kt = types[keyCol];
+      const suffix = `~${String(hit.id).slice(0, 8)}`;
+      if (['text', 'varchar', 'bpchar'].includes(kt.type)) {
+        const keep = kt.maxLength ? Math.max(1, kt.maxLength - suffix.length) : null;
+        const expr = keep ? `left("${keyCol}", ${keep}) || $2` : `"${keyCol}" || $2`;
+        await client.query(`UPDATE "${t.name}" SET "${keyCol}" = ${expr} WHERE "${pk}" = $1`, [hit.id, suffix]);
+      } else if (['int2', 'int4', 'int8'].includes(kt.type)) {
+        await client.query(`UPDATE "${t.name}" SET "${keyCol}" = "${keyCol}" + 1000000 WHERE "${pk}" = $1`, [hit.id]);
+      } else {
+        await client.query(`DELETE FROM "${t.name}" WHERE "${pk}" = $1`, [hit.id]);
+        continue;
+      }
+      displaced.push({ table: t.name, pk, oldId: hit.id, newId: r[pk] });
+    }
   }
-  return removed;
+  return displaced;
+}
+
+async function referencingColumns(client, table) {
+  const { rows } = await client.query(
+    `SELECT c.conrelid::regclass::text AS tbl, a.attname AS col
+       FROM pg_constraint c
+       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+      WHERE c.contype = 'f' AND c.confrelid = $1::regclass AND array_length(c.conkey, 1) = 1`, [table]);
+  return rows;
+}
+
+/**
+ * Retire one old row in favour of the seeded one: repoint every row outside
+ * the seed that referenced it, do the same for its content children matched
+ * by natural key under the new parent (an assignment pins a package AND its
+ * version), then delete it — cascade takes the children nobody matched.
+ */
+async function adoptRow(client, table, oldId, newId, refCache, contentTables) {
+  let repointed = 0;
+  const t = TABLES.find((x) => x.name === table);
+  for (const child of TABLES) {
+    if (!child.parent || parentTableOf(child.parent) !== table || !child.natural || child.pk.length !== 1) continue;
+    const key = Array.isArray(child.natural[0]) ? child.natural[0] : child.natural;
+    if (!key.includes(child.parent)) continue;
+    const others = key.filter((c) => c !== child.parent);
+    if (!others.length) continue;
+    const { rows: olds } = await client.query(
+      `SELECT "${child.pk[0]}" AS id, ${others.map((c) => `"${c}"`).join(', ')} FROM "${child.name}" WHERE "${child.parent}" = $1`, [oldId]);
+    for (const o of olds) {
+      const { rows: news } = await client.query(
+        `SELECT "${child.pk[0]}" AS id FROM "${child.name}" WHERE "${child.parent}" = $1 AND ${others.map((c, i) => `"${c}" = $${i + 2}`).join(' AND ')}`,
+        [newId, ...others.map((c) => o[c])]);
+      if (news.length) repointed += await adoptRow(client, child.name, o.id, news[0].id, refCache, contentTables);
+    }
+  }
+  refCache[table] = refCache[table] || await referencingColumns(client, table);
+  for (const ref of refCache[table]) {
+    // Content tables' own children of the old row are the seed's business
+    // (matched above, or cascade-deleted with it); only the rows outside the
+    // seed — assignments, progress, acknowledgements — need moving.
+    if (contentTables.has(ref.tbl)) continue;
+    const { rowCount } = await client.query(
+      `UPDATE ${ref.tbl} SET "${ref.col}" = $1 WHERE "${ref.col}" = $2`, [newId, oldId]);
+    repointed += rowCount;
+  }
+  await client.query(`DELETE FROM "${table}" WHERE "${t.pk[0]}" = $1`, [oldId]);
+  return repointed;
+}
+
+async function adoptDisplaced(client, displaced) {
+  const contentTables = new Set(TABLES.map((t) => t.name));
+  const refCache = {};
+  let repointed = 0;
+  for (const d of displaced) repointed += await adoptRow(client, d.table, d.oldId, d.newId, refCache, contentTables);
+  return repointed;
 }
 
 async function deleteStale(client, t, rows, ctx, seededParents) {
@@ -324,7 +412,8 @@ async function importWith(client, opts) {
   const ctx = await resolveContext(client, opts.ownerEmail);
 
   // Refuse to overwrite edits nobody exported, unless told to.
-  const state = readState(opts.stateFile, dbKey(client));
+  // Refuse to overwrite edits nobody exported, unless told to.
+  const state = readState(opts.stateFile, await dbIdentity(client));
   if (state && !opts.force) {
     const current = fingerprint(await readContent(client, ctx));
     if (current !== state.fingerprint) {
@@ -343,16 +432,21 @@ async function importWith(client, opts) {
     // forward reference always has its target), then the deferred columns.
     const typesByTable = {};
     for (const t of TABLES) typesByTable[t.name] = await columnTypes(client, t.name);
-    for (const t of [...TABLES].reverse()) {
-      await purgeNaturalCollisions(client, t, seeds.content[t.name] || [], typesByTable[t.name], ctx);
+    const displaced = [];
+    for (const t of TABLES) {
+      displaced.push(...await displaceCollisions(client, t, seeds.content[t.name] || [], typesByTable[t.name], ctx));
     }
     for (const t of TABLES) {
       const rows = seeds.content[t.name] || [];
       if (rows.length) await upsertTable(client, t, rows, typesByTable[t.name], ctx);
       seededParents[t.name] = rows.map((r) => r.id).filter(Boolean);
-      summary[t.name] = { upserted: rows.length, deleted: 0 };
+      summary[t.name] = { upserted: rows.length, deleted: 0, adopted: 0 };
     }
     for (const t of TABLES) await applyDeferred(client, t, seeds.content[t.name] || [], typesByTable[t.name]);
+    // Children-first: a displaced version row must be resolved before the
+    // package it hangs off is deleted.
+    summary.repointed = await adoptDisplaced(client, [...displaced].reverse());
+    for (const d of displaced) summary[d.table].adopted += 1;
     // Stale rows go children-first so no FK complains.
     for (const t of [...TABLES].reverse()) {
       summary[t.name].deleted = await deleteStale(client, t, seeds.content[t.name] || [], ctx, seededParents);
@@ -362,7 +456,7 @@ async function importWith(client, opts) {
     await client.query('ROLLBACK');
     throw e;
   }
-  writeState(fingerprint(await readContent(client, ctx)), opts.stateFile, dbKey(client));
+  writeState(fingerprint(await readContent(client, ctx)), opts.stateFile, await dbIdentity(client));
   return { summary, manifest: seeds.manifest };
 }
 
@@ -387,14 +481,18 @@ async function main() {
       console.log(`\nExported ${total} rows to seeds/content/. Review with git diff, then commit.`);
     } else if (cmd === 'import') {
       const { summary, manifest } = await importContent(client, { force });
-      for (const [t, s] of Object.entries(summary)) {
-        if (s.upserted || s.deleted) console.log(`  ${String(s.upserted).padStart(5)} in, ${String(s.deleted).padStart(3)} removed  ${t}`);
+      for (const t of TABLES) {
+        const s = summary[t.name];
+        if (s.upserted || s.deleted || s.adopted) {
+          console.log(`  ${String(s.upserted).padStart(5)} in, ${String(s.deleted).padStart(3)} removed, ${String(s.adopted).padStart(3)} adopted  ${t.name}`);
+        }
       }
+      if (summary.repointed) console.log(`  ${summary.repointed} row(s) outside the seed (assignments, progress) now point at the seeded ids.`);
       console.log(`\nImported seeds exported ${manifest.exported_at}. Uploaded Resource Hub files are not in git — copy the RESOURCE_HUB_STORAGE_PATH folder separately.`);
     } else if (cmd === 'status') {
       const ctx = await resolveContext(client);
       const current = fingerprint(await readContent(client, ctx));
-      const state = readState(STATE_FILE, dbKey(client));
+      const state = readState(STATE_FILE, await dbIdentity(client));
       const seeds = readSeeds();
       console.log(`database:   ${current.slice(0, 12)}${state ? (state.fingerprint === current ? '  (matches last sync)' : '  (UNEXPORTED local edits)') : '  (never synced)'}`);
       console.log(`seeds/:     ${seeds ? seeds.manifest.fingerprint.slice(0, 12) + (seeds.manifest.fingerprint === current ? '  (database matches)' : '  (differs from database)') : 'none'}`);

@@ -69,7 +69,10 @@ async function authorContent(orgId, userId) {
     [orgId, doc.id, wf.id, userId]);
   await db.pool.query(
     `INSERT INTO onboarding_package_requirements (package_id, template_id, sort_order) VALUES ($1, $2, 1)`, [pkg.id, tpl.id]);
-  return { parent, child, res, tag, wf, doc, pkg, tpl };
+  const ver = await q(
+    `INSERT INTO onboarding_package_versions (package_id, version, title, content, published_by)
+     VALUES ($1, 1, 'OT Starter', '{"requirements":[]}', $2) RETURNING *`, [pkg.id, userId]);
+  return { parent, child, res, tag, wf, doc, pkg, tpl, ver };
 }
 
 const count = async (table, where = '', p = []) =>
@@ -141,6 +144,39 @@ describe('content-seed export → import', () => {
     const tags = (await db.pool.query(`SELECT id FROM resource_tags WHERE category = 'topic' AND name = 'sensory'`)).rows;
     expect(tags.map((t) => t.id)).toEqual([a.tag.id]);
     expect(await count('resource_tag_links', 'WHERE tag_id = $1', [a.tag.id])).toBe(1);
+  });
+
+  test('a package the target already holds under another id is adopted: its assignment follows the seeded ids', async () => {
+    // The primary machine's content …
+    const a = await authorContent(org.id, owner.id);
+    await seed.exportContent(db.pool, opts());
+
+    // … and a second machine whose migrations seeded the same package and
+    // document under random ids, where someone then created an onboarding
+    // assignment (RESTRICT references to the package and its version) before
+    // the first import.
+    await truncateAll();
+    const org2 = await seedOrganisation('Opal Therapy');
+    const owner2 = await seedUser({ role: 'owner', organisation_id: org2.id, email: 'owner@opaltherapy.dev' });
+    fs.rmSync(stateFile, { force: true });
+    const local = await authorContent(org2.id, owner2.id);
+    expect(local.pkg.id).not.toBe(a.pkg.id);
+    const { rows: [asg] } = await db.pool.query(
+      `INSERT INTO onboarding_assignments (organisation_id, package_id, package_version_id, applicant_name, applicant_email, employment_type)
+       VALUES ($1, $2, $3, 'Test Applicant', 'applicant@test.invalid', 'full_time') RETURNING id`,
+      [org2.id, local.pkg.id, local.ver.id]);
+
+    const { summary } = await seed.importContent(db.pool, opts());
+    expect(summary.onboarding_packages.adopted).toBe(1);
+    expect(summary.repointed).toBeGreaterThanOrEqual(2);
+
+    const after = (await db.pool.query('SELECT package_id, package_version_id FROM onboarding_assignments WHERE id = $1', [asg.id])).rows[0];
+    expect(after.package_id).toBe(a.pkg.id);
+    expect(after.package_version_id).toBe(a.ver.id);
+    expect(await count('onboarding_packages', 'WHERE organisation_id = $1', [org2.id])).toBe(1);
+    expect(await count('onboarding_package_versions')).toBe(1);
+    expect(await count('onboarding_documents', 'WHERE organisation_id = $1', [org2.id])).toBe(1);
+    expect((await db.pool.query('SELECT code FROM onboarding_packages')).rows[0].code).toBe('ot-starter');
   });
 
   test('refuses to overwrite unexported local edits unless forced', async () => {
