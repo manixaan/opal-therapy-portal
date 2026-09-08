@@ -685,7 +685,7 @@
   function startForm(opts, t) {
     var staff = [['', '— Not set —']].concat((opts.staff || []).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
     var roleCats = [['', '— Choose —']].concat((opts.roleCategories || []).map(function (c) { return [c, titleCase(c)]; }));
-    var pkgs = [['', 'Recommend from role and employment type']].concat((opts.packages || []).map(function (p) { return [p.id, p.title]; }));
+    var pkgs = (opts.packages || []).map(function (p) { return [p.id, p.title]; });
     return ''
       + '<form class="oj-form" id="oj-start" onsubmit="return OnboardingJourney.submitStart(event)">'
       + '<section class="oj-panel"><h2>Who</h2>'
@@ -704,7 +704,7 @@
       + termsFields(opts, t)
       + '</section>'
       + '<section class="oj-panel"><h2>Onboarding package</h2>'
-      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, t.packageId || ''), 'Left alone, the portal picks the published package that matches the role and employment type.')
+      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, t.packageId || ''), 'The published document pack this hire will receive.')
       + field('oj-f-notes', 'Internal note (optional)', '<textarea id="oj-f-notes" rows="2" maxlength="2000">' + esc(t.notes || '') + '</textarea>')
       + '</section>'
       + '<div id="oj-start-error" class="ob-note is-danger" role="alert" hidden></div>'
