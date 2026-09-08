@@ -1,0 +1,589 @@
+[
+ {
+  "id": "001c86d9-18c5-42a8-9b43-e2583db5eaeb",
+  "category": "therapy_area",
+  "name": "Feeding",
+  "aliases": [
+   "mealtime",
+   "mealtimes",
+   "picky eating",
+   "SOS feeding"
+  ]
+ },
+ {
+  "id": "01f80b2c-d000-4e20-89e3-95ce3fafbf70",
+  "category": "population",
+  "name": "Adolescents",
+  "aliases": []
+ },
+ {
+  "id": "03231694-d9fe-4ee4-a2a9-76ee94e95c67",
+  "category": "type",
+  "name": "NDIS evidence guide",
+  "aliases": [
+   "NDIS pricing",
+   "PAPL",
+   "price guide",
+   "pricing arrangements"
+  ]
+ },
+ {
+  "id": "05bff433-152c-4ed2-8216-1e9eaa2cbd33",
+  "category": "therapy_area",
+  "name": "Gross motor",
+  "aliases": []
+ },
+ {
+  "id": "06eb9eed-efc6-48c0-a046-48f212b2cde1",
+  "category": "population",
+  "name": "Community-based therapy",
+  "aliases": []
+ },
+ {
+  "id": "0c5f7f8d-f56d-4bea-a297-c03bbae654ff",
+  "category": "therapy_area",
+  "name": "Handwriting",
+  "aliases": []
+ },
+ {
+  "id": "0cb748f6-71e2-43cd-aff9-2302ae73ce3b",
+  "category": "therapy_area",
+  "name": "Social skills",
+  "aliases": []
+ },
+ {
+  "id": "0cf69e40-71b8-40a4-a3f4-04d8cf053ded",
+  "category": "therapy_area",
+  "name": "Fine motor",
+  "aliases": []
+ },
+ {
+  "id": "0d01088b-a865-459d-8d9b-73eaff24b75d",
+  "category": "diagnosis",
+  "name": "Behaviour of Concern",
+  "aliases": []
+ },
+ {
+  "id": "13d49cbc-64a8-41d0-84db-a2a4ebac04b1",
+  "category": "diagnosis",
+  "name": "Sensory Processing",
+  "aliases": []
+ },
+ {
+  "id": "174bb402-70c1-48c8-ba67-ee5622c3f84e",
+  "category": "type",
+  "name": "PD video",
+  "aliases": [
+   "PD",
+   "professional development",
+   "CPD",
+   "supervision",
+   "online learning"
+  ]
+ },
+ {
+  "id": "189ef60d-416e-4d19-b921-186ed1d4e532",
+  "category": "therapy_area",
+  "name": "Sensory processing",
+  "aliases": [
+   "sensory",
+   "sensory integration",
+   "ASI"
+  ]
+ },
+ {
+  "id": "1912ece9-8e99-4688-8b22-a9ff91907179",
+  "category": "therapy_area",
+  "name": "IADLs",
+  "aliases": []
+ },
+ {
+  "id": "1946909e-e298-4cf4-9b30-5034e76ffd72",
+  "category": "type",
+  "name": "Handout",
+  "aliases": []
+ },
+ {
+  "id": "1ead67ff-d1ea-4da3-be73-cafcbb282fa2",
+  "category": "therapy_area",
+  "name": "Toileting",
+  "aliases": []
+ },
+ {
+  "id": "2cd907bd-8fc2-4436-9788-4d724d521753",
+  "category": "diagnosis",
+  "name": "Acquired Brain Injury",
+  "aliases": [
+   "ABI",
+   "TBI",
+   "brain injury"
+  ]
+ },
+ {
+  "id": "300c828e-9374-41f1-8b1d-ea565d4f697d",
+  "category": "therapy_area",
+  "name": "Mobility",
+  "aliases": []
+ },
+ {
+  "id": "37a8298e-b0ed-4318-a3d4-9a89f5029f58",
+  "category": "therapy_area",
+  "name": "Oral sensory / chewing",
+  "aliases": []
+ },
+ {
+  "id": "3908c890-2afd-4fe4-8147-518748562578",
+  "category": "diagnosis",
+  "name": "Anxiety",
+  "aliases": []
+ },
+ {
+  "id": "3b8f5be3-ef4b-43d6-ae74-f6ef4c1fbac4",
+  "category": "diagnosis",
+  "name": "Developmental Coordination Disorder",
+  "aliases": []
+ },
+ {
+  "id": "3ce3a520-323d-4ce5-a7ed-3b77d7284aa6",
+  "category": "diagnosis",
+  "name": "Feeding Difficulties",
+  "aliases": []
+ },
+ {
+  "id": "422b25f0-9a7f-4496-83a2-00dcefbfaad5",
+  "category": "type",
+  "name": "Visual support",
+  "aliases": []
+ },
+ {
+  "id": "466cd322-ed05-41cf-a8a1-b54cc1a9123d",
+  "category": "type",
+  "name": "Assessment support",
+  "aliases": [
+   "FCA",
+   "functional capacity assessment",
+   "functional assessment",
+   "outcome measures",
+   "outcome measure",
+   "standardised assessment"
+  ]
+ },
+ {
+  "id": "4ad1bcb4-0256-498c-b9f2-594c18d23eca",
+  "category": "type",
+  "name": "Product link",
+  "aliases": []
+ },
+ {
+  "id": "51b2f91a-7d74-4c63-a208-3103fda9e8fa",
+  "category": "therapy_area",
+  "name": "Executive functioning",
+  "aliases": []
+ },
+ {
+  "id": "5661e890-0a9e-49ce-9243-3e6f324498d2",
+  "category": "therapy_area",
+  "name": "Communication supports",
+  "aliases": []
+ },
+ {
+  "id": "597fb978-280c-43f7-ab37-dfed97bce713",
+  "category": "therapy_area",
+  "name": "Community access",
+  "aliases": []
+ },
+ {
+  "id": "59bfbd56-025f-4ea2-a34a-0498c0702f69",
+  "category": "therapy_area",
+  "name": "Assistive technology",
+  "aliases": [
+   "AT",
+   "assistive tech",
+   "NED",
+   "equipment database"
+  ]
+ },
+ {
+  "id": "5c8375bc-2c68-4aa8-93c8-ab8b890b0a07",
+  "category": "type",
+  "name": "Worksheet",
+  "aliases": []
+ },
+ {
+  "id": "5c8ba73a-2547-4de8-9839-44478fb81a75",
+  "category": "diagnosis",
+  "name": "Down Syndrome",
+  "aliases": []
+ },
+ {
+  "id": "608431cb-bdef-4de1-8da6-cdf46793a484",
+  "category": "diagnosis",
+  "name": "Psychosocial Disability",
+  "aliases": [
+   "mental health",
+   "trauma",
+   "PTSD",
+   "trauma-informed care"
+  ]
+ },
+ {
+  "id": "639cc242-3197-40f5-bf52-2cf1c1855859",
+  "category": "origin",
+  "name": "International",
+  "aliases": []
+ },
+ {
+  "id": "6b419b0a-d902-44d8-ae83-b227a527b988",
+  "category": "type",
+  "name": "Equipment idea",
+  "aliases": []
+ },
+ {
+  "id": "6c5ced79-5e91-49c4-ba87-20f431b7c4d5",
+  "category": "diagnosis",
+  "name": "Amputation",
+  "aliases": []
+ },
+ {
+  "id": "6fb57284-1d56-42ef-a0fd-17ccd586c12b",
+  "category": "type",
+  "name": "School strategy",
+  "aliases": []
+ },
+ {
+  "id": "711a603f-aeb0-4b6d-ac54-8650ff621b42",
+  "category": "type",
+  "name": "Activity idea",
+  "aliases": []
+ },
+ {
+  "id": "7442014a-094a-409b-85b2-d7a26b56ef8e",
+  "category": "therapy_area",
+  "name": "Equipment prescription",
+  "aliases": [
+   "wheelchair",
+   "seating",
+   "pressure care"
+  ]
+ },
+ {
+  "id": "7abc4c6e-5306-458b-b7d8-5e68c89a2b79",
+  "category": "therapy_area",
+  "name": "Cooking",
+  "aliases": []
+ },
+ {
+  "id": "7c977e60-b29d-4a75-b528-8f4b0e40688a",
+  "category": "therapy_area",
+  "name": "Work readiness",
+  "aliases": []
+ },
+ {
+  "id": "831712e9-b31a-489f-a953-2f2384fde8f8",
+  "category": "population",
+  "name": "Remote/rural clients",
+  "aliases": [
+   "rural trip",
+   "rural travel",
+   "remote travel"
+  ]
+ },
+ {
+  "id": "87c3b0db-4b74-4f81-8fc7-842a9193ac79",
+  "category": "therapy_area",
+  "name": "Sleep",
+  "aliases": [
+   "sleep hygiene",
+   "bedtime",
+   "sleep routines"
+  ]
+ },
+ {
+  "id": "8977bb25-bf5b-438f-b49e-f17a8ae5ed3b",
+  "category": "therapy_area",
+  "name": "ADLs",
+  "aliases": []
+ },
+ {
+  "id": "8ac70061-d5be-41d9-aaed-c2d4796e9115",
+  "category": "therapy_area",
+  "name": "Capacity building",
+  "aliases": []
+ },
+ {
+  "id": "8d48c0b6-99b7-438c-bdd8-7e0e355ab5e5",
+  "category": "population",
+  "name": "Children",
+  "aliases": [
+   "F-words",
+   "childhood disability",
+   "ICF"
+  ]
+ },
+ {
+  "id": "8e0d6e74-af46-464d-87dd-0bbe4767357d",
+  "category": "diagnosis",
+  "name": "Chronic Pain",
+  "aliases": []
+ },
+ {
+  "id": "92ffbce4-2514-4ac0-ab87-4c97aea28d9b",
+  "category": "population",
+  "name": "Early childhood",
+  "aliases": []
+ },
+ {
+  "id": "9407a150-0c1c-4ceb-99e4-89ac76b217be",
+  "category": "type",
+  "name": "Template",
+  "aliases": []
+ },
+ {
+  "id": "946cc35f-b539-4c16-95fb-891b6e2c4c7a",
+  "category": "therapy_area",
+  "name": "Home safety",
+  "aliases": [
+   "home mods",
+   "home modifications",
+   "HM assessment"
+  ]
+ },
+ {
+  "id": "94e8a800-f75b-4ec7-9887-e86b7617ee8f",
+  "category": "diagnosis",
+  "name": "Intellectual Disability",
+  "aliases": []
+ },
+ {
+  "id": "95071fa8-b542-4274-be97-d0279b7c4588",
+  "category": "therapy_area",
+  "name": "Money management",
+  "aliases": []
+ },
+ {
+  "id": "97848136-e998-46b6-bfcc-01fc9f858db2",
+  "category": "diagnosis",
+  "name": "Cerebral Palsy",
+  "aliases": []
+ },
+ {
+  "id": "98d9dfca-cf16-450b-a25e-62e2454022bd",
+  "category": "diagnosis",
+  "name": "Emotional Regulation",
+  "aliases": []
+ },
+ {
+  "id": "9e4184de-cd2a-4390-9c08-f087f6eba9d0",
+  "category": "flag",
+  "name": "Essential",
+  "aliases": []
+ },
+ {
+  "id": "9f5f47c6-46fa-4e15-824d-cd0b97e96256",
+  "category": "diagnosis",
+  "name": "Executive Functioning Difficulties",
+  "aliases": []
+ },
+ {
+  "id": "a0c6b30b-05d7-4caa-a07e-d4da9ac0b7ed",
+  "category": "type",
+  "name": "Home program",
+  "aliases": []
+ },
+ {
+  "id": "a33404fb-a84e-4c04-acfe-2a3054eeae8c",
+  "category": "cost",
+  "name": "Paid",
+  "aliases": []
+ },
+ {
+  "id": "a63ff95d-030e-478f-8f09-467eb80bac7d",
+  "category": "diagnosis",
+  "name": "Autism",
+  "aliases": []
+ },
+ {
+  "id": "a67f8ddc-93e7-4643-aaf4-843a16c4c611",
+  "category": "type",
+  "name": "Research article",
+  "aliases": [
+   "evidence",
+   "evidence-based practice",
+   "EBP",
+   "systematic review"
+  ]
+ },
+ {
+  "id": "a6c8ae67-ab8e-4c90-946c-b5a3a422748c",
+  "category": "therapy_area",
+  "name": "Personal care",
+  "aliases": []
+ },
+ {
+  "id": "a6eb8ff1-3674-4634-94f8-8a3840aa92bc",
+  "category": "diagnosis",
+  "name": "Neurological Conditions",
+  "aliases": [
+   "stroke",
+   "CVA",
+   "dementia"
+  ]
+ },
+ {
+  "id": "ab60c019-1327-4aeb-b7cd-7812afabcdd2",
+  "category": "population",
+  "name": "School-based therapy",
+  "aliases": []
+ },
+ {
+  "id": "b155e4f4-84ff-4b10-9201-733a6810c42a",
+  "category": "diagnosis",
+  "name": "Physical Disability",
+  "aliases": [
+   "SCI",
+   "spinal cord injury"
+  ]
+ },
+ {
+  "id": "b1b3b7e6-c36d-45bf-a2e8-265b0a8fc731",
+  "category": "therapy_area",
+  "name": "School participation",
+  "aliases": [
+   "school",
+   "classroom"
+  ]
+ },
+ {
+  "id": "b6836da9-3c57-435f-be5c-ec399f99464b",
+  "category": "therapy_area",
+  "name": "Emotional regulation",
+  "aliases": [
+   "interoception",
+   "self-regulation",
+   "self regulation"
+  ]
+ },
+ {
+  "id": "b95a4142-6c48-445f-9efb-b4d900ac6e55",
+  "category": "type",
+  "name": "Report-writing phrase bank",
+  "aliases": [
+   "case notes",
+   "clinical notes",
+   "progress notes",
+   "documentation"
+  ]
+ },
+ {
+  "id": "beffc9c3-3532-4568-b445-168ba20c2905",
+  "category": "diagnosis",
+  "name": "Schizophrenia / Schizoaffective",
+  "aliases": []
+ },
+ {
+  "id": "c25c1e5e-5082-48b8-af28-845f54e037fa",
+  "category": "population",
+  "name": "Adults",
+  "aliases": []
+ },
+ {
+  "id": "c4a248e0-6f9c-4d98-a5e3-3e5bb984884a",
+  "category": "type",
+  "name": "Risk/safety guide",
+  "aliases": [
+   "risk assessment",
+   "professional boundaries",
+   "safety planning"
+  ]
+ },
+ {
+  "id": "cd3b04df-2ae5-4f7c-8bb5-153796f69a63",
+  "category": "therapy_area",
+  "name": "Parent coaching",
+  "aliases": []
+ },
+ {
+  "id": "d4fa5004-7dd1-4647-8f7f-8e08ac7e8ef5",
+  "category": "diagnosis",
+  "name": "FASD",
+  "aliases": []
+ },
+ {
+  "id": "d56c1207-d5f5-4abc-84b7-74f21d98e728",
+  "category": "therapy_area",
+  "name": "Routine building",
+  "aliases": []
+ },
+ {
+  "id": "d75605f7-1c47-4467-98f7-fc1ed90bc4c1",
+  "category": "diagnosis",
+  "name": "Developmental Delay",
+  "aliases": []
+ },
+ {
+  "id": "d884d5c9-e339-49ee-9713-df17f9572e07",
+  "category": "therapy_area",
+  "name": "Play skills",
+  "aliases": []
+ },
+ {
+  "id": "d957434a-ae80-4cda-9dc0-9aa96a9ec114",
+  "category": "type",
+  "name": "Case example",
+  "aliases": []
+ },
+ {
+  "id": "e2d16d20-18c9-4c2f-8aa9-7a15c46318eb",
+  "category": "diagnosis",
+  "name": "Handwriting Difficulties",
+  "aliases": []
+ },
+ {
+  "id": "e575641c-643e-4e16-af9d-a0be988a69c1",
+  "category": "population",
+  "name": "Older adults",
+  "aliases": []
+ },
+ {
+  "id": "e8483cbb-8c6d-4c7e-b8c7-a9b12ddb2dcb",
+  "category": "population",
+  "name": "Home-based therapy",
+  "aliases": []
+ },
+ {
+  "id": "eb000d6b-a67d-4bed-a963-fd514ca8e295",
+  "category": "cost",
+  "name": "Free",
+  "aliases": []
+ },
+ {
+  "id": "eb1f9929-4aa0-4d63-9bf4-27391a2c0dbf",
+  "category": "origin",
+  "name": "Australia",
+  "aliases": []
+ },
+ {
+  "id": "f25f8126-2472-4f4b-99b9-07934dab596f",
+  "category": "diagnosis",
+  "name": "Global Developmental Delay",
+  "aliases": []
+ },
+ {
+  "id": "f4a7f6e2-7f44-4048-987c-599b5fc8a39d",
+  "category": "therapy_area",
+  "name": "NDIS",
+  "aliases": []
+ },
+ {
+  "id": "f623db8d-78c7-41a6-94df-639e6b7db29b",
+  "category": "type",
+  "name": "Session plan",
+  "aliases": []
+ },
+ {
+  "id": "f74a3905-f088-4e62-8ed0-cb313432716d",
+  "category": "diagnosis",
+  "name": "ADHD",
+  "aliases": []
+ }
+]

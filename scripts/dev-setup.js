@@ -52,7 +52,7 @@ function run(cmd, cmdArgs, opts = {}) {
 }
 
 // ── 1. Toolchain ──────────────────────────────────────────────────────────────
-step('1/6  Toolchain');
+step('1/7  Toolchain');
 const major = Number(process.versions.node.split('.')[0]);
 if (major >= 20 && major < 27) ok(`node ${process.versions.node}`);
 else bad(`node ${process.versions.node} is outside the supported range (>=20 <27)`, 'nvm install 26 && nvm use 26   (the repo has an .nvmrc)');
@@ -65,7 +65,7 @@ for (const tool of ['psql', 'createdb']) {
 }
 
 // ── 2. PostgreSQL reachable ──────────────────────────────────────────────────
-step('2/6  PostgreSQL');
+step('2/7  PostgreSQL');
 const pgEnv = { ...process.env, PGPASSWORD: DB_PASSWORD };
 const ping = spawnSync('psql', ['-U', DB_USER, '-d', 'postgres', '-Atc', 'select 1'], { stdio: 'pipe', env: pgEnv });
 if (ping.status === 0) ok(`connected as ${DB_USER}@localhost`);
@@ -73,7 +73,7 @@ else bad(`cannot connect to PostgreSQL as "${DB_USER}"`,
   `is the service running? brew services list · does the role exist? createuser -s ${DB_USER} · wrong password? DB_PASSWORD=... npm run setup`);
 
 // ── 3. backend/.env ───────────────────────────────────────────────────────────
-step('3/6  backend/.env');
+step('3/7  backend/.env');
 if (fs.existsSync(ENV_FILE)) {
   ok('backend/.env already exists — left untouched');
 } else if (CHECK_ONLY) {
@@ -111,7 +111,7 @@ if (fs.existsSync(ENV_FILE)) {
 }
 
 // ── 4. Dependencies ───────────────────────────────────────────────────────────
-step('4/6  Dependencies');
+step('4/7  Dependencies');
 const backendReady = fs.existsSync(path.join(BACKEND, 'node_modules', 'express'));
 const rootReady = fs.existsSync(path.join(ROOT, 'node_modules', 'dotenv'));
 if (CHECK_ONLY) {
@@ -123,7 +123,7 @@ if (CHECK_ONLY) {
 }
 
 // ── 5. Database create + migrate ──────────────────────────────────────────────
-step('5/6  Database');
+step('5/7  Database');
 if (ping.status !== 0) {
   bad('skipped — PostgreSQL is not reachable (see step 2)');
 } else {
@@ -145,7 +145,7 @@ if (ping.status !== 0) {
 }
 
 // ── 6. Dev logins ─────────────────────────────────────────────────────────────
-step('6/6  Development logins');
+step('6/7  Development logins');
 if (CHECK_ONLY || ping.status !== 0) {
   info('skipped');
 } else {
@@ -157,6 +157,23 @@ if (CHECK_ONLY || ping.status !== 0) {
   } else {
     info('add --demo for a populated week of demo appointments');
   }
+}
+
+// ── 7. Authored content from git ─────────────────────────────────────────────
+// Inductions, onboarding packages, walkthroughs and the Resource Hub catalogue
+// live in seeds/content/ (backend/scripts/content-seed.js). A fresh database
+// loads them here; afterwards `npm run content:import` after every pull.
+step('7/7  Authored content (seeds/content)');
+const SEED_MANIFEST = path.join(ROOT, 'seeds', 'content', 'manifest.json');
+if (CHECK_ONLY || ping.status !== 0) {
+  info('skipped');
+} else if (!fs.existsSync(SEED_MANIFEST)) {
+  info('no seeds/content in this checkout — nothing to load');
+} else {
+  const r = spawnSync('node', ['scripts/content-seed.js', 'import'], { stdio: 'pipe', cwd: BACKEND,
+    env: { ...process.env, DB_NAME, DB_USER, DB_PASSWORD } });
+  if (r.status === 0) ok('loaded inductions, onboarding packages, walkthroughs and the Resource Hub catalogue');
+  else bad(`content import failed: ${String(r.stderr || r.stdout).trim().split('\n').pop()}`, 'npm run content:import   (add --force to discard unexported local edits)');
 }
 
 // ── Done ──────────────────────────────────────────────────────────────────────

@@ -1,0 +1,1132 @@
+[
+ {
+  "id": "037be510-7e10-4ba2-9842-7ad206ebfc85",
+  "organisation_id": null,
+  "title": "Opal Portal Induction",
+  "description": "The interactive walkthroughs of the portal itself: calendar, bookings, travel, resources and your profile.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-de148210",
+     "items": [
+      {
+       "key": "i-0da354ca",
+       "body": "",
+       "type": "resource",
+       "title": "Getting Started with the Opal Portal",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "70b5ac36-c7f5-4528-8916-7f52999cf5d5",
+       "resource_title": "Getting Started with the Opal Portal"
+      },
+      {
+       "key": "i-f819600f",
+       "body": "",
+       "type": "resource",
+       "title": "Your Profile and Documents",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "d14526e5-4205-47a4-a828-c21ba0a148c4",
+       "resource_title": "Your Profile and Documents"
+      },
+      {
+       "key": "i-9c9ac389",
+       "body": "",
+       "type": "resource",
+       "title": "Connecting Outlook",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "e5826760-4b88-4f0d-a08f-f4c2b3170004",
+       "resource_title": "Connecting Outlook"
+      },
+      {
+       "key": "i-1d1e8967",
+       "body": "",
+       "type": "resource",
+       "title": "Using the Calendar (Day, Week, Month)",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "e9c33a51-07d9-4b55-aeae-596029d79db3",
+       "resource_title": "Using the Calendar (Day, Week, Month)"
+      },
+      {
+       "key": "i-8214e2ad",
+       "body": "",
+       "type": "resource",
+       "title": "Booking an Appointment",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "56ad7a3b-a0c7-4b03-ae95-8caef252249a",
+       "resource_title": "Booking an Appointment"
+      },
+      {
+       "key": "i-bf7c17c2",
+       "body": "",
+       "type": "resource",
+       "title": "The Travel Logbook",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "1d0d64f5-301b-499d-89e5-1c31dba4e06a",
+       "resource_title": "The Travel Logbook"
+      }
+     ],
+     "title": "Portal walkthroughs"
+    },
+    {
+     "key": "s-032b41e8",
+     "items": [
+      {
+       "key": "i-aadffe9f",
+       "body": "",
+       "type": "resource",
+       "title": "Using the Resource Hub",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "acf0675a-6394-4237-a393-a5d5baf8af20",
+       "resource_title": "Using the Resource Hub"
+      },
+      {
+       "key": "i-05d3696a",
+       "body": "",
+       "type": "resource",
+       "title": "Notifications",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "8874d79f-3b3f-4125-9339-3280ab024e18",
+       "resource_title": "Notifications"
+      },
+      {
+       "key": "i-59a33c27",
+       "body": "",
+       "type": "resource",
+       "title": "Meet Opa, Your Practice Sidekick",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "caaa0cec-820d-43ef-a762-a318a3a59095",
+       "resource_title": "Meet Opa, Your Practice Sidekick"
+      },
+      {
+       "key": "i-1c55cfb0",
+       "body": "",
+       "type": "resource",
+       "title": "The Master Scheduler",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "6a48a774-bf7e-420c-a355-00372cb51679",
+       "resource_title": "The Master Scheduler"
+      },
+      {
+       "key": "i-acd6c93b",
+       "body": "",
+       "type": "resource",
+       "title": "Inviting Therapists",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "cbd3a4fe-bc52-412a-a693-a05f667f774d",
+       "resource_title": "Inviting Therapists (Owner)"
+      }
+     ],
+     "title": "Portal walkthroughs (continued)"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": "OWNER",
+  "created_at": "2026-08-30 08:38:21.644661+00",
+  "updated_at": "2026-08-30 08:38:21.644661+00",
+  "archived_at": null
+ },
+ {
+  "id": "157003f5-fdd2-46b2-b7c1-fb1c94cbcbf2",
+  "organisation_id": null,
+  "title": "Rural & Remote Starter",
+  "description": "Working safely and effectively on rural and remote service runs.",
+  "category": "rural_remote",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-23d4963a",
+     "items": [
+      {
+       "key": "i-bc189a21",
+       "body": "Multi-day runs, accommodation, kit lists and how travel time is recorded.",
+       "type": "content",
+       "title": "How rural runs work",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-38f8e914",
+       "body": "Cultural safety, working in schools and homes, and who to call when plans change.",
+       "type": "content",
+       "title": "Working in community",
+       "minutes": 15,
+       "required": true
+      }
+     ],
+     "title": "Rural service delivery"
+    },
+    {
+     "key": "s-cc7ec3cc",
+     "items": [
+      {
+       "key": "i-ed238a3b",
+       "body": "Journey plans, check-ins, fatigue rules and what to do when a road is closed.",
+       "type": "content",
+       "title": "Vehicle and journey safety",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-04057fc2",
+       "body": "",
+       "type": "acknowledgement",
+       "title": "Journey safety acknowledgement",
+       "required": true,
+       "ack_statement": "I will follow the journey management procedure on every rural run, including check-ins and fatigue limits."
+      }
+     ],
+     "title": "Safety"
+    }
+   ]
+  },
+  "current_version": 1,
+  "created_by": null,
+  "created_at": "2026-08-20 00:03:19.055661+00",
+  "updated_at": "2026-08-21 05:44:21.405585+00",
+  "archived_at": null
+ },
+ {
+  "id": "15bc3a3c-8700-4c28-b899-cdc30698d518",
+  "organisation_id": null,
+  "title": "New Starter — Admin",
+  "description": "For admin staff: portal mastery, scheduling, privacy and the policies that govern handling client information.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-4e2a92b6",
+     "items": [
+      {
+       "key": "i-f2008cdb",
+       "body": "",
+       "type": "resource",
+       "title": "Welcome to Opal Therapy",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "a2124b13-ca22-420b-b8d6-091e2f9c8002",
+       "resource_title": "Welcome to Opal Therapy"
+      },
+      {
+       "key": "i-0a8b5dc0",
+       "body": "",
+       "type": "resource",
+       "title": "How We Work",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "8d8ae216-45b7-4d05-b311-0e0f2b93ed19",
+       "resource_title": "How We Work"
+      },
+      {
+       "key": "i-377ccced",
+       "body": "",
+       "type": "resource",
+       "title": "Who to Ask for Help",
+       "minutes": 3,
+       "required": true,
+       "resource_id": "740031f2-8bf6-4c88-ad0b-0ca9abe2a20b",
+       "resource_title": "Who to Ask for Help"
+      }
+     ],
+     "title": "Orientation"
+    },
+    {
+     "key": "s-0d057f26",
+     "items": [
+      {
+       "key": "i-498646d7",
+       "body": "",
+       "type": "resource",
+       "title": "Privacy and Confidentiality Policy",
+       "minutes": 8,
+       "required": true,
+       "resource_id": "707c1c14-ca3a-474f-aa8d-1ba62be07913",
+       "resource_title": "Privacy and Confidentiality Policy"
+      },
+      {
+       "key": "i-c63790ff",
+       "body": "",
+       "type": "resource",
+       "title": "Responsible Use of AI Policy",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "29af5b17-8e13-4b6d-8c50-cf8c93f023e5",
+       "resource_title": "Responsible Use of AI Policy"
+      },
+      {
+       "key": "i-e5b92c62",
+       "body": "",
+       "type": "resource",
+       "title": "Responsible Use of AI — Learning Module",
+       "minutes": 15,
+       "required": true,
+       "resource_id": "6b492858-af05-47a9-8420-bc832148f17c",
+       "resource_title": "Responsible Use of AI — Learning Module"
+      }
+     ],
+     "title": "Policies and standards"
+    },
+    {
+     "key": "s-11183c14",
+     "items": [
+      {
+       "key": "i-62ac37e3",
+       "body": "",
+       "type": "resource",
+       "title": "Getting Started with the Opal Portal",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "70b5ac36-c7f5-4528-8916-7f52999cf5d5",
+       "resource_title": "Getting Started with the Opal Portal"
+      },
+      {
+       "key": "i-f7ade33b",
+       "body": "",
+       "type": "resource",
+       "title": "Using the Calendar (Day, Week, Month)",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "e9c33a51-07d9-4b55-aeae-596029d79db3",
+       "resource_title": "Using the Calendar (Day, Week, Month)"
+      },
+      {
+       "key": "i-2289e9e0",
+       "body": "",
+       "type": "resource",
+       "title": "The Master Scheduler",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "6a48a774-bf7e-420c-a355-00372cb51679",
+       "resource_title": "The Master Scheduler"
+      },
+      {
+       "key": "i-e7606000",
+       "body": "",
+       "type": "resource",
+       "title": "Booking an Appointment",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "56ad7a3b-a0c7-4b03-ae95-8caef252249a",
+       "resource_title": "Booking an Appointment"
+      },
+      {
+       "key": "i-2fee1f99",
+       "body": "",
+       "type": "resource",
+       "title": "Connecting Outlook",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "e5826760-4b88-4f0d-a08f-f4c2b3170004",
+       "resource_title": "Connecting Outlook"
+      },
+      {
+       "key": "i-7ffa4591",
+       "body": "",
+       "type": "resource",
+       "title": "Notifications",
+       "minutes": 3,
+       "required": true,
+       "resource_id": "8874d79f-3b3f-4125-9339-3280ab024e18",
+       "resource_title": "Notifications"
+      }
+     ],
+     "title": "Using the portal"
+    },
+    {
+     "key": "s-a1997f82",
+     "items": [
+      {
+       "key": "i-d5027b0a",
+       "body": "",
+       "type": "resource",
+       "title": "Privacy in Digital Communication",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "044892e0-93a4-4f58-930d-66ea76e243d4",
+       "resource_title": "Privacy in Digital Communication"
+      },
+      {
+       "key": "i-eb020d05",
+       "body": "",
+       "type": "resource",
+       "title": "Information Security Basics",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "020b9ca4-e421-40fa-9385-2c6bf68d76eb",
+       "resource_title": "Information Security Basics"
+      }
+     ],
+     "title": "Orientation (continued)"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": "OWNER",
+  "created_at": "2026-08-30 08:38:21.556477+00",
+  "updated_at": "2026-08-30 08:38:21.556477+00",
+  "archived_at": null
+ },
+ {
+  "id": "288c8f99-1c14-4153-8a2e-232dc58ca4f0",
+  "organisation_id": null,
+  "title": "Splose Induction",
+  "description": "The Splose induction for Opal practitioners: account setup, booking, appointment management, progress notes and AI documentation, the Microsoft 365 connection, performance — closed out by a knowledge check and the first-day checklist.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-80dfcb64",
+     "items": [
+      {
+       "key": "i-1b4d9349",
+       "body": "The three systems Opal runs on, what belongs in each, and the one rule that keeps them honest.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Splose at Opal: The Big Picture",
+       "minutes": 6,
+       "required": true,
+       "walkthrough_key": "splose-at-opal"
+      },
+      {
+       "key": "i-521b8795",
+       "body": "Your practitioner profile, the locations and services attached to it, and why a missing service is never solved by picking a different one.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Set Up Your Splose Account",
+       "minutes": 10,
+       "required": true,
+       "walkthrough_key": "splose-account-setup"
+      },
+      {
+       "key": "i-a2bcfdf6",
+       "body": "The Splose calendar, the three booking types, completing a booking properly, and how practitioner–client access really works.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Book a Client Appointment",
+       "minutes": 12,
+       "required": true,
+       "walkthrough_key": "splose-booking"
+      },
+      {
+       "key": "i-fb96583c",
+       "body": "Moving appointments safely, recording cancellations and no-shows through Status, and why Archive is never a cancellation.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Reschedule, Cancel and Status",
+       "minutes": 10,
+       "required": true,
+       "walkthrough_key": "splose-appointments"
+      },
+      {
+       "key": "i-fe50ee4f",
+       "body": "Progress notes from the appointment, structuring a defensible clinical note, and using Splose’s AI drafting without ever letting it write the record for you.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Document the Session",
+       "minutes": 15,
+       "required": true,
+       "walkthrough_key": "splose-progress-notes"
+      },
+      {
+       "key": "i-708009e0",
+       "body": "Your personal Teams connection, telehealth links, the one-way calendar feed into Outlook, and the private URL you must never share.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Connect Splose to Microsoft 365",
+       "minutes": 12,
+       "required": true,
+       "walkthrough_key": "splose-teams-outlook"
+      }
+     ],
+     "title": "Splose walkthroughs"
+    },
+    {
+     "key": "s-d2b3d61a",
+     "items": [
+      {
+       "key": "i-bb280baf",
+       "body": "Reading your own Splose performance report: utilisation, what the numbers do and do not mean, and why incomplete notes come first.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Your Performance Report",
+       "minutes": 8,
+       "required": true,
+       "walkthrough_key": "splose-performance"
+      },
+      {
+       "key": "i-3b6ded0b",
+       "body": "The capstone: a full day across Splose, Outlook and the Opal Portal, the decision drill, and the first-day checklist.\n\nOpen the walkthrough below — your place in it is saved as you go.",
+       "type": "task",
+       "title": "Your Splose Workflow at Opal",
+       "minutes": 12,
+       "required": true,
+       "walkthrough_key": "splose-daily-workflow"
+      }
+     ],
+     "title": "Splose walkthroughs (continued)"
+    },
+    {
+     "key": "s-fe52f09a",
+     "items": [
+      {
+       "key": "i-bfdaa4d5",
+       "body": "Ten questions across the whole Splose induction. The pass mark is 80% — you can retry as often as you need.",
+       "quiz": {
+        "questions": [
+         {
+          "options": [
+           "In Splose",
+           "In the subscribed Outlook calendar",
+           "Wherever is quickest"
+          ],
+          "question": "A participant asks to move tomorrow’s appointment to a new time. Where is the appointment moved?",
+          "correctIndex": 0
+         },
+         {
+          "options": [
+           "Select a similar service so the booking goes through",
+           "Check the selected location and your practitioner service assignment, then escalate to admin if needed",
+           "Book it as busy time and fix it later"
+          ],
+          "question": "A service is missing from your booking screen. What do you do?",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "Appointment",
+           "Support activity",
+           "Busy time"
+          ],
+          "question": "Which booking type is used for a normal therapy session?",
+          "correctIndex": 0
+         },
+         {
+          "options": [
+           "A support activity linked to the client",
+           "Emailing the client",
+           "Opening the waitlist"
+          ],
+          "question": "What can create the practitioner–client link before the first appointment?",
+          "correctIndex": 0
+         },
+         {
+          "options": [
+           "Yes — archive keeps the calendar tidy",
+           "No — the status records the cancellation and the history is preserved"
+          ],
+          "question": "Should a cancelled appointment normally be archived?",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "Cancelled",
+           "Did not arrive",
+           "No status"
+          ],
+          "question": "A participant was expected, never attended, and had not cancelled. Which status fits?",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "True",
+           "False — every AI draft is verified against the session before finalising"
+          ],
+          "question": "True or false: AI-generated note text can be saved as long as it reads professionally.",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "Yes",
+           "No — Splose publishes to Outlook and nothing flows back"
+          ],
+          "question": "Is the Splose-to-Outlook calendar feed two-way?",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "Your private Splose calendar-feed URL",
+           "Your practitioner column colour",
+           "The clinic street address"
+          ],
+          "question": "What must never be shared with anyone?",
+          "correctIndex": 0
+         },
+         {
+          "options": [
+           "40%",
+           "70%",
+           "82%"
+          ],
+          "question": "Available time 40 hours; arrived appointment time 28 hours. Appointment utilisation?",
+          "correctIndex": 1
+         }
+        ],
+        "passThreshold": 80
+       },
+       "type": "quiz",
+       "title": "Splose knowledge check",
+       "minutes": 5,
+       "required": true
+      }
+     ],
+     "title": "Make it formal"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": "OWNER",
+  "created_at": "2026-08-30 08:38:21.647173+00",
+  "updated_at": "2026-09-05 01:26:39.99848+00",
+  "archived_at": null
+ },
+ {
+  "id": "6d59942c-0019-4f10-8c26-30fd636de677",
+  "organisation_id": null,
+  "title": "New Starter — Occupational Therapist",
+  "description": "Core induction for every occupational therapist joining Opal Therapy.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-cc0c0377",
+     "items": [
+      {
+       "key": "i-51d60b22",
+       "body": "Welcome to the team! This induction walks you through how Opal Therapy runs: our values, the people you will work with, and the systems you will use every day.\n\nWork through each section in order — your progress saves automatically.",
+       "type": "content",
+       "title": "Welcome and how we work",
+       "minutes": 5,
+       "required": true
+      },
+      {
+       "key": "i-b935f6a2",
+       "body": "Who does what at Opal Therapy, who to ask about scheduling, clinical questions, and equipment.",
+       "type": "content",
+       "title": "Organisational structure",
+       "minutes": 5,
+       "required": true
+      },
+      {
+       "key": "i-61c16665",
+       "body": "Read the code of conduct below, then confirm your acknowledgement.",
+       "type": "acknowledgement",
+       "title": "Code of conduct",
+       "minutes": 10,
+       "required": true,
+       "ack_statement": "I have read and understood the Opal Therapy Code of Conduct and agree to work in accordance with it."
+      }
+     ],
+     "title": "Welcome to Opal Therapy"
+    },
+    {
+     "key": "s-08356feb",
+     "items": [
+      {
+       "key": "i-d993f241",
+       "body": "Client information is health information. This module covers what you may collect, where it must live, and what must never leave our systems.",
+       "type": "content",
+       "title": "Privacy and confidentiality",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-1dd2460e",
+       "body": "Confirm the privacy undertaking below.",
+       "type": "acknowledgement",
+       "title": "Privacy undertaking",
+       "minutes": 3,
+       "required": true,
+       "ack_statement": "I understand my privacy and confidentiality obligations, including that client information is only accessed for clinical purposes and never stored outside approved systems."
+      },
+      {
+       "key": "i-a1fd0452",
+       "body": "A short check of the privacy module.",
+       "quiz": {
+        "questions": [
+         {
+          "options": [
+           "Send it — they are family",
+           "Decline and escalate to the practice owner before releasing anything",
+           "Read it to them over the phone"
+          ],
+          "question": "A client’s parent asks for a copy of a report about the other parent’s session. What do you do?",
+          "correctIndex": 1
+         },
+         {
+          "options": [
+           "In approved practice systems only",
+           "On my personal laptop for convenience",
+           "In a private notebook"
+          ],
+          "question": "Where may session notes be stored?",
+          "correctIndex": 0
+         }
+        ],
+        "passThreshold": 80
+       },
+       "type": "quiz",
+       "title": "Privacy knowledge check",
+       "minutes": 5,
+       "required": true
+      }
+     ],
+     "title": "Privacy and compliance"
+    },
+    {
+     "key": "s-d8c67304",
+     "items": [
+      {
+       "key": "i-0e77ee3f",
+       "body": "Complete your profile in the portal: display name, phone, work locations, and upload your credentials.",
+       "type": "task",
+       "title": "Set up your portal profile",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-be22ad51",
+       "body": "How appointments, travel blocks and the logbook work — and what to check before you drive.",
+       "type": "content",
+       "title": "Scheduling and travel",
+       "minutes": 10,
+       "required": true
+      }
+     ],
+     "title": "Working here"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": null,
+  "created_at": "2026-08-20 00:03:19.051451+00",
+  "updated_at": "2026-08-24 00:52:31.334473+00",
+  "archived_at": null
+ },
+ {
+  "id": "9058db67-553e-47ae-b1b3-a6870cc3fbf4",
+  "organisation_id": null,
+  "title": "Rural and Remote Starter",
+  "description": "Before your first rural circuit: travel and safety policies, trip planning, and culturally safe clinical practice at distance.",
+  "category": "rural_remote",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-2b314a03",
+     "items": [
+      {
+       "key": "i-5b998fe0",
+       "body": "",
+       "type": "resource",
+       "title": "Rural and Remote Practice at Opal",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "0dbec138-2b7b-4419-bf31-64e66ef91595",
+       "resource_title": "Rural and Remote Practice at Opal"
+      },
+      {
+       "key": "i-62f84864",
+       "body": "",
+       "type": "resource",
+       "title": "Rural and Remote Travel Policy",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "d3a2dafd-9006-4e45-a96d-b6b427b1f86d",
+       "resource_title": "Rural and Remote Travel Policy"
+      },
+      {
+       "key": "i-c5f324a2",
+       "body": "",
+       "type": "resource",
+       "title": "Lone Worker Safety Policy",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "d0455805-1af1-4d3f-9364-adaaed50140a",
+       "resource_title": "Lone Worker Safety Policy"
+      },
+      {
+       "key": "i-13f1c19d",
+       "body": "",
+       "type": "resource",
+       "title": "Rural Trip Pre-Trip Checklist",
+       "minutes": 4,
+       "required": true,
+       "resource_id": "4295ef7e-3698-4b3c-9568-a6d37869d2c0",
+       "resource_title": "Rural Trip Pre-Trip Checklist"
+      }
+     ],
+     "title": "Orientation"
+    },
+    {
+     "key": "s-9ec9e551",
+     "items": [
+      {
+       "key": "i-2eae998c",
+       "body": "",
+       "type": "resource",
+       "title": "Working Safely in Community Settings",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "42d1d909-8715-4c61-a495-dff04ee10186",
+       "resource_title": "Working Safely in Community Settings"
+      },
+      {
+       "key": "i-b97e8d32",
+       "body": "",
+       "type": "resource",
+       "title": "Rural Clinical Planning",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "702333a2-b608-4d38-9a1c-5a88a43c0b3e",
+       "resource_title": "Rural Clinical Planning"
+      },
+      {
+       "key": "i-e45fc56b",
+       "body": "",
+       "type": "resource",
+       "title": "Cultural Safety and Respectful Practice",
+       "minutes": 8,
+       "required": true,
+       "resource_id": "62cbff51-5f8e-4d42-8a66-f9da3e76ef37",
+       "resource_title": "Cultural Safety and Respectful Practice"
+      },
+      {
+       "key": "i-26259d91",
+       "body": "",
+       "type": "resource",
+       "title": "Telehealth — A Practical Guide",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "ca46d0e3-5de9-4ef6-a6a0-ac5c8b5c4e74",
+       "resource_title": "Telehealth — A Practical Guide"
+      }
+     ],
+     "title": "Clinical guide"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": "OWNER",
+  "created_at": "2026-08-30 08:38:21.572241+00",
+  "updated_at": "2026-08-30 08:38:21.572241+00",
+  "archived_at": null
+ },
+ {
+  "id": "a25a7582-a5e9-47e0-93a7-5bfd9e7169fd",
+  "organisation_id": null,
+  "title": "New Graduate — Clinical Foundations",
+  "description": "For early-career OTs: the professional standards, documentation craft and core clinical guides that first-year practice leans on.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-5b1469f5",
+     "items": [
+      {
+       "key": "i-95033712",
+       "body": "",
+       "type": "resource",
+       "title": "Australian OT Competency Standards (2018)",
+       "minutes": 8,
+       "required": true,
+       "resource_id": "e3dd4928-cf29-470e-8dd0-679507f808af",
+       "resource_title": "Australian OT Competency Standards (2018)"
+      },
+      {
+       "key": "i-05936621",
+       "body": "",
+       "type": "resource",
+       "title": "Ahpra Shared Code of Conduct — Summary",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "7028e4fc-e2e7-459f-b386-1cd012f8efab",
+       "resource_title": "Ahpra Shared Code of Conduct — Summary"
+      },
+      {
+       "key": "i-b7226849",
+       "body": "",
+       "type": "resource",
+       "title": "CPD Requirements for Occupational Therapists",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "3edff564-9e78-4cd3-8118-3e0275bc7c1c",
+       "resource_title": "CPD Requirements for Occupational Therapists"
+      },
+      {
+       "key": "i-d1093c66",
+       "body": "",
+       "type": "resource",
+       "title": "Supervision Policy",
+       "minutes": 5,
+       "required": true,
+       "resource_id": "fa51a5a3-ccbc-43a4-bf27-d4dbc1eb465d",
+       "resource_title": "Supervision Policy"
+      }
+     ],
+     "title": "Standard"
+    },
+    {
+     "key": "s-e043afb9",
+     "items": [
+      {
+       "key": "i-598784bc",
+       "body": "",
+       "type": "resource",
+       "title": "Professional Boundaries — A Practical Guide",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "de9afc08-041b-43ec-b819-6494bdd23182",
+       "resource_title": "Professional Boundaries — A Practical Guide"
+      },
+      {
+       "key": "i-e1d9e7a0",
+       "body": "",
+       "type": "resource",
+       "title": "Clinical Note Quality",
+       "minutes": 10,
+       "required": true,
+       "resource_id": "c90203ac-6e3a-4a70-b5c3-ce280b8ba508",
+       "resource_title": "Clinical Note Quality"
+      },
+      {
+       "key": "i-136088f1",
+       "body": "",
+       "type": "resource",
+       "title": "Writing Functional Impact",
+       "minutes": 12,
+       "required": true,
+       "resource_id": "86279e32-1896-43f6-9752-2f099e8749e4",
+       "resource_title": "Writing Functional Impact"
+      },
+      {
+       "key": "i-39d649fb",
+       "body": "",
+       "type": "resource",
+       "title": "Goal Writing",
+       "minutes": 9,
+       "required": true,
+       "resource_id": "524095f2-8de1-4b61-af5f-622b3a6d17a9",
+       "resource_title": "Goal Writing"
+      },
+      {
+       "key": "i-b840f69a",
+       "body": "",
+       "type": "resource",
+       "title": "Writing Clinical Recommendations",
+       "minutes": 9,
+       "required": true,
+       "resource_id": "20d32dd0-5b0f-4ec8-abbd-1c4c81ed5e50",
+       "resource_title": "Writing Clinical Recommendations"
+      },
+      {
+       "key": "i-3e0f002e",
+       "body": "",
+       "type": "resource",
+       "title": "Functional Capacity Assessment Workflow",
+       "minutes": 12,
+       "required": true,
+       "resource_id": "4b67c4b4-a85c-45de-8abd-bf813eebc9fb",
+       "resource_title": "Functional Capacity Assessment Workflow"
+      }
+     ],
+     "title": "Clinical guide"
+    },
+    {
+     "key": "s-46f3f26e",
+     "items": [
+      {
+       "key": "i-347e5be8",
+       "body": "",
+       "type": "resource",
+       "title": "Clinical Risk Assessment",
+       "minutes": 10,
+       "required": true,
+       "resource_id": "1f57f42c-c7e2-400a-a699-7fb3e03c318f",
+       "resource_title": "Clinical Risk Assessment"
+      },
+      {
+       "key": "i-9d0241b7",
+       "body": "",
+       "type": "resource",
+       "title": "Evidence-Informed Practice",
+       "minutes": 6,
+       "required": true,
+       "resource_id": "581919ba-0ef9-4648-a3db-0c1dfbbacf46",
+       "resource_title": "Evidence-Informed Practice"
+      },
+      {
+       "key": "i-1bac5073",
+       "body": "",
+       "type": "resource",
+       "title": "Caregiver Coaching",
+       "minutes": 7,
+       "required": true,
+       "resource_id": "5bd4c4be-d690-41ae-9803-f2b22dfae1bd",
+       "resource_title": "Caregiver Coaching"
+      }
+     ],
+     "title": "Clinical guide (continued)"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": "OWNER",
+  "created_at": "2026-08-30 08:38:21.4886+00",
+  "updated_at": "2026-08-30 08:38:21.4886+00",
+  "archived_at": null
+ },
+ {
+  "id": "b57a599b-4cda-4b74-a18c-eb09db23ddcb",
+  "organisation_id": null,
+  "title": "New Graduate Occupational Therapist",
+  "description": "Extended induction for new graduate OTs: supervision, clinical documentation and NDIS fundamentals.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-f5be8cdd",
+     "items": [
+      {
+       "key": "i-8e2b8cd1",
+       "body": "Your supervision schedule, who your supervisor is, and how to raise clinical questions between sessions.",
+       "type": "content",
+       "title": "Your supervision structure",
+       "minutes": 5,
+       "required": true
+      },
+      {
+       "key": "i-40fc1497",
+       "body": "Plans, goals, supports and how OT services fit into a participant’s NDIS plan.",
+       "type": "content",
+       "title": "NDIS fundamentals",
+       "minutes": 15,
+       "required": true
+      }
+     ],
+     "title": "Foundations"
+    },
+    {
+     "key": "s-0992d8ed",
+     "items": [
+      {
+       "key": "i-e97370a5",
+       "body": "What a defensible session note contains, and what does not belong in one.",
+       "type": "content",
+       "title": "Session notes that stand up",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-2cfa7db1",
+       "body": "",
+       "quiz": {
+        "questions": [
+         {
+          "options": [
+           "Within the practice’s documentation window, as soon as practicable",
+           "At the end of the month",
+           "Only if something notable happened"
+          ],
+          "question": "When should a session note be written?",
+          "correctIndex": 0
+         }
+        ],
+        "passThreshold": 80
+       },
+       "type": "quiz",
+       "title": "Documentation knowledge check",
+       "minutes": 5,
+       "required": true
+      },
+      {
+       "key": "i-efcef326",
+       "body": "Confirm you have read the documentation standard.",
+       "type": "acknowledgement",
+       "title": "Documentation standard",
+       "required": true,
+       "ack_statement": "I have read the clinical documentation standard and will document sessions in accordance with it."
+      }
+     ],
+     "title": "Clinical documentation"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": null,
+  "created_at": "2026-08-20 00:03:19.054184+00",
+  "updated_at": "2026-08-20 00:03:19.054184+00",
+  "archived_at": null
+ },
+ {
+  "id": "ed17869e-576e-48a5-b2ef-b9b2dab09b8e",
+  "organisation_id": null,
+  "title": "Admin Starter",
+  "description": "Induction for administration staff: systems, scheduling, privacy at the front desk.",
+  "category": "induction",
+  "status": "active",
+  "draft_content": {
+   "sections": [
+    {
+     "key": "s-d51dc3e2",
+     "items": [
+      {
+       "key": "i-0891d0f8",
+       "body": "The systems you will use daily and how the practice calendar is organised.",
+       "type": "content",
+       "title": "The portal and the calendar",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-9c7e6bf6",
+       "body": "Sit with a senior admin while they take a booking end to end, then note two things that surprised you.",
+       "type": "task",
+       "title": "Shadow a booking",
+       "minutes": 30,
+       "required": true
+      }
+     ],
+     "title": "Systems and scheduling"
+    },
+    {
+     "key": "s-3bdb928c",
+     "items": [
+      {
+       "key": "i-93708bcd",
+       "body": "Phone enquiries, waiting-room conversations and what may be confirmed to whom.",
+       "type": "content",
+       "title": "Privacy for administration",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-8cec279f",
+       "body": "",
+       "type": "acknowledgement",
+       "title": "Privacy undertaking",
+       "required": true,
+       "ack_statement": "I understand my privacy obligations in an administration role, including verification before disclosing any client information."
+      }
+     ],
+     "title": "Privacy at the front desk"
+    }
+   ]
+  },
+  "current_version": 0,
+  "created_by": null,
+  "created_at": "2026-08-20 00:03:19.054985+00",
+  "updated_at": "2026-08-20 00:03:19.054985+00",
+  "archived_at": null
+ }
+]

@@ -1,0 +1,373 @@
+[
+ {
+  "id": "0423bc74-8b4b-4cab-b5cc-14a408f0d0fa",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "707c1c14-ca3a-474f-aa8d-1ba62be07913",
+  "sort_order": 6,
+  "required": true
+ },
+ {
+  "id": "0872c4da-fed3-4ca4-8226-8211a383998e",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "740031f2-8bf6-4c88-ad0b-0ca9abe2a20b",
+  "sort_order": 2,
+  "required": true
+ },
+ {
+  "id": "1b5c0c31-a806-473b-a5cd-874b4aa9b001",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "044892e0-93a4-4f58-930d-66ea76e243d4",
+  "sort_order": 12,
+  "required": true
+ },
+ {
+  "id": "1cb536d1-d826-4059-bb57-a496e5f656f4",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "6b492858-af05-47a9-8420-bc832148f17c",
+  "sort_order": 9,
+  "required": true
+ },
+ {
+  "id": "1ef90f53-3b3c-4843-83d4-a3bf551318e1",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "20d32dd0-5b0f-4ec8-abbd-1c4c81ed5e50",
+  "sort_order": 8,
+  "required": true
+ },
+ {
+  "id": "249cb962-fd8f-4b4d-b8fd-89cc32e3eb12",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "1d0d64f5-301b-499d-89e5-1c31dba4e06a",
+  "sort_order": 14,
+  "required": true
+ },
+ {
+  "id": "24f6bced-934a-4910-9178-09d9351394e9",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "70b5ac36-c7f5-4528-8916-7f52999cf5d5",
+  "sort_order": 6,
+  "required": true
+ },
+ {
+  "id": "2b105ae2-c9c6-4baf-8e8e-8c890ce49d1d",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "62cbff51-5f8e-4d42-8a66-f9da3e76ef37",
+  "sort_order": 6,
+  "required": true
+ },
+ {
+  "id": "37dde2d3-e20d-4655-a4d9-066846378fdb",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "3edff564-9e78-4cd3-8118-3e0275bc7c1c",
+  "sort_order": 2,
+  "required": true
+ },
+ {
+  "id": "3923a1c5-ea3f-4ec2-a88a-1f39a5c1830d",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "702333a2-b608-4d38-9a1c-5a88a43c0b3e",
+  "sort_order": 5,
+  "required": true
+ },
+ {
+  "id": "3ec390f1-b399-4ead-92eb-488ae050d5c4",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "6a48a774-bf7e-420c-a355-00372cb51679",
+  "sort_order": 8,
+  "required": true
+ },
+ {
+  "id": "413f8e4e-7c56-455d-8a58-0695a7f8516f",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "4b67c4b4-a85c-45de-8abd-bf813eebc9fb",
+  "sort_order": 9,
+  "required": true
+ },
+ {
+  "id": "470934d0-5e39-4031-9b3b-298538d23c7c",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "ca46d0e3-5de9-4ef6-a6a0-ac5c8b5c4e74",
+  "sort_order": 7,
+  "required": true
+ },
+ {
+  "id": "50a892f6-7f9d-438e-9a1c-da028b8967c2",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "a2124b13-ca22-420b-b8d6-091e2f9c8002",
+  "sort_order": 0,
+  "required": true
+ },
+ {
+  "id": "536aec4a-4e23-46fa-822b-60e4a4ba8d55",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "1f57f42c-c7e2-400a-a699-7fb3e03c318f",
+  "sort_order": 10,
+  "required": true
+ },
+ {
+  "id": "56f8acd9-d24c-4a5b-b7a6-5836667b1c13",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "740031f2-8bf6-4c88-ad0b-0ca9abe2a20b",
+  "sort_order": 4,
+  "required": true
+ },
+ {
+  "id": "5ec4d8dd-ae42-4ec6-aa1d-74afddd434d9",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "020b9ca4-e421-40fa-9385-2c6bf68d76eb",
+  "sort_order": 13,
+  "required": true
+ },
+ {
+  "id": "6831f438-345d-4d7d-95e0-488477ad48da",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "29af5b17-8e13-4b6d-8c50-cf8c93f023e5",
+  "sort_order": 4,
+  "required": true
+ },
+ {
+  "id": "699732b4-9d36-48f7-ba0f-77ac66a1391a",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "707c1c14-ca3a-474f-aa8d-1ba62be07913",
+  "sort_order": 3,
+  "required": true
+ },
+ {
+  "id": "6fccdf32-63d0-445f-9209-c35cba377f59",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "56ad7a3b-a0c7-4b03-ae95-8caef252249a",
+  "sort_order": 9,
+  "required": true
+ },
+ {
+  "id": "755be0ee-b536-481a-8d01-6364b18c2756",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "acf0675a-6394-4237-a393-a5d5baf8af20",
+  "sort_order": 15,
+  "required": true
+ },
+ {
+  "id": "86ba47e7-6ee5-4e88-af41-c7ca54f41149",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "8874d79f-3b3f-4125-9339-3280ab024e18",
+  "sort_order": 11,
+  "required": true
+ },
+ {
+  "id": "8985fae4-d306-4079-a048-12cc72a4be3b",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "29af5b17-8e13-4b6d-8c50-cf8c93f023e5",
+  "sort_order": 8,
+  "required": true
+ },
+ {
+  "id": "8e014646-0e9c-45fe-bd54-6be50b7f8f1c",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "5bd4c4be-d690-41ae-9803-f2b22dfae1bd",
+  "sort_order": 12,
+  "required": true
+ },
+ {
+  "id": "9a855da6-961a-4ec2-ab89-b06fa09b4ef5",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "70b5ac36-c7f5-4528-8916-7f52999cf5d5",
+  "sort_order": 10,
+  "required": true
+ },
+ {
+  "id": "9b1b8107-7639-49ca-8cee-8b9923993c3d",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "8d8ae216-45b7-4d05-b311-0e0f2b93ed19",
+  "sort_order": 1,
+  "required": true
+ },
+ {
+  "id": "9d076621-89f0-4c58-9e51-0f9a0967ca1f",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "4a878747-9505-4bc7-8e58-8b4f6f9e4558",
+  "sort_order": 16,
+  "required": true
+ },
+ {
+  "id": "a1d6ab94-cab7-4b2d-89d7-55ce43491bec",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "8d8ae216-45b7-4d05-b311-0e0f2b93ed19",
+  "sort_order": 1,
+  "required": true
+ },
+ {
+  "id": "a2c9e896-510d-42c0-b7f1-5b4e054974a7",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "d3a2dafd-9006-4e45-a96d-b6b427b1f86d",
+  "sort_order": 1,
+  "required": true
+ },
+ {
+  "id": "a5c87475-026d-47fe-b8fc-330054c92e82",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "0dbec138-2b7b-4419-bf31-64e66ef91595",
+  "sort_order": 0,
+  "required": true
+ },
+ {
+  "id": "aa677c67-13be-4a04-acf9-22f3904e02b5",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "f76913f0-c5fd-4920-908a-42628bab2688",
+  "sort_order": 5,
+  "required": true
+ },
+ {
+  "id": "aabc9460-1ebb-4aa2-8853-41c5104cc154",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "6b492858-af05-47a9-8420-bc832148f17c",
+  "sort_order": 5,
+  "required": true
+ },
+ {
+  "id": "aacc13a2-3607-44ca-a29c-610e9442f644",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "7028e4fc-e2e7-459f-b386-1cd012f8efab",
+  "sort_order": 1,
+  "required": true
+ },
+ {
+  "id": "ab97077c-4d50-4db7-a46c-506cbdf8336c",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "10229040-1449-46e9-8b54-fa9f2bd5cf0d",
+  "sort_order": 3,
+  "required": true
+ },
+ {
+  "id": "ade11d73-0eeb-43a7-b4b8-5c1fac43aaab",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "c90203ac-6e3a-4a70-b5c3-ce280b8ba508",
+  "sort_order": 5,
+  "required": true
+ },
+ {
+  "id": "b10bf496-3cf6-4332-9dd7-b481f63e9fb6",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "e9c33a51-07d9-4b55-aeae-596029d79db3",
+  "sort_order": 12,
+  "required": true
+ },
+ {
+  "id": "bbca2c47-8780-4b11-a77a-9f9114f52e1e",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "86279e32-1896-43f6-9752-2f099e8749e4",
+  "sort_order": 6,
+  "required": true
+ },
+ {
+  "id": "c1d58ce7-33a1-4e7e-9b39-c59ced784f22",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "e3dd4928-cf29-470e-8dd0-679507f808af",
+  "sort_order": 0,
+  "required": true
+ },
+ {
+  "id": "c81c6da2-4588-49f8-a4bb-e89b696d4e82",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "581919ba-0ef9-4648-a3db-0c1dfbbacf46",
+  "sort_order": 11,
+  "required": true
+ },
+ {
+  "id": "ca46f4ee-6773-4c72-8477-51427255def4",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "e9c33a51-07d9-4b55-aeae-596029d79db3",
+  "sort_order": 7,
+  "required": true
+ },
+ {
+  "id": "d26ef936-4b8a-4b1e-8bbe-913f85f5a31c",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "b2ef20e6-516c-48ac-a4df-6655b145cbbf",
+  "sort_order": 2,
+  "required": true
+ },
+ {
+  "id": "d5d2e4b1-02a7-490e-8363-49caada81a4f",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "fa51a5a3-ccbc-43a4-bf27-d4dbc1eb465d",
+  "sort_order": 3,
+  "required": true
+ },
+ {
+  "id": "d8612931-9147-4310-a782-259a3771785f",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "de9afc08-041b-43ec-b819-6494bdd23182",
+  "sort_order": 4,
+  "required": true
+ },
+ {
+  "id": "d96f8f50-6e72-4761-95b0-fb5a0053fb03",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "4295ef7e-3698-4b3c-9568-a6d37869d2c0",
+  "sort_order": 3,
+  "required": true
+ },
+ {
+  "id": "dba1a853-46e5-4693-acb0-628c31743577",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "d0455805-1af1-4d3f-9364-adaaed50140a",
+  "sort_order": 2,
+  "required": true
+ },
+ {
+  "id": "e051f9f5-b6c5-4923-8ee6-1208f5776186",
+  "path_id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "resource_id": "e5826760-4b88-4f0d-a08f-f4c2b3170004",
+  "sort_order": 10,
+  "required": true
+ },
+ {
+  "id": "e1d5a851-2cc2-4df6-8f67-42e54993913d",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "d0455805-1af1-4d3f-9364-adaaed50140a",
+  "sort_order": 17,
+  "required": true
+ },
+ {
+  "id": "ec64f305-7c6c-4882-97e0-2153c16c8d30",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "054d250b-c39c-40e9-95f5-91dd5a96e2b6",
+  "sort_order": 7,
+  "required": true
+ },
+ {
+  "id": "f2ad13f8-9ccb-41d6-b0b9-6d5340efafea",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "a2124b13-ca22-420b-b8d6-091e2f9c8002",
+  "sort_order": 0,
+  "required": true
+ },
+ {
+  "id": "f810625c-8a54-43f2-bbe7-3756d564693f",
+  "path_id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "resource_id": "42d1d909-8715-4c61-a495-dff04ee10186",
+  "sort_order": 4,
+  "required": true
+ },
+ {
+  "id": "fc20fa42-44b3-4c8f-b973-6b9e5ebb0966",
+  "path_id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "resource_id": "524095f2-8de1-4b61-af5f-622b3a6d17a9",
+  "sort_order": 7,
+  "required": true
+ },
+ {
+  "id": "fca3b6ab-b43e-45bd-8e37-5b4e77b23fdb",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "56ad7a3b-a0c7-4b03-ae95-8caef252249a",
+  "sort_order": 13,
+  "required": true
+ },
+ {
+  "id": "fe0527cf-2463-455d-bf97-cb456ac2da26",
+  "path_id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "resource_id": "d14526e5-4205-47a4-a828-c21ba0a148c4",
+  "sort_order": 11,
+  "required": true
+ }
+]

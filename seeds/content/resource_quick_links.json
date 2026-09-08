@@ -1,0 +1,83 @@
+[
+ {
+  "id": "0289267e-0807-4966-a802-ebfe061f8df5",
+  "organisation_id": null,
+  "label": "NDIS Support Catalogue",
+  "url": "https://www.ndis.gov.au/providers/pricing-arrangements",
+  "icon": "list",
+  "sort_order": 2,
+  "is_active": true
+ },
+ {
+  "id": "0e49d4be-87b4-4b11-9043-c66d752a7b84",
+  "organisation_id": null,
+  "label": "OT Board of Australia",
+  "url": "https://www.occupationaltherapyboard.gov.au",
+  "icon": "award",
+  "sort_order": 5,
+  "is_active": true
+ },
+ {
+  "id": "548a97f4-d93a-4dfc-9499-15a0d1e86772",
+  "organisation_id": null,
+  "label": "Splose",
+  "url": "https://splose.com",
+  "icon": "external-link",
+  "sort_order": 8,
+  "is_active": true
+ },
+ {
+  "id": "5dba643c-d3eb-43ed-accb-74da04b3aa30",
+  "organisation_id": null,
+  "label": "Would We Fund It (NDIA guidance)",
+  "url": "https://www.ndis.gov.au/understanding/supports-funded-ndis/would-we-fund-it",
+  "icon": "help-circle",
+  "sort_order": 3,
+  "is_active": true
+ },
+ {
+  "id": "730d1ef2-b259-43b5-b1f5-5714a2c55991",
+  "organisation_id": null,
+  "label": "NDIS Code of Conduct",
+  "url": "https://www.ndis-commission.gov.au/about/ndis-code-conduct",
+  "icon": "shield",
+  "sort_order": 4,
+  "is_active": true
+ },
+ {
+  "id": "a7cfae5a-7bf8-4872-adbc-d38d7592a7e5",
+  "organisation_id": null,
+  "label": "Ahpra Register",
+  "url": "https://www.ahpra.gov.au/registration/registers-of-practitioners.aspx",
+  "icon": "search",
+  "sort_order": 6,
+  "is_active": true
+ },
+ {
+  "id": "cf611958-b124-4579-9724-19240cee1330",
+  "organisation_id": null,
+  "label": "CPD Registration Standard",
+  "url": "https://www.occupationaltherapyboard.gov.au/Registration-Standards.aspx",
+  "icon": "book-open",
+  "sort_order": 7,
+  "is_active": true
+ },
+ {
+  "id": "d854ff6a-d8c0-45a3-a0c8-9de56d802239",
+  "organisation_id": null,
+  "label": "Outlook",
+  "url": "https://outlook.office.com",
+  "icon": "mail",
+  "sort_order": 9,
+  "is_active": true
+ },
+ {
+  "id": "e996b142-3810-4af6-a6a8-f23fdf198cb6",
+  "organisation_id": null,
+  "label": "NDIS Pricing Arrangements",
+  "url": "https://www.ndis.gov.au/providers/pricing-arrangements",
+  "icon": "dollar-sign",
+  "sort_order": 1,
+  "is_active": true
+ }
+]

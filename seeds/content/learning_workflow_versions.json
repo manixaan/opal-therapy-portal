@@ -1,0 +1,60 @@
+[
+ {
+  "id": "ee33d1b9-3e4f-44f1-bb50-523c60126b44",
+  "workflow_id": "157003f5-fdd2-46b2-b7c1-fb1c94cbcbf2",
+  "version": 1,
+  "title": "Rural & Remote Starter",
+  "description": "Working safely and effectively on rural and remote service runs.",
+  "category": "rural_remote",
+  "content": {
+   "sections": [
+    {
+     "key": "s-23d4963a",
+     "items": [
+      {
+       "key": "i-bc189a21",
+       "body": "Multi-day runs, accommodation, kit lists and how travel time is recorded.",
+       "type": "content",
+       "title": "How rural runs work",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-38f8e914",
+       "body": "Cultural safety, working in schools and homes, and who to call when plans change.",
+       "type": "content",
+       "title": "Working in community",
+       "minutes": 15,
+       "required": true
+      }
+     ],
+     "title": "Rural service delivery"
+    },
+    {
+     "key": "s-cc7ec3cc",
+     "items": [
+      {
+       "key": "i-ed238a3b",
+       "body": "Journey plans, check-ins, fatigue rules and what to do when a road is closed.",
+       "type": "content",
+       "title": "Vehicle and journey safety",
+       "minutes": 10,
+       "required": true
+      },
+      {
+       "key": "i-04057fc2",
+       "body": "",
+       "type": "acknowledgement",
+       "title": "Journey safety acknowledgement",
+       "required": true,
+       "ack_statement": "I will follow the journey management procedure on every rural run, including check-ins and fatigue limits."
+      }
+     ],
+     "title": "Safety"
+    }
+   ]
+  },
+  "published_by": "OWNER",
+  "published_at": "2026-08-21 05:44:21.405585+00"
+ }
+]

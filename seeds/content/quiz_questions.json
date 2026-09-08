@@ -1,0 +1,68 @@
+[
+ {
+  "id": "135a158d-2961-46fd-9caf-b1139bcfe0c8",
+  "quiz_id": "05b662c3-fe12-4d24-8dec-41526fb89092",
+  "sort_order": 3,
+  "question": "AI systems can generate fluent, confident text that is factually wrong, so every fact, score and clinical claim in an AI draft must be verified before it stands in a record.",
+  "kind": "true_false",
+  "options": [
+   "True",
+   "False"
+  ],
+  "correct_index": 0
+ },
+ {
+  "id": "1a5b93d1-d538-40f1-b5c1-f586763a03e8",
+  "quiz_id": "05b662c3-fe12-4d24-8dec-41526fb89092",
+  "sort_order": 2,
+  "question": "A report was substantially drafted with AI assistance and signed by the treating therapist. Who is accountable for its content?",
+  "kind": "multiple_choice",
+  "options": [
+   "The AI tool vendor",
+   "The practice owner, because they approved the tool",
+   "The therapist who signed it, fully and in every respect",
+   "Accountability is shared between the therapist and the tool"
+  ],
+  "correct_index": 2
+ },
+ {
+  "id": "8b9f8d37-8282-444e-a752-b6ec2f9bc154",
+  "quiz_id": "05b662c3-fe12-4d24-8dec-41526fb89092",
+  "sort_order": 4,
+  "question": "You plan to use an approved recording and transcription tool in a session. What must happen before recording starts?",
+  "kind": "multiple_choice",
+  "options": [
+   "Nothing — approval of the tool covers its use in any session",
+   "The participant is told in plain language and their consent is documented",
+   "A note is added to the record after the session",
+   "The supervisor is copied on the transcript"
+  ],
+  "correct_index": 1
+ },
+ {
+  "id": "ac81acc1-1237-482a-ab50-92a69a7aba0f",
+  "quiz_id": "05b662c3-fe12-4d24-8dec-41526fb89092",
+  "sort_order": 1,
+  "question": "It is acceptable to paste identifiable participant information into an AI tool that has not been approved by the practice owner, provided you delete the conversation afterwards.",
+  "kind": "true_false",
+  "options": [
+   "True",
+   "False"
+  ],
+  "correct_index": 1
+ },
+ {
+  "id": "ee9acb5b-193c-4556-aee3-beab178f9f90",
+  "quiz_id": "05b662c3-fe12-4d24-8dec-41526fb89092",
+  "sort_order": 0,
+  "question": "An AI tool has drafted a progress note from your session summary. Before it can enter the clinical record, what must happen?",
+  "kind": "multiple_choice",
+  "options": [
+   "Nothing further — approved tools produce record-ready notes",
+   "The responsible clinician reviews, corrects and approves every part of it",
+   "A colleague spot-checks the first paragraph",
+   "It is stored separately until the next supervision session"
+  ],
+  "correct_index": 1
+ }
+]

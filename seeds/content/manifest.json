@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "exported_at": "2026-09-08T10:50:23.129Z",
+  "fingerprint": "c7b64fdd1e2b0e74d7a4233491b3f6b8de6bfc5b90462e8fac01186e13f3512e",
+  "tables": {
+    "compliance_requirements": 32,
+    "resource_tags": 83,
+    "resource_folders": 30,
+    "resources": 701,
+    "resource_versions": 18,
+    "resource_files": 506,
+    "resource_tag_links": 1084,
+    "resource_folder_assignments": 653,
+    "resource_collections": 16,
+    "resource_collection_items": 178,
+    "resource_quick_links": 9,
+    "quizzes": 1,
+    "quiz_questions": 5,
+    "learning_paths": 4,
+    "learning_path_items": 53,
+    "learning_workflows": 9,
+    "learning_workflow_versions": 1,
+    "walkthrough_modules": 21,
+    "walkthrough_module_versions": 19,
+    "onboarding_documents": 44,
+    "onboarding_document_versions": 58,
+    "onboarding_requirement_templates": 58,
+    "onboarding_packages": 15,
+    "onboarding_package_requirements": 56,
+    "onboarding_package_versions": 24,
+    "onboarding_pack_defaults": 4
+  }
+}

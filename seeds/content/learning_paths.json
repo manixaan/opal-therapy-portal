@@ -1,0 +1,46 @@
+[
+ {
+  "id": "7a01152f-f561-4423-a364-3fd64bf1b7e2",
+  "organisation_id": null,
+  "key": "new-ot-starter",
+  "name": "New Starter — Occupational Therapist",
+  "description": "The ordered essentials for any therapist joining Opal: orientation, required policies, the AI module and core portal skills.",
+  "target_role": "therapist",
+  "sort_order": 0,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.188896+00"
+ },
+ {
+  "id": "870a267a-d2f2-4445-84d8-9c14bd3efeb2",
+  "organisation_id": null,
+  "key": "new-grad-ot",
+  "name": "New Graduate — Clinical Foundations",
+  "description": "For early-career OTs: the professional standards, documentation craft and core clinical guides that first-year practice leans on.",
+  "target_role": "therapist",
+  "sort_order": 1,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.194706+00"
+ },
+ {
+  "id": "ba173377-b1be-45d4-8266-53b69f3a4cab",
+  "organisation_id": null,
+  "key": "admin-starter",
+  "name": "New Starter — Admin",
+  "description": "For admin staff: portal mastery, scheduling, privacy and the policies that govern handling client information.",
+  "target_role": "admin",
+  "sort_order": 2,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.196614+00"
+ },
+ {
+  "id": "f8829c3e-f4c5-4104-a6c7-0e6f8b960f7d",
+  "organisation_id": null,
+  "key": "rural-remote-starter",
+  "name": "Rural and Remote Starter",
+  "description": "Before your first rural circuit: travel and safety policies, trip planning, and culturally safe clinical practice at distance.",
+  "target_role": "therapist",
+  "sort_order": 3,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.198629+00"
+ }
+]

@@ -104,10 +104,27 @@ npm run setup -- --check
 
 (the check catches a migration someone else added — run `npm run setup` to apply it.)
 
+```bash
+npm run content:import
+```
+
+(loads any inductions, onboarding packages, walkthroughs or Resource Hub
+catalogue changes the other laptop pushed — see "Content travels with the
+code" below. Refuses if you have content edits you never exported; export
+them first, or add `-- --force` to discard them.)
+
 Work on a branch or worktree, exactly as `.claude/rules/concurrency.md` describes.
 Commit as often as you like. Nobody sees local commits until you push.
 
-When a piece of work is finished:
+When a piece of work is finished — and if you edited any content in the app
+(an induction, a package, a walkthrough, the hub catalogue), export it first
+so it travels with the commit:
+
+```bash
+npm run content:export
+```
+
+then commit `seeds/content/` alongside the code. Then:
 
 ```bash
 git checkout main && git pull && git merge --ff-only <feature>
@@ -121,6 +138,31 @@ git push
 
 That push takes a few seconds and lands on `origin/develop`. The other laptop
 picks it up on its next `git pull`. No deploy happens.
+
+## 3a. Content travels with the code
+
+The app's authored content — inductions and learning paths, onboarding
+packages with their policy documents and requirement templates, walkthrough
+modules, and the Resource Hub catalogue — is database rows, not code. Git
+carries it as `seeds/content/*.json` (one file per table, ~5 MB), written by
+`backend/scripts/content-seed.js`:
+
+| Command | Does |
+|---|---|
+| `npm run content:export` | database → `seeds/content/`. Run after editing content, then commit. |
+| `npm run content:import` | `seeds/content/` → database. Run after every pull; `npm run setup` runs it too. |
+| `npm run content:status` | whether the database, the seeds and the last sync agree. |
+
+Import mirrors the seed into your organisation: rows are upserted by id, rows
+the seed no longer has are removed, so a deletion on one laptop reaches the
+other. Content in other organisations, and everything that is not authored
+content (users, calendar, assignments, employee records, assessments, audit),
+is never touched and never exported.
+
+Two things do not travel: the Resource Hub's uploaded files (the
+`RESOURCE_HUB_STORAGE_PATH` folder, ~1.5 GB — copy it once by hand, or point
+both machines at Blob storage) and the "who created this" columns, which
+become the local owner login on import.
 
 ## 4. Releasing to staging
 

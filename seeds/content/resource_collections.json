@@ -1,0 +1,178 @@
+[
+ {
+  "id": "03ebd301-007e-4650-9f8c-aed65f867061",
+  "organisation_id": null,
+  "key": "templates",
+  "name": "Templates",
+  "tagline": "Ready-to-use structures for notes, reports and supervision.",
+  "icon": "file-text",
+  "sort_order": 6,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.186614+00"
+ },
+ {
+  "id": "50ac99a5-3144-46a7-b22e-b1d2e8116a8c",
+  "organisation_id": null,
+  "key": "social-communication",
+  "name": "Social communication",
+  "tagline": "Communication, self-advocacy, help-seeking and relationships.",
+  "icon": null,
+  "sort_order": 1020,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.532507+00"
+ },
+ {
+  "id": "5e669835-663f-4713-bdb1-f62a74bfb514",
+  "organisation_id": null,
+  "key": "routines-and-executive-function",
+  "name": "Routines and planning",
+  "tagline": "Practical supports for organising activities and everyday routines.",
+  "icon": null,
+  "sort_order": 1030,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.533223+00"
+ },
+ {
+  "id": "65264887-43e7-40e8-9e61-b3f2c3fe842f",
+  "organisation_id": null,
+  "key": "clinical",
+  "name": "Clinical Practice",
+  "tagline": "Assessment, intervention and documentation guides for everyday practice.",
+  "icon": "stethoscope",
+  "sort_order": 2,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.176549+00"
+ },
+ {
+  "id": "98ca39b3-2be3-49ee-bbad-5abaa91be85d",
+  "organisation_id": null,
+  "key": "official-guidance",
+  "name": "Official guidance",
+  "tagline": "Current government, NDIS and public-health links with clear attribution.",
+  "icon": null,
+  "sort_order": 1060,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.535083+00"
+ },
+ {
+  "id": "a393ec61-67f8-4fdf-89e0-14f41b2abf0e",
+  "organisation_id": null,
+  "key": "money-and-budgeting",
+  "name": "Money and budgeting",
+  "tagline": "Supported daily-living tools for planning and understanding money.",
+  "icon": null,
+  "sort_order": 1050,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.53447+00"
+ },
+ {
+  "id": "a67c91c1-b891-4596-8dc3-2bd4e4798817",
+  "organisation_id": null,
+  "key": "start-here",
+  "name": "Start Here",
+  "tagline": "Your first days at Opal — read these in order.",
+  "icon": "flag",
+  "sort_order": 0,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.170842+00"
+ },
+ {
+  "id": "a9d9f4e8-35c4-47ad-8c52-6efa59a641c8",
+  "organisation_id": null,
+  "key": "emotional-regulation",
+  "name": "Emotional regulation",
+  "tagline": "Tools for noticing emotions, body cues and strategies.",
+  "icon": null,
+  "sort_order": 1010,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.528576+00"
+ },
+ {
+  "id": "be9f5db9-26d0-449c-a251-8eb442450cf1",
+  "organisation_id": null,
+  "key": "professional-development",
+  "name": "Professional Development",
+  "tagline": "CPD requirements, learning modules and growth resources.",
+  "icon": "graduation-cap",
+  "sort_order": 5,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.185442+00"
+ },
+ {
+  "id": "c53e22e3-e19b-4d56-9ddd-74f1aa44b248",
+  "organisation_id": null,
+  "key": "ndis",
+  "name": "NDIS Knowledge",
+  "tagline": "Conduct, standards, pricing and funding concepts — always linked to the official source.",
+  "icon": "shield",
+  "sort_order": 3,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.180613+00"
+ },
+ {
+  "id": "cb278c09-eed8-4167-b7ed-f42d204311d8",
+  "organisation_id": null,
+  "key": "rural-remote",
+  "name": "Rural and Remote",
+  "tagline": "Planning, safety and clinical practice for work beyond the metro area.",
+  "icon": "map",
+  "sort_order": 7,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.187353+00"
+ },
+ {
+  "id": "cca3f601-bdef-4379-96dc-1bf4820f070d",
+  "organisation_id": null,
+  "key": "knowledge-library",
+  "name": "OT Knowledge Library",
+  "tagline": "Curated external links, evidence and learning — verified 9 Aug 2026",
+  "icon": "book",
+  "sort_order": 8,
+  "is_active": true,
+  "created_at": "2026-08-09 00:26:26.946229+00"
+ },
+ {
+  "id": "d8d04f6b-4946-4fe0-82b8-1e1bbd91c557",
+  "organisation_id": null,
+  "key": "clinical-tools",
+  "name": "Clinical tools",
+  "tagline": "Controlled assessment and practitioner resources for authorised clinicians.",
+  "icon": null,
+  "sort_order": 1070,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.535783+00"
+ },
+ {
+  "id": "e0ae26e0-2902-4c4f-936b-11ec2815ff83",
+  "organisation_id": null,
+  "key": "policies-standards",
+  "name": "Policies and Standards",
+  "tagline": "Opal policies plus the professional standards that govern our work.",
+  "icon": "scale",
+  "sort_order": 4,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.182352+00"
+ },
+ {
+  "id": "e414f5dc-8c66-481f-a7f2-f447fff10d88",
+  "organisation_id": null,
+  "key": "using-opal",
+  "name": "Using Opal",
+  "tagline": "Portal tutorials — calendar, travel, resources and more.",
+  "icon": "monitor",
+  "sort_order": 1,
+  "is_active": true,
+  "created_at": "2026-08-08 09:25:27.174621+00"
+ },
+ {
+  "id": "eb220db1-2edf-43aa-b4da-4b3854e5faf2",
+  "organisation_id": null,
+  "key": "goal-planning",
+  "name": "Goals and participation",
+  "tagline": "Tools for turning meaningful goals into manageable actions.",
+  "icon": null,
+  "sort_order": 1040,
+  "is_active": true,
+  "created_at": "2026-08-10 07:07:29.533852+00"
+ }
+]

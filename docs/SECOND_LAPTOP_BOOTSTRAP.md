@@ -128,7 +128,15 @@ This runs `scripts/dev-setup.js`. It checks the toolchain, writes
 `backend/.env` with fresh random secrets and every remote-write flag set to
 false, runs `npm install` in `backend/` and the root, creates the local
 `therapy_scheduler` database, applies all migrations (through 063 at the time
-of writing), seeds the three dev logins, and seeds a demo week of appointments.
+of writing), seeds the three dev logins, seeds a demo week of appointments, and
+loads the authored content from `seeds/content/` — the inductions, onboarding
+packages, walkthroughs and Resource Hub catalogue the primary machine
+exported. After that, `npm run content:import` after each pull keeps them
+current (docs/TWO_MACHINE_DEV_WORKFLOW.md §3a).
+
+The Resource Hub's uploaded files are not in git: resources list and open, but
+a download needs the `RESOURCE_HUB_STORAGE_PATH` folder copied from the
+primary machine.
 
 Every step prints ✓ or ✗. A ✗ line is followed by a `→` line with the fix.
 Common ones:

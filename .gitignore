@@ -72,3 +72,6 @@ deploy/staging-synthetic.local.txt
 test-results/
 playwright-report/
 .playwright-mcp/
+
+# Content-seed sync state (per machine, see backend/scripts/content-seed.js)
+backend/.content-seed-state.json

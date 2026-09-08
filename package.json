@@ -9,7 +9,10 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:local": "playwright test --config playwright.local.config.js",
-    "tutorials:capture": "node scripts/capture-tutorial-screenshots.js"
+    "tutorials:capture": "node scripts/capture-tutorial-screenshots.js",
+    "content:export": "node backend/scripts/content-seed.js export",
+    "content:import": "node backend/scripts/content-seed.js import",
+    "content:status": "node backend/scripts/content-seed.js status"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

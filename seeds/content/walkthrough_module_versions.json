@@ -1,0 +1,2993 @@
+[
+ {
+  "id": "08f71ad1-8105-4a83-a90c-9ec6bac62c9b",
+  "module_id": "e72a519e-3ec7-4e64-b143-65b3b13b83a2",
+  "version": 1,
+  "title": "The Master Scheduler",
+  "description": "The whole-team free/busy matrix: propose a time, weigh recommendations, book.",
+  "minutes": 6,
+  "roles": [
+   "owner",
+   "admin"
+  ],
+  "thumb": "/assets/tutorials/portal-master-scheduler.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-8a68a6c7",
+    "body": "The Master Scheduler lays every therapist’s day side by side: who is free, who is busy, who is on leave, and where they are working. It is where owners and admins find the right person and the right time for a new appointment.\n\nIt is a **viewing and planning** tool — nothing you do in it changes anyone’s calendar, so feel free to click around as we go.",
+    "type": "intro",
+    "title": "The whole practice on one screen"
+   },
+   {
+    "key": "s-56f5fe52",
+    "pad": 2,
+    "body": "The Scheduler lives with the calendar views. Alongside **Day**, **Week** and **Month**, owners and admins get a fourth view tab: **Scheduler**.\n\nClick **Scheduler** now to open it.",
+    "type": "action",
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "Open the Scheduler",
+    "target": "cal-view-master",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-63b79f23",
+    "pad": 4,
+    "body": "The Scheduler shows a single day — use the **‹ ›** arrows, **Today** or the date picker to change it.\n\n**Start** and **Duration** describe the appointment you are trying to place. You can set them here, though it is usually quicker to click a time in the grid — that is next.\n\n**Working day** trims the view to office hours; switch it to **Full day** to see early or late times.",
+    "type": "highlight",
+    "title": "One day at a time",
+    "target": ".sch-toolbar",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-16f571ab",
+    "pad": 0,
+    "body": "Every row is one therapist. A quiet, pale background means free time. Coloured blocks are commitments, and shaded stretches mean time that cannot be booked: outside working hours, on leave, protected buffer time, or a gap too short to fit an appointment.\n\n**Privacy is built in:** across the team, blocks show only the kind of commitment — **Client session**, **Meeting**, **Busy** — never client names or appointment details.\n\nA **default hours** badge under a name means that therapist has no schedule set up for this week, so standard hours are assumed rather than known.",
+    "type": "highlight",
+    "image": {
+     "alt": "The Master Scheduler grid: one row per therapist, free time as a pale background, commitments as labelled blocks",
+     "src": "/assets/tutorials/portal-master-scheduler/matrix.png"
+    },
+    "title": "Reading the grid",
+    "target": "#sm-scroll",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-91e549b2",
+    "pad": 2,
+    "body": "Click a **clear moment** in this top row — empty space, not a block. A dashed band appears at that time in **every** row so you can compare the whole team at once, and the therapist whose row you clicked becomes the pick for the slot.\n\nAfterwards you can drag the band to another time, or drag its right edge to change the length. Nothing is booked by any of this.",
+    "type": "action",
+    "image": {
+     "alt": "Clicking a clear moment in a therapist row proposes a time",
+     "src": "/assets/tutorials/portal-master-scheduler/matrix.png"
+    },
+    "title": "Propose a time",
+    "target": ".sm-track",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-1fb3690c",
+    "pad": 4,
+    "body": "This bar sums up your proposal: the time, and how many of the selected therapists are free then — for example **9:00am–10:00am · 4 of 6 selected therapists available**.\n\nThe picked therapist’s name sits here next to the **Schedule** button, and **Clear slot** removes the proposal whenever you want to start again.",
+    "type": "highlight",
+    "title": "The summary bar",
+    "target": "#sm-summary",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-f3f383dc",
+    "pad": 4,
+    "body": "While a time is proposed, each row carries a chip with that therapist’s verdict for it, such as **Available**, **Busy**, **On leave**, **Outside working hours**, **Buffer time** or **Not enough free time**.\n\nOnce travel has been checked — more on that shortly — chips can sharpen further: **Travel feasible**, **Tight travel**, or **Not practical for this location**.",
+    "type": "highlight",
+    "image": {
+     "alt": "Therapist rows with a proposed slot: each row shows a verdict chip such as Available, Busy or On leave",
+     "src": "/assets/tutorials/portal-master-scheduler/status-chips.png"
+    },
+    "title": "Every row gives its verdict",
+    "target": ".sm-chip",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2bb2ba55",
+    "pad": 6,
+    "body": "Every therapist starts ticked. Untick anyone you are not considering — their row greys out and drops from the count. **Select all** and **Clear** in the top-left corner reset the list, and the search box there finds a name quickly.\n\nWith two or more ticked, Opal also works out when **everyone** selected is free at the same time: those windows appear in the summary bar as **Common free** and as a soft highlight along the time ruler.",
+    "type": "highlight",
+    "title": "Compare a shortlist",
+    "target": ".sm-check",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-4c8accf2",
+    "pad": 4,
+    "body": "**Recommend** stays greyed out until a time is proposed — pick a moment first.\n\nIt also needs to know where the client will be: type their suburb into **Client suburb** in the toolbar, or tick **Telehealth (no travel)** inside the panel. Opal then ranks the team for the slot — **Best fit**, **Good fit**, **Possible**, **Not ideal** — with plain-language reasons and travel times, and lists who cannot take it and why. Clicking a suggestion picks that therapist and moves the band to the suggested time.\n\nOne quirk to know: the **Discipline** dropdown narrows these recommendations only — it never hides rows in the grid.",
+    "type": "highlight",
+    "title": "Ask Opal to recommend",
+    "target": ".sch-toggle[data-act=\"recs\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-c5470e53",
+    "pad": 4,
+    "body": "Click any therapist’s **name** to open their day in a side panel: appointment count, clinical and available time, their next free window, and **Open windows** you can turn into a proposal with **+ Add appointment** — it only positions the band; it books nothing.\n\nBecause this looks at one therapist rather than the whole team, the day list here shows full appointment details.\n\nThe **This week** strip at the bottom shows Monday-to-Friday capacity — click a day to jump the Scheduler there.",
+    "type": "highlight",
+    "title": "Zoom in on one therapist",
+    "target": ".sm-name",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-9e9a3984",
+    "pad": 4,
+    "body": "**Map** plots the day’s face-to-face client visits, one colour per therapist, so you can see who is working where before you add a travel-heavy booking. Tick **Operating areas** to sketch each therapist’s usual patch.\n\nPins sit at suburb level — never exact addresses — and telehealth sessions are never mapped. If the map cannot load, the rest of the Scheduler keeps working.",
+    "type": "highlight",
+    "title": "See the day on a map",
+    "target": ".sch-toggle[data-act=\"map\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-17d221c0",
+    "pad": 4,
+    "body": "When the slot looks right, **+ Appointment** here (or **Schedule** in the summary bar) opens the **New Appointment** panel with your chosen therapist already selected.\n\n**The day and time do not carry across.** The panel always books into the current week, so set the day, start time and duration again under **When & Where** before creating anything.\n\nWe will leave the panel closed for now — the **Booking an Appointment** module walks through it end to end.",
+    "type": "highlight",
+    "title": "From proposal to booking",
+    "target": ".sch-add-btn[data-act=\"add\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-1a6edda5",
+    "quiz": {
+     "explain": "Schedule carries the therapist across, but not the proposed day or time — and the panel books into the current week. Always set When & Where in the panel before you create. (A suburb only helps with travel-aware recommendations; it is not needed to book.)",
+     "options": [
+      "The day and time — the panel does not carry them across",
+      "Nothing — the appointment is already created",
+      "The client’s suburb — bookings cannot be created without one"
+     ],
+     "question": "You propose 2:00pm in the Scheduler, pick a therapist and click Schedule. What must you check in the New Appointment panel before creating the booking?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-e657d507",
+    "body": "You can now read the team’s day at a glance, propose a time, compare a shortlist, weigh Opal’s recommendations and check the map — all without touching anyone’s calendar.\n\nNext, follow a booking all the way through in **Booking an Appointment**.",
+    "next": "portal-booking-appointment",
+    "type": "complete",
+    "title": "You can run the whole board"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.082254+00"
+ },
+ {
+  "id": "13d9b4b2-df63-4ac2-bbee-d9e71b297d77",
+  "module_id": "f40e2e7d-6510-48a7-9a80-a51c47919ad7",
+  "version": 1,
+  "title": "Connecting Outlook",
+  "description": "Link your own Microsoft mailbox so the calendar mirrors your real day.",
+  "minutes": 4,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist"
+  ],
+  "thumb": "/assets/tutorials/portal-connecting-outlook.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-50606ed7",
+    "body": "The portal calendar is a mirror of your Outlook calendar. Once connected, whatever is in your Outlook calendar shows up here, and the portal checks Outlook for changes about every 90 seconds — so what you see is your real day, not a copy that drifts.\n\nIt works both ways: appointments and travel blocks booked in the portal can be written straight back into your Outlook calendar (whether write-back is switched on depends on how your practice is set up).\n\nThis short module shows you how to connect, how to tell it is working, and what to do if it ever needs reconnecting.",
+    "type": "intro",
+    "title": "Why connect Outlook?"
+   },
+   {
+    "key": "s-d3c1ab0b",
+    "pad": 4,
+    "body": "Everything about your Outlook connection lives in one place: **Settings → Integrations**.\n\nClick **Integrations** in the settings menu to open it.",
+    "type": "action",
+    "roles": [
+     "owner"
+    ],
+    "route": {
+     "tab": "settings"
+    },
+    "title": "Open Integrations",
+    "target": ".settings-nav-item[data-section=\"integration-settings\"]",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-71ead023",
+    "pad": 6,
+    "body": "This pill shows the state of your Outlook connection:\n\n**Connected** — sync is running normally.\n\n**Not connected** — the portal is not linked to a mailbox yet.\n\n**Token expired — reconnect** — the connection has lapsed and needs a quick refresh (more on that shortly).\n\nIf it ever says **Status unavailable**, the portal could not check just now — try again in a minute.",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "route": {
+     "tab": "settings",
+     "section": "integration-settings"
+    },
+    "title": "Your connection at a glance",
+    "target": "#stg-outlook-status",
+    "rounded": "20px"
+   },
+   {
+    "key": "s-fa7ede9d",
+    "pad": 6,
+    "body": "When connected, this line shows the **mailbox** the portal is mirroring — for example, \"Connected as reception@yourpractice.com.au\".\n\nIt can be different from the email you use to sign in to the portal — that is fine, and common with shared mailboxes. One rule to remember: a mailbox can only be connected to one portal account at a time.",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "title": "Connected as — which mailbox?",
+    "target": "#stg-outlook-account",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-8036d909",
+    "pad": 6,
+    "body": "Clicking **Connect Outlook** takes you to Microsoft’s own sign-in page — the portal never sees your Microsoft password.\n\nWe will leave the button alone during this walkthrough so we do not leave the portal mid-tour. When you connect for real, the next screen looks like this…",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "title": "The Connect Outlook button",
+    "target": "settings-outlook-connect",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2b04650c",
+    "pad": 6,
+    "body": "You connect Outlook during your first-time setup — and any time your account is not connected, the Calendar shows this banner with its own **Connect Outlook** button.\n\nClicking it takes you to Microsoft’s own sign-in page — the portal never sees your Microsoft password. If you are already connected, the banner stays out of the way (which is why you may be seeing a picture of it instead).",
+    "type": "highlight",
+    "image": {
+     "alt": "The Calendar showing the \"Outlook calendar not connected\" banner with its Connect Outlook button",
+     "src": "/assets/tutorials/portal-connecting-outlook/connect-banner.png"
+    },
+    "roles": [
+     "admin",
+     "therapist"
+    ],
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "Where you connect",
+    "target": "#outlook-connect-banner",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-2a4a1b7b",
+    "body": "Microsoft always asks which account to use, even if you are already signed in. Pick your **work account** — the one whose calendar you want mirrored here. Personal Microsoft accounts will not work; only accounts from your organisation can connect.\n\nOnce you have signed in, Microsoft sends you straight back to the portal. The whole trip takes under a minute.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Microsoft sign-in page asking which account to use",
+     "src": "/assets/tutorials/portal-connecting-outlook/account-picker.png"
+    },
+    "title": "Choosing your Microsoft account"
+   },
+   {
+    "key": "s-2c20fcca",
+    "body": "Connecting gives the portal access to exactly three things: reading your calendar, writing to your calendar, and your own name and email address.\n\nIt can never read your mail, your files, your Teams chats, or anyone else’s calendar. Your Microsoft password stays with Microsoft — the portal only holds a secure connection key, which is never shown to anyone.",
+    "type": "callout",
+    "title": "What the portal can — and cannot — see"
+   },
+   {
+    "key": "s-c3e63926",
+    "body": "Back in the portal, the status pill turns **Connected** and the **Connected as** line shows your mailbox.\n\nYour events then start flowing in — give the first load a minute or two. From then on the portal picks up Outlook changes automatically, about every 90 seconds.",
+    "type": "callout",
+    "roles": [
+     "owner"
+    ],
+    "title": "Right after connecting"
+   },
+   {
+    "key": "s-a8e45400",
+    "pad": 6,
+    "body": "You do not need to visit Settings to check on sync. This pill in the top bar shows it wherever you are — for example, **Outlook: synced 2 min ago**.\n\nClick the pill any time to refresh it on the spot. A red dot means something needs attention — head to **Settings → Integrations** to see what.",
+    "type": "highlight",
+    "title": "The sync pill in the top bar",
+    "target": "sync-status",
+    "rounded": "20px"
+   },
+   {
+    "key": "s-9d5aa811",
+    "pad": 6,
+    "body": "**Please do not click this now** — just know what it does.\n\nDisconnect stops sync for **your account only**. Events already mirrored into the portal stay put, nothing changes in your Outlook calendar itself, and nobody else’s connection is affected.\n\nA confirmation message appears before anything happens, and you can reconnect any time from this same screen.",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "title": "Disconnect — what it does (and does not)",
+    "target": "settings-outlook-disconnect",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-7e3e8ac2",
+    "body": "Disconnecting stops sync for one account only: events already mirrored into the portal stay put, and nothing changes in Outlook itself.\n\nThe disconnect control lives in the practice owner’s settings — if you need your connection removed or refreshed, ask the owner, or raise it through **Support**.",
+    "type": "callout",
+    "roles": [
+     "admin",
+     "therapist"
+    ],
+    "title": "Disconnecting"
+   },
+   {
+    "key": "s-796225bb",
+    "body": "Now and then the connection lapses. You will see **Token expired — reconnect** on the status pill here, or a notification with a **Reconnect Outlook** button that brings you back to this screen.\n\nNothing is lost. Click **Connect Outlook**, sign in to Microsoft again, and sync picks up where it left off.",
+    "type": "callout",
+    "roles": [
+     "owner"
+    ],
+    "title": "If the connection expires"
+   },
+   {
+    "key": "s-6e5307e9",
+    "body": "Now and then a connection lapses. Your early warning is the sync pill in the top bar — it will stop saying \"synced\".\n\nNothing is lost when this happens. Mention it to the practice owner or raise it through **Support**, and once reconnected, sync picks up exactly where it left off.",
+    "type": "callout",
+    "roles": [
+     "admin",
+     "therapist"
+    ],
+    "title": "If the connection expires"
+   },
+   {
+    "key": "s-1674631d",
+    "quiz": {
+     "explain": "Disconnect is local to your portal account: sync stops, events already mirrored stay in the portal, and Outlook itself is untouched. You can reconnect at any time.",
+     "options": [
+      "Nothing — only the portal stops syncing your account",
+      "Your Outlook events are deleted",
+      "Outlook is disconnected for the whole practice"
+     ],
+     "question": "You click Disconnect and confirm. What happens to your Outlook calendar itself?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-5ea8bd9e",
+    "body": "That is the Outlook connection: link your mailbox once, glance at the sync pill to know it is healthy,, and get it reconnected quickly if it ever lapses.\n\nNext, see what all those mirrored events look like in **Using the Calendar**.",
+    "next": "portal-using-calendar",
+    "type": "complete",
+    "title": "You’re connected"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.077144+00"
+ },
+ {
+  "id": "393d04b9-4393-4465-b470-9d7ad8951ec4",
+  "module_id": "b6174a6a-e2ad-4069-b040-f2530409f239",
+  "version": 1,
+  "title": "The Travel Logbook",
+  "description": "How travel between visits is recorded, checked and kept accurate.",
+  "minutes": 5,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist"
+  ],
+  "thumb": "/assets/tutorials/portal-travel-logbook.png",
+  "start_context": {
+   "tab": "logbook"
+  },
+  "steps": [
+   {
+    "key": "s-322e6743",
+    "body": "The Travel Logbook is the practice’s financial-year record of travel to and from appointments. It builds itself: when provider travel is recorded against an appointment in Splose, the journey appears here — with the minutes, estimated kilometres and a dollar figure.\n\nThere is nothing to fill in day to day. This short walkthrough shows you how to read the logbook, and the one thing you can edit.",
+    "type": "intro",
+    "title": "Your travel, recorded for you"
+   },
+   {
+    "key": "s-7ee7ecf7",
+    "pad": 2,
+    "body": "The Travel Logbook lives in the dropdown at the end of the tab row — labelled **More** for owners and **Menu** for admins — under the **Travel** group.\n\nThe greyed-out **Travel & Flights** item beside it is a placeholder for a planned feature and is not available yet.",
+    "menu": true,
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "Finding the logbook",
+    "target": ".tab[data-tab=\"logbook\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2278e9e5",
+    "pad": 2,
+    "body": "As a therapist, the **Travel Logbook** sits right in your main tab row — one click from anywhere in the portal.",
+    "type": "highlight",
+    "roles": [
+     "therapist"
+    ],
+    "title": "Your Logbook tab",
+    "target": ".tab[data-tab=\"logbook\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-404143a5",
+    "body": "Owners and admins see every practitioner’s travel together in one list, so the totals cover the whole team for the selected year.\n\nTherapists see only their own journeys when they open the same page.",
+    "type": "callout",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "You see the whole practice"
+   },
+   {
+    "key": "s-2becb5d9",
+    "body": "Your logbook shows only your own travel — journeys linked to your appointments.\n\nIf you see a note about linking your Splose practitioner profile instead of a list, ask the practice owner to finish setting up your therapist profile. Your logbook appears as soon as that is done.",
+    "type": "callout",
+    "roles": [
+     "therapist"
+    ],
+    "title": "You see your own journeys"
+   },
+   {
+    "key": "s-fa30c269",
+    "pad": 4,
+    "body": "The logbook works in financial years — 1 July to 30 June. This selector opens on **FY 2026–27** and goes back three years; changing it reloads the list.\n\nThe **Refresh** button beside it reloads the logbook, and the small note under the heading shows the time it last updated. The logbook also keeps itself fresh in the background.",
+    "type": "highlight",
+    "route": {
+     "tab": "logbook"
+    },
+    "title": "Pick a financial year",
+    "target": "#logbook-fy",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-fcd4025e",
+    "pad": 6,
+    "body": "Four cards sum up the selected year: **Travel trips**, **Total minutes**, **Est. kilometres** and **Deduction**.\n\nOnce the data loads, the Deduction card also shows the kilometre rate it uses — for example, @$0.88/km.",
+    "type": "highlight",
+    "title": "The totals at a glance",
+    "target": ".logbook-stats",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-6cef7d8a",
+    "body": "The travel **minutes** come straight from what was recorded in Splose. The **kilometres** are an estimate: the portal converts those minutes at an average speed of 40 km/h. The **deduction** multiplies the kilometres by the practice kilometre rate, which is set by the practice owner in Business Settings ($0.88 per kilometre unless changed).\n\nTreat these figures as a working estimate for checking travel — the logbook does not produce a tax report or an export.",
+    "type": "callout",
+    "title": "How the numbers are worked out"
+   },
+   {
+    "key": "s-83a7052d",
+    "pad": 6,
+    "body": "Journeys are grouped by month. Each row shows the trip — **Round trip**, **To** or **From** — with the destination address, the linked appointment, the date and approximate departure and arrival times. On the right: the minutes, estimated kilometres and dollar figure for that trip.\n\nYou never add entries by hand. Journeys appear automatically once provider travel is recorded against appointments in Splose — so if the list is empty for a period, no travel was recorded then.",
+    "type": "highlight",
+    "title": "The journey list",
+    "target": "travel-logbook",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-98d430e5",
+    "pad": 6,
+    "body": "Select any journey and its details open in this side panel: the trip type, the date and time, and the addresses.\n\nWhen a journey has a date, an **Open in calendar** button jumps to that week — and the logbook keeps your place, so your selected journey is still highlighted when you come back. On smaller screens the details open in a pop-up window instead.",
+    "type": "highlight",
+    "title": "Journey details",
+    "target": "#lb-detail-side",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-3e5daa8b",
+    "body": "The logbook is a record, not a form — the only edit is tidying a journey’s addresses. In the journey details, correct the **From address** or **To address** and click **Save addresses**. A destination address is required; the From address may be left blank.\n\nFixing an address updates only the logbook record — nothing changes in Splose or Outlook, and the original address is kept behind the scenes. The list refreshes by itself after you save.",
+    "type": "callout",
+    "title": "The one thing you can change: addresses"
+   },
+   {
+    "key": "s-d5fd8501",
+    "body": "You may also see coloured travel strips between sessions on the calendar. Those are live estimates to help you plan the day — a separate feature from this logbook, which is the record drawn from Splose.\n\nClicking a travel strip opens the Travel Details panel, and its **View Travel Logbook** link brings you back here.",
+    "type": "callout",
+    "title": "Not the same as calendar travel"
+   },
+   {
+    "key": "s-30936b3a",
+    "quiz": {
+     "explain": "Address fixes are a local tidy-up for the travel record. The practice systems keep their original address — and the logbook quietly remembers it too.",
+     "options": [
+      "Only the logbook record changes — Splose and Outlook are untouched",
+      "The appointment’s address is updated in Splose",
+      "A new travel event is added to your Outlook calendar"
+     ],
+     "question": "A journey in the logbook shows the wrong destination address. What happens when you correct it and click Save addresses?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-ab147113",
+    "body": "You know where the Travel Logbook lives, what the totals mean, how the estimates are worked out and how to tidy an address when one is wrong.\n\nNext, find policies, guides and your learning in **Using the Resource Hub**.",
+    "next": "portal-resource-hub",
+    "type": "complete",
+    "title": "You can read the logbook"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.087971+00"
+ },
+ {
+  "id": "394d2bb0-89ab-403d-93e3-15e17a159c9c",
+  "module_id": "7f07790a-ddf0-4905-9cd3-ed9c6fe916c6",
+  "version": 1,
+  "title": "Getting Started with the Opal Portal",
+  "description": "First sign-in, the top bar, the main navigation and where everything lives.",
+  "minutes": 5,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-getting-started.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-f75f73dd",
+    "body": "The Opal Portal is where the practice runs its day: appointments, scheduling, travel records, resources and your own profile.\n\nThis short walkthrough points out the controls you will use every day. You can leave at any time — your place is saved, and you can continue later from the Resource Hub.",
+    "type": "intro",
+    "title": "Welcome to Opal"
+   },
+   {
+    "key": "s-3a871872",
+    "pad": 4,
+    "body": "This bar is always visible. From left to right: the sync status pill, global search, the daily snapshot, notifications, help, and your account menu.",
+    "type": "highlight",
+    "title": "The top bar",
+    "target": "app-header",
+    "rounded": "0"
+   },
+   {
+    "key": "s-2138a0ff",
+    "pad": 2,
+    "body": "These tabs are the main areas of the portal. What you see here depends on your role — owners see practice management areas that therapists do not, so your tab row may differ from a colleague’s.",
+    "type": "highlight",
+    "title": "Main navigation",
+    "target": "main-nav",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-e96566e4",
+    "pad": 2,
+    "body": "You land on the Calendar after signing in. It shows your week as colour-coded blocks: sessions, travel and other commitments.\n\nThe **Using the Calendar** module covers it in detail.",
+    "type": "highlight",
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "Calendar — your home base",
+    "target": "tab-calendar",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-7d9a31a9",
+    "pad": 4,
+    "body": "This pill shows whether your Outlook calendar is connected and when it last synced. Click it any time to refresh. If it says \"not connected\", the **Connecting Outlook** module shows you how to fix that.",
+    "type": "highlight",
+    "title": "Outlook sync status",
+    "target": "sync-status",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-dc9d32c4",
+    "pad": 4,
+    "body": "Search across the portal from anywhere. Keyboard shortcut: **Cmd+K** on Mac or **Ctrl+K** on Windows.",
+    "type": "highlight",
+    "title": "Global search",
+    "target": "header-search",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-6b3e80a3",
+    "pad": 4,
+    "body": "A summary of the day or week — a quick morning check before you head out.",
+    "type": "highlight",
+    "title": "Daily and weekly snapshot",
+    "target": "header-report",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-4c61fa1a",
+    "pad": 4,
+    "body": "Schedule changes, sync alerts and reminders arrive here. The badge shows how many are unread. The **Notifications** module covers what each type means.",
+    "type": "highlight",
+    "title": "Notifications",
+    "target": "header-notifications",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-7b47b44a",
+    "pad": 2,
+    "body": "Something broken, confusing or missing? Open Support to report it — you can attach a screenshot, and the portal records which page you were on automatically.",
+    "type": "highlight",
+    "title": "Support",
+    "target": "#tab-support-pop",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-084678a8",
+    "pad": 4,
+    "body": "The question mark opens Help: quick guided tours of individual screens, a setup checklist, and a way back to this induction.",
+    "type": "highlight",
+    "title": "Help and guided tours",
+    "target": "header-help",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-e1ea9da3",
+    "pad": 4,
+    "body": "Click your name for the account menu: your profile, reporting an issue, your support tickets, and **Sign out**.",
+    "type": "highlight",
+    "title": "Your account",
+    "target": "#app-user-chip",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-6851770d",
+    "pad": 2,
+    "body": "Less-frequent areas live under this menu — travel, business and administrative tools. Everything in it works exactly like a normal tab.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "The More menu",
+    "target": "#nav-more-btn",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-7d26bd2b",
+    "quiz": {
+     "explain": "The Calendar is your home base — the portal lands there after every sign-in.",
+     "options": [
+      "The Calendar tab",
+      "The Support window",
+      "The account menu"
+     ],
+     "question": "Where do you see today’s appointments after signing in?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-6e42cfef",
+    "body": "That’s the shell of the portal: navigation, search, notifications, support and your account.\n\nNext, make sure your details are up to date in **Your Profile and Documents**.",
+    "next": "portal-profile-documents",
+    "type": "complete",
+    "title": "You know your way around"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.060312+00"
+ },
+ {
+  "id": "3c07b407-cedf-4660-8aea-3d93e97f0a10",
+  "module_id": "a8f89633-a9d6-4970-81a8-86940828cfbd",
+  "version": 1,
+  "title": "Book a Client Appointment",
+  "description": "The Splose calendar, the three booking types, completing a booking properly, and how practitioner–client access really works.",
+  "minutes": 12,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-booking.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-ded56bca",
+    "body": "Booking in Splose is quick — the skill is doing it **accurately**: the right client, the right service, linked to the right case.\n\nBy the end of this lesson you can navigate the calendar, tell an Appointment from a Support activity and Busy time, complete a booking with the correct details, and get access to a new client’s record before their first appointment.",
+    "type": "intro",
+    "title": "Booking, done properly"
+   },
+   {
+    "key": "s-61293719",
+    "body": "Open **Calendar**, find the correct **location** and your **practitioner column**, and click the time slot you want.\n\nA small menu appears with three choices. For a therapy session with a client, choose **Appointment**.\n\nEverything in this screenshot is demo data — the layout is what matters.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Splose calendar in week view for a demo clinic, with practitioner columns across the top. A clicked 11:00 am time slot shows a small menu offering Support activity, Busy time and Appointment, with App",
+     "src": "/assets/tutorials/splose-booking/calendar-choose-appointment.png"
+    },
+    "title": "Pick the time slot"
+   },
+   {
+    "key": "s-afa4af51",
+    "body": "**Appointment** — a client-facing therapy or clinical session. Your default for participant work.\n\n**Support activity** — a client-related activity that is not a standard session, where Opal procedure allows it: report writing or billable communication are typical examples, depending on final Opal policy.\n\n**Busy time** — blocks your availability without representing any client work.\n\nChoosing the right type matters: it drives attendance records, reporting and, ultimately, billing.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Close-up of the Splose slot menu showing the three booking types: Support activity with a clock icon, Busy time with a blocked icon, and Appointment with a calendar icon.",
+     "src": "/assets/tutorials/splose-booking/calendar-choose-support-activity.png"
+    },
+    "title": "The three booking types"
+   },
+   {
+    "key": "s-6f7445a4",
+    "body": "The Create appointment dialog walks you down the details:\n\n1. **Client** — search and select. Only create a new client where that is appropriate and you are authorised to.\n2. **Service** — choose the correct one. Only services enabled for you at this location appear.\n3. **Case** — link the appointment to the appropriate existing case where one is available. This is what keeps the clinical record tidy.\n4. **Date, time, duration** — confirm them; assign a room or resource if needed.\n5. Turn on **Provider Travel** when the appointment requires travel and the configured workflow expects it.\n6. Click **Create**.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The Splose Create appointment dialog with location and practitioner filled in, a client search underway with a demo client result (date of birth hidden), and fields below for service, case, date and t",
+     "src": "/assets/tutorials/splose-booking/create-appointment-client.png"
+    },
+    "title": "Complete the booking"
+   },
+   {
+    "key": "s-4fddadba",
+    "body": "Booking an appointment **or** a support activity with a client links that client to you.\n\nBy default, you generally see the clients you have an appointment or support activity with — that link is what opens the record to you.",
+    "type": "callout",
+    "title": "How client access works"
+   },
+   {
+    "key": "s-0f52780e",
+    "body": "New referral arrives. You need to review the record **before** the first session — but the client is not linked to you yet, so you cannot see it.\n\nThe supplied workflow: create a **support activity linked to that client**. The link now exists, you can review the record, and later you book the real therapy appointment. If Opal procedure allows, the temporary activity can be archived afterwards.",
+    "type": "callout",
+    "title": "A referral you cannot see yet"
+   },
+   {
+    "key": "s-4f30d8ae",
+    "quiz": {
+     "explain": "A client-facing therapy session is always an Appointment. Support activities are for non-session client work, and busy time holds space with no client attached.",
+     "options": [
+      "Appointment",
+      "Support activity",
+      "Busy time"
+     ],
+     "question": "A regular one-hour therapy session with a participant — which booking type?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check: booking type"
+   },
+   {
+    "key": "s-e3ea03d3",
+    "quiz": {
+     "explain": "Service visibility is the service + practitioner + location relationship — the same rule you learned in account setup. Wrong location or missing assignment: check both, then escalate.",
+     "options": [
+      "Splose hides services at busy times",
+      "It is not enabled for the selected location or for you as the practitioner",
+      "The client has not consented to that service"
+     ],
+     "question": "Why might a service not appear in the Create appointment dialog?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: the missing service, again"
+   },
+   {
+    "key": "s-980cf332",
+    "quiz": {
+     "explain": "A client-linked support activity creates the practitioner–client link, which is what opens the record. A placeholder appointment pollutes the appointment history and cancellation records.",
+     "options": [
+      "Ask a colleague to read the record to you",
+      "Create a support activity linked to the client, which establishes your access",
+      "Book a placeholder appointment for tomorrow and cancel it later"
+     ],
+     "question": "A new referral is not visible to you yet, and you need to review the client’s information before the first session. What is the correct path?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Scenario: early record access"
+   },
+   {
+    "key": "s-82900e12",
+    "quiz": {
+     "explain": "Linking the appointment to its case at booking time is what keeps sessions, notes and reporting connected.",
+     "options": [
+      "Put the case name in the appointment note",
+      "Link the appointment to the appropriate case",
+      "Email admin after each session"
+     ],
+     "question": "What is the recommended way to make sure a session is tracked correctly against the clinical record?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: cases"
+   },
+   {
+    "key": "s-46926b01",
+    "body": "The following are not final yet, so this lesson does not state rules for them: the exact allowed uses of Support activity, whether practitioners or only administrators create new clients, the Provider Travel field expectations once Opal’s travel automation is final, and who archives temporary linking activities.\n\nWhen one of these matters to your work, ask Opal administration rather than guessing.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-1b60eb7a",
+    "body": "Right slot, right type, right client, right service, linked case — and the support-activity trick for records you cannot see yet.\n\nNext: what happens when appointments change.",
+    "next": "splose-appointments",
+    "type": "complete",
+    "title": "You can book cleanly"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.1016+00"
+ },
+ {
+  "id": "4b72b491-712a-491e-a87d-0709c0cd60e5",
+  "module_id": "df3119f3-7745-4323-900a-3ec50cbfc4fe",
+  "version": 1,
+  "title": "Reschedule, Cancel and Status",
+  "description": "Moving appointments safely, recording cancellations and no-shows through Status, and why Archive is never a cancellation.",
+  "minutes": 10,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-appointments.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-9ce69dee",
+    "body": "Sessions move, participants cancel, sometimes nobody shows up. Splose records each of those differently, and the differences carry through to clinical history and billing.\n\nBy the end of this lesson you can reschedule with confidence, record a cancellation properly, tell **Cancelled** from **Did not arrive**, and explain why **Archive** is not how you cancel anything.",
+    "type": "intro",
+    "title": "Appointments change — records should not suffer"
+   },
+   {
+    "key": "s-9fe0e7f7",
+    "body": "Click the appointment, select **Reschedule**, then click the new time slot. Splose shows a confirmation before anything changes.\n\nThe faster alternative: **drag** the appointment to its new day or time. The same confirmation appears — the speed never skips the check.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Splose calendar in rescheduling mode: a banner at the top reads Rescheduling for, with the client name hidden, and the calendar waits for a new time slot to be clicked.",
+     "src": "/assets/tutorials/splose-appointments/rescheduling-mode.png"
+    },
+    "title": "Reschedule"
+   },
+   {
+    "key": "s-357933bb",
+    "body": "The confirmation sentence contains everything that is about to change. Before clicking Confirm, deliberately check all four:\n\n**Date** — the right day?\n**Time** — the right slot?\n**Location** — the right clinic?\n**Practitioner** — still the right person?\n\nDrag-and-drop makes it easy to be one column or one row off — this dialog is where you catch it.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A Splose confirmation dialog asking Are you sure?, describing the appointment change with its new time, date, clinic location and practitioner, with Cancel and Confirm buttons.",
+     "src": "/assets/tutorials/splose-appointments/reschedule-confirm.png"
+    },
+    "title": "Read before you confirm"
+   },
+   {
+    "key": "s-5162f940",
+    "body": "To record a cancellation: click the appointment, open the **Status** dropdown, select **Cancelled**, choose the applicable cancellation option, add a reason where required, and confirm.\n\nThe status vocabulary:\n\n**No status** — not yet marked.\n**Arrived** — the participant attended.\n**Did not arrive** — expected, did not attend, had not cancelled.\n**Cancelled** — the appointment was called off.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A Splose appointment panel with the Status dropdown open showing No status, Arrived, Did not arrive and Cancelled. The client name is hidden. Below the panel are Book another, Edit, Reschedule and Arc",
+     "src": "/assets/tutorials/splose-appointments/status-cancelled-dna.png"
+    },
+    "title": "Cancellations go through Status"
+   },
+   {
+    "key": "s-fc286526",
+    "body": "The **Archive** button on the appointment panel is a record-management action — it is **not** how you cancel.\n\nA cancellation recorded through Status **preserves** the appointment and its history, which the practice needs for reporting and billing. Archive records no cancellation at all — it is a separate action for managing records, and it is never the normal way to handle a cancelled appointment.\n\nIf you remember one thing from this lesson: **status records what happened; Archive is not a cancellation shortcut.**",
+    "type": "warning",
+    "title": "Cancel is not Archive"
+   },
+   {
+    "key": "s-49c9768a",
+    "body": "The appointment panel may offer **View change log** — the appointment’s history of edits and status changes.\n\nYou will not need it daily, but when something looks wrong — a session that moved unexpectedly, a status you did not set — the change log is where you look before escalating.",
+    "type": "callout",
+    "title": "The change log"
+   },
+   {
+    "key": "s-fc8a6c9d",
+    "quiz": {
+     "explain": "The family cancelled before the session — that is a cancellation, recorded through Status with the applicable option and reason. Did not arrive is only for unannounced absences, and Archive is never a cancellation.",
+     "options": [
+      "Status → Did not arrive",
+      "Status → Cancelled, with the applicable cancellation option",
+      "Archive the appointment"
+     ],
+     "question": "A parent emails before the session: their child is unwell and cannot attend today. How is the appointment recorded?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Scenario: the sick child"
+   },
+   {
+    "key": "s-47200681",
+    "quiz": {
+     "explain": "Expected, absent, no prior cancellation — that is exactly what Did not arrive records. The distinction from Cancelled matters for reporting and any applicable billing rules.",
+     "options": [
+      "Cancelled",
+      "No status",
+      "Did not arrive"
+     ],
+     "question": "You wait at the scheduled time; the participant never attends and nobody cancelled beforehand. Which status fits?",
+     "correctIndex": 2
+    },
+    "type": "quiz",
+    "title": "Scenario: the empty waiting room"
+   },
+   {
+    "key": "s-d1acdf4a",
+    "quiz": {
+     "explain": "Reschedule in Splose — it is the source of truth. Outlook only displays a copy, and cancel-plus-rebook fabricates a cancellation that never happened.",
+     "options": [
+      "In Splose, using Reschedule or drag-and-drop",
+      "In the subscribed Outlook calendar",
+      "Cancel in Splose and rebook fresh"
+     ],
+     "question": "A participant asks to move tomorrow’s 10am session to 2pm. Where does the move happen?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Scenario: the moved session"
+   },
+   {
+    "key": "s-59365265",
+    "quiz": {
+     "explain": "All four, every time — drag-and-drop mistakes are usually one column (practitioner) or one row (time) off, and the confirmation sentence is where you catch them.",
+     "options": [
+      "Just the new time",
+      "Date, time, location and practitioner",
+      "That the client was notified"
+     ],
+     "question": "What must you verify in the confirmation dialog after dragging an appointment to a new slot?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: before you confirm"
+   },
+   {
+    "key": "s-d0e67c14",
+    "body": "Not covered here because Opal has not finalised them: whether clients are automatically notified after a reschedule or cancellation, the cancellation reason categories, late-cancellation invoicing, who may archive appointments and when, and exactly when the Arrived status must be applied.\n\nUntil those are published, ask Opal administration when a case in front of you depends on one.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-b7f2b338",
+    "body": "Reschedule with the four-point check, cancellations through Status, Did not arrive for unannounced absences — and Archive left alone.\n\nNext: documenting the session itself.",
+    "next": "splose-progress-notes",
+    "type": "complete",
+    "title": "Changes, recorded honestly"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.103735+00"
+ },
+ {
+  "id": "68436429-3f2a-4afd-b5b5-d0bd54a2fbb9",
+  "module_id": "e9f9a771-6621-4ffc-912e-5a6e35580f5e",
+  "version": 1,
+  "title": "Your Profile and Documents",
+  "description": "Keep your details, credentials and documents current — and see where they are used.",
+  "minutes": 5,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-profile-documents.png",
+  "start_context": {
+   "tab": "profile"
+  },
+  "steps": [
+   {
+    "key": "s-e5b422d4",
+    "body": "My Profile is your own record in the portal: your details, work locations, leave, professional development, documents and credentials.\n\nIt is not just paperwork — the scheduler, travel estimates and compliance reminders all read from what you keep here. This walkthrough shows you around and points out what saves automatically, what needs a save button, and what only the practice owner can change.",
+    "type": "intro",
+    "title": "Your profile runs more than you think"
+   },
+   {
+    "key": "s-d7be2adb",
+    "pad": 6,
+    "body": "The top of the tab shows how the portal knows you: your name, your role and your email.\n\nThe chip on the right tracks your account setup — it reads **Setup complete**, or counts the steps remaining. While anything is outstanding, an **Account setup status** card also appears above with the list. Some items there, like the Splose practitioner link for therapists, are set up for you by the practice owner.",
+    "type": "highlight",
+    "route": {
+     "tab": "profile"
+    },
+    "title": "You, at a glance",
+    "target": ".pf-summary",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-824424c6",
+    "pad": 6,
+    "body": "Each card opens one section: **Personal Details**, **Work Locations**, **Leave** and **Professional development** (owners and admins see these last two as **Leave approvals** and **CPD approvals**), **Professional Development Documents**, **Credentials** and **Notifications**.\n\n**Work Locations** is where you set which base you work from each weekday — the scheduler uses it for travel estimates. **Notifications** holds your reminder preferences. Leave and CPD submitted here are reviewed by the practice owner.",
+    "type": "highlight",
+    "title": "Seven cards, one profile",
+    "target": "#pf-dashboard",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-8647ea3f",
+    "pad": 4,
+    "body": "Click the **Personal Details** card to open the first section. Nothing changes until you edit and save — opening a section is always safe.",
+    "type": "action",
+    "title": "Open Personal Details",
+    "target": ".pf-card[onclick*=\"pf-details\"]",
+    "advance": "click",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-8d9a0fe1",
+    "pad": 6,
+    "body": "This section shows your full name, display name, email, phone, job title and app role, plus whether your Outlook calendar is connected and whether your profile is complete.\n\nTwo things deliberately live elsewhere: practitioner registration details such as AHPRA and NDIS provider numbers are managed in Splose, and your **email address and app role can only be changed by the practice owner**.",
+    "type": "highlight",
+    "title": "What the practice sees",
+    "target": "profile-details",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-aa155371",
+    "pad": 4,
+    "body": "**Edit** opens the form. Display name, job title and phone are yours to change; the email field stays greyed out for the owner to manage.\n\nNothing is stored until you press **Save changes** — a green confirmation banner tells you it worked. If you treat clients, your display name is also your name on the practice calendar, so a change here shows for the whole team straight away.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Editing your details",
+    "target": "#pf-edit-btn",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-390e4f93",
+    "pad": 4,
+    "body": "Click **← My Profile** to return to the cards.\n\nWorth knowing: Personal Details is the only profile form with a save button. Work Locations saves by itself moments after each change, and every section reloads fresh from the server whenever you open this tab.",
+    "type": "action",
+    "title": "Back to the cards",
+    "target": ".pf-area-bar .btn",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-117690dd",
+    "pad": 4,
+    "body": "The **Leave** card holds your leave requests and their status: Draft, Pending approval, Approved or Rejected.\n\nInside, **Request leave** opens the form — pick the leave type, the dates, add an optional note for the approver, and leave **Save as** on **Submit for approval** (a saved draft cannot be submitted later from the portal yet). Once submitted, a request cannot be edited or withdrawn here, so speak to the practice owner if plans change. When leave is approved, those dates show as unavailable in the practice scheduler — and the owner will tell you the outcome directly, as the portal does not send you a notification yet.",
+    "type": "highlight",
+    "roles": [
+     "therapist"
+    ],
+    "title": "Requesting leave",
+    "target": "#pf-nav-leave",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-ca21d886",
+    "pad": 4,
+    "body": "For you this card is **Leave approvals**. Inside, requests sit under Pending, Approved and Rejected tabs, and each pending request offers **Reject** and **Approve**.\n\nTake care: **Approve** applies immediately, with no confirmation step, and neither decision can be reversed in the portal. Rejecting asks for an optional reason, which the staff member sees against their request. Approved leave blocks that person’s availability in the Master Scheduler straight away — but the portal does not notify them automatically, so tell them directly. CPD submissions are approved the same way from the **CPD approvals** card.",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "title": "Approving leave",
+    "target": "#pf-nav-leave",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-a5b12b58",
+    "pad": 4,
+    "body": "This card tracks CPD activities. Each one records a title, provider, category, date, hours and cost, with room for a supporting link and a short reflection.\n\nTherapists add activities with **Add CPD activity** — only the title is required — and submit them for the practice owner’s approval, keeping **Save as** on **Submit for approval**. Once activities are approved, their hours are totalled above the list, building the CPD record behind AHPRA registration. If your hours fall well behind pace for the year, the portal nudges you in your notifications.",
+    "type": "highlight",
+    "title": "Professional development",
+    "target": "#pf-nav-cpd",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-81ab8135",
+    "pad": 4,
+    "body": "**Professional Development Documents** is where certificates, training records and other PD evidence live. **Upload document** takes a title, a document type, an optional link to one of your CPD activities, and the file itself — click the file box to choose a PNG, JPG or PDF up to 5 MB.\n\nEvery document offers **Download** any time. **Remove** deletes it permanently after a single confirmation, so treat it with respect. Files here are private: only you and the practice owner can open them.",
+    "type": "highlight",
+    "title": "Your document folder",
+    "target": ".pf-card[onclick*=\"pf-pddocs\"]",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-e4a1f7bb",
+    "pad": 4,
+    "body": "**Credentials** is the practice’s compliance record: AHPRA registration, Working with Children Check, NDIS Worker Screening, police clearance, insurances, first aid and more. Staff record each one with **Add credential** — type and name are required, and the expiry date matters most, because it is what the portal watches.\n\nA credential’s card turns amber once expiry is within 60 days and red once it has passed, and reminders start arriving in your notifications in the months before the date. The practice owner can mark a credential **Verified**. Here too, **Remove** is permanent — keep it for entries added in error.",
+    "type": "highlight",
+    "title": "Credentials and expiry dates",
+    "target": ".pf-card[onclick*=\"pf-credentials\"]",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-760db441",
+    "quiz": {
+     "explain": "Credential cards turn amber inside 60 days of expiry and red once expired, and reminder notifications begin well before the date — as long as the expiry date has been recorded on the credential.",
+     "options": [
+      "Its card in Credentials turns amber, and reminders arrive in your notifications",
+      "Nothing changes in the portal until the day it expires",
+      "The portal renews it with the issuing body automatically"
+     ],
+     "question": "Your Working with Children Check expires in six weeks. Where will you notice?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-ee1ce840",
+    "body": "That’s My Profile: your details, locations, leave, CPD, documents and credentials — with the portal watching the dates so nothing lapses quietly.\n\nIf you use your own Microsoft mailbox, the **Connecting Outlook** module is a good next stop; otherwise head straight to **Using the Calendar**.",
+    "next": "portal-using-calendar",
+    "type": "complete",
+    "title": "Your records are in your hands"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.075131+00"
+ },
+ {
+  "id": "6f4581fc-ab90-40eb-abed-baa6c8b2d8ba",
+  "module_id": "7a06a878-6109-44d2-acb2-0721e713c5f9",
+  "version": 1,
+  "title": "Connect Splose to Microsoft 365",
+  "description": "Your personal Teams connection, telehealth links, the one-way calendar feed into Outlook, and the private URL you must never share.",
+  "minutes": 12,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-teams-outlook.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-0de2a081",
+    "body": "Splose and Microsoft 365 meet in two places: **Teams** creates the meeting links for telehealth, and **Outlook** can display your Splose calendar alongside your email and meetings.\n\nThe theme of this lesson is direction: Splose pushes **out** to Microsoft. Nothing you do in Outlook ever changes a Splose appointment.",
+    "type": "intro",
+    "title": "Two systems, connected carefully"
+   },
+   {
+    "key": "s-49c780cc",
+    "body": "In Splose: **My Account → Integrations → Microsoft Teams → Connect**, then sign in with your **Opal Microsoft 365 business account** — never a personal Microsoft account. Return to Splose and check it shows as connected.\n\nThis connection is **per practitioner**: every therapist connects their own work account.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The Splose My Account Integrations page showing Microsoft Teams with its Connect button circled, and below it the Calendar feed section with a privacy warning and a feed URL whose private token is hid",
+     "src": "/assets/tutorials/splose-teams-outlook/integrations-teams-feed.png"
+    },
+    "title": "Connect Microsoft Teams — you, personally"
+   },
+   {
+    "key": "s-9bb7732f",
+    "body": "Where Opal has configured it, the telehealth service carries **Create meeting with Microsoft Teams**. Book that service and Splose creates the Teams meeting link for the appointment.\n\nService configuration may be admin-only — what matters day-to-day is simply: book the **correct telehealth service** and the link takes care of itself.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A Splose service’s Telehealth settings with three toggles — Create meeting with Zoom, Create meeting with Google Meet, and Create meeting with Microsoft Teams, with only the Microsoft Teams toggle swi",
+     "src": "/assets/tutorials/splose-teams-outlook/service-telehealth-toggles.png"
+    },
+    "title": "How telehealth gets its Teams link"
+   },
+   {
+    "key": "s-7a4f2aa6",
+    "body": "No link on a telehealth appointment? Open the appointment and use **Create Microsoft Teams meeting** to add one manually.\n\nIf there is still no link, walk this checklist:\n\n1. Is Microsoft Teams connected under My Account → Integrations?\n2. Was the correct telehealth service selected?\n3. Is that service configured to create Teams meetings?\n4. Use the manual Create Microsoft Teams meeting if appropriate.\n5. Still stuck — escalate to Opal administration.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A Splose appointment panel with the client name hidden and the Create Microsoft Teams meeting link underlined, next to a calendar showing a telehealth session.",
+     "src": "/assets/tutorials/splose-teams-outlook/manual-teams-meeting.png"
+    },
+    "title": "The manual fallback"
+   },
+   {
+    "key": "s-a6cab990",
+    "body": "To see your Splose appointments alongside your Outlook commitments:\n\nFirst, in **Splose**: My Account → Integrations → **Calendar Feed** → Enable, then copy the private feed link.\n\nThen, in **Outlook**: open the Calendar and choose **Add calendar**.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Outlook on the web with the calendar open and the Add calendar option circled in the left sidebar.",
+     "src": "/assets/tutorials/splose-teams-outlook/outlook-add-calendar.png"
+    },
+    "title": "See Splose in Outlook — step 1"
+   },
+   {
+    "key": "s-82bf4ee4",
+    "body": "Choose **Subscribe from web**, paste the Splose feed link, name the calendar **Splose**, and click **Import**.\n\nYour Splose appointments and support activities now appear in Outlook, refreshed automatically.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Outlook’s Add calendar dialog on the Subscribe from web tab, with the Splose feed URL pasted (its token hidden), the calendar named Splose, and the Import button circled.",
+     "src": "/assets/tutorials/splose-teams-outlook/outlook-subscribe-web.png"
+    },
+    "title": "See Splose in Outlook — step 2"
+   },
+   {
+    "key": "s-8199ff3a",
+    "body": "The subscribed calendar is a **view**, not a second copy you can edit.\n\nSplose → Outlook: appointments appear. Outlook → Splose: **nothing flows back**. Moving, editing or deleting the Outlook copy changes nothing in Splose — it just makes your view wrong.\n\nSo the working pattern for an emailed change request: read and reply in **Outlook**, reschedule in **Splose**, and let the Outlook view catch up on its own.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Diagram of a one-way arrow from Splose to Outlook labelled calendar feed, view only, with the reverse direction crossed out in red and labelled: changes made in Outlook never update Splose.",
+     "src": "/assets/tutorials/splose-teams-outlook/one-way-feed.png"
+    },
+    "title": "The feed is one-way. Always."
+   },
+   {
+    "key": "s-9c2412fe",
+    "body": "Anyone who has your calendar-feed URL can see your Splose appointments, support activities and busy times — no password asked.\n\nNever share it, post it, or paste it anywhere other than your own Outlook subscription. If it is ever shared by mistake, **disable the feed and generate a new link** in Splose, then resubscribe.\n\nThat is also why the URLs in this lesson’s screenshots have their tokens hidden.",
+    "type": "warning",
+    "title": "The feed link is private"
+   },
+   {
+    "key": "s-c3733b91",
+    "quiz": {
+     "explain": "The feed is one-way. Only rescheduling in Splose changes the appointment; the Outlook view then updates itself.",
+     "options": [
+      "Drag the event in Outlook",
+      "Reschedule the appointment in Splose",
+      "Delete the Outlook copy so it re-syncs"
+     ],
+     "question": "Your subscribed Splose calendar shows tomorrow’s session at the wrong time — the participant agreed to move it. Where do you fix it?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: where changes happen"
+   },
+   {
+    "key": "s-a9670b1d",
+    "quiz": {
+     "explain": "One-way, by design. Outlook displays; Splose decides.",
+     "options": [
+      "Yes — edits sync in both directions",
+      "No — Splose publishes to Outlook, and nothing flows back"
+     ],
+     "question": "Is the Splose-to-Outlook calendar feed two-way?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: the feed’s direction"
+   },
+   {
+    "key": "s-dd6842e1",
+    "quiz": {
+     "explain": "Each practitioner connects their own approved Opal Microsoft 365 business account — personal and shared accounts do not belong in the clinical workflow.",
+     "options": [
+      "Any Microsoft account you already have",
+      "Your approved Opal Microsoft 365 business account",
+      "A shared practice account admin gives you"
+     ],
+     "question": "Which Microsoft account do you connect to Splose for Teams?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: which account"
+   },
+   {
+    "key": "s-9a4b9e13",
+    "quiz": {
+     "explain": "Internal meetings live in Outlook/Teams. Splose’s Teams integration exists for participant telehealth appointments.",
+     "options": [
+      "In Splose, so they appear in the feed",
+      "In Outlook/Teams"
+     ],
+     "question": "Where are ordinary internal Teams meetings — team catch-ups, supervision — created?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: internal meetings"
+   },
+   {
+    "key": "s-c28840ce",
+    "body": "Not yet final, so not stated as rules here: exactly what clients are sent when a Teams link is created, which Opal services have Teams creation enabled, whether service configuration is owner/admin-only, and the final wording on documenting MDT meetings and support activities.\n\nWhen in doubt, ask Opal administration — especially before assuming a client was automatically notified of anything.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-da6e993d",
+    "body": "Teams connected with your own work account, telehealth links flowing from the right service, Splose visible in Outlook — and the feed treated as what it is: a private, one-way view.\n\nNext: what Splose can tell you about your own work.",
+    "next": "splose-performance",
+    "type": "complete",
+    "title": "Connected, in the right direction"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.107413+00"
+ },
+ {
+  "id": "70e6c82e-65d0-45b5-8422-4ad2034375cf",
+  "module_id": "c20c1925-b912-44c1-8706-a7e940cde615",
+  "version": 1,
+  "title": "Using the Resource Hub",
+  "description": "Find policies, guides and learning: collections, search, saving and My Learning.",
+  "minutes": 4,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-resource-hub.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-6ebace19",
+    "body": "The Resource Hub is the practice’s shared bookshelf: policies, clinical guides, portal tutorials, professional development and your own learning record, all in one place.\n\nThis walkthrough shows you how to find things fast, keep your favourites handy, and see what the practice needs you to read.",
+    "type": "intro",
+    "title": "One place for everything you need to know"
+   },
+   {
+    "key": "s-7282cb4e",
+    "pad": 4,
+    "body": "The hub lives under the **Resources** tab, and this menu is how you move around inside it: **Home**, **Library**, **Saved**, **My Learning**, **Professional development** and **Assessments**.\n\nOwners and practice administrators also see an **Admin** section on the end. You’re on **Home** now — let’s look around.",
+    "type": "highlight",
+    "route": {
+     "tab": "resources"
+    },
+    "title": "The hub menu",
+    "target": ".rh2-nav",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-f02dc5af",
+    "pad": 6,
+    "body": "Type a few words here — a policy name, a topic, “calendar” — and press **Enter** or the **Search** button. Results open in the Library, where you can narrow them further.\n\nSearch covers everything in the hub: policies, guides, tutorials and NDIS guidance alike.",
+    "type": "highlight",
+    "title": "When you know what you’re after, search",
+    "target": ".rh2-hero-search",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-ea913f96",
+    "pad": 4,
+    "body": "The Library is the full catalogue — everything approved for staff.\n\nClick **Library** in the hub menu now, and the walkthrough will follow you there.",
+    "type": "action",
+    "title": "Open the Library",
+    "target": ".rh2-nav .rh2-nav-btn:nth-child(2)",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-575ab0cb",
+    "pad": 6,
+    "body": "The search box here works as you type. Beside it, dropdowns narrow the list: **All kinds** separates hosted documents, external links and in-portal guides; **All types** picks a category like policy or tutorial; **All topics** filters by therapy area — with more filters after that.\n\nThe last dropdown changes the order: most relevant, recently updated, A to Z, or most popular. If there’s more than one page, a **Load more** button sits under the grid.",
+    "type": "highlight",
+    "title": "Narrowing the list",
+    "target": ".rh2-filters",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-b76153a1",
+    "pad": 6,
+    "body": "Each card tells you what you’re getting before you click: what kind of thing it is, roughly how many minutes it takes, a **Required** chip if the practice expects everyone to read it, a star once you’ve saved it, and often a badge showing who published it.\n\nOpening a resource is always safe — click this card now to see one.",
+    "type": "action",
+    "title": "Reading a card — then opening one",
+    "target": ".rh2-grid button.rh2-cardtile",
+    "advance": "click",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-b57904c1",
+    "pad": 6,
+    "body": "**Save** puts a resource on your personal shortlist — everything you save appears under **Saved** in the hub menu, so the guides you use every week are two clicks away.\n\n**Mark complete** records that you’ve worked through it, and if the resource belongs to a learning path it ticks off there too. Both are toggles: click again to undo.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Save it, or tick it off",
+    "target": ".rh2-article-head .rh2-article-actions:last-of-type",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-9f052a93",
+    "body": "Some policies carry an **Acknowledge** button as well. That one is different: after you press it, the hub asks you to **Confirm** that you have read and understood the current version, and your confirmation becomes a permanent, version-stamped record the practice relies on.\n\nSo only confirm once you genuinely have read the policy — we won’t do one now. Small wording fixes never ask you again; if a policy changes materially, it returns to **Required for you** on the hub’s Home page until you acknowledge the new version.",
+    "type": "callout",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Acknowledgements are the formal one"
+   },
+   {
+    "key": "s-0df89ea8",
+    "pad": 4,
+    "body": "The hub menu works from anywhere — you don’t need to go back first.\n\nClick **My Learning** now to see your own learning record.",
+    "type": "action",
+    "title": "Open My Learning",
+    "target": ".rh2-nav .rh2-nav-btn:nth-child(4)",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-4cdd6667",
+    "pad": 6,
+    "body": "A learning path is a sequence of resources in a sensible order — a progress bar up top, the modules numbered below, and a tick beside each one you’ve completed. The **Continue learning** card on Home brings you straight back to wherever you’re up to.\n\nYour induction lives here too: the **Opal Portal induction** panel at the top of this page tracks every interactive walkthrough — including the one you’re doing right now — so you can pause and pick any module up later.",
+    "type": "highlight",
+    "title": "Learning paths",
+    "target": ".rh2-path",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-36099ccf",
+    "pad": 6,
+    "body": "**CPD this registration year** counts the hours you’ve logged, with interactive hours shown separately. **Add CPD entry** opens a short form — a date and the activity are all it needs, with provider, hours and a reflection if you want them.\n\nOne honest caveat, straight from the tracker itself: it’s informational only. Your professional body’s own CPD record remains the authoritative one.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Your CPD at a glance",
+    "target": "rh2-cpd",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-15b51a7c",
+    "pad": 6,
+    "body": "**CPD this registration year** shows continuing-professional-development hours at a glance, with interactive hours counted separately.\n\nIt’s informational only — a professional body’s own CPD record remains the authoritative one.",
+    "type": "highlight",
+    "roles": [
+     "read_only"
+    ],
+    "title": "The CPD tracker",
+    "target": "rh2-cpd",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-1cab5570",
+    "quiz": {
+     "explain": "Search covers everything in the hub — policies, guides and tutorials — and the Library’s filters can narrow it from there. Colleagues’ emailed copies go stale; the hub always shows the current version.",
+     "options": [
+      "Search from the hub’s Home page — results open in the Library",
+      "Scroll through the calendar until it turns up",
+      "Ask a colleague to email you their copy"
+     ],
+     "question": "You need the practice’s privacy policy but can’t remember where it lives. Quickest way to find it?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-3e3d493f",
+    "body": "You can now find anything in the Library, keep your regulars under **Saved**, follow a learning path, and see what the practice needs you to read on the Home page.\n\nNext, learn where schedule changes and alerts arrive in **Notifications**.",
+    "next": "portal-notifications",
+    "type": "complete",
+    "title": "The hub is yours"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.090278+00"
+ },
+ {
+  "id": "73b1b8d5-2ccb-40a7-b82f-67469f1ad76b",
+  "module_id": "272d9da3-438c-4652-acc2-430b8bb88c30",
+  "version": 1,
+  "title": "Splose at Opal: The Big Picture",
+  "description": "The three systems Opal runs on, what belongs in each, and the one rule that keeps them honest.",
+  "minutes": 6,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-at-opal.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-214ca2d9",
+    "body": "Opal runs its day across three systems, and each has one job.\n\n**Splose** is the clinical practice-management system: participant appointments, attendance, cases and progress notes.\n\n**Outlook and Teams** are the communication layer: email, internal meetings and meeting infrastructure.\n\n**The Opal Portal** — where you are now — is the operational layer: travel, invoicing, resources and this learning.\n\nThis short lesson gives you the map. The rest of the Splose induction fills in each area.",
+    "type": "intro",
+    "title": "Three systems, one practice"
+   },
+   {
+    "key": "s-230cd520",
+    "body": "Keep this decision table in mind whenever you are unsure which system to open.\n\nIf a task involves a **participant’s appointment or clinical record**, it belongs in Splose. If it is **email or an internal meeting**, it belongs in Outlook or Teams. If it is **travel, invoicing, resources or learning**, it belongs in the Opal Portal.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Decision table of the three systems: Splose holds participant appointments, telehealth bookings, status changes, cases and progress notes, and your performance report. Outlook and Teams hold email, in",
+     "src": "/assets/tutorials/splose-at-opal/systems-map.png"
+    },
+    "title": "Where does each job belong?"
+   },
+   {
+    "key": "s-d04151bc",
+    "body": "Splose is the **source of truth for participant appointments**.\n\nYour Outlook calendar can display a subscribed copy of your Splose calendar — that is a convenience view. Any change to a participant appointment — booking, moving, cancelling — is made **in Splose**, never by editing the Outlook copy.\n\nA later lesson shows exactly how that one-way calendar feed works.",
+    "type": "callout",
+    "title": "The source-of-truth rule"
+   },
+   {
+    "key": "s-01575212",
+    "body": "Participant **telehealth appointments are booked in Splose**. Where the service is configured for it, Splose creates the Microsoft Teams meeting link for you.\n\n**Internal meetings** — team meetings, supervision, general Teams meetings — are created in Outlook/Teams, not booked as appointments in Splose.\n\nAn MDT or case conference may have its meeting invite in Outlook/Teams, and still be clinically documented in Splose where Opal procedure requires it.",
+    "type": "callout",
+    "title": "Telehealth and meetings"
+   },
+   {
+    "key": "s-56064d6c",
+    "quiz": {
+     "explain": "Splose is the source of truth for participant appointments. You read and answer the email in Outlook, but the appointment itself moves in Splose — the Outlook view catches up on its own.",
+     "options": [
+      "Drag the appointment in the subscribed Outlook calendar",
+      "Reschedule the appointment in Splose",
+      "Reply by email and update it wherever is quickest"
+     ],
+     "question": "A participant emails asking to move tomorrow’s session to the afternoon. Where do you make the change?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Which system? — appointments"
+   },
+   {
+    "key": "s-c16e4318",
+    "quiz": {
+     "explain": "Internal meetings — including supervision — live in Outlook/Teams. Splose appointments are for participant work.",
+     "options": [
+      "Book it as an appointment in Splose",
+      "Create it in Outlook/Teams",
+      "Add it as busy time in Splose only"
+     ],
+     "question": "You need to set up a fortnightly supervision meeting with your supervisor. Where does it go?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Which system? — meetings"
+   },
+   {
+    "key": "s-6f1da9c4",
+    "quiz": {
+     "explain": "Travel calculation and invoicing workflow belong to the Opal Portal, even when the underlying appointment data starts in Splose.",
+     "options": [
+      "Splose",
+      "Outlook",
+      "The Opal Portal"
+     ],
+     "question": "You drove to a home visit and need the travel recorded and invoiced correctly. Which system owns that workflow?",
+     "correctIndex": 2
+    },
+    "type": "quiz",
+    "title": "Which system? — operations"
+   },
+   {
+    "key": "s-2495bce7",
+    "body": "Three systems, each with one job — and one rule above them all: **Splose is the source of truth for participant appointments**.\n\nNext, set your own Splose account up properly.",
+    "next": "splose-account-setup",
+    "type": "complete",
+    "title": "You have the map"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.097713+00"
+ },
+ {
+  "id": "7ebf3a59-f5ba-45c5-94fc-f053b7aca979",
+  "module_id": "6b0c09e6-a236-4533-bfed-b22d036b7c43",
+  "version": 1,
+  "title": "Meet Opa, Your Practice Sidekick",
+  "description": "What the Opa assistant can and cannot do, and how to use it responsibly.",
+  "minutes": 4,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-opa-assistant.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-5fab5c69",
+    "body": "Opa is the Portal’s built-in assistant — a chat helper that explains how things work, right where you’re working.\n\nThis short module shows you where Opa lives, what it can and can’t do, and how to use it safely. Nothing in this walkthrough sends a message or changes anything.",
+    "type": "intro",
+    "title": "Meet Opa"
+   },
+   {
+    "key": "s-9d3ab552",
+    "pad": 6,
+    "body": "Opa lives behind this floating button in the bottom-right corner — it follows you to every page of the Portal.\n\nOne thing to know: the little pebble up in the top bar just says hello. It’s this floating button that opens the actual assistant.",
+    "type": "highlight",
+    "image": {
+     "alt": "The floating Opa button in the bottom-right corner of the portal",
+     "src": "/assets/tutorials/portal-opa/fab.png"
+    },
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "The Opa button",
+    "target": "#opa-fab",
+    "rounded": "50%"
+   },
+   {
+    "key": "s-49e23ed4",
+    "pad": 6,
+    "body": "Click the button to open Opa’s chat panel. This is completely safe — opening the panel doesn’t send any message.",
+    "type": "action",
+    "title": "Open the panel",
+    "target": "#opa-fab",
+    "advance": "click",
+    "rounded": "50%"
+   },
+   {
+    "key": "s-aa9b6ef0",
+    "pad": 4,
+    "body": "**+** starts a fresh chat, **−** tucks the panel away, **□** grows it to fill most of the screen and **×** closes it. Minimising or closing doesn’t lose your conversation — open Opa again and it’s still there.\n\nOn a computer you can drag the panel by its header to move it, or drag the bottom-right corner to resize it — Opa remembers your preferred spot. Pressing **Escape** while you’re in the panel closes it too.",
+    "type": "highlight",
+    "route": {
+     "open": "opa"
+    },
+    "title": "The panel controls",
+    "target": ".opa-head-btns",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-cc495988",
+    "pad": 6,
+    "body": "When a chat is empty, Opa offers a few ready-made questions. They change to suit the page you’re on and your role — an owner sees prompts a therapist doesn’t.\n\nClicking one doesn’t send it. It just pops the words into the message box so you can adjust them first, then send when you’re ready.",
+    "type": "highlight",
+    "image": {
+     "alt": "Opa’s empty chat showing the greeting and suggestion prompts",
+     "src": "/assets/tutorials/portal-opa/suggestions.png"
+    },
+    "title": "Suggestion prompts",
+    "target": ".opa-suggestions",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-f221a2c9",
+    "pad": 4,
+    "body": "Type your question in plain English in the **Ask Opa anything...** box. Press **Enter** (or the arrow button) to send; **Shift+Enter** starts a new line.\n\nWhile Opa is thinking you’ll see a **Stop** button if you change your mind. We won’t send a message during this walkthrough — try a question of your own once you finish.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Asking a question",
+    "target": ".opa-composer",
+    "rounded": "12px"
+   },
+   {
+    "key": "s-fd5cb59a",
+    "body": "Your account is read-only, so Opa can’t answer messages for you — if you send one, you’ll see an error instead of an answer.\n\nYou can still open the panel and browse the suggestions, and the rest of this module shows what Opa does for your colleagues.",
+    "type": "callout",
+    "roles": [
+     "read_only"
+    ],
+    "title": "A note for read-only accounts"
+   },
+   {
+    "key": "s-ac70143e",
+    "body": "Opa answers questions about how the Portal works: booking, the calendar, Outlook sync, the Resource Hub, your profile and more. Its answers come from a guide the practice writes and keeps up to date — the **Based on:** line under an answer shows which topics it drew from.\n\nAnswers respect your role, so Opa won’t walk you through screens your account can’t open. Sometimes it offers a button that jumps you straight to the right tab, and every answer has a **Copy** button.",
+    "type": "screenshot",
+    "image": {
+     "alt": "An Opa answer showing the Based on line, a navigation button and the Copy button",
+     "src": "/assets/tutorials/portal-opa/answer.png"
+    },
+    "title": "What a good answer looks like"
+   },
+   {
+    "key": "s-8249a0e8",
+    "body": "Opa can’t see live information — it doesn’t read your calendar, appointments, client records or documents. It can’t look up or fetch actual resources either; for those it points you to the Resource Hub.\n\nAnd it never changes anything: no bookings, edits or deletions. The most it can do is jump you to another tab. If Opa isn’t sure something exists in the Portal, it tells you it can’t confirm — that honesty is deliberate.",
+    "type": "callout",
+    "title": "What Opa can’t do"
+   },
+   {
+    "key": "s-3bf26c91",
+    "body": "Opa never needs a client’s name, address or clinical details to explain how the Portal works — so leave them out of your messages. Opa is built to never repeat identifying details, but the safest detail is the one you never type.\n\nYour chats are stored privately against your own account, and the practice’s records show only that a chat happened — never what was said. All of Opa’s AI processing happens in Australia.",
+    "type": "warning",
+    "title": "Keep client details out of the chat"
+   },
+   {
+    "key": "s-333f10ca",
+    "body": "If a question strays outside helping with the Portal, Opa replies: **“I can't help with that one. Try asking about how the Portal works, or check with your practice lead.”** That answer is final — sending the same question again won’t change it, but rewording it so it’s about the Portal usually will.\n\nOther messages are just temporary: if Opa says it couldn’t reach its knowledge service, or asks you to wait a moment after lots of messages in a row, simply try again shortly.",
+    "type": "callout",
+    "title": "When Opa says no"
+   },
+   {
+    "key": "s-3d69ac06",
+    "body": "Opa is a guide, not the final word — AI answers can occasionally be out of date or simply wrong. For anything important, double-check against the Resource Hub or with your practice lead.\n\nSpotted a wrong or odd answer? Use **Copy** under the answer, then report it through **Support** with the copied text so it can be fixed for everyone.",
+    "type": "callout",
+    "title": "Check before you rely on it"
+   },
+   {
+    "key": "s-7417c439",
+    "pad": 4,
+    "body": "Click the **×** to close Opa — the floating button comes back, ready whenever you need it.\n\nOpa keeps your conversation as you move around the Portal. If you refresh the browser or sign out, your next chat starts fresh.",
+    "type": "action",
+    "title": "Close the panel",
+    "target": "opa-close",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-fd3a6975",
+    "quiz": {
+     "explain": "Opa explains how the Portal works — it never needs client details, and it can’t open records anyway. Keep identifying details out of the chat.",
+     "options": [
+      "Include the client’s name and address so Opa has the full picture",
+      "Ask how the Travel Logbook works, without any client details",
+      "Ask Opa to open the client’s record for you"
+     ],
+     "question": "You want Opa’s help understanding how to record travel for a client visit. What should your message look like?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-da3f3f6b",
+    "body": "You know how to open Opa, what it can genuinely help with, what it deliberately won’t do, and the habits that keep client information safe.\n\nThat’s the final module of the induction — well done. Everything you’ve covered lives in the Resource Hub whenever you need a refresher.",
+    "type": "complete",
+    "title": "You and Opa are acquainted"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.095612+00"
+ },
+ {
+  "id": "87428175-d3d7-4d93-9362-97c46b4ea02b",
+  "module_id": "b063a1d6-e9f4-4ca8-9a3b-990d76848371",
+  "version": 1,
+  "title": "Using the Calendar (Day, Week, Month)",
+  "description": "Read your week, switch views, open event details and understand the colours.",
+  "minutes": 6,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-using-calendar.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-a22ef4b7",
+    "body": "The Calendar is the heart of the portal. It mirrors your Outlook calendar, so what you see here is your real day: client sessions, travel, admin time and meetings, shown as colour-coded blocks.\n\nThis walkthrough shows you how to read the week, switch views, move through time and open the details of any appointment. Nothing you do in it will change a single booking.",
+    "type": "intro",
+    "title": "Your week at a glance"
+   },
+   {
+    "key": "s-edf78a8e",
+    "pad": 4,
+    "body": "These buttons change how much of your calendar you see at once.\n\n**Week** is the everyday view — it’s where the calendar opens unless you’ve picked a different starting view in Settings. **Day** zooms into a single day in detail, and **Month** gives you the long view for planning ahead.",
+    "type": "highlight",
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "Day, Week and Month",
+    "target": "cal-view-tabs",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-3878308f",
+    "pad": 4,
+    "body": "**Today** brings you straight back to the current date from wherever you’ve wandered.\n\nThe arrows beside it step backwards or forwards — one day, one week or one month at a time, depending on the view you’re in. The label next to the arrows always tells you exactly what you’re looking at.",
+    "type": "highlight",
+    "title": "Moving through time",
+    "target": "cal-today",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-0a97af17",
+    "pad": 0,
+    "body": "Every block is one commitment: a client session, travel, admin time or a meeting. Today’s column is highlighted, and an orange line across it marks the current time.\n\nThe grid covers the full 24 hours — scroll up or down for early starts and evenings. Colours follow your Outlook categories, and the **Legend** button in the toolbar shows what each colour means.",
+    "type": "highlight",
+    "title": "Reading the grid",
+    "target": "calendar-grid",
+    "rounded": "0"
+   },
+   {
+    "key": "s-4655b680",
+    "pad": 4,
+    "body": "Let’s look at the bigger picture.\n\nClick the highlighted **Month** button. Switching views is always safe — it never changes any of your appointments.",
+    "type": "action",
+    "title": "Try Month view",
+    "target": "cal-view-month",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-e08b6688",
+    "pad": 4,
+    "body": "Month view scrolls smoothly from one month into the next. Each day shows its first few events, with **+N more** when a day is busy — clicking any day opens it in Day view.\n\nWhen you’re ready, click **Week** to head back to the everyday view.",
+    "type": "action",
+    "title": "The long view — and back again",
+    "target": "cal-view-week",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-63d55119",
+    "pad": 4,
+    "body": "The mini month is the quickest way to jump around: in Day or Week view, click any date and the main calendar goes straight there.\n\nUnder **My calendars**, untick a category — Travel, say, or Meetings — to tuck those blocks out of view while you concentrate. Nothing is changed or deleted; it only affects what you see on this screen, and ticking the box brings everything straight back.\n\nOn smaller screens this sidebar tucks itself away — the lines button at the top left of the toolbar opens it.",
+    "type": "highlight",
+    "title": "The mini month and My calendars",
+    "target": "#cal-sidebar",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-c95d5ccc",
+    "pad": 4,
+    "body": "Click any block on your calendar — a details panel slides in from the right.\n\nLooking is always safe: opening details never changes the appointment.",
+    "type": "action",
+    "image": {
+     "alt": "Week view showing colour-coded appointment blocks",
+     "src": "/assets/tutorials/portal-using-calendar/week-blocks.png"
+    },
+    "title": "Open an appointment",
+    "target": ".session",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-039dad7b",
+    "pad": 4,
+    "body": "The panel shows the session type, day and time, whether it’s billable, and the client’s details when there is one.\n\nThe **Location** section deserves a close look. If an appointment is missing its full street address you’ll see a warning. For accounts that can make changes, start typing in the address box and pick a suggestion — it saves on the spot — or press **Save & recalculate** after typing it yourself. Those address saves are real: they’re stored and synced back to Outlook so travel times can be worked out.\n\n**Navigate** opens the address in Google Maps. Close the panel with **Close**, the × in its top corner, or the Escape key.",
+    "type": "highlight",
+    "image": {
+     "alt": "The session details panel, showing time, billing, patient and location",
+     "src": "/assets/tutorials/portal-using-calendar/detail-drawer.png"
+    },
+    "title": "Session details",
+    "target": "detail-panel",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-be477b66",
+    "body": "The calendar mirrors Outlook, and in this version **time changes made here don’t stick**. Dragging a block, resizing its edges or editing the time boxes in the details panel will look like they work, but the calendar snaps back to Outlook’s times at the next refresh.\n\nTo change when something happens, change it in Outlook (or rebook it) and the portal will follow.\n\n**Deleting is different — it’s real.** For accounts that can make changes, **Delete** removes the event from this calendar and from Outlook, along with any linked travel blocks. A confirmation always appears first, and Cmd+Z (Ctrl+Z on Windows) can undo it straight away.",
+    "type": "warning",
+    "title": "What saves — and what doesn’t"
+   },
+   {
+    "key": "s-2eec3648",
+    "pad": 4,
+    "body": "As an owner or admin you get a fourth view. **Scheduler** lays the whole team out side by side for a single day — who’s free, who’s booked, and where a new appointment would fit best. There’s also an **All therapists (Master view)** link at the bottom of the My calendars list.\n\nThe **Master Scheduler** module walks through it properly.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "The Scheduler view",
+    "target": "cal-view-master",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-ac4338a2",
+    "pad": 4,
+    "body": "**Add event** opens the New Appointment panel right over the calendar. You can also click any empty space in the grid — or drag across a stretch of time — and the panel opens with that time already filled in.\n\nBooking creates a real appointment in Outlook, so we won’t press it now. The **Booking an Appointment** module covers it end to end.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin",
+     "therapist"
+    ],
+    "title": "Adding an appointment",
+    "target": "cal-add-event",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-70945167",
+    "quiz": {
+     "explain": "Times on this calendar come from Outlook. Dragging or editing times here doesn’t save yet — update the time in Outlook (or rebook) and the portal follows at the next sync.",
+     "options": [
+      "Time changes made on this calendar don’t save in this version — change the time in Outlook instead",
+      "Someone else on the team moved it back",
+      "The session was cancelled"
+     ],
+     "question": "You drag a session to a new time, but a few minutes later it jumps back. What happened?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-6f9f284b",
+    "body": "Views, moving through time, the colours, session details and the golden rule — times live in Outlook, addresses save here. That’s the calendar covered.\n\nIf your account books appointments, the next module is **Booking an Appointment** — creating a session properly from start to finish.",
+    "next": "portal-booking-appointment",
+    "type": "complete",
+    "title": "You can read the week like a pro"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.079561+00"
+ },
+ {
+  "id": "8d1b6223-9cd9-4e3e-8063-e2570e7c4914",
+  "module_id": "bcbe5d93-fe7c-4af4-9c91-3bfe15ea3e3e",
+  "version": 1,
+  "title": "Inviting Therapists",
+  "description": "Bring a new team member on board: invite, role, approval and first sign-in.",
+  "minutes": 5,
+  "roles": [
+   "owner"
+  ],
+  "thumb": "/assets/tutorials/portal-inviting-therapists.png",
+  "start_context": {
+   "tab": "settings"
+  },
+  "steps": [
+   {
+    "key": "s-737583a6",
+    "body": "When someone new joins the practice, they don’t sign themselves up — you invite them. This walkthrough covers the whole journey: sending the invitation, choosing the right role, what the new person sees at their end, and approving their account so they can sign in.\n\nThese controls belong to the practice owner, so only you will see them.",
+    "type": "intro",
+    "title": "Growing the team"
+   },
+   {
+    "key": "s-87451972",
+    "pad": 4,
+    "body": "Team management lives in **Settings**, in the **Business** group of the side menu.\n\nClick **Users & Roles** to open it.",
+    "type": "action",
+    "route": {
+     "tab": "settings"
+    },
+    "title": "Open Users & Roles",
+    "target": ".settings-nav-item[data-section=\"user-management\"]",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-d33f32bd",
+    "pad": 6,
+    "body": "Everyone with an account is listed here with their role and a status badge: **Active**, **Pending email** (they haven’t verified their address yet), **Pending approval** (waiting on you), **Suspended** or **Deactivated**.\n\nSmall flags like **No calendar** or **No location** point out members whose setup isn’t finished. Accounts that need your attention sort to the top.",
+    "type": "highlight",
+    "route": {
+     "tab": "settings",
+     "section": "user-management"
+    },
+    "title": "Team Members",
+    "target": "#stg-user-list",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-5b43144d",
+    "pad": 4,
+    "body": "Click **+ Invite team member** to open the invitation form. Opening it sends nothing, so it’s safe to have a look around.\n\nThe first field is their **email address** — the invitation is locked to that exact address, so check the spelling. The name is optional.",
+    "type": "action",
+    "title": "Start an invitation",
+    "target": "settings-invite-user",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-5a7c009f",
+    "pad": 6,
+    "body": "The role decides what they can see and do:\n\n**Therapist** — their own calendar and schedule, and their own travel records.\n\n**Admin** — whole-team scheduling and travel, but no billing, business settings or team management.\n\n**Read-only** — can view calendars and records but can’t change anything.\n\n**Owner** — full control of the practice, including this screen. Hand it out sparingly.",
+    "type": "highlight",
+    "route": {
+     "tab": "settings",
+     "open": "invite-modal",
+     "section": "user-management"
+    },
+    "title": "Choose their role",
+    "target": "#invite-role",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-c5a737f1",
+    "pad": 6,
+    "body": "Leave this ticked for anyone who sees clients. When they register, their therapist profile is created automatically, so they arrive with a working calendar of their own.\n\nIt only counts when the role is **Therapist** — for other roles the box is simply ignored.",
+    "type": "highlight",
+    "title": "Treating therapist",
+    "target": "#invite-treating-wrap",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-738d6304",
+    "pad": 6,
+    "body": "The invitation link works for **3, 7 or 14 days** — 7 is the usual choice. After that it stops working and the invitation shows as expired.\n\nNo drama if that happens: you can simply send them a fresh invitation.",
+    "type": "highlight",
+    "title": "The link has a shelf life",
+    "target": "#invite-expires",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-629a3bb5",
+    "pad": 4,
+    "body": "**Send invite** emails the person a registration link straight away. If the practice’s email isn’t set up (or the send fails), the portal never pretends it went out — it shows you the link with a **Copy link** button so you can pass it on yourself, by phone or Teams.\n\nWe’re not inviting anyone today, so click **Cancel** to close the form.",
+    "type": "action",
+    "title": "Don’t send this one",
+    "target": "invite-modal-close",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-76c67dbb",
+    "body": "Their email invites them to the practice with a **Create my account** button. The link opens this registration page: their email address is already filled in and locked, their role is shown, and they choose a password — at least 8 characters with an uppercase letter, a lowercase letter and a number.\n\nAfter **Create account**, the portal emails them a verification link to prove the address is really theirs.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The registration page showing an invitation confirmed for the invitee, with their role, locked email address, password rules and the Create account button.",
+     "src": "/assets/tutorials/portal-inviting-therapists/register-invited.png"
+    },
+    "title": "What your invitee sees"
+   },
+   {
+    "key": "s-6db71fd3",
+    "pad": 6,
+    "body": "Here’s the step people forget: even after verifying their email, a new account **waits for your approval**. If they try to sign in, they see a pending-approval screen — they’re not stuck, they’re waiting for you.\n\nBack here, a banner appears and their row shows **Pending approval** with an **Approve** button. Approve, and they can sign in straight away. Their first sign-in runs a short setup wizard — their details, connecting Outlook, and their work location.",
+    "type": "highlight",
+    "title": "Approve the new account",
+    "target": "#stg-user-list",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-a56e03c0",
+    "pad": 6,
+    "body": "Invitations you’ve sent are listed under **Pending Invites** with the role and expiry date.\n\nFor an invitation that’s still open: **Resend** emails the same link again, **Copy link** puts it on your clipboard to share yourself, and **Revoke** kills the link for good — use it if an invitation went out by mistake. Note that **Resend won’t revive an expired link** — for those, send a fresh invitation instead.",
+    "type": "highlight",
+    "title": "Keeping track of invitations",
+    "target": "#stg-pending-invites-wrap",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-e2e093bb",
+    "pad": 6,
+    "body": "This panel tracks each member’s setup at a glance: account, onboarding, and — for therapists — their profile and Splose link, plus whether their **Outlook** mailbox is connected (it shows which address, never any passwords) and whether their travel base is set.\n\nIf something’s missing, a fix-up button appears right here — for example **Create profile** for a therapist without a calendar identity yet.",
+    "type": "highlight",
+    "title": "Team setup status",
+    "target": "#stg-team-setup-wrap",
+    "rounded": "10px"
+   },
+   {
+    "key": "s-b50b7bcb",
+    "quiz": {
+     "explain": "Every new account waits for the owner’s approval. Open Settings → Users & Roles and press Approve on their row — they can sign in the moment you do.",
+     "options": [
+      "They need to connect Outlook first",
+      "You need to approve their account in Users & Roles",
+      "They need to be sent a second invite link"
+     ],
+     "question": "A new therapist has registered and verified their email, but says they still can’t sign in. What’s the missing step?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-953bf235",
+    "body": "You can now invite a new team member, pick the right role, follow their progress from invitation to first sign-in, and approve them when they’re ready.\n\nOne last stop: meet **Opa**, the practice’s assistant.",
+    "next": "portal-opa-assistant",
+    "type": "complete",
+    "title": "Your team, sorted"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.093618+00"
+ },
+ {
+  "id": "94684247-55d5-4550-a176-64944151d5df",
+  "module_id": "4909f427-bd8a-4d34-9bda-80d65ddb1253",
+  "version": 1,
+  "title": "Booking an Appointment",
+  "description": "The New Appointment panel end to end: type, client, time — and what saving does.",
+  "minutes": 5,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist"
+  ],
+  "thumb": "/assets/tutorials/portal-booking-appointment.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-d2050e82",
+    "body": "This module walks the **New Appointment** panel end to end: choosing a booking type, picking the client, setting the day and time, and what actually happens when you save.\n\nWe will open the real panel and look at every part of it — but we will **not** create an appointment. At the end you will close the panel without saving anything.",
+    "type": "intro",
+    "title": "Booking an Appointment"
+   },
+   {
+    "key": "s-8ccf9204",
+    "pad": 4,
+    "body": "Everything starts here. Click **Add event** to open the panel.\n\nA tip for later: clicking an empty slot in the week view — or dragging across a stretch of one — opens the same panel with that day and time already filled in.",
+    "type": "action",
+    "route": {
+     "tab": "calendar"
+    },
+    "title": "Open the New Appointment panel",
+    "target": "cal-add-event",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-6051dfa2",
+    "pad": 4,
+    "body": "The panel asks for the type first, because the type decides what the rest of the form needs — a client session asks for a client, an email block asks for a title — and each type starts with a sensible duration.\n\nBillable work sits at the top (direct services, requested reports, non-face-to-face), non-billable at the bottom. The **Provider travel** section is there for the billing rules only — there is nothing to book under it, because travel blocks are created automatically between in-person sessions.\n\nClick **Therapy session** to continue.",
+    "type": "action",
+    "route": {
+     "tab": "calendar",
+     "open": "booking"
+    },
+    "title": "Choose a booking type",
+    "target": ".bk-item[data-leaf=\"therapy\"]",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-5b95e420",
+    "pad": 6,
+    "body": "For a client session, this is where you choose who the appointment is for. The list comes straight from Splose, so it always shows the practice’s current active clients.\n\nSearch by name, suburb or postcode, or narrow the list with the region pills — **East**, **South**, **West**, **Central**. Each card shows the client’s region, NDIS plan and suburb, so you can be sure you have the right person. In a real booking, clicking a card is what selects the client — leave the cards alone today, since we are not booking anyone.\n\nIf the list ever looks empty, a search or region filter is probably still on — clear it and everyone comes back.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "Pick the client",
+    "target": "#cat-client-section",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-301b0eff",
+    "pad": 6,
+    "body": "This is where a client would be chosen — but as a therapist you will see a notice here instead of a client list. The patient directory is only open to the practice owner and admins, so when a client session needs booking, ask them and it will be created on your calendar.\n\nEverything else in this panel is yours to use: reports, case noting, emails, phone calls, professional development, supervision, lunch and the rest need no client at all.",
+    "type": "highlight",
+    "roles": [
+     "therapist"
+    ],
+    "title": "Client bookings are made for you",
+    "target": "#cat-client-section",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-091cda18",
+    "pad": 6,
+    "body": "Down in **When & Where** is where the day gets picked — no need to pick one now. One thing to remember: these chips are always **Monday to Friday of the current week**.\n\nThat holds even if the calendar behind the panel is showing a different week — the appointment still lands in the current week. So before you save a real booking, double-check the day chip says what you think it says.\n\nNo day is pre-selected: if you forget to pick one, the panel asks you to set a time rather than guessing.",
+    "type": "highlight",
+    "title": "Day — this week only",
+    "target": "#bsp-day-chips",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-503968c6",
+    "pad": 6,
+    "body": "Set the start time and the end time moves with it, keeping the appointment’s length. Adjust the end time instead and the duration updates to match.\n\nTimes move in 15-minute steps, which keeps the calendar tidy.",
+    "type": "highlight",
+    "title": "Start and End",
+    "target": ".bsp-time-row",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-ae9728cd",
+    "pad": 6,
+    "body": "The quickest way to set the length: tap a preset, from **15m** up to **4h**, or drag the slider above them for anything in between.\n\nFour hours is the longest a single appointment can be from this panel. The duration starts at a sensible default for the booking type — an hour for client sessions — until you change it.",
+    "type": "highlight",
+    "title": "Duration",
+    "target": ".bsp-dur-presets",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-07f3f590",
+    "pad": 6,
+    "body": "This field is optional — and for client sessions you can leave it alone. The appointment is saved with the **client’s own address** from their record, not with whatever is typed here.\n\nIf a session is happening somewhere unusual, create the appointment first, then open it on the calendar and edit the address there — that change is saved properly and synced to Outlook.",
+    "type": "highlight",
+    "title": "Location",
+    "target": "#bsp-location",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2e4ec122",
+    "pad": 6,
+    "body": "As an owner or admin you can create appointments on any therapist’s calendar. This strip at the top of the panel shows who the booking is for: with one therapist it simply names them, a small team gets a chip each, and a larger team gets a dropdown.\n\nTherapists don’t see this strip — anything they book goes on their own calendar.",
+    "type": "highlight",
+    "image": {
+     "alt": "The \"Booking for\" strip at the top of the New Appointment panel, showing a chip for each therapist",
+     "src": "/assets/tutorials/portal-booking-for-strip.png"
+    },
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "Booking for whom?",
+    "target": "#bsp-therapist-strip",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-52731aa9",
+    "pad": 6,
+    "body": "**Don’t click it now** — but here is what happens when you do.\n\nThe appointment is written straight onto the therapist’s real Outlook calendar and into the portal at the same time. There is no confirmation pop-up: you land back on the calendar with the new appointment in view, and a quiet message confirms it was added.\n\nMade a mistake? **Cmd+Z** on Mac or **Ctrl+Z** on Windows undoes the booking for about ten minutes after you create it.",
+    "type": "highlight",
+    "title": "What Create appointment does",
+    "target": "#create-booking-btn",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-87c6dfd5",
+    "body": "Creating an appointment does **not** check the therapist’s calendar for conflicts. If the time is already taken, both appointments simply sit on the calendar overlapping — nothing stops a double-booking at save time.\n\nSo make a habit of glancing at the therapist’s day before you book. Owners and admins can also use the **Master Scheduler**, which shows the whole team’s availability at once.",
+    "type": "warning",
+    "title": "The panel does not check for clashes"
+   },
+   {
+    "key": "s-2ca34f50",
+    "pad": 4,
+    "body": "To finish, click the **✕** in the top corner to close the panel. Pressing **Escape** or clicking outside the panel does the same.\n\nOne thing to know: closing throws away everything you have entered, without asking. There is no draft — if you are half-way through a real booking, create it before you step away.",
+    "type": "action",
+    "title": "Close without saving",
+    "target": ".bsp-close",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-77f12442",
+    "quiz": {
+     "explain": "The day chips always cover the current week only — even when the calendar behind the panel is showing a different week. Always double-check the day chip before you create.",
+     "options": [
+      "Pick any date using the day chips",
+      "Only pick a day in the current week — the chips are always this week’s Monday to Friday",
+      "Pick next week, as long as the calendar behind the panel is showing next week"
+     ],
+     "question": "You need to book a client session for a day next week. What will the New Appointment panel let you do?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-a8d3befc",
+    "body": "That’s the whole journey: type, client, day and time, then **Create appointment** — straight onto the Outlook calendar with nothing in the way.\n\nEvery in-person session you book also creates travel blocks around it automatically. See how that travel is recorded and checked in **The Travel Logbook**.",
+    "next": "portal-travel-logbook",
+    "type": "complete",
+    "title": "You can take a booking end to end"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.084952+00"
+ },
+ {
+  "id": "99cb8e3f-19b1-4b27-9e2c-d8a653033486",
+  "module_id": "793ef9e9-843b-4ca8-a42d-13fc7a66190b",
+  "version": 1,
+  "title": "Document the Session",
+  "description": "Progress notes from the appointment, structuring a defensible clinical note, and using Splose’s AI drafting without ever letting it write the record for you.",
+  "minutes": 15,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-progress-notes.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-fe19c20f",
+    "body": "A session is not finished until it is documented — and the note you write **is** the clinical record.\n\nBy the end of this lesson you can start a progress note from the right appointment, structure it clearly, keep reported information separate from what you observed, and use Splose’s AI drafting tools the safe way: as a drafting hand, never as the author of record.",
+    "type": "intro",
+    "title": "The note is the clinical record"
+   },
+   {
+    "key": "s-2c5b0b92",
+    "body": "Notes for a session start **from that session’s appointment** — that is what ties the note to the right client, date, service and practitioner.\n\nIn the Calendar, click the appointment, confirm those details are the ones you expect, then select **Add progress note**. Pick the appropriate progress-note template and the editor opens.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A Splose appointment panel with client contact details hidden and the Add progress note link circled. The panel also shows the appointment time, service and note field.",
+     "src": "/assets/tutorials/splose-progress-notes/add-progress-note.png"
+    },
+    "title": "Start from the appointment"
+   },
+   {
+    "key": "s-32c5b13f",
+    "body": "The note editor builds from blocks. Type **/** to open the insert menu — headings, text, bullet lists, numbered lists, and depending on configuration, tables, images and signatures.\n\nUse headings to give the note a visible clinical structure rather than one long paragraph.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The Splose note editor with a slash-command menu open, offering Heading 1, Heading 2, Heading 3, Text, Bullet list and Numbered list blocks.",
+     "src": "/assets/tutorials/splose-progress-notes/editor-slash-menu.png"
+    },
+    "title": "The editor and slash commands"
+   },
+   {
+    "key": "s-3b689862",
+    "body": "Use the note structure Opal provides in the template — do not invent your own per note.\n\nA classic **SOAP** structure is Subjective, Objective, Assessment, Plan. Opal may instead configure a practical OT structure along the lines of: presentation and reported information, intervention, observations of occupational performance, clinical interpretation, participant response, and plan.\n\nWhichever template Opal supplies: same structure, every note — that consistency is what makes records readable across the team.",
+    "type": "callout",
+    "title": "Structure the note"
+   },
+   {
+    "key": "s-0e37ca21",
+    "body": "A defensible note keeps three kinds of statement visibly distinct:\n\n**Reported** — “Mother reported difficulty with morning routines.”\n**Observed** — “OT observed the participant complete the task with verbal prompting.”\n**Clinical interpretation** — “This suggests reduced task initiation.”\n\nNever convert a collateral report into a direct observation. What a parent, teacher or support worker told you stays labelled as reported — however plausible it sounds.",
+    "type": "callout",
+    "title": "Reported. Observed. Interpreted."
+   },
+   {
+    "key": "s-e5f40ffa",
+    "body": "Where Opal has AI enabled, the slash menu offers two AI options:\n\n**Load AI block** — inserts a preconfigured prompt from the library. When Opal publishes approved prompts, this is the one you use.\n\n**Insert AI block** — creates an empty block for a custom prompt.\n\nTypical uses: summarising, drafting a structured section, extracting actions, or tidying rough notes. Splose can also use a session transcript as context and draft a note with **Write Progress Note**, where that capability is enabled.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The Splose note editor slash menu showing two AI options — Load AI block, which inserts a prompt from the library, and Insert AI block, which creates an empty custom prompt — above an example AI promp",
+     "src": "/assets/tutorials/splose-progress-notes/ai-blocks.png"
+    },
+    "title": "AI blocks"
+   },
+   {
+    "key": "s-a806e2c8",
+    "body": "Every AI-generated sentence is a **draft** until you have verified it. The working rule:\n\ngenerate → **read all of it** → compare against the session → correct anything unsupported → add the clinical reasoning only you can supply → then finalise.\n\nNever auto-finalise AI output. The treating practitioner remains responsible for the record — the tool never is.\n\nWatch for the classic leap: a parent reported difficulty brushing teeth, and the draft asserts “requires moderate assistance with oral hygiene.” An assistance level belongs in the note only if it was actually established, observed or assessed.",
+    "type": "warning",
+    "title": "AI output is a draft. You are the author."
+   },
+   {
+    "key": "s-a0791e32",
+    "quiz": {
+     "explain": "Starting from the appointment ties the note to the right client, date, service and practitioner automatically — the links that make it findable and auditable later.",
+     "options": [
+      "From the client’s file, whenever convenient",
+      "From that session’s appointment in the calendar",
+      "In a separate document, pasted in later"
+     ],
+     "question": "Where should a progress note for a specific session normally be started?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: where notes start"
+   },
+   {
+    "key": "s-27f8cbc4",
+    "quiz": {
+     "explain": "You did not see it — someone told you. It stays labelled as reported, and must never drift into the note as an observation.",
+     "options": [
+      "Direct observation",
+      "Clinical interpretation",
+      "Collateral / reported information"
+     ],
+     "question": "“Support worker reported the participant refused breakfast.” What kind of evidence is this?",
+     "correctIndex": 2
+    },
+    "type": "quiz",
+    "title": "Quick check: evidence types"
+   },
+   {
+    "key": "s-5bb04131",
+    "quiz": {
+     "explain": "Load AI block loads from the library — the home of approved prompts. Insert AI block creates an empty custom block.",
+     "options": [
+      "Insert AI block",
+      "Load AI block"
+     ],
+     "question": "Which option inserts an approved prompt from the library, rather than a custom one?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: the two AI options"
+   },
+   {
+    "key": "s-947f471c",
+    "quiz": {
+     "explain": "The draft turned a parent’s report into an assessed assistance level — a claim nothing in the session supports. Fix the unsupported statement and keep drafting; the discipline is verification, not avoidance.",
+     "options": [
+      "Keep it — it is a reasonable clinical summary",
+      "Correct it: the assistance level was never established, so it cannot stand as written",
+      "Delete the whole draft and refuse to use AI"
+     ],
+     "question": "Your session record says: “Parent reported difficulty brushing teeth.” The AI draft says: “Participant requires moderate assistance with oral hygiene.” What do you do?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Scenario: check the draft"
+   },
+   {
+    "key": "s-f05ede0d",
+    "body": "Not settled yet, so not taught here: Opal’s final progress-note template, consent requirements for recording or transcribing sessions, audio retention rules, exactly which AI functions are enabled and approved, whether custom AI prompts are permitted, and note finalisation and amendment rules in Splose.\n\nUntil Opal publishes these, ask before recording any session audio and before relying on an AI feature this lesson has not covered.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-6d8c9226",
+    "body": "Notes start from the appointment, follow the practice structure, keep reported and observed apart — and AI drafts only ever leave your hands after you have verified every line.\n\nNext: connecting Splose to Teams and Outlook.",
+    "next": "splose-teams-outlook",
+    "type": "complete",
+    "title": "Documentation you can stand behind"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.105384+00"
+ },
+ {
+  "id": "a7331fcb-1922-4eab-8027-baf276b105a8",
+  "module_id": "4a45b053-b40a-45d1-b3e6-312a0e71baee",
+  "version": 1,
+  "title": "Notifications",
+  "description": "Where alerts arrive, what each type means, and how to keep the list clean.",
+  "minutes": 4,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/portal-notifications.png",
+  "start_context": {
+   "tab": "calendar"
+  },
+  "steps": [
+   {
+    "key": "s-2ce44a44",
+    "body": "The portal keeps an eye on your day and lets you know when something needs attention: schedule clashes, expiring credentials, sync trouble, policy updates and more.\n\nEverything arrives in one place — the notifications panel. Alerts appear inside the portal only; they are not emailed to you, so the panel is worth a glance each day. This walkthrough takes a few minutes.",
+    "type": "intro",
+    "title": "Where alerts arrive"
+   },
+   {
+    "key": "s-5bc98b46",
+    "pad": 4,
+    "body": "The bell sits in the top bar on every page. When you have unread alerts, a red badge shows the count — it refreshes about once a minute while the portal is open.\n\n**Click the bell** to open your notifications.",
+    "type": "action",
+    "title": "The bell",
+    "target": "header-notifications",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-429b71df",
+    "pad": 4,
+    "body": "Day-to-day notices arrive here: a summary of today’s appointments (on days you have any), calendar clashes, appointments missing an address, unusually long travel between visits, sessions still waiting on a case note, and reminders when a credential is close to expiry or CPD hours are behind pace.\n\nThe practice uses it too: you’ll be told when a policy in the Resource Hub changes and needs a fresh acknowledgement, and when a support ticket you reported is updated.\n\nIf there’s nothing to show, you’ll see **You’re all caught up!**",
+    "type": "highlight",
+    "route": {
+     "open": "notifications"
+    },
+    "title": "What lands here",
+    "target": "notif-list",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-1c7737a5",
+    "pad": 4,
+    "body": "Because you help run the practice, some extra alerts come your way: clients who haven’t been seen for several weeks, client addresses the portal can’t resolve, and team members whose profiles are incomplete.\n\nOwners also receive billing readiness notices, plus an alert whenever an automatic sync is halted as a safety precaution.",
+    "type": "highlight",
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "Practice-level alerts",
+    "target": "notif-list",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2447dfd6",
+    "body": "If the portal and Outlook lose touch — the regular sync has stopped moving, or a change couldn’t be written back to your Outlook calendar — a red alert appears here. Nothing is lost, but the two calendars can drift out of step until the connection is sorted, so it’s worth acting on.\n\nSplose connection problems appear the same way, with a **Retry sync** button that re-checks the connection on the spot. Outlook alerts carry a shortcut button — **Reconnect Outlook** or **Open Integrations** — which opens Settings, where the practice owner can re-link the mailbox. That Settings page is owner-only: for everyone else, if your Outlook link has dropped, use the **Connect Outlook** banner that appears at the top of the Calendar, or ask the owner for a hand.",
+    "type": "screenshot",
+    "image": {
+     "alt": "A red sync alert in the notifications panel with a Reconnect Outlook button",
+     "src": "/assets/tutorials/portal-notifications/sync-writeback.png"
+    },
+    "title": "Sync trouble"
+   },
+   {
+    "key": "s-8a7b6693",
+    "pad": 4,
+    "body": "Unread alerts are tinted, with a dot on the right-hand side — the bell badge counts them.\n\nMost alerts are linked to a page: click one and it’s marked as read and the portal takes you there — a calendar clash opens the Calendar, a credential reminder opens My Profile. Many also carry a shortcut button such as **Open Profile** or **View Calendar**. Alerts without a linked page simply mark themselves read when clicked.",
+    "type": "highlight",
+    "title": "Read, unread and jumping across",
+    "target": "notif-list",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-1c7dd07c",
+    "pad": 4,
+    "body": "**Mark all read** clears the badge and the unread tints in one go — the alerts themselves stay in the list.\n\nTo remove an alert, use its **Dismiss** button. One thing to know: if the underlying issue is still there — say two appointments still overlap — the portal raises the alert again on a later check. Fix the issue and it stays gone. The daily schedule summary is the exception — there’s nothing to fix, so dismissing it only hides it until the panel next refreshes, and it returns on any day you have appointments.",
+    "type": "highlight",
+    "title": "Keeping the list tidy",
+    "target": "notif-mark-all",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-a71b4505",
+    "pad": 4,
+    "body": "**Click the close button** in the top corner of the panel. Clicking anywhere outside the panel, or pressing Escape, works too.",
+    "type": "action",
+    "title": "Close the panel",
+    "target": "#notif-close-btn",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-5c51736b",
+    "pad": 2,
+    "body": "As the practice owner you also have a Settings area with a page of notification switches.\n\n**Click Notifications** in the settings menu to open it.",
+    "type": "action",
+    "roles": [
+     "owner"
+    ],
+    "route": {
+     "tab": "settings"
+    },
+    "title": "Notification settings",
+    "target": ".settings-nav-item[data-section=\"notif-settings\"]",
+    "advance": "click",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-0087e992",
+    "pad": 6,
+    "body": "The switches that make a visible difference today are the calendar ones: **Calendar conflict warnings** turns the red conflict badges on calendar tiles on or off, **Missing location alerts** controls the missing-address markers, and the **Dormant Cases** controls set whether dormant-case detection runs and how many quiet weeks count as dormant.\n\nWorth knowing: these switches don’t filter the notifications panel — it always shows every alert raised for you.\n\nIf you change anything, press **Save Notification Settings** and wait for the Saved tick.",
+    "type": "highlight",
+    "roles": [
+     "owner"
+    ],
+    "route": {
+     "tab": "settings",
+     "section": "notif-settings"
+    },
+    "title": "What these switches do",
+    "target": "#settings-notif-settings",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-22d350df",
+    "pad": 4,
+    "body": "Your own reminder preferences live behind this **Notifications** card — the same choices you made on the sign-up checklist. Toggles here save the moment you flip them.\n\nThe one to know is the **work-location reminder**: leave it on and, on Fridays, if next week’s work locations aren’t filled in, a reminder lands in your notifications panel.\n\nAn honest note: the other reminders listed on that page are recorded but not active yet, and nothing on it is emailed — alerts only ever arrive inside the portal.",
+    "type": "highlight",
+    "image": {
+     "alt": "The Notifications card on the My Profile dashboard",
+     "src": "/assets/tutorials/portal-notifications/profile-notifications-card.png"
+    },
+    "route": {
+     "tab": "profile"
+    },
+    "title": "Your personal reminders",
+    "target": ".pf-card[onclick=\"pfOpenArea('pf-alerts')\"]",
+    "rounded": "8px"
+   },
+   {
+    "key": "s-2d692e2d",
+    "quiz": {
+     "explain": "Mark all read only clears the unread highlights — the alert stays in the list. Dismiss removes it, and because the clash is already fixed, it won’t come back.",
+     "options": [
+      "Its Dismiss button",
+      "Mark all read",
+      "Closing and reopening the panel"
+     ],
+     "question": "You’ve fixed an overlapping appointment, but the clash alert is still sitting in the panel. What clears it out of the list?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Quick check"
+   },
+   {
+    "key": "s-03ed4ef7",
+    "body": "You know where alerts arrive, what the main types mean, how to jump from an alert to the right page, and how to keep the list tidy with Mark all read and Dismiss.\n\nNext, meet **Opa**, the practice’s AI sidekick — what it can and can’t do, and how to use it well.",
+    "next": "portal-opa-assistant",
+    "type": "complete",
+    "title": "Alerts under control"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.0917+00"
+ },
+ {
+  "id": "b48a6b18-a9eb-413c-9e04-525ef0cb2cbd",
+  "module_id": "9896c3b8-6968-480e-b405-a49277ac2df7",
+  "version": 1,
+  "title": "Your Performance Report",
+  "description": "Reading your own Splose performance report: utilisation, what the numbers do and do not mean, and why incomplete notes come first.",
+  "minutes": 8,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-performance.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-1dd1554f",
+    "body": "Splose can show you an honest picture of your own working week: sessions delivered, time utilised, travel, and — most importantly — any sessions still missing their notes.\n\nBy the end of this lesson you can open your own performance report, read each metric for what it actually measures, and act on the one number that is really a clinical follow-up list in disguise.",
+    "type": "intro",
+    "title": "Your numbers, read properly"
+   },
+   {
+    "key": "s-1e6a56ba",
+    "body": "In Splose: **Reports → Performance**.\n\nSet the **date range** you want to look at, select **your own practitioner name**, and review the metrics for that period.",
+    "type": "callout",
+    "title": "Find your report"
+   },
+   {
+    "key": "s-3925cd6b",
+    "body": "**1:1 Appointments** — one-on-one sessions marked as arrived.\n**Appointments Utilisation** — the share of your available time spent in arrived appointments.\n**Group attendees** — participants seen in group sessions.\n**Support activities** — hours in support and non-clinical activity, depending on configuration.\n**Travel** — provider travel hours.\n**Total hours / Total Utilisation** — the broader picture across recognised service activity.\n**Revenue** — invoiced revenue from appointments, support activities and travel.\n**Cancellations** and **Incomplete notes** — the follow-up signals.",
+    "type": "callout",
+    "title": "What the metrics measure"
+   },
+   {
+    "key": "s-8c53a2e7",
+    "body": "Utilisation is a simple fraction of your available time.\n\nAvailable time this week: **40 hours**. Time in arrived appointments: **28 hours**. Appointment utilisation: 28 ÷ 40 = **70%**.\n\nAppointment utilisation and Total Utilisation can differ, because broader utilisation may also count other recognised service time — support activities or travel, depending on configuration.\n\nAnd a caution built into the metric: utilisation measures **workload**, not clinical quality. A higher number is not a better therapist.",
+    "type": "callout",
+    "title": "The utilisation sum"
+   },
+   {
+    "key": "s-8953752c",
+    "body": "**Incomplete notes** is not a KPI to admire — it is a list of sessions whose clinical documentation is missing.\n\nYou finished six sessions yesterday and the report shows 2 incomplete notes? That is two clinical records currently incomplete: identify which sessions they are, and complete or review the documentation promptly.",
+    "type": "callout",
+    "title": "Incomplete notes come first"
+   },
+   {
+    "key": "s-ad1e63c8",
+    "quiz": {
+     "explain": "28 ÷ 40 = 0.70 — seventy percent of available time in arrived appointments.",
+     "options": [
+      "40%",
+      "70%",
+      "82%"
+     ],
+     "question": "Available time 40 hours; arrived appointment time 28 hours. Appointment utilisation?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: the sum"
+   },
+   {
+    "key": "s-1afe8e8f",
+    "quiz": {
+     "explain": "Utilisation is an operational measure of how available time was used. Clinical quality lives in the work itself and its documentation.",
+     "options": [
+      "Yes — more sessions means better care",
+      "No — utilisation measures workload, not clinical quality"
+     ],
+     "question": "Does high utilisation automatically mean high-quality clinical work?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: what the number means"
+   },
+   {
+    "key": "s-b5d9da8b",
+    "quiz": {
+     "explain": "Incomplete notes are outstanding clinical records. Find the sessions, finish the documentation — promptly, while the session is still fresh.",
+     "options": [
+      "Note it and move on — it is only a statistic",
+      "Identify the sessions missing notes and complete or review the documentation promptly",
+      "Ask admin to clear the counter"
+     ],
+     "question": "Your report shows Incomplete notes: 2. What is the practical response?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Scenario: two missing notes"
+   },
+   {
+    "key": "s-cc36630f",
+    "body": "Managers and owners may have access to the broader **Performance Overview**: practitioner comparisons, utilisation and revenue charts over time, and PNG / JPG / CSV export for reporting.\n\nUse it as an operational lens across the practice. Practitioners are not expected to compare colleagues — this view is a management tool, and this step of the lesson only appears for management roles.",
+    "type": "screenshot",
+    "image": {
+     "alt": "The Splose Performance overview dashboard comparing utilisation and revenue over a date range, with a download menu circled offering PNG image, JPG image and CSV data export.",
+     "src": "/assets/tutorials/splose-performance/performance-overview.png"
+    },
+    "roles": [
+     "owner",
+     "admin"
+    ],
+    "title": "Manager view: Performance Overview"
+   },
+   {
+    "key": "s-ef159389",
+    "quiz": {
+     "explain": "Your report is for your own work. Cross-practitioner comparison is a management function, used with the care any staff-level data deserves.",
+     "options": [
+      "Yes — friendly competition helps",
+      "No — not unless their role and permissions specifically require it"
+     ],
+     "question": "Should a practitioner normally use performance data to compare themselves against other staff?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: comparing colleagues"
+   },
+   {
+    "key": "s-d6de32d2",
+    "body": "Treat the metric definitions here as the supplied Splose descriptions, not Opal’s final word: exact calculation logic in Opal’s configuration, which metrics practitioners can see under current permissions, how managers will use targets, and how Splose revenue relates to the Opal Portal’s finance dashboards are all still to be confirmed.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-bce8f545",
+    "body": "You can find your report, do the utilisation sum, and read every metric for what it measures — with incomplete notes treated as the clinical to-do list it really is.\n\nOne module left: the whole workflow, end to end.",
+    "next": "splose-daily-workflow",
+    "type": "complete",
+    "title": "Numbers in perspective"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.109291+00"
+ },
+ {
+  "id": "b7b27b7f-490d-474a-b99b-abf3e8985e80",
+  "module_id": "1a96636f-8241-4211-ad2a-427dd912532f",
+  "version": 1,
+  "title": "Set Up Your Splose Account",
+  "description": "Your practitioner profile, the locations and services attached to it, and why a missing service is never solved by picking a different one.",
+  "minutes": 10,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-account-setup.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-5d04fd89",
+    "body": "Your practitioner profile controls three things: **where** you work, **which services** appear when a booking is made with you, and **when** you are available.\n\nIf any of those are wrong, bookings go wrong quietly — a service missing from a list, an appointment in the wrong location.\n\nBy the end of this lesson you can open My Account, check your locations and services, understand availability, and know exactly what to do when a service you need is not there.",
+    "type": "intro",
+    "title": "Why your profile matters"
+   },
+   {
+    "key": "s-24745810",
+    "body": "Click your **profile icon**, then open **My Account** and review your practitioner profile.\n\nTwo lists do the heavy lifting:\n\n**Locations you work at** — the clinics and sites you can be booked into.\n\n**Services provided by you** — the services that appear when someone books an appointment with you. A service only shows during booking when it is enabled for **both** you and the selected location.\n\nThe screenshot is from a Splose demo workspace — your real account shows Opal’s locations and service names.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Splose practitioner settings showing a Locations you work at checklist and a Services provided by you checklist with a search box; several services are ticked and others left unticked. The organisatio",
+     "src": "/assets/tutorials/splose-account-setup/practitioner-settings.png"
+    },
+    "title": "Locations and services"
+   },
+   {
+    "key": "s-b0976ca5",
+    "body": "Availability is when you are ordinarily open for work and bookings — it is **not** an appointment.\n\nSplose availability can support recurring weekly patterns, fortnightly patterns, one-off days and custom hours. Review yours and set it according to your **Opal-approved work pattern**, then save and check the configuration.",
+    "type": "callout",
+    "title": "Availability"
+   },
+   {
+    "key": "s-fde74b27",
+    "body": "Do not tick every service just because the settings screen offers it — only use services appropriate to your profession, role and authorised configuration.\n\nAnd if the service you need is **missing when you book**, never select a similar-looking service to make the booking work. A near-match creates wrong clinical and billing records.\n\nInstead: check the selected **location**, check the service is assigned to **you**, and if it is still missing, contact **Opal administration**.",
+    "type": "warning",
+    "title": "Missing service? Never substitute"
+   },
+   {
+    "key": "s-260668f8",
+    "quiz": {
+     "explain": "Service visibility depends on the service + practitioner + location relationship. Check those first; if the right service still is not there, Opal administration fixes the assignment — a substitute service is never the answer.",
+     "options": [
+      "Pick the closest similar service so the booking goes through",
+      "Check the selected location and your practitioner service assignment, then escalate to admin if it is still missing",
+      "Create the appointment as busy time and fix it later"
+     ],
+     "question": "You are booking a session and cannot find Telehealth OT in the service list. What do you do first?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Scenario: the missing service"
+   },
+   {
+    "key": "s-afe7fefe",
+    "quiz": {
+     "explain": "False — a wrong service means wrong records. Check the assignment, then escalate.",
+     "options": [
+      "True",
+      "False"
+     ],
+     "question": "True or false: when the correct service is missing, selecting another similar service is acceptable.",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: substitution"
+   },
+   {
+    "key": "s-1fd01b0a",
+    "quiz": {
+     "explain": "Availability is your ordinary working pattern — the frame bookings go into, not the bookings themselves.",
+     "options": [
+      "The appointments already booked with you",
+      "When you are ordinarily available for work and bookings",
+      "Your leave calendar"
+     ],
+     "question": "What does your practitioner availability represent?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Quick check: availability"
+   },
+   {
+    "key": "s-d0b541ac",
+    "body": "Before you move on, you should be able to tick every line:\n\n✓ Splose login works\n✓ Profile details reviewed\n✓ Correct work locations visible\n✓ Correct services for your role visible\n✓ Availability reviewed against your approved pattern\n\nAnything you cannot tick — raise it with Opal administration now, not on the morning of your first booking.",
+    "type": "callout",
+    "title": "Your setup checklist"
+   },
+   {
+    "key": "s-d363df03",
+    "body": "A few profile rules are still being settled and are **not** covered by this lesson: which profile fields you may edit yourself versus manager-controlled fields, who owns availability changes after onboarding, and Opal’s exact location and service naming.\n\nUntil those are published, check with Opal administration before changing profile settings beyond what this lesson covers.",
+    "type": "callout",
+    "title": "Still being finalised at Opal"
+   },
+   {
+    "key": "s-b89a6fb8",
+    "body": "Profile, locations, services, availability — checked. You also know the golden rule: a missing service is an assignment problem for admin, never a reason to pick a near-match.\n\nNext: booking appointments on the Splose calendar.",
+    "next": "splose-booking",
+    "type": "complete",
+    "title": "Your account is in order"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.100139+00"
+ },
+ {
+  "id": "f680c638-0988-4f2e-bf56-fc04031dca05",
+  "module_id": "eb05c3f6-184a-4e3a-9093-cdda7d590e34",
+  "version": 1,
+  "title": "Your Splose Workflow at Opal",
+  "description": "The capstone: a full day across Splose, Outlook and the Opal Portal, the decision drill, and the first-day checklist.",
+  "minutes": 12,
+  "roles": [
+   "owner",
+   "admin",
+   "therapist",
+   "read_only"
+  ],
+  "thumb": "/assets/tutorials/splose-daily-workflow.png",
+  "start_context": {
+   "tab": "resources"
+  },
+  "steps": [
+   {
+    "key": "s-04611607",
+    "body": "You have covered setup, booking, appointment changes, documentation, the Microsoft connection and your report. This capstone folds it into a single habit: for any task, you know **which system to open** without thinking.\n\nWork through the day, drill the decisions, and finish with the first-day checklist.",
+    "type": "intro",
+    "title": "One mental model"
+   },
+   {
+    "key": "s-8f422810",
+    "body": "**8:00** — Review Outlook for organisational meetings, with the subscribed Splose calendar alongside. Open Splose to confirm the authoritative participant appointments.\n\n**9:00** — Home OT visit, booked in Splose. Attend, then complete the progress note in Splose; the Opal Portal handles the travel and invoice workflow.\n\n**11:00** — Telehealth session booked in Splose; the Teams link was created through Splose. Deliver, then note in Splose.\n\n**1:00** — Internal team meeting: Outlook/Teams.\n\n**2:30** — A participant emails to move tomorrow’s session: reply in Outlook, reschedule in Splose, and the Outlook view catches up.\n\n**End of day** — Check attendance statuses and incomplete notes in Splose; deal with travel and invoice tasks in the Opal Portal.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Timeline of a working day: 8:00 check Outlook then open Splose; 9:00 home visit with a progress note in Splose; 11:00 telehealth in Splose with a Teams link; 1:00 team meeting in Outlook and Teams; 2:",
+     "src": "/assets/tutorials/splose-daily-workflow/day-at-opal.png"
+    },
+    "title": "A day at Opal"
+   },
+   {
+    "key": "s-10bb0861",
+    "body": "Every card in the next drill is answered by this table. Take ten seconds to read it once more — then no peeking.",
+    "type": "screenshot",
+    "image": {
+     "alt": "Decision table of the three systems: Splose for participant appointments and clinical records, Outlook and Teams for email and meetings, the Opal Portal for travel, invoicing, resources and learning.",
+     "src": "/assets/tutorials/splose-at-opal/systems-map.png"
+    },
+    "title": "The decision table, one last time"
+   },
+   {
+    "key": "s-213078d2",
+    "quiz": {
+     "explain": "Participant therapy appointments live in Splose — it is the source of truth for them.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "Booking a participant’s therapy appointment — which system?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Decision drill 1 of 8"
+   },
+   {
+    "key": "s-0b45c475",
+    "quiz": {
+     "explain": "Clinical documentation is Splose — progress notes live with the participant record.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "A case note after this morning’s session — which system?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Decision drill 2 of 8"
+   },
+   {
+    "key": "s-bbfd06f7",
+    "quiz": {
+     "explain": "Email is Outlook — the communication layer. What the email asks for may then happen in Splose or the Portal.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "Sending and answering email — which system?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Decision drill 3 of 8"
+   },
+   {
+    "key": "s-b70f27a7",
+    "quiz": {
+     "explain": "Internal meetings are created in Outlook/Teams — they are never Splose appointments.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "An internal staff meeting for Thursday — which system?",
+     "correctIndex": 1
+    },
+    "type": "quiz",
+    "title": "Decision drill 4 of 8"
+   },
+   {
+    "key": "s-040c1d72",
+    "quiz": {
+     "explain": "Participant telehealth is booked in Splose; where configured, Splose creates the Teams link itself.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "Booking a participant telehealth session — which system?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Decision drill 5 of 8"
+   },
+   {
+    "key": "s-bf602433",
+    "quiz": {
+     "explain": "Travel calculation belongs to the Opal Portal, even when the visit itself was booked in Splose.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "Calculating travel for a home visit — which system?",
+     "correctIndex": 2
+    },
+    "type": "quiz",
+    "title": "Decision drill 6 of 8"
+   },
+   {
+    "key": "s-66b6c866",
+    "quiz": {
+     "explain": "Invoicing workflow belongs to the Opal Portal, the operational layer — even though the session data originates in Splose.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "The invoicing workflow for last week’s sessions — which system?",
+     "correctIndex": 2
+    },
+    "type": "quiz",
+    "title": "Decision drill 7 of 8"
+   },
+   {
+    "key": "s-99f72b56",
+    "quiz": {
+     "explain": "Email in Outlook, change in Splose. The subscribed calendar is a view — the appointment moves at its source of truth.",
+     "options": [
+      "Splose",
+      "Outlook/Teams",
+      "Opal Portal"
+     ],
+     "question": "Rescheduling a participant appointment after an email request — which system?",
+     "correctIndex": 0
+    },
+    "type": "quiz",
+    "title": "Decision drill 8 of 8"
+   },
+   {
+    "key": "s-f542c2e8",
+    "body": "1. **Splose** is the clinical participant workflow and the source of truth for participant appointments.\n2. **Outlook/Teams** is communication and meeting infrastructure.\n3. **The Opal Portal** is the operational layer: travel, invoicing, resources, learning.\n4. Never manage the same appointment in two systems.\n5. When a workflow is unclear, do **not** invent a workaround that changes billing or clinical records — escalate to Opal administration or management.",
+    "type": "callout",
+    "title": "The five capstone rules"
+   },
+   {
+    "key": "s-7bf5e43b",
+    "body": "Before your first full week, every line should be true:\n\n**Splose** — workspace invite accepted · login works · profile reviewed · correct locations visible · correct services visible · availability reviewed.\n\n**Microsoft** — Opal Microsoft account working · Outlook working · Teams working.\n\n**Splose + Microsoft** — Teams integration connected · calendar feed enabled if Opal requires it · Splose calendar subscribed in Outlook · and you understand the one-way sync.\n\n**Opal Portal** — login works · Learning opens · travel, invoice and resource access as appropriate to your role.\n\nIf Opal has assigned you the Splose induction in Assigned Learning, its final knowledge check and checklist acknowledgement make this completion formal.",
+    "type": "callout",
+    "title": "The first-day checklist"
+   },
+   {
+    "key": "s-4cc78d27",
+    "body": "That is the whole Splose induction: the right system for every task, appointments honest at their source of truth, documentation you stand behind, and a connected Microsoft setup that never confuses a view with the record.\n\nEverything here stays available for review — and when a real case does not fit a rule you learned, that is a question for Opal administration, not a workaround.",
+    "type": "complete",
+    "title": "You know the Opal way"
+   }
+  ],
+  "published_by": "OWNER",
+  "published_at": "2026-08-30 11:00:20.110472+00"
+ }
+]

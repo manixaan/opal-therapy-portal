@@ -1,0 +1,200 @@
+[
+ {
+  "id": "0348d96b-c012-4aae-ac50-6cbd58e9ff91",
+  "resource_id": "4382e2a2-affe-4b6f-93ab-7f27cf4c5107",
+  "version": 1,
+  "title": "Complaints and Feedback Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Complaints and Feedback Policy\n\n## Purpose\n\nComplaints are information we could not have bought. Every participant has the right to complain safely, and every complaint gets a respectful, timely response.\n\n## Our commitments\n\n1. **Easy to raise.** Complaints and feedback can be raised with any staff member, verbally or in writing, by the participant or someone acting with their consent. No form is required to be heard.\n2. **Safe to raise.** Complaining never affects a participant's access to services. Retaliation of any kind is misconduct.\n3. **Acknowledged fast.** Complaints are acknowledged within two business days and the complainant is told what happens next and when.\n4. **Handled fairly.** The practice owner manages complaints, hears all sides, keeps the complainant informed, and documents the outcome and reasons. Where the complaint concerns the practice owner, an external pathway is offered.\n5. **Closed with learning.** Outcomes feed the same review loop as incidents: what changes so this is less likely next time.\n\n## External pathways\n\nParticipants can always complain externally, and we say so plainly rather than burying it:\n\n- NDIS participants may complain to the NDIS Quality and Safeguards Commission about NDIS supports.\n- Concerns about a registered health practitioner may be raised with Ahpra or the relevant health complaints entity. Which body applies in a given case: Requires legal/regulatory verification.\n\n## Staff obligations\n\nAny staff member receiving a complaint records it and passes it to the practice owner within one business day, resisting the urge to argue the practice's case in the moment. Feedback — positive included — is logged so patterns are visible.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.169546+00"
+ },
+ {
+  "id": "03d91e66-dbca-4de3-b49f-b79fce922d45",
+  "resource_id": "a099a4cc-a7ad-461a-bb7b-c5a6a442e3e3",
+  "version": 1,
+  "title": "Work Health and Safety Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Work Health and Safety Policy\n\n## Purpose\n\nOpal's workplace is wherever the work is: vehicles, homes, schools and community venues. Work health and safety duties follow the work, and everyone holds a share of them.\n\n## Responsibilities\n\n- **The practice** provides safe systems of work (this policy suite), consults staff on WHS matters, and acts on reported hazards.\n- **All staff** take reasonable care for their own safety and others', follow safety procedures, and report hazards, incidents and near misses promptly.\n\n## Core controls\n\n1. **Travel and driving.** Fatigue management and vehicle standards per the Rural and Remote Travel Policy; seatbelts always; no phone handling while driving — calls wait or route through hands-free.\n2. **Manual handling.** Therapy work involves lifting, transfers and equipment. Use taught techniques, ask for help or equipment rather than improvising, and decline manual handling that exceeds safe limits.\n3. **Home and community environments.** Assess each environment on entry: trip hazards, animals, smoke, aggression indicators. The Lone Worker Safety Policy applies to all solo visits.\n4. **Psychosocial safety.** Workload, exposure to distressing content, and isolation are hazards, not weaknesses. Raise them in supervision or directly with the practice owner; they are managed like any other risk.\n5. **First aid and emergencies.** Know the first-aid kit locations (vehicle and office) and keep personal currency in first aid where required for your role.\n\n## Jurisdictional obligations\n\nSpecific WHS duties, notifiable incident thresholds and workers' compensation requirements are jurisdiction-dependent: Requires legal/regulatory verification. The practice owner maintains the current position.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.169716+00"
+ },
+ {
+  "id": "103b69b0-d1e9-4e33-bb0e-d8853e389161",
+  "resource_id": "626f11d4-55f2-4450-b28f-44356308f102",
+  "version": 1,
+  "title": "Continuing Professional Development Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Continuing Professional Development Policy\n\n## Purpose\n\nCPD keeps practice current and is a condition of registration for occupational therapists. Opal treats it as core work, not an after-hours hobby.\n\n## Expectations\n\n1. **Meet the standard.** Registered occupational therapists meet the OT Board of Australia's CPD registration standard — currently 20 hours per registration year, including at least 5 interactive hours, with a learning goal and reflection recorded for activities, and records kept for five years. Confirm the current standard at the OT Board website; a 2026 consultation on revised standards is not in effect unless and until commenced.\n2. **Plan it.** Each clinician maintains a simple CPD plan linked to their role and the Australian OT competency standards, reviewed in supervision twice a year.\n3. **Record as you go.** Use the portal CPD tracker: date, activity, provider, hours, interactive hours, learning goal and reflection. A record made the same week is accurate; a record reconstructed in May is fiction.\n4. **Practice support.** Opal provides CPD-eligible internal learning (marked in the Resource Hub), circulates relevant PD events, and supports reasonable time for CPD by arrangement with the practice owner.\n\n## What counts\n\nFormal courses, workshops and webinars; supervision meeting CPD definitions; structured reading with documented reflection; journal clubs; and internal learning modules marked CPD-eligible. When unsure whether an activity counts, check the OT Board standard rather than guessing.\n\n## Audit readiness\n\nAhpra may audit CPD compliance. Keeping the portal tracker current, with evidence attached where available, makes an audit a formality.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.168274+00"
+ },
+ {
+  "id": "17b0ba7d-74ea-4a88-baa5-54aa765559da",
+  "resource_id": "054d250b-c39c-40e9-95f5-91dd5a96e2b6",
+  "version": 1,
+  "title": "Clinical Documentation Standard",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Clinical Documentation Standard\n\n## Purpose\n\nClinical records are the professional and legal account of our work. This standard defines the minimum for every entry.\n\n## The standard\n\n1. **Timeliness.** Notes are completed the same working day wherever possible, and no later than 48 hours after the contact. Late entries are marked as late entries with the actual date of writing.\n2. **Attribution.** Every entry identifies its author and date. Entries are never written under another person's login.\n3. **Accuracy.** Records are factual and specific. Observation is distinguished from interpretation; direct quotes are marked as quotes.\n4. **Completeness.** Each contact note covers: who was present, what occurred, clinical observations, the participant's response, any risk observed and action taken, and the plan for next contact.\n5. **Objectivity and respect.** Person-first, strengths-based, non-judgemental language throughout. Write every note as if the participant and a tribunal will both read it — either may.\n6. **Corrections.** Errors are corrected transparently: the original remains legible in the record's history, and the correction is attributed and dated. Records are never deleted or retrospectively altered to change their meaning.\n7. **AI assistance.** Any AI-drafted content is reviewed, corrected and approved by the responsible clinician before it enters the record, per the Responsible Use of AI Policy. The clinician is the author in every sense that matters.\n\n## Reports\n\nReports state their purpose, sources of information, assessment findings, functional impact and recommendations, and distinguish evidence from opinion. Reports leave the practice only after the review step in the report workflow.\n\n## Retention and access\n\nClinical records are retained in accordance with applicable health records requirements, which vary by jurisdiction and client age: Requires legal/regulatory verification. Access and amendment requests are routed to the practice owner.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.166764+00"
+ },
+ {
+  "id": "21f9c746-8440-4206-8652-00027ab0350f",
+  "resource_id": "f2113757-52e8-4b49-ae32-62d52df0eb89",
+  "version": 1,
+  "title": "Consent Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Consent Policy\n\n## Purpose\n\nConsent at Opal is informed, specific, documented and revisited — not a signature collected once and forgotten.\n\n## What informed consent requires\n\nBefore services begin, the participant (or their decision-maker where one is lawfully in place) understands, in language accessible to them:\n\n- what the service involves and what it aims to achieve;\n- fees, funding source and cancellation terms;\n- how their information is used and who may see it (see the Privacy and Confidentiality Policy);\n- their right to decline, withdraw or change their mind at any time without penalty to the therapeutic relationship.\n\n## Specific consents\n\nSeparate, explicit consent is obtained for: photographs or recordings; telehealth delivery; use of approved recording or transcription tools in sessions; sharing information with schools, other providers or family members outside the decision-making arrangement; and student or observer presence.\n\n## Capacity and supported decision-making\n\nAdults are presumed to have capacity. Where capacity is in doubt, support the person's own decision-making first; substitute decision-making arrangements (guardianship, nominee) are verified, not assumed. Requirements vary by jurisdiction: Requires legal/regulatory verification.\n\n## Children and young people\n\nConsent involves those with parental responsibility, and the child's own assent is sought in an age-appropriate way. Family law arrangements affecting consent are recorded and respected.\n\n## Recording and revisiting\n\nConsent is documented in the clinical record at commencement, when the service changes materially, and whenever the participant's circumstances suggest it should be revisited. Withdrawal of consent is actioned immediately and documented.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.16654+00"
+ },
+ {
+  "id": "26e7edf5-73c1-4082-a501-bff8088695b3",
+  "resource_id": "c31e5fe8-ebf9-434b-9d43-02aee72b5f44",
+  "version": 1,
+  "title": "Information Security Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Information Security Policy\n\n## Purpose\n\nClinical information is only as secure as the devices and accounts that touch it. These are the practice-wide rules.\n\n## Accounts\n\n1. Unique, strong passwords for every practice system; no password reuse from personal accounts. A password manager is recommended.\n2. Multi-factor authentication is enabled wherever the system supports it.\n3. Accounts are personal. Credentials are never shared, and work is never done under another person's login.\n\n## Devices\n\n- Any device used for practice work has a screen lock, encryption enabled and current operating system updates.\n- Devices are locked whenever unattended, and never left visible in parked vehicles.\n- Lost or stolen devices are reported to the practice owner immediately — hours matter. See the Data Breach Response Policy.\n\n## Data handling\n\n- Client information lives in approved practice systems only. No forwarding to personal email, no personal cloud drives, no USB sticks except where the practice owner approves an encrypted device for a specific purpose.\n- Public Wi-Fi is not used for practice systems unless connecting through the approved secure method.\n- Paper is a device too: minimise it, carry it out of sight, store it locked and destroy it securely.\n\n## Email and messages\n\nPhishing is the most likely attack we will face. Verify unexpected requests for credentials, payment changes or client data by phone before acting. Report suspicious messages to the practice owner rather than deleting them silently.\n\n## Leaving the practice\n\nOn departure, access is revoked, practice data is returned or destroyed as directed, and no client information leaves with the departing staff member.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.169018+00"
+ },
+ {
+  "id": "2a3717ea-a850-4f13-9b92-45826432919c",
+  "resource_id": "7d3c4790-c99e-4d13-9699-69af9282cfc0",
+  "version": 1,
+  "title": "Telehealth Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Telehealth Policy\n\n## Purpose\n\nTelehealth extends access — particularly for rural and remote participants — when it is clinically appropriate and delivered to the same standard as in-person care.\n\n## Clinical suitability\n\nThe therapist decides, session by session, whether telehealth suits the clinical task. Hands-on assessment, equipment fitting and situations of elevated risk usually require in-person delivery. Suitability is reviewed if the participant's presentation changes.\n\n## Consent\n\nTelehealth-specific consent is obtained before the first telehealth session and covers: how the technology works, its limits, privacy considerations at both ends, and the backup plan if the connection fails. Recording of sessions occurs only with separate explicit consent and through approved tools.\n\n## Privacy and setup\n\n- Sessions are conducted from a private space with a closed door; public spaces and vehicles in motion are not acceptable.\n- Only approved video platforms are used; personal accounts on consumer apps are not.\n- Confirm who is present but off-camera at the participant's end at the start of each session.\n\n## Safety\n\nAt the start of each telehealth session, confirm the participant's physical location and an emergency contact for that location. If a session raises urgent safety concerns, keep the person engaged where possible, contact emergency services for their location, and follow the Clinical Escalation Pathway.\n\n## Documentation\n\nTelehealth sessions are documented to the same standard as in-person sessions, noting the mode of delivery and any technical limitations that affected the session. Funding and claiming rules for telehealth vary by scheme and change over time — check current NDIS pricing guidance before advising on claims.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.167319+00"
+ },
+ {
+  "id": "2fb199af-e59d-4e1b-991b-4937ee9a90dd",
+  "resource_id": "707c1c14-ca3a-474f-aa8d-1ba62be07913",
+  "version": 1,
+  "title": "Privacy and Confidentiality Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Privacy and Confidentiality Policy\n\n## Purpose\n\nOpal Therapy holds sensitive health information about participants and personal information about staff. This policy sets the standard for collecting, using, storing and disclosing that information.\n\n## Principles\n\n1. **Collect the minimum.** We collect only the information needed for safe, effective therapy and lawful practice administration.\n2. **Use for purpose.** Information collected for therapy is used for therapy, its administration and its funding — nothing else without consent.\n3. **Disclose deliberately.** Disclosure outside the care team requires participant consent, except where the law requires or permits disclosure (for example, mandatory reporting or serious threat). Where obligations depend on registration status or jurisdiction: Requires legal/regulatory verification.\n4. **Store securely.** Client information lives in approved practice systems only — never in personal email, personal cloud storage, unapproved apps or unattended paper.\n5. **Speak carefully.** No identifying discussion of participants in public places, group chats or social settings. De-identify case discussions in supervision beyond the care team where practicable.\n\n## Practical rules\n\n- Lock devices whenever unattended; use unique passwords and screen locks.\n- Confirm the recipient before sending anything containing client information; email misdirection is our most likely breach.\n- Paper travelling to community visits is minimised, carried out of sight and returned or destroyed securely.\n- Photographs and recordings require documented consent and are stored only in approved systems.\n- Participants may request access to their information; route requests to the practice owner.\n\n## Breach response\n\nAny suspected privacy breach — lost device, misdirected email, unauthorised access — is reported to the practice owner the same day. See the Data Breach Response Policy. Notification obligations under the Notifiable Data Breaches scheme: Requires legal/regulatory verification.\n\n## Accountability\n\nAll staff acknowledge this policy on commencement and after each material change. Breaches are managed under the Incident Management Policy and may constitute misconduct.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.165138+00"
+ },
+ {
+  "id": "4164979b-7ee4-4bd3-a189-17eb65f43f6b",
+  "resource_id": "fa51a5a3-ccbc-43a4-bf27-d4dbc1eb465d",
+  "version": 1,
+  "title": "Supervision Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Supervision Policy\n\n## Purpose\n\nSupervision is how we protect participants, develop clinicians and keep isolated community practice connected. It is planned, protected time — not a corridor conversation.\n\n## Structure\n\n1. **Frequency.** New graduates and new starters: weekly for the first three months, then reviewed. Experienced clinicians: at least fortnightly, with frequency reviewed against caseload complexity.\n2. **Protected.** Supervision sessions are scheduled in the calendar and are not routinely cancelled for operational pressure. A cancelled session is rebooked within the week.\n3. **Documented.** Each session records topics discussed, decisions made and actions agreed. Clinical decisions arising from supervision are reflected in the relevant clinical records.\n\n## Content\n\nSupervision covers clinical reasoning and case review, risk and escalation, professional development against the Australian OT competency standards, wellbeing and workload, and boundary or ethical questions. Supervisees bring cases; supervisors bring structure and challenge.\n\n## Responsibilities\n\n- **Supervisees** prepare, raise concerns early (especially risk, boundary and scope issues), and action what is agreed.\n- **Supervisors** provide a psychologically safe space, keep records, and escalate to the practice owner where participant safety requires it — supervision is confidential, but not at the price of safety.\n\n## CPD linkage\n\nSupervision that meets the OT Board's definitions may count towards CPD, including interactive hours. Record it in your CPD log with reflections. See the CPD Policy and current registration standard.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.168102+00"
+ },
+ {
+  "id": "82d8a073-3721-4c11-9e81-9e76cf03c113",
+  "resource_id": "257477ce-98ab-49e7-b931-a08088b32b0b",
+  "version": 1,
+  "title": "Child Safe Practice Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Child Safe Practice Policy\n\n## Purpose\n\nOpal works with children in their homes, schools and communities. Child safety is an organisational commitment with teeth, aligned with the National Principles for Child Safe Organisations.\n\n## Commitments\n\n1. **Screening.** Every staff member holds a current Working With Children Check and NDIS Worker Screening where applicable, verified before any child-facing work and tracked for renewal in the portal.\n2. **Conduct.** Physical contact is limited to what therapy requires, explained, and consented. Sessions with children occur with a parent, carer or responsible adult present or immediately available, unless a documented plan says otherwise. Personal contact with child clients outside practice channels is prohibited.\n3. **Voice of the child.** Children are spoken to directly, in language they understand, and their assent is sought for what happens in sessions. Concerns raised by children are taken seriously every time.\n4. **Cultural safety.** Safety for Aboriginal and Torres Strait Islander children includes cultural safety — family and community connection are protective factors, engaged respectfully.\n\n## Responding to concerns\n\n- Any concern about harm, abuse or neglect of a child is escalated to the practice owner the same day, and via the Clinical Escalation Pathway where urgent.\n- Mandatory reporting obligations for occupational therapists vary by jurisdiction and circumstance: Requires legal/regulatory verification. When in doubt, escalate immediately and verify — never sit on a concern while deciding whether it \"counts\".\n- Concerns about the conduct of any adult in the practice towards a child are reported directly to the practice owner, or where the concern involves the practice owner, to the relevant external authority.\n\n## Documentation\n\nConcerns and responses are documented factually and contemporaneously, using the child's own words where quotes are relevant, and stored with heightened access care.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.169883+00"
+ },
+ {
+  "id": "899dec4a-288c-41ed-9e31-e40405333407",
+  "resource_id": "c5d65395-a1b9-4141-a7a7-7fc9cdc74d3b",
+  "version": 1,
+  "title": "Conflict of Interest Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Conflict of Interest Policy\n\n## Purpose\n\nA conflict of interest exists whenever a personal interest could influence — or reasonably appear to influence — professional judgement. Conflicts are common and manageable; concealed conflicts are neither.\n\n## Common examples\n\n- Recommending equipment or services from a supplier in which a staff member has a financial interest or receives benefits.\n- Providing services to family members, friends or close community connections.\n- Secondary employment with providers serving the same participants.\n- Gifts or hospitality from suppliers beyond trivial value.\n\n## Rules\n\n1. **Disclose early.** Actual, potential and perceived conflicts are disclosed to the practice owner as soon as recognised, and recorded in the practice register.\n2. **Manage deliberately.** Management options include disclosure to the participant, reassignment of the client, independent second opinions on recommendations, or declining the interest. The plan is documented.\n3. **Recommendations stay clean.** Equipment and provider recommendations are made on clinical merit, with options offered where reasonable. Commissions or referral kickbacks are never accepted.\n4. **Small communities.** In rural work, overlapping relationships are normal. The duty is not to avoid all overlap — often impossible — but to name it and manage it transparently.\n\n## Breaches\n\nFailure to disclose a known conflict is a conduct matter. Honest late disclosure is always better received than discovery.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.170467+00"
+ },
+ {
+  "id": "9a87198e-e2ee-4f0f-a89d-cb8e0028e6b0",
+  "resource_id": "d3a2dafd-9006-4e45-a96d-b6b427b1f86d",
+  "version": 1,
+  "title": "Rural and Remote Travel Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Rural and Remote Travel Policy\n\n## Purpose\n\nRural and remote trips carry risks that metropolitan practice does not: distance, isolation, patchy communications and environmental hazards. Planning is not bureaucracy; it is the treatment for those risks.\n\n## Trip planning\n\n1. Every rural or remote trip has a written trip plan before departure: route, stops, visit schedule, overnight arrangements, expected return, and the nominated check-in contact.\n2. Complete the Pre-Trip Checklist (Resource Hub) for every trip. It is short deliberately, so it gets done.\n3. Schedule realistically: driving fatigue is a primary hazard. No driving after a full clinical day where the drive exceeds two hours, without explicit agreement with the practice owner; overnight stays are the default for long circuits.\n\n## Vehicle and equipment\n\n- The vehicle is roadworthy, fuelled beyond the trip's needs, and carries water, first-aid kit and a charged power bank as minimum.\n- For remote routes with poor mobile coverage, carry the practice's alternative communication device where issued, and know its use before departure. Coverage assumptions are checked, not guessed.\n\n## Check-ins\n\n- Agreed check-in times with the nominated contact, morning and end-of-day at minimum, plus on arrival at and departure from remote locations.\n- A missed check-in triggers the escalation steps in the trip plan: attempted contact, then contact with the visit location, then emergency services with the trip plan's route details.\n\n## Weather and conditions\n\nTrips are postponed for severe weather warnings, road closures or fire danger affecting the route. A cancelled trip is a planning success, not a failure.\n\n## Fatigue and wellbeing\n\nBuild travel days with breaks every two hours of driving. Fatigue self-assessment before the return leg is expected; staying overnight unplanned, with a phone call to the practice owner, is always the approved alternative to driving tired.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.168803+00"
+ },
+ {
+  "id": "9c61ae9f-0580-4787-9261-d88e59734eb0",
+  "resource_id": "584710bf-0ec0-46ea-9c57-ec9bea5f6007",
+  "version": 1,
+  "title": "Social Media Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Social Media Policy\n\n## Purpose\n\nSocial media conduct affects participant privacy, professional registration and the practice's standing. Ahpra's expectations for registered practitioners apply online exactly as they do offline.\n\n## Rules\n\n1. **No client content, ever.** No participant information, images, stories or identifiable details appear on any personal or practice account without documented consent obtained through the practice — and even then, only via the practice's official channels.\n2. **No connections with participants.** Friend and follow requests from participants or their family members are declined politely; existing prior connections in small communities are disclosed to the practice owner and managed under the Professional Boundaries Policy.\n3. **You are identifiable.** Even on personal accounts, staff are identifiable as Opal clinicians. Commentary that is disrespectful of participants, colleagues or other providers, or that undermines public confidence in the profession, is a conduct matter.\n4. **Health information online.** Registered practitioners posting health information must ensure it is accurate, evidence-based and consistent with professional obligations. Testimonial rules in advertising apply: Requires legal/regulatory verification.\n5. **Practice accounts** are operated only by those authorised by the practice owner, with content approved before posting.\n\n## Practical judgement\n\nBefore posting, apply one test: would you be comfortable if a participant's family, Ahpra and your supervisor all read it tomorrow? If the answer wavers, do not post. Report any social media incident involving practice or participant information to the practice owner the same day.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.167927+00"
+ },
+ {
+  "id": "aea7e81d-398e-4702-9ffb-13a9bc46ec34",
+  "resource_id": "732c3ddb-28e2-4ffd-af8e-8038952b808c",
+  "version": 1,
+  "title": "Incident Management Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Incident Management Policy\n\n## Purpose\n\nIncidents are inevitable in community practice; unreported incidents are the only unforgivable kind. This policy covers any event that caused, or could have caused, harm to a participant, staff member or other person, plus property and privacy incidents.\n\n## What to report\n\n- Injury or harm to a participant or staff member during service delivery or travel.\n- Behavioural incidents, aggression, or threats.\n- Medication, equipment or environmental safety events.\n- Vehicle incidents on work travel.\n- Privacy and security incidents (also see Data Breach Response Policy).\n- Near misses — events that could plausibly have caused harm. Near-miss reporting is prized, not punished.\n\n## How to report\n\n1. Make people safe first; use the Clinical Escalation Pathway for urgent clinical risk.\n2. Tell the practice owner by phone the same day for anything involving harm or serious risk.\n3. Complete a written incident report within 24 hours: factual, timed, first-person, distinguishing observation from interpretation.\n4. Record the clinical dimensions in the participant's record where the incident involved a participant.\n\n## Reportable incidents\n\nCertain serious incidents connected with NDIS supports carry external notification obligations to the NDIS Commission, with strict timeframes. Whether and how these apply to Opal's circumstances: Requires legal/regulatory verification — escalate to the practice owner immediately rather than resolving alone.\n\n## Learning\n\nEvery incident ends in a documented review with actions and owners. Reviews focus on systems before individuals: the question is \"what made this likely?\", not \"who do we blame?\".\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.16938+00"
+ },
+ {
+  "id": "aeae47cc-0097-46ec-9ca8-c6c19babbf05",
+  "resource_id": "29af5b17-8e13-4b6d-8c50-cf8c93f023e5",
+  "version": 1,
+  "title": "Responsible Use of AI Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Responsible Use of AI Policy\n\n## Purpose\n\nAI tools can reduce administrative burden and improve clarity. Used carelessly, they can breach privacy, embed errors into clinical records and erode professional accountability. This policy sets the rules.\n\n## Rules\n\n1. **Accountability never transfers.** The clinician who signs a note or report is fully accountable for its content, however it was drafted. AI is never the responsible clinician.\n2. **Human review is mandatory.** AI-drafted notes, reports or letters are reviewed, corrected and approved by the responsible clinician before entering any record or leaving the practice.\n3. **Privacy is absolute.** Identifiable participant information is never entered into AI tools that have not been approved by the practice owner for that purpose. If in doubt, the tool is not approved.\n4. **Transparency and consent.** Where recording or transcription tools are used in sessions, participants are told plainly and consent is documented per the Consent Policy.\n5. **Know the limits.** AI systems produce fluent, confident text that can be wrong (hallucination). Verify every factual claim, score, date and clinical assertion before it stands in a record.\n6. **Watch for bias.** AI outputs can reflect biases in training data. Review generated text for stigmatising, deficit-focused or culturally unsafe language — our person-first standard applies to machine drafts too.\n7. **No clinical decisions by machine.** AI may summarise, draft and organise. Assessment conclusions, diagnoses within scope, recommendations and risk judgements are made by clinicians.\n\n## Approved tools\n\nThe practice owner maintains the list of approved tools and their approved uses. Using an unapproved tool with client information is a privacy incident and is managed under the Data Breach Response Policy.\n\n## Training\n\nAll staff complete the Responsible Use of AI learning module, including the knowledge check, before client-facing work, and acknowledge this policy.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.167685+00"
+ },
+ {
+  "id": "c48603a3-53a7-48d9-aeb0-c102c906e16e",
+  "resource_id": "d0455805-1af1-4d3f-9364-adaaed50140a",
+  "version": 1,
+  "title": "Lone Worker Safety Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Lone Worker Safety Policy\n\n## Purpose\n\nMost Opal visits are conducted alone in other people's homes and community settings. This policy exists so that being alone never means being unaccounted for.\n\n## Before the visit\n\n1. Your calendar is your safety record: every community visit has an accurate address and time in the portal before it happens.\n2. Review known risks for the setting: prior incidents, animals, household composition, access issues. New referrals with unknown environments warrant a phone conversation before the first visit.\n3. If a specific risk is identified (history of aggression, volatile household), plan controls with the practice owner first — paired visits, public meeting places, or declining home visits are all legitimate outcomes.\n\n## During the visit\n\n- Park for easy exit; keep keys and phone on your person, not in a bag across the room.\n- Position yourself with an exit path; do not allow yourself to be between a risk and a closed door.\n- Trust discomfort. You may end any visit, at any point, without needing to justify the decision in the moment. Leave first, explain later.\n\n## Check-ins\n\nFor standard metropolitan days, a finished calendar plus reachable phone is the baseline. For elevated-risk visits and all rural or remote travel, explicit check-in arrangements per the Rural and Remote Travel Policy apply: nominated contact, agreed check-in times, and an escalation step if a check-in is missed.\n\n## After an incident or near miss\n\nReport every incident and near miss — including \"it was probably nothing\" events — under the Incident Management Policy. Near-miss reports are how the next person stays safe.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.168486+00"
+ },
+ {
+  "id": "d0aae407-af31-4b5e-967d-25215118f48d",
+  "resource_id": "2ab17911-a306-48f3-9f7b-dea1743d63e9",
+  "version": 1,
+  "title": "Data Breach Response Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Data Breach Response Policy\n\n## Purpose\n\nA data breach is any unauthorised access, disclosure or loss of personal information — a misdirected email, a lost phone, a compromised account, a stolen bag with case notes. Fast, honest response limits harm.\n\n## The response sequence\n\n1. **Report immediately.** Anyone who suspects a breach tells the practice owner the same day, by phone for anything involving client information. Reporting a possible breach is always the right call; false alarms are welcome.\n2. **Contain.** Stop the exposure: remotely wipe the device, recall the email where possible, disable the compromised account, retrieve the documents. Containment starts before investigation finishes.\n3. **Assess.** The practice owner assesses what information was involved, who is affected, and the likelihood of serious harm. The assessment is documented even when the conclusion is \"no serious harm likely\".\n4. **Notify where required.** Where the assessment indicates likely serious harm, affected individuals and the OAIC are notified in accordance with the Notifiable Data Breaches scheme. Thresholds, timeframes and content of notification: Requires legal/regulatory verification.\n5. **Remediate and learn.** Every breach and near miss ends with a documented review: what failed, what changes, who actions it, by when.\n\n## Staff obligations\n\n- Never attempt to quietly fix a breach without reporting it. Concealment converts an accident into misconduct.\n- Preserve evidence: do not delete the misdirected email or reset the lost device outside the containment plan.\n\n## Practice register\n\nThe practice owner maintains a register of breaches and near misses, reviewed for patterns at least annually.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.16919+00"
+ },
+ {
+  "id": "f43ca4c9-7294-426e-b3ab-bb3e4e86ce3e",
+  "resource_id": "82fd53b0-5994-45fe-aa88-4a8dc4a53e41",
+  "version": 1,
+  "title": "Professional Boundaries Policy",
+  "content": "**DRAFT — REQUIRES OPAL APPROVAL**\n\n# Professional Boundaries Policy\n\n## Purpose\n\nCommunity-based practice puts therapists inside homes and family life. That privilege demands clearer boundaries than clinic practice, not looser ones.\n\n## Standards\n\n1. **The relationship is therapeutic.** Friendship, romantic or sexual relationships with participants or their close family members are prohibited. Ahpra and OT Board expectations apply throughout: see the Shared Code of Conduct summary in the Resource Hub.\n2. **Gifts.** Token gifts of trivial value may be accepted graciously and disclosed to the practice owner. Money, significant gifts, bequests or loans are declined.\n3. **Contact channels.** Client contact happens through practice channels — practice phone and email — within reasonable hours. Personal social media connections with participants or their families are not accepted.\n4. **Self-disclosure.** Brief, purposeful self-disclosure that serves the participant's goals can be appropriate; venting, over-sharing or seeking support from participants is not.\n5. **Physical contact** is limited to what the therapy task requires, explained beforehand, and delivered with consent.\n6. **Dual relationships.** In small and rural communities, overlap is sometimes unavoidable. Disclose any dual relationship to the practice owner and plan how it will be managed rather than pretending it away.\n7. **Finances.** Therapists do not handle participant money, witness wills, or act as advocates in financial matters.\n\n## When lines blur\n\nBoundary drift is gradual by nature. If you notice yourself making exceptions for one participant, extending sessions socially, or dreading disclosure of some interaction in supervision — that is the signal. Raise it in supervision early; early conversations are routine, late ones are incidents.\n",
+  "change_note": "Initial seeded draft",
+  "change_kind": "initial",
+  "created_by": "OWNER",
+  "created_at": "2026-08-08 09:25:27.167113+00"
+ }
+]
