@@ -178,7 +178,8 @@ function writeSeeds(content, dir = SEED_DIR) {
     fs.writeFileSync(path.join(dir, `${t.name}.json`), JSON.stringify(rows, null, 1) + '\n');
   }
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({
-    format: 1, exported_at: new Date().toISOString(), fingerprint: fingerprint(content), tables: counts,
+    // No timestamp: an export that changed nothing must produce no diff.
+    format: 1, fingerprint: fingerprint(content), tables: counts,
   }, null, 2) + '\n');
   return counts;
 }
@@ -488,7 +489,7 @@ async function main() {
         }
       }
       if (summary.repointed) console.log(`  ${summary.repointed} row(s) outside the seed (assignments, progress) now point at the seeded ids.`);
-      console.log(`\nImported seeds exported ${manifest.exported_at}. Uploaded Resource Hub files are not in git — copy the RESOURCE_HUB_STORAGE_PATH folder separately.`);
+      console.log(`\nImported seeds ${manifest.fingerprint.slice(0, 12)}. Uploaded Resource Hub files are not in git — copy the RESOURCE_HUB_STORAGE_PATH folder separately.`);
     } else if (cmd === 'status') {
       const ctx = await resolveContext(client);
       const current = fingerprint(await readContent(client, ctx));
