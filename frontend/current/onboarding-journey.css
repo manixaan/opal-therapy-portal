@@ -503,3 +503,6 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .oj-tabpane > .oj-stage:first-child { border-top-left-radius: 0; border-top-right-radius: 0; border-top: 0; }
 @media (max-width: 640px) { .oj-tabs { overflow-x: auto; padding: 0 4px; } .oj-tab { white-space: nowrap; padding: 9px 12px; } }
+
+/* "Mark as sent" sits under the send buttons as a button of its own, not a quiet link. */
+.oj-actions-sent { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }

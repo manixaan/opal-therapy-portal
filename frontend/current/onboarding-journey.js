@@ -1089,7 +1089,7 @@
           + btn('I have sent it — mark as sent', 'OnboardingJourney.markSent()', 'oj-btn-primary')
           + '</div></div>';
       } else {
-        body += '<p class="oj-quiet">Sent it another way? ' + '<button type="button" class="oj-link" onclick="OnboardingJourney.markSent()">Mark as sent</button></p>';
+        body += '<div class="oj-actions oj-actions-sent">' + btn('Mark as sent — I sent it another way', 'OnboardingJourney.markSent()') + '</div>';
       }
     } else {
       body += '<p class="oj-quiet">' + (E.sentAt ? 'Sent ' + esc(fmtDateTime(E.sentAt)) : 'Not yet sent') + (E.subject ? ' · “' + esc(E.subject) + '”' : '') + '</p>'
@@ -1467,7 +1467,7 @@
           + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent()', 'oj-btn-primary')
           + '</div></div>';
       } else {
-        out += '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent()">Mark as sent</button></p>';
+        out += '<div class="oj-actions oj-actions-sent">' + btn('Mark as sent — I sent it another way', 'OnboardingJourney.packMarkSent()') + '</div>';
       }
     }
     out += '</div>';
@@ -1822,7 +1822,7 @@
         + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + '</div>' : '')
         + '<div class="oj-actions">' + (E.outlook && !E.outlook.available ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'ie\', \'/api/onboarding/journey/records/' + jsq(d.record.id) + '/induction/zip\')', R.ready ? 'oj-btn-primary' : '') : '') + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready && !(E.outlook && !E.outlook.available) ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
         + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
-          : '<p class="oj-quiet">Sent it another way? <button type="button" class="oj-link" onclick="OnboardingJourney.packMarkSent(\'induction\')">Mark as sent</button></p>')
+          : '<div class="oj-actions oj-actions-sent">' + btn('Mark as sent — I sent it another way', 'OnboardingJourney.packMarkSent(\'induction\')') + '</div>')
         + '</div>';
     }
     return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-phase3"><header><h2><span class="oj-stage-n">3</span>Phase 3 — Internal Induction Pack</h2><span class="oj-chip ' + (state === 'complete' ? 'is-done' : sent ? 'is-employee' : R.ready ? 'is-you' : 'is-quiet') + '">' + esc(state === 'complete' ? 'Complete' : sent ? 'Sent — tracking' : R.ready ? 'Ready to send' : 'Not ready') + '</span></header>' + body + '</section>';
