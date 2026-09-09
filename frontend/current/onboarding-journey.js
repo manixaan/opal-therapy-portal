@@ -1243,6 +1243,11 @@
     return out;
   }
 
+  /** More files on the same document — each becomes its own attachment; the item's own file stays. */
+  function addFilesButton(id) {
+    return '<label class="oj-btn oj-btn-small oj-file" title="Attach more files to this document">+ Add files<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packAddAttachments(\'' + jsq(id) + '\', this.files); this.value = \'\'"></label>';
+  }
+
   function fileChip(i, editable) {
     var f = i.file || {};
     if (f.placeholder) return '<span class="oj-chip is-warn">Placeholder — replace with the real document</span>';
@@ -1258,6 +1263,7 @@
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
       acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl && !f.placeholder ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      if (!i.itemKind || i.itemKind === 'document') acts.push(addFilesButton(i.id));
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       if (i.group === 'added') acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
@@ -1507,6 +1513,7 @@
     if (f.downloadUrl) acts.push('<a class="oj-btn oj-btn-small" href="' + esc(f.downloadUrl) + '">Download</a>');
     if (editable) {
       acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
+      if (!i.itemKind || i.itemKind === 'document') acts.push(addFilesButton(i.id));
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
@@ -2149,7 +2156,7 @@
       var files = ev.dataTransfer && ev.dataTransfer.files;
       if (!files || !files.length) return;
       var spec = row.getAttribute('data-drop').split(':');
-      if (spec[0] === 'pack') { packUploadFile(spec[1], files[0]); if (files.length > 1) toast('One document per line — the first file was used. Drop several on a section heading to add one line each.', true); }
+      if (spec[0] === 'pack') packDropFiles(spec[1], files);
       else if (spec[0] === 'defaults') defaultsUpload(spec[1], spec[2], files[0]);
       else if (spec[0] === 'returns') uploadReturns({ files: files, value: '' });
       else if (spec[0] === 'section') packAttachToSection(spec[1], spec[2], files);
@@ -2360,6 +2367,16 @@
     var hasLibrary = !!(i && i.library);
     if (!hasLibrary && !await portalConfirm('Remove the attached file? The document stays in the pack with no file until you attach another.', { danger: true })) return;
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', {}, hasLibrary ? 'Back to the library copy.' : 'File removed — attach the right one when ready.', 'DELETE', phaseOfItem(id)));
+  }
+  /** Files dropped on a document: the first fills an empty slot, everything else is attached alongside. */
+  function packDropFiles(id, files) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    var all = ((S.record && S.record.pack) ? S.record.pack.items : []).concat((S.record && S.record.induction) ? S.record.induction.items : []);
+    var i = all.filter(function (x) { return x.id === id; })[0];
+    var hasFile = !!(i && i.file && i.file.previewUrl && !i.file.placeholder);
+    if (hasFile) return packAddAttachments(id, list);
+    packUploadFile(id, list[0]).then(function () { if (list.length > 1) return packAddAttachments(id, list.slice(1)); });
   }
   /** Extra files on one document. Several at once; each lands as its own attachment. */
   async function packAddAttachments(id, files) {
