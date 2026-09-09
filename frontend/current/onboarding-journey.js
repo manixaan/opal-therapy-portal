@@ -159,6 +159,7 @@
     S.recordId = view === 'record' ? (id || S.recordId) : null;
     S.packageId = view === 'defaults' ? (id || null) : null;
     S.phaseView = null;
+    S.docTab = null;
     S.editingTerms = false;
     if (global.Onboarding && typeof global.Onboarding.nav === 'function') {
       global.Onboarding.nav(view, view === 'defaults' ? S.packageId : S.recordId);
@@ -822,11 +823,44 @@
     var cur = currentPhase(d);
     var view = Math.min(S.phaseView || cur, cur);
     if (view === 1) return offerPanel(d);
-    if (view === 2) return documentationPanel(d) + inductionPanel(d) + payrollPanel(d);
+    if (view === 2) return docTabs(d);
     return phase3Panel(d) + inductionPanel(d) + payrollPanel(d) + profilePanel(d);
   }
 
   function viewPhase(n) { S.phaseView = n; var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane); }
+
+  // ── Stage 2 tabs ──────────────────────────────────────────────────────────
+  // Phase 2 is three jobs that happen side by side: the email and its
+  // attachments, the internal setup checklist, and payroll. Each gets a
+  // browser-style tab so the page shows one job at a time.
+
+  var DOC_TABS = [
+    ['email', 'Email & attachments', function (d) { return documentationPanel(d); }],
+    ['setup', 'Internal setup', function (d) { return inductionPanel(d); }],
+    ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
+  ];
+
+  function docTabs(d) {
+    var active = S.docTab || DOC_TABS[0][0];
+    if (!DOC_TABS.some(function (t) { return t[0] === active; })) active = DOC_TABS[0][0];
+    var tabs = '<div class="oj-tabs" role="tablist" aria-label="Onboarding documentation">' + DOC_TABS.map(function (t) {
+      var on = t[0] === active;
+      return '<button type="button" role="tab" class="oj-tab' + (on ? ' is-active' : '') + '" id="oj-tab-' + t[0] + '" aria-selected="' + on + '" aria-controls="oj-tabpane-' + t[0] + '" onclick="OnboardingJourney.docTab(\'' + t[0] + '\')">' + esc(t[1]) + '</button>';
+    }).join('') + '</div>';
+    var panes = DOC_TABS.map(function (t) {
+      var html = t[2](d) || '<section class="oj-panel oj-stage is-pending"><p class="oj-quiet">Nothing here yet — this opens once the earlier steps are done.</p></section>';
+      return '<div class="oj-tabpane" role="tabpanel" id="oj-tabpane-' + t[0] + '" aria-labelledby="oj-tab-' + t[0] + '"' + (t[0] === active ? '' : ' hidden') + '>' + html + '</div>';
+    }).join('');
+    return '<div class="oj-tabset">' + tabs + panes + '</div>';
+  }
+
+  /** Switch the stage 2 tab in place — no re-render, so nothing typed is lost. */
+  function docTab(key) {
+    S.docTab = key;
+    var set = doc.querySelector('.oj-tabset'); if (!set) return;
+    set.querySelectorAll('.oj-tab').forEach(function (b) { var on = b.id === 'oj-tab-' + key; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    set.querySelectorAll('.oj-tabpane').forEach(function (p) { p.hidden = p.id !== 'oj-tabpane-' + key; });
+  }
 
   function recordHeadActions(d) {
     var r = d.record;
@@ -2615,7 +2649,12 @@
     }
   }
 
-  function scrollTo(id) { var el = doc.getElementById(id); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+  function scrollTo(id) {
+    var el = doc.getElementById(id); if (!el) return;
+    // A target inside a hidden stage 2 tab needs its tab in front first.
+    var pane = el.closest('.oj-tabpane'); if (pane && pane.hidden) docTab(pane.id.replace('oj-tabpane-', ''));
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
   function copy(text) {
     if (global.navigator && global.navigator.clipboard) global.navigator.clipboard.writeText(text).then(function () { toast('Link copied.'); }, function () { toast('Could not copy — select the link and copy it.', true); });
   }
@@ -2652,7 +2691,7 @@
     release: release,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
-    scrollTo: scrollTo, copy: copy, viewPhase: viewPhase,
+    scrollTo: scrollTo, copy: copy, viewPhase: viewPhase, docTab: docTab,
     openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsRename: defaultsRename,
     defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsUpload: defaultsUpload, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
     refresh: rerender,
