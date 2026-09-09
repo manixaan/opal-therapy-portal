@@ -866,9 +866,13 @@ router.get('/api/onboarding/compliance/expiring',
 
 router.get('/api/onboarding/employees',
   requirePermission('onboarding.view'), safe(async (req, res) => {
+    // The Employees register asks for people still being onboarded too
+    // (?include=onboarding); the compliance view keeps its historic shape.
+    const includeOnboarding = String(req.query.include || '') === 'onboarding';
     const { rows } = await odb.pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.is_active,
-              e.job_title, e.employment_type, e.start_date, e.status AS employment_status,
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.is_treating_therapist, u.role_title,
+              e.job_title, e.employment_type, e.start_date, e.end_date, e.status AS employment_status,
+              e.role_category, e.work_location, e.hours_per_week,
               e.child_related_work, e.ndis_risk_assessed_role, e.mobile_community_role,
               (SELECT COUNT(*)::int FROM credentials c
                 WHERE c.user_id = u.id AND c.expiry_date IS NOT NULL
@@ -885,15 +889,17 @@ router.get('/api/onboarding/employees',
             WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
          ) a ON TRUE
         WHERE u.organisation_id IS NOT DISTINCT FROM $1
-          AND u.role <> 'pre_employee'
-        ORDER BY u.name`, [orgOf(req)]
+          AND (u.role <> 'pre_employee' OR $2::boolean)
+        ORDER BY u.name`, [orgOf(req), includeOnboarding]
     );
     res.json({
       ok: true,
       employees: rows.map((r) => ({
         userId: r.id, name: r.name, email: r.email, role: r.role, isActive: r.is_active,
-        jobTitle: r.job_title, employmentType: r.employment_type, startDate: r.start_date,
-        employmentStatus: r.employment_status,
+        isTreatingTherapist: r.is_treating_therapist, roleTitle: r.role_title,
+        jobTitle: r.job_title, employmentType: r.employment_type, startDate: r.start_date, endDate: r.end_date,
+        employmentStatus: r.employment_status, roleCategory: r.role_category,
+        workLocation: r.work_location, hoursPerWeek: r.hours_per_week,
         childRelatedWork: r.child_related_work,
         ndisRiskAssessedRole: r.ndis_risk_assessed_role,
         mobileCommunityRole: r.mobile_community_role,
@@ -970,6 +976,7 @@ router.get('/api/onboarding/employees/:userId',
     const perms = getPermissions(req.user.role, req.user.permissions || []);
     if (perms.includes('onboarding.review') || perms.includes('onboarding.payroll')) {
       payload.personalDetails = await odb.getPersonalDetails(userId);
+      payload.vehicle = await require('./onboarding-returns-db').getVehicle(userId);
     }
     if (perms.includes('onboarding.payroll')) {
       payload.payroll = odb.payrollView(await odb.getPayrollProfileMasked(userId));

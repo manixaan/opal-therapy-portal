@@ -31,6 +31,7 @@
 <link rel="stylesheet" href="/onboarding.css?v=8" />
 <link rel="stylesheet" href="/splose-sync.css?v=1" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=31" />
+<link rel="stylesheet" href="/employees.css?v=1" />
 <script src="/resourcehub.js?v=r44" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
@@ -67,6 +68,9 @@
      board, Start Onboarding and each record. onboarding.js hands its
      management surface to this module and keeps Packages. -->
 <script src="/onboarding-journey.js?v=47" defer></script>
+<!-- Employees: the people register and one profile per person, read from
+     the onboarding employee endpoints. Renders into #emp-root inside #view-employees. -->
+<script src="/employees.js?v=1" defer></script>
 <!-- Interview Preparation: the Owner's structured recruitment interviews.
      Every /api/interviews route requires the `interviews.access` permission,
      which only the Owner holds by default, so this module renders nothing
@@ -90,7 +94,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=1" defer></script>
-<script src="/navigation.js?v=10" defer></script>
+<script src="/navigation.js?v=11" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -4034,6 +4038,9 @@ window.opIcon = function (name, size) {
   <button class="tab" data-tab="onboarding" title="Onboarding — new starter packs, credential verification and workforce compliance">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Onboarding
   </button>
+  <button class="tab" data-tab="employees" title="Employees — the people register and each person's profile">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Employees
+  </button>
   <button class="tab" data-tab="interviews" style="display:none;" title="Interview Preparation — prepare, complete and manage structured interviews">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1z"/><rect x="4" y="5" width="16" height="17" rx="2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="13" y2="15"/></svg> Interview Preparation
   </button>
@@ -4050,6 +4057,13 @@ window.opIcon = function (name, size) {
      403s) rather than trusting a role string in the browser. -->
 <section class="view" id="view-onboarding">
   <div id="ob-root"></div>
+</section>
+
+<!-- ============ EMPLOYEES TAB ============ -->
+<!-- The people register and one profile per person. employees.js renders
+     into #emp-root; the server decides which sections a reader receives. -->
+<section class="view" id="view-employees">
+  <div id="emp-root"></div>
 </section>
 
 <!-- ============ INTERVIEW PREPARATION TAB ============ -->
@@ -19389,7 +19403,7 @@ var ROLE_NAV = {
     primary: ['profile', 'calendar', 'casenotes', 'resources'],
     menu: { label: 'More', groups: [
       ['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']],
-      ['People', ['onboarding']],
+      ['People', ['onboarding', 'employees']],
       ['Recruitment', ['interviews']],
       ['Travel', ['travel', 'logbook']],
       ['Business', ['accounting', 'settings', 'support']],
@@ -19403,7 +19417,7 @@ var ROLE_NAV = {
     // degrades gracefully there (topic/cost filter lists come back empty).
     primary: ['profile', 'calendar', 'resources'],
     menu: { label: 'Menu', groups: [
-      ['People', ['onboarding']],
+      ['People', ['onboarding', 'employees']],
       // Interview Preparation is PERMISSION-gated, not role-gated: listing it
       // here only makes an admin ELIGIBLE. PERMISSION_TABS below removes it
       // again for any admin the Owner has not granted interviews.access.
@@ -19616,6 +19630,7 @@ function applyNavRoleVisibility(role) {
       if (name === 'support' && typeof supOpenCentre === 'function') supOpenCentre();
       if (name === 'casenotes' && window.CaseNotes && typeof window.CaseNotes.open === 'function') window.CaseNotes.open();
       if (name === 'interviews' && window.Interviews && typeof window.Interviews.open === 'function') window.Interviews.open();
+      if (name === 'employees' && window.Employees && typeof window.Employees.open === 'function') window.Employees.open();
       // Onboarding.open() is idempotent, so calling it from both here and
       // navigation.js's applyBase is safe — and necessary: restore() calls
       // switchTab but no per-tab loader, so a deep link or a Back press would

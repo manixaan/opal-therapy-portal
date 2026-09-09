@@ -1,0 +1,63 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EMPLOYEES — the people register and one profile per person.
+   Prefix `emp-`. Shares the ob-root / ob-hero / ob-subnav frame with
+   onboarding.css so the People tabs feel like one place.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.emp-root { max-width: 1180px; }
+.emp-quiet { color: var(--ink-soft); font-size: 13px; }
+.emp-subnav button .emp-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--border); color: var(--ink-soft); }
+.emp-subnav button.active .emp-count { background: var(--accent); color: #fff; }
+
+/* Search */
+.emp-toolbar { display: flex; align-items: center; gap: 12px; margin: 14px 0 12px; }
+.emp-search { flex: 1; display: flex; align-items: center; gap: 8px; max-width: 480px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.emp-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.emp-search-icon { color: var(--ink-soft); font-size: 16px; }
+.emp-search input { flex: 1; font: inherit; font-size: 14px; padding: 10px 0; border: 0; background: transparent; color: var(--ink); outline: none; }
+
+/* Register */
+.emp-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.emp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.emp-table th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.emp-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.emp-table tr:last-child td { border-bottom: 0; }
+.emp-row { cursor: pointer; }
+.emp-row:hover, .emp-row:focus-visible { background: var(--bg, #faf6f0); outline: none; }
+.emp-name { font-weight: 600; color: var(--ink); text-decoration: none; }
+.emp-name:hover { text-decoration: underline; }
+.emp-open { color: var(--accent); font-weight: 600; white-space: nowrap; text-align: right; }
+.emp-empty { border: 1px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; color: var(--ink-soft); }
+.emp-empty strong { display: block; color: var(--ink); margin-bottom: 4px; }
+
+/* Chips and flags */
+.emp-chip { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--ink-soft); white-space: nowrap; }
+.emp-chip.is-active { background: #e6f4ea; color: #2f7d4f; border-color: #bfe3cb; }
+.emp-chip.is-onboarding { background: #fff4e0; color: #8a5a00; border-color: #f2d9a6; }
+.emp-chip.is-inactive { background: #fbe9e5; color: #a33324; border-color: #f3c6bd; }
+.emp-chip.is-quiet { opacity: .85; }
+.emp-flag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #fff4e0; color: #8a5a00; white-space: nowrap; }
+.emp-flag.is-danger { background: #fbe9e5; color: #a33324; }
+
+/* Profile */
+.emp-back { font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; margin: 4px 0 10px; }
+.emp-back:hover { text-decoration: underline; }
+.emp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.emp-head h1 { font-size: 24px; margin: 0 0 4px; }
+.emp-head-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.emp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.emp-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 16px 18px; }
+.emp-card h3 { display: flex; align-items: baseline; justify-content: space-between; font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-soft); margin: 0 0 10px; }
+.emp-h3-note { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.emp-terms { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 13.5px; }
+.emp-terms dt { color: var(--ink-soft); font-weight: 600; }
+.emp-terms dd { margin: 0; overflow-wrap: anywhere; }
+.emp-creds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.emp-creds li.is-danger { color: #a33324; }
+.emp-creds a { color: var(--ink); text-decoration: none; }
+.emp-creds a:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .emp-toolbar { flex-direction: column; align-items: stretch; }
+  .emp-table th:nth-child(4), .emp-table td:nth-child(4), .emp-table th:nth-child(5), .emp-table td:nth-child(5) { display: none; }
+}

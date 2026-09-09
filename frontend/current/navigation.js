@@ -84,6 +84,9 @@
     // idless address here names the library, which is a real screen, so it
     // must degrade to itself rather than elsewhere.
     'interviews',
+    // Employees. The same shape as 'interviews': '#employees' is the
+    // register, '#employees/record/<userId>' is one person's profile.
+    'employees',
     'fca', 'letter',
     // The assessment surface. Like the two wizards it is a full-screen view
     // rather than a tab, but it carries a RECORD ID rather than a step number:
@@ -221,6 +224,8 @@
 
     } else if (out.tab === 'interviews') {
       out.id = safeId(s.id) || null;
+    } else if (out.tab === 'employees') {
+      out.id = safeId(s.id) || null;
 
     } else if (inList(WIZARD_TABS, out.tab)) {
       var n = parseInt(s.step, 10);
@@ -282,6 +287,8 @@
       // matching '#assessment/record/<id>'. decodeRoute also accepts the
       // shorter '#interviews/<id>' a human would type.
       if (s.id) out += '/record/' + encodeURIComponent(s.id);
+    } else if (s.tab === 'employees') {
+      if (s.id) out += '/record/' + encodeURIComponent(s.id);
     } else if (inList(WIZARD_TABS, s.tab)) {
       if (s.step) out += '/step-' + s.step;
     } else if (inList(PAGE_TABS, s.tab)) {
@@ -333,6 +340,8 @@
     } else if (tab === 'casenotes') {
       st.id = decodeSegment(parts[1]);
     } else if (tab === 'interviews') {
+      st.id = decodeSegment(lower(parts[1]) === 'record' ? parts[2] : parts[1]);
+    } else if (tab === 'employees') {
       st.id = decodeSegment(lower(parts[1]) === 'record' ? parts[2] : parts[1]);
     } else if (inList(WIZARD_TABS, tab)) {
       var m = /^step-(\d{1,3})$/.exec(lower(parts[1] || ''));
@@ -467,6 +476,12 @@
     return inList(CAL_MODES, mode) ? mode : null;
   }
 
+  function employeeRecordId() {
+    var em = global.Employees;
+    if (!em || !isFn(em.currentRecordId)) return null;
+    try { return safeId(em.currentRecordId()) || null; } catch (e) { return null; }
+  }
+
   function interviewRecordId() {
     var iv = global.Interviews;
     if (!iv || !isFn(iv.currentRecordId)) return null;
@@ -501,6 +516,7 @@
     else if (tab === 'onboarding') { st.view = NAV.obView || 'track'; st.id = NAV.obId; }
     else if (tab === 'casenotes') st.id = caseNoteSelectedId();
     else if (tab === 'interviews') st.id = interviewRecordId();
+    else if (tab === 'employees') st.id = employeeRecordId();
     return st;
   }
 
@@ -838,6 +854,16 @@
         try { global.Interviews.openRecord(t.id); } catch (e) {}
       } else if (isFn(global.Interviews.open)) {
         try { global.Interviews.open(); } catch (e) {}
+      }
+    }
+
+    if (t.tab === 'employees' && global.Employees) {
+      // Same as interviews: the dispatch opens the register; a restored
+      // address naming a person has to open that person. Both are idempotent.
+      if (t.id && isFn(global.Employees.openRecord)) {
+        try { global.Employees.openRecord(t.id); } catch (e) {}
+      } else if (isFn(global.Employees.open)) {
+        try { global.Employees.open(); } catch (e) {}
       }
     }
 
@@ -1373,6 +1399,12 @@
     pushInterview: function (id) {
       if (NAV.restoring) return;
       writeRoute({ tab: 'interviews', id: safeId(id) || null });
+    },
+
+    /** Employees does the same: pushEmployee(userId) on open, pushEmployee(null) back on the register. */
+    pushEmployee: function (id) {
+      if (NAV.restoring) return;
+      writeRoute({ tab: 'employees', id: safeId(id) || null });
     },
 
     /** Programmatic navigation, e.g. OpalNav.go({ tab: 'calendar', view: 'month' }). */

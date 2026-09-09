@@ -673,7 +673,7 @@ describe('changed assets are cache-busted', () => {
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
-      ['navigation.js', 10],
+      ['navigation.js', 11],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -684,6 +684,8 @@ describe('changed assets are cache-busted', () => {
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
       ['onboarding-journey.js', 47], ['onboarding-journey.css', 31],
+      // Employees: a first pin is still a pin.
+      ['employees.js', 1], ['employees.css', 1],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
