@@ -97,7 +97,10 @@ async function docxFields(buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const entry = zip.file('word/document.xml');
   if (!entry) return { fields: [], text: '' };
-  const doc = new DOMParser().parseFromString(await entry.async('string'), 'text/xml');
+  // Some generators write a byte-order mark before the XML declaration; the
+  // strict parser refuses it, and the whole document would read as unopenable.
+  const xml = (await entry.async('string')).replace(/^\uFEFF/, '');
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
   const fields = [];
   // Content controls: a control still showing its placeholder is blank.
   for (const sdt of elements(doc, 'w:sdt')) {

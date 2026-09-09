@@ -113,6 +113,12 @@ async function processReturns(req, assignment) {
     const full = await wdb.getReturnedDocument(assignment.id, d.id);
     const bytes = await wdb.readReturnedDocumentBytes(full).catch(() => null);
     if (!bytes) { out.unreadable += 1; continue; }
+    // A check that failed (or never ran) is worth another go: the reader may have been fixed since the upload.
+    if (!full.check_result || full.check_result.status === 'unreadable') {
+      const check = await documentCheck.checkDocument({ buffer: bytes, mime: full.file_mime });
+      await rdb.setDocumentCheck(full.id, check);
+      full.check_result = check;
+    }
     const text = await extraction.readDocumentText(bytes, full.file_mime);
     if (text.status !== full.text_status) await wdb.setReturnedDocumentText(full.id, { textStatus: text.status, textChars: text.chars, pageCount: text.pages.length });
     if (text.status === 'extracted') { readable.push({ index: readable.length + 1, id: full.id, title: full.title || full.file_name, pages: text.pages, row: full }); out.read += 1; } else out.unreadable += 1;

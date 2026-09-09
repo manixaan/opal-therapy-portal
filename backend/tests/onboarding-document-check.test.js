@@ -87,6 +87,18 @@ describe('onboarding document check', () => {
     expect(r.issues.map((i) => i.message)).toEqual(['Preferred name is blank', 'Emergency contact is blank']);
   });
 
+  test('a Word file whose XML starts with a byte-order mark still reads', async () => {
+    const xml = `\uFEFF<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+      <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Full Name</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Jane Smith</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t>Bank BSB</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>
+      </w:body></w:document>`;
+    const zip = new JSZip(); zip.file('word/document.xml', xml);
+    const r = await check.checkDocument({ buffer: await zip.generateAsync({ type: 'nodebuffer' }), mime: DOCX });
+    expect(r.status).toBe('attention');
+    expect(r.method).toBe('docx');
+    expect(r.fields.map((f) => [f.label, f.filled])).toEqual([['Full Name', true], ['Bank BSB', false]]);
+  });
+
   test('a photo, a scan and a broken file are unreadable, never ok', async () => {
     expect((await check.checkDocument({ buffer: Buffer.from('x'), mime: 'image/jpeg' })).status).toBe('unreadable');
     expect((await check.checkDocument({ buffer: Buffer.from('%PDF-1.4 not really'), mime: PDF })).status).toBe('unreadable');
