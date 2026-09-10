@@ -23,8 +23,6 @@
  */
 
 const express = require('express');
-/** The sections a pack is filed under; anything else falls to the phase's default. */
-const PACK_SECTIONS = new Set(['welcome_employment', 'personal_details', 'payroll_tax_super', 'identity', 'professional', 'screening', 'ndis', 'policies', 'training', 'systems', 'agreements', 'accounts', 'other']);
 const { contentDisposition } = require('./content-disposition');
 const router = express.Router();
 
@@ -32,6 +30,7 @@ const odb = require('./onboarding-db');
 const wdb = require('./onboarding-workflow-db');
 const pdb = require('./onboarding-pack-db');
 const pack = require('./onboarding-pack');
+const { PACK_SECTIONS } = pack;
 const placeholderPdf = require('./onboarding-placeholder-pdf');
 const packEmail = require('./onboarding-pack-email');
 const graphMail = require('./graph-mail');

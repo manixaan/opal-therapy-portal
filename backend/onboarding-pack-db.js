@@ -382,8 +382,8 @@ async function listPackDefaults(packageId, q = pool) {
 async function upsertPackDefault({ organisationId, packageId, phase, code, action, patch = {}, actorId }, q = pool) {
   const { rows } = await q.query(
     `INSERT INTO onboarding_pack_defaults
-       (organisation_id, package_id, phase, code, action, title, description, sends_document, employee_returns, requires_verification, required, document_id, sort_order, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       (organisation_id, package_id, phase, code, action, title, description, sends_document, employee_returns, requires_verification, required, document_id, sort_order, updated_by, section)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      ON CONFLICT (package_id, phase, code) DO UPDATE SET
        action = EXCLUDED.action,
        title = COALESCE(EXCLUDED.title, onboarding_pack_defaults.title),
@@ -394,11 +394,12 @@ async function upsertPackDefault({ organisationId, packageId, phase, code, actio
        required = COALESCE(EXCLUDED.required, onboarding_pack_defaults.required),
        document_id = COALESCE(EXCLUDED.document_id, onboarding_pack_defaults.document_id),
        sort_order = COALESCE(EXCLUDED.sort_order, onboarding_pack_defaults.sort_order),
+       section = COALESCE(EXCLUDED.section, onboarding_pack_defaults.section),
        updated_by = EXCLUDED.updated_by, updated_at = NOW()
      RETURNING *`,
     [organisationId, packageId, phase, str(code, 80), action, str(patch.title, 250), str(patch.description, 1000),
       patch.sends ?? null, patch.returns ?? null, patch.verifies ?? null, patch.required ?? null,
-      isUuid(patch.documentId) ? patch.documentId : null, patch.sortOrder ?? null, actorId || null]
+      isUuid(patch.documentId) ? patch.documentId : null, patch.sortOrder ?? null, actorId || null, str(patch.section, 40)]
   );
   return rows[0];
 }

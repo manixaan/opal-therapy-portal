@@ -21,6 +21,7 @@ const router = express.Router();
 const odb = require('./onboarding-db');
 const pdb = require('./onboarding-pack-db');
 const pack = require('./onboarding-pack');
+const { PACK_SECTIONS } = pack;
 const offerDocx = require('./onboarding-offer-docx');
 const offerPdf = require('./onboarding-offer-pdf');
 const offerEmail = require('./onboarding-offer-email');
@@ -178,11 +179,13 @@ router.post('/api/onboarding/journey/defaults/:packageId/items', requirePermissi
   }
   if (!title) return res.status(400).json({ error: 'A document name is required' });
   const code = `DEF_${require('crypto').randomBytes(4).toString('hex').toUpperCase()}`;
+  // The heading the document files under — the section's own + Add document button sets it.
+  const section = PACK_SECTIONS.has(b.section) ? b.section : null;
   await pdb.upsertPackDefault({
     organisationId: orgOf(req), packageId: pkg.id, phase, code, action: 'add', actorId: req.user.id,
-    patch: { title, description: b.description, sends: b.sendsDocument !== false, returns: b.employeeReturns === true, verifies: b.requiresVerification === true, required: b.required !== false, documentId: doc ? doc.id : null, sortOrder: 900 },
+    patch: { title, description: b.description, sends: b.sendsDocument !== false, returns: b.employeeReturns === true, verifies: b.requiresVerification === true, required: b.required !== false, documentId: doc ? doc.id : null, sortOrder: 900, section },
   });
-  await auditOnboarding(req, 'pack_default_added', { targetType: 'onboarding_package', targetId: pkg.id, metadata: { packageId: pkg.id, phase, code, documentId: doc ? doc.id : null } });
+  await auditOnboarding(req, 'pack_default_added', { targetType: 'onboarding_package', targetId: pkg.id, metadata: { packageId: pkg.id, phase, code, section, documentId: doc ? doc.id : null } });
   res.status(201).json({ ok: true, items: await defaultItems(req, pkg, phase), phase });
 }));
 

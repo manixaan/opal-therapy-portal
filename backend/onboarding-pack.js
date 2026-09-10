@@ -295,7 +295,7 @@ function applyDefaults(items, defaults, phase) {
   for (const d of rows) {
     if (d.action !== 'add') continue;
     out.push({
-      code: d.code, title: d.title || 'Document', description: d.description || null, section: phase === 'induction' ? 'agreements' : 'policies',
+      code: d.code, title: d.title || 'Document', description: d.description || null, section: d.section || (phase === 'induction' ? 'agreements' : 'policies'),
       sends: d.sends_document !== false, returns: d.employee_returns === true, verifies: d.requires_verification === true, required: d.required !== false,
       requirementCode: null, phase, itemKind: 'document', linkedTaskCode: null,
       documentId: d.document_id || null, documentVersionId: d.current_version_id || null, documentCode: d.document_code || null,
@@ -428,8 +428,11 @@ async function buildPackZip(resolved, meta) {
   };
 }
 
+/** The sections a pack is filed under; anything else falls to the phase's default. */
+const PACK_SECTIONS = new Set(['welcome_employment', 'personal_details', 'payroll_tax_super', 'identity', 'professional', 'screening', 'ndis', 'policies', 'training', 'systems', 'agreements', 'accounts', 'other']);
+
 module.exports = {
-  DOCUMENTATION_PACK, groupOf, parentOf,
+  DOCUMENTATION_PACK, PACK_SECTIONS, groupOf, parentOf,
   SUPPLEMENT, INDUCTION_SUPPLEMENT, INDUCTION_SECTIONS, REPLACED_BY_SUPPLEMENT, NOT_A_DOCUMENT, TITLE_OVERRIDES, phaseOf,
   itemFromRequirement, buildDefaultItems, applyDefaults, sampleFactsFor, buildPackZip, buildReadme, safeStem, extFor,
 };
