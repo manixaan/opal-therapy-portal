@@ -694,7 +694,7 @@ describe('changed assets are cache-busted', () => {
       ['profile.js', 5],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
-      ['reports.js', 2],
+      ['reports.js', 3],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder

@@ -93,7 +93,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=2" defer></script>
+<script src="/reports.js?v=3" defer></script>
 <script src="/navigation.js?v=11" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -8077,7 +8077,7 @@ window.APP_USER = null;
 window.clearCachedPracticeData = function () {
   try {
     Object.keys(sessionStorage)
-      .filter(function (k) { return k.indexOf('splose_swr_') === 0; })
+      .filter(function (k) { return k.indexOf('splose_swr_') === 0 || k.indexOf('snapshot_auto_shown:') === 0; })
       .forEach(function (k) { sessionStorage.removeItem(k); });
   } catch (_) {}
   // Practice-adjacent localStorage must not survive a user change either:

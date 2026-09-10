@@ -373,7 +373,9 @@
           window.location.replace('/create-password');
           return;
         }
-        // Successful login — redirect to main app
+        // Successful login — tell the shell to open the Today snapshot,
+        // then redirect to main app
+        try { sessionStorage.setItem('snapshot_just_signed_in', '1'); } catch (_) {}
         const redirect = new URLSearchParams(window.location.search).get('next') || '/';
         window.location.replace(redirect);
         return;

@@ -89,7 +89,13 @@ function autoOpenDailySnapshot() {
   var ff = ((window.APP_ORG_SETTINGS || {}).featureFlags) || {};
   if (ff.dailyWeeklyReports === false) return;
   var key = 'snapshot_auto_shown:' + u.id;
-  try { if (sessionStorage.getItem(key)) return; } catch (_) { return; }
+  try {
+    // A fresh sign-in (flag set by login.html) always shows it; otherwise
+    // only once per browser session, so reloads stay quiet.
+    var fresh = sessionStorage.getItem('snapshot_just_signed_in');
+    sessionStorage.removeItem('snapshot_just_signed_in');
+    if (!fresh && sessionStorage.getItem(key)) return;
+  } catch (_) { return; }
   (function whenEventsReady(attempt) {
     var loaded = (window.__outlookEventsCache || []).length > 0;
     if (!loaded && attempt < 40) { setTimeout(function () { whenEventsReady(attempt + 1); }, 250); return; }
