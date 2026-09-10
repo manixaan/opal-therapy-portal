@@ -378,6 +378,15 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect(verified.body.offer.status).toBe('accepted');
     expect(verified.body.prepared.status).toBe('prepared');
     expect((await agent.post(`${base}/offer/verify`).send({ acknowledge: true })).status).toBe(409);
+    // A wrong letter can still be replaced after acceptance: the offer stays accepted,
+    // and the new letter with its own reading supersedes the old one.
+    const replaced = await agent.post(`${base}/offer/signed`).send({ fileName: 'Jane Smith signed LOO v2.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF-1.4 signed letter v2').toString('base64') });
+    expect(replaced.status).toBe(201);
+    expect(replaced.body.offer.status).toBe('accepted');
+    expect(replaced.body.signed.fileName).toBe('Jane Smith signed LOO v2.pdf');
+    expect(Buffer.from((await agent.get(`${base}/offer/signed/download`)).body).toString()).toBe('%PDF-1.4 signed letter v2');
+    const { rows: signedDocs } = await db.pool.query(`SELECT status FROM onboarding_offer_documents WHERE assignment_id = $1 AND kind = 'signed' ORDER BY uploaded_at`, [record.id]);
+    expect(signedDocs.map((r) => r.status)).toEqual(['superseded', 'active']);
     expect(verified.body.prepared.total).toBeGreaterThan(8);
     expect(verified.body.record.status).toBe('created');
     expect(verified.body.journey.stage.key).toBe('documentation');
@@ -411,7 +420,7 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
       "SELECT action, metadata FROM audit_logs WHERE action LIKE 'onboarding.offer_%' OR action = 'onboarding.assignment_released' ORDER BY created_at");
     expect(audit.map((a) => a.action)).toEqual([
       'onboarding.offer_email_drafted', 'onboarding.offer_marked_sent', 'onboarding.offer_signed_received',
-      'onboarding.offer_verified', 'onboarding.assignment_released',
+      'onboarding.offer_verified', 'onboarding.offer_signed_replaced', 'onboarding.assignment_released',
     ]);
     expect(JSON.stringify(audit)).not.toContain('jane.smith@example.com');
     expect(JSON.stringify(audit)).not.toContain('Jane Smith');

@@ -963,25 +963,29 @@ router.post('/api/onboarding/journey/records/:id/offer/signed', requirePermissio
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
   const offer = await jdb.getCurrentOffer(assignment.id);
-  if (!offer || !['sent', 'signed_received', 'email_drafted', 'draft', 'approved'].includes(offer.status)) {
+  // An accepted offer keeps its acceptance: a wrong upload can still be replaced,
+  // and the new letter (with its reading) supersedes the old one outright.
+  const replacingAccepted = !!offer && offer.status === 'accepted';
+  if (!offer || !['sent', 'signed_received', 'email_drafted', 'draft', 'approved', 'accepted'].includes(offer.status)) {
     return res.status(409).json({ error: 'This offer is not waiting for a signed letter.', code: 'not_waiting' });
   }
   const up = readUpload(req.body, UPLOAD_MIMES);
   if (up.error) return res.status(400).json({ error: up.error });
 
+  const previous = await jdb.getLiveOfferDocument(offer.id, 'signed');
   const doc = await jdb.storeOfferDocument({
     organisationId: orgOf(req), offerId: offer.id, assignmentId: assignment.id, kind: 'signed',
     fileName: up.fileName, fileMime: up.fileMime, buffer: up.buffer, uploadedBy: req.user.id,
   });
-  await jdb.markSignedReceived(offer.id);
+  if (!replacingAccepted) await jdb.markSignedReceived(offer.id);
   // The portal reads the letter before it counts: the acceptance block's
   // fields are listed and the blank ones flagged. Nothing advances here —
   // the Owner submits it (verify) once the reading is in front of them.
   const check = await documentCheck.checkDocument({ buffer: up.buffer, mime: up.fileMime, expect: documentCheck.LETTER_OF_OFFER_EXPECT, keepValues: true });
   await jdb.setOfferDocumentCheck(doc.id, check);
-  await auditOnboarding(req, 'offer_signed_received', {
+  await auditOnboarding(req, previous ? 'offer_signed_replaced' : 'offer_signed_received', {
     targetType: 'onboarding_offer', targetId: offer.id,
-    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, bytes: doc.file_size_bytes, check: { status: check.status, method: check.method, fields: check.fields.length, issues: check.issues.map((i) => i.code) } },
+    metadata: { assignmentId: assignment.id, documentId: doc.id, supersededDocumentId: previous ? previous.id : null, afterAcceptance: replacingAccepted, sha256: doc.file_sha256, bytes: doc.file_size_bytes, check: { status: check.status, method: check.method, fields: check.fields.length, issues: check.issues.map((i) => i.code) } },
   });
   res.status(201).json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), check });
 }));

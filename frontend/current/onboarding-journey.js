@@ -1175,7 +1175,7 @@
         + '<div class="oj-actions">'
         + (c.assign && !done ? btn('Submit — accept the offer and start Phase 2', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '')
         + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
-        + (c.assign && !done ? '<label class="oj-btn oj-file">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label>' : '') + '</div>';
+        + (c.assign ? '<label class="oj-btn oj-file" title="Upload a different signed letter — it supersedes this one and what was read from it">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this' + (done ? ', true' : '') + ')"></label>' : '') + '</div>';
     } else if (c.assign) {
       body += '<p class="oj-quiet">Upload the letter the candidate returned. The portal reads the acceptance block — name, signature, date — and flags anything left blank before you submit it.</p>'
         + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
@@ -2278,7 +2278,12 @@
     return res;
   }
   function uploadLetter(input) { return uploadTo(input, '/offer/letter', 'Edited letter'); }
-  function uploadSigned(input) { return refreshRecordAfter(uploadTo(input, '/offer/signed', 'Signed letter')); }
+  async function uploadSigned(input, accepted) {
+    if (accepted && input && input.files && input.files[0]) {
+      if (!await portalConfirm('Replace the signed letter? The offer stays accepted; the new letter and what the portal reads from it supersede the previous one.', { danger: true })) { input.value = ''; return; }
+    }
+    return refreshRecordAfter(uploadTo(input, '/offer/signed', 'Signed letter'));
+  }
   async function discardLetter() {
     if (!await portalConfirm('Discard the uploaded edit and go back to the generated letter?', { danger: true })) return;
     return act('/offer/letter', {}, 'Using the generated letter again.', 'DELETE');
