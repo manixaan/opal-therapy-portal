@@ -531,6 +531,19 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     await respond(req, res, assignment, 201, phase);
   }));
 
+  router.patch(`${BASE}/items/:itemId/attachments/:attachmentId`, requirePermission('onboarding.assign'), safe(async (req, res) => {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    if (!packEditable(assignment, phase)) return res.status(409).json({ error: 'The pack has been sent and can no longer be changed.', code: 'sent' });
+    const fileName = String((req.body || {}).fileName || '').trim().replace(/[\\/\u0000-\u001f]/g, '');
+    if (!fileName || fileName.length > 255) return res.status(400).json({ error: 'Give the attachment a name (up to 255 characters).' });
+    const renamed = await pdb.renameAttachment(assignment.id, req.params.itemId, req.params.attachmentId, fileName);
+    if (!renamed) return notFound(res);
+    await clearDraft(assignment.id, phase);
+    await auditOnboarding(req, P.auditPrefix + '_item_attachment_renamed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: req.params.itemId, attachmentId: req.params.attachmentId } });
+    await respond(req, res, assignment, 200, phase);
+  }));
+
   router.delete(`${BASE}/items/:itemId/attachments/:attachmentId`, requirePermission('onboarding.assign'), safe(async (req, res) => {
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);

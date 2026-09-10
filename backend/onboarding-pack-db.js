@@ -287,6 +287,16 @@ async function addAttachment({ organisationId, assignmentId, itemId, fileName, f
   return rows[0];
 }
 
+/** Rename an attachment as it shows in the pack and the ZIP; the bytes stay. */
+async function renameAttachment(assignmentId, itemId, id, fileName, q = pool) {
+  if (!isUuid(id) || !isUuid(itemId)) return null;
+  const { rows } = await q.query(
+    'UPDATE onboarding_pack_item_attachments SET file_name = $4 WHERE assignment_id = $1 AND item_id = $2 AND id = $3 RETURNING *',
+    [assignmentId, itemId, id, str(fileName, 255)]
+  );
+  return rows[0] || null;
+}
+
 async function deleteAttachment(assignmentId, itemId, id, q = pool) {
   if (!isUuid(id) || !isUuid(itemId)) return false;
   const { rowCount } = await q.query('DELETE FROM onboarding_pack_item_attachments WHERE assignment_id = $1 AND item_id = $2 AND id = $3', [assignmentId, itemId, id]);
@@ -404,7 +414,7 @@ async function clearPackDefaults(packageId, phase, q = pool) {
 }
 
 module.exports = {
-  mapAttachments, getAttachment, addAttachment, deleteAttachment, readAttachment,
+  mapAttachments, getAttachment, addAttachment, renameAttachment, deleteAttachment, readAttachment,
   listPackDefaults, upsertPackDefault, deletePackDefault, clearPackDefaults,
   listItems, getItem, countItems, countItemsByPhase, insertDefaults, addItem, restoreDefaults, updateItem, setItemStatus, reorderItems, setItemCompleted,
   setItemFile, clearItemFile, describeItemFile, readItemFile,

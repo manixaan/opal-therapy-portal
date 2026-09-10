@@ -1351,11 +1351,13 @@
       acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl && !f.placeholder ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
       if (!i.itemKind || i.itemKind === 'document') acts.push(addFilesButton(i.id));
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      acts.push(btn('Edit', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       if (i.group === 'added') acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
     var atts = (i.attachments || []);
     var extra = atts.length ? '<ul class="oj-atts">' + atts.map(function (a) {
       return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" title="Preview" onclick="event.preventDefault(); OnboardingJourney.packPreviewAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">' + esc(a.fileName) + '</a>'
+        + (editable ? ' <button type="button" class="oj-btn oj-btn-small oj-btn-quiet" title="Rename this attachment" onclick="OnboardingJourney.packRenameAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\', \'' + jsq(a.fileName) + '\')">Edit</button>' : '')
         + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
     }).join('') + '</ul>' : '';
     var sub = '';
@@ -1592,7 +1594,8 @@
     if (atts.length) {
       fileCell += '<ul class="oj-atts">' + atts.map(function (a) {
         return '<li class="oj-att"><a href="' + esc(a.previewUrl) + '" title="Preview" onclick="event.preventDefault(); OnboardingJourney.packPreviewAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">' + esc(a.fileName) + '</a>'
-          + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
+          + (editable ? ' <button type="button" class="oj-btn oj-btn-small oj-btn-quiet" title="Rename this attachment" onclick="OnboardingJourney.packRenameAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\', \'' + jsq(a.fileName) + '\')">Edit</button>' : '')
+        + (editable ? '<button type="button" class="oj-file-x" title="Remove this attachment now" aria-label="Remove ' + esc(a.fileName) + '" onclick="OnboardingJourney.packRemoveAttachment(\'' + jsq(i.id) + '\', \'' + jsq(a.id) + '\')">×</button>' : '') + '</li>';
       }).join('') + '</ul>';
     }
     var acts = [];
@@ -2483,6 +2486,11 @@
     if (ok) toast(ok === 1 ? 'Attached.' : ok + ' files attached.');
     return refreshRecordAfter(Promise.resolve({ ok: true }));
   }
+  async function packRenameAttachment(id, attachmentId, current) {
+    var name = await portalPrompt('Attachment name as it will appear in the pack:', current || '');
+    if (name === null) return; if (!name.trim()) return toast('Give the attachment a name.', true);
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(attachmentId), { fileName: name.trim() }, 'Renamed.', 'PATCH', phaseOfItem(id)));
+  }
   function packRemoveAttachment(id, attachmentId) {
     return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(attachmentId), {}, 'Attachment removed.', 'DELETE', phaseOfItem(id)));
   }
@@ -2782,7 +2790,7 @@
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterCaret: letterCaret, letterKey: letterKey, letterPaste: letterPaste, letterInsert: letterInsert,
-    packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment,
+    packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment, packRenameAttachment: packRenameAttachment,
     openInMailApp: openInMailApp,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,

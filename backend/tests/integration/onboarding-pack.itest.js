@@ -220,9 +220,14 @@ describe('editing one person\'s pack', () => {
     const zipRes = await agent.get(`${jane.base}/pack/zip`).buffer().parse(binary);
     const zipped = await require('jszip').loadAsync(zipRes.body);
     expect(Object.keys(zipped.files).filter((n) => /schedule.a|schedule.b/i.test(n))).toHaveLength(2);
+    // An attachment can be renamed in place; a blank name is refused.
+    const attRenamed = await agent.patch(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[1].id}`).send({ fileName: 'Schedule B (signed).pdf' });
+    expect(attRenamed.status).toBe(200);
+    expect(attRenamed.body.pack.items.find((i) => i.id === contract.id).attachments[1].fileName).toBe('Schedule B (signed).pdf');
+    expect((await agent.patch(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[1].id}`).send({ fileName: '  ' })).status).toBe(400);
     const dropped = await agent.delete(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[0].id}`);
     expect(dropped.status).toBe(200);
-    expect(dropped.body.pack.items.find((i) => i.id === contract.id).attachments.map((a) => a.fileName)).toEqual(['schedule-b.pdf']);
+    expect(dropped.body.pack.items.find((i) => i.id === contract.id).attachments.map((a) => a.fileName)).toEqual(['Schedule B (signed).pdf']);
     expect((await agent.delete(`${jane.base}/pack/items/${contract.id}/attachments/${withBoth.attachments[0].id}`)).status).toBe(404);
     // A file dropped on a section files under that section; an unknown section falls to the default.
     const filed = await agent.post(`${jane.base}/pack/items`).send({ title: 'Passport scan', section: 'identity', employeeReturns: false, required: false, fileName: 'passport.pdf', fileMime: 'application/pdf', fileData: Buffer.from('%PDF passport').toString('base64') });
