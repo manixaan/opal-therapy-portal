@@ -188,6 +188,14 @@ async function setItemFile(assignmentId, itemId, { fileName, fileMime, buffer, u
   return rows[0] || null;
 }
 
+/** Rename this person's own copy as it shows in the pack and the ZIP. */
+async function renameItemFile(assignmentId, itemId, fileName, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_pack_items SET file_name = $3, updated_at = NOW()
+      WHERE assignment_id = $1 AND id = $2 AND file_name IS NOT NULL RETURNING *`, [assignmentId, itemId, str(fileName, 255)]);
+  return rows[0] || null;
+}
+
 async function clearItemFile(assignmentId, itemId, q = pool) {
   const { rows } = await q.query(
     `UPDATE onboarding_pack_items
@@ -415,7 +423,7 @@ async function clearPackDefaults(packageId, phase, q = pool) {
 }
 
 module.exports = {
-  mapAttachments, getAttachment, addAttachment, renameAttachment, deleteAttachment, readAttachment,
+  renameItemFile, mapAttachments, getAttachment, addAttachment, renameAttachment, deleteAttachment, readAttachment,
   listPackDefaults, upsertPackDefault, deletePackDefault, clearPackDefaults,
   listItems, getItem, countItems, countItemsByPhase, insertDefaults, addItem, restoreDefaults, updateItem, setItemStatus, reorderItems, setItemCompleted,
   setItemFile, clearItemFile, describeItemFile, readItemFile,

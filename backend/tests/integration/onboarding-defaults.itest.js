@@ -132,6 +132,11 @@ describe('Edit onboarding', () => {
     expect(parkingAfter.file.previewUrl).toBeTruthy();
     const bytes = await agent.get(parkingAfter.file.previewUrl);
     expect(bytes.status).toBe(200);
+    // The published file can be renamed in place; its title and bytes stay.
+    const fileRenamed = await agent.patch(`/api/onboarding/journey/defaults/${otFull.id}/items/${parking.code}/file`).send({ phase: 'documentation', fileName: 'Parking map (2026).pdf' });
+    expect(fileRenamed.status).toBe(200);
+    expect(fileRenamed.body.items.find((i) => i.code === parking.code)).toMatchObject({ title: 'Parking map', file: { fileName: 'Parking map (2026).pdf' } });
+    expect((await agent.patch(`/api/onboarding/journey/defaults/${otFull.id}/items/${parking.code}/file`).send({ phase: 'documentation', fileName: ' ' })).status).toBe(400);
     const later = await start({ name: 'Kim Lee', personalEmail: 'kim@example.com', position: 'OT', roleCategory: 'occupational_therapist', employmentType: 'full_time', isTreatingTherapist: true, startDate: '2026-11-02' });
     await agent.post(`/api/onboarding/journey/records/${later}/offer/skip`);
     const laterPack = (await agent.get(`/api/onboarding/journey/records/${later}/pack`)).body.pack.items;

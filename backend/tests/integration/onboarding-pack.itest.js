@@ -192,6 +192,11 @@ describe('editing one person\'s pack', () => {
     expect(item.file).toMatchObject({ source: 'own', previewKind: 'docx', fileName: 'Jane contract.docx' });
     const bytes = await agent.get(item.file.previewUrl).buffer().parse(binary);
     expect(bytes.body.toString()).toBe('PK-docx-jane');
+    // The file itself can be renamed without touching the document title; a blank name is refused.
+    const fileRenamed = await agent.patch(`${jane.base}/pack/items/${contract.id}/file`).send({ fileName: 'Jane Smith - Contract.docx' });
+    expect(fileRenamed.status).toBe(200);
+    expect(fileRenamed.body.pack.items.find((i) => i.id === contract.id)).toMatchObject({ title: 'Contract of Employment — Jane Smith', file: { source: 'own', fileName: 'Jane Smith - Contract.docx' } });
+    expect((await agent.patch(`${jane.base}/pack/items/${contract.id}/file`).send({ fileName: '' })).status).toBe(400);
 
     const removed = await agent.post(`${jane.base}/pack/items/${fwis.id}/remove`).send({ reason: 'given in person' });
     expect(removed.status).toBe(200);

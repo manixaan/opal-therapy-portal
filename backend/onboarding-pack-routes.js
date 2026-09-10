@@ -543,6 +543,27 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     await respond(req, res, assignment, 200, phase);
   }));
 
+  router.patch(`${BASE}/items/:itemId/file`, requirePermission('onboarding.assign'), safe(async (req, res) => {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    if (!packEditable(assignment, phase)) return res.status(409).json({ error: 'The pack has been sent and can no longer be changed.', code: 'sent' });
+    const item = await pdb.getItem(assignment.id, req.params.itemId);
+    if (!item) return notFound(res);
+    const fileName = String((req.body || {}).fileName || '').trim().replace(/[\\/\u0000-\u001f]/g, '');
+    if (!fileName || fileName.length > 255) return res.status(400).json({ error: 'Give the file a name (up to 255 characters).' });
+    let renamed = null; let scope = 'own';
+    if (item.file_name) renamed = await pdb.renameItemFile(assignment.id, item.id, fileName);
+    else if (item.document_id) {
+      scope = 'library';
+      renamed = item.document_version_id ? await odb.renameVersionFile(item.document_id, item.document_version_id, fileName) : null;
+      if (!renamed) renamed = await odb.renameCurrentVersionFile(item.document_id, fileName);
+    }
+    if (!renamed) return res.status(400).json({ error: 'This document has no file to rename yet.' });
+    await clearDraft(assignment.id, phase);
+    await auditOnboarding(req, P.auditPrefix + '_item_file_renamed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, scope } });
+    await respond(req, res, assignment, 200, phase);
+  }));
+
   router.delete(`${BASE}/items/:itemId/attachments/:attachmentId`, requirePermission('onboarding.assign'), safe(async (req, res) => {
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);

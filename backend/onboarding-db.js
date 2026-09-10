@@ -303,6 +303,24 @@ async function createDocumentVersion(documentId, data, actorId, q = pool) {
  * Superseding NEVER touches acknowledgement history: an acknowledgement is
  * pinned to a version id, so "who agreed to v1" stays answerable forever.
  */
+/** Rename the file on a document's current published version; the bytes stay. */
+async function renameCurrentVersionFile(documentId, fileName, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_document_versions v SET file_name = $2
+       FROM onboarding_documents d
+      WHERE d.id = $1 AND v.document_id = d.id AND v.version = d.current_version AND v.file_name IS NOT NULL
+      RETURNING v.id`, [documentId, str(fileName, 255)]);
+  return rows[0] || null;
+}
+
+/** Rename the file on one specific version (a pack item pinned to it). */
+async function renameVersionFile(documentId, versionId, fileName, q = pool) {
+  const { rows } = await q.query(
+    `UPDATE onboarding_document_versions SET file_name = $3 WHERE document_id = $1 AND id = $2 AND file_name IS NOT NULL RETURNING id`,
+    [documentId, versionId, str(fileName, 255)]);
+  return rows[0] || null;
+}
+
 async function publishDocumentVersion(documentId, versionId, actorId, q = pool) {
   const { rows: vRows } = await q.query(
     'SELECT * FROM onboarding_document_versions WHERE id = $1 AND document_id = $2',
@@ -1516,6 +1534,8 @@ async function claimExpiryNotice(data, q = pool) {
 
 module.exports = {
   pool,
+  renameCurrentVersionFile,
+  renameVersionFile,
   isUuid,
   str,
   bool,

@@ -466,7 +466,7 @@
         if (f.previewUrl) fileActs.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small oj-btn-quiet'));
         if (f.previewUrl) fileActs.push('<a class="oj-btn oj-btn-small oj-btn-quiet" href="' + esc(f.previewUrl) + '" download>Download</a>');
         if (edit && i.itemKind === 'document') fileActs.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? ' oj-btn-quiet' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
-        if (edit) fileActs.push(btn('Edit', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
+        if (edit && f.previewUrl && f.source === 'library') fileActs.push(btn('Edit', 'OnboardingJourney.defaultsRenameFile(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(f.fileName || '') + '\')', 'oj-btn-small oj-btn-quiet'));
         var rowActs = [];
         if (edit) { rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         var droppable = edit && i.itemKind === 'document';
@@ -496,6 +496,11 @@
     var title = await portalPrompt('Document name in this package\'s default pack:', current || '');
     if (title === null) return; if (!title.trim()) return toast('Give the document a name.', true);
     return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, title: title.trim() }, 'PATCH', 'Renamed for every new onboarding of this package.');
+  }
+  async function defaultsRenameFile(code, phase, current) {
+    var name = await portalPrompt('File name as it will appear in the pack:', current || '');
+    if (name === null) return; if (!name.trim()) return toast('Give the file a name.', true);
+    return defaultsAct('/items/' + encodeURIComponent(code) + '/file', { phase: phase, fileName: name.trim() }, 'PATCH', 'File renamed — it shows under this name in every pack that uses it.');
   }
   function defaultsRemove(code, phase, removed) { return defaultsAct('/items/' + encodeURIComponent(code), { phase: phase, removed: removed }, 'PATCH', removed ? 'Removed from the default.' : 'Restored to the default.'); }
   async function defaultsUpload(code, phase, input) {
@@ -1355,7 +1360,7 @@
       acts.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl && !f.placeholder ? '' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
       if (!i.itemKind || i.itemKind === 'document') acts.push(addFilesButton(i.id));
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
-      acts.push(btn('Edit', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
+      if (f.previewUrl && !f.placeholder && (f.source === 'own' || f.source === 'library')) acts.push(btn('Edit', 'OnboardingJourney.packRenameFile(\'' + jsq(i.id) + '\',\'' + jsq(f.fileName || '') + '\')', 'oj-btn-small oj-btn-quiet'));
       if (i.group === 'added') acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
     var atts = (i.attachments || []);
@@ -1609,6 +1614,7 @@
       acts.push('<label class="oj-btn oj-btn-small oj-file">' + (f.previewUrl ? 'Replace' : 'Attach a file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.packUploadFile(\'' + jsq(i.id) + '\', this)"></label>');
       if (!i.itemKind || i.itemKind === 'document') acts.push(addFilesButton(i.id));
       if (f.source === 'own' && i.library) acts.push(btn('Use library copy', 'OnboardingJourney.packRevertFile(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      if (f.previewUrl && !f.placeholder && (f.source === 'own' || f.source === 'library')) acts.push(btn('Edit', 'OnboardingJourney.packRenameFile(\'' + jsq(i.id) + '\',\'' + jsq(f.fileName || '') + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Rename', 'OnboardingJourney.packRename(\'' + jsq(i.id) + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
       acts.push(btn('Remove', 'OnboardingJourney.packItem(\'' + jsq(i.id) + '\',\'remove\')', 'oj-btn-small oj-btn-quiet'));
     }
@@ -2490,6 +2496,11 @@
     if (ok) toast(ok === 1 ? 'Attached.' : ok + ' files attached.');
     return refreshRecordAfter(Promise.resolve({ ok: true }));
   }
+  async function packRenameFile(id, current) {
+    var name = await portalPrompt('File name as it will appear in the pack:', current || '');
+    if (name === null) return; if (!name.trim()) return toast('Give the file a name.', true);
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/file', { fileName: name.trim() }, 'File renamed.', 'PATCH', phaseOfItem(id)));
+  }
   async function packRenameAttachment(id, attachmentId, current) {
     var name = await portalPrompt('Attachment name as it will appear in the pack:', current || '');
     if (name === null) return; if (!name.trim()) return toast('Give the attachment a name.', true);
@@ -2794,7 +2805,7 @@
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
     openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterCaret: letterCaret, letterKey: letterKey, letterPaste: letterPaste, letterInsert: letterInsert,
-    packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment, packRenameAttachment: packRenameAttachment,
+    packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment, packRenameAttachment: packRenameAttachment, packRenameFile: packRenameFile,
     openInMailApp: openInMailApp,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
     saveEmail: saveEmail, resetEmail: resetEmail, createDraft: createDraft, markSent: markSent, unmarkSent: unmarkSent,
@@ -2811,7 +2822,7 @@
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
     scrollTo: scrollTo, copy: copy, viewPhase: viewPhase, docTab: docTab,
-    openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsRename: defaultsRename,
+    openDefaults: openDefaults, viewDefaultsPhase: viewDefaultsPhase, previewDefaultsLetter: previewDefaultsLetter, defaultsRename: defaultsRename, defaultsRenameFile: defaultsRenameFile,
     defaultsRemove: defaultsRemove, defaultsRestore: defaultsRestore, defaultsUpload: defaultsUpload, defaultsPreview: defaultsPreview, defaultsAddOpen: defaultsAddOpen, defaultsAddClose: defaultsAddClose, defaultsAddSubmit: defaultsAddSubmit,
     refresh: rerender,
     _state: S,

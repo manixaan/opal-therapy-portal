@@ -250,6 +250,24 @@ router.post('/api/onboarding/journey/defaults/:packageId/items/:code/file', requ
   res.status(201).json({ ok: true, items: await defaultItems(req, pkg, phase), phase });
 }));
 
+/** Rename the file behind a default item — the library document's current published version, so every pack that uses it follows. */
+router.patch('/api/onboarding/journey/defaults/:packageId/items/:code/file', requirePermission('onboarding.manage_packages'), safe(async (req, res) => {
+  const pkg = await loadPackage(req);
+  if (!pkg) return notFound(res);
+  const b = req.body || {};
+  const phase = PHASES.includes(b.phase) ? b.phase : 'documentation';
+  const code = str(req.params.code, 80);
+  const item = (await defaultItems(req, pkg, phase)).find((i) => i.code === code);
+  if (!item) return notFound(res);
+  const fileName = String((req.body || {}).fileName || '').trim().replace(/[\\/\u0000-\u001f]/g, '');
+  if (!fileName || fileName.length > 255) return res.status(400).json({ error: 'Give the file a name (up to 255 characters).' });
+  if (!item.library || item.file.source !== 'library') return res.status(400).json({ error: 'This document has no file to rename yet.' });
+  const renamed = await odb.renameCurrentVersionFile(item.library.documentId, fileName);
+  if (!renamed) return res.status(400).json({ error: 'This document has no file to rename yet.' });
+  await auditOnboarding(req, 'pack_default_file_renamed', { targetType: 'onboarding_document', targetId: item.library.documentId, metadata: { packageId: pkg.id, phase, code, versionId: renamed.id } });
+  res.json({ ok: true, items: await defaultItems(req, pkg, phase), phase });
+}));
+
 router.post('/api/onboarding/journey/defaults/:packageId/restore', requirePermission('onboarding.manage_packages'), safe(async (req, res) => {
   const pkg = await loadPackage(req);
   if (!pkg) return notFound(res);
