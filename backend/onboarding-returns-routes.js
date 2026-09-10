@@ -527,7 +527,7 @@ for (const [verb, status] of [['verify', 'verified'], ['reject', 'rejected']]) {
  * reverse puts the slot back to awaiting return.
  */
 for (const [verb, applicable] of [['not-applicable', false], ['applicable', true]]) {
-  router.post(`/api/onboarding/journey/records/:id/pack/items/:itemId/${verb}`, requirePermission('onboarding.verify'), safe(async (req, res) => {
+  router.post(`/api/onboarding/journey/records/:id/pack/items/:itemId/${verb}`, requirePermission('onboarding.review'), safe(async (req, res) => {
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);
     const item = await pdb.getItem(assignment.id, req.params.itemId);

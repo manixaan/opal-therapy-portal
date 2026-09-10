@@ -1504,12 +1504,12 @@
     }
     var acts = [];
     if (i.employeeReturns && i.progress === 'not_applicable') {
-      if (c.verify) acts.push(btn('Applies after all', 'OnboardingJourney.itemApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      if (c.review) acts.push(btn('Applies after all', 'OnboardingJourney.itemApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
       return '<li class="oj-attach-item' + (sub ? ' is-sub' : '') + ' is-not_applicable"><div class="oj-attach-main"><strong>' + esc(i.title) + '</strong> ' + progressChip(i)
         + '<div class="oj-attach-file">' + body + '</div></div><div class="oj-actions oj-actions-tight oj-attach-acts">' + acts.join('') + '</div></li>';
     }
     if (i.employeeReturns && c.review) acts.push('<label class="oj-btn oj-btn-small oj-file">' + (docs.length ? 'Upload another' : 'Upload for this document') + '<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this, \'' + jsq(i.id) + '\')"></label>');
-    if (i.employeeReturns && !docs.length && c.verify) acts.push(btn('Not applicable', 'OnboardingJourney.itemNotApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+    if (i.employeeReturns && !docs.length && c.review) acts.push(btn('Not applicable', 'OnboardingJourney.itemNotApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
     if (i.employeeReturns && docs.length && i.progress !== 'verified' && c.verify) acts.push(btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-primary') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
     return '<li class="oj-attach-item' + (sub ? ' is-sub' : '') + ' is-' + esc(i.progress || 'n/a') + '">'
       + '<div class="oj-attach-main"><strong>' + esc(i.title) + '</strong>' + (i.employeeReturns && !i.required ? ' <span class="oj-quiet">(if applicable)</span>' : '') + (i.employeeReturns ? ' ' + progressChip(i) : '')

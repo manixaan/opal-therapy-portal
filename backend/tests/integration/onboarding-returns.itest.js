@@ -249,7 +249,7 @@ describe('returned documents: read, reconciled, applied', () => {
     expect((await viewer.agent.post(`${base}/returns/${blur.action.returnedDocumentId}/archive`)).status).toBe(403);
   });
 
-  test('a document that does not apply is set aside: it stops counting, can be put back, and needs the verify permission', async () => {
+  test('a document that does not apply is set aside: it stops counting, can be put back, and needs the review permission', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify'] });
     const { base } = await settledAndSent(agent);
     const before = await agent.get(base);
@@ -258,8 +258,8 @@ describe('returned documents: read, reconciled, applied', () => {
     const returnsBefore = before.body.pack.counts.returns;
     const trackedBefore = before.body.pack.tracking.total;
 
-    // A viewer, and a reviewer without the verify permission, cannot set a document aside.
-    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view', 'onboarding.review'] });
+    // A viewer without the review permission cannot set a document aside.
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
     expect((await viewer.agent.post(`${base}/pack/items/${visa.id}/not-applicable`)).status).toBe(403);
 
     const marked = await agent.post(`${base}/pack/items/${visa.id}/not-applicable`).send({ note: 'Australian citizen' });
