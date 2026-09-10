@@ -325,7 +325,7 @@ describe('the changed assets are cache-busted', () => {
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
     // 10: the management surface is handed to onboarding-journey.js.
     expect(SHELL).toContain('src="/onboarding.js?v=14"');
-    expect(SHELL).toContain('src="/onboarding-journey.js?v=57"');
+    expect(SHELL).toContain('src="/onboarding-journey.js?v=58"');
     expect(SHELL).toContain('href="/onboarding-journey.css?v=35"');
   });
 

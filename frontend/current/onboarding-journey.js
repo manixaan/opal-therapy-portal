@@ -1409,7 +1409,9 @@
         + '<label class="oj-btn oj-file">Upload a folder<input type="file" multiple webkitdirectory directory hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
         + (active.length ? btn('Re-read everything', 'OnboardingJourney.processReturns()', 'oj-btn-quiet') : '') + '</div>';
       if (unplaced.length) {
-        var opts = expected.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + '</option>'; }).join('');
+        // Every document in the pack is a slot, read-only ones included: a statement that came back sits under its own heading.
+        var placeable = included.filter(function (i) { return !i.itemKind || i.itemKind === 'document'; });
+        var opts = placeable.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + (i.employeeReturns ? '' : ' (for reading only)') + '</option>'; }).join('');
         out += '<div class="oj-unplaced"><strong>Not placed yet (' + unplaced.length + ')</strong> <span class="oj-quiet">— the portal could not tell which document these are. Choose the slot for each.</span><ul>'
           + unplaced.map(function (x) {
             return '<li><span>' + esc(x.title || x.fileName) + '</span> ' + (x.checkSummary ? '<span class="oj-quiet">' + esc(x.checkSummary) + '</span> ' : '')
