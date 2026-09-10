@@ -1949,6 +1949,32 @@
   }
   function completePayrollAction(code) { return returnsAct('/payroll-setup/manual-actions/' + encodeURIComponent(code) + '/complete', {}, 'Recorded.'); }
 
+  /**
+   * Readiness as a checklist: one row per check, its reasons folded beneath
+   * it, so the eye reads "what is done, what is left" rather than a wall of red.
+   */
+  function readinessBlock(R) {
+    var checks = R.checks || [];
+    var gating = checks.filter(function (k) { return !k.advisory; });
+    var readyCount = gating.filter(function (k) { return k.state === 'ready'; }).length;
+    var head = R.ready
+      ? '<h3>Ready to send</h3><p class="oj-quiet">Everything the induction pack needs is in place.</p>'
+      : '<h3>Before the induction pack can go</h3><p class="oj-quiet">' + readyCount + ' of ' + gating.length + ' ready. Each item below says what is still to happen.</p>';
+    var rows = checks.map(function (k) {
+      var ok = k.state === 'ready';
+      var cls = ok ? 'is-ready' : k.state === 'in_progress' ? 'is-progress' : 'is-open';
+      var items = (k.items || []).filter(function (x) { return !ok; });
+      // The chip carries the count; the reasons say which ones, so a count-only chip is not repeated.
+      var chip = ok ? 'Ready' : items.length ? (items.length + ' to go') : k.detail;
+      return '<li class="oj-rdy ' + cls + '"><div class="oj-rdy-head"><span class="oj-rdy-mark" aria-hidden="true">' + (ok ? '✓' : k.state === 'in_progress' ? '…' : '') + '</span>'
+        + '<span class="oj-rdy-label">' + esc(k.label) + (k.advisory ? ' <span class="oj-quiet">(shown, not a gate)</span>' : '') + '</span>'
+        + '<span class="oj-chip ' + (ok ? 'is-done' : k.state === 'in_progress' ? 'is-employee' : 'is-quiet') + '">' + esc(chip) + '</span></div>'
+        + (items.length ? '<ul class="oj-rdy-items">' + items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '')
+        + '</li>';
+    }).join('');
+    return '<div class="oj-ready' + (R.ready ? ' is-ready' : '') + '">' + head + '<ol class="oj-rdy-list">' + rows + '</ol></div>';
+  }
+
   /** Phase 3 — readiness, the induction pack, Email 3, tracking. */
   function phase3Panel(d) {
     var I = d.induction;
@@ -1957,9 +1983,7 @@
     var c = I.can || d.can; var E = I.email || {}; var sent = I.sent;
     var state = I.tracking && I.tracking.total && I.tracking.done === I.tracking.total && sent ? 'complete' : sent ? 'active' : R.ready ? 'active' : 'parallel';
     var body = '';
-    body += '<div class="oj-ready"><h3>' + (R.ready ? 'Ready to send' : 'Phase 3 is not ready because:') + '</h3>'
-      + (R.ready ? '' : '<ul class="oj-blockers">' + R.blockers.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>')
-      + '<ul class="oj-checks">' + R.checks.map(function (k) { return '<li><span>' + esc(k.label) + '</span><span class="oj-chip ' + (k.state === 'ready' ? 'is-done' : k.state === 'in_progress' ? 'is-employee' : 'is-quiet') + '">' + esc(k.detail) + '</span></li>'; }).join('') + '</ul></div>';
+    body += readinessBlock(R);
     if (sent) {
       body += '<div class="oj-sent-banner"><strong>Internal Induction Sent</strong><span>Due: ' + esc(fmtDate(E.dueAt)) + '</span><span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + (I.tracking ? ' · ' + I.tracking.done + ' of ' + I.tracking.total + ' induction items complete' : '') + '</span></div>';
     }

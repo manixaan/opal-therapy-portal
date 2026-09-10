@@ -70,8 +70,9 @@ function buildReadiness({ assignment = {}, tasks = [], documentation = [], payro
   for (const r of REQUIRED_TASKS) {
     if (r.when && !r.when(assignment)) continue;
     const ok = taskDone(r.code);
-    checks.push({ key: r.code, label: r.label, state: ok ? 'ready' : taskState(r.code) === 'in_progress' ? 'in_progress' : 'pending', detail: ok ? 'Ready' : taskState(r.code) === 'in_progress' ? 'In progress' : 'Not yet created' });
-    if (!ok) blockers.push(`${r.label} account still needs to be ${r.code === 'portal_account' ? 'created' : 'set up'}`);
+    const why = ok ? null : `${r.label} account still needs to be ${r.code === 'portal_account' ? 'created' : 'set up'}`;
+    checks.push({ key: r.code, label: r.label, state: ok ? 'ready' : taskState(r.code) === 'in_progress' ? 'in_progress' : 'pending', detail: ok ? 'Ready' : taskState(r.code) === 'in_progress' ? 'In progress' : 'Not yet created', items: why ? [why] : [] });
+    if (why) blockers.push(why);
   }
 
   const included = documentation.filter((d) => d.status === 'included' && d.employee_returns && d.required);
@@ -79,13 +80,16 @@ function buildReadiness({ assignment = {}, tasks = [], documentation = [], payro
   const compliance = included.filter((d) => STATUTORY.has(d.code));
   const outstanding = (list) => list.filter((d) => d.verification_status !== 'verified');
   const empOut = outstanding(employment); const compOut = outstanding(compliance);
-  checks.push({ key: 'employment_docs', label: 'Required employment documents', state: empOut.length ? 'pending' : 'ready', detail: empOut.length ? `${empOut.length} not yet verified` : 'Ready' });
-  checks.push({ key: 'compliance', label: 'Required compliance items', state: compOut.length ? 'pending' : 'ready', detail: compOut.length ? `${compOut.length} not yet verified` : 'Ready' });
-  for (const d of empOut) blockers.push(`${d.title} has not been ${d.returned_at ? 'verified' : 'returned'}`);
-  for (const d of compOut) blockers.push(`${d.title} has not been ${d.returned_at ? 'verified against the register' : 'returned'}`);
+  // Each check carries its own reasons, so the screen can show them under the
+  // check they belong to; `blockers` stays the flat list for the API and logs.
+  const empWhy = empOut.map((d) => `${d.title} has not been ${d.returned_at ? 'verified' : 'returned'}`);
+  const compWhy = compOut.map((d) => `${d.title} has not been ${d.returned_at ? 'verified against the register' : 'returned'}`);
+  checks.push({ key: 'employment_docs', label: 'Required employment documents', state: empOut.length ? 'pending' : 'ready', detail: empOut.length ? `${empOut.length} not yet verified` : 'Ready', items: empWhy });
+  checks.push({ key: 'compliance', label: 'Required compliance items', state: compOut.length ? 'pending' : 'ready', detail: compOut.length ? `${compOut.length} not yet verified` : 'Ready', items: compWhy });
+  blockers.push(...empWhy, ...compWhy);
 
   if (payroll) {
-    checks.push({ key: 'payroll', label: 'Payroll setup', state: payroll.approved ? 'ready' : payroll.ready ? 'in_progress' : 'pending', detail: payroll.label });
+    checks.push({ key: 'payroll', label: 'Payroll setup', state: payroll.approved ? 'ready' : payroll.ready ? 'in_progress' : 'pending', detail: payroll.label, items: [], advisory: true });
     // Payroll is shown, not a gate: the pack can go while payroll is still being approved.
   }
 

@@ -343,11 +343,20 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-record-head + .oj-summary { padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel); margin-bottom: var(--space-3); }
 /* ── Payroll + Phase 3 ───────────────────────────────────────────────────── */
 .oj-payroll th { width: 30%; font-weight: 600; color: var(--ink-soft); text-transform: none; letter-spacing: 0; font-size: 13px; }
-.oj-ready { padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg, #faf6f0); margin-bottom: 10px; }
-.oj-ready h3 { font-size: 13.5px; margin: 0 0 6px; }
-.oj-blockers { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; color: #a33324; }
-.oj-checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; font-size: 13px; }
-.oj-checks li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.oj-ready { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel, #fff); margin-bottom: 12px; }
+.oj-ready.is-ready { border-color: #bfe0cb; background: #f2faf5; }
+.oj-ready h3 { font-size: 14px; margin: 0 0 2px; }
+.oj-ready > p { margin: 0 0 10px; font-size: 13px; }
+.oj-rdy-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.oj-rdy { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--bg, #faf6f0); }
+.oj-rdy.is-ready { background: transparent; opacity: .85; }
+.oj-rdy-head { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+.oj-rdy-label { flex: 1; font-weight: 600; color: var(--ink); }
+.oj-rdy-mark { width: 20px; height: 20px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; border: 1.5px solid var(--border); color: var(--ink-soft); background: var(--panel); }
+.oj-rdy.is-ready .oj-rdy-mark { background: #2f7d4f; border-color: #2f7d4f; color: #fff; }
+.oj-rdy.is-progress .oj-rdy-mark { border-color: #1d4f8a; color: #1d4f8a; }
+.oj-rdy-items { margin: 6px 0 0 30px; padding: 0 0 0 16px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+.oj-rdy-items li { margin: 1px 0; }
 
 /* ── One phase at a time ─────────────────────────────────────────────────── */
 .oj-stepper { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
