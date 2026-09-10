@@ -93,7 +93,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=1" defer></script>
+<script src="/reports.js?v=2" defer></script>
 <script src="/navigation.js?v=11" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -8052,6 +8052,12 @@ window.APP_USER = null;
     (function loadSettingsWhenReady(attempt) {
       if (typeof loadUserSettings === 'function') { loadUserSettings(); return; }
       if ((attempt || 0) < 40) setTimeout(function () { loadSettingsWhenReady((attempt || 0) + 1); }, 100);
+    })(0);
+    // Morning reminder: open the Today snapshot once per session for
+    // owner/admin/therapist (reports.js is deferred, so retry until parsed).
+    (function autoSnapshotWhenReady(attempt) {
+      if (typeof autoOpenDailySnapshot === 'function') { setTimeout(autoOpenDailySnapshot, 1500); return; }
+      if ((attempt || 0) < 40) setTimeout(function () { autoSnapshotWhenReady((attempt || 0) + 1); }, 100);
     })(0);
   } catch (err) {
     console.error('Auth check error:', err);

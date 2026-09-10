@@ -78,6 +78,28 @@ function openReportPanel(mode) {
   renderReportPanel();
 }
 
+/* Auto-open on sign-in: owners, admins and therapists see the Today
+   snapshot once per browser session as a reminder of the day ahead.
+   Waits for the calendar's event cache so the panel is not empty on first
+   paint, skips read-only accounts, honours the org "Daily & Weekly Reports"
+   flag, and never re-opens on a plain reload within the same session. */
+function autoOpenDailySnapshot() {
+  var u = window.APP_USER;
+  if (!u || ['owner', 'admin', 'therapist'].indexOf(u.role) === -1) return;
+  var ff = ((window.APP_ORG_SETTINGS || {}).featureFlags) || {};
+  if (ff.dailyWeeklyReports === false) return;
+  var key = 'snapshot_auto_shown:' + u.id;
+  try { if (sessionStorage.getItem(key)) return; } catch (_) { return; }
+  (function whenEventsReady(attempt) {
+    var loaded = (window.__outlookEventsCache || []).length > 0;
+    if (!loaded && attempt < 40) { setTimeout(function () { whenEventsReady(attempt + 1); }, 250); return; }
+    if (_reportOpen) return;
+    try { sessionStorage.setItem(key, '1'); } catch (_) {}
+    _reportDate = new Date();
+    openReportPanel('daily');
+  })(0);
+}
+
 function closeReportPanel() {
   _reportOpen = false;
   document.getElementById('report-overlay').classList.remove('open');
