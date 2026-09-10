@@ -2774,6 +2774,8 @@
     subnavHtml: subnavHtml,
     nav: nav,
     openRecord: openRecord,
+    cancelRecordDialog: cancelRecordDialog,
+    confirmCancelRecord: confirmCancelRecord,
     filter: setFilter,
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
