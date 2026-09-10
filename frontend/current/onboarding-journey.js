@@ -329,13 +329,23 @@
   //  EDIT ONBOARDING — the default copy each package starts from
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /** Packages whose master default can be opened from Edit onboarding. Everything else is greyed out for now. */
+  var ACTIVE_DEFAULT_PACKAGES = ['PKG_OT_FULL_TIME'];
+
   async function viewDefaults(pane, actions) {
     if (actions) actions.innerHTML = S.packageId ? '<button type="button" class="oj-btn" onclick="OnboardingJourney.nav(\'defaults\')">← All packages</button>' : '';
     if (!S.packageId) {
       var res = await api('/api/onboarding/journey/defaults');
       if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'; return; }
       pane.innerHTML = '<p class="oj-quiet">Each package is the default an onboarding starts from. Open one to walk through its three phases and tweak the documents; every new onboarding for that package inherits the tweak.</p>'
+        + '<p class="oj-quiet">Only <strong>Occupational Therapist — Full-Time</strong> is open for editing at the moment. The other packages are on the way.</p>'
         + '<div class="oj-list">' + res.packages.map(function (p) {
+          // Only the OT full-time package is being actively developed; the rest are shown but greyed out.
+          if (ACTIVE_DEFAULT_PACKAGES.indexOf(p.code) === -1) {
+            return '<article class="oj-row oj-tile-off" aria-disabled="true"><div class="oj-row-main"><h3>' + esc(p.title) + '</h3>'
+              + '<p class="oj-quiet">' + esc(titleCase(p.roleCategory || '')) + ' · ' + esc(titleCase(p.employmentType || '')) + ' · coming soon</p></div>'
+              + '<div class="oj-row-side"><span class="oj-chip is-quiet">Not yet available</span></div></article>';
+          }
           return '<article class="oj-row oj-tile-link" role="link" tabindex="0" onclick="OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();OnboardingJourney.openDefaults(\'' + jsq(p.id) + '\');}"><div class="oj-row-main"><h3>' + esc(p.title) + '</h3>'
             + '<p class="oj-quiet">' + esc(titleCase(p.roleCategory || '')) + ' · ' + esc(titleCase(p.employmentType || '')) + (p.tweaks ? ' · ' + p.tweaks + ' tweak' + (p.tweaks === 1 ? '' : 's') : '') + (p.published ? '' : ' · not published') + '</p></div>'
             + '<div class="oj-row-side"><span class="oj-tile-arrow" aria-hidden="true">→</span></div></article>';

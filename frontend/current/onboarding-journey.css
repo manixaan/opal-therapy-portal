@@ -358,6 +358,8 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-tile-link:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), 0 4px 16px rgba(0,0,0,.08); }
 .oj-tile-link h3 { color: var(--ink); }
 .oj-tile-link:hover h3 { color: var(--accent); }
+.oj-tile-off { opacity: .55; cursor: not-allowed; background: var(--surface-2, #f6f6f6); }
+.oj-tile-off h3 { color: var(--ink-soft); }
 .oj-tile-arrow { font-size: 18px; color: var(--ink-soft); align-self: center; }
 .oj-tile-link:hover .oj-tile-arrow { color: var(--accent); }
 
