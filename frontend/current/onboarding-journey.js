@@ -452,7 +452,8 @@
       + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>File</th><th></th></tr></thead><tbody>'
       + (edit ? '<tr class="oj-pack-addrow"><td colspan="3">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
-      out += '<tr class="oj-pack-section"><td colspan="3">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
+      out += '<tr class="oj-pack-section"><td colspan="3"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
+        + (edit ? '<span class="oj-section-attach">' + btn('+ Add document', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\', \'' + jsq(k) + '\')', 'oj-btn-small oj-btn-quiet') + '</span>' : '') + '</div></td></tr>';
       groups[k].forEach(function (i) { out += defaultsRow(i); var kids = grouped.children[i.code] || []; if (kids.length) { out += subheadRow(i, 3); kids.forEach(function (c) { out += defaultsRow(c, true); }); } });
     });
     function defaultsRow(i, sub) {
@@ -465,8 +466,9 @@
         if (f.previewUrl) fileActs.push(btn('Preview', 'OnboardingJourney.defaultsPreview(\'' + jsq(i.code) + '\',\'' + phase + '\')', 'oj-btn-small oj-btn-quiet'));
         if (f.previewUrl) fileActs.push('<a class="oj-btn oj-btn-small oj-btn-quiet" href="' + esc(f.previewUrl) + '" download>Download</a>');
         if (edit && i.itemKind === 'document') fileActs.push('<label class="oj-btn oj-btn-small oj-file' + (f.previewUrl ? ' oj-btn-quiet' : ' oj-btn-primary') + '">' + (f.previewUrl ? 'Replace' : 'Upload file') + '<input type="file" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.defaultsUpload(\'' + jsq(i.code) + '\',\'' + phase + '\', this)"></label>');
+        if (edit) fileActs.push(btn('Edit', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet'));
         var rowActs = [];
-        if (edit) { rowActs.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
+        if (edit) { rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         var droppable = edit && i.itemKind === 'document';
         out += '<tr class="oj-pack-row' + (sub ? ' oj-pack-sub' : '') + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="defaults:' + esc(i.code) + ':' + esc(phase) + '" title="Drop a file here to attach it"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
           + '<td class="oj-filecell"><div>' + fileCell + '</div>' + (fileActs.length ? '<div class="oj-actions oj-actions-tight oj-file-acts">' + fileActs.join('') + '</div>' : '') + '</td>'
@@ -513,13 +515,15 @@
     if ((i.file.previewKind === 'pdf' || i.file.previewKind === 'docx') && global.DocPreview) global.DocPreview.open({ kind: i.file.previewKind, url: i.file.previewUrl, downloadUrl: i.file.previewUrl, title: i.title, meta: 'Library copy' });
     else global.open(i.file.previewUrl, '_blank', 'noopener');
   }
-  async function defaultsAddOpen(phase) {
+  /** Open the add form for the package default; a section pins the new document under that heading. */
+  async function defaultsAddOpen(phase, section) {
     var host = doc.getElementById('oj-defaults-add'); if (!host) return;
+    S.defaultsAddSection = section || null;
     host.hidden = false; host.innerHTML = spinner('Loading the library…');
     var lib = await api('/api/onboarding/documents?audience=employee');
     var docs = (lib.ok && (lib.documents || lib.items)) || [];
     var opts = [['', '— Choose a library document —']].concat(docs.filter(function (x) { return x.status !== 'archived'; }).map(function (x) { return [x.id, x.title]; }));
-    host.innerHTML = '<div class="oj-panel oj-add"><h3>Add a document to this package\'s default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</h3>'
+    host.innerHTML = '<div class="oj-panel oj-add"><h3>Add a document to ' + (S.defaultsAddSection ? '<em>' + esc(SECTION_LABELS[S.defaultsAddSection] || titleCase(S.defaultsAddSection)) + '</em> in ' : '') + 'this package\'s default ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</h3>'
       + '<div class="oj-grid2">' + field('oj-da-doc', 'From the library', select('oj-da-doc', opts, '')) + field('oj-da-title', 'Name (optional when choosing from the library)', input('oj-da-title', 'text', '', 'maxlength="250"')) + '</div>'
       + '<div class="oj-check-row"><label class="oj-check"><input type="checkbox" id="oj-da-sends" checked> A file is sent in the pack</label><label class="oj-check"><input type="checkbox" id="oj-da-returns"> The employee returns it</label><label class="oj-check"><input type="checkbox" id="oj-da-verifies"> We verify it</label><label class="oj-check"><input type="checkbox" id="oj-da-required" checked> Required</label></div>'
       + '<div class="oj-actions">' + btn('Add to the default', 'OnboardingJourney.defaultsAddSubmit(\'' + phase + '\')', 'oj-btn-primary') + btn('Cancel', 'OnboardingJourney.defaultsAddClose()') + '</div></div>';
@@ -529,7 +533,7 @@
     var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
     var ck = function (id) { var el = doc.getElementById(id); return !!(el && el.checked); };
     if (!v('oj-da-doc') && !v('oj-da-title')) return toast('Choose a library document or give the new document a name.', true);
-    var res = await defaultsAct('/items', { phase: phase, documentId: v('oj-da-doc') || null, title: v('oj-da-title') || null, sendsDocument: ck('oj-da-sends'), employeeReturns: ck('oj-da-returns'), requiresVerification: ck('oj-da-verifies'), required: ck('oj-da-required') }, 'POST', 'Added to the default.');
+    var res = await defaultsAct('/items', { phase: phase, documentId: v('oj-da-doc') || null, title: v('oj-da-title') || null, sendsDocument: ck('oj-da-sends'), employeeReturns: ck('oj-da-returns'), requiresVerification: ck('oj-da-verifies'), required: ck('oj-da-required'), section: S.defaultsAddSection || undefined }, 'POST', 'Added to the default.');
     if (res && res.ok) defaultsAddClose();
   }
 
