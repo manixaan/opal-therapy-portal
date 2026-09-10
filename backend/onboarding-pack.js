@@ -87,7 +87,8 @@ const DOCUMENTATION_PACK = [
   { code: 'REQ_NDIS_SCREENING', title: 'NDIS Worker Screening clearance', section: 'personal_details', sortOrder: 160, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: NDIS Worker Screening Check.' },
   { code: 'REQ_WWCC', title: 'WWCC clearance', section: 'personal_details', sortOrder: 170, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: Working With Children Check.' },
   { code: 'PACK_POLICE_CHECK', title: 'National Police Check certificate', section: 'personal_details', sortOrder: 180, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: National Police Check. Issued within the last twelve months.' },
-  { code: 'REQ_TAX_SETUP', title: 'Employee Tax Details Summary (from myGov)', section: 'payroll_tax_super', sortOrder: 190, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: null, description: 'Emailed after completing the Tax File Number declaration online; not part of the ZIP.' },
+  // The tax summary is its own payroll item, not one of the form's attachments.
+  { code: 'REQ_TAX_SETUP', title: 'Employee Tax Details Summary (from myGov)', section: 'payroll_tax_super', sortOrder: 190, group: 'supporting', sends: false, returns: true, verifies: true, requiredRule: null, description: 'Emailed after completing the Tax File Number declaration online; not part of the ZIP.' },
 ];
 const GROUP_BY_CODE = new Map(DOCUMENTATION_PACK.map((d) => [d.code, d.group]));
 const PARENT_BY_CODE = new Map(DOCUMENTATION_PACK.map((d) => [d.code, d.parentCode || null]));

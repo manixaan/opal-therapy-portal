@@ -74,7 +74,9 @@ describe('the default pack', () => {
     }
     // Grouping: attachments go in the ZIP; the rest sit under the New Employee Details.
     for (const c of ATTACHMENTS) expect(pack.groupOf(c)).toBe('attachment');
-    for (const c of SUPPORTING) { expect(pack.groupOf(c)).toBe('supporting'); expect(pack.parentOf(c)).toBe('PACK_NEW_EMPLOYEE_DETAILS'); }
+    for (const c of SUPPORTING) expect(pack.groupOf(c)).toBe('supporting');
+    for (const c of SUPPORTING.filter((x) => x !== 'REQ_TAX_SETUP')) expect(pack.parentOf(c)).toBe('PACK_NEW_EMPLOYEE_DETAILS');
+    expect(pack.parentOf('REQ_TAX_SETUP')).toBeNull(); // sits under Payroll, tax and super on its own
     // The form's own attachments sit beneath the New Employee Details, not under identity / professional / screening headings.
     for (const c of SUPPORTING.filter((x) => x !== 'REQ_TAX_SETUP')) expect(ot.find((i) => i.code === c).section).toBe('personal_details');
     expect(pack.groupOf('DEF_ABC')).toBe('added');
