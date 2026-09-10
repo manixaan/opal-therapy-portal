@@ -1066,9 +1066,9 @@
 
   // ── Stage 1 panel ─────────────────────────────────────────────────────────
 
-  function termsTable(t) {
+  function termsTable(t, name) {
     var rows = [
-      ['Position', t.positionTitle], ['Employment type', titleCase(t.employmentType)],
+      ['Employee name', name], ['Position', t.positionTitle], ['Employment type', titleCase(t.employmentType)],
       ['Commencement', t.startDate ? fmtDate(t.startDate) : null], ['End date', t.endDate ? fmtDate(t.endDate) : null],
       [t.payBasis === 'hourly' ? 'Rate' : 'Salary', t.payRate != null ? money(t.payRate) + (t.payBasis === 'hourly' ? ' per hour' : ' per annum') : null],
       ['Standard hours', t.hoursPerWeek != null ? t.hoursPerWeek + ' h/week' : null],
@@ -1112,7 +1112,7 @@
     body += '<ol class="oj-steps">';
     body += '<li class="oj-step ' + stepState(true, false) + '"><div class="oj-step-head"><span class="oj-step-n">1</span><strong>Employee details</strong>'
       + (editable ? btn('Edit', 'OnboardingJourney.editTerms()', 'oj-btn-small') : '') + '</div>'
-      + termsTable(o.terms || r.terms || {})
+      + termsTable(o.terms || r.terms || {}, r.applicantName)
       + (before ? '<p class="oj-quiet">Change these and the letter regenerates. An Outlook draft made from the old letter is discarded.</p>' : '')
       + '</li>';
 
