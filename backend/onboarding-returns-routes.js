@@ -4,7 +4,7 @@
  * THE RETURN LEG — routes.
  *
  *   POST …/returns                 upload returned documents (base64), then PROCESS
- *   POST …/returns/process         read → classify → match → reconcile → apply
+ *   POST …/returns/process         read (fixed rules, no model) → match → reconcile → apply
  *   POST …/returns/:docId/assign   the Owner says which pack item a document answers
  *   POST …/returns/:docId/archive  not one of ours
  *   POST …/fields/:fieldId/resolve the Owner settles a review or a conflict
@@ -17,6 +17,11 @@
  * A document that is recognised, matched to its pack item, read reliably and
  * agrees with everything else is applied to the profile and the item is
  * verified — silently. Anything else lands in Requires Your Attention.
+ *
+ * READING IS RULE-BASED. The pack's own forms are read by
+ * onboarding-form-reader.js from their field names and printed labels, with
+ * hard-coded rules for what must be filled and what a valid value is. No
+ * model reads a returned document.
  */
 
 const express = require('express');
@@ -27,11 +32,11 @@ const wdb = require('./onboarding-workflow-db');
 const pdb = require('./onboarding-pack-db');
 const rdb = require('./onboarding-returns-db');
 const extraction = require('./onboarding-extraction');
+const formReader = require('./onboarding-form-reader');
 const documentCheck = require('./onboarding-document-check');
 const reconcile = require('./onboarding-reconcile');
 const attention = require('./onboarding-attention');
 const sync = require('./onboarding-profile-sync');
-const gateway = require('./ai/ai-gateway');
 const { auditOnboarding } = require('./onboarding-audit');
 const { requireAuth, requirePermission } = require('./permissions');
 const log = require('./logger').createLogger('onboarding-returns');
@@ -130,43 +135,40 @@ async function processReturns(req, assignment) {
   const packItems = await pdb.listItems(assignment.id);
   if (!docs.length) return out;
 
-  // 1. Read.
+  // 1. Read. Every document is read by fixed rules — the pack's own forms by
+  //    their field names and printed labels (onboarding-form-reader), anything
+  //    else by the generic blank-field check. No model is involved.
   const readable = [];
+  const classifications = new Map();
+  let runId = null;
   for (const d of docs) {
     const full = await wdb.getReturnedDocument(assignment.id, d.id);
     const bytes = await wdb.readReturnedDocumentBytes(full).catch(() => null);
     if (!bytes) { out.unreadable += 1; continue; }
-    // A check that failed (or never ran) is worth another go: the reader may have been fixed since the upload.
-    if (!full.check_result || full.check_result.status === 'unreadable') {
+    const reading = await formReader.readReturnedDocument({ buffer: bytes, mime: full.file_mime }).catch((err) => { log.warn('form reading failed', { error: err, documentId: full.id }); return null; });
+    if (reading) {
+      await rdb.setDocumentCheck(full.id, reading.check);
+      full.check_result = reading.check;
+      classifications.set(full.id, { kind: reading.kind, confidence: 'high', signed: reading.signed });
+      for (const c of reading.candidates) {
+        await rdb.upsertCandidate({ organisationId: assignment.organisation_id, assignmentId: assignment.id, runId, field: { key: c.key, value: c.value, confidence: c.confidence, sourceDocumentId: full.id, sourceLabel: full.title || full.file_name, sourcePage: c.page } });
+        out.candidates += 1;
+      }
+    } else if (!full.check_result || full.check_result.status === 'unreadable') {
+      // A check that failed (or never ran) is worth another go: the reader may have been fixed since the upload.
       const check = await documentCheck.checkDocument({ buffer: bytes, mime: full.file_mime });
       await rdb.setDocumentCheck(full.id, check);
       full.check_result = check;
     }
     const text = await extraction.readDocumentText(bytes, full.file_mime);
     if (text.status !== full.text_status) await wdb.setReturnedDocumentText(full.id, { textStatus: text.status, textChars: text.chars, pageCount: text.pages.length });
-    if (text.status === 'extracted') { readable.push({ index: readable.length + 1, id: full.id, title: full.title || full.file_name, pages: text.pages, row: full }); out.read += 1; } else out.unreadable += 1;
+    if (text.status === 'extracted' || reading) { readable.push({ index: readable.length + 1, id: full.id, title: full.title || full.file_name, row: full }); out.read += 1; } else out.unreadable += 1;
   }
 
-  // 2. Classify + transcribe, one model call, when the gateway allows.
-  let classifications = new Map(); let candidates = []; let runId = null;
-  if (readable.length && gateway.isAvailable(extraction.AI_FEATURE)) {
-    const run = await wdb.startRun({ organisationId: assignment.organisation_id, assignmentId: assignment.id, documentCount: readable.length, requestedBy: req.user.id });
-    runId = run.id;
-    try {
-      const corpus = extraction.buildCorpus(readable);
-      const answer = await extraction.callModel({ corpus: corpus.text, userId: req.user.id, organisationId: assignment.organisation_id });
-      const byIndex = new Map(readable.map((d) => [d.index, d]));
-      classifications = extraction.normaliseClassifications(answer.documents, byIndex);
-      const norm = extraction.normaliseCandidates(answer.fields, byIndex);
-      for (const f of norm.fields) { await rdb.upsertCandidate({ organisationId: assignment.organisation_id, assignmentId: assignment.id, runId, field: f }); out.candidates += 1; }
-      await wdb.finishRun(run.id, { status: 'succeeded', readableCount: readable.length, fieldCount: out.candidates, modelKey: answer.meta?.modelKey, provider: answer.meta?.provider, aiAuditId: answer.meta?.interactionId });
-      out.aiUsed = true;
-    } catch (err) {
-      await wdb.finishRun(run.id, { status: 'failed', readableCount: readable.length, errorReason: String(err.code || err.message).slice(0, 200) });
-      if (err.code === 'ENCRYPTION_UNAVAILABLE') throw err;
-      log.warn('extraction failed; documents matched by name only', { error: err, assignmentId: assignment.id });
-    }
-  }
+  // 2. A form the rules did not recognise keeps whatever was read before;
+  //    a recognised one replaces its earlier readings (upsertCandidate is per
+  //    document and field). Readings of a document that is no longer active
+  //    are excluded by listCandidates.
 
   // 3. Match every active document to its pack item.
   for (const d of docs) {
@@ -188,7 +190,7 @@ async function processReturns(req, assignment) {
   }
 
   // 4. Reconcile every field that has a document reading.
-  candidates = await rdb.listCandidates(assignment.id);
+  const candidates = await rdb.listCandidates(assignment.id);
   const cands = candidates.map((c) => ({
     key: c.field_key, value: rdb.revealCandidate(c), confidence: c.confidence, sourceKind: 'document',
     sourceLabel: c.pack_item_title || c.source_title || c.source_file_name || 'Returned document', sourceDocumentId: c.source_document_id, candidateId: c.id,
@@ -255,7 +257,7 @@ async function processReturns(req, assignment) {
   await odb.pool.query(
     `UPDATE onboarding_assignments SET status = CASE WHEN status = 'starter_pack_sent' THEN 'documents_received' ELSE status END,
         documents_received_at = COALESCE(documents_received_at, NOW()), extraction_completed_at = CASE WHEN $2::boolean THEN NOW() ELSE extraction_completed_at END,
-        last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignment.id, out.aiUsed]
+        last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignment.id, out.candidates > 0]
   );
   await syncProgress(req, await odb.getAssignment(assignment.organisation_id, assignment.id));
   return out;

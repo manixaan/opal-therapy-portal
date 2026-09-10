@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * THE RETURN LEG — against a real database, the model stubbed at the gateway.
+ * THE RETURN LEG — against a real database, the forms read by fixed rules.
  *
  *   documents come back → the portal reads them, says what each is and
  *   whether it is signed, keeps every reading per document, reconciles:
@@ -50,18 +50,16 @@ async function agentFor({ permissions, ...overrides } = {}) {
   return { agent, user };
 }
 
-/** The model, stubbed at the gateway boundary: classification + per-document readings. */
-function stubModel(fields, documents, notes) {
-  const gateway = require('../../ai/ai-gateway');
-  return jest.spyOn(gateway, 'generate').mockResolvedValue({
-    text: null,
-    toolUse: { type: 'tool_use', name: 'record_employee_details', input: { fields, documents, notes: notes || '' } },
-    metadata: { aiUsed: true, interactionId: null, modelKey: 'mock', provider: 'mock' },
-  });
-}
+/** The pack's own forms, built with the real field names and labels; read by fixed rules, no model. */
+const forms = require('../fixtures/onboarding-forms');
+const pdf = (buffer) => ({ fileMime: 'application/pdf', fileData: buffer.toString('base64') });
+/** A complete contract on the offer's terms (full-time, $92,000, 38 hours, 2 November 2026). */
+const CONTRACT_ON_OFFER = { ...forms.CONTRACT_COMPLETE, employment_type: 'Full-time', annual_salary_aud: '92,000.00', commencement_date: '2 November 2026' };
+/** The details form agreeing with the offer (title and start date). */
+const NED_ON_OFFER = { values: { ...forms.NED_COMPLETE.values, p2_role_position_title: 'Occupational Therapist', p2_employment_start_date: '02/11/2026' }, ticks: forms.NED_COMPLETE.ticks };
 
 const OT = {
-  name: 'Jane Smith', personalEmail: 'jane.smith@example.com', position: 'Occupational Therapist',
+  name: 'Jane Doe', personalEmail: 'jane.doe@example.com', position: 'Occupational Therapist',
   roleCategory: 'occupational_therapist', employmentType: 'full_time', proposedRole: 'therapist', isTreatingTherapist: true,
   mobileCommunityRole: true, usesOwnVehicle: true, childRelatedWork: 'yes', ndisRiskAssessedRole: 'yes',
   startDate: '2026-11-02', payBasis: 'annual', payRate: 92000, hoursPerWeek: 38,
@@ -114,7 +112,7 @@ describe('Phase 2 begins: the profile owner exists and internal setup is under w
     expect(rec.body.journey.stages[2].state).toBe('parallel');
     expect(rec.body.journey.stage.key).toBe('documentation');
     expect(rec.body.journey.internalOpen.length).toBeGreaterThan(3);
-    const { rows } = await db.pool.query('SELECT role FROM users WHERE email = $1', ['jane.smith@example.com']);
+    const { rows } = await db.pool.query('SELECT role FROM users WHERE email = $1', ['jane.doe@example.com']);
     expect(rows[0].role).toBe('pre_employee');
   });
 });
@@ -124,40 +122,25 @@ describe('returned documents: read, reconciled, applied', () => {
     const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify', 'onboarding.payroll', 'onboarding.sensitive_identity'] });
     const { base } = await settledAndSent(agent);
 
-    // The stubbed model: three documents, one of them disagreeing about hours.
-    stubModel([
-      { key: 'legal_first_name', value: 'Jane', confidence: 'high', documentIndex: 1 }, { key: 'surname', value: 'Smith', confidence: 'high', documentIndex: 1 },
-      { key: 'legal_first_name', value: 'Jane', confidence: 'high', documentIndex: 2 }, { key: 'surname', value: 'Smith', confidence: 'high', documentIndex: 2 },
-      { key: 'date_of_birth', value: '1990-04-03', confidence: 'high', documentIndex: 2 }, { key: 'date_of_birth', value: '1990-04-03', confidence: 'high', documentIndex: 3 },
-      { key: 'hours_per_week', value: '38', confidence: 'high', documentIndex: 1 }, { key: 'hours_per_week', value: '30.4', confidence: 'high', documentIndex: 2 },
-      { key: 'mobile', value: '0412 000 000', confidence: 'high', documentIndex: 2 }, { key: 'suburb', value: 'Fremantle', confidence: 'high', documentIndex: 2 },
-      { key: 'address_line1', value: '12 Wattle Street', confidence: 'high', documentIndex: 2 }, { key: 'postcode', value: '6160', confidence: 'high', documentIndex: 2 }, { key: 'state', value: 'WA', confidence: 'high', documentIndex: 2 },
-      { key: 'emergency_name', value: 'Peter Smith', confidence: 'high', documentIndex: 2 }, { key: 'emergency_phone', value: '0498 765 432', confidence: 'high', documentIndex: 2 }, { key: 'emergency_relationship', value: 'Brother', confidence: 'high', documentIndex: 2 },
-      { key: 'bsb', value: '066-123', confidence: 'high', documentIndex: 2 }, { key: 'account_number', value: '12345678', confidence: 'high', documentIndex: 2 }, { key: 'account_holder_name', value: 'Jane Smith', confidence: 'high', documentIndex: 2 },
-      { key: 'drivers_licence_number', value: 'WA1234567', confidence: 'high', documentIndex: 3 }, { key: 'drivers_licence_expiry', value: '2029-03-01', confidence: 'high', documentIndex: 3 },
-    ], [
-      { documentIndex: 1, kind: 'contract', confidence: 'high', signed: 'yes' },
-      { documentIndex: 2, kind: 'new_employee_details', confidence: 'high', signed: 'yes' },
-      { documentIndex: 3, kind: 'drivers_licence', confidence: 'high', signed: 'unknown' },
-    ]);
-
+    // Three documents: the signed contract, the details form (disagreeing about the start date), and a licence scan the rules do not read.
     const up = await agent.post(`${base}/returns`).send({ files: [
-      { fileName: 'Jane contract signed.txt', ...text('CONTRACT OF EMPLOYMENT signed Jane Smith 38 hours per week') },
-      { fileName: 'employee details.txt', ...text('NEW EMPLOYEE DETAILS FORM Jane Smith DOB 03/04/1990 30.4 hours') },
-      { fileName: 'licence.txt', ...text('DRIVERS LICENCE WA1234567 expiry 01/03/2029 Jane Smith') },
+      { fileName: '01 - Contract of Employment.pdf', ...pdf(await forms.buildContractPdf(CONTRACT_ON_OFFER, { signature: 'Jane Marie Doe' })) },
+      { fileName: '04 - New Employee Details.pdf', ...pdf(await forms.buildEmployeeDetailsPdf({ values: { ...NED_ON_OFFER.values, p2_employment_start_date: '09/11/2026' }, ticks: NED_ON_OFFER.ticks })) },
+      { fileName: 'licence.txt', ...text('DRIVERS LICENCE 0000001 expiry 14/03/2031 Jane Doe') },
     ] });
     expect(up.status).toBe(201);
     expect(up.body.stored).toHaveLength(3);
-    expect(up.body.processed).toMatchObject({ read: 3, matched: 3, unrecognised: 0, aiUsed: true });
+    expect(up.body.processed).toMatchObject({ read: 3, matched: 3, unrecognised: 0, aiUsed: false });
+    expect(up.body.processed.candidates).toBeGreaterThan(30);
     expect(up.body.processed.conflict).toBe(1);
     expect(up.body.processed.reliable).toBeGreaterThan(5);
 
-    // Requires Your Attention: the hours conflict and the two doubtful readings, nothing else.
+    // Requires Your Attention: the start-date conflict, nothing else about the readings.
     const kinds = up.body.attention.map((a) => a.kind);
     expect(kinds.filter((k) => k === 'conflict')).toHaveLength(1);
     const conflict = up.body.attention.find((a) => a.kind === 'conflict');
-    expect(conflict.title).toBe('Employment Hours Conflict');
-    expect(conflict.options.map((o) => `${o.sourceLabel}: ${o.display}`)).toEqual(expect.arrayContaining(['Contract of Employment: 38 hours', 'New Employee Details Form: 30.4 hours', 'Offer terms: 38 hours']));
+    expect(conflict.title).toBe('Commencement Date Conflict');
+    expect(conflict.options.map((o) => `${o.sourceLabel}: ${o.display}`)).toEqual(expect.arrayContaining(['Contract of Employment: 02/11/2026', 'New Employee Details: 09/11/2026', 'Offer terms: 02/11/2026']));
     expect(kinds).not.toContain('unrecognised_document');
     expect(kinds).not.toContain('missing_signature');
     expect(kinds).toContain('payroll_approval');
@@ -165,27 +148,32 @@ describe('returned documents: read, reconciled, applied', () => {
     // The profile carries the reliable values already.
     const rec = await agent.get(base);
     expect(rec.body.record.status).toBe('documents_received');
-    expect(rec.body.profile.personal).toMatchObject({ name: 'Jane Smith', address: '12 Wattle Street, Fremantle, WA, 6160' });
-    expect(rec.body.profile.personal.dateOfBirth).toMatch(/^1990-04-03/);
-    expect(rec.body.profile.emergency).toMatchObject({ name: 'Peter Smith', relationship: 'Brother' });
-    expect(rec.body.profile.employment.hoursPerWeek).toBe(38); // the offer's value stands until the conflict is settled
-    expect(rec.body.profile.payroll).toMatchObject({ bankStatus: 'provided', bsbMasked: '•••-•23', accountLast4: '5678' });
+    expect(rec.body.profile.personal).toMatchObject({ name: 'Jane Marie Doe', address: '12 Example Street, Subiaco, WA, 6008' });
+    expect(rec.body.profile.personal.dateOfBirth).toMatch(/^1998-03-14/);
+    expect(rec.body.profile.emergency).toMatchObject({ name: 'John Doe', relationship: 'Partner' });
+    expect(rec.body.profile.employment.hoursPerWeek).toBe(38);
+    expect(rec.body.profile.employment.startDate).toMatch(/^2026-11-02/); // the offer's date stands until the conflict is settled
+    expect(rec.body.profile.payroll).toMatchObject({ bankStatus: 'provided', bsbMasked: '•••-•00', accountLast4: '0001' });
     const licence = rec.body.profile.credentials.find((c) => c.type === 'drivers_licence');
-    expect(licence).toMatchObject({ number: 'WA1234567', status: 'pending_review' });
-    expect(licence.expiryDate).toMatch(/^2029-03-01/);
+    expect(licence).toMatchObject({ number: '0000001', status: 'pending_review' });
+    expect(licence.expiryDate).toMatch(/^2031-03-14/);
     expect(licence.documentId).toBeTruthy(); // the original is attached
-    expect(rec.body.profile.identity).toHaveLength(0);
+    // The passport details on the form become an identity record, the original attached.
+    expect(rec.body.profile.identity).toHaveLength(1);
+    expect(rec.body.profile.identity[0]).toMatchObject({ kind: 'identity', evidenceType: 'australian_passport', numberLast4: '0001' });
+    expect(rec.body.profile.identity[0].expiryDate).toMatch(/^2033-07-01/);
 
-    // The pack table: contract and details form verified by the automation; licence waits for the register check? No — licence is not statutory.
+    // The pack table: the details form waits on the conflict; the licence (not statutory) is verified by the automation; the contract's reading is complete.
     const items = rec.body.pack.items;
-    expect(items.find((i) => i.code === 'PACK_NEW_EMPLOYEE_DETAILS').progress).toBe('received'); // hours conflict unsettled → not yet verified
+    expect(items.find((i) => i.code === 'PACK_NEW_EMPLOYEE_DETAILS').progress).toBe('received'); // start-date conflict unsettled → not yet verified
+    expect(rec.body.returnedDocuments.find((d) => d.fileName === '01 - Contract of Employment.pdf').check).toMatchObject({ status: 'ok', kind: 'contract', method: 'pdf_form' });
     expect(items.find((i) => i.code === 'REQ_DRIVERS_LICENCE')).toMatchObject({ progress: 'verified', verificationMode: 'auto' });
     expect(items.find((i) => i.code === 'REQ_AHPRA').progress).toBe('awaiting_return');
 
     // The registers read the profile: the licence expiry appears without anybody typing it.
     const userId = rec.body.record.userId;
     const employees = await agent.get(`/api/onboarding/employees/${userId}`);
-    expect(employees.body.credentials.find((c) => c.type === 'drivers_licence').expiryDate).toMatch(/^2029-03-01/);
+    expect(employees.body.credentials.find((c) => c.type === 'drivers_licence').expiryDate).toMatch(/^2031-03-14/);
     const expiring = await agent.get('/api/onboarding/compliance/expiring?days=365');
     expect(expiring.body.items.some((i) => i.kind === 'drivers_licence' && i.userId === userId)).toBe(false); // not within a year yet
     const { rows: creds } = await db.pool.query('SELECT expiry_date, document_id, source FROM credentials WHERE user_id = $1 AND credential_type = $2', [userId, 'drivers_licence']);
@@ -200,7 +188,7 @@ describe('returned documents: read, reconciled, applied', () => {
     expect(resolved.body.field).toMatchObject({ status: 'applied' });
     expect(resolved.body.attention.some((a) => a.kind === 'conflict')).toBe(false);
     const after = await agent.get(base);
-    expect(after.body.profile.employment.hoursPerWeek).toBe(38);
+    expect(after.body.profile.employment.startDate).toMatch(/^2026-11-02/);
     expect(after.body.pack.items.find((i) => i.code === 'PACK_NEW_EMPLOYEE_DETAILS').progress).toBe('verified');
 
     // Payroll approval is an Owner act and then falls silent.
@@ -213,39 +201,40 @@ describe('returned documents: read, reconciled, applied', () => {
     // Audit names ids only.
     const { rows: audit } = await db.pool.query("SELECT action, metadata FROM audit_logs WHERE action IN ('onboarding.returns_processed', 'onboarding.field_resolved', 'onboarding.payroll_bank_approved')");
     expect(audit.length).toBeGreaterThanOrEqual(3);
-    expect(JSON.stringify(audit)).not.toMatch(/Jane|066-123|12345678|WA1234567/);
+    expect(JSON.stringify(audit)).not.toMatch(/Jane|066-000|00000001|Subiaco/);
   });
 
   test('an unrecognised document and a missing signature need the Owner; a statutory check waits for the register', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify'] });
     const { base } = await settledAndSent(agent);
-    stubModel([
-      { key: 'wwcc_number', value: 'WWC1234567', confidence: 'high', documentIndex: 2 }, { key: 'wwcc_expiry', value: '2028-06-30', confidence: 'high', documentIndex: 2 },
-    ], [
-      { documentIndex: 1, kind: 'unrecognised', confidence: 'low', signed: 'unknown' },
-      { documentIndex: 2, kind: 'wwcc', confidence: 'high', signed: 'unknown' },
-      { documentIndex: 3, kind: 'contract', confidence: 'high', signed: 'no' },
-    ]);
     const up = await agent.post(`${base}/returns`).send({ files: [
       { fileName: 'IMG_0001.txt', ...text('something blurry that says nothing useful at all') },
-      { fileName: 'card.txt', ...text('WORKING WITH CHILDREN CHECK WWC1234567 valid to 30/06/2028') },
-      { fileName: 'contract.txt', ...text('CONTRACT OF EMPLOYMENT unsigned copy returned') },
+      { fileName: 'WWCC card.txt', ...text('WORKING WITH CHILDREN CHECK WWC0000001 valid to 01/07/2029') },
+      { fileName: 'contract.pdf', ...pdf(await forms.buildContractPdf({ ...CONTRACT_ON_OFFER, signature_date: '' })) },
+      { fileName: 'employee details.pdf', ...pdf(await forms.buildEmployeeDetailsPdf(NED_ON_OFFER)) },
     ] });
     expect(up.status).toBe(201);
     const kinds = up.body.attention.map((a) => a.kind);
     expect(kinds).toEqual(expect.arrayContaining(['unrecognised_document', 'missing_signature', 'register_check']));
+    const unsigned = up.body.attention.find((a) => a.kind === 'missing_signature');
+    expect(unsigned.detail).toMatch(/Contract of Employment came back without a signature/);
 
     // The Owner says what the blurry one is.
     const blur = up.body.attention.find((a) => a.kind === 'unrecognised_document');
     const rec = await agent.get(base);
-    const passportItem = rec.body.pack.items.find((i) => i.code === 'PACK_PASSPORT_VISA');
+    const passportItem = rec.body.pack.items.find((i) => i.code === 'REQ_IDENTITY');
     const assigned = await agent.post(`${base}/returns/${blur.action.returnedDocumentId}/assign`).send({ packItemId: passportItem.id });
     expect(assigned.status).toBe(200);
     expect(assigned.body.attention.some((a) => a.kind === 'unrecognised_document')).toBe(false);
 
-    // The WWCC is on the profile with its expiry, but stays pending until checked against the register.
+    // The WWCC (read from the details form) is on the profile with its expiry, but stays pending until checked against the register.
     const wwcc = rec.body.profile.credentials.find((c) => c.type === 'wwcc');
-    expect(wwcc).toMatchObject({ number: 'WWC1234567', status: 'pending_review' });
+    expect(wwcc).toMatchObject({ number: 'WWC0000001', status: 'pending_review' });
+    // The unsigned contract is held: its check names the blanks, and the item is not verified.
+    const contractDoc = rec.body.returnedDocuments.find((d) => d.fileName === 'contract.pdf');
+    expect(contractDoc.signatureStatus).toBe('missing');
+    expect(contractDoc.check.issues.map((i) => i.message)).toEqual(['Employee signature is empty', 'Date signed is blank']);
+    expect(rec.body.pack.items.find((i) => i.code === 'PACK_CONTRACT').progress).not.toBe('verified');
     const item = rec.body.pack.items.find((i) => i.code === 'REQ_WWCC');
     expect(item.progress).toBe('received');
     const verified = await agent.post(`${base}/pack/items/${item.id}/verify`).send({ reference: 'WA register 2026-09-20' });
@@ -263,8 +252,6 @@ describe('returned documents: read, reconciled, applied', () => {
   test('a ZIP of returns is unpacked into documents, each matched on its own; what it cannot hold is reported', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { base } = await settledAndSent(agent);
-    const gateway = require('../../ai/ai-gateway');
-    jest.spyOn(gateway, 'isAvailable').mockReturnValue(false);
     const JSZip = require('jszip');
     const z = new JSZip();
     z.file('Returned/Jane police check.txt', 'NATIONAL POLICE CHECK result no disclosable outcome'.padEnd(60, ' '));
@@ -279,7 +266,7 @@ describe('returned documents: read, reconciled, applied', () => {
     expect(up.body.processed).toMatchObject({ matched: 2, aiUsed: false });
     const rec = await agent.get(base);
     expect(rec.body.pack.items.find((i) => i.code === 'PACK_POLICE_CHECK').progress).toBe('received');
-    // Without the model the signature is unknown, so the contract is received and waits for a person.
+    // A contract that is not the pack's own form cannot be read for a signature, so it is received and waits for a person.
     expect(rec.body.pack.items.find((i) => i.code === 'PACK_CONTRACT').returnedAt).toBeTruthy();
     expect(rec.body.returnedDocuments.map((d) => d.title).sort()).toEqual(['Returned / Jane police check.txt', 'Returned / Signed contract.txt']);
     // A zip that turns out to hold nothing usable is a 400, not a silent success.
@@ -292,16 +279,43 @@ describe('returned documents: read, reconciled, applied', () => {
     for (const r of rows) expect(JSON.stringify(r.metadata)).not.toMatch(/police|contract|Jane/i);
   });
 
-  test('without the model, documents are still matched by name and nothing is invented', async () => {
+  test('a document the rules do not know is matched by name and nothing is invented', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { base } = await settledAndSent(agent);
-    const gateway = require('../../ai/ai-gateway');
-    jest.spyOn(gateway, 'isAvailable').mockReturnValue(false);
     const up = await agent.post(`${base}/returns`).send({ files: [{ fileName: 'Jane police check.txt', ...text('NATIONAL POLICE CHECK result no disclosable outcome') }] });
     expect(up.status).toBe(201);
     expect(up.body.processed).toMatchObject({ matched: 1, aiUsed: false, candidates: 0 });
     const rec = await agent.get(base);
     expect(rec.body.pack.items.find((i) => i.code === 'PACK_POLICE_CHECK').progress).toBe('received');
     expect(rec.body.profile.credentials).toHaveLength(0);
+  });
+
+  test('the ATO super choice form is read beneath its labels; an incomplete details form names its blanks and is never verified silently', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify', 'onboarding.payroll', 'onboarding.sensitive_identity'] });
+    const { base } = await settledAndSent(agent);
+    const ticks = forms.NED_COMPLETE.ticks.filter((t) => t !== 'p2_interpreter_required_no');
+    const up = await agent.post(`${base}/returns`).send({ files: [
+      { fileName: '02 - Superannuation Form.pdf', ...pdf(await forms.buildSuperChoicePdf(forms.SUPER_COMPLETE, { signature: 'Jane Marie Doe', signedDate: '10092026' })) },
+      { fileName: '04 - New Employee Details.pdf', ...pdf(await forms.buildEmployeeDetailsPdf({ values: { ...NED_ON_OFFER.values, p4_bsb: '12345' }, ticks })) },
+    ] });
+    expect(up.status).toBe(201);
+    expect(up.body.processed).toMatchObject({ read: 2, matched: 2, aiUsed: false });
+    const rec = await agent.get(base);
+    const superDoc = rec.body.returnedDocuments.find((d) => d.fileName === '02 - Superannuation Form.pdf');
+    expect(superDoc.check).toMatchObject({ status: 'ok', kind: 'super_choice', method: 'pdf_text', section: 'B' });
+    expect(superDoc.signatureStatus).toBe('present');
+    expect(rec.body.pack.items.find((i) => i.code === 'PACK_SUPER_CHOICE')).toMatchObject({ progress: 'verified', verificationMode: 'auto' });
+    expect(rec.body.profile.payroll).toMatchObject({ superFund: 'AustralianSuper' });
+    // The details form: the interpreter question is unanswered and the BSB is malformed — named, and the item held.
+    const ned = rec.body.returnedDocuments.find((d) => d.fileName === '04 - New Employee Details.pdf');
+    expect(ned.check.status).toBe('attention');
+    expect(ned.check.issues.map((i) => i.message)).toEqual(['Interpreter required: nothing is ticked', 'BSB should be six digits (000-000)']);
+    const item = rec.body.pack.items.find((i) => i.code === 'PACK_NEW_EMPLOYEE_DETAILS');
+    expect(item.progress).not.toBe('verified');
+    expect(item.attentionReason).toMatch(/Interpreter required: nothing is ticked; BSB should be six digits/);
+    // The malformed BSB was never proposed; the valid values were.
+    expect(rec.body.profile.payroll.bsbMasked).toBeNull();
+    expect(rec.body.profile.payroll.accountLast4).toBe('0001');
+    expect(rec.body.profile.personal.dateOfBirth).toMatch(/^1998-03-14/);
   });
 });
