@@ -70,6 +70,7 @@ async function defaultItems(req, pkg, phase) {
       code: it.code, title: it.title, description: it.description || null, section: it.section || null,
       sendsDocument: it.sends === true, employeeReturns: it.returns === true, requiresVerification: it.verifies === true, required: it.required !== false,
       itemKind: it.itemKind || 'document', linkedTaskCode: it.linkedTaskCode || null,
+      group: t && t.action === 'add' ? 'added' : pack.groupOf(it.code), parentCode: pack.parentOf(it.code),
       origin: t && t.action === 'add' ? 'added' : 'default', tweaked: !!t && t.action !== 'add', status,
       library: doc ? { documentId: doc.id, code: doc.code, title: doc.title, contentStatus: doc.content_status } : null,
       file: {

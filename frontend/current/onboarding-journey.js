@@ -395,7 +395,7 @@
   function defaultsTable(d, phase) {
     var items = d.phases[phase].items; var edit = d.can && d.can.edit;
     var included = items.filter(function (i) { return i.status === 'included'; }); var removed = items.filter(function (i) { return i.status !== 'included'; });
-    var groups = {}; included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
+    var grouped = groupPackItems(included); var groups = grouped.groups;
     var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
     var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
@@ -406,7 +406,10 @@
       + (edit ? '<tr class="oj-pack-addrow"><td colspan="3">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section"><td colspan="3">' + esc(SECTION_LABELS[k] || titleCase(k)) + '</td></tr>';
-      groups[k].forEach(function (i) {
+      groups[k].forEach(function (i) { out += defaultsRow(i); var kids = grouped.children[i.code] || []; if (kids.length) { out += subheadRow(i, 3); kids.forEach(function (c) { out += defaultsRow(c, true); }); } });
+    });
+    function defaultsRow(i, sub) {
+      var out = '';
         var f = i.file || {};
         var fileCell = i.itemKind !== 'document' ? '<span class="oj-quiet">' + (i.itemKind === 'account' ? 'Follows the set-up task' : 'Follows the induction task') + '</span>'
           : f.previewUrl ? (/^PLACEHOLDER - /.test(f.fileName || '') ? '<span class="oj-chip is-warn">Placeholder</span> ' : '') + '<span class="oj-quiet">' + esc(f.fileName || 'Library') + '</span>' : !i.sendsDocument ? '<span class="oj-quiet">Employee supplies their own</span>'
@@ -418,11 +421,11 @@
         var rowActs = [];
         if (edit) { rowActs.push(btn('Rename', 'OnboardingJourney.defaultsRename(\'' + jsq(i.code) + '\',\'' + phase + '\',\'' + jsq(i.title) + '\')', 'oj-btn-small oj-btn-quiet')); rowActs.push(btn('Remove', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', true)', 'oj-btn-small oj-btn-quiet')); }
         var droppable = edit && i.itemKind === 'document';
-        out += '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="defaults:' + esc(i.code) + ':' + esc(phase) + '" title="Drop a file here to attach it"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
+        out += '<tr class="oj-pack-row' + (sub ? ' oj-pack-sub' : '') + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="defaults:' + esc(i.code) + ':' + esc(phase) + '" title="Drop a file here to attach it"' : '') + '><td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : i.tweaked ? ' <span class="oj-chip is-quiet">Tweaked</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + '</td>'
           + '<td class="oj-filecell"><div>' + fileCell + '</div>' + (fileActs.length ? '<div class="oj-actions oj-actions-tight oj-file-acts">' + fileActs.join('') + '</div>' : '') + '</td>'
           + '<td class="oj-rowacts"><div class="oj-actions oj-actions-tight">' + rowActs.join('') + '</div></td></tr>';
-      });
-    });
+      return out;
+    }
     out += '</tbody></table></div>';
     if (removed.length) out += '<details class="oj-history"><summary>Removed from this package\'s default (' + removed.length + ')</summary><ul>' + removed.map(function (i) { return '<li>' + esc(i.title) + (edit ? ' ' + btn('Restore', 'OnboardingJourney.defaultsRemove(\'' + jsq(i.code) + '\',\'' + phase + '\', false)', 'oj-btn-small oj-btn-quiet') : '') + '</li>'; }).join('') + '</ul></details>';
     out += '</section>';
@@ -1171,6 +1174,23 @@
 
   // ── Stage 2 panel ─────────────────────────────────────────────────────────
 
+  /** Group included items by section, hoisting each supporting document under
+      its parent (the New Employee Details) wherever the parent sits, so the
+      form's attachments read as subsections rather than headings of their own. */
+  function groupPackItems(included) {
+    var byCode = {}; included.forEach(function (i) { byCode[i.code] = i; });
+    var children = {}; var groups = {};
+    included.forEach(function (i) {
+      var pc = i.parentCode && byCode[i.parentCode] ? i.parentCode : null;
+      if (pc) { (children[pc] = children[pc] || []).push(i); return; }
+      var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i);
+    });
+    return { groups: groups, children: children };
+  }
+  function subheadRow(parent, cols) {
+    return '<tr class="oj-pack-subhead"><td colspan="' + cols + '">Returned with the ' + esc(parent.title) + ' — the copies the form asks for</td></tr>';
+  }
+
   var SECTION_LABELS = {
     welcome_employment: 'Employment', personal_details: 'Personal details', payroll_tax_super: 'Payroll, tax and super',
     identity: 'Identity and right to work', professional: 'Professional registration', screening: 'Screening and checks',
@@ -1425,11 +1445,11 @@
     var sent = !!P.sent;
     var included = P.items.filter(function (i) { return i.status === 'included'; });
     var removed = P.items.filter(function (i) { return i.status !== 'included'; });
-    var groups = {};
-    included.forEach(function (i) { var k = i.section || 'other'; (groups[k] = groups[k] || []).push(i); });
+    var grouped = groupPackItems(included); var groups = grouped.groups;
     // While the pack is editable every section of this phase is shown, empty ones
-    // included, so there is always somewhere to drop a file for it.
-    var phaseSections = phase === 'induction' ? ['systems', 'policies', 'ndis', 'training', 'agreements', 'accounts'] : ['welcome_employment', 'personal_details', 'payroll_tax_super', 'identity', 'professional', 'screening'];
+    // included, so there is always somewhere to drop a file for it. Identity,
+    // professional and screening headings only appear when something still sits there.
+    var phaseSections = phase === 'induction' ? ['systems', 'policies', 'ndis', 'training', 'agreements', 'accounts'] : ['welcome_employment', 'personal_details', 'payroll_tax_super'];
     var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k] || (editable && phaseSections.indexOf(k) >= 0); });
 
     out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong> · '
@@ -1443,7 +1463,7 @@
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
         + '</div></td></tr>';
-      (groups[k] || []).forEach(function (i) { out += packRow(i, editable, sent); });
+      (groups[k] || []).forEach(function (i) { out += packRow(i, editable, sent); var kids = grouped.children[i.code] || []; if (kids.length) { out += subheadRow(i, 7); kids.forEach(function (c) { out += packRow(c, editable, sent, true); }); } });
       if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here to add them, or press + Add document.</td></tr>';
     });
     out += '</tbody></table></div>';
@@ -1496,7 +1516,7 @@
     return '<span class="oj-chip ' + cls + '">' + esc(PROGRESS_LABELS[i.progress] || titleCase(i.progress)) + '</span>' + (i.verificationMode === 'auto' && i.progress === 'verified' ? '<br><span class="oj-quiet">by the portal</span>' : '');
   }
 
-  function packRow(i, editable, sent) {
+  function packRow(i, editable, sent, sub) {
     var f = i.file || {};
     var fileCell;
     if (i.itemKind && i.itemKind !== 'document') {
@@ -1537,7 +1557,7 @@
       if (i.employeeReturns && i.requiresVerification) expects.push('checked by us');
     }
     var droppable = editable && (!i.itemKind || i.itemKind === 'document');
-    return '<tr class="oj-pack-row' + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="pack:' + esc(i.id) + '" title="Drop a file here to attach it"' : '') + '>'
+    return '<tr class="oj-pack-row' + (sub ? ' oj-pack-sub' : '') + (i.origin === 'added' ? ' is-added' : '') + (droppable ? ' oj-droprow' : '') + '"' + (droppable ? ' data-drop="pack:' + esc(i.id) + '" title="Drop a file here to attach it"' : '') + '>'
       + '<td><strong>' + esc(i.title) + '</strong>' + (i.origin === 'added' ? ' <span class="oj-chip is-you">Added</span>' : '') + (i.description ? '<br><span class="oj-quiet">' + esc(i.description) + '</span>' : '') + (expects.length ? '<br><span class="oj-quiet">' + esc(expects.join(' · ')) + '</span>' : '') + '</td>'
       + (sent ? '<td>' + progressChip(i) + (i.progress === 'received' && i.requiresVerification && S.record && S.record.can && S.record.can.verify ? '<div class="oj-actions oj-actions-tight">' + btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small') + '</div>' : '') + '</td>' : '')
       + '<td>' + fileCell + '</td>'

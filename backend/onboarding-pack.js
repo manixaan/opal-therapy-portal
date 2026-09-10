@@ -74,15 +74,19 @@ const DOCUMENTATION_PACK = [
   { code: 'PACK_NEW_EMPLOYEE_DETAILS', title: 'New Employee Details', section: 'personal_details', sortOrder: 40, group: 'attachment',
     documentCode: 'DOC_NEW_EMPLOYEE_DETAILS', shippedFile: 'new-employee-details.docx', sends: true, returns: true, verifies: true,
     description: 'Personal, emergency contact and bank details, returned together with the supporting documents below.' },
-  // Supporting documents, returned with the New Employee Details.
-  { code: 'REQ_RIGHT_TO_WORK', title: 'Right to Work Verification (passport or visa details)', section: 'identity', sortOrder: 110, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
-  { code: 'REQ_IDENTITY', title: 'Identity Verification (evidence of passport)', section: 'identity', sortOrder: 120, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
-  { code: 'PACK_POLICE_CHECK', title: 'Police Check', section: 'screening', sortOrder: 130, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Issued within the last twelve months.' },
-  { code: 'REQ_NDIS_SCREENING', title: 'NDIS Worker Screening', section: 'screening', sortOrder: 140, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true },
-  { code: 'REQ_WWCC', title: 'WWCC', section: 'screening', sortOrder: 150, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Working with Children Check.' },
-  { code: 'REQ_DRIVERS_LICENCE', title: "Driver's licence + Vehicle Details", section: 'screening', sortOrder: 160, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Licence, and vehicle registration and insurance where the role uses a vehicle.' },
-  { code: 'PACK_FIRST_AID', title: 'First Aid Certificate / CPR Certificate', section: 'screening', sortOrder: 170, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.PARTICIPANT_FACING, description: 'Current certificates (HLTAID011 and HLTAID009 or equivalent).' },
-  { code: 'REQ_AHPRA', title: 'AHPRA Reg', section: 'professional', sortOrder: 180, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.OT, description: 'Current AHPRA registration.' },
+  // Supporting documents — the attachments the New Employee Details form
+  // itself asks for, one per form section, in the form's order. Details
+  // (visa type, licence number, clearance numbers) are written into the
+  // form; only the copies are separate items. Every one sits beneath the
+  // New Employee Details (section + parentCode), not under its own heading.
+  { code: 'REQ_DRIVERS_LICENCE', title: "Driver's licence (front and back)", section: 'personal_details', sortOrder: 110, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: "Form section: Driver's Licence Details. Vehicle registration and insurance too where the role uses a vehicle." },
+  { code: 'REQ_IDENTITY', title: 'Passport photo page (identity and right to work)', section: 'personal_details', sortOrder: 120, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: Working Rights and Identity Verification. Other identity documents may be asked for to complete a 100-point check.' },
+  { code: 'REQ_RIGHT_TO_WORK', title: 'Visa evidence / VEVO check', section: 'personal_details', sortOrder: 130, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: null, description: 'Only where the employee is not an Australian citizen or permanent resident; visa details go in the form.' },
+  { code: 'REQ_AHPRA', title: 'AHPRA registration certificate', section: 'personal_details', sortOrder: 140, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.OT, description: 'Form section: AHPRA Registration Details.' },
+  { code: 'PACK_FIRST_AID', title: 'First Aid / CPR certificate', section: 'personal_details', sortOrder: 150, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: R.PARTICIPANT_FACING, description: 'Form section: First Aid and CPR Certification (HLTAID011 and HLTAID009 or equivalent).' },
+  { code: 'REQ_NDIS_SCREENING', title: 'NDIS Worker Screening clearance', section: 'personal_details', sortOrder: 160, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: NDIS Worker Screening Check.' },
+  { code: 'REQ_WWCC', title: 'WWCC clearance', section: 'personal_details', sortOrder: 170, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: Working With Children Check.' },
+  { code: 'PACK_POLICE_CHECK', title: 'National Police Check certificate', section: 'personal_details', sortOrder: 180, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, description: 'Form section: National Police Check. Issued within the last twelve months.' },
   { code: 'REQ_TAX_SETUP', title: 'Employee Tax Details Summary (from myGov)', section: 'payroll_tax_super', sortOrder: 190, group: 'supporting', parentCode: 'PACK_NEW_EMPLOYEE_DETAILS', sends: false, returns: true, verifies: true, requiredRule: null, description: 'Emailed after completing the Tax File Number declaration online; not part of the ZIP.' },
 ];
 const GROUP_BY_CODE = new Map(DOCUMENTATION_PACK.map((d) => [d.code, d.group]));
@@ -328,7 +332,13 @@ function buildReadme({ orgName, employeeName, roleTitle, dueDate, returnEmail, i
     ...enclosed.map((i, n) => `  ${String(n + 1).padStart(2, '0')}. ${i.title}`),
     '',
     'PLEASE COMPLETE AND RETURN',
-    ...returns.map((i) => `  • ${i.title}${i.required ? '' : ' (if applicable)'}${i.entryName ? '' : ' — your own copy'}`),
+    ...returns.flatMap((i) => {
+      if (parentOf(i.code)) return [];
+      const line = `  • ${i.title}${i.required ? '' : ' (if applicable)'}${i.entryName ? '' : ' — your own copy'}`;
+      const under = returns.filter((c) => parentOf(c.code) === i.code)
+        .map((c) => `      ○ ${c.title}${c.required ? '' : ' (if applicable)'}${c.entryName ? '' : ' — your own copy'}`);
+      return under.length ? [line + ', together with:', ...under] : [line];
+    }),
     '',
     dueDate ? `Please return everything by ${fmtDate(dueDate)}.` : 'Please return everything within seven days.',
     returnEmail ? `Return to: ${returnEmail}` : '',

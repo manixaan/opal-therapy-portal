@@ -21,16 +21,15 @@ Attachments: ZIP folder including –
 - Contract of Employment
 - Superannuation Form
 - FWIS (and FTCIS/CEIS)
-- New Employee Details which will include:
-   o Bank details
-   o Right to Work Verification (passport or visa details)
-   o Identity Verification (evidence of passport)
-   o Police Check
-   o NDIS Worker Screening
-   o WWCC
-   o Driver's licence + Vehicle Details
-   o First Aid Certificate/CPR Certificate
-   o AHPRA Reg
+- New Employee Details, with the copies the form asks for:
+   o Driver's licence (front and back)
+   o Passport photo page (identity and right to work)
+   o Visa evidence / VEVO check (if you are not an Australian citizen or permanent resident)
+   o AHPRA registration certificate (registered roles)
+   o First Aid / CPR certificate (where required for your role)
+   o NDIS Worker Screening clearance
+   o WWCC clearance
+   o National Police Check certificate
 
 Please download and extract the ZIP folder, carefully review each document, and complete and sign all documentation applicable to you. Please return the completed documentation within seven days, by [DD/MM/YYYY].
 

@@ -273,6 +273,9 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-file-x { margin-left: 6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); color: var(--ink-soft); font-size: 14px; line-height: 1; cursor: pointer; vertical-align: middle; padding: 0; }
 .oj-file-x:hover { background: #fbe9e5; color: #a33324; border-color: #f3c6bd; }
 .oj-pack-row.is-added td { background: #fffaf0; }
+.oj-pack-subhead td { padding: 4px 10px 4px 28px; font-size: 12px; font-weight: 600; color: var(--ink-soft); background: var(--panel); border-bottom: 0; }
+.oj-pack-sub td:first-child { padding-left: 28px; }
+.oj-pack-sub td:first-child strong { font-weight: 600; }
 .oj-yes { color: #2f7d4f; font-weight: 600; }
 .oj-no { color: var(--ink-soft); }
 .oj-toggle { font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--ink-soft); cursor: pointer; }

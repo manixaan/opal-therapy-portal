@@ -134,7 +134,7 @@ describe('the default pack', () => {
 
     expect(ot.pack.prepared).toBe(true);
     // The one documentation list, for every role and contract type (CEIS / FTCIS follow the contract type).
-    const LIST = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS', 'REQ_RIGHT_TO_WORK', 'REQ_IDENTITY', 'PACK_POLICE_CHECK', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'REQ_AHPRA', 'REQ_TAX_SETUP'];
+    const LIST = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS', 'REQ_DRIVERS_LICENCE', 'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'REQ_AHPRA', 'PACK_FIRST_AID', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'PACK_POLICE_CHECK', 'REQ_TAX_SETUP'];
     expect(codes(ot.pack).filter((c) => c !== 'PACK_CEIS' && c !== 'PACK_FTCIS')).toEqual(LIST);
     expect(codes(admin.pack).filter((c) => c !== 'PACK_CEIS' && c !== 'PACK_FTCIS')).toEqual(LIST);
     expect(codes(ot.pack).includes('PACK_CEIS')).toBe(OT.employmentType === 'casual');
@@ -285,7 +285,8 @@ describe('Prepare Onboarding Email', () => {
     expect(call.html).toContain(`by ${due}.`);
     const zip = await JSZip.loadAsync(call.attachment);
     expect(Object.keys(zip.files)).toContain('01 - Contract of Employment — Jane Smith.pdf');
-    expect(await zip.file('00 - Read Me First.txt').async('string')).toContain('• Right to Work Verification (passport or visa details) — your own copy');
+    expect(await zip.file('00 - Read Me First.txt').async('string')).toContain('• New Employee Details, together with:');
+    expect(await zip.file('00 - Read Me First.txt').async('string')).toContain('○ Passport photo page (identity and right to work) — your own copy');
 
     // The stored ZIP is what the download serves, and the draft is stale once the pack changes.
     const dl = await agent.get(`${jane.base}/pack/zip`).buffer().parse(binary);

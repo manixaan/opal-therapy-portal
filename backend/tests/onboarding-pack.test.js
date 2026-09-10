@@ -54,7 +54,7 @@ const library = new Map([
 describe('the default pack', () => {
   const ADMIN = { employment_type: 'casual', role_category: 'administration', is_treating_therapist: false, child_related_work: 'no', ndis_risk_assessed_role: 'no', mobile_community_role: false, uses_own_vehicle: false };
   const ATTACHMENTS = ['PACK_CONTRACT', 'PACK_SUPER_CHOICE', 'PACK_FWIS', 'PACK_NEW_EMPLOYEE_DETAILS'];
-  const SUPPORTING = ['REQ_RIGHT_TO_WORK', 'REQ_IDENTITY', 'PACK_POLICE_CHECK', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'REQ_DRIVERS_LICENCE', 'PACK_FIRST_AID', 'REQ_AHPRA', 'REQ_TAX_SETUP'];
+  const SUPPORTING = ['REQ_DRIVERS_LICENCE', 'REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'REQ_AHPRA', 'PACK_FIRST_AID', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'PACK_POLICE_CHECK', 'REQ_TAX_SETUP'];
 
   test('every package, role and contract type gets the one documentation list: four attachments, then the supporting documents', () => {
     const ot = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library);
@@ -75,6 +75,8 @@ describe('the default pack', () => {
     // Grouping: attachments go in the ZIP; the rest sit under the New Employee Details.
     for (const c of ATTACHMENTS) expect(pack.groupOf(c)).toBe('attachment');
     for (const c of SUPPORTING) { expect(pack.groupOf(c)).toBe('supporting'); expect(pack.parentOf(c)).toBe('PACK_NEW_EMPLOYEE_DETAILS'); }
+    // The form's own attachments sit beneath the New Employee Details, not under identity / professional / screening headings.
+    for (const c of SUPPORTING.filter((x) => x !== 'REQ_TAX_SETUP')) expect(ot.find((i) => i.code === c).section).toBe('personal_details');
     expect(pack.groupOf('DEF_ABC')).toBe('added');
   });
 
