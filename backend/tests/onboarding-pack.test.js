@@ -99,6 +99,18 @@ describe('the default pack', () => {
     expect(ind.map((i) => i.code)).toEqual(expect.arrayContaining(['REQ_HANDBOOK', 'REQ_NDIS_CODE', 'IND_SPLOSE_SETUP', 'IND_PRIVACY_AGREEMENT', 'IND_SPLOSE_ACTIVE', 'IND_TRAINING']));
     expect(ind.find((i) => i.code === 'IND_SPLOSE_ACTIVE')).toMatchObject({ itemKind: 'account', linkedTaskCode: 'systems_access', sends: false });
     expect(ind.every((i) => i.phase === 'induction')).toBe(true);
+    // The Owner's induction layout: the handbook alone under Employment; agreements, injury information and the
+    // NDIS Code under Policies and agreements; the welcome page and position description are not induction items.
+    const sectionOf = (c) => (ind.find((i) => i.code === c) || {}).section;
+    expect(ind.filter((i) => i.section === 'welcome_employment').map((i) => i.code).sort()).toEqual(['IND_HANDBOOK', 'REQ_HANDBOOK']);
+    for (const c of ['IND_PRIVACY_AGREEMENT', 'IND_CODE_OF_CONDUCT', 'REQ_INJURY_INFO', 'REQ_NDIS_CODE']) expect(`${c}:${sectionOf(c)}`).toBe(`${c}:agreements`);
+    expect(ind.some((i) => i.section === 'policies' || i.section === 'ndis')).toBe(false);
+    for (const gone of ['REQ_WELCOME', 'REQ_POSITION_DESCRIPTION']) expect(ind.some((i) => i.code === gone)).toBe(false);
+    // The handbook and both agreements ship with the portal.
+    for (const c of ['IND_HANDBOOK', 'IND_PRIVACY_AGREEMENT', 'IND_CODE_OF_CONDUCT']) expect(pack.INDUCTION_SUPPLEMENT.find((d) => d.code === c).shippedFile).toBeTruthy();
+    // A handbook in the library means the supplement's handbook replaces the requirement's copy (sent once).
+    const withHandbook = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), new Map([...library, ['DOC_HANDBOOK', { id: 'doc-DOC_HANDBOOK', current_version_id: 'v' }]]), 'induction');
+    expect(withHandbook.filter((i) => i.section === 'welcome_employment').map((i) => i.code)).toEqual(['IND_HANDBOOK']);
     expect(ot[0].code).toBe('PACK_CONTRACT');
   });
 

@@ -234,17 +234,22 @@ async function preparePack(assignment) {
  */
 async function ensurePlaceholderDocuments(organisationId) {
   const fs = require('fs'); const path = require('path');
-  const SHIPPED_DIR = path.join(__dirname, 'onboarding-templates', 'stage2');
+  const SHIPPED_DIRS = { documentation: path.join(__dirname, 'onboarding-templates', 'stage2'), induction: path.join(__dirname, 'onboarding-templates', 'stage3') };
   const MIME = { pdf: 'application/pdf', docx: offerDocxMime() };
   const library = await odb.listDocuments(organisationId);
   const byCode = new Map(library.map((d) => [d.code, d]));
-  for (const item of pack.DOCUMENTATION_PACK) {
+  // Stage 2 attachments always get a file (shipped or placeholder); Stage 3 only where the portal ships one.
+  const candidates = [
+    ...pack.DOCUMENTATION_PACK.map((item) => ({ ...item, stage: 'documentation' })),
+    ...pack.INDUCTION_SUPPLEMENT.filter((item) => item.shippedFile).map((item) => ({ ...item, stage: 'induction' })),
+  ];
+  for (const item of candidates) {
     if (!item.sends || !item.documentCode) continue;
     let doc = byCode.get(item.documentCode);
     const current = doc ? doc.current_file_name : null;
     // A file the practice uploaded stays. A placeholder gives way to a shipped file once one exists.
     if (current && !(placeholderPdf.isPlaceholderName(current) && item.shippedFile)) continue;
-    const shippedPath = item.shippedFile ? path.join(SHIPPED_DIR, item.shippedFile) : null;
+    const shippedPath = item.shippedFile ? path.join(SHIPPED_DIRS[item.stage], item.shippedFile) : null;
     const shipped = shippedPath && fs.existsSync(shippedPath) ? shippedPath : null;
     if (current && !shipped) continue; // a placeholder already, nothing better shipped
     if (!doc) {
@@ -258,7 +263,7 @@ async function ensurePlaceholderDocuments(organisationId) {
       bytes = fs.readFileSync(shipped);
       fileName = `${item.title.replace(/[\\/:*?"<>|]+/g, ' ').trim()}.${item.shippedFile.split('.').pop()}`;
       fileMime = MIME[item.shippedFile.split('.').pop()] || 'application/octet-stream';
-      note = 'Published by the portal from the shipped Stage 2 documents — replace in Edit Onboarding when the practice document changes';
+      note = `Published by the portal from the shipped ${item.stage === 'induction' ? 'Stage 3' : 'Stage 2'} documents — replace in Edit Onboarding when the practice document changes`;
     } else {
       bytes = await placeholderPdf.buildPlaceholderPdf({ title: item.title, note: item.description || '' });
       fileName = `${placeholderPdf.PLACEHOLDER_PREFIX}${item.title}.pdf`; fileMime = 'application/pdf';

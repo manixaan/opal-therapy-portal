@@ -98,14 +98,15 @@ function parentOf(code) { return PARENT_BY_CODE.get(code) || null; }
 /** Kept for the tests and the older records that still carry these items. */
 const SUPPLEMENT = DOCUMENTATION_PACK;
 
-/** The induction pack's own items. Instructions go out; agreements come back signed; accounts and training are tracked, not sent. */
+/** The induction pack's own items. Instructions go out; agreements come back signed; accounts and training are tracked, not sent.
+ *  The handbook and the two agreements ship with the portal (backend/onboarding-templates/stage3) until the practice replaces them. */
 const INDUCTION_SUPPLEMENT = [
+  { code: 'IND_HANDBOOK', title: 'Opal Therapy Staff Handbook', section: 'welcome_employment', sortOrder: 5, documentCode: 'DOC_HANDBOOK', shippedFile: 'staff-handbook.docx', sends: true, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'document', description: 'For reading; the policies it refers to are acknowledged under Training and induction.' },
   { code: 'IND_SPLOSE_SETUP', title: 'Splose setup instructions', section: 'systems', sortOrder: 10, documentCode: 'DOC_SPLOSE_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.PARTICIPANT_FACING, itemKind: 'document' },
   { code: 'IND_OUTLOOK_SETUP', title: 'Outlook setup instructions', section: 'systems', sortOrder: 20, documentCode: 'DOC_OUTLOOK_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
   { code: 'IND_PORTAL_SETUP', title: 'Opal Portal setup instructions', section: 'systems', sortOrder: 30, documentCode: 'DOC_PORTAL_SETUP', sends: true, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
-  { code: 'IND_PRIVACY_AGREEMENT', title: 'Privacy and Confidentiality Agreement', section: 'agreements', sortOrder: 100, documentCode: 'DOC_PRIVACY_AGREEMENT', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
-  { code: 'IND_CODE_OF_CONDUCT', title: 'Code of Conduct Agreement', section: 'agreements', sortOrder: 110, documentCode: 'DOC_CODE_OF_CONDUCT_AGREEMENT', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
-  { code: 'IND_HANDBOOK', title: 'Staff Handbook acknowledgement', section: 'agreements', sortOrder: 120, documentCode: 'DOC_HANDBOOK', sends: true, returns: true, verifies: false, required: false, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_PRIVACY_AGREEMENT', title: 'Privacy and Confidentiality Agreement', section: 'agreements', sortOrder: 100, documentCode: 'DOC_PRIVACY_AGREEMENT', shippedFile: 'privacy-and-confidentiality-agreement.docx', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
+  { code: 'IND_CODE_OF_CONDUCT', title: 'Opal Therapy Code of Conduct Agreement', section: 'agreements', sortOrder: 110, documentCode: 'DOC_CODE_OF_CONDUCT_AGREEMENT', shippedFile: 'code-of-conduct-agreement.docx', sends: true, returns: true, verifies: false, required: true, rule: R.ALL, itemKind: 'document' },
   { code: 'IND_SPLOSE_ACTIVE', title: 'Splose account activated', section: 'accounts', sortOrder: 300, sends: false, returns: false, verifies: false, required: true, rule: R.PARTICIPANT_FACING, itemKind: 'account', linkedTaskCode: 'systems_access', description: 'Marked ready when the internal set-up task is done.' },
   { code: 'IND_OUTLOOK_ACTIVE', title: 'Outlook account activated', section: 'accounts', sortOrder: 310, sends: false, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'account', linkedTaskCode: 'work_email', description: 'Marked ready when the internal set-up task is done.' },
   { code: 'IND_PORTAL_ACTIVE', title: 'Opal Portal account activated', section: 'accounts', sortOrder: 320, sends: false, returns: false, verifies: false, required: true, rule: R.ALL, itemKind: 'account', linkedTaskCode: 'portal_account', description: 'Marked ready when the internal set-up task is done.' },
@@ -115,6 +116,20 @@ const INDUCTION_SUPPLEMENT = [
 /** Requirement sections that belong to the induction pack, not the documentation pack. */
 const INDUCTION_SECTIONS = new Set(['policies', 'ndis', 'training']);
 const INDUCTION_REQ_CODES = new Set(['REQ_HANDBOOK', 'REQ_WELCOME', 'REQ_INJURY_INFO', 'REQ_POSITION_DESCRIPTION']);
+/**
+ * Where a requirement-derived item sits in the Owner's induction table.
+ * Employment holds the handbook alone; the two agreements, the injury /
+ * workers compensation information and the NDIS Code of Conduct are
+ * "Policies and agreements"; every policy acknowledgement and the NDIS
+ * modules are "Training and induction". The welcome page and position
+ * description are Phase 1 material and are not induction items at all.
+ */
+const INDUCTION_EXCLUDED = new Set(['REQ_WELCOME', 'REQ_POSITION_DESCRIPTION']);
+const INDUCTION_SECTION_BY_CODE = { REQ_HANDBOOK: 'welcome_employment', REQ_INJURY_INFO: 'agreements', REQ_NDIS_CODE: 'agreements' };
+const INDUCTION_SECTION_BY_SECTION = { policies: 'training', ndis: 'training' };
+function inductionSectionFor(req) {
+  return INDUCTION_SECTION_BY_CODE[req.template_code] || INDUCTION_SECTION_BY_SECTION[req.section] || req.section || null;
+}
 
 /** Requirement codes whose portal form is replaced in the pack by a supplement document. */
 const REPLACED_BY_SUPPLEMENT = new Set([
@@ -204,9 +219,9 @@ function buildDefaultItems(versionContent, facts, libraryByCode = new Map(), pha
   if (phase === 'induction') {
     const { applied } = engine.selectApplicable(versionContent, facts);
     applied.forEach((req, i) => {
-      if (phaseOf(req) !== phase) return;
+      if (phaseOf(req) !== phase || INDUCTION_EXCLUDED.has(req.template_code)) return;
       const it = itemFromRequirement(req, i);
-      if (it) items.push({ ...it, phase, itemKind: 'document' });
+      if (it) items.push({ ...it, section: inductionSectionFor(req), phase, itemKind: 'document' });
     });
   }
 

@@ -320,7 +320,54 @@
       + nextLine(r.next)
       + '<div class="oj-chips">' + bits.join('') + '</div>'
       + '</div>'
+      + (!r.closed && !r.complete && can('onboarding.assign')
+        ? '<button type="button" class="oj-row-bin" title="Cancel this onboarding" aria-label="Cancel onboarding for ' + esc(r.applicantName) + '"'
+          + ' onclick="event.stopPropagation();OnboardingJourney.cancelRecordDialog(\'' + jsq(r.id) + '\')" onkeydown="event.stopPropagation()">'
+          + '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M3.5 5.5h13M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 5.5l.8 10.2a1.5 1.5 0 0 0 1.5 1.3h5.4a1.5 1.5 0 0 0 1.5-1.3L15 5.5M8.2 9v5M11.8 9v5"/></svg></button>'
+        : '')
       + '</article>';
+  }
+
+  /**
+   * The bin on a board row. Cancelling keeps the record and its history (the
+   * backend never deletes), but stops the invitation and any account that was
+   * never staff — so it asks for a reason, the same as the record page does.
+   */
+  function cancelRecordDialog(id) {
+    if (!global.Onboarding || typeof global.Onboarding.openModal !== 'function') return;
+    var r = (S.board && S.board.records || []).filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    global.Onboarding.openModal({
+      title: 'Cancel this onboarding',
+      subtitle: r.applicantName,
+      body: '<div class="ob-note is-warn">Cancelling stops this onboarding: any invitation link '
+        + 'stops working immediately, and an account that never became staff is deactivated. '
+        + 'Nothing is deleted — the record and its history are kept.</div>'
+        + '<div class="ob-field">'
+        + '  <label for="oj-cx-reason">Why is it being cancelled?<span class="ob-req-mark" aria-hidden="true">*</span></label>'
+        + '  <textarea id="oj-cx-reason" maxlength="500" required'
+        + '            placeholder="e.g. Started in error, or the candidate withdrew."></textarea>'
+        + '</div>'
+        + '<div id="oj-cx-error" class="ob-note is-danger" role="alert" hidden></div>',
+      footer: '<div class="oj-actions oj-actions-tight">'
+        + btn('Cancel onboarding', 'OnboardingJourney.confirmCancelRecord(\'' + jsq(id) + '\')', 'oj-btn-primary')
+        + btn('Keep it', 'Onboarding.closeModal()')
+        + '</div>',
+    });
+  }
+
+  async function confirmCancelRecord(id) {
+    var ta = doc.getElementById('oj-cx-reason');
+    var errEl = doc.getElementById('oj-cx-error');
+    var reason = ta && ta.value.trim();
+    var fail = function (m) { if (errEl) { errEl.textContent = m; errEl.hidden = false; } };
+    if (!reason) { fail('A reason is required.'); return; }
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(id) + '/cancel', { method: 'POST', body: { reason: reason } });
+    if (!res.ok) { fail(res.error); return; }
+    global.Onboarding.closeModal();
+    toast('Onboarding cancelled');
+    rerender();
   }
 
   function setFilter(f) { S.filter = f; var pane = doc.getElementById('oj-view'); if (pane && S.board) drawBoard(pane); }
@@ -396,7 +443,7 @@
     var items = d.phases[phase].items; var edit = d.can && d.can.edit;
     var included = items.filter(function (i) { return i.status === 'included'; }); var removed = items.filter(function (i) { return i.status !== 'included'; });
     var grouped = groupPackItems(included); var groups = grouped.groups;
-    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k]; });
+    var order = sectionOrder(phase).filter(function (k) { return groups[k]; });
     var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
@@ -1194,9 +1241,18 @@
   var SECTION_LABELS = {
     welcome_employment: 'Employment', personal_details: 'Personal details', payroll_tax_super: 'Payroll, tax and super',
     identity: 'Identity and right to work', professional: 'Professional registration', screening: 'Screening and checks',
-    ndis: 'NDIS', policies: 'Policies', training: 'Training',
-    systems: 'Account setup instructions', agreements: 'Agreements and acknowledgements', accounts: 'Accounts activated',
+    ndis: 'NDIS', policies: 'Policies', training: 'Training and induction',
+    systems: 'Account setup instructions', agreements: 'Policies and agreements', accounts: 'Accounts activated',
   };
+  /** Section order per phase; sections not listed (older records, added documents) follow in label order. */
+  var PHASE_ORDER = {
+    documentation: ['welcome_employment', 'personal_details', 'payroll_tax_super'],
+    induction: ['welcome_employment', 'agreements', 'training', 'systems', 'accounts'],
+  };
+  function sectionOrder(phase) {
+    var lead = PHASE_ORDER[phase] || [];
+    return lead.concat(Object.keys(SECTION_LABELS).filter(function (k) { return lead.indexOf(k) === -1; })).concat(['other']);
+  }
 
   function documentationPanel(d) {
     var st = d.journey.stages[1];
@@ -1449,8 +1505,8 @@
     // While the pack is editable every section of this phase is shown, empty ones
     // included, so there is always somewhere to drop a file for it. Identity,
     // professional and screening headings only appear when something still sits there.
-    var phaseSections = phase === 'induction' ? ['systems', 'policies', 'ndis', 'training', 'agreements', 'accounts'] : ['welcome_employment', 'personal_details', 'payroll_tax_super'];
-    var order = Object.keys(SECTION_LABELS).concat(['other']).filter(function (k) { return groups[k] || (editable && phaseSections.indexOf(k) >= 0); });
+    var phaseSections = PHASE_ORDER[phase] || [];
+    var order = sectionOrder(phase).filter(function (k) { return groups[k] || (editable && phaseSections.indexOf(k) >= 0); });
 
     out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong> · '
       + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back' + (P.tracking ? ', ' + P.tracking.done + ' of ' + P.tracking.total + ' tracked items complete' : '') + '</span>'
