@@ -134,6 +134,7 @@ function itemRow(row, assignmentId, attachments = []) {
     progress: row.status !== 'included' ? 'removed'
       : row.item_kind && row.item_kind !== 'document' ? (row.completed_at ? 'verified' : 'awaiting')
       : !row.employee_returns ? (row.sends_document ? 'sent' : 'n/a')
+      : row.verification_status === 'not_applicable' ? 'not_applicable'
       : row.verification_status === 'verified' ? 'verified'
       : row.verification_status === 'attention' || row.verification_status === 'rejected' ? 'attention'
       : row.returned_at ? 'received' : 'awaiting_return',
@@ -153,7 +154,8 @@ async function packDetail(req, assignment, phase = 'documentation') {
     ? induction.composeInductionEmail({ applicantName: assignment.applicant_name })
     : packEmail.composePackEmail({ applicantName: assignment.applicant_name });
   const base = `/api/onboarding/journey/records/${assignment.id}/${P.prefix}`;
-  const tracked = included.filter((i) => i.employeeReturns || i.itemKind !== 'document');
+  // A document marked not applicable is set aside: it is neither tracked nor expected back.
+  const tracked = included.filter((i) => (i.employeeReturns || i.itemKind !== 'document') && i.progress !== 'not_applicable');
   return {
     phase,
     prepared: !!assignment[C.prepared],
@@ -173,6 +175,11 @@ async function packDetail(req, assignment, phase = 'documentation') {
       missingFiles: included.filter((i) => i.sendsDocument && !i.file.previewUrl).length,
       placeholders: included.filter((i) => i.sendsDocument && i.file.placeholder).length,
       returns: included.filter((i) => i.employeeReturns).length,
+      // The forms the employee fills in (contract, super choice, New Employee
+      // Details) as against the copies they attach. Stage 3 opens once the forms
+      // are verified, even while supporting copies are still to come back.
+      formsOpen: included.filter((i) => i.employeeReturns && i.group === 'attachment' && i.progress !== 'verified' && i.progress !== 'not_applicable').length,
+      returnsOpen: included.filter((i) => i.employeeReturns && i.progress !== 'verified' && i.progress !== 'not_applicable').length,
       verifies: included.filter((i) => i.requiresVerification).length,
       removed: items.length - included.length,
       awaitingReturn: included.filter((i) => i.progress === 'awaiting_return').length,

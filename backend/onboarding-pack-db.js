@@ -54,12 +54,14 @@ async function countItems(assignmentIds, q = pool) {
   if (!ids.length) return out;
   const { rows } = await q.query(
     `SELECT assignment_id, COUNT(*) FILTER (WHERE status = 'included') AS included,
-            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns) AS returns,
-            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND returned_at IS NOT NULL) AS returned,
-            COUNT(*) FILTER (WHERE status = 'included' AND requires_verification AND verified_at IS NOT NULL) AS verified
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND verification_status <> 'not_applicable') AS returns,
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND verification_status <> 'not_applicable' AND returned_at IS NOT NULL) AS returned,
+            COUNT(*) FILTER (WHERE status = 'included' AND requires_verification AND verified_at IS NOT NULL) AS verified,
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND sends_document AND phase = 'documentation' AND verification_status IS DISTINCT FROM 'verified') AS forms_open,
+            COUNT(*) FILTER (WHERE status = 'included' AND employee_returns AND phase = 'documentation' AND verification_status IS DISTINCT FROM 'verified') AS returns_open
        FROM onboarding_pack_items WHERE assignment_id = ANY($1::uuid[]) GROUP BY assignment_id`, [ids]
   );
-  for (const r of rows) out.set(r.assignment_id, { included: +r.included, returns: +r.returns, returned: +r.returned, verified: +r.verified });
+  for (const r of rows) out.set(r.assignment_id, { included: +r.included, returns: +r.returns, returned: +r.returned, verified: +r.verified, formsOpen: +r.forms_open, returnsOpen: +r.returns_open });
   return out;
 }
 
@@ -117,10 +119,10 @@ async function countItemsByPhase(assignmentIds, q = pool) {
   if (!ids.length) return out;
   const { rows } = await q.query(
     `SELECT assignment_id, phase,
-            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document')) AS tracked,
-            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND required) AS required,
-            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS done,
-            COUNT(*) FILTER (WHERE status = 'included' AND (employee_returns OR item_kind <> 'document') AND required AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS required_done
+            COUNT(*) FILTER (WHERE status = 'included' AND verification_status <> 'not_applicable' AND (employee_returns OR item_kind <> 'document')) AS tracked,
+            COUNT(*) FILTER (WHERE status = 'included' AND verification_status <> 'not_applicable' AND (employee_returns OR item_kind <> 'document') AND required) AS required,
+            COUNT(*) FILTER (WHERE status = 'included' AND verification_status <> 'not_applicable' AND (employee_returns OR item_kind <> 'document') AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS done,
+            COUNT(*) FILTER (WHERE status = 'included' AND verification_status <> 'not_applicable' AND (employee_returns OR item_kind <> 'document') AND required AND (verification_status = 'verified' OR completed_at IS NOT NULL)) AS required_done
        FROM onboarding_pack_items WHERE assignment_id = ANY($1::uuid[]) GROUP BY assignment_id, phase`, [ids]
   );
   for (const r of rows) {

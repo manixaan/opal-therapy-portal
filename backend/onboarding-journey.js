@@ -258,6 +258,14 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
     if (returnsOpen > 0) {
       out.items.push({ kind: 'employee', label: `${returnsOpen} document(s) still to be returned`, dueAt: assignment.pack_due_at || null, overdue: isOverdue(assignment.pack_due_at, now) });
     }
+    // The forms (contract, super choice, New Employee Details) verified with
+    // supporting copies still outstanding: the stage stays open — it is not
+    // ticked until every return is in — but Stage 3 may begin alongside it.
+    if (c.formsOpen === 0 && (c.returnsOpen || 0) > 0) {
+      out.formsDone = true;
+      out.outstanding = c.returnsOpen;
+      out.summary = `Forms verified — ${c.returnsOpen} supporting document(s) still to come back. Internal induction can begin.`;
+    }
     out.next = { actor: 'admin', action: 'review_returns', label: 'Work through Requires Your Attention, then finish the documentation' };
     return out;
   }
@@ -453,7 +461,7 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
 
   const s1 = projectOffer(assignment, offer, now);
   const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete', pack);
-  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete', induction);
+  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete' || s2.formsDone === true, induction);
 
   const stages = [
     { ...STAGES[0], ...pick(s1) },
@@ -544,7 +552,9 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
 }
 
 function pick(s) {
-  return { state: s.state, summary: s.summary, completedAt: s.completedAt };
+  const out = { state: s.state, summary: s.summary, completedAt: s.completedAt };
+  if (s.formsDone) { out.formsDone = true; out.outstanding = s.outstanding || 0; }
+  return out;
 }
 
 module.exports = {

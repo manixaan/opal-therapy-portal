@@ -359,6 +359,10 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 .oj-stepper-n { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; background: var(--border); color: var(--ink-soft); flex: none; }
 .oj-stepper-step.is-done .oj-stepper-n { background: #2f7d4f; color: #fff; }
 .oj-stepper-step.is-current .oj-stepper-n { background: #e0a52a; color: #fff; }
+.oj-stepper-step.is-attention > button { color: var(--ink); border-color: #e0a52a; background: #fff8ea; }
+.oj-stepper-step.is-attention .oj-stepper-n { background: #e0a52a; color: #fff; }
+.oj-stepper-note { margin-left: auto; font-size: 11px; font-weight: 600; color: #8a5a00; background: #fdebc4; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.oj-docs-pending { margin-bottom: var(--space-4); }
 .oj-coming-soon { opacity: .55; filter: grayscale(1); pointer-events: none; }
 @media (max-width: 640px) { .oj-stepper { grid-template-columns: 1fr; } }
 
@@ -483,6 +487,8 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-attach-item:not(.is-sub):not(.is-subhead) { counter-increment: att; }
 .oj-attach-item:not(.is-sub):not(.is-subhead) > .oj-attach-main::before { content: counter(att) '.'; font-weight: 800; color: var(--accent); margin-right: 8px; }
 .oj-attach-item.is-sub { margin-left: 28px; padding: 7px 12px; background: #fcfbf8; }
+.oj-attach-item.is-not_applicable { opacity: .55; background: #f4f3f0; }
+.oj-attach-item.is-not_applicable .oj-attach-acts { opacity: 1; }
 .oj-attach-item.is-subhead { margin-left: 28px; border: 0; padding: 0 0 2px; background: transparent; font-size: 12.5px; }
 .oj-attach-item.oj-droprow.is-dragover { box-shadow: inset 0 0 0 2px var(--accent); background: #eef5f1; }
 .oj-attach-main { flex: 1; min-width: 0; }

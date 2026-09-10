@@ -117,6 +117,24 @@ describe('Stage 2 — the document pack', () => {
     const j = journey.projectJourney({ assignment: assignment({ status: 'documents_received', pack_prepared_at: NOW }), offer: accepted, pack: packed, now: NOW });
     expect(j.next).toMatchObject({ actor: 'admin', action: 'review_returns' });
   });
+
+  test('verified forms open Stage 3 while supporting copies are still to come — Stage 2 stays unticked', () => {
+    const rec = assignment({ status: 'documents_received', pack_prepared_at: NOW });
+    const formsDone = { ...packed, counts: { included: 12, returns: 12, received: 0, verified: 3, formsOpen: 0, returnsOpen: 9 } };
+    const j = journey.projectJourney({ assignment: rec, offer: accepted, pack: formsDone, tasks: [task({ code: 'portal_account' })], induction: { prepared: true, readiness: { ready: false, blockers: ['Driver\'s licence has not been returned'] } }, now: NOW });
+    expect(j.stages[1]).toMatchObject({ state: 'active', formsDone: true, outstanding: 9 });
+    expect(j.stages[1].summary).toMatch(/9 supporting document\(s\) still to come back/);
+    expect(j.stages[2].state).toBe('active');
+    expect(j.stage.key).toBe('induction');
+    expect(j.waitingOnEmployee.some((i) => /9 document\(s\) still to be returned/.test(i.label))).toBe(true);
+
+    // A form still open keeps Stage 3 waiting.
+    const formOpen = { ...packed, counts: { included: 12, returns: 12, received: 0, verified: 2, formsOpen: 1, returnsOpen: 10 } };
+    const k = journey.projectJourney({ assignment: rec, offer: accepted, pack: formOpen, tasks: [task({ code: 'portal_account' })], now: NOW });
+    expect(k.stages[1].formsDone).toBeUndefined();
+    expect(k.stages[2].state).toBe('parallel');
+    expect(k.stage.key).toBe('documentation');
+  });
 });
 
 describe('Stage 2 — Onboarding Documentation', () => {

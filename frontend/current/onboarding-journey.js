@@ -870,20 +870,33 @@
     if (!o || ['accepted', 'not_required'].indexOf(o.status) === -1) return 1;
     var I = d.induction || {};
     if (I.sentAt || I.completedAt || r.status === 'completed' || r.status === 'activated' || r.status === 'ready_to_activate') return 3;
-    if (d.journey && d.journey.stages && d.journey.stages[1] && d.journey.stages[1].state === 'complete') return 3;
+    var s2 = d.journey && d.journey.stages && d.journey.stages[1];
+    // Stage 3 opens once the forms (contract, super choice, New Employee
+    // Details) are verified, even while supporting copies are still to come.
+    if (s2 && (s2.state === 'complete' || s2.formsDone)) return 3;
     return 2;
+  }
+
+  /** Stage 2 opened Stage 3 early: the returns still outstanding, or 0. */
+  function docsOutstanding(d) {
+    var s2 = d.journey && d.journey.stages && d.journey.stages[1];
+    return s2 && s2.state !== 'complete' && s2.formsDone ? (s2.outstanding || 0) : 0;
   }
 
   function phaseStepper(d) {
     var cur = currentPhase(d);
     var view = S.phaseView || cur;
     var names = ['Letter of Offer', 'Onboarding Documentation', 'Internal Induction'];
+    var outstanding = docsOutstanding(d);
     return '<ol class="oj-stepper">' + names.map(function (n, i) {
       var num = i + 1; var state = num < cur ? 'done' : num === cur ? 'current' : 'upcoming';
+      // Stage 2 is not ticked while returns are outstanding, even though Stage 3 is open.
+      if (num === 2 && state === 'done' && outstanding) state = 'attention';
       var clickable = num <= cur;
       return '<li class="oj-stepper-step is-' + state + (num === view ? ' is-viewing' : '') + '">'
         + (clickable ? '<button type="button" onclick="OnboardingJourney.viewPhase(' + num + ')">' : '<span>')
-        + '<span class="oj-stepper-n">' + (state === 'done' ? '✓' : num) + '</span>' + esc(n)
+        + '<span class="oj-stepper-n">' + (state === 'done' ? '✓' : state === 'attention' ? '!' : num) + '</span>' + esc(n)
+        + (state === 'attention' ? '<span class="oj-stepper-note" title="' + outstanding + ' document(s) still to come back">' + outstanding + ' still to come back</span>' : '')
         + (clickable ? '</button>' : '</span>') + '</li>';
     }).join('') + '</ol>';
   }
@@ -893,7 +906,12 @@
     var view = Math.min(S.phaseView || cur, cur);
     if (view === 1) return offerPanel(d);
     if (view === 2) return docTabs(d);
-    return phase3Panel(d) + inductionPanel(d) + payrollPanel(d) + profilePanel(d);
+    var outstanding = docsOutstanding(d);
+    var pending = outstanding
+      ? '<div class="ob-note is-warn oj-docs-pending" role="status"><strong>Onboarding Documentation still has ' + outstanding + ' document(s) to come back.</strong> The forms are verified, so internal induction can begin; Stage 2 is ticked off once every return is in. '
+        + '<button type="button" class="oj-link" onclick="OnboardingJourney.viewPhase(2)">Open Onboarding Documentation</button></div>'
+      : '';
+    return pending + phase3Panel(d) + inductionPanel(d) + payrollPanel(d) + profilePanel(d);
   }
 
   function viewPhase(n) { S.phaseView = n; var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane); }
@@ -1466,6 +1484,8 @@
           + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>')
           + (c.review ? btn('Not this one', 'OnboardingJourney.unplaceReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
       }).join('') + '</ul>' : '');
+    } else if (i.progress === 'not_applicable') {
+      body = '<span class="oj-quiet">Not applicable to this person — nothing needs to come back.' + (i.verificationNote ? ' ' + esc(i.verificationNote) : '') + '</span>';
     } else if (!docs.length) {
       body = '<span class="oj-quiet">' + (i.required ? 'Waiting for it to come back.' : 'If applicable — nothing received yet.') + '</span>';
     } else {
@@ -1483,7 +1503,13 @@
       if (i.verificationNote && i.progress === 'verified') body += '<div class="oj-quiet oj-attach-reason">' + esc(i.verificationNote) + '</div>';
     }
     var acts = [];
+    if (i.employeeReturns && i.progress === 'not_applicable') {
+      if (c.verify) acts.push(btn('Applies after all', 'OnboardingJourney.itemApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
+      return '<li class="oj-attach-item' + (sub ? ' is-sub' : '') + ' is-not_applicable"><div class="oj-attach-main"><strong>' + esc(i.title) + '</strong> ' + progressChip(i)
+        + '<div class="oj-attach-file">' + body + '</div></div><div class="oj-actions oj-actions-tight oj-attach-acts">' + acts.join('') + '</div></li>';
+    }
     if (i.employeeReturns && c.review) acts.push('<label class="oj-btn oj-btn-small oj-file">' + (docs.length ? 'Upload another' : 'Upload for this document') + '<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt" hidden onchange="OnboardingJourney.uploadReturns(this, \'' + jsq(i.id) + '\')"></label>');
+    if (i.employeeReturns && !docs.length && c.verify) acts.push(btn('Not applicable', 'OnboardingJourney.itemNotApplicable(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
     if (i.employeeReturns && docs.length && i.progress !== 'verified' && c.verify) acts.push(btn('Verify', 'OnboardingJourney.verifyItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-primary') + btn('Reject', 'OnboardingJourney.rejectItem(\'' + jsq(i.id) + '\')', 'oj-btn-small oj-btn-quiet'));
     return '<li class="oj-attach-item' + (sub ? ' is-sub' : '') + ' is-' + esc(i.progress || 'n/a') + '">'
       + '<div class="oj-attach-main"><strong>' + esc(i.title) + '</strong>' + (i.employeeReturns && !i.required ? ' <span class="oj-quiet">(if applicable)</span>' : '') + (i.employeeReturns ? ' ' + progressChip(i) : '')
@@ -1594,7 +1620,7 @@
     return out;
   }
 
-  var PROGRESS_LABELS = { awaiting_return: 'Awaiting return', received: 'Received', verified: 'Complete', attention: 'Needs attention', sent: 'Sent', awaiting: 'Pending', 'n/a': '—', removed: 'Removed' };
+  var PROGRESS_LABELS = { awaiting_return: 'Awaiting return', received: 'Received', verified: 'Complete', attention: 'Needs attention', sent: 'Sent', awaiting: 'Pending', not_applicable: 'Not applicable', 'n/a': '—', removed: 'Removed' };
   function progressChip(i) {
     var cls = i.progress === 'verified' ? 'is-done' : i.progress === 'received' ? 'is-employee' : i.progress === 'attention' ? 'is-danger' : i.progress === 'awaiting_return' ? 'is-you' : 'is-quiet';
     return '<span class="oj-chip ' + cls + '">' + esc(PROGRESS_LABELS[i.progress] || titleCase(i.progress)) + '</span>' + (i.verificationMode === 'auto' && i.progress === 'verified' ? '<br><span class="oj-quiet">by the portal</span>' : '');
@@ -2761,6 +2787,11 @@
     if (ref === null) return;
     return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/verify', { reference: ref || undefined }, 'Verified.');
   }
+  async function itemNotApplicable(itemId) {
+    if (!await portalConfirm('Mark this document as not applicable? Nothing will need to come back for it, and it will no longer hold up the internal induction.')) return;
+    return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/not-applicable', {}, 'Marked not applicable.');
+  }
+  function itemApplicable(itemId) { return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/applicable', {}, 'Back to awaiting return.'); }
   async function rejectItem(itemId) {
     var reason = await portalPrompt('Reject this document. Reason:');
     if (reason === null) return;
@@ -2836,7 +2867,7 @@
     emailMark: emailMark, emailKey: emailKey, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
     uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
-    verifyItem: verifyItem, rejectItem: rejectItem, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
+    verifyItem: verifyItem, rejectItem: rejectItem, itemNotApplicable: itemNotApplicable, itemApplicable: itemApplicable, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
     loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,
     requestPayrollChanges: requestPayrollChanges, syncPayroll: syncPayroll, recheckPayroll: recheckPayroll, resolvePayrollDuplicate: resolvePayrollDuplicate, completePayrollAction: completePayrollAction,
     release: release,
