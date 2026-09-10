@@ -249,6 +249,43 @@ describe('returned documents: read, reconciled, applied', () => {
     expect((await viewer.agent.post(`${base}/returns/${blur.action.returnedDocumentId}/archive`)).status).toBe(403);
   });
 
+  test('a document that does not apply is set aside: it stops counting, can be put back, and needs the verify permission', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify'] });
+    const { base } = await settledAndSent(agent);
+    const before = await agent.get(base);
+    const visa = before.body.pack.items.find((i) => i.code === 'REQ_RIGHT_TO_WORK');
+    expect(visa.progress).toBe('awaiting_return');
+    const returnsBefore = before.body.pack.counts.returns;
+    const trackedBefore = before.body.pack.tracking.total;
+
+    // A viewer, and a reviewer without the verify permission, cannot set a document aside.
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view', 'onboarding.review'] });
+    expect((await viewer.agent.post(`${base}/pack/items/${visa.id}/not-applicable`)).status).toBe(403);
+
+    const marked = await agent.post(`${base}/pack/items/${visa.id}/not-applicable`).send({ note: 'Australian citizen' });
+    expect(marked.status).toBe(200);
+    const after = await agent.get(base);
+    const visaAfter = after.body.pack.items.find((i) => i.id === visa.id);
+    expect(visaAfter).toMatchObject({ progress: 'not_applicable', verificationStatus: 'not_applicable', verificationNote: 'Australian citizen' });
+    expect(after.body.pack.counts.returns).toBe(returnsBefore - 1);
+    expect(after.body.pack.counts.notApplicable).toBe(1);
+    expect(after.body.pack.tracking.total).toBe(trackedBefore - 1);
+    expect(after.body.pack.counts.returnsOpen).toBe(before.body.pack.counts.returnsOpen - 1);
+    // A document that does not come back cannot be marked twice, and only one expected back can be marked at all.
+    const readOnly = after.body.pack.items.find((i) => i.status === 'included' && !i.employeeReturns);
+    expect((await agent.post(`${base}/pack/items/${readOnly.id}/not-applicable`)).status).toBe(409);
+
+    // Reversed: back to awaiting return, counted again.
+    expect((await agent.post(`${base}/pack/items/${visa.id}/applicable`)).status).toBe(200);
+    const restored = await agent.get(base);
+    expect(restored.body.pack.items.find((i) => i.id === visa.id).progress).toBe('awaiting_return');
+    expect(restored.body.pack.counts.returns).toBe(returnsBefore);
+    expect((await agent.post(`${base}/pack/items/${visa.id}/applicable`)).status).toBe(409);
+
+    const { rows: audit } = await db.pool.query("SELECT action FROM audit_logs WHERE action IN ('onboarding.pack_item_not_applicable', 'onboarding.pack_item_applicable') ORDER BY created_at");
+    expect(audit.map((a) => a.action)).toEqual(['onboarding.pack_item_not_applicable', 'onboarding.pack_item_applicable']);
+  });
+
   test('a ZIP of returns is unpacked into documents, each matched on its own; what it cannot hold is reported', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { base } = await settledAndSent(agent);

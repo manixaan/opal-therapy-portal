@@ -174,7 +174,8 @@ async function packDetail(req, assignment, phase = 'documentation') {
       sendable: included.filter((i) => i.sendsDocument && i.file.previewUrl).length,
       missingFiles: included.filter((i) => i.sendsDocument && !i.file.previewUrl).length,
       placeholders: included.filter((i) => i.sendsDocument && i.file.placeholder).length,
-      returns: included.filter((i) => i.employeeReturns).length,
+      returns: included.filter((i) => i.employeeReturns && i.progress !== 'not_applicable').length,
+      notApplicable: included.filter((i) => i.progress === 'not_applicable').length,
       // The forms the employee fills in (contract, super choice, New Employee
       // Details) as against the copies they attach. Stage 3 opens once the forms
       // are verified, even while supporting copies are still to come back.

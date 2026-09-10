@@ -286,7 +286,8 @@ async function syncProgress(req, assignment) {
     }
   }
   const after = await pdb.listItems(assignment.id);
-  const docReq = after.filter((i) => i.phase === 'documentation' && i.status === 'included' && i.required && i.employee_returns);
+  // What was marked not applicable is set aside and does not hold the stage open.
+  const docReq = after.filter((i) => i.phase === 'documentation' && i.status === 'included' && i.required && i.employee_returns && i.verification_status !== 'not_applicable');
   const docDone = docReq.length > 0 && docReq.every((i) => i.verification_status === 'verified');
   if (docDone && !assignment.documentation_completed_at) {
     await odb.pool.query('UPDATE onboarding_assignments SET documentation_completed_at = NOW(), updated_at = NOW() WHERE id = $1', [assignment.id]);
@@ -516,6 +517,28 @@ for (const [verb, status] of [['verify', 'verified'], ['reject', 'rejected']]) {
     }
     await auditOnboarding(req, `pack_item_${status}`, { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, code: item.code } });
     res.json({ ok: true, attention: await attentionFor(assignment) });
+  }));
+}
+
+/**
+ * A document that does not apply to this person (visa evidence for a citizen,
+ * say) is set aside rather than waited for; it stops counting towards the
+ * documentation stage so internal induction can begin without it. The
+ * reverse puts the slot back to awaiting return.
+ */
+for (const [verb, applicable] of [['not-applicable', false], ['applicable', true]]) {
+  router.post(`/api/onboarding/journey/records/:id/pack/items/:itemId/${verb}`, requirePermission('onboarding.verify'), safe(async (req, res) => {
+    const assignment = await loadRecord(req);
+    if (!assignment) return notFound(res);
+    const item = await pdb.getItem(assignment.id, req.params.itemId);
+    if (!item) return notFound(res);
+    if (item.status !== 'included' || item.item_kind !== 'document' || !item.employee_returns) return res.status(409).json({ error: 'Only a document expected back can be marked not applicable.', code: 'not_returnable' });
+    if (!applicable && item.verification_status === 'verified') return res.status(409).json({ error: 'This document has already been verified.', code: 'already_verified' });
+    if (applicable && item.verification_status !== 'not_applicable') return res.status(409).json({ error: 'This document is not marked as not applicable.', code: 'not_marked' });
+    await rdb.setItemVerification(item.id, { status: applicable ? 'pending' : 'not_applicable', mode: applicable ? null : 'owner', actorId: req.user.id, reason: null, note: applicable ? null : str(req.body?.note, 1000) });
+    await auditOnboarding(req, applicable ? 'pack_item_applicable' : 'pack_item_not_applicable', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, code: item.code } });
+    await syncProgress(req, assignment).catch((err) => { log.warn('sync after not-applicable failed', { error: err }); });
+    res.json({ ok: true, attention: await attentionFor(await odb.getAssignment(orgOf(req), assignment.id)) });
   }));
 }
 
