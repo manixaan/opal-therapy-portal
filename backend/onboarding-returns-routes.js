@@ -55,6 +55,8 @@ async function loadRecord(req) {
 const KIND_TO_CODES = {
   contract: ['PACK_CONTRACT'], new_employee_details: ['PACK_NEW_EMPLOYEE_DETAILS'], super_choice: ['PACK_SUPER_CHOICE'],
   tax_summary: ['REQ_TAX_SETUP'], fair_work_statement: ['PACK_FWIS', 'REQ_FWIS', 'REQ_CEIS', 'REQ_FTCIS'],
+  // The contract-type statements go out with the FWIS and, like it, come back for reading only.
+  ftcis: ['PACK_FTCIS', 'REQ_FTCIS'], ceis: ['PACK_CEIS', 'REQ_CEIS'],
   passport: ['REQ_IDENTITY', 'REQ_RIGHT_TO_WORK', 'PACK_PASSPORT_VISA'], visa: ['REQ_RIGHT_TO_WORK', 'PACK_PASSPORT_VISA'],
   drivers_licence: ['REQ_DRIVERS_LICENCE', 'REQ_IDENTITY'], police_check: ['PACK_POLICE_CHECK', 'REQ_POLICE_CHECK'],
   ndis_screening: ['REQ_NDIS_SCREENING'], wwcc: ['REQ_WWCC'], ahpra: ['REQ_AHPRA'], first_aid: ['PACK_FIRST_AID'], cpr: ['PACK_FIRST_AID', 'PACK_CPR'],
@@ -63,11 +65,26 @@ const KIND_TO_CODES = {
 };
 const FILENAME_HINTS = [
   [/contract/i, 'contract'], [/employee.?details|new.?employee|personal.?details/i, 'new_employee_details'], [/super/i, 'super_choice'],
-  [/fwis|fair.?work/i, 'fair_work_statement'], [/tax|tfn|ato/i, 'tax_summary'], [/passport/i, 'passport'], [/visa|vevo/i, 'visa'], [/licen[cs]e/i, 'drivers_licence'],
+  [/ftcis|fixed.?term.?contract/i, 'ftcis'], [/ceis|casual.?employment/i, 'ceis'], [/fwis|fair.?work/i, 'fair_work_statement'], [/tax|tfn|ato/i, 'tax_summary'], [/passport/i, 'passport'], [/visa|vevo/i, 'visa'], [/licen[cs]e/i, 'drivers_licence'],
   [/police|npc/i, 'police_check'], [/ndis|screening/i, 'ndis_screening'], [/wwcc|working.?with.?children/i, 'wwcc'], [/ahpra/i, 'ahpra'],
   [/first.?aid/i, 'first_aid'], [/cpr/i, 'cpr'], [/vehicle|rego|registration/i, 'vehicle'], [/insurance|indemnity/i, 'insurance'],
   [/privacy|confidential/i, 'privacy_agreement'], [/code.?of.?conduct/i, 'code_of_conduct'], [/handbook/i, 'handbook_acknowledgement'],
 ];
+
+/** "05 - FTCIS.pdf" against an item titled "FTCIS": the file's name, minus its
+ * numbering and extension, contains the item's title (or the other way round). */
+const nameKey = (v) => String(v || '').replace(/\.[a-z0-9]+$/i, '').replace(/^[\s\d._-]+/, '').replace(/[^a-z0-9]+/gi, '').toLowerCase();
+function itemNamedLike(doc, packItems) {
+  const keys = [nameKey(doc.file_name), nameKey(doc.title)].filter((k) => k.length >= 4);
+  // The closest name wins: "FTCIS" exactly over "FWIS (and FTCIS/CEIS)" merely mentioning it.
+  const rank = (t) => (keys.some((k) => k === t) ? 3 : keys.some((k) => k.includes(t)) ? 2 : keys.some((k) => t.includes(k)) ? 1 : 0);
+  let best = null; let bestRank = 0;
+  for (const p of packItems) {
+    const t = nameKey(p.title); if (t.length < 4) continue;
+    const r = rank(t); if (r > bestRank) { best = p; bestRank = r; }
+  }
+  return best;
+}
 
 function matchDocument(doc, classification, packItems) {
   const included = packItems.filter((p) => p.status === 'included');
@@ -76,13 +93,19 @@ function matchDocument(doc, classification, packItems) {
     const hint = FILENAME_HINTS.find(([re]) => re.test(`${doc.title || ''} ${doc.file_name || ''}`));
     if (hint) { kind = hint[1]; confidence = 'medium'; }
   }
-  if (!kind || kind === 'unrecognised' || kind === 'other') return { kind: kind || 'unrecognised', item: null, confidence: 'low' };
-  const codes = KIND_TO_CODES[kind] || [];
+  const known = kind && kind !== 'unrecognised' && kind !== 'other';
+  const codes = known ? (KIND_TO_CODES[kind] || []) : [];
   // A signed policy acknowledgement answers the induction item whose title it names.
+  // A file named for an item that comes back for reading only (an added FTCIS,
+  // say) is placed on that item so it need not be registered by hand.
   const item = codes.map((c) => included.find((p) => p.code === c)).find(Boolean)
     || (kind === 'policy_acknowledgement' ? included.find((p) => p.phase === 'induction' && p.employee_returns && new RegExp(String(doc.title || doc.file_name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z]+/gi, '.*'), 'i').test(p.title)) : null)
-    || included.find((p) => p.employee_returns && new RegExp(kind.replace(/_/g, '.?'), 'i').test(p.title)) || null;
-  return { kind, item, confidence: item ? confidence : 'low' };
+    || (known ? included.find((p) => p.employee_returns && new RegExp(kind.replace(/_/g, '.?'), 'i').test(p.title)) : null)
+    || itemNamedLike(doc, included)
+    // A statement with no slot of its own sits with the FWIS it went out with.
+    || ((kind === 'ftcis' || kind === 'ceis') ? included.find((p) => p.code === 'PACK_FWIS') : null) || null;
+  if (!item && !known) return { kind: kind || 'unrecognised', item: null, confidence: 'low' };
+  return { kind: kind || 'unrecognised', item, confidence: item ? (known ? confidence : 'medium') : 'low' };
 }
 
 /** Which resolved fields a pack item's verification depends on. */

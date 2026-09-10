@@ -1428,7 +1428,16 @@
     var t = P.tracking || { done: 0, total: expected.length };
     out += '<div class="oj-pack-head"><div><strong>Returned documentation</strong> <span class="oj-quiet">' + t.done + ' of ' + t.total + ' complete' + (P.counts.attention ? ' · <span class="oj-warn">' + P.counts.attention + ' need a look</span>' : '') + '</span></div></div>'
       + '<ol class="oj-attach-list is-returns">';
-    attachments.concat(added).forEach(function (i) {
+    // A document added to the pack sits under the last sent document of its
+    // section (an added FTCIS under the FWIS); one from a section with none at the end.
+    var rows = [];
+    attachments.forEach(function (i, idx) {
+      rows.push(i);
+      var lastOfSection = !attachments.slice(idx + 1).some(function (n) { return n.section === i.section; });
+      if (lastOfSection) added.forEach(function (a) { if (a.section === i.section) rows.push(a); });
+    });
+    added.forEach(function (a) { if (rows.indexOf(a) < 0) rows.push(a); });
+    rows.forEach(function (i) {
       out += returnRow(d, i, c);
       if (i.code === 'PACK_NEW_EMPLOYEE_DETAILS' && supporting.length) {
         out += '<li class="oj-attach-item is-subhead"><span class="oj-quiet">which will include:</span></li>';
@@ -1449,7 +1458,12 @@
     var docs = (d.returnedDocuments || []).filter(function (x) { return x.status === 'active' && x.packItemId === i.id; });
     var body = '';
     if (!i.employeeReturns) {
-      body = '<span class="oj-quiet">For reading only — nothing comes back.</span>';
+      // Returned anyway (the whole pack came back as one ZIP, say): shown, nothing to check or verify.
+      body = '<span class="oj-quiet">For reading only — nothing comes back.</span>' + (docs.length ? '<ul class="oj-return-files">' + docs.map(function (x) {
+        return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">· came back with the pack — nothing to check</span> '
+          + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>')
+          + (c.review ? btn('Not this one', 'OnboardingJourney.unplaceReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
+      }).join('') + '</ul>' : '');
     } else if (!docs.length) {
       body = '<span class="oj-quiet">' + (i.required ? 'Waiting for it to come back.' : 'If applicable — nothing received yet.') + '</span>';
     } else {
