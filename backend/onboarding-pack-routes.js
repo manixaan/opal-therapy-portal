@@ -202,7 +202,7 @@ async function packDetail(req, assignment, phase = 'documentation') {
       dueAt: assignment[C.dueAt] || null,
       outlook: { available: graphMail.isAvailable(req.user), reason: graphMail.unavailableReason(req.user) },
     },
-    can: { assign: hasPermission(req.user, 'onboarding.assign'), review: hasPermission(req.user, 'onboarding.review') },
+    can: { assign: hasPermission(req.user, 'onboarding.assign'), review: hasPermission(req.user, 'onboarding.review'), verify: hasPermission(req.user, 'onboarding.verify') },
   };
 }
 
