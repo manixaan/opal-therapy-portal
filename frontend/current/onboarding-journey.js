@@ -1518,6 +1518,7 @@
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
+        + (editable ? '<span class="oj-section-attach">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\', \'' + jsq(k) + '\')', 'oj-btn-small oj-btn-quiet') + '</span>' : '')
         + '</div></td></tr>';
       (groups[k] || []).forEach(function (i) { out += packRow(i, editable, sent); var kids = grouped.children[i.code] || []; if (kids.length) { out += subheadRow(i, 7); kids.forEach(function (c) { out += packRow(c, editable, sent, true); }); } });
       if (!groups[k] && editable) out += '<tr class="oj-pack-empty oj-droprow" data-drop="section:' + esc(phase) + ':' + esc(k) + '"><td colspan="7">Nothing here yet — drop files here to add them, or press + Add document.</td></tr>';
@@ -2544,9 +2545,10 @@
       global.open(a.downloadUrl || a.previewUrl, '_blank', 'noopener');
     }
   }
-  async function packAddOpen(phase) {
+  /** Open the add-document form; a section pins the new document to that heading. */
+  async function packAddOpen(phase, section) {
     phase = phase || 'documentation';
-    S.addPhase = phase;
+    S.addPhase = phase; S.addSection = section || null;
     var host = doc.getElementById('oj-pack-add-' + phase);
     if (!host) return;
     host.hidden = false;
@@ -2557,7 +2559,7 @@
       return [d.id, d.title + (d.hasFile ? '' : d.contentStatus === 'link_only' ? ' (official link — no file)' : ' (no file yet)')];
     }));
     host.innerHTML = '<div class="oj-panel oj-add">'
-      + '<h3>Add a document to this pack</h3>'
+      + '<h3>Add a document to ' + (S.addSection ? '<em>' + esc(SECTION_LABELS[S.addSection] || titleCase(S.addSection)) + '</em>' : 'this pack') + '</h3>'
       + '<div class="oj-grid2">'
       + field('oj-pa-doc', 'From the library', select('oj-pa-doc', opts, ''), 'Or leave blank and upload a file below.')
       + field('oj-pa-title', 'Name (optional when choosing from the library)', input('oj-pa-title', 'text', '', 'maxlength="250"'))
@@ -2577,7 +2579,7 @@
   async function packAddSubmit() {
     var v = function (id) { var el = doc.getElementById(id); return el ? el.value.trim() : ''; };
     var ck = function (id) { var el = doc.getElementById(id); return !!(el && el.checked); };
-    var body = { documentId: v('oj-pa-doc') || null, title: v('oj-pa-title') || null, sendsDocument: ck('oj-pa-sends'), employeeReturns: ck('oj-pa-returns'), requiresVerification: ck('oj-pa-verifies'), required: ck('oj-pa-required') };
+    var body = { documentId: v('oj-pa-doc') || null, title: v('oj-pa-title') || null, sendsDocument: ck('oj-pa-sends'), employeeReturns: ck('oj-pa-returns'), requiresVerification: ck('oj-pa-verifies'), required: ck('oj-pa-required'), section: S.addSection || undefined };
     var fileEl = doc.getElementById('oj-pa-file');
     var file = fileEl && fileEl.files && fileEl.files[0];
     if (!body.documentId && !body.title) return toast('Choose a library document or give the new document a name.', true);

@@ -683,7 +683,7 @@ describe('changed assets are cache-busted', () => {
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 50], ['onboarding-journey.css', 34],
+      ['onboarding-journey.js', 51], ['onboarding-journey.css', 34],
       // Employees: a first pin is still a pin.
       ['employees.js', 1], ['employees.css', 1],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
