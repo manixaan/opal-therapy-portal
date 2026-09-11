@@ -705,7 +705,8 @@
   function select(id, options, value, attrs) {
     return '<select id="' + id + '" ' + (attrs || '') + '>' + options.map(function (o) {
       var v = Array.isArray(o) ? o[0] : o; var l = Array.isArray(o) ? o[1] : titleCase(o);
-      return '<option value="' + esc(v) + '"' + (String(v) === String(value == null ? '' : value) ? ' selected' : '') + '>' + esc(l) + '</option>';
+      var dis = Array.isArray(o) && o[2] ? ' disabled' : '';
+      return '<option value="' + esc(v) + '"' + (String(v) === String(value == null ? '' : value) ? ' selected' : '') + dis + '>' + esc(l) + '</option>';
     }).join('') + '</select>';
   }
 
@@ -751,7 +752,11 @@
   function startForm(opts, t) {
     var staff = [['', '— Not set —']].concat((opts.staff || []).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
     var roleCats = [['', '— Choose —']].concat((opts.roleCategories || []).map(function (c) { return [c, titleCase(c)]; }));
-    var pkgs = (opts.packages || []).map(function (p) { return [p.id, p.title]; });
+    // Only the OT Full-Time pack is live for now; the rest stay visible but greyed out.
+    var liveRe = /occupational therapist\s*[-\u2013\u2014]\s*full[- ]?time/i;
+    var pkgs = (opts.packages || []).map(function (p) { return [p.id, p.title, !liveRe.test(p.title || '')]; });
+    var livePkg = pkgs.filter(function (p) { return !p[2]; })[0];
+    var pkgValue = t.packageId || (livePkg ? livePkg[0] : '');
     return ''
       + '<form class="oj-form" id="oj-start" onsubmit="return OnboardingJourney.submitStart(event)">'
       + '<section class="oj-panel"><h2>Who</h2>'
@@ -769,7 +774,7 @@
       + termsFields(opts, t)
       + '</section>'
       + '<section class="oj-panel"><h2>Onboarding package</h2>'
-      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, t.packageId || ''), 'The published document pack this hire will receive.')
+      + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, pkgValue), 'The published document pack this hire will receive.')
       + field('oj-f-notes', 'Internal note (optional)', '<textarea id="oj-f-notes" rows="2" maxlength="2000">' + esc(t.notes || '') + '</textarea>')
       + '</section>'
       + '<div id="oj-start-error" class="ob-note is-danger" role="alert" hidden></div>'
