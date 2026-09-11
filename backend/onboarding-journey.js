@@ -94,8 +94,14 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
     },
     {
       code: 'payroll_setup', sortOrder: 30,
-      title: 'Set up in payroll (Xero)',
+      title: 'Set up Xero (Payroll) access',
       description: 'Employee record, pay template from the agreed rate and hours, tax and super details from the onboarding documentation.',
+      dueAt: soonest(beforeStart(1)),
+    },
+    {
+      code: 'splose_access', sortOrder: 35,
+      title: 'Set up Splose access',
+      description: 'Splose practitioner login, calendar and client record access appropriate to the role.',
       dueAt: soonest(beforeStart(1)),
     },
     {

@@ -189,6 +189,8 @@ describe('Stage 3 — Internal Induction & Access', () => {
     expect(ot.map((t) => t.code)).not.toContain('first_week_checkin');
     expect(ot.find((t) => t.code === 'systems_access').title).toMatch(/clinical system access/);
     expect(admin.find((t) => t.code === 'systems_access').title).toBe('Grant system access');
+    expect(ot.find((t) => t.code === 'splose_access').title).toBe('Set up Splose access');
+    expect(ot.find((t) => t.code === 'payroll_setup').title).toBe('Set up Xero (Payroll) access');
     expect(ot.find((t) => t.code === 'portal_access').automation).toBe('activate_portal_access');
     // Every task carries a stable code, so regeneration never duplicates.
     expect(new Set(ot.map((t) => t.code)).size).toBe(ot.length);

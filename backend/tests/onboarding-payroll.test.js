@@ -54,7 +54,7 @@ describe('Phase 3 readiness', () => {
   test('says exactly what is blocking, never just "locked"', () => {
     const r = induction.buildReadiness({
       assignment: a,
-      tasks: [{ code: 'portal_account', status: 'done' }, { code: 'work_email', status: 'done' }, { code: 'systems_access', status: 'in_progress' }],
+      tasks: [{ code: 'portal_account', status: 'done' }, { code: 'work_email', status: 'done' }, { code: 'splose_access', status: 'in_progress' }],
       documentation: [item('PACK_CONTRACT', 'Contract of Employment', { returned_at: '2026-09-10' }), item('REQ_WWCC', 'Working with Children Check', { returned_at: '2026-09-10' }), item('REQ_FWIS', 'FWIS', { employee_returns: false })],
     });
     expect(r.ready).toBe(false);

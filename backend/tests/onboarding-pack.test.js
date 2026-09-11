@@ -99,7 +99,7 @@ describe('the default pack', () => {
     // The induction pack keeps its own list.
     const ind = pack.buildDefaultItems(contentFor('PKG_OT_FULL_TIME'), facts({}), library, 'induction');
     expect(ind.map((i) => i.code)).toEqual(expect.arrayContaining(['REQ_HANDBOOK', 'REQ_NDIS_CODE', 'IND_SPLOSE_SETUP', 'IND_PRIVACY_AGREEMENT', 'IND_SPLOSE_ACTIVE', 'IND_TRAINING']));
-    expect(ind.find((i) => i.code === 'IND_SPLOSE_ACTIVE')).toMatchObject({ itemKind: 'account', linkedTaskCode: 'systems_access', sends: false });
+    expect(ind.find((i) => i.code === 'IND_SPLOSE_ACTIVE')).toMatchObject({ itemKind: 'account', linkedTaskCode: 'splose_access', sends: false });
     expect(ind.every((i) => i.phase === 'induction')).toBe(true);
     // The Owner's induction layout: the handbook alone under Employment; agreements, injury information and the
     // NDIS Code under Policies and agreements; the welcome page and position description are not induction items.

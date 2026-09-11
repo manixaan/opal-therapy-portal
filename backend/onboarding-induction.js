@@ -50,7 +50,7 @@ function restampDueDate(body, previousDueAt, dueAt) {
 const REQUIRED_TASKS = [
   { code: 'portal_account', label: 'Opal Portal' },
   { code: 'work_email', label: 'Outlook' },
-  { code: 'systems_access', label: 'Splose', when: (a) => a.is_treating_therapist === true || a.role_category === 'occupational_therapist' },
+  { code: 'splose_access', label: 'Splose', when: (a) => a.is_treating_therapist === true || a.role_category === 'occupational_therapist' },
 ];
 const STATUTORY = new Set(['REQ_AHPRA', 'REQ_NDIS_SCREENING', 'REQ_WWCC', 'PACK_POLICE_CHECK']);
 
