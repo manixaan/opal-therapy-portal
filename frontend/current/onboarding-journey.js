@@ -561,7 +561,7 @@
     if (formEl) formEl.addEventListener('input', markDraftDirty);
     if (formEl) formEl.addEventListener('change', markDraftDirty);
     if (S.draftId) syncPaySuggestions('oj-f-');
-    setDraftStatus(S.draftId ? 'Draft resumed — saves as you type' : 'Saves as you type');
+    setDraftStatus(S.draftId ? 'Draft resumed' : '');
     var first = doc.getElementById('oj-f-name');
     if (first) first.focus({ preventScroll: true });
   }
@@ -591,7 +591,7 @@
     if (!doc.getElementById('oj-start')) return false;
     var form = readStartForm();
     var typedAnything = Object.keys(form).some(function (k) { return form[k] !== '' && form[k] !== null && form[k] !== false && k !== 'proposedRole' && k !== 'employmentType' && k !== 'payBasis' && k !== 'probationMonths' && k !== 'isTreatingTherapist'; });
-    if (!S.draftId && !typedAnything) { setDraftStatus('Saves as you type'); return false; }
+    if (!S.draftId && !typedAnything) { setDraftStatus(''); return false; }
     setDraftStatus('Saving…');
     var res = S.draftId
       ? await api('/api/onboarding/journey/drafts/' + encodeURIComponent(S.draftId), { method: 'PUT', body: { form: form } })
@@ -762,13 +762,12 @@
       + '<section class="oj-panel"><h2>Who</h2>'
       + '<div class="oj-grid2">'
       + field('oj-f-name', 'Full name', input('oj-f-name', 'text', t.name, 'maxlength="200" required autocomplete="off"'))
-      + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', t.personalEmail, 'maxlength="255" required autocomplete="off"'), 'The letter of offer and the onboarding invitation go here.')
+      + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', t.personalEmail, 'maxlength="255" required autocomplete="off"'))
       + field('oj-f-mobile', 'Mobile (optional)', input('oj-f-mobile', 'tel', t.mobile, 'maxlength="40"'))
-      + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, t.roleCategory || ''), 'Drives which onboarding package applies.')
+      + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, t.roleCategory || ''))
       + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], t.proposedRole || 'therapist'))
       + field('oj-f-managerUserId', 'Reports to', select('oj-f-managerUserId', staff, t.managerUserId || ''))
       + '</div>'
-      + '<label class="oj-check"><input type="checkbox" id="oj-f-treating"' + (t.isTreatingTherapist === false ? '' : ' checked') + '> Treating therapist (works directly with participants)</label>'
       + '</section>'
       + '<section class="oj-panel"><h2>The offer</h2>'
       + termsFields(opts, t)
@@ -793,7 +792,7 @@
       name: v('oj-f-name'), personalEmail: v('oj-f-email'), mobile: v('oj-f-mobile') || null,
       roleCategory: v('oj-f-roleCategory') || null, proposedRole: v('oj-f-proposedRole'),
       managerUserId: v('oj-f-managerUserId') || null,
-      isTreatingTherapist: !!(doc.getElementById('oj-f-treating') || {}).checked,
+      isTreatingTherapist: true,
       position: terms.positionTitle, employmentType: terms.employmentType, startDate: terms.startDate, endDate: terms.endDate,
       payBasis: terms.payBasis, payRate: terms.payRate, hoursPerWeek: terms.hoursPerWeek, probationMonths: terms.probationMonths,
       awardClassification: terms.awardClassification, workLocation: terms.workLocation, additionalTerms: terms.additionalTerms,
