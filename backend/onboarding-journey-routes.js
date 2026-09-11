@@ -143,15 +143,35 @@ async function currentLetter(assignment, offer) {
     const bytes = await jdb.readOfferDocumentBytes(edited);
     if (bytes) return { bytes, fileName: edited.file_name, source: 'uploaded', document: edited };
   }
-  const settings = await odb.getOnboardingSettings();
   const issuedAt = offer.email_sent_at || offer.email_drafted_at || new Date();
   const bytes = await offerDocx.buildOfferDocx({
-    templateBuffer: await offerTemplate.currentTemplateBuffer(assignment.organisation_id),
-    terms: offer.terms || {}, issuedAt, signatory: signatoryFrom(settings),
-    applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
-    isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
+    templateBuffer: await recordTemplateBuffer(assignment, offer),
+    ...(await letterInputs(assignment, offer, issuedAt)),
   });
   return { bytes, fileName: offerDocx.offerFileName(assignment.applicant_name, issuedAt), source: 'generated', document: null };
+}
+
+/** What fills the fields of this record's letter — the same facts wherever it is composed. */
+async function letterInputs(assignment, offer, issuedAt) {
+  const settings = await odb.getOnboardingSettings();
+  return {
+    terms: offer.terms || {}, issuedAt: issuedAt || offer.email_sent_at || offer.email_drafted_at || new Date(), signatory: signatoryFrom(settings),
+    applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
+    isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
+  };
+}
+
+/**
+ * The template this record's letter composes from: its own edited wording
+ * (migration 066) if it has one, else the practice's standard.
+ */
+async function recordTemplateBuffer(assignment, offer) {
+  const wording = await jdb.getLiveOfferDocument(offer.id, 'wording');
+  if (wording) {
+    const bytes = await jdb.readOfferDocumentBytes(wording);
+    if (bytes) return bytes;
+  }
+  return offerTemplate.currentTemplateBuffer(assignment.organisation_id);
 }
 
 function taskRow(t) {
@@ -274,9 +294,9 @@ async function recordDetail(req, assignment) {
     payroll: payrollSetup ? { status: payrollSetup.status, label: payrollSetup.label, ready: payrollSetup.ready, approved: payrollSetup.approved } : null,
   });
   const s = shape();
-  const [editedLetter, signed] = offer
-    ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed')])
-    : [null, null];
+  const [editedLetter, signed, wording] = offer
+    ? await Promise.all([jdb.getLiveOfferDocument(offer.id, 'letter'), jdb.getLiveOfferDocument(offer.id, 'signed'), jdb.getLiveOfferDocument(offer.id, 'wording')])
+    : [null, null, null];
   const emailDefault = offerEmail.composeOfferEmail({
     applicantName: assignment.applicant_name, positionTitle: assignment.job_title,
   });
@@ -297,6 +317,7 @@ async function recordDetail(req, assignment) {
       source: editedLetter ? 'uploaded' : 'generated',
       fileName: editedLetter ? editedLetter.file_name : offerDocx.offerFileName(assignment.applicant_name, offer.email_sent_at || new Date()),
       uploaded: documentRow(editedLetter),
+      wording: documentRow(wording),
       templateVersion: offerDocx.TEMPLATE_VERSION,
       template: await templateSummary(assignment.organisation_id),
       previewUrl: `/api/onboarding/journey/records/${assignment.id}/offer/letter/preview.docx`,
@@ -517,6 +538,87 @@ router.post('/api/onboarding/journey/offer-template/reset', requirePermission('o
   const n = await offerTemplate.resetTemplate(orgOf(req));
   if (n) await auditOnboarding(req, 'offer_template_reset', { targetType: 'onboarding_offer_template' });
   res.json(await templatePayload(orgOf(req)));
+}));
+
+// ── The wording of one record's letter ──────────────────────────────────
+// The same editor, but the edit belongs to this letter alone: the record
+// keeps its own copy of the template and regenerates from it. The
+// practice-wide standard is untouched.
+
+const WORDING_STATUSES = ['draft', 'approved', 'email_drafted'];
+
+/** The record, its offer and the wording document — or the response already sent. */
+async function loadWordingContext(req, res, { editable } = {}) {
+  const assignment = await loadRecord(req);
+  if (!assignment) { notFound(res); return null; }
+  const offer = await jdb.getCurrentOffer(assignment.id);
+  if (!offer) { res.status(409).json({ error: 'There is no letter of offer on this record yet.', code: 'no_offer' }); return null; }
+  if (editable && !WORDING_STATUSES.includes(offer.status)) {
+    res.status(409).json({ error: 'The letter can only be changed before it is sent.', code: 'not_editable' }); return null;
+  }
+  return { assignment, offer, wording: await jdb.getLiveOfferDocument(offer.id, 'wording') };
+}
+
+async function wordingPayload(req, ctx) {
+  const { assignment, offer, wording } = ctx;
+  const buffer = await recordTemplateBuffer(assignment, offer);
+  // The fields show this person's actual values, so the editor reads as the letter does.
+  const values = offerDocx.buildScalars(await letterInputs(assignment, offer));
+  return {
+    ok: true,
+    wording: documentRow(wording),
+    template: await templateSummary(assignment.organisation_id),
+    paragraphs: await offerTemplate.readParagraphs(buffer),
+    tags: Object.keys(offerTemplate.TAG_LABELS).map((tag) => ({
+      tag, label: offerTemplate.TAG_LABELS[tag], value: values[tag] == null || values[tag] === '' ? null : String(values[tag]),
+    })),
+    maxParagraphChars: offerTemplate.MAX_PARAGRAPH_CHARS,
+  };
+}
+
+router.get('/api/onboarding/journey/records/:id/offer/wording', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const ctx = await loadWordingContext(req, res);
+  if (!ctx) return;
+  noStore(res);
+  res.json(await wordingPayload(req, ctx));
+}));
+
+router.put('/api/onboarding/journey/records/:id/offer/wording', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const edits = req.body?.paragraphs;
+  if (!Array.isArray(edits) || !edits.length || edits.length > 400) return res.status(400).json({ error: 'Send the edited paragraphs' });
+  const ctx = await loadWordingContext(req, res, { editable: true });
+  if (!ctx) return;
+  const { assignment, offer } = ctx;
+  let next;
+  try {
+    next = await offerTemplate.applyEdits(await recordTemplateBuffer(assignment, offer), edits);
+    // Composed with this record's real details, so a bad edit fails here and not in the preview.
+    await offerDocx.buildOfferDocx({ templateBuffer: next, ...(await letterInputs(assignment, offer)) });
+  } catch (err) {
+    log.warn('offer wording edit refused', { error: err.message, assignmentId: assignment.id });
+    return res.status(400).json({ error: `The letter could not be saved: ${err.message}` });
+  }
+  const doc = await jdb.storeOfferDocument({
+    organisationId: orgOf(req), offerId: offer.id, assignmentId: assignment.id, kind: 'wording',
+    fileName: 'Letter of Offer wording.docx', fileMime: offerDocx.DOCX_MIME, buffer: next, uploadedBy: req.user.id,
+  });
+  // A draft in Outlook carries the old letter; it has to be made again.
+  if (offer.status === 'email_drafted') await jdb.resetOfferToDraft(offer.id);
+  await auditOnboarding(req, 'offer_wording_saved', {
+    targetType: 'onboarding_offer', targetId: offer.id,
+    metadata: { assignmentId: assignment.id, documentId: doc.id, sha256: doc.file_sha256, paragraphs: edits.length },
+  });
+  res.json(await recordDetail(req, assignment));
+}));
+
+router.delete('/api/onboarding/journey/records/:id/offer/wording', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const ctx = await loadWordingContext(req, res, { editable: true });
+  if (!ctx) return;
+  const { assignment, offer } = ctx;
+  const removed = await jdb.removeOfferDocument(offer.id, 'wording');
+  if (removed && offer.status === 'email_drafted') await jdb.resetOfferToDraft(offer.id);
+  await auditOnboarding(req, 'offer_wording_discarded', { targetType: 'onboarding_offer', targetId: offer.id, metadata: { assignmentId: assignment.id } });
+  res.json(await recordDetail(req, assignment));
 }));
 
 router.get('/api/onboarding/journey/options', requirePermission('onboarding.view'), safe(async (req, res) => {

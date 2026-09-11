@@ -441,6 +441,7 @@ a.oj-btn { text-decoration: none; display: inline-block; }
 /* A portal-filled field: one chip, moved or deleted whole, never typed over. */
 .oj-lt-tag { display: inline; background: #e8f1ec; color: #2f5651; border: 1px solid #c5d9cf; border-radius: 3px; padding: 0 3px; margin: 0; font-size: .92em; font-weight: 600; white-space: nowrap; user-select: all; cursor: default; }
 .oj-lt-tag.is-demo { font-size: 12px; }
+.oj-lt-tag.is-live { user-select: text; cursor: text; }
 .oj-lt-block:focus .oj-lt-tag { box-shadow: 0 0 0 1px rgba(47,86,81,.15); }
 
 /* ── Drag and drop onto pack rows ───────────────────────────────────────── */
@@ -474,6 +475,8 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-fmt-btn.is-b { font-weight: 800; }
 .oj-fmt-btn.is-i { font-style: italic; font-family: Georgia, serif; }
 .oj-fmt-btn.is-u { text-decoration: underline; }
+.oj-fmt-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.oj-fmt-btn.is-hist { font-size: 15px; }
 .oj-fmt-hint { font-size: 11.5px; color: var(--ink-soft); margin-left: 6px; }
 
 /* What the portal read in an uploaded document, before the Owner submits it. */

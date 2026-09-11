@@ -750,7 +750,8 @@
   }
 
   function startForm(opts, t) {
-    var staff = [['', '— Not set —']].concat((opts.staff || []).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
+    // Every hire reports to the owner, so the list holds only owner accounts.
+    var staff = [['', '\u2014 Not set \u2014']].concat((opts.staff || []).filter(function (u) { return String(u.role || '').toLowerCase() === 'owner'; }).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
     var roleCats = [['', '— Choose —']].concat((opts.roleCategories || []).map(function (c) { return [c, titleCase(c)]; }));
     // Only the OT Full-Time pack is live for now; the rest stay visible but greyed out.
     var liveRe = /occupational therapist\s*[-\u2013\u2014]\s*full[- ]?time/i;
@@ -774,7 +775,6 @@
       + '</section>'
       + '<section class="oj-panel"><h2>Onboarding package</h2>'
       + field('oj-f-packageId', 'Documentation package', select('oj-f-packageId', pkgs, pkgValue), 'The published document pack this hire will receive.')
-      + field('oj-f-notes', 'Internal note (optional)', '<textarea id="oj-f-notes" rows="2" maxlength="2000">' + esc(t.notes || '') + '</textarea>')
       + '</section>'
       + '<div id="oj-start-error" class="ob-note is-danger" role="alert" hidden></div>'
       + '<div class="oj-actions"><button type="submit" class="oj-btn oj-btn-primary" id="oj-start-submit">Create the record and draft the letter</button>'
@@ -798,7 +798,7 @@
       awardClassification: terms.awardClassification, workLocation: terms.workLocation, additionalTerms: terms.additionalTerms,
       award: terms.award, workPattern: terms.workPattern, payCycle: terms.payCycle,
       superannuationRate: terms.superannuationRate, offerClosingDate: terms.offerClosingDate,
-      packageId: v('oj-f-packageId') || null, notes: v('oj-f-notes') || null,
+      packageId: v('oj-f-packageId') || null, notes: null,
     };
   }
 
@@ -849,7 +849,7 @@
     pane.innerHTML = ''
       + '<div class="oj-record-head">'
       + '  <div><h2>' + esc(r.applicantName) + ' ' + stagePill + '</h2>'
-      + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType)) + ' · ' + esc(r.applicantEmail || '')
+      + '  <p class="oj-quiet">' + esc(r.jobTitle || 'Position not set') + ' · ' + esc(titleCase(r.employmentType))
       + (r.startDate ? ' · commences ' + esc(fmtDate(r.startDate)) + ' (' + esc(daysWord(j.daysToStart)) + ')' : '') + '</p></div>'
       + '  <div class="oj-record-head-actions">' + recordHeadActions(d) + '</div>'
       + '</div>'
@@ -1143,13 +1143,14 @@
     // ── Step 2: the letter ──
     var L = d.letter || {};
     body += '<li class="oj-step ' + stepState(!before, before) + '"><div class="oj-step-head"><span class="oj-step-n">2</span><strong>Letter of Offer</strong>'
-      + '<span class="oj-chip ' + (L.source === 'uploaded' ? 'is-you' : 'is-quiet') + '">' + (L.source === 'uploaded' ? 'Edited copy uploaded' : templateChipText(L.template)) + '</span></div>'
+      + '<span class="oj-chip ' + (L.source === 'uploaded' || L.wording ? 'is-you' : 'is-quiet') + '">' + (L.source === 'uploaded' ? 'Edited copy uploaded' : L.wording ? 'Wording edited for this letter' : templateChipText(L.template)) + '</span></div>'
       + '<p class="oj-quiet">' + esc(L.fileName || '') + (L.uploaded ? ' · uploaded ' + esc(fmtDateTime(L.uploaded.uploadedAt)) + (L.uploaded.uploadedByName ? ' by ' + esc(L.uploaded.uploadedByName) : '') : '') + '</p>'
       + '<div class="oj-actions">'
       + btn('Preview the letter', 'OnboardingJourney.previewLetter()', before ? 'oj-btn-primary' : '')
       + '<a class="oj-btn" href="' + esc(L.downloadUrl || '#') + '">Download (.docx)</a>'
       + (L.pdfUrl ? '<a class="oj-btn" href="' + esc(L.pdfUrl) + '">Download (PDF)</a>' : '')
-      + (before && c.assign && L.source !== 'uploaded' ? btn('Edit the letter', 'OnboardingJourney.openLetterEditor()') : '')
+      + (before && c.assign && L.source !== 'uploaded' ? btn('Edit the letter', 'OnboardingJourney.openRecordLetterEditor()') : '')
+      + (before && c.assign && L.source !== 'uploaded' && L.wording ? btn('Discard the wording edit — use the standard letter', 'OnboardingJourney.discardRecordWording()', 'oj-btn-quiet') : '')
       + (before && c.assign ? '<label class="oj-btn oj-file">Upload an edited letter<input type="file" accept=".docx" hidden onchange="OnboardingJourney.uploadLetter(this)"></label>' : '')
       + (before && c.assign && L.source === 'uploaded' ? btn('Discard the edit — use the generated letter', 'OnboardingJourney.discardLetter()', 'oj-btn-quiet') : '')
       + '</div>'
@@ -2064,7 +2065,7 @@
   //  THE LETTER'S WORDING — edit any paragraph; save makes it the standard
   // ═══════════════════════════════════════════════════════════════════════════
 
-  var LT = { data: null, lastFocus: null, range: null };
+  var LT = { data: null, lastFocus: null, range: null, mode: 'template', labels: {} };
 
   function templateChipText(t) {
     if (!t || t.source !== 'practice') return 'Generated from the template';
@@ -2084,9 +2085,15 @@
   };
 
   /** Segments → the HTML inside one editable block: text with line breaks, controls as chips. */
+  /** In the record editor a field is typed into like any other text; once its words change it is plain text in this letter. */
+  function tagChipHtml(tag, labels) {
+    if (LT.mode === 'record') return '<span class="oj-lt-tag is-live" data-tag="' + esc(tag) + '" title="This person\'s detail — type into it to change the words for this letter only">' + esc(labels[tag] || tag) + '</span>';
+    return '<span class="oj-lt-tag" contenteditable="false" data-tag="' + esc(tag) + '" title="Filled in by the portal for each person">' + esc(labels[tag] || tag) + '</span>';
+  }
+
   function segmentsToHtml(segs, labels) {
     return (segs || []).map(function (s) {
-      if (s.type === 'tag') return '<span class="oj-lt-tag" contenteditable="false" data-tag="' + esc(s.tag) + '" title="Filled in by the portal for each person">' + esc(labels[s.tag] || s.tag) + '</span>';
+      if (s.type === 'tag') return tagChipHtml(s.tag, labels);
       return esc(s.text).replace(/\n/g, '<br>');
     }).join('');
   }
@@ -2102,7 +2109,13 @@
     var walk = function (node, first) {
       if (node.nodeType === 3) { push(node.nodeValue.replace(/\u00a0/g, ' ')); return; }
       if (node.nodeType !== 1) return;
-      if (node.classList && node.classList.contains('oj-lt-tag')) { out.push({ type: 'tag', tag: node.getAttribute('data-tag') }); return; }
+      if (node.classList && node.classList.contains('oj-lt-tag')) {
+        var tag = node.getAttribute('data-tag');
+        var typed = (node.textContent || '').replace(/\u00a0/g, ' ');
+        // A field the user has typed into is their words now, not the portal's.
+        if (node.classList.contains('is-live') && typed !== (LT.labels[tag] || tag)) { push(typed); return; }
+        out.push({ type: 'tag', tag: tag }); return;
+      }
       if (node.nodeName === 'BR') { push('\n'); return; }
       var block = /^(DIV|P)$/.test(node.nodeName);
       if (block && !first) push('\n');
@@ -2124,13 +2137,47 @@
     return out;
   }
 
+  /** The practice-wide letter: an edit here is the standard for every offer from now on. */
   async function openLetterEditor() {
     if (!global.Onboarding || typeof global.Onboarding.openModal !== 'function') return;
     var res = await api('/api/onboarding/journey/offer-template');
     if (!res.ok) { toast(res.error, true); return; }
-    LT.data = res; LT.lastFocus = null; LT.range = null;
-    var labels = {}; res.tags.forEach(function (t) { labels[t.tag] = t.label; });
     var t = res.template;
+    LT.mode = 'template';
+    buildLetterEditor(res, {
+      title: 'Edit the Letter of Offer',
+      subtitle: 'The letter as the employee sees it. Click into any line and type, as in Word. Save makes it the standard letter for every offer from now on.',
+      chip: '<span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>',
+      footer: btn('Save as the standard letter', 'OnboardingJourney.saveLetterEditor()', 'oj-btn-primary')
+        + btn('Cancel', 'Onboarding.closeModal()')
+        + (t.source === 'practice' ? btn('Restore the original letter', 'OnboardingJourney.resetLetterTemplate()', 'oj-btn-quiet') : ''),
+    });
+  }
+
+  /** This record's letter only: the fields show the person's real details, and the edit stays on this letter. */
+  async function openRecordLetterEditor() {
+    if (!global.Onboarding || typeof global.Onboarding.openModal !== 'function') return;
+    if (!S.recordId) return;
+    var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/offer/wording');
+    if (!res.ok) { toast(res.error, true); return; }
+    var name = (S.record && S.record.record && S.record.record.applicantName) || 'this person';
+    LT.mode = 'record';
+    buildLetterEditor(res, {
+      title: 'Edit the letter for ' + name,
+      subtitle: 'This letter only — the standard letter is not changed. Click into any line and type, as in Word. The highlighted details are filled in by the portal and follow the offer terms.',
+      chip: '<span class="oj-chip ' + (res.wording ? 'is-you' : 'is-quiet') + '">' + esc(res.wording ? 'Wording edited for this letter' + (res.wording.uploadedByName ? ' · by ' + res.wording.uploadedByName : '') : templateChipText(res.template)) + '</span>',
+      footer: btn('Save this letter', 'OnboardingJourney.saveLetterEditor()', 'oj-btn-primary')
+        + btn('Cancel', 'Onboarding.closeModal()')
+        + (res.wording ? btn('Discard the wording edit', 'OnboardingJourney.discardRecordWording()', 'oj-btn-quiet') : ''),
+      useValues: true,
+    });
+  }
+
+  function buildLetterEditor(res, ui) {
+    LT.data = res; LT.lastFocus = null; LT.range = null;
+    // In the record editor a field chip reads as the person's actual value; a value the terms leave blank keeps its label.
+    var labels = {}; res.tags.forEach(function (t) { labels[t.tag] = (ui.useValues && t.value) ? t.value : t.label; });
+    LT.labels = labels;
     var TH = 'OPALTableHeader', TD = 'OPALTableBody';
     var paras = res.paragraphs;
     var block = function (p, tagName, extraCls) {
@@ -2159,13 +2206,13 @@
       rows += block(p, 'div');
       i += 1;
     }
-    var fields = res.tags.map(function (x) { return '<option value="' + esc(x.tag) + '">' + esc(x.label) + '</option>'; }).join('');
+    var fields = res.tags.map(function (x) { return '<option value="' + esc(x.tag) + '">' + esc(x.label) + (ui.useValues && x.value ? ' — ' + esc(x.value) : '') + '</option>'; }).join('');
     global.Onboarding.openModal({
-      title: 'Edit the Letter of Offer',
-      subtitle: 'The letter as the employee sees it. Click into any line and type, as in Word. Save makes it the standard letter for every offer from now on.',
+      title: ui.title,
+      subtitle: ui.subtitle,
       wide: true,
       body: '<div class="oj-lt">'
-        + '<div class="oj-lt-bar"><span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>'
+        + '<div class="oj-lt-bar">' + ui.chip
         + '<label class="oj-lt-insert">Insert a field <select onchange="OnboardingJourney.letterInsert(this)"><option value="">Choose…</option>' + fields + '</select></label></div>'
         + '<div class="oj-lt-sheet"><div class="oj-lt-page is-doc">'
         + '<div class="oj-lt-header" aria-hidden="true"><span>OPAL THERAPY</span><span>Letter of Offer</span><span>' + esc(labels.OPAL_LOO_CANDIDATE_FULL_NAME || 'Candidate full name') + '</span></div>'
@@ -2174,11 +2221,7 @@
         + '</div></div>'
         + '<div id="oj-lt-error" class="ob-note is-danger" role="alert" hidden></div>'
         + '</div>',
-      footer: '<div class="oj-actions oj-actions-tight">'
-        + btn('Save as the standard letter', 'OnboardingJourney.saveLetterEditor()', 'oj-btn-primary')
-        + btn('Cancel', 'Onboarding.closeModal()')
-        + (t.source === 'practice' ? btn('Restore the original letter', 'OnboardingJourney.resetLetterTemplate()', 'oj-btn-quiet') : '')
-        + '</div>',
+      footer: '<div class="oj-actions oj-actions-tight">' + ui.footer + '</div>',
     });
   }
 
@@ -2205,10 +2248,9 @@
   function letterInsert(sel) {
     var tag = sel.value; sel.value = '';
     var ta = LT.lastFocus; if (!tag || !ta || !doc.body.contains(ta)) return;
-    var labels = {}; (LT.data && LT.data.tags || []).forEach(function (t) { labels[t.tag] = t.label; });
-    var chip = doc.createElement('span');
-    chip.className = 'oj-lt-tag'; chip.setAttribute('contenteditable', 'false'); chip.setAttribute('data-tag', tag);
-    chip.title = 'Filled in by the portal for each person'; chip.textContent = labels[tag] || tag;
+    var labels = LT.labels || {};
+    var holder = doc.createElement('span'); holder.innerHTML = tagChipHtml(tag, labels);
+    var chip = holder.firstChild;
     var r = LT.range && ta.contains(LT.range.commonAncestorContainer) ? LT.range : null;
     if (r) { r.deleteContents(); r.insertNode(chip); } else ta.appendChild(chip);
     // Put the caret just after the chip so typing carries on.
@@ -2236,11 +2278,26 @@
     }
     var errEl = doc.getElementById('oj-lt-error');
     if (!edits.length) { global.Onboarding.closeModal(); toast('Nothing changed.'); return; }
+    if (LT.mode === 'record') {
+      var rr = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/offer/wording', { method: 'PUT', body: { paragraphs: edits } });
+      if (!rr.ok) { if (errEl) { errEl.textContent = rr.error; errEl.hidden = false; errEl.scrollIntoView({ block: 'nearest' }); } return; }
+      global.Onboarding.closeModal();
+      if (rr.record) S.record = rr;
+      toast('Saved. This letter now carries your wording; the standard letter is unchanged.');
+      var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane);
+      return;
+    }
     var res = await api('/api/onboarding/journey/offer-template', { method: 'PUT', body: { paragraphs: edits } });
     if (!res.ok) { if (errEl) { errEl.textContent = res.error; errEl.hidden = false; errEl.scrollIntoView({ block: 'nearest' }); } return; }
     global.Onboarding.closeModal();
     toast('Saved. This wording is now the standard letter — v' + res.template.version + '.');
     rerender();
+  }
+
+  async function discardRecordWording() {
+    if (!await portalConfirm('Go back to the standard letter for this person? The wording edited here is no longer used.', { danger: true })) return;
+    if (global.Onboarding && typeof global.Onboarding.closeModal === 'function') global.Onboarding.closeModal();
+    return act('/offer/wording', {}, 'Using the standard letter again.', 'DELETE');
   }
 
   async function resetLetterTemplate() {
@@ -2256,7 +2313,7 @@
     var L = S.record && S.record.letter;
     if (!L) return;
     if (global.DocPreview && typeof global.DocPreview.open === 'function') {
-      global.DocPreview.open({ kind: 'docx', url: L.previewUrl + '?rev=' + Date.now(), downloadUrl: L.downloadUrl, title: 'Letter of Offer — ' + (S.record.record.applicantName || ''), meta: L.source === 'uploaded' ? 'Your edited copy' : 'Generated from the template' });
+      global.DocPreview.open({ kind: 'docx', url: L.previewUrl + '?rev=' + Date.now(), downloadUrl: L.downloadUrl, title: 'Letter of Offer — ' + (S.record.record.applicantName || ''), meta: L.source === 'uploaded' ? 'Your edited copy' : L.wording ? 'Wording edited for this letter' : 'Generated from the template' });
     } else {
       global.open(L.downloadUrl, '_blank');
     }
@@ -2357,14 +2414,38 @@
   function openInMailApp(prefix, attachmentUrl) {
     var r = S.record && S.record.record; if (!r) return;
     var sub = doc.getElementById('oj-' + prefix + '-subject'); var body = doc.getElementById('oj-' + prefix + '-body');
-    var subject = sub ? sub.value.trim() : ''; var text = body ? stripEmailMarks(body.value) : '';
+    var subject = sub ? sub.value.trim() : ''; var raw = body ? body.value : ''; var text = stripEmailMarks(raw);
+    // A mailto: body is plain text only, so the bold/italic/underline marks are
+    // stripped from it. The formatted version goes on the clipboard instead:
+    // pasting into the mail body (Cmd+V) replaces the plain wording with it.
+    var formatted = /\*\*|__|\*/.test(raw) && copyFormattedEmail(raw);
     if (attachmentUrl) {
       var a = doc.createElement('a'); a.href = attachmentUrl; a.download = ''; a.style.display = 'none';
       doc.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1000);
     }
     var href = 'mailto:' + encodeURIComponent(r.applicantEmail || '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
     setTimeout(function () { global.location.href = href; }, attachmentUrl ? 400 : 0);
-    toast(attachmentUrl ? 'Your mail app is opening — attach the file that just downloaded, then send.' : 'Your mail app is opening.');
+    var hint = formatted ? ' The formatted message is on your clipboard — paste it over the plain wording (Cmd+V) to keep the bold and underline.' : '';
+    toast((attachmentUrl ? 'Your mail app is opening — attach the file that just downloaded, then send.' : 'Your mail app is opening.') + hint);
+  }
+
+  /** Marks → HTML, mirroring what the Outlook draft renders. */
+  function emailMarksToHtml(text) {
+    var h = esc(String(text || ''));
+    h = h.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
+      .replace(/__(?=\S)([\s\S]*?\S)__/g, '<u>$1</u>')
+      .replace(/(^|[^\w*])\*(?=[^\s*])([^*\n]*?[^\s*])\*(?![\w*])/g, '$1<em>$2</em>');
+    return h.split(/\n{2,}/).map(function (para) { return '<p>' + para.replace(/\n/g, '<br>') + '</p>'; }).join('');
+  }
+  /** Puts the message on the clipboard as HTML + plain text. Returns true when it could. */
+  function copyFormattedEmail(raw) {
+    try {
+      var clip = global.navigator && global.navigator.clipboard;
+      if (!clip || typeof global.ClipboardItem !== 'function') return false;
+      var html = emailMarksToHtml(raw), plain = stripEmailMarks(raw);
+      clip.write([new global.ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).catch(function () {});
+      return true;
+    } catch (_) { return false; }
   }
 
   /**
@@ -2379,8 +2460,18 @@
     var b = function (mark, label, title, cls) {
       return '<button type="button" class="oj-fmt-btn ' + cls + '" title="' + title + '" aria-label="' + title + '" onmousedown="event.preventDefault()" onclick="OnboardingJourney.emailMark(\'' + textareaId + '\', \'' + mark + '\')">' + label + '</button>';
     };
+    var h = function (cmd, label, title) {
+      return '<button type="button" class="oj-fmt-btn is-hist" title="' + title + '" aria-label="' + title + '" onmousedown="event.preventDefault()" onclick="OnboardingJourney.emailHistory(\'' + textareaId + '\', \'' + cmd + '\')">' + label + '</button>';
+    };
     return '<div class="oj-fmt-bar" role="toolbar" aria-label="Formatting">' + b('**', 'B', 'Bold (Ctrl+B)', 'is-b') + b('*', 'I', 'Italic (Ctrl+I)', 'is-i') + b('__', 'U', 'Underline (Ctrl+U)', 'is-u')
+      + '<span class="oj-fmt-sep" aria-hidden="true"></span>' + h('undo', '&#x21B6;', 'Undo (Ctrl+Z)') + h('redo', '&#x21B7;', 'Redo (Ctrl+Shift+Z)')
       + '</div>';
+  }
+  /** Undo / redo in the email textarea, using the browser's own history. */
+  function emailHistory(textareaId, cmd) {
+    var ta = doc.getElementById(textareaId); if (!ta) return;
+    ta.focus();
+    try { doc.execCommand(cmd === 'redo' ? 'redo' : 'undo'); } catch (_) {}
   }
   function emailMark(textareaId, mark) {
     var ta = doc.getElementById(textareaId); if (!ta) return;
@@ -2398,8 +2489,14 @@
       next = mark + sel + mark; ca = sel ? a : a + n; cb = sel ? a + next.length : a + n;            // wrap; empty → caret between marks
     }
     ta.focus();
-    if (typeof ta.setRangeText === 'function') ta.setRangeText(next, a, b, 'preserve');
-    else ta.value = v.slice(0, a) + next + v.slice(b);
+    // insertText goes through the browser's undo stack (setRangeText does not),
+    // so Ctrl+Z and the Undo button can take the mark back off.
+    var done = false;
+    try { ta.setSelectionRange(a, b); done = doc.execCommand('insertText', false, next) && ta.value.slice(a, a + next.length) === next; } catch (_) { done = false; }
+    if (!done) {
+      if (typeof ta.setRangeText === 'function') ta.setRangeText(next, a, b, 'preserve');
+      else ta.value = v.slice(0, a) + next + v.slice(b);
+    }
     ta.selectionStart = ca; ta.selectionEnd = cb;
   }
   /** Ctrl/Cmd+B, I, U inside an email textarea. */
@@ -2870,7 +2967,7 @@
     filter: setFilter,
     submitStart: submitStart,
     editTerms: editTerms, cancelEdit: cancelEdit, saveTerms: saveTerms,
-    openLetterEditor: openLetterEditor, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterCaret: letterCaret, letterKey: letterKey, letterPaste: letterPaste, letterInsert: letterInsert,
+    openLetterEditor: openLetterEditor, openRecordLetterEditor: openRecordLetterEditor, discardRecordWording: discardRecordWording, saveLetterEditor: saveLetterEditor, resetLetterTemplate: resetLetterTemplate, letterFocus: letterFocus, letterCaret: letterCaret, letterKey: letterKey, letterPaste: letterPaste, letterInsert: letterInsert,
     packPreviewAttachment: packPreviewAttachment, packRemoveFileNow: packRemoveFileNow, packAttachToSection: packAttachToSection, packAddAttachments: packAddAttachments, packRemoveAttachment: packRemoveAttachment, packRenameAttachment: packRenameAttachment, packRenameFile: packRenameFile,
     openInMailApp: openInMailApp,
     previewLetter: previewLetter, previewSigned: previewSigned, uploadLetter: uploadLetter, uploadSigned: uploadSigned, discardLetter: discardLetter,
@@ -2878,7 +2975,7 @@
     verifyOffer: verifyOffer, declineOffer: declineOffer, withdrawOffer: withdrawOffer, skipOffer: skipOffer,
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
-    emailMark: emailMark, emailKey: emailKey, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
+    emailMark: emailMark, emailKey: emailKey, emailHistory: emailHistory, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
     uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, itemNotApplicable: itemNotApplicable, itemApplicable: itemApplicable, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,

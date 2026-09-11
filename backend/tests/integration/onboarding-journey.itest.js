@@ -285,6 +285,76 @@ describe('The letter\'s wording — edited in the portal, the standard from then
   });
 });
 
+describe('One letter\'s wording — edited for the record alone (migration 066)', () => {
+  const greetingIndex = (paras) => paras.findIndex((p) => p.segments[0] && p.segments[0].text === 'Dear ');
+  const letterText = async (agent, id) => {
+    const res = await agent.get(`/api/onboarding/journey/records/${id}/offer/letter/download`).buffer(true).parse((r, cb) => { const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(res.status).toBe(200);
+    const zip = await require('jszip').loadAsync(res.body);
+    const xml = await zip.file('word/document.xml').async('string');
+    return (xml.match(/<w:t(?: [^>]*)?>[^<]*<\/w:t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join('');
+  };
+  const greeting = (i) => ({ paragraphs: [{ index: i, segments: [
+    { type: 'text', text: 'Hi ' }, { type: 'tag', tag: 'OPAL_LOO_CANDIDATE_FIRST_NAME' }, { type: 'text', text: ', just for you,' },
+  ] }] });
+
+  test('the editor shows this person\'s values; save changes this letter only, survives a terms change, and discard goes back', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const record = await start(agent);
+    const id = record.record.id;
+    const url = `/api/onboarding/journey/records/${id}/offer/wording`;
+
+    const before = await agent.get(url);
+    expect(before.status).toBe(200);
+    expect(before.body.wording).toBeNull();
+    expect(before.body.tags.find((t) => t.tag === 'OPAL_LOO_CANDIDATE_FIRST_NAME').value).toBe('Jane');
+    const i = greetingIndex(before.body.paragraphs);
+
+    const saved = await agent.put(url).send(greeting(i));
+    expect(saved.status).toBe(200);
+    expect(saved.body.letter.wording).toMatchObject({ kind: 'wording' });
+    expect(saved.body.letter.source).toBe('generated');
+    expect(await letterText(agent, id)).toContain('Hi Jane, just for you,');
+    expect((await agent.get(url)).body.paragraphs[i].segments[0].text).toBe('Hi ');
+
+    // The practice's standard letter is untouched, and so is every other record.
+    expect((await agent.get('/api/onboarding/journey/offer-template')).body.template.source).toBe('built_in');
+    const other = await start(agent, { name: 'Other Person', personalEmail: 'other.person@example.com' });
+    expect(await letterText(agent, other.record.id)).toContain('Dear Other,');
+
+    // A change to the terms keeps the wording and refills the fields.
+    const terms = { ...record.record.terms, positionTitle: 'Senior Occupational Therapist' };
+    const changed = await agent.put(`/api/onboarding/journey/records/${id}/offer`).send({ terms });
+    expect(changed.status).toBe(200);
+    const text = await letterText(agent, id);
+    expect(text).toContain('Hi Jane, just for you,');
+    expect(text).toContain('Senior Occupational Therapist');
+
+    const discarded = await agent.delete(url);
+    expect(discarded.status).toBe(200);
+    expect(discarded.body.letter.wording).toBeNull();
+    expect(await letterText(agent, id)).toContain('Dear Jane,');
+  });
+
+  test('a bad edit is refused; only onboarding.assign may edit; another organisation never can', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const record = await start(agent);
+    const url = `/api/onboarding/journey/records/${record.record.id}/offer/wording`;
+    expect((await agent.put(url).send({ paragraphs: [{ index: 99999, segments: [] }] })).status).toBe(400);
+    expect((await agent.put(url).send({})).status).toBe(400);
+    expect((await agent.get(url)).body.wording).toBeNull();
+
+    const viewer = await agentFor({ role: 'admin', email: 'viewer@example.com', permissions: ['onboarding.view'] });
+    expect((await viewer.agent.get(url)).status).toBe(403);
+    expect((await viewer.agent.put(url).send({ paragraphs: [] })).status).toBe(403);
+    expect((await viewer.agent.delete(url)).status).toBe(403);
+
+    const otherOrg = await seedOrganisation('Elsewhere Pty Ltd');
+    const outsider = await agentFor({ role: 'owner', email: 'other@example.com', organisation_id: otherOrg.id });
+    expect((await outsider.agent.get(url)).status).toBe(404);
+  });
+});
+
 const detailLetter = (res) => res.body.letter;
 
 describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verification, release', () => {
