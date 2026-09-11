@@ -188,7 +188,7 @@
 
     host.innerHTML = '<div class="ob-root oj-root">'
       + '<div class="ob-hero"><div><h1>Onboarding</h1>'
-      + '<p>From the letter of offer to the first day. The portal runs each step and asks for you only when a decision is yours.</p></div>'
+      + '</div>'
       + '<div class="ob-hero-actions" id="oj-hero-actions"></div></div>'
       + subnavHtml(S.view)
       + '<div id="oj-view">' + spinner() + '</div></div>';
@@ -384,8 +384,7 @@
     if (!S.packageId) {
       var res = await api('/api/onboarding/journey/defaults');
       if (!res.ok) { pane.innerHTML = '<div class="ob-note is-danger" role="alert">' + esc(res.error) + '</div>'; return; }
-      pane.innerHTML = '<p class="oj-quiet">Each package is the default an onboarding starts from. Open one to walk through its three phases and tweak the documents; every new onboarding for that package inherits the tweak.</p>'
-        + '<p class="oj-quiet">Only <strong>Occupational Therapist — Full-Time</strong> is open for editing at the moment. The other packages are on the way.</p>'
+      pane.innerHTML = ''
         + '<div class="oj-list">' + res.packages.map(function (p) {
           // Only the OT full-time package is being actively developed; the rest are shown but greyed out.
           if (ACTIVE_DEFAULT_PACKAGES.indexOf(p.code) === -1) {
@@ -416,7 +415,6 @@
     var body;
     if (view === 1) {
       body = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">1</span>Letter of Offer</h2></header>'
-        + '<p class="oj-quiet">The letter template, filled with a sample employee so you can see how it reads. Edit the wording here and it becomes the standard for every offer; the particulars come from each onboarding\'s details.</p>'
         + '<div class="oj-actions">' + btn('Preview the letter', 'OnboardingJourney.previewDefaultsLetter()', 'oj-btn-primary') + (can('onboarding.assign') ? btn('Edit the letter', 'OnboardingJourney.openLetterEditor()') : '') + '<a class="oj-btn" href="' + esc(d.letter.downloadUrl) + '">Download (.docx)</a>' + (d.letter.pdfUrl ? '<a class="oj-btn" href="' + esc(d.letter.pdfUrl) + '">Download (PDF)</a>' : '') + '</div>'
         + '<h3 class="oj-sub">Email 1</h3><pre class="oj-pre">' + esc(d.emails.offer.subject) + '\n\n' + esc(d.emails.offer.body) + '</pre></section>';
     } else {
@@ -445,7 +443,7 @@
     var grouped = groupPackItems(included); var groups = grouped.groups;
     var order = sectionOrder(phase).filter(function (k) { return groups[k]; });
     var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
-      + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
+      + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<div id="oj-defaults-add" hidden></div>'
       + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>File</th><th></th></tr></thead><tbody>'
@@ -623,7 +621,6 @@
   function draftsSection(drafts) {
     if (!drafts || !drafts.length) return '';
     return '<section class="oj-drafts"><h2>Drafts <span class="oj-count">' + drafts.length + '</span></h2>'
-      + '<p class="oj-quiet">Start Onboarding forms saved part-way. Nothing has been created from them yet.</p>'
       + '<div class="oj-list">' + drafts.map(function (d) {
         return '<article class="oj-row oj-row-draft"><div class="oj-row-main"><h3>' + esc(d.applicantName || 'Unnamed') + ' <span class="oj-chip is-quiet">Draft</span></h3>'
           + '<p class="oj-quiet">' + esc(d.positionTitle || 'Position not set') + ' · last saved ' + esc(fmtDateTime(d.updatedAt)) + '</p></div>'
@@ -769,7 +766,6 @@
       + '<label class="oj-check"><input type="checkbox" id="oj-f-treating"' + (t.isTreatingTherapist === false ? '' : ' checked') + '> Treating therapist (works directly with participants)</label>'
       + '</section>'
       + '<section class="oj-panel"><h2>The offer</h2>'
-      + '<p class="oj-quiet">Entered once. These terms become the letter of offer, the employment profile and the payroll set-up task.</p>'
       + termsFields(opts, t)
       + '</section>'
       + '<section class="oj-panel"><h2>Onboarding package</h2>'
@@ -964,7 +960,7 @@
     if (n.actor === 'admin' && n.action) action = actionButton(n, d);
     return '<div class="oj-next-banner ' + (n.actor === 'admin' ? 'is-you' : n.actor === 'employee' ? 'is-employee' : 'is-quiet') + '">'
       + '<div><span class="oj-next-k">What happens next</span><strong>' + esc(n.label) + '</strong>'
-      + '<span class="oj-quiet"> — ' + (n.actor === 'admin' ? 'this one is yours' : n.actor === 'employee' ? 'the portal is waiting on the employee and will chase them' : n.actor === 'system' ? 'the portal is handling it' : 'nothing to do') + '</span></div>'
+      + '</div>'
       + (action ? '<div>' + action + '</div>' : '')
       + '</div>';
   }
@@ -1130,7 +1126,6 @@
     body += '<li class="oj-step ' + stepState(true, false) + '"><div class="oj-step-head"><span class="oj-step-n">1</span><strong>Employee details</strong>'
       + (editable ? btn('Edit', 'OnboardingJourney.editTerms()', 'oj-btn-small') : '') + '</div>'
       + termsTable(o.terms || r.terms || {}, r.applicantName)
-      + (before ? '<p class="oj-quiet">Change these and the letter regenerates. An Outlook draft made from the old letter is discarded.</p>' : '')
       + '</li>';
 
     // ── Step 2: the letter ──
@@ -1193,7 +1188,6 @@
         + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
         + (c.assign ? '<label class="oj-btn oj-file" title="Upload a different signed letter — it supersedes this one and what was read from it">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this' + (done ? ', true' : '') + ')"></label>' : '') + '</div>';
     } else if (c.assign) {
-      body += '<p class="oj-quiet">Upload the letter the candidate returned. The portal reads the acceptance block — name, signature, date — and flags anything left blank before you submit it.</p>'
         + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
     }
     body += '</li></ol>';
@@ -1341,9 +1335,9 @@
     var supporting = included.filter(function (i) { return i.group === 'supporting'; });
     var added = included.filter(function (i) { return i.group === 'added'; });
     var out = '<div class="oj-attach" id="oj-attachments">'
-      + '<div class="oj-pack-head"><div><strong>Attachments: ZIP folder including –</strong> <span class="oj-quiet">' + P.counts.sending + ' document(s) go out in the ZIP; ' + P.counts.returns + ' item(s) come back.</span>'
+      + '<div class="oj-pack-head"><div><strong>Attachments: ZIP folder including –</strong>'
       + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) have no file yet — attach one before the email can be sent.</span>' : '')
-      + (P.counts.placeholders ? '<br><span class="oj-quiet">' + P.counts.placeholders + ' placeholder(s) stand in for documents not uploaded yet — replace them in Edit onboarding, or here for this person only.</span>' : '') + '</div>'
+      + '</div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<ol class="oj-attach-list">';
     attachments.concat(added).forEach(function (i) {
@@ -1427,9 +1421,9 @@
         // Every document in the pack is a slot, read-only ones included: a statement that came back sits under its own heading.
         var placeable = included.filter(function (i) { return !i.itemKind || i.itemKind === 'document'; });
         var opts = placeable.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + (i.employeeReturns ? '' : ' (for reading only)') + '</option>'; }).join('');
-        out += '<div class="oj-unplaced"><strong>Not placed yet (' + unplaced.length + ')</strong> <span class="oj-quiet">— the portal could not tell which document these are. Choose the slot for each.</span><ul>'
+        out += '<div class="oj-unplaced"><strong>Not placed yet (' + unplaced.length + ')</strong><ul>'
           + unplaced.map(function (x) {
-            return '<li><span>' + esc(x.title || x.fileName) + '</span> ' + (x.checkSummary ? '<span class="oj-quiet">' + esc(x.checkSummary) + '</span> ' : '')
+            return '<li><span>' + esc(x.title || x.fileName) + '</span> '
               + '<select id="oj-place-' + esc(x.id) + '"><option value="">— Which document is this? —</option>' + opts + '</select> '
               + btn('Place it', 'OnboardingJourney.placeReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-primary')
               + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '')
@@ -1476,22 +1470,21 @@
     var body = '';
     if (!i.employeeReturns) {
       // Returned anyway (the whole pack came back as one ZIP, say): shown, nothing to check or verify.
-      body = '<span class="oj-quiet">For reading only — nothing comes back.</span>' + (docs.length ? '<ul class="oj-return-files">' + docs.map(function (x) {
-        return '<li><span>' + esc(x.title || x.fileName) + '</span> <span class="oj-quiet">· came back with the pack — nothing to check</span> '
+      body = (docs.length ? '<ul class="oj-return-files">' + docs.map(function (x) {
+        return '<li><span>' + esc(x.title || x.fileName) + '</span> '
           + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>')
           + (c.review ? btn('Not this one', 'OnboardingJourney.unplaceReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
       }).join('') + '</ul>' : '');
     } else if (i.progress === 'not_applicable') {
-      body = '<span class="oj-quiet">Not applicable to this person — nothing needs to come back.' + (i.verificationNote ? ' ' + esc(i.verificationNote) : '') + '</span>';
+      body = i.verificationNote ? '<span class="oj-quiet">' + esc(i.verificationNote) + '</span>' : '';
     } else if (!docs.length) {
-      body = '<span class="oj-quiet">' + (i.required ? 'Waiting for it to come back.' : 'If applicable — nothing received yet.') + '</span>';
+      body = '';
     } else {
       body = '<ul class="oj-return-files">' + docs.map(function (x) {
         var flags = [];
         if (x.signatureStatus === 'missing') flags.push('<span class="oj-warn">no signature</span>');
         if (x.check && x.check.status === 'attention') flags.push('<span class="oj-warn">' + esc(x.checkSummary || 'blank fields') + '</span>');
         else if (x.check && x.check.status === 'unreadable') flags.push('<span class="oj-quiet">' + esc(x.checkSummary) + '</span>');
-        else if (x.check && x.check.status === 'ok') flags.push('<span class="oj-ok">' + esc(x.checkSummary) + '</span>');
         return '<li><span>' + esc(x.title || x.fileName) + '</span>' + (flags.length ? ' <span class="oj-quiet">· ' + flags.join(' · ') + '</span>' : '') + ' '
           + (x.previewKind ? btn('View', 'OnboardingJourney.previewReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small') : '<a class="oj-btn oj-btn-small" href="' + esc(x.downloadUrl) + '">Download</a>')
           + (c.review ? btn('Not this one', 'OnboardingJourney.unplaceReturn(\'' + jsq(x.id) + '\')', 'oj-btn-small oj-btn-quiet') : '') + '</li>';
@@ -1524,7 +1517,6 @@
     var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
     var unrecognised = active.filter(function (x) { return x.matchStatus === 'unrecognised'; });
     var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong>'
-      + (!sent ? '<p class="oj-quiet">The pack has not been marked as sent yet. You can still upload anything the employee has already returned.</p>' : '')
       + '<div class="oj-actions">'
       + '<label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
       + '<label class="oj-btn oj-file">Upload a folder<input type="file" multiple webkitdirectory directory hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
@@ -1775,7 +1767,6 @@
       return '<tr><td>' + esc(l.leaveTypeName || l.leaveTypeId) + '</td><td>' + esc(l.calculationType) + '</td><td>' + esc(l.annualNumberOfUnits == null ? '' : l.annualNumberOfUnits) + '</td><td>' + esc(l.fullTimeNumberOfUnitsPerPeriod == null ? '' : l.fullTimeNumberOfUnitsPerPeriod) + '</td><td>' + (locked ? '' : '<button type="button" class="oj-link" onclick="OnboardingJourney.removePayrollLeave(' + i + ')">Remove</button>') + '</td></tr>';
     }).join('');
     return '<div class="oj-step" id="oj-payroll-config"><div class="oj-step-head"><span class="oj-step-n">1</span><strong>Employment and pay configuration</strong>' + (X.config ? '<span class="oj-chip is-done">Saved</span>' : '<span class="oj-chip is-you">Needs your input</span>') + '</div>'
-      + '<p class="oj-quiet">Prefilled from the offer terms. Nothing here is inferred by the portal: you choose the Xero earnings rate, calendar, tax scale and leave lines, and approve the salary or rate.</p>'
       + xeroLists
       + '<div class="oj-form-grid">'
       + f('Employee number (optional)', 'employeeNumber', c.employeeNumber, { maxlength: 60 })
@@ -1871,7 +1862,7 @@
     else body += '<p class="oj-quiet">' + esc(P.integration.note) + '</p>';
     var chip = X && X.state !== 'NOT_STARTED' ? '<span class="oj-chip ' + xeroStateClass(X.state) + '">' + esc(X.label) + '</span>' : '<span class="oj-chip ' + (P.approved ? 'is-done' : P.ready ? 'is-you' : 'is-quiet') + '">' + esc(P.label) + '</span>';
     return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-payroll"><header><h2><span class="oj-stage-n">$</span>Payroll &amp; Xero Setup</h2>' + chip + '</header>'
-      + '<p class="oj-stage-summary">' + P.readyCount + ' of ' + P.total + ' lines ready. Everything here was gathered during onboarding; confirm it rather than typing it again.</p>' + body + '</section>';
+      + '<p class="oj-stage-summary">' + P.readyCount + ' of ' + P.total + ' lines ready.</p>' + body + '</section>';
   }
 
   // ── Payroll & Xero actions ───────────────────────────────────────────────
@@ -1949,10 +1940,9 @@
   function readinessBlock(R) {
     var checks = R.checks || [];
     var gating = checks.filter(function (k) { return !k.advisory; });
-    var readyCount = gating.filter(function (k) { return k.state === 'ready'; }).length;
     var head = R.ready
-      ? '<h3>Ready to send</h3><p class="oj-quiet">Everything the induction pack needs is in place.</p>'
-      : '<h3>Before the induction pack can go</h3><p class="oj-quiet">' + readyCount + ' of ' + gating.length + ' ready. Each item below says what is still to happen.</p>';
+      ? '<h3>Ready to send</h3>'
+      : '<h3>Before the induction pack can go</h3>';
     var rows = checks.map(function (k) {
       var ok = k.state === 'ready';
       var cls = ok ? 'is-ready' : k.state === 'in_progress' ? 'is-progress' : 'is-open';
@@ -1960,7 +1950,7 @@
       // The chip carries the count; the reasons say which ones, so a count-only chip is not repeated.
       var chip = ok ? 'Ready' : items.length ? (items.length + ' to go') : k.detail;
       return '<li class="oj-rdy ' + cls + '"><div class="oj-rdy-head"><span class="oj-rdy-mark" aria-hidden="true">' + (ok ? '✓' : k.state === 'in_progress' ? '…' : '') + '</span>'
-        + '<span class="oj-rdy-label">' + esc(k.label) + (k.advisory ? ' <span class="oj-quiet">(shown, not a gate)</span>' : '') + '</span>'
+        + '<span class="oj-rdy-label">' + esc(k.label) + '</span>'
         + '<span class="oj-chip ' + (ok ? 'is-done' : k.state === 'in_progress' ? 'is-employee' : 'is-quiet') + '">' + esc(chip) + '</span></div>'
         + (items.length ? '<ul class="oj-rdy-items">' + items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '')
         + '</li>';
@@ -2010,7 +2000,7 @@
         + (p.credentials || []).map(function (c) { var exp = c.expiryDate ? new Date(c.expiryDate) < new Date() : false; return '<li><span>' + esc(c.name) + (c.number ? ' <span class="oj-quiet">' + esc(c.number) + '</span>' : '') + '</span><span class="' + (exp ? 'oj-warn' : 'oj-quiet') + '">' + (c.expiryDate ? (exp ? 'EXPIRED ' : 'expires ') + esc(fmtDate(c.expiryDate)) : 'no expiry') + ' · ' + esc(c.status === 'verified' ? 'verified' : 'pending verification') + (c.documentId ? ' · original attached' : '') + '</span></li>'; }).join('')
         + '</ul>' : '<p class="oj-quiet">Nothing yet.</p>') + '</div>'
       + '<div><h3>Vehicle</h3>' + dl(v ? row('Registration', v.registration) + row('Vehicle', [v.make, v.model].filter(Boolean).join(' ')) + row('Registration expiry', v.registrationExpiry ? fmtDate(v.registrationExpiry) : '') + row('Insurance expiry', v.insuranceExpiry ? fmtDate(v.insuranceExpiry) : '') : '') + '</div>'
-      + '</div><p class="oj-quiet">Filled from verified onboarding documents. The Compliance Register, profile page and expiry reminders read these same records.</p>';
+      + '</div>';
     return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2><span class="oj-chip is-quiet">Source of truth</span></header>' + body + '</section>';
   }
 
@@ -2165,7 +2155,6 @@
       body: '<div class="oj-lt">'
         + '<div class="oj-lt-bar"><span class="oj-chip ' + (t.source === 'practice' ? 'is-you' : 'is-quiet') + '">' + esc(t.source === 'practice' ? 'Your wording, v' + t.version + (t.savedByName ? ' · saved by ' + t.savedByName : '') : 'The original letter') + '</span>'
         + '<label class="oj-lt-insert">Insert a field <select onchange="OnboardingJourney.letterInsert(this)"><option value="">Choose…</option>' + fields + '</select></label></div>'
-        + '<p class="oj-lt-help">The <span class="oj-lt-tag is-demo">highlighted fields</span> are filled in by the portal for each person — the candidate\'s name, the salary, the dates. Move or delete them like a word; the text around them is yours to change.</p>'
         + '<div class="oj-lt-sheet"><div class="oj-lt-page is-doc">'
         + '<div class="oj-lt-header" aria-hidden="true"><span>OPAL THERAPY</span><span>Letter of Offer</span><span>' + esc(labels.OPAL_LOO_CANDIDATE_FULL_NAME || 'Candidate full name') + '</span></div>'
         + rows
