@@ -338,6 +338,34 @@ async function ensureTasks(organisationId, assignmentId, tasks, q = pool) {
   return inserted;
 }
 
+/**
+ * Bring an existing checklist into line with the current template: insert
+ * tasks the template gained, refresh copy and ordering on the ones it kept,
+ * and drop retired tasks nobody has started. Rows that are done, skipped or
+ * in progress are never removed — they are part of the record's history.
+ */
+async function reconcileTasks(organisationId, assignmentId, tasks, q = pool) {
+  if (!isUuid(assignmentId)) return { inserted: 0, updated: 0, removed: 0 };
+  const inserted = await ensureTasks(organisationId, assignmentId, tasks, q);
+  let updated = 0;
+  for (const t of tasks) {
+    const { rowCount } = await q.query(
+      `UPDATE onboarding_internal_tasks
+          SET title = $3, description = $4, sort_order = $5
+        WHERE assignment_id = $1 AND code = $2
+          AND (title IS DISTINCT FROM $3 OR description IS DISTINCT FROM $4 OR sort_order IS DISTINCT FROM $5)`,
+      [assignmentId, str(t.code, 60), str(t.title, 200), str(t.description, 1000), Number(t.sortOrder) || 0]
+    );
+    updated += rowCount;
+  }
+  const { rowCount: removed } = await q.query(
+    `DELETE FROM onboarding_internal_tasks
+      WHERE assignment_id = $1 AND status = 'pending' AND NOT (code = ANY($2::text[]))`,
+    [assignmentId, tasks.map((t) => str(t.code, 60))]
+  );
+  return { inserted, updated, removed };
+}
+
 async function setTaskStatus(assignmentId, code, { status, actorId, note, detail }, q = pool) {
   const finished = status === 'done' || status === 'skipped';
   const { rows } = await q.query(
@@ -482,6 +510,7 @@ module.exports = {
   mapTasks,
   getTask,
   ensureTasks,
+  reconcileTasks,
   setTaskStatus,
   assignTask,
   mapRequirements,

@@ -191,8 +191,14 @@ async function ensureInduction(assignment, tasks, { force = false } = {}) {
   // Internal setup starts the moment Phase 1 settles (force, from the pack),
   // and in any case once the record reaches the induction statuses.
   const stage3 = ['ready_to_activate', 'activated', 'completed'].includes(assignment.status);
-  if ((!stage3 && !force) || (tasks && tasks.length)) return tasks || [];
+  if (!stage3 && !force) return tasks || [];
   const list = journey.buildInductionTasks(assignment);
+  if (tasks && tasks.length) {
+    // The checklist already exists: keep it in step with the current template
+    // so a task added or retired since shows on every record, not only new ones.
+    const delta = await jdb.reconcileTasks(assignment.organisation_id, assignment.id, list);
+    return delta.inserted || delta.updated || delta.removed ? jdb.listTasks(assignment.id) : tasks;
+  }
   await jdb.ensureTasks(assignment.organisation_id, assignment.id, list);
   // The portal account itself exists as soon as the profile does.
   if (assignment.user_id) await jdb.setTaskStatus(assignment.id, 'portal_account', { status: 'done', actorId: null, note: 'Pre-employee account created with the profile' }).catch(() => {});

@@ -553,6 +553,31 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     expect(two.body.tasks).toHaveLength(one.body.tasks.length);
   });
 
+  test('an existing checklist is reconciled with the template: retired pending tasks go, new ones arrive, copy refreshes', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const { base, record } = await toReadyToActivate(agent);
+    const id = record.id;
+    await agent.get(base);
+
+    // Age the record: a retired task still pending, a retired task already done,
+    // the Splose task missing, and the payroll task carrying its old title.
+    await db.pool.query(`DELETE FROM onboarding_internal_tasks WHERE assignment_id = $1 AND code = 'splose_access'`, [id]);
+    await db.pool.query(
+      `INSERT INTO onboarding_internal_tasks (organisation_id, assignment_id, code, title, sort_order, status)
+       SELECT organisation_id, assignment_id, 'systems_access', 'Grant system access', 40, 'pending' FROM onboarding_internal_tasks WHERE assignment_id = $1 LIMIT 1`, [id]);
+    await db.pool.query(
+      `INSERT INTO onboarding_internal_tasks (organisation_id, assignment_id, code, title, sort_order, status)
+       SELECT organisation_id, assignment_id, 'first_week_checkin', 'First week check-in', 90, 'done' FROM onboarding_internal_tasks WHERE assignment_id = $1 LIMIT 1`, [id]);
+    await db.pool.query(`UPDATE onboarding_internal_tasks SET title = 'Set up in payroll (Xero)' WHERE assignment_id = $1 AND code = 'payroll_setup'`, [id]);
+
+    const rec = await agent.get(base);
+    const byCode = Object.fromEntries(rec.body.tasks.map((t) => [t.code, t]));
+    expect(byCode.systems_access).toBeUndefined();
+    expect(byCode.first_week_checkin.status).toBe('done');
+    expect(byCode.splose_access.title).toBe('Set up Splose access');
+    expect(byCode.payroll_setup.title).toBe('Set up Xero (Payroll) access');
+  });
+
   test('portal access runs as a task; the last task closes the record', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record, base } = await toReadyToActivate(agent);
