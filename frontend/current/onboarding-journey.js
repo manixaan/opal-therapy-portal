@@ -2443,15 +2443,13 @@
     return act('/offer/verify', flagged ? { acknowledge: true } : {}, function (r) { return (r.release && r.release.message) || 'Submitted — the offer is accepted.'; });
   }
   async function declineOffer() {
-    var reason = await portalPrompt('Record that the candidate declined. Reason (optional):');
-    if (reason === null) return;
-    return act('/offer/decline', { reason: reason || undefined }, 'Recorded as declined.');
+    if (!await portalConfirm('Record that the candidate declined?')) return;
+    return act('/offer/decline', {}, 'Recorded as declined.');
   }
 
   async function withdrawOffer() {
-    var reason = await portalPrompt('Withdraw this letter of offer? You can add a reason for the record (optional).');
-    if (reason === null) return;
-    return act('/offer/withdraw', { reason: reason || undefined }, 'Offer withdrawn.');
+    if (!await portalConfirm('Withdraw this letter of offer?', { danger: true })) return;
+    return act('/offer/withdraw', {}, 'Offer withdrawn.');
   }
 
   async function skipOffer() {
@@ -2505,9 +2503,8 @@
   }
   function packPrepare() { return refreshRecordAfter(packAct('/prepare', {}, 'Pack prepared.')); }
   async function packItem(id, verb) {
-    var reason;
-    if (verb === 'remove') { reason = await portalPrompt('Remove this document from this person\'s pack? Reason (optional):'); if (reason === null) return; }
-    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, { reason: reason || undefined }, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.', 'POST', phaseOfItem(id)));
+    if (verb === 'remove' && !await portalConfirm('Remove this document from this person\'s pack?', { danger: true })) return;
+    return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id) + '/' + verb, {}, verb === 'remove' ? 'Removed from this pack only.' : 'Restored.', 'POST', phaseOfItem(id)));
   }
   function packFlag(id, field, value) { var body = {}; body[field] = value; return refreshRecordAfter(packAct('/items/' + encodeURIComponent(id), body, null, 'PATCH', phaseOfItem(id))); }
   async function packRename(id, current) {
