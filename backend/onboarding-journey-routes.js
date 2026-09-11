@@ -191,7 +191,7 @@ async function ensureInduction(assignment, tasks, { force = false } = {}) {
   // Internal setup starts the moment Phase 1 settles (force, from the pack),
   // and in any case once the record reaches the induction statuses.
   const stage3 = ['ready_to_activate', 'activated', 'completed'].includes(assignment.status);
-  if (!stage3 && !force) return tasks || [];
+  if (!stage3 && !force && !(tasks && tasks.length)) return [];
   const list = journey.buildInductionTasks(assignment);
   if (tasks && tasks.length) {
     // The checklist already exists: keep it in step with the current template
