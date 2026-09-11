@@ -32,14 +32,15 @@ then leave a morning brief the team can act on.
    `SUPABASE_URL=<value from env> node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json`
    The environment supplies the Supabase key on the request; you do not need
    it and must not look for it. If this fails, write a "DID NOT RUN" brief
-   (section 5) and stop.
+   (section 7) and stop.
 5. Note the last audit date from `docs/qa/nightly/` (newest `YYYY-MM-DD.md`).
    `git log --since=<that date> --stat -- backend frontend/current` is your
    change list. On the first run, treat the last 14 days as the window.
 
 ## Verification — per feature in the snapshot
 
-Work through every feature with stage other than `idea`. For each one:
+Work through every feature. Features still at `idea` stage get steps 1 and 5
+only (they are usually `untouched`); every other feature gets all six steps.
 
 1. **Locate.** From the title, idea, strategy and technical_plan, find the
    subsystem: the `*-routes.js` file(s) (grep `backend/server.js`), the data
@@ -76,6 +77,48 @@ Work through every feature with stage other than `idea`. For each one:
    evidence (e.g. `live` or `complete` but you found `built-untested`), flag a
    *disagreement*. You do not change the tracker; you report the gap.
 
+## One folder per tracker idea — `docs/qa/nightly/features/<slug>/`
+
+The tracker is where the humans write what they want. This folder is where
+the audit turns each of those wishes into a place to start. For every
+feature in the snapshot (including `idea` stage), derive `<slug>` from the
+feature title (lowercase, hyphens, max 60 chars) and maintain two files:
+
+- `STATUS.md` — rewritten every night. Header lines: feature title, tracker
+  stage, tracker environment, evidence label, whether it was *addressed* in
+  the change window (commits that touched its located files), whether it is
+  *created* at all (any located code). Then: located files, tests and their
+  results, open tasks from the tracker, commits in the window that touched
+  it, and the disagreement note if any.
+- `START.md` — the starter prompt. Write it only when the label is not
+  `proven`; when a feature becomes `proven`, replace START.md with two lines
+  saying it is proven and which test proves it. Rules for START.md:
+  1. Open with the skill line: `/opal-fast-change`, `/opal-feature` or
+     `/opal-critical` by the rule in "Prompts for the morning".
+  2. Next, quote the tracker's own words under headings **Idea**, **Why**,
+     **Who uses it**, **What they see**, **What should happen**, **Outcome**
+     and every recorded **Decision**, verbatim. These are the humans'
+     authentic direction. Never paraphrase, soften, or add design opinions
+     to them. If a field is empty, write "(not yet written in the tracker)"
+     so the person knows to fill it in there, not here.
+  3. Then **Where it lives today**: the files you located, or "nothing yet".
+  4. Then **Start here**: the smallest concrete first step for a Claude Code
+     session — which file to open, which test to add or make pass, which
+     existing pattern in the repo to copy (name the neighbouring feature).
+     Three to six lines. This is the only part you author.
+  5. Then **Done means**: the test that must pass and the evidence label it
+     should reach.
+  6. End with `Tracker: <feature id>` so the session can be traced back.
+  Keep the whole file under 80 lines. A human will edit it before using it;
+  leave it plain, no tables.
+
+Never delete a feature folder. If a feature was archived in the tracker,
+add `ARCHIVED` as the first line of STATUS.md and leave the folder.
+
+Maintain `docs/qa/nightly/features/README.md` as an index: one line per
+folder with stage, evidence label, addressed-this-window yes/no, and a link
+to its START.md.
+
 ## Weekly deep run (Sundays only, UTC)
 
 On Sunday runs also execute the complete suites once — `npm test`, then
@@ -101,9 +144,11 @@ fenced blocks or a "Technical detail" section at the end. Structure:
    `/opal-critical` for anything touching auth, permissions, clinical or
    employee data, AI, accounting, or migrations. Each prompt names the files
    you located and the test that should pass when done.
-5. **What changed since last audit.** Commits in the window, grouped by
+5. **Ideas without a start.** Features whose folder was created or whose
+   START.md changed tonight, with one line each on why.
+6. **What changed since last audit.** Commits in the window, grouped by
    subsystem, and any subsystem that changed but has no tracker feature.
-6. **Technical detail.** Commands run, their results, anything you could not
+7. **Technical detail.** Commands run, their results, anything you could not
    locate, and open questions for the team.
 
 Also overwrite `docs/qa/nightly/LATEST.md` with the same content.

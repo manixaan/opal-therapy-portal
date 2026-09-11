@@ -15,6 +15,12 @@ branch `claude/nightly-audit`, with a pull request that is never merged.
   `scripts/nightly-audit/PROMPT.md`.
 - *Disagreement* — the tracker stage claims more than the evidence supports.
   The agent reports it; a person decides what to do.
+- *Feature folders* — `features/<slug>/` holds one folder per tracker idea:
+  `STATUS.md` (rewritten nightly: created? addressed this window? evidence)
+  and `START.md`, a starter prompt that quotes the tracker's own idea, why,
+  who, what-they-see, what-should-happen and decisions verbatim, then adds
+  the smallest first step for a Claude Code session. Humans edit START.md
+  before using it; the agent never paraphrases the human direction.
 - *Report only* — the agent changes nothing outside this folder and writes
   nothing back to the tracker. Write-back is a later, opt-in step.
 - *Weekly deep run* — Sunday UTC (Monday morning Perth) also runs the full
