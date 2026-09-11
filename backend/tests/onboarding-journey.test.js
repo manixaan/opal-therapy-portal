@@ -182,13 +182,13 @@ describe('Stage 2 — Onboarding Documentation', () => {
 describe('Stage 3 — Internal Induction & Access', () => {
   const accepted = offer({ status: 'accepted', responded_at: NOW });
 
-  test('the checklist is internal set-up only — no manager follow-ups; the role changes the systems wording', () => {
+  test('the checklist is internal set-up only — no manager follow-ups, no generic systems-access task', () => {
     const ot = journey.buildInductionTasks(assignment(), { now: NOW });
     const admin = journey.buildInductionTasks(assignment({ is_treating_therapist: false, role_category: 'administration' }), { now: NOW });
     expect(ot.map((t) => t.code)).not.toContain('clinical_supervision');
     expect(ot.map((t) => t.code)).not.toContain('first_week_checkin');
-    expect(ot.find((t) => t.code === 'systems_access').title).toMatch(/clinical system access/);
-    expect(admin.find((t) => t.code === 'systems_access').title).toBe('Grant system access');
+    expect(ot.map((t) => t.code)).not.toContain('systems_access');
+    expect(admin.map((t) => t.code)).not.toContain('systems_access');
     expect(ot.find((t) => t.code === 'splose_access').title).toBe('Set up Splose access');
     expect(ot.find((t) => t.code === 'payroll_setup').title).toBe('Set up Xero (Payroll) access');
     expect(ot.find((t) => t.code === 'portal_access').automation).toBe('activate_portal_access');

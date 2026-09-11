@@ -68,9 +68,6 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
   const beforeStart = (days) => afterStart(-days);
   const soonest = (d) => (d && d.getTime() > now.getTime() ? d : afterStart(2) || null);
 
-  const treating = assignment.is_treating_therapist === true
-    || assignment.role_category === 'occupational_therapist';
-
   const tasks = [
     {
       code: 'portal_account', sortOrder: 5,
@@ -102,14 +99,6 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
       code: 'splose_access', sortOrder: 35,
       title: 'Set up Splose access',
       description: 'Splose practitioner login, calendar and client record access appropriate to the role.',
-      dueAt: soonest(beforeStart(1)),
-    },
-    {
-      code: 'systems_access', sortOrder: 40,
-      title: treating ? 'Grant practice management and clinical system access' : 'Grant system access',
-      description: treating
-        ? 'Practice management system login, calendar publishing and case note access appropriate to the role.'
-        : 'Logins for the systems the position uses.',
       dueAt: soonest(beforeStart(1)),
     },
     {
