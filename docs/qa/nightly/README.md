@@ -21,8 +21,14 @@ branch `claude/nightly-audit`, with a pull request that is never merged.
   who, what-they-see, what-should-happen and decisions verbatim, then adds
   the smallest first step for a Claude Code session. Humans edit START.md
   before using it; the agent never paraphrases the human direction.
-- *Report only* — the agent changes nothing outside this folder and writes
-  nothing back to the tracker. Write-back is a later, opt-in step.
+- *Write-back* — after classifying, the agent posts into the Development
+  Manager: each feature's "Claude update" and "Next action" (shown on the
+  feature card and feature page), one assistant message carrying the starter
+  prompt in the feature's Claude thread, and one activity row per feature
+  plus one for the day. It never changes stage, environment, tasks,
+  decisions or anything a person wrote. Script: `post-tracker.mjs`.
+- *Report only elsewhere* — outside `docs/qa/nightly/` and those tracker
+  fields the agent changes nothing.
 - *Weekly deep run* — Sunday UTC (Monday morning Perth) also runs the full
   unit and integration suites. Other nights run only targeted tests.
 
@@ -32,6 +38,7 @@ branch `claude/nightly-audit`, with a pull request that is never merged.
 |---|---|
 | Agent prompt | `scripts/nightly-audit/PROMPT.md` |
 | Tracker fetch | `scripts/nightly-audit/fetch-tracker.mjs` |
+| Tracker write-back | `scripts/nightly-audit/post-tracker.mjs` |
 | Schedule | claude.ai → Code → Routines ("Nightly tracker audit") |
 | Environment | claude.ai cloud environment: `SUPABASE_URL` variable, Supabase key as an API credential for `*.supabase.co`, network access "Custom" allowing `*.supabase.co` |
 

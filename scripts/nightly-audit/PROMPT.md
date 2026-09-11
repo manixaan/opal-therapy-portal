@@ -11,7 +11,10 @@ then leave a morning brief the team can act on.
   `e2e/` or `.github/`. The only files you create or edit are under
   `docs/qa/nightly/`.
 - Never deploy, never run `deploy/*.sh`, never touch Azure, Splose, Xero,
-  Outlook or any external system. Never write to the tracker's database.
+  Outlook or any external system. The only writes to the tracker's database
+  go through `scripts/nightly-audit/post-tracker.mjs` (see "Write back to the
+  tracker"); never change a feature's stage, environment, tasks, decisions,
+  build prompt or any field a person wrote.
 - Never print secrets, env values, or clinical / employee data. The test
   databases here contain synthetic data only; still, quote nothing from them.
 - If any step cannot run, the brief must say so plainly at the top. Never
@@ -158,6 +161,36 @@ fenced blocks or a "Technical detail" section at the end. Structure:
    locate, and open questions for the team.
 
 Also overwrite `docs/qa/nightly/LATEST.md` with the same content.
+
+## Write back to the tracker
+
+The team looks at the Development Manager, not at this repository, so the
+night's findings go there too. Build `/tmp/writeback.json`:
+
+```json
+{
+  "audit_date": "YYYY-MM-DD",
+  "brief": { "summary": "the Status line, then the Do-this-first items as one short paragraph" },
+  "features": [
+    {
+      "id": "<feature id from the snapshot>",
+      "claude_update": "one friendly sentence: the evidence label and why, plain English, no file paths",
+      "next_action": "the single next step for a person, under 200 characters",
+      "start_prompt": "the full START.md text, or null when the feature is proven",
+      "activity_summary": "one line for the feature's activity feed, e.g. 'Nightly audit: built but untested — 2 tests missing'"
+    }
+  ]
+}
+```
+
+Include every feature in the snapshot. Then run
+`NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/post-tracker.mjs /tmp/writeback.json`
+from `backend/`. It overwrites only `claude_update` and `next_action`, appends
+one assistant message carrying the starter prompt to each feature's Claude
+thread, and adds one activity row per feature plus one for the workspace. It
+is idempotent per night. Do this **before** the git push so a GitHub failure
+never costs the tracker its update; record the script's output line in the
+brief's Technical detail.
 
 ## Deliver
 
