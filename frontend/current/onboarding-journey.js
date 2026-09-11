@@ -442,7 +442,7 @@
     var included = items.filter(function (i) { return i.status === 'included'; }); var removed = items.filter(function (i) { return i.status !== 'included'; });
     var grouped = groupPackItems(included); var groups = grouped.groups;
     var order = sectionOrder(phase).filter(function (k) { return groups[k]; });
-    var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction Pack' : 'Onboarding Documentation Pack') + '</h2></header>'
+    var out = '<section class="oj-panel oj-stage"><header><h2><span class="oj-stage-n">' + (phase === 'induction' ? 3 : 2) + '</span>' + (phase === 'induction' ? 'Internal Induction' : 'Onboarding Documentation Pack') + '</h2></header>'
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<div id="oj-defaults-add" hidden></div>'
@@ -904,19 +904,19 @@
     var cur = currentPhase(d);
     var view = Math.min(S.phaseView || cur, cur);
     if (view === 1) return offerPanel(d);
-    if (view === 2) return docTabs(d);
+    if (view === 2) return tabset(d, DOC_TABS, 'doc', 'Onboarding documentation');
     var outstanding = docsOutstanding(d);
     var pending = outstanding
       ? '<div class="ob-note is-warn oj-docs-pending" role="status"><strong>Onboarding Documentation still has ' + outstanding + ' document(s) to come back.</strong> The forms are verified, so internal induction can begin; Stage 2 is ticked off once every return is in. '
         + '<button type="button" class="oj-link" onclick="OnboardingJourney.viewPhase(2)">Open Onboarding Documentation</button></div>'
       : '';
-    return pending + phase3Panel(d) + inductionPanel(d) + payrollPanel(d) + profilePanel(d);
+    return pending + tabset(d, INDUCTION_TABS, 'induction', 'Internal induction') + profilePanel(d);
   }
 
   function viewPhase(n) { S.phaseView = n; var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane); }
 
-  // ── Stage 2 tabs ──────────────────────────────────────────────────────────
-  // Phase 2 is three jobs that happen side by side: the email and its
+  // ── Stage 2 / Stage 3 tabs ────────────────────────────────────────────────
+  // Each stage is three jobs that happen side by side: the email and its
   // attachments, the internal setup checklist, and payroll. Each gets a
   // browser-style tab so the page shows one job at a time.
 
@@ -926,23 +926,31 @@
     ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
   ];
 
-  function docTabs(d) {
-    var active = S.docTab || DOC_TABS[0][0];
-    if (!DOC_TABS.some(function (t) { return t[0] === active; })) active = DOC_TABS[0][0];
-    var tabs = '<div class="oj-tabs" role="tablist" aria-label="Onboarding documentation">' + DOC_TABS.map(function (t) {
+  var INDUCTION_TABS = [
+    ['email', 'Email & attachments', function (d) { return phase3Panel(d); }],
+    ['setup', 'Internal setup', function (d) { return inductionPanel(d); }],
+    ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
+  ];
+
+  /** One browser-style tabset; `set` names the remembered tab (S.docTab / S.inductionTab). */
+  function tabset(d, TABS, set, label) {
+    var key = set + 'Tab';
+    var active = S[key] || TABS[0][0];
+    if (!TABS.some(function (t) { return t[0] === active; })) active = TABS[0][0];
+    var tabs = '<div class="oj-tabs" role="tablist" aria-label="' + esc(label) + '">' + TABS.map(function (t) {
       var on = t[0] === active;
-      return '<button type="button" role="tab" class="oj-tab' + (on ? ' is-active' : '') + '" id="oj-tab-' + t[0] + '" aria-selected="' + on + '" aria-controls="oj-tabpane-' + t[0] + '" onclick="OnboardingJourney.docTab(\'' + t[0] + '\')">' + esc(t[1]) + '</button>';
+      return '<button type="button" role="tab" class="oj-tab' + (on ? ' is-active' : '') + '" id="oj-tab-' + t[0] + '" aria-selected="' + on + '" aria-controls="oj-tabpane-' + t[0] + '" onclick="OnboardingJourney.docTab(\'' + t[0] + '\', \'' + set + '\')">' + esc(t[1]) + '</button>';
     }).join('') + '</div>';
-    var panes = DOC_TABS.map(function (t) {
+    var panes = TABS.map(function (t) {
       var html = t[2](d) || '<section class="oj-panel oj-stage is-pending"><p class="oj-quiet">Nothing here yet — this opens once the earlier steps are done.</p></section>';
       return '<div class="oj-tabpane" role="tabpanel" id="oj-tabpane-' + t[0] + '" aria-labelledby="oj-tab-' + t[0] + '"' + (t[0] === active ? '' : ' hidden') + '>' + html + '</div>';
     }).join('');
     return '<div class="oj-tabset">' + tabs + panes + '</div>';
   }
 
-  /** Switch the stage 2 tab in place — no re-render, so nothing typed is lost. */
-  function docTab(key) {
-    S.docTab = key;
+  /** Switch a stage's tab in place — no re-render, so nothing typed is lost. */
+  function docTab(key, set) {
+    S[(set || 'doc') + 'Tab'] = key;
     var set = doc.querySelector('.oj-tabset'); if (!set) return;
     set.querySelectorAll('.oj-tab').forEach(function (b) { var on = b.id === 'oj-tab-' + key; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     set.querySelectorAll('.oj-tabpane').forEach(function (p) { p.hidden = p.id !== 'oj-tabpane-' + key; });
@@ -1557,7 +1565,7 @@
     out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong></div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>';
 
-    if (c.review) out += returnsBlock(d, P, phase, sent);
+    if (c.review && phase !== 'induction') out += returnsBlock(d, P, phase, sent);
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
@@ -1970,11 +1978,9 @@
     var c = I.can || d.can; var E = I.email || {}; var sent = I.sent;
     var state = I.tracking && I.tracking.total && I.tracking.done === I.tracking.total && sent ? 'complete' : sent ? 'active' : R.ready ? 'active' : 'parallel';
     var body = '';
-    body += readinessBlock(R);
     if (sent) {
       body += '<div class="oj-sent-banner"><strong>Internal Induction Sent</strong><span>Due: ' + esc(fmtDate(E.dueAt)) + '</span><span class="oj-quiet">sent ' + esc(fmtDateTime(E.sentAt)) + (I.tracking ? ' · ' + I.tracking.done + ' of ' + I.tracking.total + ' induction items complete' : '') + '</span></div>';
     }
-    body += packTable(d, I, 'induction');
     if (!sent && c.assign) {
       body += '<div class="oj-step is-active" id="oj-induction-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Phase 3 email — to ' + esc(d.record.applicantEmail || '') + '</strong>' + (E.draftId ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>'
         + '<div class="oj-field"><label for="oj-ie-subject">Subject</label><input id="oj-ie-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
@@ -1984,7 +1990,9 @@
           : '<div class="oj-actions oj-actions-sent">' + btn('Mark as sent — I sent it another way', 'OnboardingJourney.packMarkSent(\'induction\')') + '</div>')
         + '</div>';
     }
-    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-phase3"><header><h2><span class="oj-stage-n">3</span>Phase 3 — Internal Induction Pack</h2><span class="oj-chip ' + (state === 'complete' ? 'is-done' : sent ? 'is-employee' : R.ready ? 'is-you' : 'is-quiet') + '">' + esc(state === 'complete' ? 'Complete' : sent ? 'Sent — tracking' : R.ready ? 'Ready to send' : 'Not ready') + '</span></header>' + body + '</section>';
+    body += packTable(d, I, 'induction');
+    body += readinessBlock(R);
+    return '<section class="oj-panel oj-stage is-' + esc(state) + '" id="oj-phase3"><header><h2><span class="oj-stage-n">3</span>Internal Induction</h2><span class="oj-chip ' + (state === 'complete' ? 'is-done' : sent ? 'is-employee' : R.ready ? 'is-you' : 'is-quiet') + '">' + esc(state === 'complete' ? 'Complete' : sent ? 'Sent — tracking' : R.ready ? 'Ready to send' : 'Not ready') + '</span></header>' + body + '</section>';
   }
 
   /** The employee profile — the source of truth every register reads. */
@@ -2692,7 +2700,7 @@
     return refreshRecordAfter(Promise.resolve(res));
   }
   async function packMarkSent(phase) {
-    if (!await portalConfirm(phase === 'induction' ? 'Mark the Internal Induction Pack as sent? The record tracks the induction items from here.' : 'Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
+    if (!await portalConfirm(phase === 'induction' ? 'Mark the Internal Induction as sent? The record tracks the induction items from here.' : 'Mark the onboarding documentation as sent? The record moves to waiting for the returned documents.')) return;
     return refreshRecordAfter(packAct('/mark-sent', {}, phase === 'induction' ? 'Internal Induction Sent.' : 'Marked as sent. Waiting for the returned documentation.', 'POST', phase));
   }
   function packUnmarkSent(phase) { return refreshRecordAfter(packAct('/unmark-sent', {}, 'Back to not sent.', 'POST', phase)); }
@@ -2840,8 +2848,8 @@
 
   function scrollTo(id) {
     var el = doc.getElementById(id); if (!el) return;
-    // A target inside a hidden stage 2 tab needs its tab in front first.
-    var pane = el.closest('.oj-tabpane'); if (pane && pane.hidden) docTab(pane.id.replace('oj-tabpane-', ''));
+    // A target inside a hidden stage 2 / stage 3 tab needs its tab in front first.
+    var pane = el.closest('.oj-tabpane'); if (pane && pane.hidden) docTab(pane.id.replace('oj-tabpane-', ''), S.phaseView === 2 ? 'doc' : 'induction');
     el.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
   function copy(text) {
