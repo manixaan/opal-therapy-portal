@@ -24,10 +24,15 @@ then leave a morning brief the team can act on.
 1. `cd` into the portal checkout (`opal-therapy-portal`). Read `CLAUDE.md`
    once for the repository map; do not read `frontend/archive/`, `handover/`,
    `reference/`, `node_modules/`.
-2. Start PostgreSQL and create the test role:
-   `service postgresql start` then, as the postgres OS user,
-   `psql -c "ALTER USER postgres PASSWORD 'audit'"` (any password; local only).
-3. `cd backend && npm ci`.
+2. The environment's setup script has already installed `backend/node_modules`,
+   started PostgreSQL and set the postgres password to `audit`. Verify with
+   `ls backend/node_modules/.bin/jest` and `service postgresql status`. If
+   PostgreSQL is down, `service postgresql start`. Do **not** run `npm ci` or
+   `npm install` yourself — the repository's permission settings put them
+   behind an approval prompt that nobody can answer overnight; if
+   `node_modules` is missing, write a "DID NOT RUN (node_modules missing —
+   check the environment setup script)" brief and stop.
+3. `cd backend`.
 4. Pull the tracker snapshot:
    `SUPABASE_URL=<value from env> node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json`
    The environment supplies the Supabase key on the request; you do not need
