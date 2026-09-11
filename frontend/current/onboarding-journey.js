@@ -1432,7 +1432,7 @@
       if (unplaced.length) {
         // Every document in the pack is a slot, read-only ones included: a statement that came back sits under its own heading.
         var placeable = included.filter(function (i) { return !i.itemKind || i.itemKind === 'document'; });
-        var opts = placeable.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + (i.employeeReturns ? '' : ' (for reading only)') + '</option>'; }).join('');
+        var opts = placeable.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.title) + (i.employeeReturns ? '' : ' (Read only)') + '</option>'; }).join('');
         out += '<div class="oj-unplaced"><strong>Not placed yet (' + unplaced.length + ')</strong><ul>'
           + unplaced.map(function (x) {
             return '<li><span>' + esc(x.title || x.fileName) + '</span> '
@@ -1662,7 +1662,7 @@
     var expects = [];
     if (i.itemKind === 'document') {
       if (i.employeeReturns) expects.push(i.required ? 'comes back, required' : 'comes back if provided');
-      else if (i.sendsDocument) expects.push('for reading only');
+      else if (i.sendsDocument) expects.push('Read only');
       if (i.employeeReturns && i.requiresVerification) expects.push('checked by us');
     }
     var droppable = editable && (!i.itemKind || i.itemKind === 'document');
