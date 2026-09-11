@@ -6,7 +6,7 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "NODE_ENV=development RESOURCE_HUB_STORAGE_PATH=/Users/antonyxavier/Documents/Opal-Resource-Store node backend/server.js"
+        "export PATH=\"$HOME/.nvm/versions/node/v26.8.1/bin:$PATH\"; NODE_ENV=development RESOURCE_HUB_STORAGE_PATH=\"$HOME/Documents/Opal-Resource-Store\" node backend/server.js"
       ],
       "port": 5001,
       "autoPort": false
