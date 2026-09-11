@@ -34,7 +34,8 @@ then leave a morning brief the team can act on.
    check the environment setup script)" brief and stop.
 3. `cd backend`.
 4. Pull the tracker snapshot:
-   `SUPABASE_URL=<value from env> node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json`
+   `NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json`
+   (`NODE_USE_ENV_PROXY=1` makes Node's `fetch` honour the sandbox's egress proxy; without it the request never reaches the credential proxy and fails with "Host not in allowlist".)
    The environment supplies the Supabase key on the request; you do not need
    it and must not look for it. If this fails, write a "DID NOT RUN" brief
    (section 7) and stop.

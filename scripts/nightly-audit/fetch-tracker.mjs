@@ -17,6 +17,9 @@
  *   SUPABASE_URL=https://<ref>.supabase.co node scripts/nightly-audit/fetch-tracker.mjs [out.json]
  *
  * Read-only: this script issues GET requests only.
+ *
+ * In the cloud sandbox run with NODE_USE_ENV_PROXY=1 so Node's fetch honours
+ * HTTPS_PROXY; otherwise the request bypasses the credential proxy.
  */
 import { writeFile } from 'node:fs/promises';
 
