@@ -448,7 +448,6 @@
       + '<div class="oj-pack-head"><div><strong>' + included.length + ' items by default</strong> <span class="oj-quiet">for this package. Required, Employee returns and Verified by us start as No — set them here for each document.</span></div>'
       + (edit ? '<div class="oj-actions">' + btn('Restore defaults', 'OnboardingJourney.defaultsRestore(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
       + '<div id="oj-defaults-add" hidden></div>'
-      + (edit ? '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>' : '')
       + '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th><th>File</th><th></th></tr></thead><tbody>'
       + (edit ? '<tr class="oj-pack-addrow"><td colspan="3">' + btn('+ Add a document to this package', 'OnboardingJourney.defaultsAddOpen(\'' + phase + '\')', 'oj-btn-primary oj-btn-small') + '</td></tr>' : '');
     order.forEach(function (k) {
@@ -764,7 +763,7 @@
       + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', t.personalEmail, 'maxlength="255" required autocomplete="off"'), 'The letter of offer and the onboarding invitation go here.')
       + field('oj-f-mobile', 'Mobile (optional)', input('oj-f-mobile', 'tel', t.mobile, 'maxlength="40"'))
       + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, t.roleCategory || ''), 'Drives which onboarding package applies.')
-      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], t.proposedRole || 'therapist'), 'Granted at induction, never before.')
+      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], t.proposedRole || 'therapist'))
       + field('oj-f-managerUserId', 'Reports to', select('oj-f-managerUserId', staff, t.managerUserId || ''))
       + '</div>'
       + '<label class="oj-check"><input type="checkbox" id="oj-f-treating"' + (t.isTreatingTherapist === false ? '' : ' checked') + '> Treating therapist (works directly with participants)</label>'
@@ -1158,8 +1157,7 @@
     if (before && c.assign) {
       body += '<div class="oj-field"><label for="oj-e-subject">Subject</label><input id="oj-e-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-e-body">Message</label>' + emailToolbar('oj-e-body') + '<textarea id="oj-e-body" rows="14" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea>'
-        + '<small>The letter is attached automatically. Edit freely — what you send is what is kept on the record.</small></div>'
-        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the letter and opens a new message with the wording filled in — drag the letter into it and send, then mark it as sent.</div>' : '')
+        + '</div>'
         + '<div class="oj-actions">'
         + (E.outlook && !E.outlook.available
           ? btn('Open in my mail app — with the letter downloaded', 'OnboardingJourney.openInMailApp(\'e\', \'' + jsq((d.letter && d.letter.pdfUrl) || (d.letter && d.letter.downloadUrl) || '') + '\')', 'oj-btn-primary')
@@ -1347,7 +1345,6 @@
       + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) have no file yet — attach one before the email can be sent.</span>' : '')
       + (P.counts.placeholders ? '<br><span class="oj-quiet">' + P.counts.placeholders + ' placeholder(s) stand in for documents not uploaded yet — replace them in Edit onboarding, or here for this person only.</span>' : '') + '</div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>'
-      + (editable ? '<p class="oj-drophint">Drag a file from your computer onto a document to attach it — no need to browse.</p>' : '')
       + '<ol class="oj-attach-list">';
     attachments.concat(added).forEach(function (i) {
       out += attachmentRow(i, editable, i.code === 'PACK_NEW_EMPLOYEE_DETAILS' ? supporting : null);
@@ -1421,7 +1418,7 @@
       + (c.assign && r.status === 'starter_pack_sent' ? btn('Not sent after all', 'OnboardingJourney.packUnmarkSent()', 'oj-btn-quiet') : '') + '</div>';
 
     if (c.review) {
-      out += '<div class="oj-returns oj-droprow" id="oj-returns-documentation" data-drop="returns"><strong>Upload what came back</strong> <span class="oj-quiet">— one file, many, a whole folder, or the ZIP. The portal reads each one, works out which document it is, checks its fillable fields for blanks and inconsistencies, and places it below. Anything it cannot place is listed here for you to put in the right slot.</span>'
+      out += '<div class="oj-returns oj-droprow" id="oj-returns-documentation" data-drop="returns"><strong>Upload what came back</strong>'
         + '<div class="oj-actions">'
         + '<label class="oj-btn oj-btn-primary oj-file">Upload files or a ZIP<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
         + '<label class="oj-btn oj-file">Upload a folder<input type="file" multiple webkitdirectory directory hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
@@ -1526,7 +1523,7 @@
     var expected = P.items.filter(function (i) { return i.status === 'included' && i.itemKind === 'document' && i.employeeReturns; });
     var pending = expected.filter(function (i) { return i.progress === 'awaiting_return'; });
     var unrecognised = active.filter(function (x) { return x.matchStatus === 'unrecognised'; });
-    var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong> <span class="oj-quiet">— upload what comes back, one file or many, a whole folder, or a ZIP. The portal reads each one — its fillable fields, then which document it is — flags anything left blank, ticks off what is complete and fills the employee profile. Anything it cannot recognise is listed under Requires Your Attention for you to name.</span>'
+    var out = '<div class="oj-returns oj-droprow" id="oj-returns-' + esc(phase) + '" data-drop="returns"><strong>Returned documents</strong>'
       + (!sent ? '<p class="oj-quiet">The pack has not been marked as sent yet. You can still upload anything the employee has already returned.</p>' : '')
       + '<div class="oj-actions">'
       + '<label class="oj-btn oj-btn-primary oj-file">Upload returned documents<input type="file" multiple accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt,.zip" hidden onchange="OnboardingJourney.uploadReturns(this)"></label>'
@@ -1561,13 +1558,10 @@
     var phaseSections = PHASE_ORDER[phase] || [];
     var order = sectionOrder(phase).filter(function (k) { return groups[k] || (editable && phaseSections.indexOf(k) >= 0); });
 
-    out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong> · '
-      + '<span class="oj-quiet">' + P.counts.sending + ' sent as files, ' + P.counts.returns + ' to come back' + (P.tracking ? ', ' + P.tracking.done + ' of ' + P.tracking.total + ' tracked items complete' : '') + '</span>'
-      + (P.counts.missingFiles ? '<br><span class="oj-warn">' + P.counts.missingFiles + ' document(s) marked as sent have no file behind them yet — upload a file, or remove them before preparing the email.</span>' : '') + '</div>'
+    out += '<div class="oj-pack-head"><div><strong>' + included.length + ' items in the ' + (phase === 'induction' ? 'induction' : 'documentation') + ' pack</strong></div>'
       + (editable ? '<div class="oj-actions">' + btn('+ Add document', 'OnboardingJourney.packAddOpen(\'' + phase + '\')') + btn('Restore defaults', 'OnboardingJourney.packRestoreDefaults(\'' + phase + '\')', 'oj-btn-quiet') + '</div>' : '') + '</div>';
 
     if (c.review) out += returnsBlock(d, P, phase, sent);
-    if (editable) out += '<p class="oj-drophint">Drag a file from your computer onto a document\'s row to attach it — no need to browse.</p>';
     out += '<div class="oj-table-wrap"><table class="oj-pack"><thead><tr><th>Document</th>' + (sent ? '<th>Status</th>' : '') + '<th>File</th><th></th></tr></thead><tbody>';
     order.forEach(function (k) {
       out += '<tr class="oj-pack-section' + (editable ? ' oj-droprow' : '') + '"' + (editable ? ' data-drop="section:' + esc(phase) + ':' + esc(k) + '" title="Drop one or more files here to add them to this section"' : '') + '><td colspan="7"><div class="oj-section-bar"><span>' + esc(SECTION_LABELS[k] || titleCase(k)) + '</span>'
@@ -1591,9 +1585,8 @@
     if (c.assign) {
       out += '<div class="oj-field"><label for="oj-pe-subject">Subject</label><input id="oj-pe-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
         + '<div class="oj-field"><label for="oj-pe-body">Message</label>' + emailToolbar('oj-pe-body') + '<textarea id="oj-pe-body" rows="16" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea>'
-        + '<small>The ZIP is built from the attachments below and attached automatically. The due date is set to seven days from the day the draft is created.</small></div>'
+        + '</div>'
         + (P.counts && P.counts.missingFiles ? '<div class="ob-note is-warn">' + P.counts.missingFiles + ' document(s) below have no file yet. Attach a file for each before the email can be prepared or sent.</div>' : '')
-        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + ' Until then, <strong>Open in my mail app</strong> downloads the ZIP and opens a new message with the wording filled in — drag the ZIP into it and send, then mark it as sent.</div>' : '')
         + '<div class="oj-actions">'
         + (E.outlook && !E.outlook.available
           ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'pe\', \'/api/onboarding/journey/records/' + jsq(r.id) + '/pack/zip\')', 'oj-btn-primary')
@@ -1991,8 +1984,7 @@
     if (!sent && c.assign) {
       body += '<div class="oj-step is-active" id="oj-induction-email"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Phase 3 email — to ' + esc(d.record.applicantEmail || '') + '</strong>' + (E.draftId ? '<span class="oj-chip is-you">Draft in Outlook</span>' : '') + '</div>'
         + '<div class="oj-field"><label for="oj-ie-subject">Subject</label><input id="oj-ie-subject" type="text" maxlength="250" value="' + esc(E.subject || '') + '"></div>'
-        + '<div class="oj-field"><label for="oj-ie-body">Message</label>' + emailToolbar('oj-ie-body') + '<textarea id="oj-ie-body" rows="14" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea><small>The induction ZIP is built from the pack above and attached. The due date is seven days from the day the draft is created.</small></div>'
-        + (E.outlook && !E.outlook.available ? '<div class="ob-note is-warn">' + esc(E.outlook.reason || 'Outlook is not connected.') + '</div>' : '')
+        + '<div class="oj-field"><label for="oj-ie-body">Message</label>' + emailToolbar('oj-ie-body') + '<textarea id="oj-ie-body" rows="14" onkeydown="OnboardingJourney.emailKey(event)">' + esc(E.body || '') + '</textarea></div>'
         + '<div class="oj-actions">' + (E.outlook && !E.outlook.available ? btn('Open in my mail app — with the ZIP downloaded', 'OnboardingJourney.openInMailApp(\'ie\', \'/api/onboarding/journey/records/' + jsq(d.record.id) + '/induction/zip\')', R.ready ? 'oj-btn-primary' : '') : '') + btn(E.draftId ? 'Prepare a fresh Outlook draft' : 'Prepare Phase 3 Email — create the Outlook draft with the pack attached', 'OnboardingJourney.packCreateDraft(\'induction\')', R.ready && !(E.outlook && !E.outlook.available) ? 'oj-btn-primary' : '') + btn('Save the wording', 'OnboardingJourney.packSaveEmail(\'induction\')') + btn('Reset to the template', 'OnboardingJourney.packResetEmail(\'induction\')', 'oj-btn-quiet') + '<a class="oj-btn" href="/api/onboarding/journey/records/' + esc(d.record.id) + '/induction/zip">Download the ZIP</a></div>'
         + (E.draftId ? '<div class="ob-note is-info"><strong>Your draft is in Outlook.</strong> Read it over and press Send there, then mark it as sent.<div class="oj-actions">' + (E.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(E.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '') + btn('I have sent it — mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')', 'oj-btn-primary') + '</div></div>'
           : '<div class="oj-actions oj-actions-sent">' + btn('Mark as sent — I sent it another way', 'OnboardingJourney.packMarkSent(\'induction\')') + '</div>')
@@ -2387,7 +2379,7 @@
       return '<button type="button" class="oj-fmt-btn ' + cls + '" title="' + title + '" aria-label="' + title + '" onmousedown="event.preventDefault()" onclick="OnboardingJourney.emailMark(\'' + textareaId + '\', \'' + mark + '\')">' + label + '</button>';
     };
     return '<div class="oj-fmt-bar" role="toolbar" aria-label="Formatting">' + b('**', 'B', 'Bold (Ctrl+B)', 'is-b') + b('*', 'I', 'Italic (Ctrl+I)', 'is-i') + b('__', 'U', 'Underline (Ctrl+U)', 'is-u')
-      + '<span class="oj-fmt-hint">Select words, then press a button. Shows as **bold**, *italic*, __underline__ here and as formatting in the email.</span></div>';
+      + '</div>';
   }
   function emailMark(textareaId, mark) {
     var ta = doc.getElementById(textareaId); if (!ta) return;
