@@ -683,7 +683,7 @@ describe('changed assets are cache-busted', () => {
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 68], ['onboarding-journey.css', 37],
+      ['onboarding-journey.js', 72], ['onboarding-journey.css', 39],
       // Employees: a first pin is still a pin.
       ['employees.js', 1], ['employees.css', 1],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
@@ -694,7 +694,7 @@ describe('changed assets are cache-busted', () => {
       ['profile.js', 5],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
-      ['reports.js', 3],
+      ['reports.js', 7],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
