@@ -128,7 +128,7 @@
   };
 
   var VIEWS = [
-    { key: 'board', label: 'Onboarding' },
+    { key: 'board', label: 'Ongoing Onboarding' },
     { key: 'start', label: 'Start onboarding' },
     { key: 'defaults', label: 'Edit onboarding' },
   ];
