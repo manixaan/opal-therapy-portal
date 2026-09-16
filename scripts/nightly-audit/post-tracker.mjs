@@ -51,7 +51,9 @@ async function rest(method, path, body, extra) {
     const text = await res.text().catch(() => '');
     throw new Error(`Supabase ${res.status} on ${method} ${path.split('?')[0]}: ${text.slice(0, 200)}`);
   }
-  return res.status === 204 ? null : res.json();
+  // PostgREST answers 201/204 with an empty body under Prefer: return=minimal.
+  const text = await res.text();
+  return text.trim() ? JSON.parse(text) : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,7 +67,7 @@ try {
   const tag = `Nightly audit ${payload.audit_date}`;
 
   // Which features already have tonight's activity row? (idempotence)
-  const existing = await rest('GET', `activity?select=feature_id&action=eq.nightly_audit&metadata->>audit_date=eq.${payload.audit_date}`);
+  const existing = (await rest('GET', `activity?select=feature_id&action=eq.nightly_audit&metadata->>audit_date=eq.${payload.audit_date}`)) || [];
   const done = new Set(existing.map((r) => r.feature_id));
 
   let updated = 0, skipped = 0;

@@ -188,7 +188,10 @@ Include every feature in the snapshot. Then run
 from `backend/`. It overwrites only `claude_update` and `next_action`, appends
 one assistant message carrying the starter prompt to each feature's Claude
 thread, and adds one activity row per feature plus one for the workspace. It
-is idempotent per night. Do this **before** the git push so a GitHub failure
+is idempotent per night. If the script fails, record its error in the brief
+and move on — never hand-craft PATCH/POST/DELETE calls against the tracker
+to work around it; the script is the only sanctioned write path. Do this
+**before** the git push so a GitHub failure
 never costs the tracker its update; record the script's output line in the
 brief's Technical detail.
 
