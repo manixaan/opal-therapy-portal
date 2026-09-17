@@ -447,6 +447,58 @@
       group('ask', 'Ask them');
   }
 
+  // ── Rich text for "what it says" ────────────────────────────────────────
+  // The player renders exactly two things: **bold** and blank-line paragraphs.
+  // The Owner should never have to type the markers, so the field is a
+  // contenteditable box with a Bold button, and these two functions carry the
+  // text between the box and the stored form without inventing anything the
+  // player cannot show.
+  function richHtml(text) {
+    var paras = String(text || '').replace(/\r/g, '').split(/\n\s*\n/);
+    return paras.map(function (p) {
+      var h = esc(p).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      return '<div>' + (h || '<br>') + '</div>';
+    }).join('');
+  }
+  function richText(el) {
+    var out = [];
+    function walk(node, acc) {
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { acc.push(n.nodeValue); continue; }
+        if (n.nodeType !== 1) continue;
+        var tag = n.tagName.toLowerCase();
+        if (tag === 'br') { acc.push('\n'); continue; }
+        var block = tag === 'div' || tag === 'p' || tag === 'li';
+        var bold = tag === 'strong' || tag === 'b' || (n.style && (n.style.fontWeight === 'bold' || parseInt(n.style.fontWeight, 10) >= 600));
+        var inner = [];
+        walk(n, inner);
+        var text = inner.join('');
+        if (bold && text.trim()) text = '**' + text.trim() + '**' + (/\s$/.test(text) ? ' ' : '');
+        if (block) out.push(text); else acc.push(text);
+      }
+    }
+    var top = [];
+    walk(el, top);
+    if (top.length) out.unshift(top.join(''));
+    return out.map(function (p) { return p.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').trim(); })
+      .filter(function (p, i, a) { return p || (i > 0 && a[i - 1]); })
+      .join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function richField(id, label, field, text, rows) {
+    return '<div class="wk-field"><label>' + label + '</label>' +
+      '<div class="wk-richwrap">' +
+        '<div class="wk-richbar" role="toolbar" aria-label="Formatting">' +
+          '<button type="button" class="wk-mini wk-richbtn" title="Bold (Cmd+B)" aria-label="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><strong>B</strong></button>' +
+          '<span class="wk-richhint">Enter for a new line, blank line for a new paragraph</span>' +
+        '</div>' +
+        '<div class="wk-rich" contenteditable="true" id="' + id + '" style="min-height:' + (rows * 24) + 'px" ' +
+          'oninput="OpalWorkshop._rich(this,\'' + field + '\')" onblur="OpalWorkshop._richDone(this,\'' + field + '\')">' + richHtml(text) + '</div>' +
+      '</div></div>';
+  }
+  function _rich(el, field) { _live('step', field, richText(el)); }
+  function _richDone(el, field) { _step(field, richText(el)); }
+
   function stepEditorHtml() {
     var s = W.steps[W.idx];
     if (!s) return '<p class="wk-muted">This walkthrough has no steps yet. Add one to begin.</p>';
@@ -506,12 +558,9 @@
         esc(s.ack_statement || '') + '</textarea>' +
         '<p class="wk-hint">Recorded against their name with the date. The wording that is stored is the ' +
         'wording you publish, so say exactly what is being agreed to.</p></div>';
-      h += '<div class="wk-field"><label>Anything to read first (optional)</label>' +
-        '<textarea rows="3" oninput="OpalWorkshop._live(\'step\',\'body\',this.value)" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea></div>';
+      h += richField('wk-body', 'Anything to read first (optional)', 'body', s.body || '', 3);
     } else {
-      h += '<div class="wk-field"><label>What it says</label>' +
-        '<textarea rows="8" oninput="OpalWorkshop._live(\'step\',\'body\',this.value)" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea>' +
-        '<p class="wk-hint">Plain text. **Bold** works, and a blank line starts a new paragraph.</p></div>';
+      h += richField('wk-body', 'What it says', 'body', s.body || '', 7);
     }
 
     if (TARGETED[s.type]) h += targetFieldHtml(s);
@@ -542,7 +591,7 @@
         'onchange="OpalWorkshop._image(\'alt\', this.value)"></div>';
     }
 
-    h += '<div class="wk-field"><label>Show it to</label><div class="wk-roles">';
+    h += '<div class="wk-field wk-field-roles"><label>Show it to</label><div class="wk-roles">';
     ['owner', 'admin', 'therapist', 'read_only'].forEach(function (r) {
       var on = !s.roles || s.roles.indexOf(r) !== -1;
       var admitted = (W.wt.roles || []).indexOf(r) !== -1;
@@ -550,11 +599,7 @@
         '<input type="checkbox" ' + (on && admitted ? 'checked' : '') + (admitted ? '' : ' disabled') +
         ' onchange="OpalWorkshop._stepRole(\'' + r + '\', this.checked)"> ' + esc(r.replace('_', ' ')) + '</label>';
     });
-    h += '</div><p class="wk-hint">Greyed-out roles are not part of this walkthrough at all.</p></div>';
-
-    h += '<div class="wk-editor-actions">' +
-      '<button type="button" class="wk-btn" onclick="OpalWorkshop.playCurrent()">Play from here</button>' +
-      '</div>';
+    h += '</div></div>';
 
     return h;
   }
@@ -1255,6 +1300,8 @@
     addStep: addStep,
     removeStep: removeStep,
     _live: _live,
+    _rich: _rich,
+    _richDone: _richDone,
     toggleRail: toggleRail,
     dragStart: dragStart,
     dragOver: dragOver,

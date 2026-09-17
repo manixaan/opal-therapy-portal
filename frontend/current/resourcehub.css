@@ -1793,7 +1793,7 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 }
 
 /* ── Builder settings: mini-nav + cards + danger zone ────────────────────── */
-.rh2-cb-setgrid { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; align-items: start; }
+.rh2-cb-setgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 .rh2-cb-setnav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 12px; }
 .rh2-cb-setlink { padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--ink-soft); text-decoration: none; }
 .rh2-cb-setlink:hover { background: var(--accent-soft); color: var(--accent-deep); }

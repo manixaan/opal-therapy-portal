@@ -325,3 +325,17 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 .wk-live-btn { margin-left: auto; flex-shrink: 0; }
 .wk-field textarea { font-size: 14px; line-height: 1.5; }
 .wk-field input[type="text"] { font-size: 14px; }
+
+/* ── Rich text for "what it says" ────────────────────────────────────────── */
+.wk-richwrap { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--card, #fff); overflow: hidden; }
+.wk-richwrap:focus-within { border-color: var(--accent, #2f6f4f); box-shadow: 0 0 0 3px rgba(15, 124, 108, .15); }
+.wk-richbar { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--border, #e5e7eb); background: var(--bg, #f6f7f9); }
+.wk-richbtn { width: 28px; height: 26px; font-size: 13px; }
+.wk-richhint { font-size: 11px; color: var(--text-muted, #9ca3af); margin-left: auto; }
+.wk-rich { padding: 10px 12px; font-size: 14px; line-height: 1.5; outline: none; color: var(--ink, #241f1a); }
+.wk-rich > div { margin: 0 0 10px; }
+.wk-rich > div:last-child { margin-bottom: 0; }
+.wk-rich:empty::before { content: "Say what this step is for."; color: var(--text-muted, #9ca3af); }
+.wk-field-roles .wk-roles { gap: 6px; }
+.wk-field-roles .wk-role { border: 1px solid var(--border, #e5e7eb); border-radius: 999px; padding: 4px 10px 4px 6px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; }
+.wk-field-roles .wk-role.is-off { opacity: .45; }

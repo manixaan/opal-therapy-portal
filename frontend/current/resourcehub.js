@@ -7202,17 +7202,13 @@
   function laCbSettingsPane(ed) {
     var cats = S.la.categories ||
       ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
-    // Sectioned like a course builder's settings: a mini-nav of anchors on
-    // the left, one card per concern on the right, the destructive actions
-    // last and set apart.
+    // Sectioned like a course builder's settings: one card per concern, the
+    // destructive actions last and set apart. No side navigation — the page
+    // is short enough to see whole.
     var deletable = !ed.counts.total && !ed._currentVersion;
-    var nav = [['basic', 'Basic settings'], ['desc', 'Description'], ['danger', 'Archive or delete']];
     return '<div class="rh2-cb-pane rh2-cb-settings-pane">' +
       laCbPaneHead('Settings') +
       '<div class="rh2-cb-setgrid">' +
-        '<nav class="rh2-cb-setnav" aria-label="Settings sections">' + nav.map(function (n) {
-          return '<a class="rh2-cb-setlink" href="#la-set-' + n[0] + '" onclick="event.preventDefault();var el=document.getElementById(\'la-set-' + n[0] + '\');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});">' + n[1] + '</a>';
-        }).join('') + '</nav>' +
         '<div class="rh2-cb-setcards">' +
           '<section class="rh2-cb-setcard" id="la-set-basic"><h3 class="rh2-cb-seth">Basic settings</h3>' +
             '<div class="rh2-cb-form">' +
