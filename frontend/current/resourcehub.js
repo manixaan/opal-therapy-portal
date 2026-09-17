@@ -367,7 +367,7 @@
     },
     // Owner-only: the Assign Learning catalogue search. There is no
     // collection cursor — the catalogue is one unified list.
-    asl: { q: '' },
+    asl: { q: '', tab: 'inductions', view: 'grid', category: '', filterOpen: false, menu: null },
     // The Library. `folders`/`folderId` are the semantic shelving added in
     // migration 039; everything else is the flat-list state it was before, and
     // is still used unchanged by Saved, All Resources and every search.
@@ -5352,7 +5352,7 @@
           (la.tab === t[0] ? ' active' : '') + '" onclick="RH2.laNav(\'' + t[0] + '\')">' + t[1] + '</button>';
       }).join('') + '</div>';
     if (la.err) out += '<div class="rh2-empty">' + esc(la.err) + '</div>';
-    if (la.editor) return out + renderLaEditor() + '</div>';
+    if (la.editor) return out + renderLaEditor() + renderLaAssign() + renderLaCreate() + '</div>';
     // The dialog goes ON TOP of the library rather than replacing it: the
     // Owner keeps sight of what they were working through, and closing it
     // returns them exactly where they were.
@@ -5376,82 +5376,137 @@
     if (!rows.length) {
       return out + '<div class="rh2-empty">No learning workflows yet. Create your first learning workflow to begin assigning staff learning.</div>';
     }
-    out += rows.map(laLibraryCard).join('');
+    out += '<div class="rh2-course-grid">' + rows.map(laLibraryCard).join('') + '</div>';
     return out;
   }
 
   /**
-   * One learning item, rendered once for both Owner surfaces.
+   * One learning item, rendered once for both Owner surfaces as a COURSE
+   * CARD: a thumbnail, the title, one line of metadata, then a footer that
+   * carries the publication state and the actions.
    *
-   * `opts.actions` decides WHICH actions the card offers, never how the item
-   * is described — the title, state, counts and warnings are identical
-   * wherever it appears, so the two surfaces cannot drift.
+   * `opts.actions` decides WHICH actions the card's menu offers, never how
+   * the item is described — the title, state, counts and warnings are
+   * identical wherever it appears, so the two surfaces cannot drift.
    *
-   *   'primary'   Assign Learning: the three things the Owner came to do —
-   *               Assign, Edit, Preview. Nothing else: the second-stage Edit,
-   *               Assignments, Duplicate, Archive and Delete draft each sent
+   *   'primary'   Assign Learning: Assign, Edit, Preview (+ Unarchive when
+   *               archived). Nothing else: the lifecycle actions each sent
    *               the Owner somewhere other than the job in hand.
-   *   'lifecycle' Admin > Learning: the same three plus the lifecycle actions.
-   *               Removing them from Assign Learning hides the buttons, not
-   *               the capability — the routes, the records and the history are
-   *               untouched, and this console is still where they live.
+   *   'lifecycle' Admin > Learning: the same plus Assignments, Duplicate,
+   *               Archive and Delete draft. Removing them from Assign
+   *               Learning hides menu entries, not the capability — the
+   *               routes, the records and the history are untouched.
    *
-   * `Assign` leads because assigning is what the Owner came to do, but it is
-   * withheld from an archived item and from one with nothing in it — a button
-   * the server would refuse is worse than no button.
+   * Assign is the one action that is not behind the menu: assigning is what
+   * the Owner came to do. It is withheld from an archived item and from one
+   * with nothing in it — a button the server would refuse is worse than no
+   * button — and the status chip says why.
    */
   function laWorkflowCard(w, opts) {
     var lifecycle = !!(opts && opts.actions === 'lifecycle');
+    var list = !!(opts && opts.layout === 'list');
     var archived = w.status === 'archived';
     var empty = !(w.module_count || 0);
     var assignable = !archived && !empty;
     var duration = aslDuration(w);
+    var st = aslStatus(w);
     // The selection checkbox belongs to the Assign Learning page only — the
     // Admin > Learning tab shares this card but has no batch assignment bar.
     var selectable = S.view === 'learning' && assignable;
     var selOn = selectable && !!aslSel()[w.id];
-    return '<section class="rh2-card rh2-learn-wf' + (archived ? ' rh2-learn-wf-archived' : '') +
-      (selOn ? ' rh2-learn-wf-sel' : '') + '">' +
-      '<div class="rh2-learn-card-head">' +
-      (selectable
-        ? '<input type="checkbox" class="rh2-learn-selbox" ' + (selOn ? 'checked ' : '') +
-          'aria-label="Select ' + esc(w.title) + ' for assignment" ' +
-          'onchange="RH2.aslToggleSel(\'' + esc(w.id) + '\')">'
-        : '') +
-      '<span class="rh2-row-title">' + esc(w.title) + '</span>' +
-        (archived ? '<span class="rh2-chip rh2-chip-quiet">Archived</span>' : '') +
-      '</div>' +
-      '<div class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
-        ' · ' + (w.module_count || 0) + ' modules' +
-        (duration ? ' · ' + esc(duration) : '') +
-        (w.current_version ? ' · Version ' + w.current_version : ' · Never assigned') +
-        ' · ' + (w.active_assignments || 0) + ' active / ' + (w.completed_assignments || 0) + ' completed' +
-        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</div>' +
-      (w.description ? '<p class="rh2-quiet">' + esc(w.description) + '</p>' : '') +
-      (!archived && empty
-        ? '<p class="rh2-quiet rh2-learn-cannot">Add at least one module before this can be assigned.</p>'
-        : '') +
-      '<div class="rh2-learn-card-actions">' +
-        (assignable ? '<button type="button" class="rh2-btn rh2-btn-primary" id="asl-assign-' + esc(w.id) +
-          '" onclick="RH2.laAssignOpen(\'' + esc(w.id) + '\')">Assign</button>' : '') +
-        (!archived ? '<button type="button" class="rh2-btn" onclick="RH2.laEdit(\'' + esc(w.id) + '\')">Edit</button>' : '') +
-        '<button type="button" class="rh2-btn" onclick="RH2.laPreview(\'' + esc(w.id) + '\')">Preview</button>' +
+    var menuOpen = S.asl.menu === w.id;
+    var id = esc(w.id);
+    var meta = esc(aslCatLabel(w.category)) +
+      ' &middot; ' + (w.module_count || 0) + ' module' + ((w.module_count || 0) === 1 ? '' : 's') +
+      (duration ? ' &middot; ' + esc(duration) : '');
+    var sub = 'Updated ' + esc(fmtDate(w.updated_at)) +
+      (w.current_version ? ' &middot; v' + esc(w.current_version) : '') +
+      ' &middot; ' + (w.active_assignments || 0) + ' active / ' + (w.completed_assignments || 0) + ' completed';
+
+    var menuItem = function (label, fn, danger) {
+      return '<button type="button" role="menuitem" class="rh2-course-mi' + (danger ? ' rh2-course-mi-danger' : '') +
+        '" onclick="RH2.aslMenuClose();' + fn + '">' + label + '</button>';
+    };
+    var menu = '';
+    if (menuOpen) {
+      menu = '<div class="rh2-course-menu" role="menu" aria-label="Actions for ' + esc(w.title) + '">' +
+        (assignable ? menuItem('Assign', 'RH2.laAssignOpen(\'' + id + '\')') : '') +
+        (!archived ? menuItem('Edit', 'RH2.laEdit(\'' + id + '\')') : '') +
+        menuItem('Preview as a learner', 'RH2.laPreview(\'' + id + '\')') +
         // An archived row needs a way back on EVERY surface — hiding both the
         // archive action and its undo would leave the item unreachable.
-        (archived ? '<button type="button" class="rh2-btn" onclick="RH2.laUnarchive(\'' + esc(w.id) + '\')">Unarchive</button>' : '') +
+        (archived ? menuItem('Unarchive', 'RH2.laUnarchive(\'' + id + '\')') : '') +
         (lifecycle
-          ? '<button type="button" class="rh2-btn" onclick="RH2.laViewAssignments(\'' + esc(w.id) + '\')">Assignments</button>' +
-            '<button type="button" class="rh2-btn" onclick="RH2.laDuplicate(\'' + esc(w.id) + '\')">Duplicate</button>' +
-            (archived ? ''
-              : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laArchive(\'' + esc(w.id) + '\')">Archive</button>') +
+          ? menuItem('Assignments', 'RH2.laViewAssignments(\'' + id + '\')') +
+            menuItem('Duplicate', 'RH2.laDuplicate(\'' + id + '\')') +
+            (archived ? '' : menuItem('Archive', 'RH2.laArchive(\'' + id + '\')', true)) +
             (!w.active_assignments && !w.completed_assignments && !w.current_version
-              ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laDelete(\'' + esc(w.id) + '\')">Delete draft</button>' : '')
+              ? menuItem('Delete draft', 'RH2.laDelete(\'' + id + '\')', true) : '')
           : '') +
-      '</div></section>';
+        '</div>';
+    }
+    var openAttr = !archived
+      ? ' onclick="RH2.laEdit(\'' + id + '\')" title="Open in the builder"'
+      : ' onclick="RH2.laPreview(\'' + id + '\')" title="Preview"';
+
+    return '<article class="rh2-course' + (list ? ' rh2-course-list' : '') +
+      (archived ? ' rh2-course-archived' : '') + (selOn ? ' rh2-course-sel' : '') +
+      (menuOpen ? ' rh2-course-menu-open' : '') + '">' +
+      '<div class="rh2-course-thumb"' + openAttr + '>' +
+        aslThumbSvg() +
+        (selectable
+          ? '<label class="rh2-course-pick" onclick="event.stopPropagation()">' +
+            '<input type="checkbox" class="rh2-learn-selbox" ' + (selOn ? 'checked ' : '') +
+              'aria-label="Select ' + esc(w.title) + ' for assignment" ' +
+              'onchange="RH2.aslToggleSel(\'' + id + '\')"></label>'
+          : '') +
+      '</div>' +
+      '<div class="rh2-course-body">' +
+        '<h3 class="rh2-course-title"><button type="button" class="rh2-course-open"' + openAttr + '>' +
+          esc(w.title) + '</button></h3>' +
+        '<div class="rh2-course-meta">' + meta + '</div>' +
+        '<div class="rh2-course-sub">' + sub + '</div>' +
+        (!archived && empty
+          ? '<p class="rh2-learn-cannot">Add at least one module before this can be assigned.</p>'
+          : '') +
+      '</div>' +
+      '<div class="rh2-course-foot">' +
+        '<span class="rh2-course-status rh2-course-status-' + st.key + '">' + st.label + '</span>' +
+        '<span class="rh2-course-acts">' +
+          (assignable ? '<button type="button" class="rh2-btn rh2-btn-primary rh2-course-assign" id="asl-assign-' + id +
+            '" onclick="RH2.laAssignOpen(\'' + id + '\')">Assign</button>' : '') +
+          '<span class="rh2-course-menuwrap">' +
+            '<button type="button" class="rh2-course-kebab" aria-haspopup="menu" aria-expanded="' + (menuOpen ? 'true' : 'false') +
+              '" aria-label="More actions for ' + esc(w.title) + '" onclick="RH2.aslMenu(event,\'' + id + '\')">' +
+              '<span aria-hidden="true">&#8942;</span></button>' +
+            menu +
+          '</span>' +
+        '</span>' +
+      '</div></article>';
+  }
+
+  /** The publication state a card prints — one word, derived from the record. */
+  function aslStatus(w) {
+    if (w.status === 'archived') return { key: 'archived', label: 'Archived' };
+    if (!(w.module_count || 0)) return { key: 'empty', label: 'Empty' };
+    if (!w.current_version) return { key: 'draft', label: 'Draft' };
+    if (w.has_unpublished_changes) return { key: 'changed', label: 'Draft changes' };
+    return { key: 'published', label: 'Published' };
+  }
+
+  /** The placeholder thumbnail: a presenter at a board. No image is stored. */
+  function aslThumbSvg() {
+    return '<svg class="rh2-course-glyph" viewBox="0 0 72 48" aria-hidden="true" focusable="false">' +
+      '<rect x="22" y="5" width="44" height="28" rx="2.5"/>' +
+      '<circle cx="13" cy="19" r="5.5"/>' +
+      '<path d="M4 44c0-7.5 4-12 9.5-12S23 36.5 23 44"/>' +
+      '<path d="M23 30l16-15"/>' +
+      '<circle cx="58" cy="12" r="2" class="rh2-course-glyph-dot"/>' +
+      '</svg>';
   }
 
   /** Assign Learning: Assign, Edit, Preview — nothing else. */
-  function aslWorkflowCard(w) { return laWorkflowCard(w, { actions: 'primary' }); }
+  function aslWorkflowCard(w) { return laWorkflowCard(w, { actions: 'primary', layout: S.asl.view }); }
 
   /** Admin > Learning: the same card, plus the lifecycle actions. */
   function laLibraryCard(w) { return laWorkflowCard(w, { actions: 'lifecycle' }); }
@@ -5529,6 +5584,8 @@
    */
   function aslVisible() {
     var rows = (S.la.workflows || []).slice();
+    var cat = String(S.asl.category || '');
+    if (cat) rows = rows.filter(function (w) { return String(w.category || '') === cat; });
     var q = String(S.asl.q || '').trim().toLowerCase();
     if (!q) return rows;
     return rows.filter(function (w) {
@@ -5539,7 +5596,7 @@
   }
 
   function aslSearch(v) { S.asl.q = v; render(); }
-  function aslResetFilters() { S.asl.q = ''; render(); }
+  function aslResetFilters() { S.asl.q = ''; S.asl.category = ''; render(); }
   function aslReload() { loadLa(); }
 
   // ── Library multi-select (checkbox per card → one Assign for the batch) ────
@@ -5596,10 +5653,23 @@
   function renderAssignLearning() {
     var la = S.la;
     var a = S.asl;
-    var out = '<div class="rh2-page">' +
-      '<h1 class="rh2-h1">Assign Learning</h1>' +
-      '<p class="rh2-page-intro">Every induction and learning item the practice holds, in one list. ' +
-      'Assign one to the people who need it, edit it exactly as they will see it, or preview it first.</p>';
+    // The builder takes the whole page: no catalogue heading above it.
+    if (la.editor && la.workflows) {
+      return '<div class="rh2-page rh2-asl">' + renderLaEditor() + renderLaAssign() + renderLaCreate() + '</div>';
+    }
+    var out = '<div class="rh2-page rh2-asl">' +
+      '<div class="rh2-asl-head">' +
+        '<div>' +
+          '<h1 class="rh2-h1">Assign Learning</h1>' +
+          '<p class="rh2-page-intro">Every induction and learning item the practice holds. ' +
+          'Assign one to the people who need it, edit it exactly as they will see it, or preview it first.</p>' +
+        '</div>' +
+        // One way in. The dialog asks what kind of induction it is, and
+        // offers the import of the practice's existing inductions as one of
+        // the templates — several buttons up here was several decisions
+        // before starting.
+        '<button type="button" class="rh2-btn rh2-btn-primary rh2-asl-new" onclick="RH2.laCreate()">+ New induction</button>' +
+      '</div>';
 
     if (la.loading && !la.workflows) {
       return out + '<div class="rh2-card">' + skel(3, 72) + '</div></div>';
@@ -5608,55 +5678,45 @@
       return out + '<div class="rh2-empty">' + esc(la.err) +
         ' <button type="button" class="rh2-btn" onclick="RH2.aslReload()">Retry</button></div></div>';
     }
-    // Edit opens the induction itself, in place, and takes the whole page.
-    if (la.editor) return out + renderLaEditor() + '</div>';
+
+    // ── Tabs: the library, then the two questions that follow from it ─────
+    var tabs = [['inductions', 'Inductions'], ['assignments', 'Assignments'], ['staff', 'Staff progress']];
+    out += '<div class="rh2-asl-tabs" role="tablist" aria-label="Assign Learning">' + tabs.map(function (t) {
+      return '<button type="button" role="tab" id="asl-tab-' + t[0] + '" aria-selected="' + (a.tab === t[0]) +
+        '" class="rh2-asl-tab' + (a.tab === t[0] ? ' active' : '') + '" onclick="RH2.aslTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+    }).join('') + '</div>';
+
+    if (la.importNote) {
+      out += '<div class="rh2-learn-done-banner" role="status">' + esc(la.importNote) +
+        ' <button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laImportDismiss()">Dismiss</button></div>';
+    }
+
+    if (a.tab === 'assignments') {
+      // The same monitor the Admin > Learning tab carries — shared renderer,
+      // shared `S.la` state, shared endpoint — deliberately no second
+      // assignments view that could drift from this one.
+      out += '<section class="rh2-card" id="asl-assignments" aria-labelledby="asl-h-assign">' +
+        '<h2 class="rh2-h2" id="asl-h-assign">Assignment status</h2>' +
+        '<p class="rh2-page-intro">Who has been assigned what, how far they have got, ' +
+        'and what has passed its due date.</p>' +
+        renderLaAssignments() +
+        '</section>';
+      return out + renderLaAssign() + renderLaCreate() + '</div>';
+    }
+    if (a.tab === 'staff') {
+      out += '<section class="rh2-card" aria-labelledby="asl-h-staff">' +
+        '<h2 class="rh2-h2" id="asl-h-staff">Staff progress</h2>' +
+        renderLaStaff() +
+        '</section>';
+      return out + renderLaAssign() + renderLaCreate() + '</div>';
+    }
 
     // ── The catalogue ───────────────────────────────────────────────────────
-    // One unified list. Collections used to stand between the Owner and their
-    // own library: a shelf had to be opened before anything could be seen, and
-    // an item filed under a category nobody thought to click was invisible.
-    // Category still exists on the record (and still shows on every card) —
-    // it just no longer decides what the Owner is allowed to look at.
+    // One unified grid. Category is on every record and can narrow the grid
+    // from the filter, but nothing has to be opened before the library is
+    // visible.
     var all = la.workflows || [];
     var rows = aslVisible();
-
-    out += '<section class="rh2-card" aria-labelledby="asl-h-lib">' +
-      '<div class="rh2-learn-cat-head">' +
-      '<div class="rh2-learn-cat-heading">' +
-        '<h2 class="rh2-h2" id="asl-h-lib">All learning</h2>' +
-        (all.length
-          ? '<p class="rh2-row-sub">' + (a.q ? rows.length + ' of ' + all.length : all.length) +
-            ' item' + ((a.q ? rows.length : all.length) === 1 ? '' : 's') + '</p>'
-          : '') +
-      '</div>' +
-      // Search, the archived toggle and the create actions filter or add to a
-      // list. With no items they are controls that cannot do anything, so only
-      // the empty state below survives — where the eye already is.
-      (all.length
-        ? '<div class="rh2-learn-cat-actions">' +
-            '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
-              'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
-            // One way in. The dialog asks whether the new induction is a
-            // document or an interactive walkthrough, and offers the import
-            // of the practice's existing inductions as a quiet third line —
-            // three buttons up here was three decisions before starting.
-            '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCreate()">+ New induction</button>' +
-          '</div>' +
-          // Its own full-width row beneath the heading, so the field lines up
-          // with the cards it filters instead of floating off to the right.
-          '<div class="rh2-learn-cat-search">' +
-            '<label class="rh2-visually-hidden" for="asl-q">Search learning</label>' +
-            '<span class="rh2-learn-cat-search-icn" aria-hidden="true">' + icn('search', 'search', 16) + '</span>' +
-            '<input class="rh2-input" id="asl-q" type="search" placeholder="Search learning…" value="' + esc(a.q) + '"' +
-              ' oninput="RH2.aslSearch(this.value)">' +
-            (a.q ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.aslResetFilters()">Clear</button>' : '') +
-          '</div>'
-        : '') +
-      '</div>' +
-      (la.importNote
-        ? '<div class="rh2-learn-done-banner" role="status">' + esc(la.importNote) +
-          ' <button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laImportDismiss()">Dismiss</button></div>'
-        : '');
 
     if (!all.length) {
       // The practice almost certainly HAS inductions already — as Resource Hub
@@ -5669,94 +5729,120 @@
           'onclick="RH2.laImport()">' + (la.importing ? 'Importing…' : 'Import existing inductions') + '</button>' +
         '<button type="button" class="rh2-btn" onclick="RH2.laCreate()">+ New induction</button>' +
         '</div></div>';
-    } else if (!rows.length) {
-      out += '<div class="rh2-empty">Nothing matches &ldquo;' + esc(a.q) + '&rdquo;.' +
-        ' <button type="button" class="rh2-btn" onclick="RH2.aslResetFilters()">Clear search</button></div>';
-    } else {
-      // Batch bar: tick several items, assign them all in one pass. Lives
-      // above the cards so the count and the action stay in view together.
-      var selCount = aslSelCount();
-      var selectable = aslSelectable();
-      var allOn = selectable.length > 0 && selectable.every(function (w) { return aslSel()[w.id]; });
-      out += '<div class="rh2-learn-selbar">' +
+      return out + renderLaAssign() + renderLaCreate() + '</div>';
+    }
+
+    // Toolbar: search, filter, grid/list.
+    var cats = aslCategories(all);
+    var filtering = !!(a.category || la.includeArchived);
+    out += '<div class="rh2-asl-tools">' +
+      '<div class="rh2-learn-cat-search">' +
+        '<label class="rh2-visually-hidden" for="asl-q">Search inductions by name</label>' +
+        '<span class="rh2-learn-cat-search-icn" aria-hidden="true">' + icn('search', 'search', 16) + '</span>' +
+        '<input class="rh2-input" id="asl-q" type="search" placeholder="Search inductions by name" value="' + esc(a.q) + '"' +
+          ' oninput="RH2.aslSearch(this.value)">' +
+      '</div>' +
+      '<div class="rh2-asl-filter">' +
+        '<button type="button" class="rh2-btn rh2-asl-filter-btn' + (filtering ? ' rh2-asl-filter-on' : '') +
+          '" aria-expanded="' + (a.filterOpen ? 'true' : 'false') + '" aria-controls="asl-filter-pop" ' +
+          'onclick="RH2.aslFilterToggle()">Filter' + (filtering ? ' &middot; on' : '') +
+          ' <span aria-hidden="true">&#9662;</span></button>' +
+        (a.filterOpen
+          ? '<div class="rh2-asl-filter-pop" id="asl-filter-pop">' +
+              '<label class="rh2-lbl" for="asl-cat">Category</label>' +
+              '<select class="rh2-select" id="asl-cat" onchange="RH2.aslCategory(this.value)">' +
+                '<option value=""' + (a.category ? '' : ' selected') + '>All categories</option>' +
+                cats.map(function (c) {
+                  return '<option value="' + esc(c) + '"' + (a.category === c ? ' selected' : '') + '>' + esc(aslCatLabel(c)) + '</option>';
+                }).join('') +
+              '</select>' +
+              '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (la.includeArchived ? 'checked ' : '') +
+                'onchange="RH2.laToggleArchived(this.checked)"> Show archived</label>' +
+              (filtering
+                ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.aslResetFilters()">Clear filters</button>'
+                : '') +
+            '</div>'
+          : '') +
+      '</div>' +
+      '<div class="rh2-asl-view" role="group" aria-label="Layout">' +
+        '<button type="button" class="rh2-asl-view-btn' + (a.view !== 'list' ? ' active' : '') +
+          '" aria-pressed="' + (a.view !== 'list') + '" onclick="RH2.aslView(\'grid\')">' +
+          '<span aria-hidden="true">&#9638;</span> Grid</button>' +
+        '<button type="button" class="rh2-asl-view-btn' + (a.view === 'list' ? ' active' : '') +
+          '" aria-pressed="' + (a.view === 'list') + '" onclick="RH2.aslView(\'list\')">' +
+          '<span aria-hidden="true">&#8801;</span> List</button>' +
+      '</div>' +
+    '</div>';
+
+    // Batch bar: tick several items, assign them all in one pass. Only shown
+    // once something is ticked, so the grid is the first thing on the page.
+    var selCount = aslSelCount();
+    var selectable = aslSelectable();
+    var allOn = selectable.length > 0 && selectable.every(function (w) { return aslSel()[w.id]; });
+    if (selCount) {
+      out += '<div class="rh2-learn-selbar" role="region" aria-label="Selection">' +
+        '<span class="rh2-learn-assign-count" role="status" aria-live="polite">' + selCount + ' selected</span>' +
         (selectable.length > 1
           ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.aslSelectAllShown()">' +
             (allOn ? 'Clear shown' : 'Select all shown (' + selectable.length + ')') + '</button>'
           : '') +
-        '<span class="rh2-learn-assign-count" role="status" aria-live="polite">' +
-          (selCount ? selCount + ' selected' : 'Tick items to assign several at once') + '</span>' +
-        (selCount
-          ? '<button type="button" class="rh2-btn rh2-btn-primary" id="asl-bulk-assign" ' +
-            'onclick="RH2.laAssignOpenMulti()">Assign selected (' + selCount + ')</button>' +
-            '<button type="button" class="rh2-btn" onclick="RH2.aslClearSel()">Clear selection</button>'
-          : '') +
+        '<button type="button" class="rh2-btn rh2-btn-primary" id="asl-bulk-assign" ' +
+          'onclick="RH2.laAssignOpenMulti()">Assign selected (' + selCount + ')</button>' +
+        '<button type="button" class="rh2-btn" onclick="RH2.aslClearSel()">Clear selection</button>' +
         '</div>';
-      out += rows.map(aslWorkflowCard).join('');
-    }
-    out += '</section>';
-
-    // ── Assignment status ───────────────────────────────────────────────────
-    // The same monitor the Admin > Learning tab carries, rendered here in
-    // place. Assigning and checking who is behind on what are one job, and
-    // splitting them across two tabs meant the Owner had to leave this page to
-    // answer the obvious follow-up question.
-    //
-    // Shared renderer, shared `S.la` state, shared endpoint — deliberately no
-    // second assignments view that could drift from this one.
-    //
-    // An empty library with no assignments has nothing to monitor, and the
-    // library's own empty state is already the invitation; but assignments can
-    // outlive a library filtered down to nothing (everything archived), so the
-    // section stays whenever there is something to show.
-    if (all.length || (la.assignments && la.assignments.length)) {
-      out += '<section class="rh2-card" id="asl-assignments" aria-labelledby="asl-h-assign">' +
-        '<h2 class="rh2-h2" id="asl-h-assign">Assignment status</h2>' +
-        '<p class="rh2-page-intro">Who has been assigned what, how far they have got, ' +
-        'and what has passed its due date.</p>' +
-        renderLaAssignments() +
-        '</section>';
     }
 
-    out += '<div class="rh2-grid-2">';
+    if (!rows.length) {
+      out += '<div class="rh2-empty">Nothing matches' + (a.q ? ' &ldquo;' + esc(a.q) + '&rdquo;' : ' these filters') + '.' +
+        ' <button type="button" class="rh2-btn" onclick="RH2.aslResetFilters()">Clear</button></div>';
+    } else {
+      out += '<p class="rh2-asl-count">' + (a.q || filtering ? rows.length + ' of ' + all.length : all.length) +
+        ' induction' + ((a.q || filtering ? rows.length : all.length) === 1 ? '' : 's') + '</p>';
+      out += '<div class="' + (a.view === 'list' ? 'rh2-course-rows' : 'rh2-course-grid') + '">' +
+        rows.map(aslWorkflowCard).join('') + '</div>';
+    }
 
-    // ── Upcoming professional development ───────────────────────────────────
-    var pd = (S.home && (pick(S.home, 'upcoming_pd') || pick(S.home, 'upcomingPd'))) || [];
-    out += '<section class="rh2-card rh2-pd-preview" aria-labelledby="asl-h-pd">' +
-      '<h2 class="rh2-h-link"><button type="button" class="rh2-heading-btn" onclick="RH2.nav(\'pd\')">' +
-      '<span id="asl-h-pd">Upcoming professional development</span>' +
-      '<span class="rh2-heading-more" aria-hidden="true">&rsaquo;</span>' +
-      '<span class="rh2-visually-hidden"> — open the professional development page</span>' +
-      '</button></h2>';
-    if (S.homeLoading && !S.home) out += skel(2);
-    else if (!pd.length) out += '<p class="rh2-quiet">No upcoming professional development is scheduled.</p>';
-    else out += pd.map(function (e) {
-      return '<div class="rh2-pd-row"><div class="rh2-pd-date">' + esc(fmtDateTime(pick(e, 'starts_at'))) + '</div>' +
-        '<div class="rh2-row-title">' + esc(pick(e, 'title')) + '</div>' +
-        '<div class="rh2-row-sub">' + esc(pick(e, 'provider') || '') + '</div></div>';
-    }).join('');
-    out += '</section>';
-
-    // ── Recently added ──────────────────────────────────────────────────────
-    // A plain list, not a way in: the catalogue above already shows every item,
-    // so these rows report what changed rather than filtering anything.
-    var recent = all.slice().sort(function (x, y) {
-      return String(y.updated_at || '').localeCompare(String(x.updated_at || ''));
-    }).slice(0, ASL_RECENT_LIMIT);
-    out += '<section class="rh2-card" aria-labelledby="asl-h-recent">' +
-      '<h2 id="asl-h-recent">Recently added</h2>';
-    if (!recent.length) out += '<p class="rh2-quiet">Nothing has been added yet.</p>';
-    else out += recent.map(function (w) {
-      return '<div class="rh2-row"><span class="rh2-row-main">' +
-        '<span class="rh2-row-title">' + esc(w.title) + '</span>' +
-        '<span class="rh2-row-sub">' + esc(aslCatLabel(w.category)) +
-        ' · Updated ' + esc(fmtDate(w.updated_at)) + '</span></span></div>';
-    }).join('');
-    out += '</section></div>';
-
-    // The assignment dialog goes ON TOP of the page rather than replacing it,
-    // so closing it returns the Owner exactly where they were.
+    // The dialogs go ON TOP of the page rather than replacing it, so closing
+    // one returns the Owner exactly where they were.
     return out + renderLaAssign() + renderLaCreate() + '</div>';
   }
+
+  /** The categories actually in use, for the filter. */
+  function aslCategories(rows) {
+    var seen = {};
+    (rows || []).forEach(function (w) { if (w.category) seen[w.category] = true; });
+    return Object.keys(seen).sort();
+  }
+
+  function aslTab(t) {
+    S.asl.tab = t;
+    S.asl.menu = null;
+    S.la.assign = null;
+    if (t === 'assignments' && !S.la.assignments) loadLaAssignments();
+    render();
+  }
+  function aslView(v) { S.asl.view = v === 'list' ? 'list' : 'grid'; render(); }
+  function aslCategory(v) { S.asl.category = String(v || ''); render(); }
+  function aslFilterToggle() { S.asl.filterOpen = !S.asl.filterOpen; render(); }
+
+  /** One card menu open at a time; a click anywhere else closes it. */
+  function aslMenu(ev, id) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    S.asl.menu = S.asl.menu === id ? null : id;
+    render();
+  }
+  function aslMenuClose() {
+    if (!S.asl.menu) return;
+    S.asl.menu = null;
+    render();
+  }
+  doc.addEventListener('click', function (e) {
+    if (S.asl && S.asl.menu && !(e.target.closest && e.target.closest('.rh2-course-menuwrap'))) aslMenuClose();
+    if (S.asl && S.asl.filterOpen && !(e.target.closest && e.target.closest('.rh2-asl-filter'))) {
+      S.asl.filterOpen = false;
+      render();
+    }
+  });
 
   function laToggleArchived(on) { S.la.includeArchived = !!on; loadLa(); }
 
@@ -5790,17 +5876,48 @@
   /**
    * Naming a new learning item.
    *
-   * This used to be window.prompt(). A native prompt is unstyled, ignores the
-   * portal's design language, cannot show a category or a validation message,
-   * and on some browsers is suppressed entirely — which made the primary
-   * "create" action look broken. It is a portal dialog now, the same component
-   * the assignment flow uses.
+   * Two screens, like a course builder: first "choose a template" (blank,
+   * a starter induction with the usual chapters, an interactive
+   * walkthrough, or the import of the practice's existing inductions), then
+   * "name it". This used to be window.prompt(). A native prompt is unstyled,
+   * ignores the portal's design language, cannot show a category or a
+   * validation message, and on some browsers is suppressed entirely — which
+   * made the primary "create" action look broken. It is a portal dialog now,
+   * the same component the assignment flow uses.
    */
   function laCreate() {
-    // `kind` is the first question: null until the Owner picks document or
-    // walkthrough. Only a document goes on to the name-and-category form.
+    // `kind` is the first question: null until the Owner picks a template.
+    // Only a document or a starter goes on to the name-and-category form.
     S.la.create = { kind: null, title: '', category: 'induction', busy: false, err: '' };
     render();
+  }
+
+  /** The templates on offer, in the order the dialog shows them. */
+  var LA_TEMPLATES = [
+    { kind: 'document', title: 'Blank', glyph: 'blank',
+      text: 'Start fresh and build your own induction to match exactly what this role needs.' },
+    { kind: 'starter', title: 'Standard induction', glyph: 'starter',
+      text: 'Begin with the usual chapters &mdash; welcome, policies, systems, sign-off &mdash; and fill them in.' },
+    { kind: 'walkthrough', title: 'Interactive walkthrough', glyph: 'walk',
+      text: 'A guided tour of the portal itself &mdash; pop-ups and spotlights on the real screens.' },
+    { kind: 'import', title: 'Import existing', glyph: 'import',
+      text: 'Bring the practice&rsquo;s existing inductions and learning paths in, ready to edit and assign.' },
+  ];
+
+  /** The chapters a starter induction opens with. Empty steps, named. */
+  function laStarterContent() {
+    var step = function (type, title) {
+      var it = { type: type, title: title, body: '', required: true };
+      if (type === 'quiz') it.quiz = { passThreshold: 80, questions: [{ question: 'Which of these is the first thing to do when you start a shift?', options: ['Sign in and check the schedule for the day', 'Start seeing clients straight away'], correctIndex: 0 }] };
+      if (type === 'acknowledgement') it.ack_statement = 'I have read the code of conduct and agree to work to it.';
+      return it;
+    };
+    return { sections: [
+      { title: 'Welcome to the practice', items: [step('content', 'Who we are and how we work'), step('content', 'Your first week')] },
+      { title: 'Policies and compliance', items: [step('content', 'The policies that apply to your role'), step('acknowledgement', 'Code of conduct')] },
+      { title: 'Systems and tools', items: [step('task', 'Set up your accounts'), step('task', 'Book your first appointment')] },
+      { title: 'Check your understanding', items: [step('quiz', 'Knowledge check')] },
+    ] };
   }
 
   /** The Owner's answer to "what are you making?". */
@@ -5822,10 +5939,19 @@
       laImport();
       return;
     }
-    c.kind = 'document';
+    c.kind = kind === 'starter' ? 'starter' : 'document';
     render();
     var input = doc.getElementById('la-new-title');
     if (input) { try { input.focus(); } catch (e) { /* not yet painted */ } }
+  }
+
+  /** Back to the template screen, keeping whatever was typed. */
+  function laCreateBack() {
+    var c = S.la.create;
+    if (!c || c.busy) return;
+    c.kind = null;
+    c.err = '';
+    render();
   }
 
   function laCreateClose() {
@@ -5901,11 +6027,19 @@
     var d = await api('/api/learning/workflows', {
       method: 'POST', body: { title: title, category: c.category },
     });
+    if (d.ok && c.kind === 'starter') {
+      // The starter's chapters go in as the first draft — the same PUT the
+      // builder saves through, so nothing about the record is special.
+      var put = await api('/api/learning/workflows/' + encodeURIComponent(d.workflow.id), {
+        method: 'PUT', body: { title: title, category: c.category, description: '', content: laStarterContent() },
+      });
+      if (!put.ok) d = put;
+    }
     c.busy = false;
     if (!d.ok) { c.err = d.error || 'The learning item could not be created.'; return render(); }
     S.la.create = null;
     await loadLa();
-    // Straight into the editor: naming it is the start of building it.
+    // Straight into the builder: naming it is the start of building it.
     laEdit(d.workflow.id);
   }
 
@@ -5914,71 +6048,79 @@
     if (!c) return '';
     var cats = S.la.categories || ['induction', 'clinical', 'compliance', 'safety',
       'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
+    var naming = c.kind === 'walkthrough' || c.kind === 'document' || c.kind === 'starter';
     return '<div class="rh2-dialog-backdrop" onclick="RH2.laCreateBackdrop(event)">' +
-      '<section class="rh2-dialog rh2-dialog-sm" role="dialog" aria-modal="true"' +
+      '<section class="rh2-dialog' + (naming ? ' rh2-dialog-sm' : ' rh2-dialog-tpl') + '" role="dialog" aria-modal="true"' +
       ' aria-labelledby="la-new-title-h" id="la-new-dialog">' +
       '<div class="rh2-dialog-head">' +
-        '<h2 class="rh2-h2" id="la-new-title-h">New induction</h2>' +
-        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateClose()"' +
-        ' aria-label="Close without creating">Close</button>' +
+        '<h2 class="rh2-h2" id="la-new-title-h">' + (naming ? 'Name your new induction' : 'Choose a template') + '</h2>' +
+        '<button type="button" class="rh2-dialog-x" onclick="RH2.laCreateClose()"' +
+        ' aria-label="Close without creating"><span aria-hidden="true">&times;</span></button>' +
       '</div>' +
       (c.kind === 'walkthrough' ? laCreateWalkthroughForm(c) :
-       c.kind === 'document' ? laCreateDocumentForm(c, cats) :
-        // The first screen: what are you making? Two tiles, one quiet line.
+       naming ? laCreateDocumentForm(c, cats) :
+        // The first screen: four template tiles.
         '<div class="rh2-dialog-body">' +
-            '<p class="rh2-quiet rh2-learn-new-hint">What kind of induction is it?</p>' +
             '<div class="rh2-learn-kind">' +
-              '<button type="button" class="rh2-learn-kind-tile" onclick="RH2.laCreateKind(\'document\')">' +
-                '<span class="rh2-row-title">Document</span>' +
-                '<span class="rh2-row-sub">Written sections, resources to read, sign-offs and knowledge checks. ' +
-                'You write it on the learner&rsquo;s own screen.</span></button>' +
-              '<button type="button" class="rh2-learn-kind-tile" onclick="RH2.laCreateKind(\'walkthrough\')">' +
-                '<span class="rh2-row-title">Interactive walkthrough</span>' +
-                '<span class="rh2-row-sub">A guided tour of the portal itself &mdash; pop-ups and spotlights ' +
-                'on the real screens. Built in the walkthrough workshop.</span></button>' +
+              LA_TEMPLATES.map(function (t) {
+                var disabled = t.kind === 'import' && S.la.importing;
+                return '<div class="rh2-learn-kind-tile">' +
+                  '<span class="rh2-learn-kind-glyph" aria-hidden="true">' + laTemplateGlyph(t.glyph) + '</span>' +
+                  '<span class="rh2-learn-kind-title">' + t.title + '</span>' +
+                  '<span class="rh2-learn-kind-text">' + t.text + '</span>' +
+                  '<button type="button" class="rh2-btn rh2-learn-kind-choose"' + (disabled ? ' disabled' : '') +
+                    ' onclick="RH2.laCreateKind(\'' + t.kind + '\')">' +
+                    (disabled ? 'Importing…' : 'Choose') + '</button>' +
+                '</div>';
+              }).join('') +
             '</div>' +
-            '<p class="rh2-quiet rh2-learn-kind-import">Or <button type="button" class="rh2-linkbtn" ' +
-              (S.la.importing ? 'disabled ' : '') + 'onclick="RH2.laCreateKind(\'import\')">' +
-              'import the practice&rsquo;s existing inductions</button> to edit and assign them.</p>' +
           '</div>' +
           '<div class="rh2-dialog-foot">' +
             '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
           '</div></section></div>');
   }
 
+  /** Line icons for the template tiles. Decorative; the title carries the meaning. */
+  function laTemplateGlyph(kind) {
+    var open = '<svg viewBox="0 0 40 32" aria-hidden="true" focusable="false">';
+    if (kind === 'blank') return open + '<rect x="6" y="3" width="24" height="24" rx="2" stroke-dasharray="4 3"/><circle cx="31" cy="26" r="6" class="rh2-glyph-fill"/><path d="M31 23v6M28 26h6" class="rh2-glyph-inv"/></svg>';
+    if (kind === 'starter') return open + '<path d="M20 4l16 7-16 7L4 11z"/><path d="M10 14v8c0 3 5 5 10 5s10-2 10-5v-8"/><path d="M36 11v9"/></svg>';
+    if (kind === 'walk') return open + '<rect x="4" y="4" width="32" height="22" rx="2"/><path d="M4 10h32M14 30h12"/><circle cx="24" cy="18" r="4" stroke-dasharray="2 2"/></svg>';
+    return open + '<path d="M6 10a4 4 0 014-4h5l3 3h12a4 4 0 014 4v13a4 4 0 01-4 4H10a4 4 0 01-4-4z"/><path d="M20 14v9M16 19l4 4 4-4"/></svg>';
+  }
+
   /** The second screen of an interactive walkthrough: its name. The
    *  workshop creates it and opens its editor from here. */
   function laCreateWalkthroughForm(c) {
     return '<div class="rh2-dialog-body">' +
-        '<p class="rh2-quiet rh2-learn-new-hint">Name it now — the walkthrough editor opens next, where you ' +
-        'add the pop-ups and spotlights on the real screens. Staff see nothing until you publish it.</p>' +
-        '<div class="rh2-form-grid">' +
-          '<label class="rh2-lbl" for="la-new-title">Name</label>' +
-          '<input class="rh2-input" id="la-new-title" value="' + esc(c.title) + '"' +
+        '<div class="rh2-cb-form">' +
+          '<label class="rh2-visually-hidden" for="la-new-title">Name</label>' +
+          '<input class="rh2-input rh2-learn-new-in" id="la-new-title" value="' + esc(c.title) + '"' +
             ' placeholder="e.g. Booking a client appointment" autocomplete="off"' +
             ' oninput="RH2.laCreateField(\'title\',this.value)"' +
             ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();RH2.laCreateSubmit();}">' +
         '</div>' +
+        '<p class="rh2-quiet rh2-learn-new-hint">Don&rsquo;t worry, you can always change it later. The walkthrough editor opens next, ' +
+        'where you add the pop-ups and spotlights on the real screens. Staff see nothing until you publish it.</p>' +
         (c.err ? '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(c.err) + '</div>' : '') +
       '</div>' +
       '<div class="rh2-dialog-foot">' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateBack()">Back</button>' +
         '<button type="button" class="rh2-btn rh2-btn-primary"' + (c.busy ? ' disabled' : '') +
-          ' onclick="RH2.laCreateSubmit()">Create and edit</button>' +
+          ' onclick="RH2.laCreateSubmit()">Create walkthrough</button>' +
       '</div></section></div>';
   }
 
   /** The second screen of a document induction: its name and category. */
   function laCreateDocumentForm(c, cats) {
     return '<div class="rh2-dialog-body">' +
-        '<p class="rh2-quiet rh2-learn-new-hint">Name it now — you can add sections, modules and ' +
-        'assessments on the next screen. Nothing is visible to anyone until you assign it.</p>' +
-        '<div class="rh2-form-grid">' +
-          '<label class="rh2-lbl" for="la-new-title">Name</label>' +
-          '<input class="rh2-input" id="la-new-title" value="' + esc(c.title) + '"' +
-            ' placeholder="e.g. New Graduate OT Induction" autocomplete="off"' +
+        '<div class="rh2-cb-form">' +
+          '<label class="rh2-visually-hidden" for="la-new-title">Name</label>' +
+          '<input class="rh2-input rh2-learn-new-in" id="la-new-title" value="' + esc(c.title) + '"' +
+            ' placeholder="My induction" autocomplete="off"' +
             ' oninput="RH2.laCreateField(\'title\',this.value)"' +
             ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();RH2.laCreateSubmit();}">' +
+          '<p class="rh2-quiet rh2-learn-new-hint">Don&rsquo;t worry, you can always change it later.</p>' +
           '<label class="rh2-lbl" for="la-new-cat">Category</label>' +
           '<select class="rh2-select" id="la-new-cat" onchange="RH2.laCreateField(\'category\',this.value)">' +
             cats.map(function (k) {
@@ -5990,9 +6132,9 @@
         (c.err ? '<div class="rh2-empty rh2-learn-assign-err" role="alert">' + esc(c.err) + '</div>' : '') +
       '</div>' +
       '<div class="rh2-dialog-foot">' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laCreateClose()">Cancel</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCreateBack()">Back</button>' +
         '<button type="button" class="rh2-btn rh2-btn-primary"' + (c.busy ? ' disabled' : '') +
-          ' onclick="RH2.laCreateSubmit()">' + (c.busy ? 'Creating…' : 'Create and edit') + '</button>' +
+          ' onclick="RH2.laCreateSubmit()">' + (c.busy ? 'Creating…' : 'Create induction') + '</button>' +
       '</div></section></div>';
   }
 
@@ -6009,6 +6151,8 @@
     // A reload of the induction already open (after an autosave) keeps its
     // undo history; a fresh open starts one.
     var keepUndo = (S.la.editor && S.la.editor.id === id) ? (S.la.editor._undo || []) : [];
+    // The builder's cursor (tab, open lesson, folded chapters) survives too.
+    var keepUi = (S.la.editor && S.la.editor.id === id) ? (S.la.editor.ui || null) : null;
     var d = await api('/api/learning/workflows/' + encodeURIComponent(id));
     if (!d.ok) { portalAlert(d.error || 'The workflow could not be opened.'); return; }
     // The walkthrough shelf, so a task step in an EXISTING induction can name
@@ -6021,10 +6165,6 @@
     var w = d.workflow;
     S.la.editor = {
       id: w.id,
-      // Click-to-edit state: `editing` names the ONE region currently open as
-      // a field; `settingsOpen` names the one step/section settings strip.
-      editing: null,
-      settingsOpen: null,
       title: w.title,
       description: w.description || '',
       category: w.category || 'induction',
@@ -6061,8 +6201,11 @@
       _currentVersion: Number(w.current_version) || 0,
       _hasUnpublished: !!w.has_unpublished_changes,
       _undo: keepUndo,
+      ui: keepUi,
     };
     S.la.editor._snap = laSnapshot(S.la.editor);
+    // What Discard goes back to: the copy the server holds right now.
+    S.la.editor._saved = S.la.editor._snap;
     S.la.editorErr = '';
     S.la.editorStale = false;
     S.la.resPick = null;
@@ -6172,8 +6315,10 @@
   /**
    * Notice a change. Runs on every render of the editor and just before a
    * save: if the content differs from the last snapshot, the previous state
-   * goes on the undo stack and an autosave is scheduled. One undo step per
-   * visible change — a whole typed phrase, not a keystroke.
+   * goes on the undo stack and the builder is marked unsaved. One undo step
+   * per visible change — a whole typed phrase, not a keystroke. Nothing is
+   * saved from here: Save, moving to another lesson, and leaving are the
+   * three things that save.
    */
   function laTrack() {
     var ed = S.la.editor;
@@ -6186,21 +6331,9 @@
       ed._snap = snap;
       ed._dirty = true;
     }
-    if (ed._dirty && !ed.editing && !S.la.editorSaving) laAutosaveSchedule();
   }
 
-  /** Save shortly after the last change — and not while a field is open. */
-  function laAutosaveSchedule(ms) {
-    clearTimeout(S.la.autosaveTimer);
-    S.la.autosaveTimer = setTimeout(function () {
-      var ed = S.la.editor;
-      if (!ed || !ed._dirty) return;
-      if (ed.editing) { laAutosaveSchedule(ms); return; }
-      laSave();
-    }, ms || 900);
-  }
-
-  /** Put the content back one step. The change itself is a change: it saves. */
+  /** Put the content back one step. The change itself is a change. */
   function laUndo() {
     var ed = S.la.editor;
     if (!ed || !ed._undo || !ed._undo.length) return;
@@ -6213,13 +6346,11 @@
     ed.sections = prev.sections;
     ed._snap = snap;
     ed._dirty = true;
-    ed.editing = null;
     render();
-    laAutosaveSchedule();
   }
 
   /**
-   * Leave the editor from anywhere — its own button, a tab, browser Back.
+   * Leave the builder from anywhere — its own button, a tab, browser Back.
    * Nothing is asked: whatever is unsaved is saved on the way out, and a
    * small notice says which induction was saved. Synchronous for callers
    * that cannot wait (navigation); the save finishes in the background.
@@ -6227,12 +6358,12 @@
   function laEditorLeave() {
     var ed = S.la.editor;
     if (!ed) return;
-    clearTimeout(S.la.autosaveTimer);
     laTrack();
     var title = ed.title || 'Untitled induction';
     var pending = (ed._dirty || S.la.editorSaving) ? laSave() : null;
     S.la.editor = null;
     S.la.resPick = null;
+    S.la.drag = null;
     S.la.editorStale = false;
     S.la.editorErr = '';
     if (pending) {
@@ -6254,16 +6385,30 @@
 
   // Editor field handlers deliberately do NOT re-render on keystroke — the
   // input already shows the value; a full re-render would fight the caret.
-  // Every mutation flags _dirty so closing the editor can warn honestly.
+  // Every mutation flags _dirty so the save state and Discard stay honest.
   function laMeta(field, value) {
     if (!S.la.editor) return;
     S.la.editor[field] = value;
     S.la.editor._dirty = true;
-    // Typed straight into the live title: no render happens per keystroke,
-    // so the save is scheduled from here — a little later, to let them finish.
-    laAutosaveSchedule(1500);
+    laCbMarkDirty();
+    // The title is typed in the bar and shown in the Settings pane — keep
+    // whichever one is not being typed into in step, without a re-render.
+    if (field === 'title') {
+      ['la-ed-title', 'la-cb-set-title'].forEach(function (id) {
+        var el = doc.getElementById(id);
+        if (el && el !== doc.activeElement) el.value = value;
+      });
+    }
   }
-  function laSecField(si, value) { var ed = S.la.editor; if (ed && ed.sections[si]) { ed.sections[si].title = value; ed._dirty = true; } }
+  function laSecField(si, value) {
+    var ed = S.la.editor;
+    if (!(ed && ed.sections[si])) return;
+    ed.sections[si].title = value;
+    ed._dirty = true;
+    laCbMarkDirty();
+    var row = doc.getElementById('la-cb-c-' + si);
+    if (row) row.textContent = value || 'Untitled chapter';
+  }
   /**
    * The editor's counterpart of the learner's launch tile. A task step that
    * runs an interactive walkthrough says so here, and opens the side-panel
@@ -6377,36 +6522,45 @@
 
   function laItemField(si, ii, field, value) {
     var ed = S.la.editor;
-    if (ed && ed.sections[si] && ed.sections[si].items[ii]) { ed.sections[si].items[ii][field] = value; ed._dirty = true; }
+    if (!(ed && ed.sections[si] && ed.sections[si].items[ii])) return;
+    ed.sections[si].items[ii][field] = value;
+    ed._dirty = true;
+    laCbMarkDirty();
+    if (field === 'title') {
+      var row = doc.querySelector('#la-cb-l-' + si + '-' + ii + ' .rh2-cb-ltext');
+      if (row) row.textContent = value || 'Untitled lesson';
+    }
   }
   function laQuizField(si, ii, field, value) {
     var ed = S.la.editor;
     var it = ed && ed.sections[si] && ed.sections[si].items[ii];
-    if (it && it.quiz) { it.quiz[field] = value; ed._dirty = true; }
+    if (it && it.quiz) { it.quiz[field] = value; ed._dirty = true; laCbMarkDirty(); }
   }
   function laQField(si, ii, qi, field, value) {
     var ed = S.la.editor;
     var it = ed && ed.sections[si] && ed.sections[si].items[ii];
-    if (it && it.quiz && it.quiz.questions[qi]) { it.quiz.questions[qi][field] = value; ed._dirty = true; }
+    if (it && it.quiz && it.quiz.questions[qi]) { it.quiz.questions[qi][field] = value; ed._dirty = true; laCbMarkDirty(); }
   }
 
   function laSecAdd() {
     var ed = S.la.editor;
-    ed.sections.push({ key: '', title: 'New section', items: [] });
+    if (!ed) return;
+    ed.sections.push({ key: '', title: 'New chapter', items: [] });
     ed._dirty = true;
-    // Open the new section's title straight away: adding a section is the
-    // start of writing it.
-    laEditStart('s-' + (ed.sections.length - 1));
+    // Open the new chapter straight away: adding a chapter is the start of
+    // naming it.
+    laCbSelect('c', ed.sections.length - 1);
   }
   async function laSecRemove(si) {
     var ed = S.la.editor;
     var s = ed.sections[si];
     if (!s) return;
-    if (s.items.length && !await portalConfirm('Remove the section "' + s.title + '" and its ' + s.items.length + ' item(s)?', { danger: true })) return;
+    if (s.items.length && !await portalConfirm('Delete the chapter "' + (s.title || 'Untitled chapter') + '" and its ' + s.items.length + ' lesson(s)?', { danger: true })) return;
     ed.sections.splice(si, 1);
-    // Editing/settings keys are positional; a removal renumbers everything after it.
-    ed.editing = null;
-    ed.settingsOpen = null;
+    // Selection keys are positional; a removal renumbers everything after it.
+    var ui = laUi();
+    ui.sel = null;
+    ui.collapsed = {};
     ed._dirty = true;
     render();
   }
@@ -6416,30 +6570,33 @@
     if (to < 0 || to >= ed.sections.length) return;
     var s = ed.sections.splice(si, 1)[0];
     ed.sections.splice(to, 0, s);
-    // The open settings strip follows the section it belongs to — a move must
-    // not leave the Owner looking at the neighbour's.
-    if (ed.settingsOpen === 's-' + si) ed.settingsOpen = 's-' + to;
-    else if (ed.settingsOpen === 's-' + to) ed.settingsOpen = 's-' + si;
-    ed.editing = null;
+    // The selection follows the chapter it belongs to.
+    var ui = laUi();
+    if (ui.sel && ui.sel.si === si) ui.sel.si = to;
+    else if (ui.sel && ui.sel.si === to) ui.sel.si = si;
     ed._dirty = true;
     render();
   }
   function laItemAdd(si, type) {
     var ed = S.la.editor;
     if (!ed.sections[si] || !type) return;
-    var it = { key: '', type: type, title: '', body: '', minutes: '', required: true, resource_id: '', resource_title: '', ack_statement: '', quiz: null };
+    // Named after its type until the Owner renames it: the server refuses a
+    // lesson with no title, and Save must never be refused for a fresh one.
+    var t = LA_LESSON_TYPES.filter(function (x) { return x.type === type; })[0];
+    var it = { key: '', type: type, title: t ? t.title : 'Lesson', body: '', minutes: '', required: true, resource_id: '', resource_title: '', ack_statement: '', quiz: null };
     if (type === 'quiz') it.quiz = { passThreshold: 80, questions: [{ question: '', optionsText: '', correctIndex: 0 }] };
     ed.sections[si].items.push(it);
     ed._dirty = true;
-    // A new step starts with its title open — the first thing it needs.
-    laEditStart('i-' + si + '-' + (ed.sections[si].items.length - 1) + '-title');
+    // A new lesson opens with its title field — the first thing it needs.
+    laCbSelect('l', si, ed.sections[si].items.length - 1);
   }
-  function laItemRemove(si, ii) {
+  async function laItemRemove(si, ii) {
     var ed = S.la.editor;
-    if (!ed.sections[si]) return;
+    var it = ed.sections[si] && ed.sections[si].items[ii];
+    if (!it) return;
+    if ((it.title || it.body) && !await portalConfirm('Delete the lesson "' + (it.title || 'Untitled lesson') + '"?', { danger: true })) return;
     ed.sections[si].items.splice(ii, 1);
-    ed.editing = null;
-    ed.settingsOpen = null;
+    laUi().sel = { kind: 'c', si: si, ii: -1 };
     ed._dirty = true;
     render();
   }
@@ -6451,10 +6608,12 @@
     if (to < 0 || to >= items.length) return;
     var it = items.splice(ii, 1)[0];
     items.splice(to, 0, it);
-    // The open settings strip follows the step it belongs to.
-    if (ed.settingsOpen === 'i-' + si + '-' + ii) ed.settingsOpen = 'i-' + si + '-' + to;
-    else if (ed.settingsOpen === 'i-' + si + '-' + to) ed.settingsOpen = 'i-' + si + '-' + ii;
-    ed.editing = null;
+    // The selection follows the lesson it belongs to.
+    var ui = laUi();
+    if (ui.sel && ui.sel.kind === 'l' && ui.sel.si === si) {
+      if (ui.sel.ii === ii) ui.sel.ii = to;
+      else if (ui.sel.ii === to) ui.sel.ii = ii;
+    }
     ed._dirty = true;
     render();
   }
@@ -6463,7 +6622,9 @@
     if (!it.quiz) return;
     it.quiz.questions.push({ question: '', optionsText: '', correctIndex: 0 });
     S.la.editor._dirty = true;
-    laEditStart('i-' + si + '-' + ii + '-q' + (it.quiz.questions.length - 1));
+    render();
+    var el = doc.getElementById('la-cb-q-' + (it.quiz.questions.length - 1));
+    if (el) { try { el.focus(); } catch (e) { /* not painted */ } }
   }
   function laQRemove(si, ii, qi) {
     var it = S.la.editor.sections[si].items[ii];
@@ -6478,161 +6639,6 @@
   // editing IS what will be shipped. Closing a field is blur (or Enter/Escape
   // on a one-line field); the value is already in state from oninput, so the
   // close only swaps the field back to the learner's rendering of it.
-
-  function laEditing(key) { var ed = S.la.editor; return !!(ed && ed.editing === String(key)); }
-
-  function laEditStart(key) {
-    var ed = S.la.editor;
-    if (!ed) return;
-    ed.editing = String(key);
-    render();
-    var el = doc.getElementById('la-in-' + ed.editing);
-    if (el) {
-      try {
-        el.focus();
-        // A one-line field opens selected (renaming replaces); prose opens
-        // with the caret at the end (writing continues).
-        if (el.setSelectionRange) {
-          if (el.tagName === 'TEXTAREA') el.setSelectionRange(el.value.length, el.value.length);
-          else el.setSelectionRange(0, el.value.length);
-        }
-      } catch (e) { /* focus is a courtesy, not a contract */ }
-    }
-  }
-
-  /** Deferred, so a click that OPENS another region wins over this blur —
-   *  otherwise the blur's re-render swallows the click and every move between
-   *  two fields takes two clicks. */
-  function laEditStop(key) {
-    setTimeout(function () {
-      var ed = S.la.editor;
-      if (!ed || ed.editing !== String(key)) return;
-      // The user came straight back to the same field: a blur-and-refocus
-      // inside the window must not close it under their caret.
-      var el = doc.getElementById('la-in-' + String(key));
-      if (el && doc.activeElement === el) return;
-      ed.editing = null;
-      // The close re-renders the screen; whatever ELSE the user has since
-      // focused (a settings field, say) is rebuilt by that render, so put
-      // their focus back where it was rather than dropping their keystrokes.
-      var focusId = doc.activeElement && doc.activeElement.id;
-      render();
-      if (focusId) {
-        var back = doc.getElementById(focusId);
-        if (back) { try { back.focus(); } catch (e) { /* gone */ } }
-      }
-    }, 200);
-  }
-
-  /** One settings strip open at a time: 's-<si>' or 'i-<si>-<ii>'. */
-  function laSettings(key) {
-    var ed = S.la.editor;
-    if (!ed) return;
-    ed.settingsOpen = ed.settingsOpen === String(key) ? null : String(key);
-    render();
-  }
-
-  /** Checkbox edits re-render immediately — there is no caret to fight, and
-   *  the learner-facing chips beside them must stay honest. */
-  function laItemFlag(si, ii, field, value) { laItemField(si, ii, field, value); render(); }
-
-  // Quiz options live as one newline-joined string (optionsText) — the shape
-  // laEditorContentForApi already ships. Inline editing addresses one line.
-  function laQOption(si, ii, qi, oi, value) {
-    var ed = S.la.editor;
-    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
-    if (!it || !it.quiz || !it.quiz.questions[qi]) return;
-    var q = it.quiz.questions[qi];
-    var lines = String(q.optionsText || '').split('\n');
-    lines[oi] = value;
-    q.optionsText = lines.join('\n');
-    ed._dirty = true;
-  }
-
-  /** Closing an option's field drops emptied lines — clearing an option IS
-   *  removing it, the way deleting a paragraph removes it from a document.
-   *  The tick follows its answer down; clearing the TICKED option itself
-   *  resets the tick to the first option rather than letting it slide onto a
-   *  neighbour. Dropping lines renumbers every option, so that close renders
-   *  NOW: the usual deferred close would leave the on-screen radios carrying
-   *  stale indexes for a beat, and a tick landed in that window would mark
-   *  the wrong answer. */
-  function laQOptionDone(si, ii, qi, key) {
-    var ed = S.la.editor;
-    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
-    var dropped = false;
-    if (it && it.quiz && it.quiz.questions[qi]) {
-      var q = it.quiz.questions[qi];
-      var lines = String(q.optionsText || '').split('\n');
-      var ci0 = Number(q.correctIndex) || 0;
-      var ci = ci0;
-      var ciDropped = false;
-      var kept = [];
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].trim()) kept.push(lines[i]);
-        else if (i === ci0) ciDropped = true;
-        else if (i < ci0) ci -= 1;
-      }
-      if (ciDropped || ci >= kept.length) ci = 0;
-      dropped = kept.length !== lines.length;
-      if (dropped) {
-        q.optionsText = kept.join('\n');
-        q.correctIndex = ci;
-        ed._dirty = true;
-      }
-    }
-    if (dropped && ed && ed.editing === String(key)) {
-      ed.editing = null;
-      render();
-      return;
-    }
-    laEditStop(key);
-  }
-
-  function laQOptionAdd(si, ii, qi) {
-    var ed = S.la.editor;
-    var it = ed && ed.sections[si] && ed.sections[si].items[ii];
-    if (!it || !it.quiz || !it.quiz.questions[qi]) return;
-    var q = it.quiz.questions[qi];
-    var lines = String(q.optionsText || '').split('\n').filter(function (l) { return l.trim(); });
-    lines.push('');
-    q.optionsText = lines.join('\n');
-    ed._dirty = true;
-    laEditStart('i-' + si + '-' + ii + '-q' + qi + '-o' + (lines.length - 1));
-  }
-
-  /** The ticked radio IS the correct answer — configured by answering the
-   *  question, the way the learner will. */
-  function laQCorrect(si, ii, qi, oi) {
-    laQField(si, ii, qi, 'correctIndex', Number(oi));
-    render();
-  }
-
-  /**
-   * A click-to-edit region. Until it is clicked it shows `viewHtml` — the
-   * learner's own rendering of the value; clicked, it swaps to `inputHtml`,
-   * which must carry id="la-in-<key>" and close itself through laEditStop.
-   * The region is keyboard-reachable: Enter or Space opens it.
-   */
-  function laEditable(key, viewHtml, inputHtml, label) {
-    if (laEditing(key)) return inputHtml;
-    // A link inside the rendered prose stays a link: clicking it to check it
-    // must not also dump the region into its editor.
-    return '<div class="rh2-ind-editable" role="button" tabindex="0" title="Click to edit" ' +
-      'aria-label="' + esc(label || 'Edit') + '" ' +
-      'onclick="if(event.target&&event.target.closest&&event.target.closest(\'a\'))return;RH2.laEditStart(\'' + key + '\')" ' +
-      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();RH2.laEditStart(\'' + key + '\')}">' +
-      viewHtml + '</div>';
-  }
-
-  /** The attributes every inline field shares: its identity, commit-on-blur,
-   *  and — one-line fields — Enter/Escape closing it. */
-  function laInAttrs(key, oneLine) {
-    return 'id="la-in-' + key + '" onblur="RH2.laEditStop(\'' + key + '\')"' +
-      (oneLine
-        ? ' onkeydown="if(event.key===\'Enter\'||event.key===\'Escape\'){event.preventDefault();this.blur();}"'
-        : ' onkeydown="if(event.key===\'Escape\'){this.blur();}"');
-  }
 
   // Resource picker: inline search against the hub catalogue.
   function laResPickOpen(si, ii) {
@@ -6665,348 +6671,542 @@
     render();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  THE BUILDER — edit mode
+  //
+  //  A course-builder layout: a curriculum rail on the left (chapters, each
+  //  with its lessons, reorderable by drag or by the arrows in the pane), and
+  //  an edit pane on the right for whatever is selected. Three tabs —
+  //  Curriculum, Settings, Publish — and one Save. Nothing is saved until
+  //  the Owner presses Save, moves to another lesson, or leaves the builder;
+  //  Discard puts the pane back to the last saved copy.
+  //
+  //  `ed.ui` is the builder's own cursor: which tab, which chapter or lesson
+  //  is open, which chapters are folded. It survives a save (laEdit carries
+  //  it across the reload) so saving never throws the Owner back to the top.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  var LA_LESSON_TYPES = [
+    { type: 'content', title: 'Reading', group: 'deliver', glyph: 'text',
+      text: 'Written content, styled with markdown &mdash; headings, bullets, links.' },
+    { type: 'resource', title: 'Hub resource', group: 'deliver', glyph: 'doc',
+      text: 'A document, video or walkthrough already in the Resource Hub.' },
+    { type: 'task', title: 'Task', group: 'deliver', glyph: 'task',
+      text: 'Something to do in the portal &mdash; optionally as an interactive walkthrough.' },
+    { type: 'quiz', title: 'Knowledge check', group: 'assess', glyph: 'quiz',
+      text: 'Multiple-choice questions with a pass mark.' },
+    { type: 'acknowledgement', title: 'Acknowledgement', group: 'assess', glyph: 'ack',
+      text: 'A statement the employee must read and accept.' },
+  ];
+
+  function laLessonGlyph(kind) {
+    var open = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">';
+    if (kind === 'text') return open + '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
+    if (kind === 'doc') return open + '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>';
+    if (kind === 'task') return open + '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg>';
+    if (kind === 'quiz') return open + '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 4"/><circle cx="12" cy="17" r=".8" class="rh2-glyph-fill"/></svg>';
+    return open + '<path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6"/><path d="M8 20l4-3 4 3"/></svg>';
+  }
+  function laTypeGlyph(type) {
+    var t = LA_LESSON_TYPES.filter(function (x) { return x.type === type; })[0];
+    return laLessonGlyph(t ? t.glyph : 'text');
+  }
+
+  function laUi() {
+    var ed = S.la.editor;
+    if (!ed) return null;
+    if (!ed.ui) ed.ui = { tab: 'curriculum', sel: null, collapsed: {} };
+    return ed.ui;
+  }
+
+  /** Open a tab of the builder. Switching saves whatever is pending. */
+  function laCbTab(t) {
+    var ui = laUi();
+    if (!ui) return;
+    laCbFlush();
+    ui.tab = t;
+    render();
+  }
+
+  /** Select a chapter ('c'), a lesson ('l'), or the add-lesson picker ('pick'). */
+  function laCbSelect(kind, si, ii) {
+    var ui = laUi();
+    if (!ui) return;
+    laCbFlush();
+    ui.tab = 'curriculum';
+    ui.sel = { kind: kind, si: Number(si), ii: ii === undefined ? -1 : Number(ii) };
+    if (kind !== 'c' && ui.collapsed) delete ui.collapsed[Number(si)];
+    render();
+    // A newly opened title field takes focus when it is empty: naming is the
+    // first thing a new chapter or lesson needs.
+    var el = doc.getElementById('la-cb-title');
+    if (el && !el.value) { try { el.focus(); } catch (e) { /* not painted */ } }
+  }
+
+  function laCbToggle(si) {
+    var ui = laUi();
+    if (!ui) return;
+    if (ui.collapsed[si]) delete ui.collapsed[si];
+    else ui.collapsed[si] = true;
+    render();
+  }
+
+  /** Moving between lessons keeps pending edits in memory (they are one
+   *  draft) and only notes them, so the save state and Discard stay honest. */
+  function laCbFlush() { laTrack(); }
+
+  /** Discard: the pane goes back to the last saved copy. */
+  function laCbDiscard() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    laTrack();
+    if (!ed._dirty || !ed._saved) return;
+    var prev = JSON.parse(ed._saved);
+    ed.title = prev.title;
+    ed.description = prev.description;
+    ed.category = prev.category;
+    ed.sections = prev.sections;
+    ed._snap = ed._saved;
+    ed._dirty = false;
+    // The selection may point past the end of what was restored.
+    var ui = laUi();
+    if (ui && ui.sel && ui.sel.kind !== 'pick') {
+      var s = ed.sections[ui.sel.si];
+      if (!s) ui.sel = null;
+      else if (ui.sel.kind === 'l' && !s.items[ui.sel.ii]) ui.sel = { kind: 'c', si: ui.sel.si, ii: -1 };
+    }
+    render();
+  }
+
+  /** The bar's save state, updated in place while typing (no re-render). */
+  function laCbSaveState() {
+    var ed = S.la.editor;
+    if (!ed) return '';
+    return S.la.editorSaving ? 'Saving…' : (ed._dirty ? 'Unsaved changes' : 'All changes saved');
+  }
+  function laCbMarkDirty() {
+    var el = doc.getElementById('la-cb-savestate');
+    if (el) el.textContent = 'Unsaved changes';
+  }
+
+  /** Save, then open the learner's own preview of it. */
+  async function laCbPreview() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    laTrack();
+    if (ed._dirty) { var ok = await laSave(); if (!ok) return; }
+    laPreview(ed.id);
+  }
+
+  // ── Drag-to-reorder (native HTML5 drag; the arrows in the pane are the
+  //    keyboard route to the same moves) ─────────────────────────────────────
+
+  function laDragStart(ev, si, ii) {
+    S.la.drag = { si: Number(si), ii: ii === undefined ? -1 : Number(ii) };
+    if (ev && ev.dataTransfer) {
+      try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', 'la'); } catch (e) { /* IE */ }
+    }
+    if (ev && ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.add('rh2-cb-dragging');
+  }
+  function laDragOver(ev) {
+    if (!S.la.drag) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    var row = ev.currentTarget;
+    if (row && row.classList) row.classList.add('rh2-cb-dropover');
+  }
+  function laDragLeave(ev) {
+    var row = ev.currentTarget;
+    if (row && row.classList) row.classList.remove('rh2-cb-dropover');
+  }
+  function laDragEnd() {
+    S.la.drag = null;
+    var els = doc.querySelectorAll('.rh2-cb-dragging, .rh2-cb-dropover');
+    for (var i = 0; i < els.length; i++) els[i].classList.remove('rh2-cb-dragging', 'rh2-cb-dropover');
+  }
   /**
-   * One learning item, editable in place.
-   *
-   * This is the LEARNER'S OWN RENDERING of the step — the rendered prose, the
-   * acknowledgement blockquote, the knowledge-check options, the resource
-   * button — where every piece of content opens as a field when clicked
-   * (laEditable). Configuration — required, minutes, ordering, removal, the
-   * linked resource, the pass mark — sits behind the step's Settings toggle so
-   * the screen reads as the tutorial, never as the form that produces it. The
-   * learner's action buttons appear where the learner will see them, inert:
-   * this surface edits content, it does not complete it.
+   * Drop onto a lesson row (insert before it), or onto a chapter (a lesson
+   * goes to the end of that chapter; a chapter takes that chapter's place).
    */
-  function laEditorItemHtml(it, si, ii, count) {
-    var k = 'i-' + si + '-' + ii;
-    var setOpen = S.la.editor.settingsOpen === k;
-    // The same chips the learner sees: only the interactions announce
-    // themselves. A resource or a task is simply content there, so it is
-    // simply content here.
-    var typeChip = (it.type === 'acknowledgement' || it.type === 'quiz')
-      ? ' <span class="rh2-chip rh2-chip-quiet">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) + '</span>' : '';
-    var reqChip = !it.required ? ' <span class="rh2-chip rh2-chip-quiet">Optional</span>' : '';
-    var mins = parseInt(it.minutes, 10) > 0
-      ? '<span class="rh2-row-sub">' + parseInt(it.minutes, 10) + ' min</span>' : '';
-    // The learner's launch hint, made into the way into the walkthrough
-    // editor. Empty for anything that is not a walkthrough.
-    var walk = laItemWalkHtml(it);
+  function laDrop(ev, si, ii) {
+    ev.preventDefault();
+    var d = S.la.drag;
+    var ed = S.la.editor;
+    laDragEnd();
+    if (!d || !ed) return;
+    si = Number(si); ii = ii === undefined ? -1 : Number(ii);
+    var ui = laUi();
+    if (d.ii === -1) {
+      // A chapter, onto a chapter.
+      if (si === d.si || !ed.sections[si]) return;
+      var sec = ed.sections.splice(d.si, 1)[0];
+      var at = si > d.si ? si - 1 : si;
+      ed.sections.splice(at, 0, sec);
+      ui.sel = { kind: 'c', si: at, ii: -1 };
+    } else {
+      var from = ed.sections[d.si];
+      var to = ed.sections[si];
+      if (!from || !to || !from.items[d.ii]) return;
+      if (si === d.si && ii === d.ii) return;
+      var it = from.items.splice(d.ii, 1)[0];
+      var idx = ii === -1 ? to.items.length : ii;
+      if (si === d.si && ii > d.ii) idx -= 1;
+      to.items.splice(idx, 0, it);
+      ui.sel = { kind: 'l', si: si, ii: idx };
+      delete ui.collapsed[si];
+    }
+    ed._dirty = true;
+    render();
+  }
 
-    var out = '<div class="rh2-learn-ed-item">' +
-      '<div class="rh2-ind-item-head">' +
-        laEditable(k + '-title',
-          '<span class="rh2-row-main"><span class="rh2-row-title">' +
-            (it.title ? esc(it.title) : '<span class="rh2-ind-ed-empty">Untitled step &mdash; click to name it</span>') +
-            typeChip + reqChip + '</span>' + mins + '</span>',
-          '<input class="rh2-input rh2-learn-ed-title" ' + laInAttrs(k + '-title', true) +
-            ' placeholder="Step title" value="' + esc(it.title) + '" ' +
-            'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">',
-          'Edit the title of step ' + (ii + 1)) +
-        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-learn-ed-setbtn" ' +
-          'aria-expanded="' + (setOpen ? 'true' : 'false') + '" ' +
-          'onclick="RH2.laSettings(\'' + k + '\')">Settings</button>' +
+  // ── The rail ──────────────────────────────────────────────────────────────
+
+  function laCbRail(ed) {
+    var ui = laUi();
+    var sel = ui.sel || {};
+    var out = '<nav class="rh2-cb-rail" aria-label="Curriculum">';
+    out += ed.sections.map(function (s, si) {
+      var folded = !!ui.collapsed[si];
+      var items = s.items || [];
+      var chapterOn = sel.kind === 'c' && sel.si === si;
+      var draft = !items.length;
+      var h = '<section class="rh2-cb-chapter' + (chapterOn ? ' rh2-cb-on' : '') + '" ' +
+        'ondragover="RH2.laDragOver(event)" ondragleave="RH2.laDragLeave(event)" ondrop="RH2.laDrop(event,' + si + ',-1)">' +
+        '<div class="rh2-cb-chead" draggable="true" ondragstart="RH2.laDragStart(event,' + si + ',-1)" ondragend="RH2.laDragEnd()">' +
+          '<span class="rh2-cb-grip" aria-hidden="true" title="Drag to reorder">&#8942;&#8942;</span>' +
+          '<button type="button" class="rh2-cb-ctitle" id="la-cb-c-' + si + '" aria-current="' + (chapterOn ? 'true' : 'false') +
+            '" onclick="RH2.laCbSelect(\'c\',' + si + ')">' +
+            (s.title ? esc(s.title) : '<span class="rh2-ind-ed-empty">Untitled chapter</span>') + '</button>' +
+          (draft ? '<span class="rh2-cb-draft">Draft</span>' : '') +
+          '<button type="button" class="rh2-cb-fold" aria-expanded="' + (!folded) + '" aria-label="' +
+            (folded ? 'Expand' : 'Collapse') + ' chapter ' + (si + 1) + '" onclick="RH2.laCbToggle(' + si + ')">' +
+            '<span aria-hidden="true">' + (folded ? '&#8964;' : '&#8963;') + '</span></button>' +
+        '</div>';
+      if (!folded) {
+        h += '<ol class="rh2-cb-lessons">' + items.map(function (it, ii) {
+          var on = sel.kind === 'l' && sel.si === si && sel.ii === ii;
+          return '<li class="rh2-cb-lesson' + (on ? ' rh2-cb-on' : '') + '" draggable="true" ' +
+            'ondragstart="RH2.laDragStart(event,' + si + ',' + ii + ')" ondragend="RH2.laDragEnd()" ' +
+            'ondragover="RH2.laDragOver(event);event.stopPropagation()" ondragleave="RH2.laDragLeave(event)" ' +
+            'ondrop="RH2.laDrop(event,' + si + ',' + ii + ');event.stopPropagation()">' +
+            '<span class="rh2-cb-grip" aria-hidden="true" title="Drag to reorder">&#8942;&#8942;</span>' +
+            '<button type="button" class="rh2-cb-ltitle" id="la-cb-l-' + si + '-' + ii + '" aria-current="' + (on ? 'true' : 'false') +
+              '" onclick="RH2.laCbSelect(\'l\',' + si + ',' + ii + ')">' +
+              '<span class="rh2-cb-licon">' + laTypeGlyph(it.type) + '</span>' +
+              '<span class="rh2-cb-ltext">' + (it.title ? esc(it.title) : '<span class="rh2-ind-ed-empty">Untitled lesson</span>') + '</span>' +
+              (!it.required ? '<span class="rh2-cb-opt">Optional</span>' : '') +
+            '</button></li>';
+        }).join('') + '</ol>' +
+        '<div class="rh2-cb-cacts">' +
+          '<button type="button" class="rh2-btn rh2-btn-primary rh2-cb-addlesson" onclick="RH2.laCbSelect(\'pick\',' + si + ')">+ Add lesson</button>' +
+        '</div>';
+      }
+      return h + '</section>';
+    }).join('');
+    out += '<button type="button" class="rh2-btn rh2-cb-addchapter" onclick="RH2.laSecAdd()">Add chapter</button>';
+    if (!ed.sections.length) {
+      out += '<p class="rh2-quiet rh2-cb-railhint">An induction is chapters of lessons. Add the first chapter to begin.</p>';
+    }
+    return out + '</nav>';
+  }
+
+  // ── The pane ──────────────────────────────────────────────────────────────
+
+  /** The pane's header: what is being edited, Discard, Save. */
+  function laCbPaneHead(label) {
+    var ed = S.la.editor;
+    return '<div class="rh2-cb-phead">' +
+      '<h2 class="rh2-cb-ptitle">' + label + '</h2>' +
+      '<span class="rh2-cb-pacts">' +
+        // Never disabled: typing does not re-render, so a disabled state set at
+        // the last render would still be showing after the first keystroke.
+        '<button type="button" class="rh2-btn" onclick="RH2.laCbDiscard()">Discard changes</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSave()"' + (S.la.editorSaving ? ' disabled' : '') + '>' +
+          (S.la.editorSaving ? 'Saving…' : 'Save') + '</button>' +
+      '</span></div>';
+  }
+
+  function laCbPane(ed) {
+    var ui = laUi();
+    if (ui.tab === 'settings') return laCbSettingsPane(ed);
+    if (ui.tab === 'publish') return laCbPublishPane(ed);
+    // Opening lands on the first chapter, so the pane is never a blank
+    // page on a built induction; an empty one gets the invitation below.
+    if (!ui.sel && ed.sections.length) ui.sel = { kind: 'c', si: 0, ii: -1 };
+    var sel = ui.sel;
+    if (!sel) {
+      return '<div class="rh2-cb-pane rh2-cb-pane-empty">' +
+        '<h2 class="rh2-cb-ptitle">' + (ed.sections.length ? 'Choose a chapter or lesson' : 'Start with a chapter') + '</h2>' +
+        '<p class="rh2-quiet">' + (ed.sections.length
+          ? 'Pick anything in the curriculum on the left to edit it here. Drag chapters and lessons to reorder them.'
+          : 'A chapter groups the lessons a learner works through together. Add one, name it, then add its lessons.') + '</p>' +
+        (ed.sections.length ? '' : '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSecAdd()">Add the first chapter</button></div>') +
+        '</div>';
+    }
+    var s = ed.sections[sel.si];
+    if (!s) { ui.sel = null; return laCbPane(ed); }
+    if (sel.kind === 'pick') return laCbPickPane(ed, sel.si);
+    if (sel.kind === 'c') return laCbChapterPane(ed, s, sel.si);
+    var it = s.items[sel.ii];
+    if (!it) { ui.sel = { kind: 'c', si: sel.si, ii: -1 }; return laCbPane(ed); }
+    return laCbLessonPane(ed, it, sel.si, sel.ii);
+  }
+
+  /** "Lessons": the lesson-type picker, grouped by what the lesson is for. */
+  function laCbPickPane(ed, si) {
+    var group = function (key, heading) {
+      return '<h3 class="rh2-cb-pickgroup">' + heading + '</h3>' +
+        '<div class="rh2-cb-picks">' + LA_LESSON_TYPES.filter(function (t) { return t.group === key; }).map(function (t) {
+          return '<button type="button" class="rh2-cb-pick" onclick="RH2.laItemAdd(' + si + ',\'' + t.type + '\')">' +
+            '<span class="rh2-cb-pickicon" aria-hidden="true">' + laLessonGlyph(t.glyph) + '</span>' +
+            '<span class="rh2-cb-pickbody"><span class="rh2-cb-picktitle">' + t.title + '</span>' +
+            '<span class="rh2-cb-picktext">' + t.text + '</span></span></button>';
+        }).join('') + '</div>';
+    };
+    return '<div class="rh2-cb-pane">' +
+      '<div class="rh2-cb-phead"><h2 class="rh2-cb-ptitle">Lessons</h2>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laCbSelect(\'c\',' + si + ')">Cancel</button></div>' +
+      '<p class="rh2-quiet">Adding to <strong>' + (ed.sections[si].title ? esc(ed.sections[si].title) : 'this chapter') + '</strong>.</p>' +
+      group('deliver', 'Deliver learning content') +
+      group('assess', 'Assess your learners') +
+      '</div>';
+  }
+
+  function laCbChapterPane(ed, s, si) {
+    var count = ed.sections.length;
+    return '<div class="rh2-cb-pane">' +
+      laCbPaneHead('Edit: ' + (s.title ? esc(s.title) : 'chapter')) +
+      '<div class="rh2-cb-form">' +
+        '<label class="rh2-lbl" for="la-cb-title">Chapter title</label>' +
+        '<input class="rh2-input" id="la-cb-title" value="' + esc(s.title) + '" placeholder="Chapter title" ' +
+          'oninput="RH2.laSecField(' + si + ',this.value)">' +
+        '<p class="rh2-quiet rh2-cb-tip">A chapter stays a draft until it has at least one lesson.</p>' +
       '</div>' +
-      // The learner's own screen shows a launch tile for a task that carries a
-      // walkthrough; the editor showed text boxes and nothing else, so the
-      // pop-ups were invisible in the one place they are meant to be edited.
-      // Same tile, same position — it opens the walkthrough EDITOR instead.
-      walk;
-
-    // The secondary settings strip — configuration, off the primary surface.
-    if (setOpen) {
-      out += '<div class="rh2-learn-ed-set">' +
-        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (it.required ? 'checked ' : '') +
-          'onchange="RH2.laItemFlag(' + si + ',' + ii + ',\'required\',this.checked)"> Required</label>' +
-        '<label class="rh2-lbl">Minutes <input type="number" min="1" max="600" class="rh2-input rh2-learn-ed-mins" id="la-set-' + k + '-mins" value="' + esc(it.minutes) + '" ' +
-          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'minutes\',this.value)"></label>' +
-        (it.type === 'quiz' && it.quiz
-          ? '<label class="rh2-lbl">Pass mark % <input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="la-set-' + k + '-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
-              'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)"></label>'
-          : '') +
-        // A task step can BE an interactive walkthrough. Editing that
-        // walkthrough belongs here, next to the step that uses it — sending
-        // the Owner off to a separate console to change a pop-up in the
-        // induction they already have open is the long way round.
-        (it.type === 'task' ? laItemWalkthroughHtml(it, si, ii) : '') +
+      '<div class="rh2-cb-pfoot">' +
+        '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laCbSelect(\'pick\',' + si + ')">+ Add lesson</button>' +
         '<span class="rh2-learn-ed-tools">' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move step up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move step down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
-          '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">Remove step</button>' +
-        '</span>';
-      if (it.type === 'resource') {
-        var rp = S.la.resPick;
-        out += '<div class="rh2-learn-ed-row">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move chapter up" onclick="RH2.laSecMove(' + si + ',-1)">&uarr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === count - 1 ? 'disabled ' : '') + 'aria-label="Move chapter down" onclick="RH2.laSecMove(' + si + ',1)">&darr;</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet rh2-cb-danger" onclick="RH2.laSecRemove(' + si + ')">Delete chapter</button>' +
+        '</span>' +
+      '</div></div>';
+  }
+
+  /** The lines a quiz question's options are typed as, one per line. */
+  function laQOptionsText(q) { return String(q.optionsText || ''); }
+
+  function laCbLessonPane(ed, it, si, ii) {
+    var count = ed.sections[si].items.length;
+    var typeLabel = LA_ITEM_TYPE_LABELS[it.type] || it.type;
+    var out = '<div class="rh2-cb-pane">' +
+      laCbPaneHead('Edit: ' + (it.title ? esc(it.title) : 'lesson')) +
+      '<div class="rh2-cb-form">' +
+        '<div class="rh2-cb-typeline"><span class="rh2-cb-licon">' + laTypeGlyph(it.type) + '</span>' + esc(typeLabel) + '</div>' +
+        '<label class="rh2-lbl" for="la-cb-title">Title</label>' +
+        '<input class="rh2-input" id="la-cb-title" value="' + esc(it.title) + '" placeholder="Lesson title" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'title\',this.value)">';
+
+    // The walkthrough a task or resource step runs, if any — editable here.
+    var walk = laItemWalkHtml(it);
+    if (walk) out += walk;
+
+    if (it.type === 'task') {
+      out += '<div class="rh2-cb-row">' + laItemWalkthroughHtml(it, si, ii) + '</div>';
+    }
+
+    if (it.type === 'resource') {
+      var rp = S.la.resPick;
+      out += '<label class="rh2-lbl">Resource</label>' +
+        '<div class="rh2-learn-ed-row">' +
           (it.resource_id
             ? '<span class="rh2-chip rh2-chip-ok">Linked: ' + esc(it.resource_title || it.resource_id) + '</span>'
             : '<span class="rh2-chip rh2-chip-warn">No resource linked yet</span>') +
           '<button type="button" class="rh2-btn" onclick="RH2.laResPickOpen(' + si + ',' + ii + ')">' +
             (it.resource_id ? 'Change resource' : 'Choose resource') + '</button></div>';
-        if (rp && rp.si === si && rp.ii === ii) {
-          out += '<div class="rh2-learn-ed-respick">' +
-            '<input class="rh2-input" id="la-respick-q" placeholder="Search the Resource Hub…" value="' + esc(rp.q) + '" ' +
-              'oninput="RH2.laResSearch(this.value)">' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laResPickClose()">Close</button>';
-          if (rp.loading) out += skel(2, 34);
-          else if (rp.rows && !rp.rows.length) out += '<div class="rh2-empty">No matching resources.</div>';
-          else if (rp.rows) {
-            out += rp.rows.slice(0, 8).map(function (r, ri) {
-              return '<button type="button" class="rh2-row rh2-learn-ed-resrow" onclick="RH2.laResChoose(' + ri + ')">' +
-                '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
-                '<span class="rh2-row-sub">' + esc(pick(r, 'content_type') || pick(r, 'resource_type') || '') + '</span></span></button>';
-            }).join('');
-          }
-          out += '</div>';
+      if (rp && rp.si === si && rp.ii === ii) {
+        out += '<div class="rh2-learn-ed-respick">' +
+          '<input class="rh2-input" id="la-respick-q" placeholder="Search the Resource Hub…" value="' + esc(rp.q) + '" ' +
+            'oninput="RH2.laResSearch(this.value)">' +
+          '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laResPickClose()">Close</button>';
+        if (rp.loading) out += skel(2, 34);
+        else if (rp.rows && !rp.rows.length) out += '<div class="rh2-empty">No matching resources.</div>';
+        else if (rp.rows) {
+          out += rp.rows.slice(0, 8).map(function (r, ri) {
+            return '<button type="button" class="rh2-row rh2-learn-ed-resrow" onclick="RH2.laResChoose(' + ri + ')">' +
+              '<span class="rh2-row-main"><span class="rh2-row-title">' + esc(pick(r, 'title')) + '</span>' +
+              '<span class="rh2-row-sub">' + esc(pick(r, 'content_type') || pick(r, 'resource_type') || '') + '</span></span></button>';
+          }).join('');
         }
+        out += '</div>';
       }
-      out += '</div>';
     }
 
-    out += '<div class="rh2-learn-item-body">';
-
-    // The prose the learner reads — click it to write it.
-    out += laEditable(k + '-body',
-      it.body
-        ? '<div class="rh2-learn-prose">' + mdRender(it.body) + '</div>'
-        : '<p class="rh2-ind-ed-empty">No content yet &mdash; click to write it.</p>',
-      '<textarea class="rh2-input rh2-learn-ed-body" rows="6" ' + laInAttrs(k + '-body', false) +
-        ' placeholder="Instructions / content (markdown: ## headings, **bold**, - bullets, links)" ' +
-        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>',
-      'Edit the content of step ' + (ii + 1));
-
-    if (it.type === 'resource' && !walk) {
-      // The learner's resource item is ONE launch tile — mirror it inert.
-      // Opening is the learner's click, and opening records the step; there
-      // is no separate button to depict. A walkthrough resource already has
-      // its hint above, exactly where the learner sees it.
-      out += '<div class="rh2-learn-actions">' +
-        '<span class="rh2-ind-launch-hint">Opens' +
-          (it.resource_title ? ': ' + esc(it.resource_title) : ' the linked resource') +
-          ' &rarr;</span>' +
-        (it.resource_id ? '' : '<span class="rh2-quiet">Link the resource in Settings.</span>') +
-      '</div>';
-    }
+    out += '<label class="rh2-lbl" for="la-cb-body">' + (it.type === 'content' ? 'Content' : 'Instructions') + '</label>' +
+      '<textarea class="rh2-input rh2-cb-body" id="la-cb-body" rows="' + (it.type === 'content' ? 12 : 5) + '" ' +
+        'placeholder="Markdown: ## headings, **bold**, - bullets, links" ' +
+        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>';
 
     if (it.type === 'acknowledgement') {
-      out += laEditable(k + '-ack',
-        '<blockquote class="rh2-learn-ack">' +
-          (it.ack_statement
-            ? mdRender(it.ack_statement)
-            : '<span class="rh2-ind-ed-empty">No statement yet &mdash; click to write what the employee must acknowledge.</span>') +
-        '</blockquote>',
-        '<textarea class="rh2-input" rows="2" ' + laInAttrs(k + '-ack', false) +
-          ' placeholder="The statement the employee must acknowledge" ' +
-          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>',
-        'Edit the acknowledgement statement') +
-        '<div class="rh2-learn-actions"><button type="button" class="rh2-btn rh2-btn-primary" disabled>I acknowledge</button></div>';
+      out += '<label class="rh2-lbl" for="la-cb-ack">Statement the employee must acknowledge</label>' +
+        '<textarea class="rh2-input" id="la-cb-ack" rows="3" placeholder="I have read and understood…" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>';
     }
 
     if (it.type === 'quiz' && it.quiz) {
-      out += it.quiz.questions.map(function (q, qi) {
-        var qk = k + '-q' + qi;
-        var lines = q.optionsText ? String(q.optionsText).split('\n') : [];
-        // A question's FIRST option: '' cannot hold "one empty line" (the
-        // join of [''] is ''), so while that option's field is open the line
-        // is synthesised here — the text typed lands in state via laQOption.
-        if (laEditing(qk + '-o' + lines.length)) lines.push('');
-        var ci = Number(q.correctIndex) || 0;
-        return '<fieldset class="rh2-learn-q">' +
-          '<legend>' + laEditable(qk,
-            (qi + 1) + '. ' + (q.question ? esc(q.question) : '<span class="rh2-ind-ed-empty">Click to write question ' + (qi + 1) + '</span>'),
-            '<input class="rh2-input rh2-learn-ed-title" ' + laInAttrs(qk, true) +
-              ' placeholder="Question ' + (qi + 1) + '" value="' + esc(q.question) + '" ' +
-              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">',
-            'Edit question ' + (qi + 1)) + '</legend>' +
-          lines.map(function (opt, oi) {
-            var ok = qk + '-o' + oi;
-            return '<div class="rh2-learn-opt">' +
-              '<input type="radio" name="la-ed-q-' + si + '-' + ii + '-' + qi + '" ' + (ci === oi ? 'checked ' : '') +
-                'aria-label="Mark option ' + (oi + 1) + ' as the correct answer" ' +
-                'onchange="RH2.laQCorrect(' + si + ',' + ii + ',' + qi + ',' + oi + ')">' +
-              laEditable(ok,
-                opt.trim() ? '<span>' + esc(opt) + '</span>' : '<span class="rh2-ind-ed-empty">Empty option</span>',
-                '<input class="rh2-input" id="la-in-' + ok + '" value="' + esc(opt) + '" ' +
-                  'placeholder="Answer option &mdash; leave empty to remove" ' +
-                  'onblur="RH2.laQOptionDone(' + si + ',' + ii + ',' + qi + ',\'' + ok + '\')" ' +
-                  'onkeydown="if(event.key===\'Enter\'||event.key===\'Escape\'){event.preventDefault();this.blur();}" ' +
-                  'oninput="RH2.laQOption(' + si + ',' + ii + ',' + qi + ',' + oi + ',this.value)">',
-                'Edit answer option ' + (oi + 1)) +
-            '</div>';
-          }).join('') +
-          '<div class="rh2-learn-ed-qtools">' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laQOptionAdd(' + si + ',' + ii + ',' + qi + ')">+ Add option</button>' +
-            (setOpen
-              ? '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">Remove question</button>'
-              : '') +
-          '</div>' +
-        '</fieldset>';
-      }).join('') +
-      '<p class="rh2-quiet rh2-learn-ed-hint">The ticked option is the correct answer &mdash; learners see the options unticked.</p>' +
-      '<div class="rh2-learn-actions">' +
+      out += '<div class="rh2-cb-quiz">' +
+        '<div class="rh2-cb-row">' +
+          '<label class="rh2-lbl" for="la-cb-thr">Pass mark %</label>' +
+          '<input type="number" min="0" max="100" class="rh2-input rh2-learn-ed-mins" id="la-cb-thr" value="' + esc(it.quiz.passThreshold) + '" ' +
+            'oninput="RH2.laQuizField(' + si + ',' + ii + ',\'passThreshold\',this.value)">' +
+        '</div>' +
+        it.quiz.questions.map(function (q, qi) {
+          var lines = laQOptionsText(q).split('\n').filter(function (l) { return l.trim(); });
+          var ci = Number(q.correctIndex) || 0;
+          return '<fieldset class="rh2-cb-q">' +
+            '<legend>Question ' + (qi + 1) + '</legend>' +
+            '<input class="rh2-input" id="la-cb-q-' + qi + '" value="' + esc(q.question) + '" placeholder="The question" ' +
+              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'question\',this.value)">' +
+            '<label class="rh2-lbl" for="la-cb-qo-' + qi + '">Answer options, one per line</label>' +
+            '<textarea class="rh2-input" id="la-cb-qo-' + qi + '" rows="4" ' +
+              'oninput="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'optionsText\',this.value)" ' +
+              'onchange="RH2.laCbRender()">' + esc(laQOptionsText(q)) + '</textarea>' +
+            '<div class="rh2-cb-row">' +
+              '<label class="rh2-lbl" for="la-cb-qc-' + qi + '">Correct answer</label>' +
+              '<select class="rh2-select" id="la-cb-qc-' + qi + '" onchange="RH2.laQField(' + si + ',' + ii + ',' + qi + ',\'correctIndex\',Number(this.value))">' +
+                (lines.length ? lines.map(function (l, oi) {
+                  return '<option value="' + oi + '"' + (ci === oi ? ' selected' : '') + '>' + esc(l) + '</option>';
+                }).join('') : '<option value="0">Type the options first</option>') +
+              '</select>' +
+              (it.quiz.questions.length > 1
+                ? '<button type="button" class="rh2-btn rh2-btn-quiet rh2-cb-danger" onclick="RH2.laQRemove(' + si + ',' + ii + ',' + qi + ')">Remove question</button>'
+                : '') +
+            '</div>' +
+          '</fieldset>';
+        }).join('') +
         '<button type="button" class="rh2-btn" onclick="RH2.laQAdd(' + si + ',' + ii + ')">+ Add question</button>' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" disabled>Submit answers</button>' +
       '</div>';
     }
 
-    if (it.type === 'content' || it.type === 'task') {
-      // The learner has no button here: reading past the section records the
-      // step. Say so rather than depicting a control that no longer exists.
-      out += '<p class="rh2-quiet rh2-learn-ed-hint">The learner has nothing to press here &mdash; reading past the section records this step.</p>';
-    }
-
-    out += '</div>';
-    return out + '</div>';
+    out += '<div class="rh2-cb-row rh2-cb-settings">' +
+        '<label class="rh2-learn-inline-check"><input type="checkbox" ' + (it.required ? 'checked ' : '') +
+          'onchange="RH2.laItemField(' + si + ',' + ii + ',\'required\',this.checked);RH2.laCbRender()"> Required to complete the induction</label>' +
+        '<label class="rh2-lbl">Estimated minutes <input type="number" min="1" max="600" class="rh2-input rh2-learn-ed-mins" id="la-cb-mins" value="' + esc(it.minutes) + '" ' +
+          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'minutes\',this.value)"></label>' +
+      '</div>' +
+    '</div>' +
+    '<div class="rh2-cb-pfoot">' +
+      '<span class="rh2-quiet">' + (it.type === 'content' || it.type === 'task' || it.type === 'resource'
+        ? 'The learner has nothing to press here &mdash; reading past it records this lesson.'
+        : it.type === 'quiz' ? 'Learners see the options unticked and must reach the pass mark.'
+        : 'Learners must tick the statement before the induction can be completed.') + '</span>' +
+      '<span class="rh2-learn-ed-tools">' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === 0 ? 'disabled ' : '') + 'aria-label="Move lesson up" onclick="RH2.laItemMove(' + si + ',' + ii + ',-1)">&uarr;</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (ii === count - 1 ? 'disabled ' : '') + 'aria-label="Move lesson down" onclick="RH2.laItemMove(' + si + ',' + ii + ',1)">&darr;</button>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-cb-danger" onclick="RH2.laItemRemove(' + si + ',' + ii + ')">Delete lesson</button>' +
+      '</span>' +
+    '</div></div>';
+    return out;
   }
 
-  /** Step 0, edit mode. The title lives in the shared header, where the
-   *  learner's title is; what is left is what the overview screen shows. */
-  function indOverviewEdit(ed) {
+  /** Re-render on demand — after a change that other controls depend on. */
+  function laCbRender() { render(); }
+
+  function laCbSettingsPane(ed) {
     var cats = S.la.categories ||
       ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
-    return '<h2 class="rh2-ind-sectitle">What this covers</h2>' +
-      laEditable('desc',
-        ed.description
-          ? '<div class="rh2-learn-prose">' + mdRender(ed.description) + '</div>'
-          : '<p class="rh2-ind-ed-empty">No description yet &mdash; click to write the sentence the learner reads first.</p>',
-        '<textarea class="rh2-input rh2-ind-desc-in" rows="3" ' + laInAttrs('desc', false) +
-          ' placeholder="Describe this learning in a sentence — the learner reads it first" ' +
-          'aria-label="Description" oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>',
-        'Edit the description') +
-      '<div class="rh2-learn-ed-row">' +
+    return '<div class="rh2-cb-pane">' +
+      laCbPaneHead('Settings') +
+      '<div class="rh2-cb-form">' +
+        '<label class="rh2-lbl" for="la-cb-set-title">Induction title</label>' +
+        '<input class="rh2-input" id="la-cb-set-title" value="' + esc(ed.title) + '" placeholder="Learning title" ' +
+          'oninput="RH2.laMeta(\'title\',this.value)">' +
+        '<label class="rh2-lbl" for="la-cb-desc">Description</label>' +
+        '<textarea class="rh2-input" id="la-cb-desc" rows="4" placeholder="Describe this learning in a sentence — the learner reads it first" ' +
+          'oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
         '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
         '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
           cats.map(function (c) {
             return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>';
           }).join('') +
         '</select>' +
-      '</div>' +
-      // The sections themselves follow on this page; no contents list here.
-      (ed.sections.length ? '' :
-        '<div class="rh2-learn-actions">' +
-          '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.laSecAdd()">+ Add the first section</button>' +
-        '</div>');
+      '</div></div>';
   }
 
-  /** One section, one screen — the learner's screen; the title opens on a
-   *  click, and the section's ordering/removal sits behind its own Settings
-   *  toggle rather than dominating the head of every screen. */
-  function indSectionEdit(s, si, secCount) {
-    var items = s.items || [];
-    var sk = 's-' + si;
-    var setOpen = S.la.editor.settingsOpen === sk;
-    // No "Section n" label: the learner's page has none. The section title
-    // and its settings are the only structure the editor adds.
-    return '<div class="rh2-ind-sechead">' +
-        laEditable(sk,
-          '<h2 class="rh2-ind-sectitle">' +
-            (s.title ? esc(s.title) : '<span class="rh2-ind-ed-empty">Untitled section &mdash; click to name it</span>') +
-          '</h2>',
-          '<input class="rh2-input rh2-ind-sectitle-in" ' + laInAttrs(sk, true) + ' value="' + esc(s.title) + '" ' +
-            'placeholder="Section title" aria-label="Section ' + (si + 1) + ' title" ' +
-            'oninput="RH2.laSecField(' + si + ',this.value)">',
-          'Edit the title of section ' + (si + 1)) +
-        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-learn-ed-setbtn" ' +
-          'aria-expanded="' + (setOpen ? 'true' : 'false') + '" ' +
-          'onclick="RH2.laSettings(\'' + sk + '\')">Section settings</button>' +
+  function laCbPublishPane(ed) {
+    var sections = ed.sections || [];
+    var lessons = sections.reduce(function (n, s) { return n + (s.items || []).length; }, 0);
+    var pubLine = ed._currentVersion
+      ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' &middot; draft changes go out with the next assignment' : ' &middot; up to date')
+      : 'Not yet assigned &mdash; assigning creates version 1';
+    var out = '<div class="rh2-cb-pane">' +
+      '<div class="rh2-cb-phead"><h2 class="rh2-cb-ptitle">Publish</h2>' +
+        '<span class="rh2-cb-pacts">' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laCbPreview()">Preview</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-primary"' + (lessons ? '' : ' disabled') +
+            ' onclick="RH2.laCbAssign()">Assign to people</button>' +
+        '</span></div>' +
+      '<div class="rh2-cb-pubgrid">' +
+        '<div class="rh2-cb-stat"><span class="rh2-cb-statn">' + sections.length + '</span><span class="rh2-cb-statl">chapter' + (sections.length === 1 ? '' : 's') + '</span></div>' +
+        '<div class="rh2-cb-stat"><span class="rh2-cb-statn">' + lessons + '</span><span class="rh2-cb-statl">lesson' + (lessons === 1 ? '' : 's') + '</span></div>' +
+        '<div class="rh2-cb-stat"><span class="rh2-cb-statn">' + (ed.counts.total || 0) + '</span><span class="rh2-cb-statl">assignment' + ((ed.counts.total || 0) === 1 ? '' : 's') + '</span></div>' +
       '</div>' +
-      (setOpen
-        ? '<div class="rh2-learn-ed-set"><span class="rh2-learn-ed-tools">' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === 0 ? 'disabled ' : '') + 'aria-label="Move section up" onclick="RH2.laSecMove(' + si + ',-1)">&uarr;</button>' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" ' + (si === secCount - 1 ? 'disabled ' : '') + 'aria-label="Move section down" onclick="RH2.laSecMove(' + si + ',1)">&darr;</button>' +
-            '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laSecRemove(' + si + ')">Remove section</button>' +
-          '</span></div>'
-        : '') +
-      // The learner's own tiles, in the learner's own list — no numbering the
-      // learner never sees. Everything inside is the same card, made live.
-      '<ol class="rh2-ind-items">' + items.map(function (it, ii) {
-        return '<li class="rh2-ind-item rh2-ind-item-edit">' +
-          laEditorItemHtml(it, si, ii, items.length) + '</li>';
-      }).join('') + '</ol>' +
-      (items.length ? '' : '<p class="rh2-quiet">There is nothing in this section yet — add the first step below.</p>') +
-      '<div class="rh2-learn-ed-additem">' +
-        '<label class="rh2-visually-hidden" for="la-ed-addtype-' + si + '">New step type</label>' +
-        '<select class="rh2-select" id="la-ed-addtype-' + si + '">' +
-          '<option value="content">Reading / content</option>' +
-          '<option value="resource">Hub resource</option>' +
-          '<option value="acknowledgement">Acknowledgement</option>' +
-          '<option value="quiz">Knowledge check</option>' +
-          '<option value="task">Task</option>' +
-        '</select>' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laItemAdd(' + si + ',document.getElementById(\'la-ed-addtype-' + si + '\').value)">+ Add step</button>' +
-      '</div>';
-  }
-
-  /** The closing screen in edit mode: the shape of the whole thing, plus the
-   *  publish history the Owner needs to read draft state honestly. */
-  function indFinishEdit(ed) {
-    var out = '<div class="rh2-learn-actions">' +
-        '<button type="button" class="rh2-btn" onclick="RH2.laSecAdd()">+ Add section</button>' +
-        '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.la.editorSaving ? 'disabled ' : '') +
-          'onclick="RH2.laSave()">' + (S.la.editorSaving ? 'Saving…' : 'Save changes') + '</button>' +
-      '</div>';
+      '<p class="rh2-cb-publine">' + pubLine + '</p>' +
+      '<p class="rh2-quiet">A new version is published automatically when you assign after making changes. ' +
+      'People already working through an older version keep it until you update them from the Assignments tab.</p>' +
+      (lessons ? '' : '<p class="rh2-learn-cannot">Add at least one lesson before this can be assigned.</p>');
     if (ed.versions && ed.versions.length) {
-      out += '<h2 class="rh2-ind-sectitle">Published versions</h2>' +
+      out += '<h3 class="rh2-cb-pickgroup">Published versions</h3><ul class="rh2-cb-versions">' +
         ed.versions.map(function (v) {
-          return '<div class="rh2-row-sub">v' + esc(v.version) + ' — ' + esc(v.title) + ' · published ' + esc(fmtDate(v.published_at)) +
-            (v.published_by_name ? ' by ' + esc(v.published_by_name) : '') + ' · ' + esc(v.assignment_count) + ' assignment(s)</div>';
-        }).join('') +
-        '<p class="rh2-quiet">A new version is published automatically when you assign after making changes.</p>';
+          return '<li>v' + esc(v.version) + ' &mdash; ' + esc(v.title) + ' &middot; published ' + esc(fmtDate(v.published_at)) +
+            (v.published_by_name ? ' by ' + esc(v.published_by_name) : '') + ' &middot; ' + esc(v.assignment_count) + ' assignment(s)</li>';
+        }).join('') + '</ul>';
     }
-    return out;
+    return out + '</div>';
+  }
+
+  /** Assign from inside the builder: save first, so the version cut is the one on screen. */
+  async function laCbAssign() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    laTrack();
+    if (ed._dirty) { var ok = await laSave(); if (!ok) return; }
+    laAssignOpen(ed.id);
   }
 
   /**
-   * EDIT MODE — the learner's induction, with the fields exposed.
+   * EDIT MODE — the builder.
    *
-   * Deliberately the same shell, the same step rail and the same Back / Next
-   * as renderAssignment: opening Edit puts the Owner INSIDE the induction with
-   * editing already on. There is no second "enable editing" control, and no
-   * separate administration form that could drift from what is delivered.
+   * The bar carries the way back, the title, the save state and Preview;
+   * the tabs choose the pane; the rail and the pane are the workspace.
    */
   function renderLaEditor() {
     var ed = S.la.editor;
-    var sections = ed.sections || [];
-    // What learners receive right now, stated plainly so the Owner can always
-    // tell draft state from published state. Edits save themselves; a new
-    // version is cut when the induction is assigned.
-    var pubLine = ed._currentVersion
-      ? 'Learners receive v' + ed._currentVersion + (ed._hasUnpublished ? ' · draft changes go out with the next assignment' : ' · up to date')
-      : 'Not yet assigned — assigning creates version 1';
-    var saveLine = S.la.editorSaving ? 'Saving…' : (ed._dirty ? 'Unsaved changes' : 'All changes saved');
-    var out = '<div class="rh2-learn-ed rh2-ind rh2-ind-edit">' +
-      '<div class="rh2-learn-ed-bar">' +
-        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">&larr; Learning</button>' +
-        '<span class="rh2-chip rh2-chip-warn">Editing &mdash; this is the learner&rsquo;s own screen</span>' +
-        '<span class="rh2-quiet">' +
-          '<span class="rh2-learn-ed-save" role="status" aria-live="polite">' + esc(saveLine) + '</span> · ' +
-          esc(pubLine) +
-          (ed.counts.total ? ' · ' + ed.counts.total + ' assignment(s) pinned to published versions' : '') +
-        '</span>' +
-        '<span class="rh2-learn-ed-bar-actions">' +
-          '<button type="button" class="rh2-btn" ' + ((ed._undo && ed._undo.length) ? '' : 'disabled ') +
-            'onclick="RH2.laUndo()" title="Undo the last change">Undo</button>' +
+    var ui = laUi();
+    var tabs = [['curriculum', 'Curriculum'], ['settings', 'Settings'], ['publish', 'Publish']];
+    var out = '<div class="rh2-learn-ed rh2-cb">' +
+      '<div class="rh2-cb-bar">' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.laEditorClose()">&larr; Inductions</button>' +
+        '<input class="rh2-input rh2-cb-title" id="la-ed-title" value="' + esc(ed.title) + '"' +
+          ' placeholder="Induction title" aria-label="Induction title" oninput="RH2.laMeta(\'title\',this.value)">' +
+        '<span class="rh2-quiet rh2-learn-ed-save" id="la-cb-savestate" role="status" aria-live="polite">' + esc(laCbSaveState()) + '</span>' +
+        '<span class="rh2-cb-bar-acts">' +
+          '<button type="button" class="rh2-btn" onclick="RH2.laCbPreview()">Preview</button>' +
         '</span>' +
       '</div>' +
+      '<div class="rh2-cb-tabs" role="tablist" aria-label="Builder">' + tabs.map(function (t) {
+        return '<button type="button" role="tab" aria-selected="' + (ui.tab === t[0]) + '" class="rh2-asl-tab' +
+          (ui.tab === t[0] ? ' active' : '') + '" onclick="RH2.laCbTab(\'' + t[0] + '\')">' + t[1] + '</button>';
+      }).join('') + '</div>' +
       (S.la.editorErr
         ? '<div class="rh2-empty" role="alert">' + esc(S.la.editorErr) +
           (S.la.editorStale
             ? ' <button type="button" class="rh2-btn" onclick="RH2.laEditorReload()">Reload latest version</button>'
             : '') + '</div>'
         : '') +
-      indHeader('edit', {
-        title: ed.title,
-        sub: esc(laCatLabel(ed.category)) + ' &middot; ' + sections.length + ' section' +
-          (sections.length === 1 ? '' : 's'),
-      }, sections) +
-      // The whole induction on one page, exactly as the learner gets it: the
-      // description and category, every section with its fields live, then
-      // the closing block (add a section, save, published versions).
-      '<section class="rh2-card rh2-ind-stage rh2-ind-flat">' +
-        '<div class="rh2-ind-flatsec">' + indOverviewEdit(ed) + '</div>' +
-        sections.map(function (s, i) {
-          return '<div class="rh2-ind-flatsec">' + indSectionEdit(s, i, sections.length) + '</div>';
-        }).join('') +
-        '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishEdit(ed) + '</div>' +
-      '</section>';
+      '<div class="rh2-cb-work' + (ui.tab === 'curriculum' ? '' : ' rh2-cb-work-single') + '">' +
+        (ui.tab === 'curriculum' ? laCbRail(ed) : '') +
+        laCbPane(ed) +
+      '</div>';
     return out + '</div>';
   }
 
@@ -7533,6 +7733,7 @@
     S.la.afWorkflow = wfId || '';
     S.la.afUser = '';
     S.la.tab = 'assignments';
+    S.asl.tab = 'assignments';
     // Assign Learning now shows the monitor itself, so stay on it and bring the
     // section into view. Previously this had to jump to Admin > Learning
     // because nothing on this page could have displayed the answer.
@@ -7709,6 +7910,7 @@
     S.la.afUser = userId || '';
     S.la.afWorkflow = '';
     S.la.tab = 'assignments';
+    S.asl.tab = 'assignments';
     loadLaAssignments();
     render();
   }
@@ -7847,14 +8049,18 @@
     laQAdd: laQAdd,
     laQRemove: laQRemove,
     // Click-to-edit: the learner's rendering until a click, the field after
-    laEditStart: laEditStart,
-    laEditStop: laEditStop,
-    laSettings: laSettings,
-    laItemFlag: laItemFlag,
-    laQCorrect: laQCorrect,
-    laQOption: laQOption,
-    laQOptionAdd: laQOptionAdd,
-    laQOptionDone: laQOptionDone,
+    laCbTab: laCbTab,
+    laCbSelect: laCbSelect,
+    laCbToggle: laCbToggle,
+    laCbDiscard: laCbDiscard,
+    laCbPreview: laCbPreview,
+    laCbAssign: laCbAssign,
+    laCbRender: laCbRender,
+    laDragStart: laDragStart,
+    laDragOver: laDragOver,
+    laDragLeave: laDragLeave,
+    laDragEnd: laDragEnd,
+    laDrop: laDrop,
     laResPickOpen: laResPickOpen,
     laResPickClose: laResPickClose,
     laResSearch: laResSearch,
@@ -7878,6 +8084,7 @@
     laAssignRetryStaff: loadLaStaff,
     // New learning item — a portal dialog, not window.prompt
     laCreateClose: laCreateClose,
+    laCreateBack: laCreateBack,
     laCreateField: laCreateField,
     laCreateSubmit: laCreateSubmit,
     laCreateBackdrop: laCreateBackdrop,
@@ -7899,6 +8106,12 @@
     aslToggleSel: aslToggleSel,
     aslSelectAllShown: aslSelectAllShown,
     aslClearSel: aslClearSel,
+    aslTab: aslTab,
+    aslView: aslView,
+    aslCategory: aslCategory,
+    aslFilterToggle: aslFilterToggle,
+    aslMenu: aslMenu,
+    aslMenuClose: aslMenuClose,
     laViewAssignments: laViewAssignments,
     laAf: laAf,
     laAfQ: laAfQ,

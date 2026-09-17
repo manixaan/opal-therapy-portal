@@ -157,21 +157,40 @@ describe('the owner page is ONE catalogue, not a set of shelves', () => {
 
   test('the search box is filtered state, with no collection cursor behind it', () => {
     expect(fn('aslResetFilters')).not.toContain('collection');
-    expect(VISIBLE).toContain("asl: { q: '' }");
+    expect(VISIBLE).toContain("asl: { q: '', tab: 'inductions', view: 'grid', category: '', filterOpen: false, menu: null }");
   });
 
-  test('Upcoming professional development', () => {
-    expect(page).toContain('Upcoming professional development');
+
+
+  test('the page is three tabs — the library first, then the two questions that follow from it', () => {
+    // Inductions is the catalogue; Assignments and Staff progress are the
+    // same renderers the Admin console uses, reached without leaving here.
+    for (const tab of [['inductions', 'Inductions'], ['assignments', 'Assignments'], ['staff', 'Staff progress']]) {
+      expect(`${tab[0]}:${page.includes("['" + tab[0] + "', '" + tab[1] + "']")}`).toBe(`${tab[0]}:true`);
+    }
+    expect(page).toContain("id=\"asl-tab-' + t[0] + '\"");
+    expect(page).toContain("RH2.aslTab(\\'");
+    expect(page).toContain("if (a.tab === 'assignments')");
+    expect(page).toContain("if (a.tab === 'staff')");
+    expect(page).toContain('renderLaStaff()');
+    expect(fn('aslTab')).toContain("if (t === 'assignments' && !S.la.assignments) loadLaAssignments();");
   });
 
-  test('Recently added', () => {
-    expect(page).toContain('Recently added');
-    expect(page).toContain('ASL_RECENT_LIMIT');
+  test('the catalogue is a grid of course cards, or the same cards as rows', () => {
+    expect(page).toContain("a.view === 'list' ? 'rh2-course-rows' : 'rh2-course-grid'");
+    expect(page).toContain("RH2.aslView(\\'grid\\')");
+    expect(page).toContain("RH2.aslView(\\'list\\')");
+    expect(fn('aslWorkflowCard')).toContain('layout: S.asl.view');
+    expect(CSS).toMatch(/\.rh2-course-grid\s*\{[^}]*grid-template-columns/);
+    expect(CSS).toMatch(/\.rh2-course-list\s*\{[^}]*flex-direction: row/);
   });
 
-  test('Recently added reports; it is no longer a way into a collection', () => {
-    const recent = page.slice(page.indexOf('Recently added'));
-    expect(recent).not.toContain('aslOpenCollection');
+  test('the filter narrows by category and can show archived items', () => {
+    expect(page).toContain('RH2.aslFilterToggle()');
+    expect(page).toContain("RH2.aslCategory(this.value)");
+    expect(page).toContain('RH2.laToggleArchived(this.checked)');
+    expect(fn('aslVisible')).toContain('S.asl.category');
+    expect(fn('aslCategories')).toContain('w.category');
   });
 });
 
@@ -179,24 +198,19 @@ describe('the owner page is ONE catalogue, not a set of shelves', () => {
 //  THE CATALOGUE SEARCH
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('the catalogue search sits in the header, not beside it', () => {
+describe('the catalogue toolbar: search, filter, layout', () => {
   const page = fn('renderAssignLearning');
 
-  test('the field has its own full-width row under the heading', () => {
+  test('search, filter and the layout toggle sit in one toolbar row', () => {
+    expect(page).toContain('rh2-asl-tools');
     expect(page).toContain('rh2-learn-cat-search');
-    expect(CSS).toMatch(/\.rh2-learn-cat-search\s*\{[^}]*grid-column:\s*1 \/ -1/);
+    expect(CSS).toMatch(/\.rh2-asl-tools\s*\{[^}]*display: flex/);
+    expect(CSS).toMatch(/\.rh2-asl-tools \.rh2-learn-cat-search\s*\{[^}]*flex: 1 1/);
   });
 
-  test('the header is a grid, so the heading and the actions cannot drift apart', () => {
-    // It used to be one flex row, where the field was pushed rightwards by
-    // whatever happened to sit beside it and settled at a different height
-    // from the heading it belongs to.
-    expect(CSS).toMatch(/\.rh2-learn-cat-head\s*\{[^}]*display:\s*grid/);
-    expect(CSS).toMatch(/\.rh2-learn-cat-head\s*\{[^}]*align-items:\s*center/);
-  });
-
-  test('it collapses to one column on a phone rather than overflowing', () => {
-    expect(CSS).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.rh2-learn-cat-head \{ grid-template-columns: 1fr; \}/);
+  test('the grid collapses to one column on a phone rather than overflowing', () => {
+    expect(CSS).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.rh2-course-grid \{ grid-template-columns: 1fr; \}/);
+    expect(CSS).toMatch(/@media \(max-width: 860px\)[\s\S]*?\.rh2-cb-work \{ grid-template-columns: 1fr; \}/);
   });
 
   test('search still filters, and can still be cleared', () => {
@@ -225,8 +239,29 @@ describe('an item on Assign Learning offers three actions, and only three', () =
     // offered — never how the item itself is described.
     expect(HUB).toContain('rows.map(aslWorkflowCard).join');
     expect(HUB).toContain('rows.map(laLibraryCard).join');
-    expect(fn('aslWorkflowCard')).toContain("laWorkflowCard(w, { actions: 'primary' })");
+    expect(fn('aslWorkflowCard')).toContain("laWorkflowCard(w, { actions: 'primary', layout: S.asl.view })");
     expect(fn('laLibraryCard')).toContain("laWorkflowCard(w, { actions: 'lifecycle' })");
+  });
+
+  test('the card is a thumbnail, a title, a status word and a menu — and the title opens the builder', () => {
+    expect(card).toContain('rh2-course-thumb');
+    expect(card).toContain('aslThumbSvg()');
+    expect(card).toContain('rh2-course-status-');
+    expect(card).toContain('aria-haspopup="menu"');
+    expect(card).toContain('role="menu"');
+    expect(card).toContain('RH2.aslMenu(event,');
+    expect(card).toMatch(/openAttr = !archived\s*\n\s*\? ' onclick="RH2\.laEdit\(/);
+    // The status is derived from the record, never typed on the card.
+    const status = fn('aslStatus');
+    for (const word of ['Archived', 'Empty', 'Draft', 'Draft changes', 'Published']) {
+      expect(`${word}:${status.includes("'" + word + "'")}`).toBe(`${word}:true`);
+    }
+    expect(status).toContain('w.has_unpublished_changes');
+  });
+
+  test('one menu open at a time, closed by any click elsewhere', () => {
+    expect(fn('aslMenu')).toContain('S.asl.menu = S.asl.menu === id ? null : id');
+    expect(HUB).toContain("if (S.asl && S.asl.menu && !(e.target.closest && e.target.closest('.rh2-course-menuwrap'))) aslMenuClose();");
   });
 
   test('Assign is present and is the primary action', () => {
@@ -293,13 +328,12 @@ describe('an item on Assign Learning offers three actions, and only three', () =
 //  learner's page could carry.
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('reader, preview and editor are all one page — no steps, no tabs', () => {
+describe('the reader is one page; the builder is the Owner\'s own workspace', () => {
   const player = fn('renderAssignment');
   const editor = fn('renderLaEditor');
 
-  test('both modes render through the shared header, which carries no rail', () => {
+  test('the reader renders through the shared header, which carries no rail', () => {
     expect(player).toContain('indHeader(');
-    expect(editor).toContain('indHeader(');
     expect(fn('indHeader')).not.toContain('indRail');
     // The step machinery is gone, not hidden: nothing to switch back on.
     for (const gone of ['indRail', 'indNav', 'indGo', 'indJump', 'indStep', 'indStepCount',
@@ -324,21 +358,23 @@ describe('reader, preview and editor are all one page — no steps, no tabs', ()
     expect(CSS).toMatch(/\.rh2-ind-flatsec \+ \.rh2-ind-flatsec\s*\{[^}]*border-top/);
   });
 
-  test('the editor is the same page with the fields live: overview, every section, then the close', () => {
-    expect(editor).toContain('rh2-ind-flat');
-    expect(editor).toContain('indOverviewEdit(ed)');
-    expect(editor).toContain('indSectionEdit(s, i, sections.length)');
-    expect(editor).toContain('indFinishEdit(ed)');
-    expect(editor).not.toContain('step');
-    // No contents list pointing at steps that no longer exist.
-    expect(fn('indOverviewEdit')).not.toContain('rh2-ind-toc');
-    expect(fn('indFinishEdit')).not.toContain('rh2-ind-toc');
-    expect(fn('indOverviewEdit')).not.toContain('Edit section 1');
-    expect(fn('indFinishEdit')).toContain('RH2.laSecAdd()');
-    // Adding or moving a section no longer moves a cursor.
+  test('the builder is a bar, three tabs, a curriculum rail and an edit pane', () => {
+    expect(editor).toContain('rh2-cb-bar');
+    for (const tab of ['curriculum', 'settings', 'publish']) {
+      expect(`${tab}:${editor.includes("['" + tab + "', ")}`).toBe(`${tab}:true`);
+    }
+    expect(editor).toContain("RH2.laCbTab(\\'");
+    expect(editor).toContain("ui.tab === 'curriculum' ? laCbRail(ed) : ''");
+    expect(editor).toContain('laCbPane(ed)');
+    expect(fn('laCbRail')).toContain('RH2.laSecAdd()');
+    expect(fn('laCbPane')).toContain('laCbPickPane(ed, sel.si)');
+    expect(fn('laCbPane')).toContain('laCbChapterPane(ed, s, sel.si)');
+    expect(fn('laCbPane')).toContain('laCbLessonPane(ed, it, sel.si, sel.ii)');
+    // Adding or moving a chapter moves the builder's cursor, never a step.
     expect(fn('laSecAdd')).not.toContain('.step');
     expect(fn('laSecMove')).not.toContain('.step');
     expect(fn('laEdit')).not.toContain('keepStep');
+    expect(fn('laEdit')).toContain('ui: keepUi');
   });
 
   test('what is still owed scrolls to the item itself, on the same page', () => {
@@ -349,67 +385,70 @@ describe('reader, preview and editor are all one page — no steps, no tabs', ()
   });
 });
 
-describe('edit mode is the learner\'s screen with the fields exposed', () => {
+describe('the builder edits the same draft the learner receives', () => {
   const editor = fn('renderLaEditor');
 
-  test('opening Edit is already editing — there is no second control', () => {
+  test('opening Edit lands in the builder on the first chapter — there is no second control', () => {
     // The failure this pins: an "Edit" button that opens something read-only
     // with another "Edit" inside it.
     expect(fn('laEdit')).toContain("api('/api/learning/workflows/'");
     expect(editor).not.toMatch(/Enable editing|Edit content<|>Edit<\/button>/);
-    expect(fn('indSectionEdit')).toContain('RH2.laSecField(');
-    expect(fn('laEditorItemHtml')).toContain("\\'title\\',this.value");
-    expect(fn('laEditorItemHtml')).toContain("\\'body\\',this.value");
+    expect(fn('laCbPane')).toContain("if (!ui.sel && ed.sections.length) ui.sel = { kind: 'c', si: 0, ii: -1 };");
+    expect(fn('laCbChapterPane')).toContain('RH2.laSecField(');
+    expect(fn('laCbLessonPane')).toContain("\\'title\\',this.value");
+    expect(fn('laCbLessonPane')).toContain("\\'body\\',this.value");
   });
 
-  test('the heading is the input, in the place the learner reads it', () => {
-    expect(fn('indHeader')).toContain("mode === 'edit'");
-    expect(fn('indHeader')).toContain("RH2.laMeta(\\'title\\',this.value)");
-    expect(fn('indSectionEdit')).toContain('rh2-ind-sectitle-in');
+  test('the title is typed in the bar, and the rail follows a rename without a re-render', () => {
+    expect(editor).toContain("RH2.laMeta(\\'title\\',this.value)");
+    expect(editor).toContain('rh2-cb-title');
+    expect(fn('laSecField')).toContain("getElementById('la-cb-c-' + si)");
+    expect(fn('laItemField')).toContain("'#la-cb-l-' + si + '-' + ii + ' .rh2-cb-ltext'");
   });
 
   test('every content element the model supports stays editable', () => {
-    const item = fn('laEditorItemHtml');
-    for (const editable of ['ack_statement', 'required', 'minutes', 'laQField(', 'laResPickOpen(']) {
+    const item = fn('laCbLessonPane');
+    for (const editable of ['ack_statement', 'required', 'minutes', 'laQField(', 'laResPickOpen(', 'laItemWalkthroughHtml(it, si, ii)']) {
       expect(`${editable}:${item.includes(editable)}`).toBe(`${editable}:true`);
     }
   });
 
   test('saving goes through the existing draft lifecycle, not a new one', () => {
     // Draft is saved; a version is cut by assigning. Nothing here may
-    // publish silently — and there is no Publish button to do it loudly.
+    // publish silently — the Publish tab reports state and assigns.
     const save = fn('laSaveNow');
     expect(save).toContain("method: 'PUT'");
     expect(save).toContain('expectedUpdatedAt');
     expect(save).not.toContain('/publish');
     expect(VISIBLE).not.toContain('laPublish');
-    expect(editor).toContain('Learners receive v');
+    expect(fn('laCbPublishPane')).toContain('Learners receive v');
+    expect(fn('laCbPublishPane')).toContain('RH2.laCbAssign()');
+    expect(fn('laCbAssign')).toMatch(/laSave\(\)[\s\S]{0,80}laAssignOpen\(ed\.id\)/);
   });
 
-  test('edits save themselves: no Save, Preview or Publish buttons in the bar', () => {
-    const bar = editor.slice(editor.indexOf('rh2-learn-ed-bar'), editor.indexOf('indHeader('));
-    for (const gone of ['RH2.laSave()', 'RH2.laPreview(', 'RH2.laPublish(', '>Save<', 'Preview</button>', 'Publish version']) {
-      expect(`${gone}:${bar.includes(gone)}`).toBe(`${gone}:false`);
-    }
-    expect(bar).toContain('rh2-learn-ed-save');
-    expect(editor).toContain("'All changes saved'");
-    expect(bar).toContain('RH2.laUndo()');
-    // Every render of the editor notices changes and schedules the save;
-    // the live title input schedules it itself, since it never re-renders.
+  test('Save and Discard are explicit; nothing autosaves under the caret', () => {
+    const head = fn('laCbPaneHead');
+    expect(head).toContain('RH2.laSave()');
+    expect(head).toContain('RH2.laCbDiscard()');
+    expect(head).not.toContain('laCbDiscard()"' + ' disabled');
+    expect(VISIBLE).not.toContain('laAutosaveSchedule');
+    expect(fn('laCbDiscard')).toContain('JSON.parse(ed._saved)');
+    expect(fn('laEdit')).toContain('S.la.editor._saved = S.la.editor._snap;');
+    // The bar reports the state, and typing updates it in place.
+    expect(editor).toContain('rh2-learn-ed-save');
+    expect(fn('laCbSaveState')).toContain("'All changes saved'");
+    expect(fn('laCbMarkDirty')).toContain("getElementById('la-cb-savestate')");
     expect(fn('render')).toContain('if (S.la && S.la.editor) laTrack();');
-    expect(fn('laTrack')).toContain('laAutosaveSchedule()');
-    expect(fn('laMeta')).toContain('laAutosaveSchedule(1500)');
-    // Never while a field is open under the caret.
-    expect(fn('laAutosaveSchedule')).toContain('if (ed.editing) { laAutosaveSchedule(ms); return; }');
+    // Preview and Assign save first, so what is shown is what is on screen.
+    expect(fn('laCbPreview')).toMatch(/laSave\(\)[\s\S]{0,80}laPreview\(ed\.id\)/);
   });
 
   test('undo puts the content back one step, and that is itself a change', () => {
     const undo = fn('laUndo');
     expect(undo).toContain('ed._undo.pop()');
     expect(undo).toContain('ed._dirty = true');
-    expect(undo).toContain('laAutosaveSchedule()');
     expect(fn('laTrack')).toContain('ed._undo.push(ed._snap)');
-    // The history survives the reload an autosave triggers.
+    // The history survives the reload a save triggers.
     expect(fn('laEdit')).toContain('_undo: keepUndo');
   });
 
@@ -426,10 +465,7 @@ describe('edit mode is the learner\'s screen with the fields exposed', () => {
     expect(fn('laSaveNow')).toContain('stillOpen');
   });
 
-  test('a save re-opens the same page, with no step cursor to lose', () => {
-    // laSave re-opens from the server's normalised copy. The editor is one
-    // page now, so there is no step to carry across and nothing to be thrown
-    // back to — the Owner simply stays on the induction.
+  test('a save re-opens the same page, with the cursor carried across', () => {
     expect(fn('laSaveNow')).toContain('laEdit(ed.id)');
     expect(fn('laEdit')).not.toContain('keepStep');
     expect(fn('laEdit')).not.toMatch(/step: /);
@@ -446,92 +482,55 @@ describe('edit mode is the learner\'s screen with the fields exposed', () => {
 //  behind a Settings toggle instead of dominating every step.
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('edit mode reads as the learner\'s screen until a click', () => {
-  const item = fn('laEditorItemHtml');
+describe('the curriculum rail and the edit pane', () => {
+  const rail = fn('laCbRail');
+  const lesson = fn('laCbLessonPane');
 
-  test('content is the learner\'s rendering, not a permanent field', () => {
-    // The body renders through the same markdown renderer the learner gets;
-    // an always-open textarea is the configuration editor this replaced.
-    expect(item).toContain('mdRender(it.body)');
-    for (const region of ["laEditable(k + '-title'", "laEditable(k + '-body'", "laEditable(k + '-ack'"]) {
-      expect(`${region}:${item.includes(region)}`).toBe(`${region}:true`);
+  test('chapters and lessons can be dragged, and moved with arrows for the keyboard', () => {
+    expect(rail).toContain('draggable="true"');
+    expect(rail).toContain('RH2.laDragStart(event,');
+    expect(rail).toContain('RH2.laDrop(event,');
+    expect(fn('laDrop')).toContain('ed.sections.splice(d.si, 1)[0]');
+    expect(fn('laDrop')).toContain('to.items.splice(idx, 0, it)');
+    expect(fn('laCbChapterPane')).toContain('RH2.laSecMove(');
+    expect(lesson).toContain('RH2.laItemMove(');
+  });
+
+  test('the selected chapter or lesson is announced, and a chapter with no lessons says Draft', () => {
+    expect(rail).toContain('aria-current=');
+    expect(rail).toContain("(draft ? '<span class=\"rh2-cb-draft\">Draft</span>' : '')");
+    expect(rail).toContain('aria-expanded=');
+  });
+
+  test('adding a lesson asks what kind, grouped by what it is for', () => {
+    const pick = fn('laCbPickPane');
+    expect(pick).toContain('Deliver learning content');
+    expect(pick).toContain('Assess your learners');
+    for (const type of ['content', 'resource', 'task', 'quiz', 'acknowledgement']) {
+      expect(`${type}:${HUB.includes("type: '" + type + "', title:")}`).toBe(`${type}:true`);
     }
+    expect(pick).toContain("RH2.laItemAdd(' + si + ',\\'' + t.type + '\\')");
   });
 
-  test('a click opens the field in place; closing it is blur', () => {
-    expect(fn('laEditable')).toContain('RH2.laEditStart(');
-    expect(fn('laInAttrs')).toContain('RH2.laEditStop(');
-    // One region open at a time — everything else stays the learner's screen.
-    expect(fn('laEditStart')).toContain('ed.editing = String(key)');
-    // A field the user is still in never closes under their caret: the
-    // deferred close checks focus before it fires.
-    expect(fn('laEditStop')).toContain('doc.activeElement === el');
-    // A link inside the rendered prose stays a link — clicking it to check
-    // it must not also open the region's editor.
-    expect(fn('laEditable')).toContain("closest(\\'a\\')");
+  test('a new chapter or lesson is born with a name the server will accept', () => {
+    // The server refuses an untitled section or item; a fresh one must never
+    // make Save fail on the Owner's first click.
+    expect(fn('laSecAdd')).toContain("title: 'New chapter'");
+    expect(fn('laItemAdd')).toContain("title: t ? t.title : 'Lesson'");
   });
 
-  test('configuration sits behind the Settings toggle, off the primary surface', () => {
-    const gate = item.indexOf('if (setOpen)');
-    const body = item.indexOf('rh2-learn-item-body');
-    expect(gate).toBeGreaterThan(-1);
-    // Required, minutes, ordering, removal and the resource link render only
-    // inside the settings strip — between the gate and the learner's body.
-    for (const cfg of ['laItemFlag(', 'laItemMove(', 'laItemRemove(', 'laResPickOpen(']) {
-      const at = item.indexOf(cfg);
-      expect(`${cfg} gated:${at > gate && at < body}`).toBe(`${cfg} gated:true`);
-    }
-    expect(item).toContain('RH2.laSettings(');
+  test('the quiz is edited as options-per-line with the correct answer chosen from them', () => {
+    expect(lesson).toContain('Answer options, one per line');
+    expect(lesson).toContain("\\'optionsText\\',this.value");
+    expect(lesson).toContain("\\'correctIndex\\',Number(this.value)");
+    expect(lesson).toContain('RH2.laQAdd(');
   });
 
-  test('the learner\'s interactive elements are shown, inert — and removed ones are not depicted', () => {
-    // The Owner sees the learner's screen: the REAL interactions stay as
-    // inert buttons, and the controls the learner no longer has (per-item
-    // Mark complete, Open resource) are not depicted at all — a resource is
-    // its launch tile, a reading records itself on Next.
-    for (const btn of ['disabled>I acknowledge', 'disabled>Submit answers']) {
-      expect(`${btn}:${item.includes(btn)}`).toBe(`${btn}:true`);
-    }
-    expect(item).not.toContain('Mark complete');
-    expect(item).not.toContain('Open resource');
-    expect(item).toContain('rh2-ind-launch-hint');
-    expect(item).not.toContain('alMarkComplete');
-  });
-
-  test('the quiz is edited as the learner answers it', () => {
-    // The ticked radio IS the correct answer, and options open inline — no
-    // correct-option number field, no one-line-per-option textarea.
-    expect(item).toContain('RH2.laQCorrect(');
-    expect(item).toContain('RH2.laQOptionAdd(');
-    expect(item).not.toContain('Correct option #');
-    expect(item).not.toContain('One answer option per line');
-  });
-
-  test('a new question can receive its first option', () => {
-    // optionsText '' cannot hold "one empty line" (the join of [''] is ''),
-    // so the renderer synthesises that line while its field is open. Without
-    // it, + Add option is a no-op on a fresh question and the quiz is stuck
-    // at zero options forever.
-    expect(item).toContain("laEditing(qk + '-o' + lines.length)");
-  });
-
-  test('dropping an option renumbers the screen before the next click', () => {
-    // laQOptionDone rewrites the option lines on blur. The usual DEFERRED
-    // close would leave the rendered radios carrying pre-drop indexes for a
-    // beat, and a tick landed in that window would silently mark the wrong
-    // answer — so a close that dropped lines renders immediately. Clearing
-    // the ticked option itself resets the tick to the first option rather
-    // than letting it slide onto a neighbour.
-    const done = fn('laQOptionDone');
-    expect(done).toContain('ciDropped');
-    expect(done).toMatch(/if \(dropped && ed && ed\.editing === String\(key\)\) \{\s*\n\s*ed\.editing = null;\s*\n\s*render\(\);/);
-  });
-
-  test('the section title is the learner\'s heading until clicked', () => {
-    const sec = fn('indSectionEdit');
-    expect(sec).toContain('rh2-ind-sectitle');
-    expect(sec).toContain('laEditable(sk');
-    expect(sec).toContain('Section settings');
+  test('deleting asks first when there is something to lose', () => {
+    expect(fn('laSecRemove')).toContain('portalConfirm(');
+    expect(fn('laItemRemove')).toContain('portalConfirm(');
+    expect(lesson).toContain('RH2.laItemRemove(');
+    expect(fn('laCbChapterPane')).toContain('RH2.laSecRemove(');
   });
 });
 
@@ -697,18 +696,11 @@ describe('the induction is one clear interaction path', () => {
     expect(fn('laEditorContentForApi')).not.toContain('resource_slug');
   });
 
-  test('the editor mirrors the learner tile: same chips, no numbering, one hint per walkthrough', () => {
-    const item = fn('laEditorItemHtml');
-    // Only the interactions announce themselves, exactly as the reader shows.
-    expect(item).toContain("(it.type === 'acknowledgement' || it.type === 'quiz')");
-    expect(item).not.toContain("it.type !== 'content'");
-    // A walkthrough resource shows the learner's hint once — never a second
-    // "Opens: …" line beneath it.
-    expect(item).toContain("if (it.type === 'resource' && !walk)");
-    // No number badge and no "Section n" label the learner never sees.
-    expect(fn('indSectionEdit')).not.toContain('rh2-ind-item-no');
-    expect(fn('indSectionEdit')).not.toContain("'Section ' + (si + 1)");
-    expect(CSS).toMatch(/\.rh2-ind-edit \.rh2-learn-ed-walk \{[^}]*border: 0/);
+  test('the walkthrough behind a lesson is reachable from its pane', () => {
+    const item = fn('laCbLessonPane');
+    expect(item).toContain('laItemWalkHtml(it)');
+    expect(item).toContain("if (it.type === 'task')");
+    expect(item).toContain('laItemWalkthroughHtml(it, si, ii)');
   });
 
   test('completion is the closing screen\'s one deliberate act', () => {
@@ -964,8 +956,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r23');
-    expect(SHELL).toContain('/resourcehub.js?v=r44');
+    expect(SHELL).toContain('/resourcehub.css?v=r24');
+    expect(SHELL).toContain('/resourcehub.js?v=r45');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {
@@ -1043,30 +1035,38 @@ describe('the new learning item dialog', () => {
   });
 
   test('the dialog is mounted wherever the assignment dialog is', () => {
-    // Otherwise it would be unreachable from one of the owner surfaces.
-    expect(HUB.match(/renderLaAssign\(\) \+ renderLaCreate\(\)/g).length).toBe(3);
+    // Otherwise it would be unreachable from one of the owner surfaces —
+    // the builder included, since Publish assigns from inside it.
+    expect(fn('renderLa')).toContain('renderLaAssign() + renderLaCreate()');
+    expect(fn('renderAssignLearning')).toContain('renderLaAssign() + renderLaCreate()');
+    expect(fn('renderAssignLearning')).toContain("renderLaEditor() + renderLaAssign() + renderLaCreate()");
   });
 
   test('it is narrower than the people picker', () => {
     expect(CSS).toContain('.rh2-dialog-sm');
   });
 
-  test('the header offers ONE way in, and the dialog asks document or walkthrough first', () => {
+  test('the header offers ONE way in, and the dialog asks for a template first', () => {
     // Import existing, Walkthroughs and New learning item were three buttons
     // and three decisions before anything was started. One button now; the
-    // kind is the dialog's first question, and the import is its quiet line.
+    // template is the dialog's first question, then the name.
     const page = fn('renderAssignLearning');
-    const header = page.slice(page.indexOf('rh2-learn-cat-actions'), page.indexOf('rh2-learn-cat-search'));
+    const header = page.slice(page.indexOf('rh2-asl-head'), page.indexOf('rh2-asl-tabs'));
     expect(header).toContain('+ New induction');
     expect(header).not.toContain('Import existing');
     expect(header).not.toContain('OpalWorkshop.open()');
     expect((header.match(/rh2-btn-primary/g) || []).length).toBe(1);
 
     const dlg = fn('renderLaCreate');
-    expect(dlg).toContain("RH2.laCreateKind(\\'document\\')");
-    expect(dlg).toContain("RH2.laCreateKind(\\'walkthrough\\')");
-    expect(dlg).toContain("RH2.laCreateKind(\\'import\\')");
+    expect(dlg).toContain("'Name your new induction' : 'Choose a template'");
+    expect(dlg).toContain('LA_TEMPLATES.map(');
+    expect(dlg).toContain("RH2.laCreateKind(\\'' + t.kind + '\\')");
+    for (const kind of ['document', 'starter', 'walkthrough', 'import']) {
+      expect(`${kind}:${HUB.includes("{ kind: '" + kind + "', title:")}`).toBe(`${kind}:true`);
+    }
     expect(dlg).toContain("c.kind === 'walkthrough' ? laCreateWalkthroughForm(c)");
+    expect(fn('laCreateDocumentForm')).toContain('RH2.laCreateBack()');
+    expect(fn('laCreateWalkthroughForm')).toContain('RH2.laCreateBack()');
     const kind = fn('laCreateKind');
     expect(kind).toContain("c.kind = 'walkthrough'");
     expect(fn('laCreateSubmit')).toContain('OpalWorkshop.createNew(title)');
@@ -1080,9 +1080,19 @@ describe('the new learning item dialog', () => {
     expect(WORKSHOP).not.toContain('OpalWorkshop.publish()');
     expect(WORKSHOP.slice(WORKSHOP.indexOf('async function save('), WORKSHOP.indexOf('async function save(') + 1500)).toContain("'/publish'");
     expect(kind).toContain('laImport()');
-    expect(kind).toContain("c.kind = 'document'");
+    expect(kind).toContain("c.kind = kind === 'starter' ? 'starter' : 'document'");
     expect(fn('laCreate')).toContain('kind: null');
     expect(CSS).toContain('.rh2-learn-kind-tile');
+  });
+
+  test('the starter template is content the server will accept as-is', () => {
+    // A starter that fails validation would leave the Owner with a named,
+    // empty induction and an error — worse than Blank.
+    const starter = fn('laStarterContent');
+    expect(starter).toContain('ack_statement = ');
+    expect(starter).toMatch(/options: \['[^']+', '[^']+'\]/);
+    expect(fn('laCreateSubmit')).toContain("c.kind === 'starter'");
+    expect(fn('laCreateSubmit')).toContain('content: laStarterContent()');
   });
 });
 
@@ -1093,11 +1103,11 @@ describe('the new learning item dialog', () => {
 describe('the empty library', () => {
   const page = fn('renderAssignLearning');
 
-  test('search and the archived toggle are not offered against an empty list', () => {
+  test('search and the filter are not offered against an empty list', () => {
     // Controls that cannot do anything are noise: with nothing to filter, the
-    // empty state below carries the only call to action.
-    expect(page).toMatch(/\(all\.length[\s\S]{0,220}rh2-learn-cat-actions/);
-    expect(page).toMatch(/rh2-learn-cat-search[\s\S]{0,1200}: ''\)/);
+    // empty state carries the only call to action and the toolbar never renders.
+    expect(page.indexOf('No learning items here yet')).toBeGreaterThan(-1);
+    expect(page.indexOf('No learning items here yet')).toBeLessThan(page.indexOf('rh2-asl-tools'));
   });
   test('the empty state offers the import as well as a fresh start', () => {
     // The practice's inductions already exist as Resource Hub learning paths
@@ -1118,7 +1128,7 @@ describe('the empty library', () => {
 
   test('exactly one create button renders when the library is empty', () => {
     // Two identical primary buttons on one screen is the defect this pins.
-    const emptyBranch = page.slice(page.indexOf('if (!all.length) {'), page.indexOf('} else if (!rows.length) {'));
+    const emptyBranch = page.slice(page.indexOf('if (!all.length) {'), page.indexOf('// Toolbar'));
     expect((emptyBranch.match(/RH2\.laCreate\(\)/g) || []).length).toBe(1);
     expect((emptyBranch.match(/RH2\.laImport\(\)/g) || []).length).toBe(1);
   });
