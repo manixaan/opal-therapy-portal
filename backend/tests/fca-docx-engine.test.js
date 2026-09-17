@@ -167,13 +167,13 @@ describe('fca-v1.docx template facts', () => {
     footer6 = parts['word/footer6.xml'];
   });
 
-  test('carries 54 unique controls across 80 occurrences', () => {
+  test('carries 54 unique controls across 73 occurrences', () => {
     const all = new Map();
     for (const xml of [doc, header6, footer6]) {
       for (const [tag, n] of tagCounts(xml)) all.set(tag, (all.get(tag) || 0) + n);
     }
     expect(all.size).toBe(54);
-    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(80);
+    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(73);
   });
 
   test('splits into 25 section-or-anchor and 29 scalar controls', () => {
@@ -206,10 +206,10 @@ describe('fca-v1.docx template facts', () => {
     for (const meta of tm.SCALAR_TAGS) {
       expect([meta.tag, all.get(meta.tag)]).toEqual([meta.tag, meta.occurrences]);
     }
-    // 14 scalar tags repeat, the most repeated 5 times.
+    // 12 scalar tags repeat, the most repeated 4 times.
     const repeats = tm.SCALAR_TAGS.filter((s) => s.occurrences > 1);
-    expect(repeats.length).toBe(14);
-    expect(Math.max(...repeats.map((s) => s.occurrences))).toBe(5);
+    expect(repeats.length).toBe(12);
+    expect(Math.max(...repeats.map((s) => s.occurrences))).toBe(4);
   });
 
   test('the Word list styles (bullet and numbered) are body-sized at 11pt', async () => {
@@ -274,10 +274,10 @@ describe('scalar population', () => {
     const buffer = await generateFcaDocx({ templateBuffer, manifest: fullManifest() });
     const parts = await partsOf(buffer);
 
-    // A repeated tag: 5 occurrences, all populated, none left as placeholder.
+    // A repeated tag: 4 occurrences, all populated, none left as placeholder.
     const therapistName = 'VAL_OPAL_THERAPIST_FULL_NAME';
     const bodyHits = parts['word/document.xml'].split(therapistName).length - 1;
-    expect(bodyHits).toBe(5);
+    expect(bodyHits).toBe(4);
 
     // header6 — the part a body-only implementation would ship blank.
     expect(parts['word/header6.xml']).toContain('VAL_OPAL_CLIENT_FULL_NAME');
@@ -286,15 +286,15 @@ describe('scalar population', () => {
     // footer6 — the document id.
     expect(parts['word/footer6.xml']).toContain('VAL_OPAL_REPORT_DOCUMENT_ID');
 
-    // The client name has 3 body controls (a 4th is in header6), and the
+    // The client name has 2 body controls (a 3rd is in header6), and the
     // cover-page one is a heading — so the rebuilt TOC carries the participant's
-    // real name as a fourth body occurrence rather than the template's
+    // real name as a third body occurrence rather than the template's
     // "[PORTAL — CLIENT NAME]" placeholder.
-    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_FULL_NAME').length - 1).toBe(4);
-    // The NDIS number is not in a heading: 4 occurrences, 1 of them in header6.
-    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_NDIS_NUMBER').length - 1).toBe(3);
+    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_FULL_NAME').length - 1).toBe(3);
+    // The NDIS number is not in a heading: 3 occurrences, 1 of them in header6.
+    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_NDIS_NUMBER').length - 1).toBe(2);
 
-    expect(buffer.fcaStats.scalarsWritten).toBe(55); // 80 − 25 section/anchor controls
+    expect(buffer.fcaStats.scalarsWritten).toBe(48); // 73 − 25 section/anchor controls
   });
 
   test('a null value leaves the template placeholder and never prints "null"', async () => {
@@ -392,7 +392,7 @@ describe('excluded scalars', () => {
   });
 
   test('EVERY occurrence of an excluded tag is emptied, in every part', async () => {
-    // OPAL_REPORT_DOCUMENT_ID has 3 occurrences, one of them in footer6.
+    // OPAL_REPORT_DOCUMENT_ID has 2 occurrences, one of them in footer6.
     const parts = await partsOf(await generateFcaDocx({
       templateBuffer,
       manifest: fullManifest({ excludedTags: ['OPAL_REPORT_DOCUMENT_ID'] }),
@@ -795,9 +795,9 @@ describe('acceptance scenario: five sections out, one custom section in', () => 
 
   test('the prefilled sample data is rendered everywhere it appears', async () => {
     const parts = await partsOf(buffer);
-    // 3 controls + the rebuilt TOC entry for the cover-page heading.
-    expect(body.split('Jane Sample').length - 1).toBe(4);
-    expect(body.split('Sam Therapist').length - 1).toBe(5);
+    // 2 body controls + the rebuilt TOC entry for the cover-page heading.
+    expect(body.split('Jane Sample').length - 1).toBe(3);
+    expect(body.split('Sam Therapist').length - 1).toBe(4);
     expect(parts['word/header6.xml']).toContain('Jane Sample');
     expect(parts['word/header6.xml']).toContain('430000001');
     expect(parts['word/footer6.xml']).toContain('FCA-0001');

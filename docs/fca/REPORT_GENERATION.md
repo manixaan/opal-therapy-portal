@@ -111,11 +111,11 @@ manifest = {
 Asserted by `backend/tests/fca-docx-engine.test.js` against the shipped file, so
 none of this can silently drift.
 
-- **54** unique `w:tag` content controls across **80** occurrences
+- **54** unique `w:tag` content controls across **73** occurrences
 - **25** section-or-anchor controls, **29** scalar controls
 - **13** unique `OPAL_CLIENT_*` tags — discovered dynamically, never hard-coded
-- **14** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **5** times
-- Parts carrying controls: `word/document.xml` (77), `word/header6.xml` (2 —
+- **12** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **4** times
+- Parts carrying controls: `word/document.xml` (70), `word/header6.xml` (2 —
   `OPAL_CLIENT_FULL_NAME`, `OPAL_CLIENT_NDIS_NUMBER`), `word/footer6.xml`
   (1 — `OPAL_REPORT_DOCUMENT_ID`). **A body-only implementation ships blank
   headers**, so parts are walked generically.
@@ -246,8 +246,8 @@ strings `null` and `undefined` can never reach the page.
 
 | # | Tag | Occ | Layer | Resolved from | Save-back |
 |---|-----|-----|-------|---------------|-----------|
-| 1 | `OPAL_CLIENT_FULL_NAME` | 4 | Splose-authoritative | splose.fullName | rejected — `splose_authoritative` |
-| 2 | `OPAL_CLIENT_NDIS_NUMBER` | 4 | Splose-authoritative | splose.ndisNumber | rejected — `splose_authoritative` |
+| 1 | `OPAL_CLIENT_FULL_NAME` | 3 | Splose-authoritative | splose.fullName | rejected — `splose_authoritative` |
+| 2 | `OPAL_CLIENT_NDIS_NUMBER` | 3 | Splose-authoritative | splose.ndisNumber | rejected — `splose_authoritative` |
 | 3 | `OPAL_CLIENT_ADDRESS` | 1 | Splose-authoritative | splose.formattedAddress | rejected — `splose_authoritative` |
 | 4 | `OPAL_CLIENT_EMAIL` | 1 | Splose-authoritative | splose.email | rejected — `splose_authoritative` |
 | 5 | `OPAL_CLIENT_PHONE` | 1 | Splose-authoritative | splose.mobilePhone | rejected — `splose_authoritative` |
@@ -259,19 +259,19 @@ strings `null` and `undefined` can never reach the page.
 | 11 | `OPAL_CLIENT_REFERRER_DETAILS` | 1 | Client profile | fca_client_profiles.referrer_details | eligible |
 | 12 | `OPAL_CLIENT_NDIS_PLAN_START` | 1 | Client profile | current plan.plan_start | eligible |
 | 13 | `OPAL_CLIENT_NDIS_PLAN_END` | 1 | Client profile | current plan.plan_end | eligible |
-| 14 | `OPAL_THERAPIST_FULL_NAME` | 5 | Portal (this DB) | portal.therapistName | rejected — `not_client_data` |
-| 15 | `OPAL_THERAPIST_CREDENTIALS` | 4 | Portal (this DB) | portal.therapistRoleTitle | rejected — `not_client_data` |
+| 14 | `OPAL_THERAPIST_FULL_NAME` | 4 | Portal (this DB) | portal.therapistName | rejected — `not_client_data` |
+| 15 | `OPAL_THERAPIST_CREDENTIALS` | 3 | Portal (this DB) | portal.therapistRoleTitle | rejected — `not_client_data` |
 | 16 | `OPAL_THERAPIST_EMAIL` | 3 | Portal (this DB) | portal.therapistEmail | rejected — `not_client_data` |
 | 17 | `OPAL_THERAPIST_PHONE` | 3 | Portal (this DB) | portal.therapistPhone | rejected — `not_client_data` |
 | 18 | `OPAL_THERAPIST_ORGANISATION` | 2 | Portal (this DB) | portal.organisationName | rejected — `not_client_data` |
 | 19 | `OPAL_THERAPIST_AHPRA_NUMBER` | 2 | Portal (this DB) | portal.ahpraNumber | rejected — `not_client_data` |
 | 20 | `OPAL_THERAPIST_QUALIFICATIONS` | 2 | Report-specific | report override only | rejected — `report_specific` |
 | 21 | `OPAL_THERAPIST_PROVIDER_NUMBER` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 22 | `OPAL_REPORT_DOCUMENT_ID` | 3 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
+| 22 | `OPAL_REPORT_DOCUMENT_ID` | 2 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
 | 23 | `OPAL_REPORT_DATE` | 2 | Opal-issued | creation date, dd/mm/yyyy | rejected — `server_issued` |
-| 24 | `OPAL_REPORT_VERSION` | 2 | Opal-issued | `1.0` | rejected — `server_issued` |
+| 24 | `OPAL_REPORT_VERSION` | 1 | Opal-issued | `1.0` | rejected — `server_issued` |
 | 25 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
-| 26 | `OPAL_REPORT_ISSUE_DATE` | 2 | Report-specific | report override only | rejected — `report_specific` |
+| 26 | `OPAL_REPORT_ISSUE_DATE` | 1 | Report-specific | report override only | rejected — `report_specific` |
 | 27 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
 | 28 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
 | 29 | `OPAL_REPORT_AUTHORISED_RECIPIENTS` | 1 | Report-specific | report override only | rejected — `report_specific` |
