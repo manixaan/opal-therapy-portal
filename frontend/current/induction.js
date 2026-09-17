@@ -554,7 +554,13 @@
     var step = S.steps[S.idx];
     var card = doc.getElementById('ind-card');
     var ring = doc.getElementById('ind-ring');
+    // With the workshop dock open, the stage is the portal beside it: the
+    // shade stops at the dock and the card centres in what is left, so the
+    // Owner reads the pop-up and its fields side by side.
+    var dock = (doc.body.classList.contains('wk-open') && !doc.body.classList.contains('wk-hidden'))
+      ? doc.getElementById('wk-dock') : null;
     var vw = global.innerWidth, vh = global.innerHeight;
+    if (dock) vw = Math.max(320, Math.min(vw, dock.getBoundingClientRect().left));
     var pad = step && step.pad != null ? step.pad : 6;
 
     var hole = null;
@@ -598,7 +604,7 @@
         card.style.transform = '';
       } else {
         card.style.top = '50%';
-        card.style.left = '50%';
+        card.style.left = Math.round(vw / 2) + 'px';
         card.style.transform = 'translate(-50%,-50%)';
       }
     }
@@ -1146,8 +1152,27 @@
 
   // ── Public surface ────────────────────────────────────────────────────────
 
+  /**
+   * Re-render an OPEN preview from a newer draft, in place. The workshop
+   * calls this as the Owner types, so the pop-up on screen is the step being
+   * edited. Nothing is loaded, nothing is written, and a run that is not a
+   * preview is never touched — a learner's walkthrough cannot be edited
+   * from under them.
+   */
+  function refresh(module, at) {
+    if (!S.active || !S.preview || !module) return false;
+    var steps = module.steps || [];
+    if (!steps.length) return false;
+    S.mod = module;
+    S.steps = steps;
+    var idx = typeof at === 'number' ? at : S.idx;
+    showStep(Math.max(0, Math.min(Math.round(idx), steps.length - 1)), 0);
+    return true;
+  }
+
   global.OpalInduction = {
     start: start,
+    refresh: refresh,
     close: close,
     next: next,
     prev: prev,

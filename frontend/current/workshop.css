@@ -301,3 +301,27 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 .wk-palette-icon { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 7px; box-sizing: border-box; color: var(--ink, #241f1a); background: var(--panel, #fff); }
 .wk-palette-body { display: flex; flex-direction: column; gap: 2px; }
 .wk-palette-item strong { color: var(--accent-deep, #0a5d51); }
+
+/* ── Room to edit: a wider dock, a foldable step list, a live-preview note ── */
+:root { --wk-dock-w: 460px; }
+@media (max-width: 1100px) { :root { --wk-dock-w: 400px; } }
+@media (max-width: 900px) { :root { --wk-dock-w: 340px; } }
+.wk-rail-toggle {
+  appearance: none; width: 100%; display: flex; align-items: center; gap: 8px; background: var(--bg, #f6f7f9);
+  border: 0; border-bottom: 1px solid var(--border, #e5e7eb); padding: 8px 14px; font: inherit; font-size: 12px;
+  font-weight: 600; color: var(--ink-soft, #5d564e); cursor: pointer; text-align: left;
+}
+.wk-rail-toggle:hover { color: var(--ink, #241f1a); }
+.wk-rail-toggle-l { flex-shrink: 0; }
+.wk-rail-count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--panel, #fff); border: 1px solid var(--border, #e5e7eb); text-align: center; font-size: 11px; }
+.wk-rail-toggle-cur { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.wk-rail { max-height: 34%; }
+.wk-rail.is-folded { display: none; }
+.wk-live {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 8px 10px; border-radius: 8px;
+  background: var(--accent-soft, #e4f2ec); color: var(--accent-deep, #0a5d51); font-size: 12px; line-height: 1.4;
+}
+.wk-live-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #0f7c6c); box-shadow: 0 0 0 3px rgba(15, 124, 108, .2); }
+.wk-live-btn { margin-left: auto; flex-shrink: 0; }
+.wk-field textarea { font-size: 14px; line-height: 1.5; }
+.wk-field input[type="text"] { font-size: 14px; }

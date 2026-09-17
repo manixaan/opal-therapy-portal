@@ -88,6 +88,7 @@
     picking: null,      // live target picker state
     recording: null,    // { steps: [], banner } while recording a skeleton
     hidden: false,      // dock hidden for "as a new starter sees it"
+    railOpen: true,     // the step list, folded to give the pane room
   };
 
   // ── Utilities ─────────────────────────────────────────────────────────────
@@ -398,7 +399,12 @@
 
     // The steps, as a curriculum rail: a grip to drag, the block's icon, its
     // heading, and a quiet delete. Moving with the keyboard lives in the pane.
-    h += '<div class="wk-rail" role="list" aria-label="Steps">';
+    var cur = W.steps[W.idx];
+    h += '<button type="button" class="wk-rail-toggle" aria-expanded="' + (W.railOpen ? 'true' : 'false') + '" onclick="OpalWorkshop.toggleRail()">' +
+      '<span class="wk-rail-toggle-l">Steps <span class="wk-rail-count">' + W.steps.length + '</span></span>' +
+      (W.railOpen ? '' : '<span class="wk-rail-toggle-cur">' + (W.idx + 1) + '. ' + esc(cur ? (cur.title || '(untitled)') : '') + '</span>') +
+      '<span aria-hidden="true">' + (W.railOpen ? '&#8963;' : '&#8964;') + '</span></button>';
+    h += '<div class="wk-rail' + (W.railOpen ? '' : ' is-folded') + '" role="list" aria-label="Steps">';
     W.steps.forEach(function (s, i) {
       var block = BLOCK_BY_TYPE[s.type] || { name: s.type };
       h += '<div class="wk-rail-row' + (i === W.idx ? ' is-current' : '') + '" role="listitem" draggable="true" ' +
@@ -455,6 +461,14 @@
         '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.save()"' + (W.dirty ? '' : ' disabled') + '>Save</button>' +
       '</span></div>';
 
+    // What this pane is: the pop-up on the left, being written. Said once,
+    // at the top, with the way to bring the preview back if it was closed.
+    h += '<div class="wk-live" role="note">' +
+      '<span class="wk-live-dot" aria-hidden="true"></span>' +
+      '<span>Live preview &mdash; the pop-up beside this panel is step ' + (W.idx + 1) + ', and updates as you type.</span>' +
+      '<button type="button" class="wk-btn wk-btn-quiet wk-live-btn" onclick="OpalWorkshop.playCurrent()">Show it</button>' +
+      '</div>';
+
     h += '<div class="wk-field"><label>Block</label>' +
       '<select onchange="OpalWorkshop._step(\'type\', this.value)">';
     BLOCKS.forEach(function (b) {
@@ -463,40 +477,40 @@
     h += '</select><p class="wk-hint">' + esc(block.hint) + '</p></div>';
 
     h += '<div class="wk-field"><label>Heading</label>' +
-      '<input type="text" value="' + esc(s.title || '') + '" onchange="OpalWorkshop._step(\'title\', this.value)"></div>';
+      '<input type="text" value="' + esc(s.title || '') + '" oninput="OpalWorkshop._live(\'step\',\'title\',this.value)" onchange="OpalWorkshop._step(\'title\', this.value)"></div>';
 
     if (s.type === 'quiz' || s.type === 'checkpoint') {
       var q = s.quiz || { question: '', options: ['', ''], correctIndex: 0, explain: '' };
       h += '<div class="wk-field"><label>Question</label>' +
-        '<textarea rows="2" onchange="OpalWorkshop._quiz(\'question\', this.value)">' + esc(q.question) + '</textarea></div>';
+        '<textarea rows="2" oninput="OpalWorkshop._live(\'quiz\',\'question\',this.value)" onchange="OpalWorkshop._quiz(\'question\', this.value)">' + esc(q.question) + '</textarea></div>';
       h += '<div class="wk-field"><label>Answers <span class="wk-hint-inline">tick the right one</span></label>';
       (q.options || []).forEach(function (opt, i) {
         h += '<div class="wk-opt">' +
           '<input type="radio" name="wk-correct" ' + (q.correctIndex === i ? 'checked' : '') +
             ' onchange="OpalWorkshop._quiz(\'correctIndex\', ' + i + ')" aria-label="Answer ' + (i + 1) + ' is correct">' +
-          '<input type="text" value="' + esc(opt) + '" onchange="OpalWorkshop._quizOption(' + i + ', this.value)">' +
+          '<input type="text" value="' + esc(opt) + '" oninput="OpalWorkshop._live(\'option\',' + i + ',this.value)" onchange="OpalWorkshop._quizOption(' + i + ', this.value)">' +
           '<button type="button" class="wk-mini" onclick="OpalWorkshop._quizRemove(' + i + ')"' +
             ((q.options || []).length <= 2 ? ' disabled title="A question needs at least two answers"' : '') + '>×</button>' +
           '</div>';
       });
       h += '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop._quizAdd()">Add an answer</button></div>';
       h += '<div class="wk-field"><label>Why that answer</label>' +
-        '<textarea rows="2" onchange="OpalWorkshop._quiz(\'explain\', this.value)">' + esc(q.explain || '') + '</textarea>' +
+        '<textarea rows="2" oninput="OpalWorkshop._live(\'quiz\',\'explain\',this.value)" onchange="OpalWorkshop._quiz(\'explain\', this.value)">' + esc(q.explain || '') + '</textarea>' +
         (s.type === 'checkpoint'
           ? '<p class="wk-hint">A checkpoint is marked by the server, so the answer never travels to the ' +
             'browser and the gate is real. They cannot move on until they get it right.</p>' : '') +
         '</div>';
     } else if (s.type === 'acknowledgement') {
       h += '<div class="wk-field"><label>The statement they agree to</label>' +
-        '<textarea rows="4" onchange="OpalWorkshop._step(\'ack_statement\', this.value)">' +
+        '<textarea rows="4" oninput="OpalWorkshop._live(\'step\',\'ack_statement\',this.value)" onchange="OpalWorkshop._step(\'ack_statement\', this.value)">' +
         esc(s.ack_statement || '') + '</textarea>' +
         '<p class="wk-hint">Recorded against their name with the date. The wording that is stored is the ' +
         'wording you publish, so say exactly what is being agreed to.</p></div>';
       h += '<div class="wk-field"><label>Anything to read first (optional)</label>' +
-        '<textarea rows="3" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea></div>';
+        '<textarea rows="3" oninput="OpalWorkshop._live(\'step\',\'body\',this.value)" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea></div>';
     } else {
       h += '<div class="wk-field"><label>What it says</label>' +
-        '<textarea rows="6" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea>' +
+        '<textarea rows="8" oninput="OpalWorkshop._live(\'step\',\'body\',this.value)" onchange="OpalWorkshop._step(\'body\', this.value)">' + esc(s.body || '') + '</textarea>' +
         '<p class="wk-hint">Plain text. **Bold** works, and a blank line starts a new paragraph.</p></div>';
     }
 
@@ -695,6 +709,43 @@
     s[field] = value;
     touch(field === 'title' || field === 'body');
   }
+
+  /**
+   * Live typing: the field lands in the draft on every keystroke and the
+   * preview on screen repaints a moment later — without re-rendering the
+   * dock, which would tear the field out from under the caret. The rail row
+   * and the Save buttons are updated by hand for the same reason. The blur
+   * handler that follows still does the full re-render.
+   */
+  var liveTimer = null;
+  function _live(kind, a, b) {
+    var s = W.steps[W.idx];
+    if (!s) return;
+    if (kind === 'step') s[a] = b;
+    else if (kind === 'quiz' && s.quiz) s.quiz[a] = b;
+    else if (kind === 'option' && s.quiz) s.quiz.options[a] = b;
+    else if (kind === 'image') { s.image = s.image || { src: '', alt: '' }; s.image[a] = b; }
+    W.dirty = true;
+    if (kind === 'step' && a === 'title') {
+      var row = doc.querySelector('.wk-rail-row.is-current .wk-rail-title');
+      if (row) row.textContent = b || '(untitled)';
+      var head = doc.querySelector('.wk-editor-title');
+      if (head) head.textContent = 'Edit: ' + (b || 'step ' + (W.idx + 1));
+    }
+    var saves = doc.querySelectorAll('.wk-dock .wk-btn-primary[disabled]');
+    for (var i = 0; i < saves.length; i++) if (/Save/.test(saves[i].textContent)) saves[i].disabled = false;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(refreshPreview, 250);
+  }
+
+  /** Repaint the preview from the draft; open it if it was closed. */
+  function refreshPreview() {
+    if (!W.wt || !W.steps.length || !global.OpalInduction) return;
+    if (global.OpalInduction.refresh && global.OpalInduction.refresh(draftModule(), W.idx)) return;
+    playCurrent();
+  }
+
+  function toggleRail() { W.railOpen = !W.railOpen; renderDock(); }
 
   function _target(value) {
     var s = W.steps[W.idx];
@@ -1203,6 +1254,8 @@
     move: move,
     addStep: addStep,
     removeStep: removeStep,
+    _live: _live,
+    toggleRail: toggleRail,
     dragStart: dragStart,
     dragOver: dragOver,
     dragLeave: dragLeave,

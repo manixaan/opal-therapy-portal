@@ -652,7 +652,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 6], ['induction.css', 3],
+      ['induction.js', 7], ['induction.css', 3],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
@@ -663,7 +663,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 8], ['workshop.css', 4],
+      ['workshop.js', 9], ['workshop.css', 5],
       // 1: themed confirm/alert/prompt dialogs — every native browser dialog
       // in the portal goes through dialog.js so it reads as the portal.
       // dialog.css 2: the confirm/alert layer moved above the Splose sync
