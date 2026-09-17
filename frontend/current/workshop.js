@@ -45,6 +45,25 @@
     { type: 'acknowledgement', name: 'Sign here', hint: 'A statement they agree to. Recorded against their name.' },
     { type: 'complete',   name: 'Finish',    hint: 'Ends the walkthrough. Exactly one, at the end.' },
   ];
+  /** Which of the two picker groups a block belongs to. */
+  var BLOCK_GROUP = { quiz: 'ask', checkpoint: 'ask', acknowledgement: 'ask' };
+  /** A small line icon per block, so the rail reads at a glance. */
+  function blockGlyph(type) {
+    var o = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">';
+    switch (type) {
+      case 'intro': return o + '<path d="M4 12h12M11 7l5 5-5 5"/><path d="M20 5v14"/></svg>';
+      case 'highlight': return o + '<circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg>';
+      case 'action': return o + '<path d="M6 4l12 8-6 1-3 6z"/></svg>';
+      case 'warning': return o + '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>';
+      case 'screenshot': return o + '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l5-4 4 3 4-5 5 6"/></svg>';
+      case 'quiz': return o + '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 4"/><path d="M12 17v.5"/></svg>';
+      case 'checkpoint': return o + '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg>';
+      case 'acknowledgement': return o + '<path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6"/><path d="M8 20l4-3 4 3"/></svg>';
+      case 'page': return o + '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>';
+      case 'complete': return o + '<path d="M5 4v16"/><path d="M5 4h12l-3 4 3 4H5"/></svg>';
+      default: return o + '<rect x="4" y="5" width="16" height="12" rx="3"/><path d="M8 17l-2 4 5-4"/></svg>';
+    }
+  }
   var BLOCK_BY_TYPE = {};
   BLOCKS.forEach(function (b) { BLOCK_BY_TYPE[b.type] = b; });
 
@@ -377,25 +396,29 @@
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.startRecording()">Record steps</button>' +
     '</div>';
 
-    h += '<div class="wk-rail">';
+    // The steps, as a curriculum rail: a grip to drag, the block's icon, its
+    // heading, and a quiet delete. Moving with the keyboard lives in the pane.
+    h += '<div class="wk-rail" role="list" aria-label="Steps">';
     W.steps.forEach(function (s, i) {
       var block = BLOCK_BY_TYPE[s.type] || { name: s.type };
-      h += '<div class="wk-rail-row' + (i === W.idx ? ' is-current' : '') + '" ' +
+      h += '<div class="wk-rail-row' + (i === W.idx ? ' is-current' : '') + '" role="listitem" draggable="true" ' +
+             'ondragstart="OpalWorkshop.dragStart(event,' + i + ')" ondragend="OpalWorkshop.dragEnd()" ' +
+             'ondragover="OpalWorkshop.dragOver(event)" ondragleave="OpalWorkshop.dragLeave(event)" ondrop="OpalWorkshop.drop(event,' + i + ')" ' +
              'onclick="OpalWorkshop.select(' + i + ')">' +
+        '<span class="wk-grip" aria-hidden="true" title="Drag to reorder">&#8942;&#8942;</span>' +
         '<span class="wk-rail-n">' + (i + 1) + '</span>' +
-        '<span class="wk-rail-body"><span class="wk-rail-type">' + esc(block.name) + '</span>' +
-        '<span class="wk-rail-title">' + esc(s.title || '(untitled)') + '</span></span>' +
+        '<span class="wk-rail-icon">' + blockGlyph(s.type) + '</span>' +
+        '<span class="wk-rail-body"><span class="wk-rail-title">' + esc(s.title || '(untitled)') + '</span>' +
+        '<span class="wk-rail-type">' + esc(block.name) + '</span></span>' +
         '<span class="wk-rail-tools">' +
-          '<button type="button" class="wk-mini" title="Move up" onclick="event.stopPropagation();OpalWorkshop.move(' + i + ',-1)"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
-          '<button type="button" class="wk-mini" title="Move down" onclick="event.stopPropagation();OpalWorkshop.move(' + i + ',1)"' + (i === W.steps.length - 1 ? ' disabled' : '') + '>↓</button>' +
-          '<button type="button" class="wk-mini" title="Delete this step" onclick="event.stopPropagation();OpalWorkshop.removeStep(' + i + ')">×</button>' +
+          '<button type="button" class="wk-mini" title="Delete this step" aria-label="Delete step ' + (i + 1) + '" onclick="event.stopPropagation();OpalWorkshop.removeStep(' + i + ')">×</button>' +
         '</span></div>';
     });
-    h += '<div class="wk-rail-add"><button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.togglePalette()">+ Add a block here</button></div>';
-    h += paletteHtml();
     h += '</div>';
+    h += '<div class="wk-rail-add"><button type="button" class="wk-btn wk-btn-primary wk-btn-block" aria-expanded="' + (paletteOpen ? 'true' : 'false') + '" onclick="OpalWorkshop.togglePalette()">' +
+      (paletteOpen ? 'Cancel' : '+ Add a block') + '</button></div>';
 
-    h += '<div class="wk-editor">' + stepEditorHtml() + '</div>';
+    h += '<div class="wk-editor">' + (paletteOpen ? paletteHtml() : stepEditorHtml()) + '</div>';
 
     dockLayer().innerHTML = h;
   }
@@ -403,14 +426,19 @@
   var paletteOpen = false;
 
   function paletteHtml() {
-    if (!paletteOpen) return '';
-    var h = '<div class="wk-palette">';
-    BLOCKS.forEach(function (b) {
-      h += '<button type="button" class="wk-palette-item" onclick="OpalWorkshop.addStep(\'' + b.type + '\')">' +
-        '<strong>' + esc(b.name) + '</strong><span>' + esc(b.hint) + '</span></button>';
-    });
-    h += '</div>';
-    return h;
+    var after = W.steps[W.idx];
+    var group = function (key, heading) {
+      return '<h3 class="wk-palette-h">' + heading + '</h3><div class="wk-palette">' +
+        BLOCKS.filter(function (b) { return (BLOCK_GROUP[b.type] || 'show') === key; }).map(function (b) {
+          return '<button type="button" class="wk-palette-item" onclick="OpalWorkshop.addStep(\'' + b.type + '\')">' +
+            '<span class="wk-palette-icon" aria-hidden="true">' + blockGlyph(b.type) + '</span>' +
+            '<span class="wk-palette-body"><strong>' + esc(b.name) + '</strong><span>' + esc(b.hint) + '</span></span></button>';
+        }).join('') + '</div>';
+    };
+    return '<div class="wk-editor-head"><h2 class="wk-editor-title">Blocks</h2></div>' +
+      '<p class="wk-hint">' + (after ? 'Added after <strong>' + esc(after.title || 'step ' + (W.idx + 1)) + '</strong>.' : 'The first step of the walkthrough.') + '</p>' +
+      group('show', 'Show and tell') +
+      group('ask', 'Ask them');
   }
 
   function stepEditorHtml() {
@@ -418,6 +446,14 @@
     if (!s) return '<p class="wk-muted">This walkthrough has no steps yet. Add one to begin.</p>';
     var block = BLOCK_BY_TYPE[s.type] || { name: s.type, hint: '' };
     var h = '';
+
+    h += '<div class="wk-editor-head">' +
+      '<h2 class="wk-editor-title">Edit: ' + esc(s.title || 'step ' + (W.idx + 1)) + '</h2>' +
+      '<span class="wk-editor-tools">' +
+        '<button type="button" class="wk-mini" title="Move up" aria-label="Move step up" onclick="OpalWorkshop.move(' + W.idx + ',-1)"' + (W.idx === 0 ? ' disabled' : '') + '>↑</button>' +
+        '<button type="button" class="wk-mini" title="Move down" aria-label="Move step down" onclick="OpalWorkshop.move(' + W.idx + ',1)"' + (W.idx === W.steps.length - 1 ? ' disabled' : '') + '>↓</button>' +
+        '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.save()"' + (W.dirty ? '' : ' disabled') + '>Save</button>' +
+      '</span></div>';
 
     h += '<div class="wk-field"><label>Block</label>' +
       '<select onchange="OpalWorkshop._step(\'type\', this.value)">';
@@ -589,6 +625,38 @@
     W.steps.splice(i, 1);
     if (W.idx >= W.steps.length) W.idx = W.steps.length - 1;
     touch(true);
+  }
+
+  var dragFrom = null;
+  function dragStart(ev, i) {
+    dragFrom = i;
+    if (ev && ev.dataTransfer) { try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', 'wk'); } catch (e) { /* IE */ } }
+    if (ev && ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.add('is-dragging');
+  }
+  function dragOver(ev) {
+    if (dragFrom === null) return;
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+    if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.add('is-dropover');
+  }
+  function dragLeave(ev) {
+    if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('is-dropover');
+  }
+  function dragEnd() {
+    dragFrom = null;
+    var els = doc.querySelectorAll('.wk-rail-row.is-dragging, .wk-rail-row.is-dropover');
+    for (var i = 0; i < els.length; i++) els[i].classList.remove('is-dragging', 'is-dropover');
+  }
+  /** Drop a step onto another: it takes that step's place. */
+  function drop(ev, to) {
+    ev.preventDefault();
+    var from = dragFrom;
+    dragEnd();
+    if (from === null || from === to || !W.steps[from]) return;
+    var s = W.steps.splice(from, 1)[0];
+    W.steps.splice(to, 0, s);
+    W.idx = to;
+    touch(false);
   }
 
   function move(i, delta) {
@@ -1135,6 +1203,11 @@
     move: move,
     addStep: addStep,
     removeStep: removeStep,
+    dragStart: dragStart,
+    dragOver: dragOver,
+    dragLeave: dragLeave,
+    dragEnd: dragEnd,
+    drop: drop,
     togglePalette: togglePalette,
     pickTarget: pickTarget,
     report: report,

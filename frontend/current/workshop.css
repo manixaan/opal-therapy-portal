@@ -277,3 +277,27 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 /* Naming a new walkthrough, inline on the shelf. */
 .wk-new { margin: 0 0 16px; }
 .wk-new-row { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ── Builder-style rail: grips, icons, drag states, grouped block picker ── */
+.wk-rail { max-height: 42%; }
+.wk-rail-row { gap: 6px; padding: 7px 10px 7px 6px; cursor: grab; }
+.wk-rail-row:active { cursor: grabbing; }
+.wk-rail-row.is-dragging { opacity: .45; }
+.wk-rail-row.is-dropover { box-shadow: inset 0 2px 0 var(--accent, #2f6f4f); }
+.wk-grip { color: var(--text-muted, #9ca3af); font-size: 12px; letter-spacing: -3px; width: 12px; flex-shrink: 0; user-select: none; }
+.wk-rail-icon { display: inline-flex; width: 18px; height: 18px; flex-shrink: 0; color: var(--ink-soft, #5d564e); }
+.wk-rail-icon svg, .wk-palette-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.wk-rail-row.is-current .wk-rail-icon { color: var(--accent, #2f6f4f); }
+.wk-rail-body { gap: 1px; }
+.wk-rail-title { font-size: 13px; font-weight: 500; }
+.wk-rail-add { padding: 10px 14px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.wk-btn-block { width: 100%; justify-content: center; min-height: 38px; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; font-weight: 600; }
+.wk-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.wk-editor-title { margin: 0; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-editor-tools { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.wk-palette-h { margin: 12px 0 6px; font-size: 13px; font-weight: 600; }
+.wk-palette { padding: 0; grid-template-columns: 1fr; gap: 6px; }
+.wk-palette .wk-palette-item { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; padding: 8px 10px; text-align: left; }
+.wk-palette-icon { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 7px; box-sizing: border-box; color: var(--ink, #241f1a); background: var(--panel, #fff); }
+.wk-palette-body { display: flex; flex-direction: column; gap: 2px; }
+.wk-palette-item strong { color: var(--accent-deep, #0a5d51); }
