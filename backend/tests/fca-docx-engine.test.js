@@ -212,7 +212,7 @@ describe('fca-v1.docx template facts', () => {
     expect(Math.max(...repeats.map((s) => s.occurrences))).toBe(5);
   });
 
-  test('the Word list styles (bullet and numbered) are body-sized at 10.5pt', async () => {
+  test('the Word list styles (bullet and numbered) are body-sized at 11pt', async () => {
     // A therapist writes the body in Word after download, so the gallery's
     // "OPAL – Bullet" and "OPAL – Numbered List" must match "OPAL – Body".
     const styles = (await partsOf(templateBuffer))['word/styles.xml'];
@@ -220,9 +220,9 @@ describe('fca-v1.docx template facts', () => {
       const m = new RegExp(`<w:style [^>]*w:styleId="${id}"[\\s\\S]*?<w:sz w:val="(\\d+)"/>[\\s\\S]*?</w:style>`).exec(styles);
       return m ? Number(m[1]) : null;
     };
-    expect(sizeOf(tm.STYLE.BODY)).toBe(21);
-    expect(sizeOf('OPAL–Bullet')).toBe(21);
-    expect(sizeOf('OPAL–NumberedList')).toBe(21);
+    expect(sizeOf(tm.STYLE.BODY)).toBe(22);
+    expect(sizeOf('OPAL–Bullet')).toBe(22);
+    expect(sizeOf('OPAL–NumberedList')).toBe(22);
   });
 
   test('style ids use an en dash with no spaces', () => {
