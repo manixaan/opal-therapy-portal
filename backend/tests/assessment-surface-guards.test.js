@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r47'], ['resourcehub.css', 'r26'],
+      ['resourcehub.js', 'r48'], ['resourcehub.css', 'r27'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -694,7 +694,7 @@ describe('changed assets are cache-busted', () => {
       ['profile.js', 5],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
-      ['reports.js', 7],
+      ['reports.js', 8],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder

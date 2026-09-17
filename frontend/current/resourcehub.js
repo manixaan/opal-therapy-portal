@@ -5517,9 +5517,10 @@
           : '') +
         '</div>';
     }
-    var openAttr = !archived
-      ? ' onclick="RH2.laEdit(\'' + id + '\')" title="Open in the builder"'
-      : ' onclick="RH2.laPreview(\'' + id + '\')" title="Preview"';
+    // The whole card opens the induction — thumbnail, title and body alike.
+    // The controls in the footer and the selection tick stop the click.
+    var openFn = !archived ? 'RH2.laEdit(\'' + id + '\')' : 'RH2.laPreview(\'' + id + '\')';
+    var openAttr = ' onclick="' + openFn + '" title="' + (!archived ? 'Open in the builder' : 'Preview') + '"';
 
     return '<article class="rh2-course' + (list ? ' rh2-course-list' : '') +
       (archived ? ' rh2-course-archived' : '') + (selOn ? ' rh2-course-sel' : '') +
@@ -5533,8 +5534,8 @@
               'onchange="RH2.aslToggleSel(\'' + id + '\')"></label>'
           : '') +
       '</div>' +
-      '<div class="rh2-course-body">' +
-        '<h3 class="rh2-course-title"><button type="button" class="rh2-course-open"' + openAttr + '>' +
+      '<div class="rh2-course-body rh2-course-clickable"' + openAttr + '>' +
+        '<h3 class="rh2-course-title"><button type="button" class="rh2-course-open" onclick="event.stopPropagation();' + openFn + '">' +
           esc(w.title) + '</button></h3>' +
         '<div class="rh2-course-meta">' + meta + '</div>' +
         '<div class="rh2-course-sub">' + sub + '</div>' +
@@ -5542,7 +5543,7 @@
           ? '<p class="rh2-learn-cannot">Add at least one module before this can be assigned.</p>'
           : '') +
       '</div>' +
-      '<div class="rh2-course-foot">' +
+      '<div class="rh2-course-foot" onclick="event.stopPropagation()">' +
         '<span class="rh2-course-status rh2-course-status-' + st.key + '">' + st.label + '</span>' +
         '<span class="rh2-course-acts">' +
           (assignable ? '<button type="button" class="rh2-btn rh2-btn-primary rh2-course-assign" id="asl-assign-' + id +

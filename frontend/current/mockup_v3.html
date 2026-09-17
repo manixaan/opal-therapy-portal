@@ -16,7 +16,7 @@
 <script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
 <script src="/scheduler.js?v=p9" defer></script>
-<link rel="stylesheet" href="/resourcehub.css?v=r26" />
+<link rel="stylesheet" href="/resourcehub.css?v=r27" />
 <link rel="stylesheet" href="/opa.css?v=1" />
 <link rel="stylesheet" href="/induction-assistant.css?v=1" />
 <link rel="stylesheet" href="/supportpop.css?v=1" />
@@ -33,7 +33,7 @@
 <link rel="stylesheet" href="/splose-sync.css?v=1" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=39" />
 <link rel="stylesheet" href="/employees.css?v=1" />
-<script src="/resourcehub.js?v=r47" defer></script>
+<script src="/resourcehub.js?v=r48" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
 <script src="/induction-modules.js?v=3" defer></script>
@@ -95,7 +95,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=7" defer></script>
+<script src="/reports.js?v=8" defer></script>
 <script src="/navigation.js?v=11" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -714,7 +714,7 @@ window.opIcon = function (name, size) {
   #report-overlay.closing { display: block; opacity: 0; }
   #report-modal {
     position: fixed; top: 50%; left: 50%;
-    transform: translate(-50%, -50%) scale(0.04); opacity: 0;
+    transform: translate(-50%, -50%) scale(0.55); opacity: 0;
     transform-origin: var(--rpt-ox, 50%) var(--rpt-oy, 50%);
     pointer-events: none;
     width: min(940px, 96vw); max-height: 90vh;
@@ -727,11 +727,11 @@ window.opIcon = function (name, size) {
   /* The calendar icon flashes a ring as the panel leaves it and again when
      it lands back, so the panel's home is unmistakable. */
   @keyframes rpt-anchor-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(45,106,94,0.55); background: rgba(45,106,94,0.18); }
-    70%  { box-shadow: 0 0 0 14px rgba(45,106,94,0); }
+    0%   { box-shadow: 0 0 0 0 rgba(45,106,94,0.35); background: rgba(45,106,94,0.12); }
+    70%  { box-shadow: 0 0 0 6px rgba(45,106,94,0); }
     100% { box-shadow: 0 0 0 0 rgba(45,106,94,0); background: transparent; }
   }
-  .rpt-anchor-pulse { animation: rpt-anchor-pulse 0.7s ease-out; border-radius: 10px; }
+  .rpt-anchor-pulse { animation: rpt-anchor-pulse 0.4s ease-out; border-radius: 10px; }
   #report-modal.open { transform: translate(-50%,-50%) scale(1); opacity: 1; pointer-events: auto; }
   #report-modal-header {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;

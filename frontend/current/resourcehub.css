@@ -1555,6 +1555,8 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
   position: absolute; top: 10px; left: 10px; display: inline-flex; padding: 4px;
   background: rgba(255, 255, 255, .92); border-radius: 6px; cursor: pointer;
 }
+.rh2-course-clickable { cursor: pointer; }
+.rh2-course-clickable:hover .rh2-course-open { color: var(--accent-deep); }
 .rh2-course-body { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 12px; flex: 1 1 auto; }
 .rh2-course-title { margin: 0; font-size: 15px; line-height: 1.35; }
 .rh2-course-open {

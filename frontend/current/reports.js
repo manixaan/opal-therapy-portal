@@ -90,33 +90,36 @@ function reportPanelAnchorTo(source) {
 var _reportAnchorEl = null;
 var _reportGenieAnim = null;
 
-/* Genie-style motion (like a window minimising to the Dock): the panel is
-   pulled into a tall thin stream that flows into the anchor, sheared toward
-   it, rather than shrinking evenly. Built with the Web Animations API so the
-   shear direction can follow wherever the anchor is. `dir` is 'in' (opening)
-   or 'out' (closing). Returns the Animation, or null when unsupported. */
+/* Panel motion: a short, straight scale-and-fade toward the anchor
+   (transform-origin is set by reportPanelAnchorTo), so it reads as "into
+   the calendar icon" without any stretch or shear. Web Animations API so
+   the close can be cancelled by a reopen mid-flight. `dir` is 'in'
+   (opening) or 'out' (closing). Returns the Animation, or null when
+   unsupported. */
 function reportPanelGenie(modal, dir) {
   if (!modal.animate) return null;
   if (_reportGenieAnim) { try { _reportGenieAnim.cancel(); } catch (_) {} }
-  var ox = parseFloat(modal.style.getPropertyValue('--rpt-ox')) || modal.offsetWidth / 2;
-  var oy = parseFloat(modal.style.getPropertyValue('--rpt-oy')) || modal.offsetHeight / 2;
-  // Shear toward the anchor: it sits right of centre → lean the stream right;
-  // above → the funnel narrows at the top.
-  var sx = (ox - modal.offsetWidth / 2) / modal.offsetWidth;   // -0.5..0.5
-  var sy = (oy - modal.offsetHeight / 2) / modal.offsetHeight;
-  var skX = Math.round(-sx * 28);  // deg
-  var skY = Math.round(-sy * 10);
   var T = 'translate(-50%,-50%) ';
-  var frames = [
-    { transform: T + 'scale(0.02, 0.10) skew(' + (skX * 1.4) + 'deg,' + (skY * 1.4) + 'deg)', opacity: 0, offset: 0 },
-    { transform: T + 'scale(0.06, 0.55) skew(' + (skX * 1.2) + 'deg,' + (skY * 1.2) + 'deg)', opacity: 1, offset: 0.22 },
-    { transform: T + 'scale(0.22, 1.10) skew(' + skX + 'deg,' + skY + 'deg)', opacity: 1, offset: 0.5 },
-    { transform: T + 'scale(0.85, 1.03) skew(' + Math.round(skX * 0.3) + 'deg,' + Math.round(skY * 0.3) + 'deg)', opacity: 1, offset: 0.8 },
-    { transform: T + 'scale(1, 1) skew(0deg,0deg)', opacity: 1, offset: 1 }
-  ];
-  if (dir === 'out') frames = frames.slice().reverse().map(function (f) { return { transform: f.transform, opacity: f.opacity, offset: 1 - f.offset }; });
+  var frames;
+  if (dir === 'out') {
+    frames = [
+      { transform: T + 'scale(1)',    opacity: 1, offset: 0 },
+      { transform: T + 'scale(0.9)',  opacity: 0.6, offset: 0.45 },
+      { transform: T + 'scale(0.55)', opacity: 0, offset: 1 }
+    ];
+  } else {
+    frames = [
+      { transform: T + 'scale(0.55)', opacity: 0, offset: 0 },
+      { transform: T + 'scale(0.9)',  opacity: 0.6, offset: 0.35 },
+      { transform: T + 'scale(1)',    opacity: 1, offset: 1 }
+    ];
+  }
   modal.classList.add('genie');
-  var a = modal.animate(frames, { duration: dir === 'out' ? 520 : 560, easing: dir === 'out' ? 'cubic-bezier(0.55,0,0.75,0.2)' : 'cubic-bezier(0.2,0.8,0.25,1)', fill: 'forwards' });
+  var a = modal.animate(frames, {
+    duration: dir === 'out' ? 180 : 220,
+    easing: dir === 'out' ? 'cubic-bezier(0.4,0,1,1)' : 'cubic-bezier(0.2,0.8,0.2,1)',
+    fill: 'forwards'
+  });
   _reportGenieAnim = a;
   a.onfinish = a.oncancel = function () { modal.classList.remove('genie'); if (_reportGenieAnim === a) { _reportGenieAnim = null; } try { a.cancel(); } catch (_) {} };
   return a;
@@ -126,7 +129,7 @@ function reportPanelPulseAnchor(el) {
   el.classList.remove('rpt-anchor-pulse');
   void el.offsetWidth; // restart the animation if it is still running
   el.classList.add('rpt-anchor-pulse');
-  setTimeout(function () { el.classList.remove('rpt-anchor-pulse'); }, 750);
+  setTimeout(function () { el.classList.remove('rpt-anchor-pulse'); }, 450);
 }
 
 function openReportPanel(mode, source) {
