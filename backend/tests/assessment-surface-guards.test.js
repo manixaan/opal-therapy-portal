@@ -699,7 +699,7 @@ describe('changed assets are cache-busted', () => {
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
       // shows where the drive will go until an address is typed.
-      ['travel.js', 15],
+      ['travel.js', 16],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

@@ -548,6 +548,9 @@ app.use('/', require('./learning-routes'));
 // and walkthroughs through the learning validators (backend/ai policy:
 // induction_assistant). Mounted after the learning routes it extends.
 app.use('/', require('./induction-assistant-routes'));
+// Development only: the shell posts its load-time long tasks here so a slow
+// refresh can be diagnosed from the server log. Never mounted elsewhere.
+if (process.env.NODE_ENV === 'development') app.use('/', require('./dev-perf-routes'));
 
 // ── Onboarding Packages ───────────────────────────────────────────────────
 // The employee router is mounted FIRST because it owns the PUBLIC

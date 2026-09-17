@@ -226,11 +226,24 @@ function travelDurationMinSync(from, to, mode) {
   const entry = ROUTE_CACHE.get(key);
   if (isFresh(entry)) return entry.durationMin;
   // Warm the cache in the background — don't await.
-  fetchRoute(from, to, modeKey).then(() => {
-    // Repaint affected day(s) once the fresh route lands, if segments exist.
-    if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
-  }).catch(() => {});
+  fetchRoute(from, to, modeKey).then(scheduleOverlayRefresh).catch(() => {});
   return estimateTravelMinFromTable(from, to);
+}
+
+/* ONE repaint for a burst of route answers, not one per answer.
+   A cold page load asks the Routes API for every leg of the week — thirty or
+   so requests that resolve within a second of each other — and each answer
+   used to call refreshAllOverlays() directly: drop every session's cached
+   location, recompute every day's segments, redraw all seven columns. Thirty
+   full repaints back to back is the "page freezes for ten seconds after a
+   refresh" report (17 Sep 2026). Now the answers are coalesced: the repaint
+   runs once, shortly after the last answer lands. Direct callers (a base
+   edit, a booking) still call refreshAllOverlays() immediately. */
+let _overlayRefreshTimer = null;
+function scheduleOverlayRefresh() {
+  if (typeof refreshAllOverlays !== 'function') return;
+  clearTimeout(_overlayRefreshTimer);
+  _overlayRefreshTimer = setTimeout(() => { _overlayRefreshTimer = null; refreshAllOverlays(); }, 250);
 }
 
 /* Public facade — every caller (impact evaluator, gap-option scorer,

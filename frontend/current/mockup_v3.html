@@ -16,6 +16,56 @@
 <script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
 <script src="/scheduler.js?v=p9" defer></script>
+<script>
+/* Development-only load profiler. On localhost, records long main-thread
+   tasks from the first byte (sampling the thread where the browser cannot
+   report them), then posts a summary to /api/dev/perf (server log) 12 s
+   after load. Names of scripts only, never content. */
+(function () {
+  if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
+  var tasks = [];
+  var supported = false;
+  try {
+    if (typeof PerformanceObserver !== 'undefined'
+        && PerformanceObserver.supportedEntryTypes && PerformanceObserver.supportedEntryTypes.indexOf('longtask') !== -1) {
+      new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (e) {
+          var a = (e.attribution && e.attribution[0]) || {};
+          tasks.push({ start: Math.round(e.startTime), dur: Math.round(e.duration), src: a.containerSrc || a.containerName || '', name: e.name });
+        });
+      }).observe({ type: 'longtask', buffered: true });
+      supported = true;
+    }
+  } catch (e) { supported = false; }
+  if (!supported) {
+    var last = performance.now();
+    var tick = function () {
+      var now = performance.now();
+      if (now - last > 150) tasks.push({ start: Math.round(last), dur: Math.round(now - last), src: '(main thread blocked - sampled)', name: 'sampled' });
+      last = now;
+      if (now < 20000) setTimeout(tick, 100);
+    };
+    setTimeout(tick, 100);
+  }
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      var n = performance.getEntriesByType('navigation')[0] || {};
+      var res = performance.getEntriesByType('resource');
+      var top = tasks.slice().sort(function (a, b) { return b.dur - a.dur; }).slice(0, 15);
+      var body = JSON.stringify({
+        path: location.pathname + (supported ? '' : ' (sampled)'),
+        nav: { domInteractive: Math.round(n.domInteractive || 0), dclHandlers: Math.round((n.domContentLoadedEventEnd || 0) - (n.domContentLoadedEventStart || 0)), loadEnd: Math.round(n.loadEventEnd || 0) },
+        resources: res.length,
+        transferKB: Math.round(res.reduce(function (s, r) { return s + (r.transferSize || 0); }, 0) / 1024),
+        blockingMs: tasks.reduce(function (s, t) { return s + Math.max(0, t.dur - 50); }, 0),
+        longestMs: tasks.reduce(function (m, t) { return Math.max(m, t.dur); }, 0),
+        longTasks: top
+      });
+      try { fetch('/api/dev/perf', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }); } catch (e) { /* dev only */ }
+    }, 12000);
+  });
+})();
+</script>
 <link rel="stylesheet" href="/resourcehub.css?v=r28" />
 <link rel="stylesheet" href="/opa.css?v=1" />
 <link rel="stylesheet" href="/induction-assistant.css?v=2" />
@@ -82,7 +132,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=15" defer></script>
+<script src="/travel.js?v=16" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
