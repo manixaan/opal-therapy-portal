@@ -1086,8 +1086,11 @@ router.get('/api/calendar/reconcile', requireAuth, requireRole('owner', 'admin')
 router.get('/api/sync-status', requireAuth, async (req, res) => {
   try {
     const user = await db.getUser(req.session.userId);
-    const events = await db.getEvents(req.session.userId);
-    const outlookEvents = events.filter(e => e.outlook_id);
+    // Counts only — this runs on every page load and every freshness poll,
+    // and loading the whole event history to count it was the single
+    // heaviest query in the first minutes after a refresh.
+    const counts = await db.countEvents(req.session.userId);
+    const outlookCount = counts.outlook;
 
     // STRICTLY PER-USER (Stage 2 fix). The old org-wide fallback reported
     // "connected" with ANOTHER member's mailbox whenever anyone in the org
@@ -1111,14 +1114,14 @@ router.get('/api/sync-status', requireAuth, async (req, res) => {
       outlookConnected,
       connectedAs:        connectedEmail,
       lastSyncedAt,
-      totalEvents:        events.length,
-      outlookSyncedEvents: outlookEvents.length,
+      totalEvents:        counts.total,
+      outlookSyncedEvents: outlookCount,
       status: !outlookConnected ? 'not_connected'
-        : (outlookEvents.length > 0 ? 'synced'
+        : (outlookCount > 0 ? 'synced'
         : (lastSyncedAt ? 'synced_empty' : 'waiting_first_sync')),
       message: !outlookConnected ? 'Outlook is not connected for your account'
-        : outlookEvents.length > 0
-          ? `${outlookEvents.length} events synced from Outlook`
+        : outlookCount > 0
+          ? `${outlookCount} events synced from Outlook`
           : (lastSyncedAt ? 'Synced — no events in the mirror window yet' : 'Waiting for first sync'),
     });
   } catch (error) {

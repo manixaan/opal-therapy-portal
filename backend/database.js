@@ -847,6 +847,20 @@ async function getEvents(userId, filters = {}) {
   return result.rows;
 }
 
+// Counts for the header freshness pill / sync-status: total live events and
+// how many came from Outlook. A COUNT rather than loading every row — the
+// full read was several MB per call and ran on every page load and poll.
+async function countEvents(userId) {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE outlook_id IS NOT NULL)::int AS outlook
+       FROM events
+      WHERE user_id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+    [userId]
+  );
+  return result.rows[0] || { total: 0, outlook: 0 };
+}
+
 // Update an event
 async function updateEvent(eventId, eventData) {
   const {
@@ -2100,6 +2114,7 @@ module.exports = {
   // Events
   createEvent,
   getEvents,
+  countEvents,
   updateEvent,
   deleteEvent,
   logSync,
