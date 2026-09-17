@@ -496,7 +496,7 @@
       '<div class="wk-richwrap">' +
         '<div class="wk-richbar" role="toolbar" aria-label="Formatting">' +
           '<button type="button" class="wk-mini wk-richbtn" title="Bold (Cmd+B)" aria-label="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><strong>B</strong></button>' +
-          '<span class="wk-richhint">Enter for a new line, blank line for a new paragraph</span>' +
+'' +
         '</div>' +
         '<div class="wk-rich" contenteditable="true" id="' + id + '" style="min-height:' + (rows * 24) + 'px" ' +
           'oninput="OpalWorkshop._rich(this,\'' + field + '\')" onblur="OpalWorkshop._richDone(this,\'' + field + '\')">' + richHtml(text) + '</div>' +
@@ -514,25 +514,21 @@
     h += '<div class="wk-editor-head">' +
       '<h2 class="wk-editor-title">Edit: ' + esc(s.title || 'step ' + (W.idx + 1)) + '</h2>' +
       '<span class="wk-editor-tools">' +
+        (global.OpalInductionAssistant
+          ? '<button type="button" class="wk-btn wk-btn-quiet wk-btn-ai" title="Ask the assistant about this step" onclick="OpalInductionAssistant.toggle()"><span class="wk-ai-spark" aria-hidden="true">&#10022;</span> Ask AI</button>'
+          : '') +
+        '<button type="button" class="wk-btn wk-btn-quiet" title="Show this step in the pop-up" onclick="OpalWorkshop.playCurrent()">Show it</button>' +
         '<button type="button" class="wk-mini" title="Move up" aria-label="Move step up" onclick="OpalWorkshop.move(' + W.idx + ',-1)"' + (W.idx === 0 ? ' disabled' : '') + '>↑</button>' +
         '<button type="button" class="wk-mini" title="Move down" aria-label="Move step down" onclick="OpalWorkshop.move(' + W.idx + ',1)"' + (W.idx === W.steps.length - 1 ? ' disabled' : '') + '>↓</button>' +
         '<button type="button" class="wk-btn wk-btn-primary" onclick="OpalWorkshop.save()"' + (W.dirty ? '' : ' disabled') + '>Save</button>' +
       '</span></div>';
 
-    // What this pane is: the pop-up on the left, being written. Said once,
-    // at the top, with the way to bring the preview back if it was closed.
-    h += '<div class="wk-live" role="note">' +
-      '<span class="wk-live-dot" aria-hidden="true"></span>' +
-      '<span>Live preview &mdash; the pop-up beside this panel is step ' + (W.idx + 1) + ', and updates as you type.</span>' +
-      '<button type="button" class="wk-btn wk-btn-quiet wk-live-btn" onclick="OpalWorkshop.playCurrent()">Show it</button>' +
-      '</div>';
-
-    h += '<div class="wk-field"><label>Block</label>' +
-      '<select onchange="OpalWorkshop._step(\'type\', this.value)">';
-    BLOCKS.forEach(function (b) {
-      h += '<option value="' + b.type + '"' + (b.type === s.type ? ' selected' : '') + '>' + esc(b.name) + '</option>';
-    });
-    h += '</select><p class="wk-hint">' + esc(block.hint) + '</p></div>';
+    // The block type reads as a quiet line under the title; changing it
+    // lives in "More options" below, since it is rare.
+    h += '<p class="wk-blockline">' + esc(block.name) + ' &middot; ' + esc(block.hint) + '</p>';
+    var typeSelect = '<select onchange="OpalWorkshop._step(\'type\', this.value)">' +
+      BLOCKS.map(function (b) { return '<option value="' + b.type + '"' + (b.type === s.type ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') +
+      '</select>';
 
     h += '<div class="wk-field"><label>Heading</label>' +
       '<input type="text" value="' + esc(s.title || '') + '" oninput="OpalWorkshop._live(\'step\',\'title\',this.value)" onchange="OpalWorkshop._step(\'title\', this.value)"></div>';
@@ -597,6 +593,8 @@
         'onchange="OpalWorkshop._image(\'alt\', this.value)"></div>';
     }
 
+    h += '<details class="wk-more"><summary>More options</summary>' +
+      '<div class="wk-field"><label>Block type</label>' + typeSelect + '</div>';
     h += '<div class="wk-field wk-field-roles"><label>Show it to</label><div class="wk-roles">';
     ['owner', 'admin', 'therapist', 'read_only'].forEach(function (r) {
       var on = !s.roles || s.roles.indexOf(r) !== -1;
@@ -605,7 +603,7 @@
         '<input type="checkbox" ' + (on && admitted ? 'checked' : '') + (admitted ? '' : ' disabled') +
         ' onchange="OpalWorkshop._stepRole(\'' + r + '\', this.checked)"> ' + esc(r.replace('_', ' ')) + '</label>';
     });
-    h += '</div></div>';
+    h += '</div></div></details>';
 
     return h;
   }
