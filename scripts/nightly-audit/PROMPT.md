@@ -48,8 +48,11 @@ then leave a morning brief the team can act on.
 
 ## Verification — per feature in the snapshot
 
-Work through every feature. Features still at `idea` stage get steps 1 and 5
-only (they are usually `untouched`); every other feature gets all six steps.
+Work through every feature. Do step 1 (Locate) for all of them. A feature
+with **no** located code gets step 5 only and is `untouched`. Every feature
+with located code gets all six steps, **whatever its tracker stage** — most
+of this tracker's cards still say `idea` while the code is already built,
+and skipping the tests on them is how a real defect goes unreported.
 
 1. **Locate.** From the title, idea, strategy and technical_plan, find the
    subsystem: the `*-routes.js` file(s) (grep `backend/server.js`), the data
