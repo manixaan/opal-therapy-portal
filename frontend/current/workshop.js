@@ -647,7 +647,9 @@
   function touch(replay) {
     W.dirty = true;
     renderDock();
-    if (replay) playCurrent();
+    // A change replays the pop-up only when it is already open. Opening it
+    // is the Owner's act: clicking a step in the rail, or Show it.
+    if (replay && previewOpen()) playCurrent();
   }
 
   function select(i) {
@@ -782,11 +784,15 @@
     liveTimer = setTimeout(refreshPreview, 250);
   }
 
-  /** Repaint the preview from the draft; open it if it was closed. */
+  /** Is the walkthrough pop-up on screen right now? */
+  function previewOpen() { return !!doc.getElementById('ind-layer'); }
+
+  /** Repaint the preview from the draft — only if it is already showing.
+   *  Typing must never OPEN the pop-up; clicking a step does that. */
   function refreshPreview() {
     if (!W.wt || !W.steps.length || !global.OpalInduction) return;
-    if (global.OpalInduction.refresh && global.OpalInduction.refresh(draftModule(), W.idx)) return;
-    playCurrent();
+    if (!previewOpen()) return;
+    if (global.OpalInduction.refresh) global.OpalInduction.refresh(draftModule(), W.idx);
   }
 
   function toggleRail() { W.railOpen = !W.railOpen; renderDock(); }
