@@ -65,6 +65,16 @@ body.wk-open .ia-dock { display: none; }
 .ia-btn-primary:hover:not(:disabled) { background: var(--accent-deep, #0a5d51); border-color: var(--accent-deep, #0a5d51); }
 .ia-btn-quiet { background: none; border-color: transparent; color: var(--ink-soft, #5d564e); margin-left: auto; }
 
+/* Speech */
+.ia-mic.is-on { background: var(--danger-soft, #fbe9e5); border-color: var(--danger, #c2412e); color: var(--danger, #c2412e); }
+.ia-mic-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger, #c2412e); margin-right: 6px; animation: ia-blink 1s infinite ease-in-out; }
+.ia-speak {
+  appearance: none; float: right; margin: 6px 0 0 8px; background: none; border: 1px solid var(--border, #e9e3d9);
+  border-radius: 6px; padding: 2px 7px; font-size: 12px; cursor: pointer; color: var(--ink-soft, #5d564e);
+}
+.ia-speak:hover, .ia-speak.is-on { border-color: var(--accent, #0f7c6c); color: var(--accent-deep, #0a5d51); }
+.ia-speak:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
 /* The way in, on the page. */
 .rh2-asl-ai { display: inline-flex; align-items: center; gap: 6px; }
 .rh2-asl-ai-spark { color: var(--accent, #0f7c6c); }

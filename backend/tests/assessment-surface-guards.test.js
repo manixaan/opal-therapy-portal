@@ -717,7 +717,7 @@ describe('changed assets are cache-busted', () => {
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 2],
-      ['induction-assistant.js', 1], ['induction-assistant.css', 1],
+      ['induction-assistant.js', 2], ['induction-assistant.css', 2],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.

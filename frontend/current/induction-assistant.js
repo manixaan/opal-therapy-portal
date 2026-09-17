@@ -23,7 +23,16 @@
     busy: false,
     abort: null,
     draft: '',
+    listening: false,     // dictation in progress
+    rec: null,            // the SpeechRecognition instance
+    speakingIdx: -1,      // which assistant message is being read aloud
   };
+
+  // ── Speech: dictation in, read-aloud out. Both are the browser's own
+  //    (Web Speech API) — nothing leaves the page except the final text the
+  //    Owner sends, exactly as if they had typed it. Hidden when unsupported.
+  var Recognition = global.SpeechRecognition || global.webkitSpeechRecognition || null;
+  var canSpeak = !!(global.speechSynthesis && global.SpeechSynthesisUtterance);
 
   var SUGGESTIONS = [
     'Draft a first-week induction for a new occupational therapist',
@@ -110,7 +119,11 @@
       if (input) { try { input.focus(); } catch (e) { /* not painted */ } }
     }
   }
-  function close() { if (IA.open) toggle(); }
+  function close() {
+    if (canSpeak) { global.speechSynthesis.cancel(); IA.speakingIdx = -1; }
+    if (IA.listening && IA.rec) { try { IA.rec.stop(); } catch (e) { /* ok */ } }
+    if (IA.open) toggle();
+  }
 
   function render() {
     var host = layer();
@@ -130,12 +143,18 @@
           return '<button type="button" class="ia-sug" onclick="OpalInductionAssistant.send(' + JSON.stringify(s).replace(/"/g, '&quot;') + ')">' + esc(s) + '</button>';
         }).join('') + '</div></div>';
     }
-    IA.messages.forEach(function (m) {
+    IA.messages.forEach(function (m, idx) {
       if (m.role === 'user') {
         h += '<div class="ia-msg ia-user"><div class="ia-bubble">' + esc(m.text) + '</div></div>';
         return;
       }
-      h += '<div class="ia-msg ia-assistant' + (m.error ? ' ia-err' : '') + '"><div class="ia-bubble">' + md(m.text) + '</div>';
+      h += '<div class="ia-msg ia-assistant' + (m.error ? ' ia-err' : '') + '"><div class="ia-bubble">' + md(m.text) +
+        (canSpeak && !m.error
+          ? '<button type="button" class="ia-speak' + (IA.speakingIdx === idx ? ' is-on' : '') + '" aria-pressed="' + (IA.speakingIdx === idx) +
+            '" aria-label="' + (IA.speakingIdx === idx ? 'Stop reading' : 'Read aloud') + '" title="' + (IA.speakingIdx === idx ? 'Stop' : 'Read aloud') +
+            '" onclick="OpalInductionAssistant.speak(' + idx + ')">' + (IA.speakingIdx === idx ? '&#9632;' : '&#128266;') + '</button>'
+          : '') +
+        '</div>';
       if (m.activity && m.activity.length) {
         h += '<ul class="ia-acts">' + m.activity.map(function (a) {
           var open = '';
@@ -156,11 +175,17 @@
     h += '</div>';
 
     h += '<div class="ia-foot">' +
-      '<textarea id="ia-input" class="ia-input" rows="2" placeholder="Describe the induction you want…" ' +
+      '<textarea id="ia-input" class="ia-input" rows="2" placeholder="Describe the induction you want… or press Dictate and say it" ' +
         (IA.enabled === false ? 'disabled ' : '') +
         'oninput="OpalInductionAssistant._draft(this.value)" ' +
         'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();OpalInductionAssistant.send();}">' + esc(IA.draft) + '</textarea>' +
       '<div class="ia-foot-row">' +
+        (Recognition
+          ? '<button type="button" class="ia-btn ia-mic' + (IA.listening ? ' is-on' : '') + '" aria-pressed="' + IA.listening +
+            '" aria-label="' + (IA.listening ? 'Stop dictating' : 'Dictate') + '" title="' + (IA.listening ? 'Stop dictating' : 'Dictate your message') + '" ' +
+            (IA.enabled === false ? 'disabled ' : '') + 'onclick="OpalInductionAssistant.micToggle()">' +
+            (IA.listening ? '<span class="ia-mic-dot" aria-hidden="true"></span> Listening…' : '&#127908; Dictate') + '</button>'
+          : '') +
         (IA.busy
           ? '<button type="button" class="ia-btn" onclick="OpalInductionAssistant.stop()">Stop</button>'
           : '<button type="button" class="ia-btn ia-btn-primary" ' + (IA.enabled === false ? 'disabled ' : '') + 'onclick="OpalInductionAssistant.send()">Send</button>') +
@@ -173,6 +198,56 @@
   }
 
   function _draft(v) { IA.draft = v; }
+
+  function micToggle() {
+    if (!Recognition || IA.enabled === false) return;
+    if (IA.listening) { try { IA.rec.stop(); } catch (e) { /* already stopped */ } return; }
+    var rec = new Recognition();
+    rec.lang = 'en-AU';
+    rec.continuous = true;
+    rec.interimResults = true;
+    var base = (doc.getElementById('ia-input') || {}).value || IA.draft || '';
+    if (base && !/\s$/.test(base)) base += ' ';
+    var finalText = '';
+    rec.onresult = function (ev) {
+      var interim = '';
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalText += t + ' '; else interim += t;
+      }
+      IA.draft = base + finalText + interim;
+      var input = doc.getElementById('ia-input');
+      if (input) { input.value = IA.draft; input.scrollTop = input.scrollHeight; }
+    };
+    rec.onerror = function (ev) {
+      IA.listening = false; IA.rec = null;
+      if (ev && ev.error === 'not-allowed') {
+        IA.messages.push({ role: 'assistant', text: 'The browser blocked the microphone. Allow it for this site and try again.', error: true });
+      }
+      render();
+    };
+    rec.onend = function () { IA.listening = false; IA.rec = null; IA.draft = (base + finalText).trim(); render(); };
+    IA.rec = rec;
+    IA.listening = true;
+    render();
+    try { rec.start(); } catch (e) { IA.listening = false; IA.rec = null; render(); }
+  }
+
+  /** Read one assistant reply aloud; pressing again stops it. */
+  function speak(idx) {
+    if (!canSpeak) return;
+    if (IA.speakingIdx === idx) { global.speechSynthesis.cancel(); IA.speakingIdx = -1; render(); return; }
+    global.speechSynthesis.cancel();
+    var m = IA.messages[idx];
+    if (!m) return;
+    var u = new global.SpeechSynthesisUtterance(String(m.text || '').replace(/\*\*/g, '').replace(/^\s*[-*#]+\s*/gm, ''));
+    u.lang = 'en-AU';
+    u.onend = function () { if (IA.speakingIdx === idx) { IA.speakingIdx = -1; render(); } };
+    u.onerror = u.onend;
+    IA.speakingIdx = idx;
+    render();
+    global.speechSynthesis.speak(u);
+  }
 
   function send(text) {
     if (typeof text !== 'string') text = '';
@@ -251,6 +326,7 @@
   global.OpalInductionAssistant = {
     toggle: toggle, close: close, send: send, retry: retry, stop: stop,
     newThread: newThread, openInduction: openInduction, openWalkthrough: openWalkthrough,
+    micToggle: micToggle, speak: speak,
     _draft: _draft, _state: IA,
   };
 })(typeof window !== 'undefined' ? window : this);
