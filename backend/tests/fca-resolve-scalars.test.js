@@ -77,15 +77,15 @@ const full = (overrides = {}) => resolveScalars({
 // ── Layer classification ─────────────────────────────────────────────────────
 
 describe('layer classification', () => {
-  test('every one of the 33 scalar tags belongs to exactly one layer', () => {
+  test('every one of the 29 scalar tags belongs to exactly one layer', () => {
     const layers = ['splose', 'client_profile', 'portal', 'report', 'server'];
     const counts = Object.fromEntries(layers.map((l) => [l, 0]));
     for (const meta of tm.SCALAR_TAGS) {
       expect(layers).toContain(meta.layer);
       counts[meta.layer] += 1;
     }
-    expect(tm.SCALAR_TAGS.length).toBe(33);
-    expect(counts).toEqual({ splose: 5, client_profile: 12, portal: 6, report: 6, server: 4 });
+    expect(tm.SCALAR_TAGS.length).toBe(29);
+    expect(counts).toEqual({ splose: 5, client_profile: 8, portal: 6, report: 6, server: 4 });
   });
 
   test('profile eligibility is derived from the layer, not a hand-written list', () => {
@@ -152,20 +152,19 @@ describe('four-layer precedence', () => {
 
   test('the client profile supplies what Splose has no field for', () => {
     const { scalarData, scalarSources } = full();
-    expect(scalarData.OPAL_CLIENT_PREFERRED_NAME).toBe('Janey');
-    expect(scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('client_profile');
-    expect(scalarData.OPAL_CLIENT_PRONOUNS).toBe('she/her');
     expect(scalarData.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('Multiple sclerosis');
+    expect(scalarSources.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('client_profile');
+    expect(scalarData.OPAL_CLIENT_OTHER_CONDITIONS).toBe('Chronic fatigue');
     expect(scalarSources.OPAL_CLIENT_REFERRER_DETAILS).toBe('client_profile');
   });
 
   test('a report override beats both the profile and Splose', () => {
     const { scalarData, scalarSources } = full({
-      OPAL_CLIENT_PREFERRED_NAME: 'Jan',
+      OPAL_CLIENT_PRIMARY_DISABILITY: 'Corrected diagnosis',
       OPAL_CLIENT_ADDRESS: '2 Corrected Rd, Perth WA 6000',
     });
-    expect(scalarData.OPAL_CLIENT_PREFERRED_NAME).toBe('Jan');
-    expect(scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('report_override');
+    expect(scalarData.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('Corrected diagnosis');
+    expect(scalarSources.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('report_override');
     expect(scalarData.OPAL_CLIENT_ADDRESS).toBe('2 Corrected Rd, Perth WA 6000');
     expect(scalarSources.OPAL_CLIENT_ADDRESS).toBe('report_override');
   });
@@ -247,23 +246,38 @@ describe('NDIS plan and goals', () => {
     expect(scalarData.OPAL_CLIENT_DATE_OF_BIRTH).toBe('07/05/1990');
   });
 
-  test('the template\'s two goal controls take the current plan\'s first two goals, in order', () => {
-    const { scalarData, scalarSources } = full();
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_1).toBe('Increase independence at home');
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_2).toBe('Return to part-time work');
-    expect(scalarSources.OPAL_CLIENT_NDIS_GOAL_1).toBe('client_profile');
-    // A third goal is stored and queryable but fca-v1 has no control for it.
+  // fca-v1 no longer carries goal controls, but the `goal:N` plan resolution
+  // is still used by other templates — pinned here against a minimal catalogue.
+  const GOAL_TAGS = [
+    { tag: 'T_GOAL_1', layer: 'client_profile', profilePlanField: 'goal:0' },
+    { tag: 'T_GOAL_2', layer: 'client_profile', profilePlanField: 'goal:1' },
+  ];
+  const GOAL_CATALOGUE = {
+    SCALAR_TAGS: GOAL_TAGS,
+    SCALAR_BY_TAG: new Map(GOAL_TAGS.map((s) => [s.tag, s])),
+    SCALAR_TAG_LIST: GOAL_TAGS.map((s) => s.tag),
+  };
+
+  test('goal controls take the current plan\'s goals in order, and fca-v1 has none', () => {
+    const { scalarData, scalarSources } = resolveScalars({
+      profile: PROFILE, currentPlan: PLAN, goals: GOALS, catalogue: GOAL_CATALOGUE,
+    });
+    expect(scalarData.T_GOAL_1).toBe('Increase independence at home');
+    expect(scalarData.T_GOAL_2).toBe('Return to part-time work');
+    expect(scalarSources.T_GOAL_1).toBe('client_profile');
     expect(JSON.stringify(scalarData)).not.toContain('Build community connections');
+    // The FCA template itself renders no goal at all.
+    expect(JSON.stringify(full().scalarData)).not.toContain('Increase independence at home');
+    expect(tm.SCALAR_TAG_LIST.some((t) => t.includes('GOAL'))).toBe(false);
   });
 
   test('a plan with one goal leaves the second control missing rather than duplicating', () => {
     const { scalarData, scalarSources } = resolveScalars({
-      profile: PROFILE, currentPlan: PLAN, goals: [{ goalText: 'Only goal' }],
-      templateTags: ['OPAL_CLIENT_NDIS_GOAL_1', 'OPAL_CLIENT_NDIS_GOAL_2'],
+      profile: PROFILE, currentPlan: PLAN, goals: [{ goalText: 'Only goal' }], catalogue: GOAL_CATALOGUE,
     });
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_1).toBe('Only goal');
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_2).toBeNull();
-    expect(scalarSources.OPAL_CLIENT_NDIS_GOAL_2).toBe('missing');
+    expect(scalarData.T_GOAL_1).toBe('Only goal');
+    expect(scalarData.T_GOAL_2).toBeNull();
+    expect(scalarSources.T_GOAL_2).toBe('missing');
   });
 });
 
@@ -272,30 +286,28 @@ describe('NDIS plan and goals', () => {
 describe('missing data', () => {
   test('with nothing but Splose, every non-Splose tag is flagged missing', () => {
     const { scalarData, scalarSources, missingFields } = resolveScalars({ splose: SPLOSE });
-    expect(missingFields.length).toBe(33 - 5);
+    expect(missingFields.length).toBe(29 - 5);
     for (const tag of tm.SPLOSE_AUTHORITATIVE_TAGS) expect(scalarSources[tag]).toBe('splose');
     for (const tag of missingFields) expect(scalarData[tag]).toBeNull();
   });
 
-  test('a first name is never substituted for a preferred name', () => {
-    const { scalarData, scalarSources } = resolveScalars({
-      splose: { ...SPLOSE, firstname: 'Jane' },
-      templateTags: ['OPAL_CLIENT_PREFERRED_NAME'],
-    });
-    expect(scalarData.OPAL_CLIENT_PREFERRED_NAME).toBeNull();
-    expect(scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('missing');
+  test('fca-v1 asks for no preferred name or pronouns at all', () => {
+    const { scalarData } = full();
+    expect(scalarData).not.toHaveProperty('OPAL_CLIENT_PREFERRED_NAME');
+    expect(scalarData).not.toHaveProperty('OPAL_CLIENT_PRONOUNS');
+    expect(JSON.stringify(scalarData)).not.toContain('Janey');
   });
 
   test('blank, whitespace and null are all absent', () => {
     const { scalarSources } = resolveScalars({
       splose: { ...SPLOSE, email: '   ', mobilePhone: '' },
-      profile: { ...PROFILE, pronouns: '  ' },
+      profile: { ...PROFILE, primary_disability: '  ' },
       overrides: { OPAL_REPORT_REVIEWER_NAME: '   ' },
-      templateTags: ['OPAL_CLIENT_EMAIL', 'OPAL_CLIENT_PHONE', 'OPAL_CLIENT_PRONOUNS', 'OPAL_REPORT_REVIEWER_NAME'],
+      templateTags: ['OPAL_CLIENT_EMAIL', 'OPAL_CLIENT_PHONE', 'OPAL_CLIENT_PRIMARY_DISABILITY', 'OPAL_REPORT_REVIEWER_NAME'],
     });
     expect(scalarSources.OPAL_CLIENT_EMAIL).toBe('missing');
     expect(scalarSources.OPAL_CLIENT_PHONE).toBe('missing');
-    expect(scalarSources.OPAL_CLIENT_PRONOUNS).toBe('missing');
+    expect(scalarSources.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('missing');
     expect(scalarSources.OPAL_REPORT_REVIEWER_NAME).toBe('missing');
   });
 
@@ -317,7 +329,7 @@ describe('cross-client isolation', () => {
   test('client Y\'s resolution carries nothing of client X', () => {
     const x = resolveScalars({
       splose: { ...SPLOSE, fullName: 'Xavier Ex', ndisNumber: '111111111' },
-      profile: { ...PROFILE, preferred_name: 'Xav', primary_disability: 'Condition X' },
+      profile: { ...PROFILE, other_conditions: 'Xav', primary_disability: 'Condition X' },
       currentPlan: PLAN, goals: [{ goalText: 'Goal of X' }], portal: PORTAL, server: SERVER,
     });
     const y = resolveScalars({
@@ -330,8 +342,8 @@ describe('cross-client isolation', () => {
       expect(yJson).not.toContain(leak);
     }
     expect(y.scalarData.OPAL_CLIENT_FULL_NAME).toBe('Yvonne Why');
-    expect(y.scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('missing');
-    expect(x.scalarData.OPAL_CLIENT_PREFERRED_NAME).toBe('Xav');
+    expect(y.scalarSources.OPAL_CLIENT_OTHER_CONDITIONS).toBe('missing');
+    expect(x.scalarData.OPAL_CLIENT_OTHER_CONDITIONS).toBe('Xav');
   });
 });
 
@@ -406,12 +418,12 @@ describe('manifest composition', () => {
 
   test('overrides for unknown tags are refused; a document-control override is not', () => {
     const clean = normaliseOverrides({
-      OPAL_CLIENT_PRONOUNS: '  they/them  ',
+      OPAL_CLIENT_PRIMARY_DISABILITY: '  they/them  ',
       OPAL_REPORT_VERSION: '2.0',
       NOT_A_TAG: 'x',
       OPAL_CLIENT_ADDRESS: { nested: 'object' },
     });
-    expect(clean.OPAL_CLIENT_PRONOUNS).toBe('they/them');
+    expect(clean.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('they/them');
     // The four Opal issues itself are DEFAULTS, not decrees.
     expect(clean.OPAL_REPORT_VERSION).toBe('2.0');
     expect(clean).not.toHaveProperty('NOT_A_TAG');

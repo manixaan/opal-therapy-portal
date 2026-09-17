@@ -33,7 +33,7 @@
  *
  * ── What it does ────────────────────────────────────────────────────────────
  * 1. SCALARS. Every occurrence of every scalar tag is populated, in
- *    word/document.xml AND in the header/footer parts (OPAL_CLIENT_PREFERRED_NAME
+ *    word/document.xml AND in the header/footer parts (OPAL_CLIENT_FULL_NAME
  *    and OPAL_CLIENT_NDIS_NUMBER live in word/header6.xml;
  *    OPAL_REPORT_DOCUMENT_ID lives in word/footer6.xml). A body-only
  *    implementation would ship blank headers, which is why parts are walked

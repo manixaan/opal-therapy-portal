@@ -248,15 +248,15 @@ describe('cross-client leakage', () => {
       expect(body).not.toContain(leak);
     }
     expect(draftY.manifest.scalarData.OPAL_CLIENT_FULL_NAME).toBe('Yvonne Why');
-    expect(draftY.manifest.scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('missing');
+    expect(draftY.manifest.scalarSources.OPAL_CLIENT_NOMINEE_DETAILS).toBe('missing');
   });
 
   test('generated documents for two clients never share data', async () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
 
-    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ preferredName: 'XPREF' });
-    await agent.put(`/api/fca/clients/${CLIENT_Y.id}/profile`).send({ preferredName: 'YPREF' });
+    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ primaryDisability: 'XPREF' });
+    await agent.put(`/api/fca/clients/${CLIENT_Y.id}/profile`).send({ primaryDisability: 'YPREF' });
 
     const dx = await createDraft(agent, CLIENT_X.id);
     const dy = await createDraft(agent, CLIENT_Y.id);
@@ -281,15 +281,19 @@ describe('cross-client leakage', () => {
     const docY = await readDoc(gy.body.documentId);
 
     expect(docX.body).toContain('Xavier Ex');
-    expect(docX.header).toContain('XPREF');
+    expect(docX.header).toContain('Xavier Ex');
+    expect(docX.body).toContain('XPREF');
     expect(docY.body).toContain('Yvonne Why');
-    expect(docY.header).toContain('YPREF');
+    expect(docY.header).toContain('Yvonne Why');
+    expect(docY.body).toContain('YPREF');
 
     expect(docY.body).not.toContain('Xavier Ex');
     expect(docY.body).not.toContain(CLIENT_X.ndisNumber);
-    expect(docY.header).not.toContain('XPREF');
+    expect(docY.header).not.toContain('Xavier Ex');
+    expect(docY.body).not.toContain('XPREF');
     expect(docX.body).not.toContain('Yvonne Why');
-    expect(docX.header).not.toContain('YPREF');
+    expect(docX.header).not.toContain('Yvonne Why');
+    expect(docX.body).not.toContain('YPREF');
   });
 
   test('a save-back for client X does not reach client Y', async () => {
@@ -298,12 +302,12 @@ describe('cross-client leakage', () => {
 
     const dx = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${dx.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_PRIMARY_DISABILITY: 'XDISABILITY' },
+      scalarOverrides: { OPAL_CLIENT_OTHER_CONDITIONS: 'XCOND', OPAL_CLIENT_PRIMARY_DISABILITY: 'XDISABILITY' },
     });
     const saved = await agent.post(`/api/fca/drafts/${dx.id}/save-to-profile`)
-      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
+      .send({ fields: ['OPAL_CLIENT_OTHER_CONDITIONS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
     expect(saved.status).toBe(200);
-    expect(saved.body.savedFields.sort()).toEqual(['OPAL_CLIENT_PRIMARY_DISABILITY', 'OPAL_CLIENT_PRONOUNS']);
+    expect(saved.body.savedFields.sort()).toEqual(['OPAL_CLIENT_OTHER_CONDITIONS', 'OPAL_CLIENT_PRIMARY_DISABILITY']);
 
     const yProfile = await agent.get(`/api/fca/clients/${CLIENT_Y.id}/profile`);
     expect(yProfile.body.profile).toBeNull();
@@ -340,9 +344,9 @@ describe('four-layer precedence through the API', () => {
     expect(scalarSources.OPAL_CLIENT_FULL_NAME).toBe('splose');
     expect(scalarData.OPAL_CLIENT_FULL_NAME).toBe('Xavier Ex');
     // 2. Client profile
-    expect(scalarSources.OPAL_CLIENT_PREFERRED_NAME).toBe('client_profile');
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_1).toBe('Goal one');
+    expect(scalarSources.OPAL_CLIENT_NDIS_PLAN_START).toBe('client_profile');
     expect(scalarData.OPAL_CLIENT_NDIS_PLAN_START).toBe('01/02/2026');
+    expect(scalarData.OPAL_CLIENT_NDIS_PLAN_END).toBe('30/11/2026');
     // 3. Report override
     expect(scalarSources.OPAL_REPORT_REVIEWER_NAME).toBe('report_override');
     // Portal
@@ -358,17 +362,17 @@ describe('four-layer precedence through the API', () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
 
-    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ preferredName: 'BeforeName' });
+    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ primaryDisability: 'BeforeName' });
     const draft = await createDraft(agent, CLIENT_X.id);
     const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
     expect(gen.status).toBe(200);
 
     // Both layers change after the fact.
-    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ preferredName: 'AfterName' });
+    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ primaryDisability: 'AfterName' });
     setPatients([{ ...CLIENT_X, fullName: 'Renamed Person' }, CLIENT_Y]);
 
     const after = await agent.get(`/api/fca/drafts/${draft.id}`);
-    expect(after.body.draft.manifest.scalarData.OPAL_CLIENT_PREFERRED_NAME).toBe('BeforeName');
+    expect(after.body.draft.manifest.scalarData.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('BeforeName');
     expect(after.body.draft.manifest.scalarData.OPAL_CLIENT_FULL_NAME).toBe('Xavier Ex');
 
     // And the stored bytes still say what they said when it was issued.
@@ -515,9 +519,10 @@ describe('NDIS plan versioning', () => {
     const draft = await createDraft(agent, CLIENT_X.id);
     const { scalarData } = draft.manifest;
     expect(scalarData.OPAL_CLIENT_NDIS_PLAN_START).toBe('01/01/2026');
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_1).toBe('New goal A');
-    expect(scalarData.OPAL_CLIENT_NDIS_GOAL_2).toBe('New goal B');
+    expect(scalarData.OPAL_CLIENT_NDIS_PLAN_END).toBe('31/12/2026');
+    // fca-v1 carries no goal controls at all, from either plan.
     expect(JSON.stringify(scalarData)).not.toContain('Old goal A');
+    expect(JSON.stringify(scalarData)).not.toContain('New goal A');
   });
 });
 
@@ -533,17 +538,17 @@ describe('save-to-profile', () => {
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
       scalarOverrides: {
-        OPAL_CLIENT_PRONOUNS: 'xe/xem',
+        OPAL_CLIENT_OTHER_CONDITIONS: 'Chronic fatigue',
         OPAL_CLIENT_PRIMARY_DISABILITY: 'Multiple sclerosis',
       },
     });
 
     const res = await agent.post(`/api/fca/drafts/${draft.id}/save-to-profile`)
-      .send({ fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
+      .send({ fields: ['OPAL_CLIENT_OTHER_CONDITIONS', 'OPAL_CLIENT_PRIMARY_DISABILITY'] });
 
     expect(res.status).toBe(200);
-    expect(res.body.savedFields.sort()).toEqual(['OPAL_CLIENT_PRIMARY_DISABILITY', 'OPAL_CLIENT_PRONOUNS']);
-    expect(res.body.profile.pronouns).toBe('xe/xem');
+    expect(res.body.savedFields.sort()).toEqual(['OPAL_CLIENT_OTHER_CONDITIONS', 'OPAL_CLIENT_PRIMARY_DISABILITY']);
+    expect(res.body.profile.otherConditions).toBe('Chronic fatigue');
     expect(res.body.profile.primaryDisability).toBe('Multiple sclerosis');
   });
 
@@ -554,14 +559,14 @@ describe('save-to-profile', () => {
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
       scalarOverrides: {
-        OPAL_CLIENT_PRONOUNS: 'xe/xem',
+        OPAL_CLIENT_OTHER_CONDITIONS: 'Chronic fatigue',
         OPAL_REPORT_REVIEWER_NAME: 'Dr Reviewer',
         OPAL_REPORT_AUTHORISED_RECIPIENTS: 'Plan manager',
       },
     });
 
     const res = await agent.post(`/api/fca/drafts/${draft.id}/save-to-profile`).send({
-      fields: ['OPAL_CLIENT_PRONOUNS', 'OPAL_REPORT_REVIEWER_NAME', 'OPAL_REPORT_AUTHORISED_RECIPIENTS'],
+      fields: ['OPAL_CLIENT_OTHER_CONDITIONS', 'OPAL_REPORT_REVIEWER_NAME', 'OPAL_REPORT_AUTHORISED_RECIPIENTS'],
     });
 
     expect(res.status).toBe(400);
@@ -595,7 +600,7 @@ describe('save-to-profile', () => {
     expect(byTag.NOT_A_TAG).toBe('unknown_tag');
   });
 
-  test('plan and goal fields create a NEW plan version, keeping the old one', async () => {
+  test('plan fields create a NEW plan version, keeping the old one and its goals', async () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
 
@@ -605,19 +610,22 @@ describe('save-to-profile', () => {
 
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_NDIS_GOAL_1: 'Revised goal' },
+      scalarOverrides: { OPAL_CLIENT_NDIS_PLAN_END: '2026-06-30' },
     });
 
     const res = await agent.post(`/api/fca/drafts/${draft.id}/save-to-profile`)
-      .send({ fields: ['OPAL_CLIENT_NDIS_GOAL_1'] });
+      .send({ fields: ['OPAL_CLIENT_NDIS_PLAN_END'] });
 
     expect(res.status).toBe(200);
     expect(res.body.plans).toHaveLength(2);
     const current = res.body.plans.find((p) => p.isCurrent);
     const old = res.body.plans.find((p) => !p.isCurrent);
-    expect(current.goals.map((g) => g.goalText)).toEqual(['Revised goal']);
+    expect(String(current.planEnd)).toContain('2026-06-30');
+    // Goals carry across to the new version untouched — the FCA has no goal control to edit them.
+    expect(current.goals.map((g) => g.goalText)).toEqual(['Original goal']);
     expect(old.goals.map((g) => g.goalText)).toEqual(['Original goal']);
     expect(String(old.planStart)).toContain('2025-01-01');
+    expect(String(old.planEnd)).toContain('2025-12-31');
   });
 
   test('save-back NEVER fires implicitly from PATCH', async () => {
@@ -626,7 +634,7 @@ describe('save-to-profile', () => {
 
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem', OPAL_CLIENT_PRIMARY_DISABILITY: 'Implicit' },
+      scalarOverrides: { OPAL_CLIENT_OTHER_CONDITIONS: 'xe/xem', OPAL_CLIENT_PRIMARY_DISABILITY: 'Implicit' },
     });
 
     const profile = await agent.get(`/api/fca/clients/${CLIENT_X.id}/profile`);
@@ -641,7 +649,7 @@ describe('save-to-profile', () => {
 
     const draft = await createDraft(agent, CLIENT_X.id);
     await agent.patch(`/api/fca/drafts/${draft.id}`).send({
-      scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'xe/xem' },
+      scalarOverrides: { OPAL_CLIENT_OTHER_CONDITIONS: 'xe/xem' },
     });
     const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
     expect(gen.status).toBe(200);
@@ -735,7 +743,7 @@ describe('composition and generation', () => {
     const gen = await agent.post(`/api/fca/drafts/${draft.id}/generate`);
 
     expect(gen.body.missingFields.length).toBeGreaterThan(0);
-    expect(gen.body.missingFields).toContain('OPAL_CLIENT_PRONOUNS');
+    expect(gen.body.missingFields).toContain('OPAL_CLIENT_OTHER_CONDITIONS');
     expect(gen.body.warnings.join(' ')).toMatch(/had no data/);
 
     const dl = await agent.get(`/api/fca/documents/${gen.body.documentId}/download`)
@@ -749,7 +757,7 @@ describe('composition and generation', () => {
     expect(body).not.toMatch(/>null</);
     expect(body).not.toMatch(/>undefined</);
     // The control survives so the gap is visible to the therapist.
-    expect(body).toContain('OPAL_CLIENT_PRONOUNS');
+    expect(body).toContain('OPAL_CLIENT_OTHER_CONDITIONS');
   });
 
   test('excludedFields round-trips through PATCH and is frozen into the snapshot', async () => {
@@ -784,28 +792,28 @@ describe('composition and generation', () => {
   test('excluding a field CLEARS its override, and un-excluding restores the resolved value', async () => {
     const org = await seedOrganisation('Org A');
     const { agent } = await agentFor('therapist', { organisation_id: org.id });
-    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ pronouns: 'xe/xem' });
+    await agent.put(`/api/fca/clients/${CLIENT_X.id}/profile`).send({ otherConditions: 'xe/xem' });
     const draft = await createDraft(agent, CLIENT_X.id);
 
     const typed = await agent.patch(`/api/fca/drafts/${draft.id}`)
-      .send({ scalarOverrides: { OPAL_CLIENT_PRONOUNS: 'they/them' } });
-    expect(typed.body.draft.manifest.scalarData.OPAL_CLIENT_PRONOUNS).toBe('they/them');
-    expect(typed.body.draft.manifest.scalarSources.OPAL_CLIENT_PRONOUNS).toBe('report_override');
+      .send({ scalarOverrides: { OPAL_CLIENT_OTHER_CONDITIONS: 'they/them' } });
+    expect(typed.body.draft.manifest.scalarData.OPAL_CLIENT_OTHER_CONDITIONS).toBe('they/them');
+    expect(typed.body.draft.manifest.scalarSources.OPAL_CLIENT_OTHER_CONDITIONS).toBe('report_override');
 
     const excluded = await agent.patch(`/api/fca/drafts/${draft.id}`)
-      .send({ excludedFields: ['OPAL_CLIENT_PRONOUNS'] });
+      .send({ excludedFields: ['OPAL_CLIENT_OTHER_CONDITIONS'] });
     const stored = await db.pool.query(
       'SELECT scalar_overrides FROM fca_report_drafts WHERE id = $1', [draft.id]
     );
-    expect(stored.rows[0].scalar_overrides).not.toHaveProperty('OPAL_CLIENT_PRONOUNS');
-    expect(excluded.body.draft.manifest.excludedTags).toEqual(['OPAL_CLIENT_PRONOUNS']);
+    expect(stored.rows[0].scalar_overrides).not.toHaveProperty('OPAL_CLIENT_OTHER_CONDITIONS');
+    expect(excluded.body.draft.manifest.excludedTags).toEqual(['OPAL_CLIENT_OTHER_CONDITIONS']);
 
     // Un-excluding falls back to the layers — never to the value that was
     // struck through, which the therapist has not seen since.
     const restored = await agent.patch(`/api/fca/drafts/${draft.id}`).send({ excludedFields: [] });
     expect(restored.body.draft.manifest.excludedTags).toEqual([]);
-    expect(restored.body.draft.manifest.scalarData.OPAL_CLIENT_PRONOUNS).toBe('xe/xem');
-    expect(restored.body.draft.manifest.scalarSources.OPAL_CLIENT_PRONOUNS).toBe('client_profile');
+    expect(restored.body.draft.manifest.scalarData.OPAL_CLIENT_OTHER_CONDITIONS).toBe('xe/xem');
+    expect(restored.body.draft.manifest.scalarSources.OPAL_CLIENT_OTHER_CONDITIONS).toBe('client_profile');
   });
 
   test('an excluded field renders EMPTY in the document, with no placeholder', async () => {
@@ -962,7 +970,7 @@ describe('template registry', () => {
     expect(body.template.id).toBe(tm.TEMPLATE_ID);
     expect(body.template.version).toBe(tm.TEMPLATE_VERSION);
     expect(body.template.sections).toHaveLength(tm.SECTIONS.length);
-    expect(body.template.scalarTags).toHaveLength(33);
+    expect(body.template.scalarTags).toHaveLength(29);
     expect(new Set(body.template.profileEligibleTags)).toEqual(new Set(tm.PROFILE_ELIGIBLE_TAGS));
     for (const s of body.template.sections) {
       expect(s).toHaveProperty('group');

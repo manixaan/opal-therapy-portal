@@ -9,13 +9,16 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 0c7ab702…90318d — re-hashed
- * 24 Aug 2026 after the layout-only Letter→A4 pgSz fix; controls unchanged)
- *   58 unique w:tag content controls, 84 occurrences in total.
- *   25 of them are section/anchor controls, 33 are scalar (text) controls.
- *   15 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).
- *   Parts carrying controls: word/document.xml (81), word/header6.xml (2:
- *   OPAL_CLIENT_PREFERRED_NAME, OPAL_CLIENT_NDIS_NUMBER), word/footer6.xml
+ * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 5ced0992…d103a — re-hashed
+ * 17 Sep 2026 after removing the preferred-name, pronouns and two NDIS-goal
+ * controls plus the "Assessment purpose and scope" and "Consent and
+ * information sharing" prompts; the header now carries the full name, and
+ * the OPAL – Bullet / OPAL – Numbered List styles were raised to 10.5pt)
+ *   54 unique w:tag content controls, 80 occurrences in total.
+ *   25 of them are section/anchor controls, 29 are scalar (text) controls.
+ *   14 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).
+ *   Parts carrying controls: word/document.xml (77), word/header6.xml (2:
+ *   OPAL_CLIENT_FULL_NAME, OPAL_CLIENT_NDIS_NUMBER), word/footer6.xml
  *   (1: OPAL_REPORT_DOCUMENT_ID).
  *   Optional controls are NESTED inside required parents — the five assessment
  *   tools inside ASSESSMENT_METHOD, the nine domains + the custom-section
@@ -27,9 +30,8 @@
  * from Splose at request time and provides only: id, firstname, lastname,
  * fullName, email, mobilePhone, ndisNumber and address parts.
  *
- * Every other participant fact the template asks for (preferred name,
- * pronouns, date of birth, plan dates, disability, goals, nominee, referrer,
- * support coordinator) has no Splose field. Those durable facts live in the
+ * Every other participant fact the template asks for (date of birth, plan
+ * dates, disability, conditions, nominee, referrer, support coordinator) has no Splose field. Those durable facts live in the
  * organisation-scoped OPAL CLIENT REPORT PROFILE (fca_client_profiles and its
  * versioned NDIS plans/goals), which SUPPLEMENTS Splose and never replaces it.
  * Anything still absent is marked MISSING and flagged to the therapist. It is
@@ -77,7 +79,7 @@ const SECTIONS = [
     description: 'Participant and assessor identity block, document control table.' },
   { tag: 'OPAL_SECTION_REFERRAL_INFORMATION', group: 'core', parent: null, required: true,
     label: 'Referral Information', title: 'Referral Information',
-    description: 'Reason for referral, purpose and scope, consent, report recipients.' },
+    description: 'Reason for referral and report recipients.' },
   { tag: 'OPAL_SECTION_PARTICIPANT_INFORMATION', group: 'core', parent: null, required: true,
     label: 'Participant Information', title: 'Participant Information',
     description: 'Background, living situation, supports, disability, conditions, goals.' },
@@ -195,17 +197,14 @@ const OPTIONAL_SECTION_TAGS = SECTIONS.filter((s) => !s.required).map((s) => s.t
 // non-document parts a tag also appears in.
 const SCALAR_TAGS = [
   // ── Participant: Splose-authoritative identity and contact ───────────────
-  { tag: 'OPAL_CLIENT_FULL_NAME', label: 'Full name', layer: 'splose', field: 'fullName', occurrences: 3 },
+  { tag: 'OPAL_CLIENT_FULL_NAME', label: 'Full name', layer: 'splose', field: 'fullName', occurrences: 4, parts: ['word/header6.xml'] },
   { tag: 'OPAL_CLIENT_NDIS_NUMBER', label: 'NDIS number', layer: 'splose', field: 'ndisNumber', occurrences: 4, parts: ['word/header6.xml'] },
   { tag: 'OPAL_CLIENT_ADDRESS', label: 'Address', layer: 'splose', field: 'formattedAddress', occurrences: 1 },
   { tag: 'OPAL_CLIENT_EMAIL', label: 'Email', layer: 'splose', field: 'email', occurrences: 1 },
   { tag: 'OPAL_CLIENT_PHONE', label: 'Phone', layer: 'splose', field: 'mobilePhone', occurrences: 1 },
 
   // ── Participant: durable facts the client profile owns ───────────────────
-  { tag: 'OPAL_CLIENT_PREFERRED_NAME', label: 'Preferred name', layer: 'client_profile', profileField: 'preferred_name', occurrences: 2, parts: ['word/header6.xml'],
-    note: 'Splose has no preferred-name field. A first name is NOT a preferred name and is never substituted.' },
   { tag: 'OPAL_CLIENT_DATE_OF_BIRTH', label: 'Date of birth', layer: 'client_profile', profileField: 'date_of_birth', isDate: true, occurrences: 1 },
-  { tag: 'OPAL_CLIENT_PRONOUNS', label: 'Pronouns', layer: 'client_profile', profileField: 'pronouns', occurrences: 1 },
   { tag: 'OPAL_CLIENT_PRIMARY_DISABILITY', label: 'Primary disability', layer: 'client_profile', profileField: 'primary_disability', occurrences: 1 },
   { tag: 'OPAL_CLIENT_OTHER_CONDITIONS', label: 'Other conditions', layer: 'client_profile', profileField: 'other_conditions', occurrences: 1 },
   { tag: 'OPAL_CLIENT_NOMINEE_DETAILS', label: 'Nominee or guardian', layer: 'client_profile', profileField: 'nominee_details', occurrences: 1 },
@@ -216,10 +215,8 @@ const SCALAR_TAGS = [
   // ── Participant: current NDIS plan (versioned; never overwritten) ─────────
   { tag: 'OPAL_CLIENT_NDIS_PLAN_START', label: 'NDIS plan start', layer: 'client_profile', profilePlanField: 'plan_start', isDate: true, occurrences: 1 },
   { tag: 'OPAL_CLIENT_NDIS_PLAN_END', label: 'NDIS plan end', layer: 'client_profile', profilePlanField: 'plan_end', isDate: true, occurrences: 1 },
-  { tag: 'OPAL_CLIENT_NDIS_GOAL_1', label: 'NDIS goal 1', layer: 'client_profile', profilePlanField: 'goal:0', occurrences: 1,
-    note: 'The template exposes only two goal controls. Goals are stored unbounded and ordered by sort_order; goal 1 is the current plan\'s FIRST goal.' },
-  { tag: 'OPAL_CLIENT_NDIS_GOAL_2', label: 'NDIS goal 2', layer: 'client_profile', profilePlanField: 'goal:1', occurrences: 1,
-    note: 'The current plan\'s SECOND goal. Any third or later goal is stored and queryable but has no control in fca-v1 and is not rendered.' },
+  // fca-v1 no longer carries goal controls (removed 17 Sep 2026). Goals are
+  // still stored on the plan and rendered by other templates via `goal:N`.
 
   // ── Assessor: portal-sourced ─────────────────────────────────────────────
   { tag: 'OPAL_THERAPIST_FULL_NAME', label: 'Assessor name', layer: 'portal', field: 'therapistName', occurrences: 5 },

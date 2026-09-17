@@ -111,12 +111,12 @@ manifest = {
 Asserted by `backend/tests/fca-docx-engine.test.js` against the shipped file, so
 none of this can silently drift.
 
-- **58** unique `w:tag` content controls across **84** occurrences
-- **25** section-or-anchor controls, **33** scalar controls
-- **17** unique `OPAL_CLIENT_*` tags — discovered dynamically, never hard-coded
-- **15** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **5** times
-- Parts carrying controls: `word/document.xml` (81), `word/header6.xml` (2 —
-  `OPAL_CLIENT_PREFERRED_NAME`, `OPAL_CLIENT_NDIS_NUMBER`), `word/footer6.xml`
+- **54** unique `w:tag` content controls across **80** occurrences
+- **25** section-or-anchor controls, **29** scalar controls
+- **13** unique `OPAL_CLIENT_*` tags — discovered dynamically, never hard-coded
+- **14** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **5** times
+- Parts carrying controls: `word/document.xml` (77), `word/header6.xml` (2 —
+  `OPAL_CLIENT_FULL_NAME`, `OPAL_CLIENT_NDIS_NUMBER`), `word/footer6.xml`
   (1 — `OPAL_REPORT_DOCUMENT_ID`). **A body-only implementation ships blank
   headers**, so parts are walked generically.
 - Optional controls are **nested inside required parents**: 5 assessment tools
@@ -242,43 +242,39 @@ strings `null` and `undefined` can never reach the page.
 
 ---
 
-## 3. Complete tag-to-source mapping (all 33 scalar tags)
+## 3. Complete tag-to-source mapping (all 29 scalar tags)
 
 | # | Tag | Occ | Layer | Resolved from | Save-back |
 |---|-----|-----|-------|---------------|-----------|
-| 1 | `OPAL_CLIENT_FULL_NAME` | 3 | Splose-authoritative | splose.fullName | rejected — `splose_authoritative` |
+| 1 | `OPAL_CLIENT_FULL_NAME` | 4 | Splose-authoritative | splose.fullName | rejected — `splose_authoritative` |
 | 2 | `OPAL_CLIENT_NDIS_NUMBER` | 4 | Splose-authoritative | splose.ndisNumber | rejected — `splose_authoritative` |
 | 3 | `OPAL_CLIENT_ADDRESS` | 1 | Splose-authoritative | splose.formattedAddress | rejected — `splose_authoritative` |
 | 4 | `OPAL_CLIENT_EMAIL` | 1 | Splose-authoritative | splose.email | rejected — `splose_authoritative` |
 | 5 | `OPAL_CLIENT_PHONE` | 1 | Splose-authoritative | splose.mobilePhone | rejected — `splose_authoritative` |
-| 6 | `OPAL_CLIENT_PREFERRED_NAME` | 2 | Client profile | fca_client_profiles.preferred_name | eligible |
-| 7 | `OPAL_CLIENT_DATE_OF_BIRTH` | 1 | Client profile | fca_client_profiles.date_of_birth | eligible |
-| 8 | `OPAL_CLIENT_PRONOUNS` | 1 | Client profile | fca_client_profiles.pronouns | eligible |
-| 9 | `OPAL_CLIENT_PRIMARY_DISABILITY` | 1 | Client profile | fca_client_profiles.primary_disability | eligible |
-| 10 | `OPAL_CLIENT_OTHER_CONDITIONS` | 1 | Client profile | fca_client_profiles.other_conditions | eligible |
-| 11 | `OPAL_CLIENT_NOMINEE_DETAILS` | 1 | Client profile | fca_client_profiles.nominee_details | eligible |
-| 12 | `OPAL_CLIENT_SUPPORT_COORDINATOR_DETAILS` | 1 | Client profile | fca_client_profiles.support_coordinator_details | eligible |
-| 13 | `OPAL_CLIENT_REFERRER_DETAILS` | 1 | Client profile | fca_client_profiles.referrer_details | eligible |
-| 14 | `OPAL_CLIENT_NDIS_PLAN_START` | 1 | Client profile | current plan.plan_start | eligible |
-| 15 | `OPAL_CLIENT_NDIS_PLAN_END` | 1 | Client profile | current plan.plan_end | eligible |
-| 16 | `OPAL_CLIENT_NDIS_GOAL_1` | 1 | Client profile | current plan goal #1 | eligible |
-| 17 | `OPAL_CLIENT_NDIS_GOAL_2` | 1 | Client profile | current plan goal #2 | eligible |
-| 18 | `OPAL_THERAPIST_FULL_NAME` | 5 | Portal (this DB) | portal.therapistName | rejected — `not_client_data` |
-| 19 | `OPAL_THERAPIST_CREDENTIALS` | 4 | Portal (this DB) | portal.therapistRoleTitle | rejected — `not_client_data` |
-| 20 | `OPAL_THERAPIST_EMAIL` | 3 | Portal (this DB) | portal.therapistEmail | rejected — `not_client_data` |
-| 21 | `OPAL_THERAPIST_PHONE` | 3 | Portal (this DB) | portal.therapistPhone | rejected — `not_client_data` |
-| 22 | `OPAL_THERAPIST_ORGANISATION` | 2 | Portal (this DB) | portal.organisationName | rejected — `not_client_data` |
-| 23 | `OPAL_THERAPIST_AHPRA_NUMBER` | 2 | Portal (this DB) | portal.ahpraNumber | rejected — `not_client_data` |
-| 24 | `OPAL_THERAPIST_QUALIFICATIONS` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 25 | `OPAL_THERAPIST_PROVIDER_NUMBER` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 26 | `OPAL_REPORT_DOCUMENT_ID` | 3 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
-| 27 | `OPAL_REPORT_DATE` | 2 | Opal-issued | creation date, dd/mm/yyyy | rejected — `server_issued` |
-| 28 | `OPAL_REPORT_VERSION` | 2 | Opal-issued | `1.0` | rejected — `server_issued` |
-| 29 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
-| 30 | `OPAL_REPORT_ISSUE_DATE` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 31 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
-| 32 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
-| 33 | `OPAL_REPORT_AUTHORISED_RECIPIENTS` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 6 | `OPAL_CLIENT_DATE_OF_BIRTH` | 1 | Client profile | fca_client_profiles.date_of_birth | eligible |
+| 7 | `OPAL_CLIENT_PRIMARY_DISABILITY` | 1 | Client profile | fca_client_profiles.primary_disability | eligible |
+| 8 | `OPAL_CLIENT_OTHER_CONDITIONS` | 1 | Client profile | fca_client_profiles.other_conditions | eligible |
+| 9 | `OPAL_CLIENT_NOMINEE_DETAILS` | 1 | Client profile | fca_client_profiles.nominee_details | eligible |
+| 10 | `OPAL_CLIENT_SUPPORT_COORDINATOR_DETAILS` | 1 | Client profile | fca_client_profiles.support_coordinator_details | eligible |
+| 11 | `OPAL_CLIENT_REFERRER_DETAILS` | 1 | Client profile | fca_client_profiles.referrer_details | eligible |
+| 12 | `OPAL_CLIENT_NDIS_PLAN_START` | 1 | Client profile | current plan.plan_start | eligible |
+| 13 | `OPAL_CLIENT_NDIS_PLAN_END` | 1 | Client profile | current plan.plan_end | eligible |
+| 14 | `OPAL_THERAPIST_FULL_NAME` | 5 | Portal (this DB) | portal.therapistName | rejected — `not_client_data` |
+| 15 | `OPAL_THERAPIST_CREDENTIALS` | 4 | Portal (this DB) | portal.therapistRoleTitle | rejected — `not_client_data` |
+| 16 | `OPAL_THERAPIST_EMAIL` | 3 | Portal (this DB) | portal.therapistEmail | rejected — `not_client_data` |
+| 17 | `OPAL_THERAPIST_PHONE` | 3 | Portal (this DB) | portal.therapistPhone | rejected — `not_client_data` |
+| 18 | `OPAL_THERAPIST_ORGANISATION` | 2 | Portal (this DB) | portal.organisationName | rejected — `not_client_data` |
+| 19 | `OPAL_THERAPIST_AHPRA_NUMBER` | 2 | Portal (this DB) | portal.ahpraNumber | rejected — `not_client_data` |
+| 20 | `OPAL_THERAPIST_QUALIFICATIONS` | 2 | Report-specific | report override only | rejected — `report_specific` |
+| 21 | `OPAL_THERAPIST_PROVIDER_NUMBER` | 2 | Report-specific | report override only | rejected — `report_specific` |
+| 22 | `OPAL_REPORT_DOCUMENT_ID` | 3 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
+| 23 | `OPAL_REPORT_DATE` | 2 | Opal-issued | creation date, dd/mm/yyyy | rejected — `server_issued` |
+| 24 | `OPAL_REPORT_VERSION` | 2 | Opal-issued | `1.0` | rejected — `server_issued` |
+| 25 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
+| 26 | `OPAL_REPORT_ISSUE_DATE` | 2 | Report-specific | report override only | rejected — `report_specific` |
+| 27 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 28 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 29 | `OPAL_REPORT_AUTHORISED_RECIPIENTS` | 1 | Report-specific | report override only | rejected — `report_specific` |
 
 The 25 section-or-anchor controls are listed in `template-map.js` (`SECTIONS`
 plus `OPAL_ANCHOR_CUSTOM_SECTIONS`); 7 are required and 17 optional.
@@ -328,13 +324,15 @@ index enforces at most one current plan per profile. Old plan dates and their
 goals stay attached and queryable forever — which is what makes a report issued
 last year still explicable this year.
 
-### Goals and the two-control limit
+### Goals are stored, not rendered
 
-Goals are stored unbounded and ordered by `sort_order`. **`fca-v1` exposes only
-`OPAL_CLIENT_NDIS_GOAL_1` and `_2`**, which map to the current plan's **first two
-goals, in order**. A third or later goal is retained and queryable but has no
-control to render into. A future template version can expose more with no data
-migration.
+Goals are stored unbounded and ordered by `sort_order`. Since 17 Sep 2026
+**`fca-v1` carries no goal controls** (nor preferred name or pronouns — those
+rows were removed from the participant table, and the "Assessment purpose and
+scope" / "Consent and information sharing" prompts from Referral Information).
+Goals stay on the profile's plan versions, are queryable, and are rendered by
+other templates through the `goal:N` plan field. A future template version can
+expose them again with no data migration.
 
 ### Save-back is explicit and permissioned
 

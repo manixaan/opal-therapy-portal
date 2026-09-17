@@ -167,34 +167,34 @@ describe('fca-v1.docx template facts', () => {
     footer6 = parts['word/footer6.xml'];
   });
 
-  test('carries 58 unique controls across 84 occurrences', () => {
+  test('carries 54 unique controls across 80 occurrences', () => {
     const all = new Map();
     for (const xml of [doc, header6, footer6]) {
       for (const [tag, n] of tagCounts(xml)) all.set(tag, (all.get(tag) || 0) + n);
     }
-    expect(all.size).toBe(58);
-    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(84);
+    expect(all.size).toBe(54);
+    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(80);
   });
 
-  test('splits into 25 section-or-anchor and 33 scalar controls', () => {
+  test('splits into 25 section-or-anchor and 29 scalar controls', () => {
     // Discovered from the template, never hard-coded from a count elsewhere.
     const tags = [...tagCounts(doc).keys()];
     const sectionish = tags.filter((t) => t.startsWith('OPAL_SECTION_') || t.startsWith('OPAL_ANCHOR_'));
     expect(sectionish.length).toBe(25);
     expect(tm.SECTIONS.length + 1).toBe(sectionish.length);
-    expect(tm.SCALAR_TAG_LIST.length).toBe(33);
+    expect(tm.SCALAR_TAG_LIST.length).toBe(29);
   });
 
   test('the client tag count is discovered, not assumed', () => {
     const clientTags = tm.SCALAR_TAG_LIST.filter((t) => t.startsWith('OPAL_CLIENT_'));
     const inTemplate = [...tagCounts(doc).keys()].filter((t) => t.startsWith('OPAL_CLIENT_'));
     expect(new Set(clientTags)).toEqual(new Set(inTemplate));
-    expect(clientTags.length).toBe(17);
+    expect(clientTags.length).toBe(13);
   });
 
   test('header6 and footer6 carry controls a body-only build would miss', () => {
     expect([...tagCounts(header6).keys()].sort())
-      .toEqual(['OPAL_CLIENT_NDIS_NUMBER', 'OPAL_CLIENT_PREFERRED_NAME']);
+      .toEqual(['OPAL_CLIENT_FULL_NAME', 'OPAL_CLIENT_NDIS_NUMBER']);
     expect([...tagCounts(footer6).keys()]).toEqual(['OPAL_REPORT_DOCUMENT_ID']);
   });
 
@@ -206,10 +206,23 @@ describe('fca-v1.docx template facts', () => {
     for (const meta of tm.SCALAR_TAGS) {
       expect([meta.tag, all.get(meta.tag)]).toEqual([meta.tag, meta.occurrences]);
     }
-    // 15 scalar tags repeat, the most repeated 5 times.
+    // 14 scalar tags repeat, the most repeated 5 times.
     const repeats = tm.SCALAR_TAGS.filter((s) => s.occurrences > 1);
-    expect(repeats.length).toBe(15);
+    expect(repeats.length).toBe(14);
     expect(Math.max(...repeats.map((s) => s.occurrences))).toBe(5);
+  });
+
+  test('the Word list styles (bullet and numbered) are body-sized at 10.5pt', async () => {
+    // A therapist writes the body in Word after download, so the gallery's
+    // "OPAL – Bullet" and "OPAL – Numbered List" must match "OPAL – Body".
+    const styles = (await partsOf(templateBuffer))['word/styles.xml'];
+    const sizeOf = (id) => {
+      const m = new RegExp(`<w:style [^>]*w:styleId="${id}"[\\s\\S]*?<w:sz w:val="(\\d+)"/>[\\s\\S]*?</w:style>`).exec(styles);
+      return m ? Number(m[1]) : null;
+    };
+    expect(sizeOf(tm.STYLE.BODY)).toBe(21);
+    expect(sizeOf('OPAL–Bullet')).toBe(21);
+    expect(sizeOf('OPAL–NumberedList')).toBe(21);
   });
 
   test('style ids use an en dash with no spaces', () => {
@@ -267,25 +280,26 @@ describe('scalar population', () => {
     expect(bodyHits).toBe(5);
 
     // header6 — the part a body-only implementation would ship blank.
-    expect(parts['word/header6.xml']).toContain('VAL_OPAL_CLIENT_PREFERRED_NAME');
+    expect(parts['word/header6.xml']).toContain('VAL_OPAL_CLIENT_FULL_NAME');
     expect(parts['word/header6.xml']).toContain('VAL_OPAL_CLIENT_NDIS_NUMBER');
 
     // footer6 — the document id.
     expect(parts['word/footer6.xml']).toContain('VAL_OPAL_REPORT_DOCUMENT_ID');
 
-    // The client name has 3 controls, and the cover-page one is a heading — so
-    // the rebuilt TOC carries the participant's real name as a fourth
-    // occurrence rather than the template's "[PORTAL — CLIENT NAME]" placeholder.
+    // The client name has 3 body controls (a 4th is in header6), and the
+    // cover-page one is a heading — so the rebuilt TOC carries the participant's
+    // real name as a fourth body occurrence rather than the template's
+    // "[PORTAL — CLIENT NAME]" placeholder.
     expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_FULL_NAME').length - 1).toBe(4);
     // The NDIS number is not in a heading: 4 occurrences, 1 of them in header6.
     expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_NDIS_NUMBER').length - 1).toBe(3);
 
-    expect(buffer.fcaStats.scalarsWritten).toBe(59); // 84 − 25 section/anchor controls
+    expect(buffer.fcaStats.scalarsWritten).toBe(55); // 80 − 25 section/anchor controls
   });
 
   test('a null value leaves the template placeholder and never prints "null"', async () => {
     const manifest = fullManifest({
-      scalarData: { OPAL_CLIENT_PRONOUNS: null, OPAL_CLIENT_DATE_OF_BIRTH: null },
+      scalarData: { OPAL_CLIENT_PRIMARY_DISABILITY: null, OPAL_CLIENT_DATE_OF_BIRTH: null },
     });
     const buffer = await generateFcaDocx({ templateBuffer, manifest });
     const parts = await partsOf(buffer);
@@ -294,8 +308,8 @@ describe('scalar population', () => {
     expect(body).not.toMatch(/>null</);
     expect(body).not.toMatch(/>undefined</);
     // The control survives, so the therapist still sees an outstanding field.
-    expect(body).toContain('OPAL_CLIENT_PRONOUNS');
-    expect(body).not.toContain('VAL_OPAL_CLIENT_PRONOUNS');
+    expect(body).toContain('OPAL_CLIENT_PRIMARY_DISABILITY');
+    expect(body).not.toContain('VAL_OPAL_CLIENT_PRIMARY_DISABILITY');
   });
 
   test('run properties are preserved', async () => {
@@ -729,7 +743,6 @@ describe('acceptance scenario: five sections out, one custom section in', () => 
     }];
     const scalarData = {
       OPAL_CLIENT_FULL_NAME: 'Jane Sample',
-      OPAL_CLIENT_PREFERRED_NAME: 'Janey',
       OPAL_CLIENT_NDIS_NUMBER: '430000001',
       OPAL_THERAPIST_FULL_NAME: 'Sam Therapist',
       OPAL_REPORT_DOCUMENT_ID: 'FCA-0001',
@@ -785,7 +798,7 @@ describe('acceptance scenario: five sections out, one custom section in', () => 
     // 3 controls + the rebuilt TOC entry for the cover-page heading.
     expect(body.split('Jane Sample').length - 1).toBe(4);
     expect(body.split('Sam Therapist').length - 1).toBe(5);
-    expect(parts['word/header6.xml']).toContain('Janey');
+    expect(parts['word/header6.xml']).toContain('Jane Sample');
     expect(parts['word/header6.xml']).toContain('430000001');
     expect(parts['word/footer6.xml']).toContain('FCA-0001');
   });
