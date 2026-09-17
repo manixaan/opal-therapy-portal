@@ -400,7 +400,9 @@ describe('the builder edits the same draft the learner receives', () => {
     expect(fn('laCbPane')).toContain("if (!ui.sel && ed.sections.length) ui.sel = { kind: 'c', si: 0, ii: -1 };");
     expect(fn('laCbChapterPane')).toContain('RH2.laSecField(');
     expect(fn('laCbLessonPane')).toContain("\\'title\\',this.value");
-    expect(fn('laCbLessonPane')).toContain("\\'body\\',this.value");
+    // The body is a rich field: it saves through laRichInput → laItemField(si, ii, 'body', text).
+    expect(fn('laCbLessonPane')).toContain("':body'");
+    expect(fn('laRichInput')).toContain("laItemField(Number(parts[1]), Number(parts[2]), parts[3], text)");
   });
 
   test('the title is typed in the bar, and the rail follows a rename without a re-render', () => {
@@ -960,8 +962,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r29');
-    expect(SHELL).toContain('/resourcehub.js?v=r51');
+    expect(SHELL).toContain('/resourcehub.css?v=r30');
+    expect(SHELL).toContain('/resourcehub.js?v=r52');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

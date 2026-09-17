@@ -163,6 +163,7 @@
     var out = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
     return out;
   }
 
@@ -7102,6 +7103,128 @@
       '</div></div>';
   }
 
+  // ── Rich text for the builder ───────────────────────────────────────────
+  //
+  // The learner reads mdRender's dialect: # headings, - bullets, 1. numbered,
+  // **bold**, *italic*, [links](url), blank-line paragraphs. The Owner should
+  // never see those markers: the field is a contenteditable box showing the
+  // real thing, with a toolbar and the usual shortcuts (Cmd+B, Cmd+I, Cmd+Z
+  // are the browser's own). These two functions carry text between the box
+  // and the stored form and invent nothing the learner page cannot show.
+  function laRichHtml(text) { return mdRender(text) || '<p><br></p>'; }
+
+  function laRichText(el) {
+    var blocks = [];
+    function inline(node) {
+      var s = '';
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { s += n.nodeValue.replace(/\s+/g, ' '); continue; }
+        if (n.nodeType !== 1) continue;
+        var tag = n.tagName.toLowerCase();
+        if (tag === 'br') { s += '\n'; continue; }
+        var inner = inline(n).trim();
+        if (!inner) continue;
+        var st = n.style || {};
+        var bold = tag === 'strong' || tag === 'b' || st.fontWeight === 'bold' || parseInt(st.fontWeight, 10) >= 600;
+        var ital = tag === 'em' || tag === 'i' || st.fontStyle === 'italic';
+        if (tag === 'a' && /^https?:\/\//.test(n.getAttribute('href') || '')) inner = '[' + inner + '](' + n.getAttribute('href') + ')';
+        if (bold) inner = '**' + inner + '**';
+        if (ital) inner = '*' + inner + '*';
+        s += ' ' + inner + ' ';
+      }
+      // Inline runs are padded with spaces so words never fuse; take them
+      // back before punctuation ("heart ." → "heart.").
+      return s.replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;:!?)\]])/g, '$1').replace(/([(\[]) +/g, '$1');
+    }
+    function walk(node) {
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { var t = n.nodeValue.trim(); if (t) blocks.push(t); continue; }
+        if (n.nodeType !== 1) continue;
+        var tag = n.tagName.toLowerCase();
+        var h = tag.match(/^h([1-6])$/);
+        if (h) { var lvl = Math.max(1, Math.min(4, Number(h[1]) - 1)); blocks.push('#'.repeat(lvl) + ' ' + inline(n).trim()); continue; }
+        if (tag === 'ul' || tag === 'ol') {
+          var items = [];
+          for (var j = 0; j < n.children.length; j++) {
+            var li = n.children[j];
+            if (li.tagName.toLowerCase() !== 'li') continue;
+            var txt = inline(li).replace(/\n/g, ' ').trim();
+            if (txt) items.push((tag === 'ul' ? '- ' : (items.length + 1) + '. ') + txt);
+          }
+          if (items.length) blocks.push(items.join('\n'));
+          continue;
+        }
+        if (tag === 'p' || tag === 'div' || tag === 'blockquote' || tag === 'pre') {
+          // A div holding only other blocks (a pasted fragment) is walked, not flattened.
+          var hasBlocks = Array.prototype.some.call(n.children, function (c) { return /^(p|div|h[1-6]|ul|ol|blockquote)$/i.test(c.tagName); });
+          if (hasBlocks) { walk(n); continue; }
+          var p = inline(n).replace(/\n{2,}/g, '\n').trim();
+          if (p) blocks.push(p);
+          continue;
+        }
+        var s = inline(n).trim();
+        if (s) blocks.push(s);
+      }
+    }
+    walk(el);
+    return blocks.join('\n\n').replace(/ /g, ' ').trim();
+  }
+
+  /** A rich field: toolbar + editable box, saving through `commit(text)` on every input. */
+  function laRichField(id, label, text, commit, rows) {
+    var btn = function (cmd, title, html, arg) {
+      return '<button type="button" class="rh2-rich-btn" title="' + title + '" aria-label="' + title + '" ' +
+        'onmousedown="event.preventDefault();RH2.laRichCmd(\'' + cmd + '\',\'' + (arg || '') + '\',\'' + id + '\')">' + html + '</button>';
+    };
+    return '<label class="rh2-lbl" for="' + id + '">' + label + '</label>' +
+      '<div class="rh2-richwrap">' +
+        '<div class="rh2-richbar" role="toolbar" aria-label="Formatting">' +
+          btn('formatBlock', 'Heading', 'H', 'h2') +
+          btn('bold', 'Bold (Cmd+B)', '<strong>B</strong>') +
+          btn('italic', 'Italic (Cmd+I)', '<em>I</em>') +
+          btn('insertUnorderedList', 'Bullet list', '&bull;&#8202;&#8212;') +
+          btn('insertOrderedList', 'Numbered list', '1.') +
+          btn('link', 'Link', '&#128279;') +
+          btn('formatBlock', 'Plain paragraph', '&para;', 'p') +
+        '</div>' +
+        '<div class="rh2-rich rh2-learn-prose" contenteditable="true" id="' + id + '" style="min-height:' + ((rows || 6) * 24) + 'px" ' +
+          'data-commit="' + commit + '" oninput="RH2.laRichInput(this)" onblur="RH2.laRichInput(this)" ' +
+          'onkeydown="RH2.laRichKey(event,this)">' + laRichHtml(text) + '</div>' +
+      '</div>';
+  }
+
+  /** The editable box's commit target, parsed from data-commit: 'item:si:ii:field' or 'meta:field'. */
+  function laRichInput(el) {
+    var parts = String(el.getAttribute('data-commit') || '').split(':');
+    var text = laRichText(el);
+    if (parts[0] === 'item') laItemField(Number(parts[1]), Number(parts[2]), parts[3], text);
+    else if (parts[0] === 'meta') laMeta(parts[1], text);
+  }
+
+  function laRichKey(ev, el) {
+    // Cmd/Ctrl+K inserts a link; the browser owns B, I, Z, Y, A, X, C, V.
+    if ((ev.metaKey || ev.ctrlKey) && String(ev.key).toLowerCase() === 'k') { ev.preventDefault(); laRichCmd('link', '', el.id); }
+  }
+
+  async function laRichCmd(cmd, arg, id) {
+    var el = doc.getElementById(id);
+    if (!el) return;
+    el.focus();
+    if (cmd === 'link') {
+      var url = typeof global.portalPrompt === 'function' ? await global.portalPrompt('Link address (https://…):', 'https://') : null;
+      if (!url || !/^https?:\/\//.test(url)) return;
+      el.focus();
+      doc.execCommand('createLink', false, url);
+    } else if (cmd === 'formatBlock') {
+      doc.execCommand('formatBlock', false, arg === 'p' ? 'p' : arg);
+    } else {
+      doc.execCommand(cmd, false, null);
+    }
+    laRichInput(el);
+  }
+
   /** The lines a quiz question's options are typed as, one per line. */
   function laQOptionsText(q) { return String(q.optionsText || ''); }
 
@@ -7151,15 +7274,12 @@
       }
     }
 
-    out += '<label class="rh2-lbl" for="la-cb-body">' + (it.type === 'content' ? 'Content' : 'Instructions') + '</label>' +
-      '<textarea class="rh2-input rh2-cb-body" id="la-cb-body" rows="' + (it.type === 'content' ? 12 : 5) + '" ' +
-        'placeholder="Markdown: ## headings, **bold**, - bullets, links" ' +
-        'oninput="RH2.laItemField(' + si + ',' + ii + ',\'body\',this.value)">' + esc(it.body) + '</textarea>';
+    // Rich text, saved as mdRender's dialect through laRichInput → laItemField(si, ii, 'body', text).
+    out += laRichField('la-cb-body', it.type === 'content' ? 'Content' : 'Instructions', it.body, 'item:' + si + ':' + ii + ':body', it.type === 'content' ? 12 : 5);
 
     if (it.type === 'acknowledgement') {
-      out += '<label class="rh2-lbl" for="la-cb-ack">Statement the employee must acknowledge</label>' +
-        '<textarea class="rh2-input" id="la-cb-ack" rows="3" placeholder="I have read and understood…" ' +
-          'oninput="RH2.laItemField(' + si + ',' + ii + ',\'ack_statement\',this.value)">' + esc(it.ack_statement) + '</textarea>';
+      // laItemField(si, ii, 'ack_statement', text) through laRichInput.
+      out += laRichField('la-cb-ack', 'Statement the employee must acknowledge', it.ack_statement, 'item:' + si + ':' + ii + ':ack_statement', 3);
     }
 
     if (it.type === 'quiz' && it.quiz) {
@@ -7247,9 +7367,7 @@
             '</div></section>' +
           '<section class="rh2-cb-setcard" id="la-set-desc"><h3 class="rh2-cb-seth">Description</h3>' +
             '<div class="rh2-cb-form">' +
-            '<label class="rh2-lbl" for="la-cb-desc">In a sentence or two, what this induction covers</label>' +
-            '<textarea class="rh2-input" id="la-cb-desc" rows="4" placeholder="Describe this learning in a sentence — the learner reads it first" ' +
-              'oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
+            laRichField('la-cb-desc', 'In a sentence or two, what this induction covers', ed.description, 'meta:description', 4) +
             '</div></section>' +
           '<section class="rh2-cb-setcard rh2-cb-setcard-danger" id="la-set-danger"><h3 class="rh2-cb-seth">Archive or delete</h3>' +
             '<p class="rh2-quiet">Archiving takes it off the catalogue and stops new assignments; existing assignments and completion history are kept, and it can be unarchived. ' +
@@ -8219,6 +8337,9 @@
     alRailSearch: alRailSearch,
     alRailFold: alRailFold,
     laCbRender: laCbRender,
+    laRichInput: laRichInput,
+    laRichKey: laRichKey,
+    laRichCmd: laRichCmd,
     laDragStart: laDragStart,
     laDragOver: laDragOver,
     laDragLeave: laDragLeave,
