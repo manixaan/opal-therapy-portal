@@ -956,8 +956,8 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r24');
-    expect(SHELL).toContain('/resourcehub.js?v=r45');
+    expect(SHELL).toContain('/resourcehub.css?v=r25');
+    expect(SHELL).toContain('/resourcehub.js?v=r46');
   });
 
   test('the dialog and its styles exist for every class the JS renders', () => {

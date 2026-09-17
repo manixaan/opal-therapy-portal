@@ -5229,11 +5229,16 @@
     var a = st.data.assignment || {};
     var sections = (st.data.content && st.data.content.sections) || [];
 
-    out += '<div class="rh2-learn-player-top">' + backBtn +
-      (st.preview
-        ? '<span class="rh2-chip rh2-chip-warn">Preview &mdash; read only, nothing is saved</span>'
-        : laStatusChip(a)) +
-      '</div>';
+    // A preview announces itself as a full-width banner, the way a course
+    // player does — not a chip a reader can miss.
+    if (st.preview) {
+      out += '<div class="rh2-player-banner" role="status">' +
+        '<span>Preview &mdash; read only, nothing is saved. This is exactly what the learner receives.</span>' +
+        '<button type="button" class="rh2-btn rh2-btn-quiet rh2-player-banner-btn" onclick="RH2.alBack()">&larr; Back to Learning</button>' +
+        '</div>';
+    } else {
+      out += '<div class="rh2-learn-player-top">' + backBtn + laStatusChip(a) + '</div>';
+    }
 
     var sub = esc(laCatLabel(pick(a, 'category'))) +
       (pick(a, 'version') ? ' &middot; Version ' + esc(pick(a, 'version')) : '') +
@@ -5260,15 +5265,82 @@
     // The whole induction on one page: every section's items in order, then
     // the closing block (Mark as Complete, or what is still owed). No steps,
     // no tabs — a reader scrolls, and their place is simply what is ticked.
-    out += '<section class="rh2-card rh2-ind-stage rh2-ind-flat">';
+    // Beside it, the player rail: the course outline with progress, a lesson
+    // search and a way to jump — it never replaces the page, it indexes it.
+    out += '<div class="rh2-player">' + alRail(a, sections, mode) +
+      '<section class="rh2-card rh2-ind-stage rh2-ind-flat rh2-player-stage">';
     out += sections.length
       ? sections.map(function (s, i) {
-          return '<div class="rh2-ind-flatsec">' + indSectionRead(s, i + 1, sections.length, true) + '</div>';
+          return '<div class="rh2-ind-flatsec" id="rh2-sec-' + i + '">' +
+            '<h2 class="rh2-ind-chapter"><span class="rh2-ind-chapter-no">' + (i + 1) + '</span>' + esc(s.title) + '</h2>' +
+            indSectionRead(s, i + 1, sections.length, true) + '</div>';
         }).join('')
       : '<div class="rh2-empty">There is nothing in this induction yet.</div>';
     out += '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishRead(a, sections, mode) + '</div>';
-    out += '</section>';
+    out += '</section></div>';
     return out + '</div>';
+  }
+
+  // ── The player rail ───────────────────────────────────────────────────────
+
+  /** The outline of the induction: progress, a lesson search, every chapter
+   *  with its done count, every lesson as a jump. Reads the same
+   *  completed_items the page reads, so the two cannot disagree. */
+  function alRail(a, sections, mode) {
+    var st = S.assignment;
+    var q = String(st.railQ || '').trim().toLowerCase();
+    var fold = st.railFold || {};
+    var counted = {};
+    alCountedItems(sections).forEach(function (e) { counted[e.item.key] = true; });
+    var out = '<aside class="rh2-player-rail" aria-label="Induction outline">' +
+      '<div class="rh2-player-rail-head">' +
+        '<div class="rh2-player-rail-title">' + esc(pick(a, 'title')) + '</div>' +
+        (mode === 'preview'
+          ? '<div class="rh2-row-sub">Preview</div>'
+          : laBar(pick(a, 'progress_percent') || 0, 'Overall progress') +
+            '<div class="rh2-row-sub">' + (pick(a, 'progress_percent') || 0) + '% complete</div>') +
+      '</div>' +
+      '<label class="rh2-visually-hidden" for="al-rail-q">Search by lesson title</label>' +
+      '<input class="rh2-input rh2-player-rail-q" id="al-rail-q" type="search" placeholder="Search by lesson title" value="' +
+        esc(st.railQ || '') + '" oninput="RH2.alRailSearch(this.value)">';
+    if (!sections.length) return out + '<p class="rh2-quiet">Nothing here yet.</p></aside>';
+    out += sections.map(function (s, si) {
+      var items = s.items || [];
+      var shown = q ? items.filter(function (it) { return String(it.title || '').toLowerCase().indexOf(q) !== -1; }) : items;
+      if (q && !shown.length) return '';
+      var total = items.filter(function (it) { return counted[it.key]; }).length;
+      var done = items.filter(function (it) { return counted[it.key] && alItemDone(it.key); }).length;
+      var folded = !q && !!fold[si];
+      return '<section class="rh2-player-chapter' + (total && done === total ? ' is-done' : '') + '">' +
+        '<button type="button" class="rh2-player-chead" aria-expanded="' + (!folded) + '" onclick="RH2.alRailFold(' + si + ')">' +
+          '<span class="rh2-player-ctick" aria-hidden="true">' + (total && done === total ? icn('check', 'check', 12) : '') + '</span>' +
+          '<span class="rh2-player-ctitle">' + esc(s.title) + '</span>' +
+          '<span class="rh2-player-ccount">' + done + '/' + total + '</span>' +
+          '<span class="rh2-player-cfold" aria-hidden="true">' + (folded ? '&#8964;' : '&#8963;') + '</span>' +
+        '</button>' +
+        (folded ? '' : '<ol class="rh2-player-lessons">' + shown.map(function (it) {
+          var d = alItemDone(it.key);
+          return '<li><button type="button" class="rh2-player-lesson' + (d ? ' is-done' : '') + '" onclick="RH2.alJumpItem(\'' + esc(it.key) + '\')">' +
+            '<span class="rh2-cb-licon">' + laTypeGlyph(it.type) + '</span>' +
+            '<span class="rh2-player-ltext">' + esc(it.title) +
+              '<span class="rh2-player-lmeta">' + esc(LA_ITEM_TYPE_LABELS[it.type] || it.type) +
+                (it.minutes ? ' &middot; ' + esc(it.minutes) + ' min' : '') +
+                (it.required === false ? ' &middot; Optional' : '') + '</span></span>' +
+            (d ? '<span class="rh2-player-ltick" aria-label="Completed">' + icn('check', 'check', 12) + '</span>' : '') +
+          '</button></li>';
+        }).join('') + '</ol>') +
+      '</section>';
+    }).join('');
+    if (q && !out.match(/rh2-player-chapter/)) out += '<p class="rh2-quiet">No lesson matches.</p>';
+    return out + '</aside>';
+  }
+  function alRailSearch(v) { if (S.assignment) { S.assignment.railQ = v; render(); } }
+  function alRailFold(si) {
+    var st = S.assignment;
+    if (!st) return;
+    st.railFold = st.railFold || {};
+    if (st.railFold[si]) delete st.railFold[si]; else st.railFold[si] = true;
+    render();
   }
 
   // ── Owner: learning console (Admin → Learning) ─────────────────────────────
@@ -5722,7 +5794,9 @@
       // The practice almost certainly HAS inductions already — as Resource Hub
       // learning paths and the portal walkthroughs. Offering to import them is
       // more use than an empty page that implies none exist.
-      out += '<div class="rh2-empty">No learning items here yet. Import the practice&rsquo;s existing ' +
+      out += '<div class="rh2-empty rh2-empty-hero"><span class="rh2-empty-art" aria-hidden="true">' + aslThumbSvg() + '</span>' +
+        '<h2 class="rh2-empty-h">Build your first induction</h2>' +
+        'No learning items here yet. Import the practice&rsquo;s existing ' +
         'inductions to edit and assign them, or start something new.' +
         '<div class="rh2-empty-act">' +
         '<button type="button" class="rh2-btn rh2-btn-primary" ' + (la.importing ? 'disabled ' : '') +
@@ -6300,6 +6374,7 @@
     if (stillOpen) {
       S.la.editorErr = '';
       S.la.editorStale = false;
+      toast('Saved', 'Successfully saved “' + (ed.title || 'Untitled induction') + '”.');
       // Re-open from the server's normalised copy (keys may have been
       // assigned); the undo history survives the reload.
       await laEdit(ed.id);
@@ -6936,6 +7011,7 @@
     var sel = ui.sel;
     if (!sel) {
       return '<div class="rh2-cb-pane rh2-cb-pane-empty">' +
+        '<span class="rh2-empty-art" aria-hidden="true">' + aslThumbSvg() + '</span>' +
         '<h2 class="rh2-cb-ptitle">' + (ed.sections.length ? 'Choose a chapter or lesson' : 'Start with a chapter') + '</h2>' +
         '<p class="rh2-quiet">' + (ed.sections.length
           ? 'Pick anything in the curriculum on the left to edit it here. Drag chapters and lessons to reorder them.'
@@ -7114,22 +7190,73 @@
   function laCbSettingsPane(ed) {
     var cats = S.la.categories ||
       ['induction', 'clinical', 'compliance', 'safety', 'administration', 'rural_remote', 'professional_development', 'policy_update', 'other'];
-    return '<div class="rh2-cb-pane">' +
+    // Sectioned like a course builder's settings: a mini-nav of anchors on
+    // the left, one card per concern on the right, the destructive actions
+    // last and set apart.
+    var deletable = !ed.counts.total && !ed._currentVersion;
+    var nav = [['basic', 'Basic settings'], ['desc', 'Description'], ['danger', 'Archive or delete']];
+    return '<div class="rh2-cb-pane rh2-cb-settings-pane">' +
       laCbPaneHead('Settings') +
-      '<div class="rh2-cb-form">' +
-        '<label class="rh2-lbl" for="la-cb-set-title">Induction title</label>' +
-        '<input class="rh2-input" id="la-cb-set-title" value="' + esc(ed.title) + '" placeholder="Learning title" ' +
-          'oninput="RH2.laMeta(\'title\',this.value)">' +
-        '<label class="rh2-lbl" for="la-cb-desc">Description</label>' +
-        '<textarea class="rh2-input" id="la-cb-desc" rows="4" placeholder="Describe this learning in a sentence — the learner reads it first" ' +
-          'oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
-        '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
-        '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
-          cats.map(function (c) {
-            return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>';
-          }).join('') +
-        '</select>' +
+      '<div class="rh2-cb-setgrid">' +
+        '<nav class="rh2-cb-setnav" aria-label="Settings sections">' + nav.map(function (n) {
+          return '<a class="rh2-cb-setlink" href="#la-set-' + n[0] + '" onclick="event.preventDefault();var el=document.getElementById(\'la-set-' + n[0] + '\');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:\'smooth\',block:\'start\'});">' + n[1] + '</a>';
+        }).join('') + '</nav>' +
+        '<div class="rh2-cb-setcards">' +
+          '<section class="rh2-cb-setcard" id="la-set-basic"><h3 class="rh2-cb-seth">Basic settings</h3>' +
+            '<div class="rh2-cb-form">' +
+            '<label class="rh2-lbl" for="la-cb-set-title">Induction name</label>' +
+            '<input class="rh2-input" id="la-cb-set-title" value="' + esc(ed.title) + '" placeholder="Learning title" ' +
+              'oninput="RH2.laMeta(\'title\',this.value)">' +
+            '<label class="rh2-lbl" for="la-ed-cat">Category</label>' +
+            '<select class="rh2-select" id="la-ed-cat" onchange="RH2.laMeta(\'category\',this.value)">' +
+              cats.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (ed.category === c ? ' selected' : '') + '>' + esc(laCatLabel(c)) + '</option>';
+              }).join('') +
+            '</select>' +
+            '<p class="rh2-quiet rh2-cb-tip">The category is printed on the card and can be filtered on. It never limits who can be assigned.</p>' +
+            '</div></section>' +
+          '<section class="rh2-cb-setcard" id="la-set-desc"><h3 class="rh2-cb-seth">Description</h3>' +
+            '<div class="rh2-cb-form">' +
+            '<label class="rh2-lbl" for="la-cb-desc">In a sentence or two, what this induction covers</label>' +
+            '<textarea class="rh2-input" id="la-cb-desc" rows="4" placeholder="Describe this learning in a sentence — the learner reads it first" ' +
+              'oninput="RH2.laMeta(\'description\',this.value)">' + esc(ed.description) + '</textarea>' +
+            '</div></section>' +
+          '<section class="rh2-cb-setcard rh2-cb-setcard-danger" id="la-set-danger"><h3 class="rh2-cb-seth">Archive or delete</h3>' +
+            '<p class="rh2-quiet">Archiving takes it off the catalogue and stops new assignments; existing assignments and completion history are kept, and it can be unarchived. ' +
+            (deletable
+              ? 'A draft that has never been assigned can be deleted outright.'
+              : 'It cannot be deleted because it has been assigned; archive it instead.') + '</p>' +
+            '<div class="rh2-learn-actions">' +
+              '<button type="button" class="rh2-btn rh2-cb-danger" onclick="RH2.laCbArchive()">Archive induction</button>' +
+              (deletable ? '<button type="button" class="rh2-btn rh2-btn-quiet rh2-cb-danger" onclick="RH2.laCbDelete()">Delete draft</button>' : '') +
+            '</div></section>' +
+        '</div>' +
       '</div></div>';
+  }
+
+  /** Archive from inside the builder: save, leave, then archive via the
+   *  same confirmed route the catalogue uses. */
+  async function laCbArchive() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    var id = ed.id;
+    laTrack();
+    if (ed._dirty) { var ok = await laSave(); if (!ok) return; }
+    if (!await portalConfirm('Archive this induction? It can no longer be assigned; existing assignments and completion history are kept.')) return;
+    S.la.editor = null;
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id) + '/archive', { method: 'POST' });
+    if (!d.ok) portalAlert(d.error || 'Archiving failed.');
+    loadLa();
+  }
+  async function laCbDelete() {
+    var ed = S.la.editor;
+    if (!ed) return;
+    var id = ed.id;
+    if (!await portalConfirm('Delete this draft induction permanently? Only drafts that were never assigned can be deleted.', { danger: true })) return;
+    S.la.editor = null;
+    var d = await api('/api/learning/workflows/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!d.ok) portalAlert(d.error || 'Deleting failed.');
+    loadLa();
   }
 
   function laCbPublishPane(ed) {
@@ -8055,6 +8182,10 @@
     laCbDiscard: laCbDiscard,
     laCbPreview: laCbPreview,
     laCbAssign: laCbAssign,
+    laCbArchive: laCbArchive,
+    laCbDelete: laCbDelete,
+    alRailSearch: alRailSearch,
+    alRailFold: alRailFold,
     laCbRender: laCbRender,
     laDragStart: laDragStart,
     laDragOver: laDragOver,
