@@ -167,22 +167,22 @@ describe('fca-v1.docx template facts', () => {
     footer6 = parts['word/footer6.xml'];
   });
 
-  test('carries 54 unique controls across 73 occurrences', () => {
+  test('carries 53 unique controls across 71 occurrences', () => {
     const all = new Map();
     for (const xml of [doc, header6, footer6]) {
       for (const [tag, n] of tagCounts(xml)) all.set(tag, (all.get(tag) || 0) + n);
     }
-    expect(all.size).toBe(54);
-    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(73);
+    expect(all.size).toBe(53);
+    expect([...all.values()].reduce((a, b) => a + b, 0)).toBe(71);
   });
 
-  test('splits into 25 section-or-anchor and 29 scalar controls', () => {
+  test('splits into 25 section-or-anchor and 28 scalar controls', () => {
     // Discovered from the template, never hard-coded from a count elsewhere.
     const tags = [...tagCounts(doc).keys()];
     const sectionish = tags.filter((t) => t.startsWith('OPAL_SECTION_') || t.startsWith('OPAL_ANCHOR_'));
     expect(sectionish.length).toBe(25);
     expect(tm.SECTIONS.length + 1).toBe(sectionish.length);
-    expect(tm.SCALAR_TAG_LIST.length).toBe(29);
+    expect(tm.SCALAR_TAG_LIST.length).toBe(28);
   });
 
   test('the client tag count is discovered, not assumed', () => {
@@ -206,9 +206,9 @@ describe('fca-v1.docx template facts', () => {
     for (const meta of tm.SCALAR_TAGS) {
       expect([meta.tag, all.get(meta.tag)]).toEqual([meta.tag, meta.occurrences]);
     }
-    // 12 scalar tags repeat, the most repeated 4 times.
+    // 11 scalar tags repeat, the most repeated 4 times.
     const repeats = tm.SCALAR_TAGS.filter((s) => s.occurrences > 1);
-    expect(repeats.length).toBe(12);
+    expect(repeats.length).toBe(11);
     expect(Math.max(...repeats.map((s) => s.occurrences))).toBe(4);
   });
 
@@ -260,10 +260,13 @@ describe('fca-v1.docx template facts', () => {
     expect(parentOf('OPAL_SECTION_APPENDICES')).toBeNull(); // optional AND top-level
   });
 
-  test('the real TOC field and updateFields are present', async () => {
+  test('the real TOC field is present and nothing forces a field update on open', async () => {
     const parts = await partsOf(templateBuffer);
     expect(doc).toMatch(/TOC \\o "1-3"/);
-    expect(parts['word/settings.xml']).toContain('w:updateFields');
+    // No updateFields and no dirty field: Word must not prompt on open, and a
+    // pre-pagination auto-update would print '1' for every entry.
+    expect(parts['word/settings.xml']).not.toContain('w:updateFields');
+    expect(doc).not.toContain('w:dirty="true"');
   });
 });
 
@@ -286,15 +289,14 @@ describe('scalar population', () => {
     // footer6 — the document id.
     expect(parts['word/footer6.xml']).toContain('VAL_OPAL_REPORT_DOCUMENT_ID');
 
-    // The client name has 2 body controls (a 3rd is in header6), and the
-    // cover-page one is a heading — so the rebuilt TOC carries the participant's
-    // real name as a third body occurrence rather than the template's
-    // "[PORTAL — CLIENT NAME]" placeholder.
-    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_FULL_NAME').length - 1).toBe(3);
+    // The client name has 2 body controls (a 3rd is in header6). The cover-page
+    // one is a heading marked outlineLvl 9, so it is NOT echoed into the
+    // rebuilt contents list — exactly 2 body occurrences.
+    expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_FULL_NAME').length - 1).toBe(2);
     // The NDIS number is not in a heading: 3 occurrences, 1 of them in header6.
     expect(parts['word/document.xml'].split('VAL_OPAL_CLIENT_NDIS_NUMBER').length - 1).toBe(2);
 
-    expect(buffer.fcaStats.scalarsWritten).toBe(48); // 73 − 25 section/anchor controls
+    expect(buffer.fcaStats.scalarsWritten).toBe(46); // 71 − 25 section/anchor controls
   });
 
   test('a null value leaves the template placeholder and never prints "null"', async () => {
@@ -392,7 +394,7 @@ describe('excluded scalars', () => {
   });
 
   test('EVERY occurrence of an excluded tag is emptied, in every part', async () => {
-    // OPAL_REPORT_DOCUMENT_ID has 2 occurrences, one of them in footer6.
+    // OPAL_REPORT_DOCUMENT_ID has 1 occurrence, in footer6.
     const parts = await partsOf(await generateFcaDocx({
       templateBuffer,
       manifest: fullManifest({ excludedTags: ['OPAL_REPORT_DOCUMENT_ID'] }),
@@ -641,14 +643,14 @@ describe('table of contents', () => {
     expect(tocEntries).not.toContain('Appendices');
   });
 
-  test('the real field and updateFields survive so Word repaginates on open', async () => {
+  test('the real field survives and the document still opens without a field-update prompt', async () => {
     const buffer = await generateFcaDocx({ templateBuffer, manifest: fullManifest() });
     const parts = await partsOf(buffer);
     expect(parts['word/document.xml']).toMatch(/TOC \\o "1-3"/);
     expect(parts['word/document.xml']).toContain('w:fldCharType="begin"');
     expect(parts['word/document.xml']).toContain('w:fldCharType="separate"');
     expect(parts['word/document.xml']).toContain('w:fldCharType="end"');
-    expect(parts['word/settings.xml']).toContain('w:updateFields');
+    expect(parts['word/settings.xml']).not.toContain('w:updateFields');
   });
 
   test('the cached entries carry no invented page numbers', async () => {
@@ -795,8 +797,8 @@ describe('acceptance scenario: five sections out, one custom section in', () => 
 
   test('the prefilled sample data is rendered everywhere it appears', async () => {
     const parts = await partsOf(buffer);
-    // 2 body controls + the rebuilt TOC entry for the cover-page heading.
-    expect(body.split('Jane Sample').length - 1).toBe(3);
+    // 2 body controls; the cover-page heading stays out of the contents list.
+    expect(body.split('Jane Sample').length - 1).toBe(2);
     expect(body.split('Sam Therapist').length - 1).toBe(4);
     expect(parts['word/header6.xml']).toContain('Jane Sample');
     expect(parts['word/header6.xml']).toContain('430000001');

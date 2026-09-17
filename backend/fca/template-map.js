@@ -9,15 +9,15 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 571d4a08…2e0158 — re-hashed
+ * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 b499c33f…e1debe — re-hashed
  * 17 Sep 2026 after removing the preferred-name, pronouns and two NDIS-goal
  * controls plus the "Assessment purpose and scope" and "Consent and
  * information sharing" prompts; the header now carries the full name, and
  * physical sizes follow the Anti-Bribery and Corruption Standard PDF: Arial 11pt body on 1.25 lines, 14pt H1, 9pt tables and footer, 1in side margins; the logo sits in the running header band; 18 Sep 2026: document-control page removed with its reviewer/status rows moved into the Professional Declaration, all page-break-before flags dropped, contents list re-tabbed to the 1in column)
- *   54 unique w:tag content controls, 73 occurrences in total.
- *   25 of them are section/anchor controls, 29 are scalar (text) controls.
- *   12 scalar tags repeat, up to 4 times (OPAL_THERAPIST_FULL_NAME).
- *   Parts carrying controls: word/document.xml (70), word/header6.xml (2:
+ *   53 unique w:tag content controls, 71 occurrences in total.
+ *   25 of them are section/anchor controls, 28 are scalar (text) controls.
+ *   11 scalar tags repeat, up to 4 times (OPAL_THERAPIST_FULL_NAME).
+ *   Parts carrying controls: word/document.xml (68), word/header6.xml (2:
  *   OPAL_CLIENT_FULL_NAME, OPAL_CLIENT_NDIS_NUMBER), word/footer6.xml
  *   (1: OPAL_REPORT_DOCUMENT_ID).
  *   Optional controls are NESTED inside required parents — the five assessment
@@ -234,10 +234,9 @@ const SCALAR_TAGS = [
   { tag: 'OPAL_THERAPIST_PROVIDER_NUMBER', label: 'NDIS provider number', layer: 'report', occurrences: 2 },
 
   // ── Report control: issued by Opal at draft creation ─────────────────────
-  { tag: 'OPAL_REPORT_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 2, parts: ['word/footer6.xml'],
+  { tag: 'OPAL_REPORT_DOCUMENT_ID', label: 'Document ID', layer: 'server', field: 'documentReference', occurrences: 1, parts: ['word/footer6.xml'],
     note: 'Issued once, when the draft is created, and persisted. Regenerating a report never renumbers it.' },
   { tag: 'OPAL_REPORT_DATE', label: 'Report date', layer: 'server', field: 'reportDate', isDate: true, occurrences: 2 },
-  { tag: 'OPAL_REPORT_VERSION', label: 'Report version', layer: 'server', field: 'reportVersion', occurrences: 1 },
   { tag: 'OPAL_REPORT_STATUS', label: 'Report status', layer: 'server', field: 'reportStatus', occurrences: 1 },
 
   // ── Report control: report-specific, therapist-supplied ──────────────────

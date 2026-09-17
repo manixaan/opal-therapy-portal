@@ -398,7 +398,6 @@ describe('four-layer precedence through the API', () => {
 
     expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(`FCA-${draft.id.slice(0, 8).toUpperCase()}`);
     expect(scalarData.OPAL_REPORT_DATE).toMatch(/^\d{2}\/\d{2}\/\d{4}$/); // dd/mm/yyyy
-    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
     expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
 
     for (const tag of tm.SERVER_TAGS) {
@@ -437,11 +436,10 @@ describe('four-layer precedence through the API', () => {
     const issuedId = draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID;
 
     const patched = await agent.patch(`/api/fca/drafts/${draft.id}`).send({
-      scalarOverrides: { OPAL_REPORT_VERSION: '2.0', OPAL_REPORT_STATUS: 'Final' },
+      scalarOverrides: { OPAL_REPORT_STATUS: 'Final' },
     });
     expect(patched.status).toBe(200);
-    expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_VERSION).toBe('2.0');
-    expect(patched.body.draft.manifest.scalarSources.OPAL_REPORT_VERSION).toBe('report_override');
+    expect(patched.body.draft.manifest.scalarSources.OPAL_REPORT_STATUS).toBe('report_override');
     expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_STATUS).toBe('Final');
     // The id the therapist read in review is the id that ships.
     expect(patched.body.draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(issuedId);
@@ -450,7 +448,7 @@ describe('four-layer precedence through the API', () => {
     expect(gen.status).toBe(200);
     const after = await agent.get(`/api/fca/drafts/${draft.id}`);
     expect(after.body.draft.manifest.scalarData.OPAL_REPORT_DOCUMENT_ID).toBe(issuedId);
-    expect(after.body.draft.manifest.scalarData.OPAL_REPORT_VERSION).toBe('2.0');
+    expect(after.body.draft.manifest.scalarData.OPAL_REPORT_STATUS).toBe('Final');
   });
 
   test('Splose being down is reported honestly, never fabricated', async () => {
@@ -970,7 +968,7 @@ describe('template registry', () => {
     expect(body.template.id).toBe(tm.TEMPLATE_ID);
     expect(body.template.version).toBe(tm.TEMPLATE_VERSION);
     expect(body.template.sections).toHaveLength(tm.SECTIONS.length);
-    expect(body.template.scalarTags).toHaveLength(29);
+    expect(body.template.scalarTags).toHaveLength(28);
     expect(new Set(body.template.profileEligibleTags)).toEqual(new Set(tm.PROFILE_ELIGIBLE_TAGS));
     for (const s of body.template.sections) {
       expect(s).toHaveProperty('group');

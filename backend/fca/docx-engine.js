@@ -538,11 +538,11 @@ function runsWithFieldChars(p) {
  * Rebuild the cached TOC result so the contents list matches the document that
  * was actually composed.
  *
- * WHAT THIS DOES: the real TOC field and w:updateFields are both preserved, and
- * the cached entries are regenerated from the FINAL body — after unselected
- * sections have been removed and custom sections inserted. Entry paragraphs are
- * cloned from the template's own cached entries, so TOC1/TOC2/TOC3 styling,
- * fonts, colours and dot leaders are the template's, not ours.
+ * WHAT THIS DOES: the real TOC field is preserved, and the cached entries are
+ * regenerated from the FINAL body — after unselected sections have been removed
+ * and custom sections inserted. Entry paragraphs are cloned from the template's
+ * own cached entries, so TOC1/TOC2/TOC3 styling, fonts, colours and dot leaders
+ * are the template's, not ours.
  *
  * WHAT IS HONESTLY IMPOSSIBLE WITHOUT WORD: page numbers. Pagination depends on
  * a layout engine — line breaking, widow/orphan control, table row splitting,
@@ -550,9 +550,11 @@ function runsWithFieldChars(p) {
  * which page a heading lands on, and a plausible-looking guess in a clinical
  * document is worse than no number at all. So rebuilt entries carry the correct
  * titles, in the correct order, at the correct level, with an EMPTY page-number
- * slot. w:updateFields="true" is kept, so Word fills the numbers in the moment
- * the document is opened, and the template's own reminder to update the field
- * before issue is left in place. The document is therefore never stale in its
+ * slot. The master deliberately carries NO w:updateFields and NO dirty flag:
+ * updateFields makes Word prompt on every open, and a dirty TOC is updated
+ * before pagination and prints '1' for every entry (verified in Word for Mac,
+ * 18 Sep 2026). The therapist fills the numbers with Update Field (right-click
+ * the list, or F9) before issue. The document is therefore never stale in its
  * entry list — only in its page numbers, and visibly so rather than wrongly.
  */
 /**

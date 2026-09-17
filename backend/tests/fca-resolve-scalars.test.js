@@ -77,15 +77,15 @@ const full = (overrides = {}) => resolveScalars({
 // ── Layer classification ─────────────────────────────────────────────────────
 
 describe('layer classification', () => {
-  test('every one of the 29 scalar tags belongs to exactly one layer', () => {
+  test('every one of the 28 scalar tags belongs to exactly one layer', () => {
     const layers = ['splose', 'client_profile', 'portal', 'report', 'server'];
     const counts = Object.fromEntries(layers.map((l) => [l, 0]));
     for (const meta of tm.SCALAR_TAGS) {
       expect(layers).toContain(meta.layer);
       counts[meta.layer] += 1;
     }
-    expect(tm.SCALAR_TAGS.length).toBe(29);
-    expect(counts).toEqual({ splose: 5, client_profile: 8, portal: 6, report: 6, server: 4 });
+    expect(tm.SCALAR_TAGS.length).toBe(28);
+    expect(counts).toEqual({ splose: 5, client_profile: 8, portal: 6, report: 6, server: 3 });
   });
 
   test('profile eligibility is derived from the layer, not a hand-written list', () => {
@@ -182,7 +182,6 @@ describe('four-layer precedence', () => {
     expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe('FCA-ABCD1234');
     expect(scalarSources.OPAL_REPORT_DOCUMENT_ID).toBe('server');
     expect(scalarData.OPAL_REPORT_DATE).toBe('10/08/2026');
-    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
     expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
     for (const tag of tm.SERVER_TAGS) expect(scalarSources[tag]).toBe('server');
   });
@@ -192,11 +191,8 @@ describe('four-layer precedence', () => {
     // therapist's own document. Opal issues a sensible default and gets out of
     // the way, and the badge then says the value came from them.
     const { scalarData, scalarSources } = full({
-      OPAL_REPORT_VERSION: '2.0',
       OPAL_REPORT_STATUS: 'Final',
     });
-    expect(scalarData.OPAL_REPORT_VERSION).toBe('2.0');
-    expect(scalarSources.OPAL_REPORT_VERSION).toBe('report_override');
     expect(scalarData.OPAL_REPORT_STATUS).toBe('Final');
     expect(scalarSources.OPAL_REPORT_STATUS).toBe('report_override');
     // Untouched fields keep the issued value and the 'server' attribution.
@@ -286,7 +282,7 @@ describe('NDIS plan and goals', () => {
 describe('missing data', () => {
   test('with nothing but Splose, every non-Splose tag is flagged missing', () => {
     const { scalarData, scalarSources, missingFields } = resolveScalars({ splose: SPLOSE });
-    expect(missingFields.length).toBe(29 - 5);
+    expect(missingFields.length).toBe(28 - 5);
     for (const tag of tm.SPLOSE_AUTHORITATIVE_TAGS) expect(scalarSources[tag]).toBe('splose');
     for (const tag of missingFields) expect(scalarData[tag]).toBeNull();
   });
@@ -419,13 +415,11 @@ describe('manifest composition', () => {
   test('overrides for unknown tags are refused; a document-control override is not', () => {
     const clean = normaliseOverrides({
       OPAL_CLIENT_PRIMARY_DISABILITY: '  they/them  ',
-      OPAL_REPORT_VERSION: '2.0',
       NOT_A_TAG: 'x',
       OPAL_CLIENT_ADDRESS: { nested: 'object' },
     });
     expect(clean.OPAL_CLIENT_PRIMARY_DISABILITY).toBe('they/them');
     // The four Opal issues itself are DEFAULTS, not decrees.
-    expect(clean.OPAL_REPORT_VERSION).toBe('2.0');
     expect(clean).not.toHaveProperty('NOT_A_TAG');
     expect(clean).not.toHaveProperty('OPAL_CLIENT_ADDRESS');
   });
@@ -501,7 +495,6 @@ describe('server-issued document control', () => {
     });
     expect(scalarData.OPAL_REPORT_DOCUMENT_ID).toBe('FCA-1A2B3C4D');
     expect(scalarData.OPAL_REPORT_DATE).toBe('10/08/2026');
-    expect(scalarData.OPAL_REPORT_VERSION).toBe('1.0');
     expect(scalarData.OPAL_REPORT_STATUS).toBe('Draft');
     for (const tag of tm.SERVER_TAGS) {
       expect(scalarSources[tag]).toBe('server');

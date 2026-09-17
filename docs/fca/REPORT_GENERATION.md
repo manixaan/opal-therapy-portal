@@ -111,11 +111,11 @@ manifest = {
 Asserted by `backend/tests/fca-docx-engine.test.js` against the shipped file, so
 none of this can silently drift.
 
-- **54** unique `w:tag` content controls across **73** occurrences
-- **25** section-or-anchor controls, **29** scalar controls
+- **54** unique `w:tag` content controls across **71** occurrences
+- **25** section-or-anchor controls, **28** scalar controls
 - **13** unique `OPAL_CLIENT_*` tags — discovered dynamically, never hard-coded
-- **12** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **4** times
-- Parts carrying controls: `word/document.xml` (70), `word/header6.xml` (2 —
+- **11** scalar tags repeat, the most (`OPAL_THERAPIST_FULL_NAME`) **4** times
+- Parts carrying controls: `word/document.xml` (68), `word/header6.xml` (2 —
   `OPAL_CLIENT_FULL_NAME`, `OPAL_CLIENT_NDIS_NUMBER`), `word/footer6.xml`
   (1 — `OPAL_REPORT_DOCUMENT_ID`). **A body-only implementation ships blank
   headers**, so parts are walked generically.
@@ -242,7 +242,7 @@ strings `null` and `undefined` can never reach the page.
 
 ---
 
-## 3. Complete tag-to-source mapping (all 29 scalar tags)
+## 3. Complete tag-to-source mapping (all 28 scalar tags)
 
 | # | Tag | Occ | Layer | Resolved from | Save-back |
 |---|-----|-----|-------|---------------|-----------|
@@ -267,14 +267,13 @@ strings `null` and `undefined` can never reach the page.
 | 19 | `OPAL_THERAPIST_AHPRA_NUMBER` | 2 | Portal (this DB) | portal.ahpraNumber | rejected — `not_client_data` |
 | 20 | `OPAL_THERAPIST_QUALIFICATIONS` | 2 | Report-specific | report override only | rejected — `report_specific` |
 | 21 | `OPAL_THERAPIST_PROVIDER_NUMBER` | 2 | Report-specific | report override only | rejected — `report_specific` |
-| 22 | `OPAL_REPORT_DOCUMENT_ID` | 2 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
+| 22 | `OPAL_REPORT_DOCUMENT_ID` | 1 | Opal-issued | `FCA-{uuid8}`, at creation | rejected — `server_issued` |
 | 23 | `OPAL_REPORT_DATE` | 2 | Opal-issued | creation date, dd/mm/yyyy | rejected — `server_issued` |
-| 24 | `OPAL_REPORT_VERSION` | 1 | Opal-issued | `1.0` | rejected — `server_issued` |
-| 25 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
-| 26 | `OPAL_REPORT_ISSUE_DATE` | 1 | Report-specific | report override only | rejected — `report_specific` |
-| 27 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
-| 28 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
-| 29 | `OPAL_REPORT_AUTHORISED_RECIPIENTS` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 24 | `OPAL_REPORT_STATUS` | 1 | Opal-issued | `Draft` | rejected — `server_issued` |
+| 25 | `OPAL_REPORT_ISSUE_DATE` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 26 | `OPAL_REPORT_REVIEWER_NAME` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 27 | `OPAL_REPORT_REVIEWER_ROLE` | 1 | Report-specific | report override only | rejected — `report_specific` |
+| 28 | `OPAL_REPORT_AUTHORISED_RECIPIENTS` | 1 | Report-specific | report override only | rejected — `report_specific` |
 
 The 25 section-or-anchor controls are listed in `template-map.js` (`SECTIONS`
 plus `OPAL_ANCHOR_CUSTOM_SECTIONS`); 7 are required and 17 optional.
