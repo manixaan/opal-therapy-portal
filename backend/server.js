@@ -646,6 +646,8 @@ app.use('/', require('./interview-routes'));
 const accountingRoutes = require('./accounting-routes');
 app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
 app.use('/', accountingRoutes);
+// Finance portal — dashboard, payroll, invoicing (owner-only, read-only over Xero)
+app.use('/', require('./finance-routes'));
 
 console.log('✅ Routes registered');
 

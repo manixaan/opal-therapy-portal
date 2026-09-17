@@ -673,7 +673,8 @@ describe('changed assets are cache-busted', () => {
       // grammar (OB_VIEWS is now track/packages/start, bare address = track).
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
-      ['navigation.js', 11],
+      // 12: the Finance tab joined KNOWN_TABS.
+      ['navigation.js', 12],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -717,6 +718,8 @@ describe('changed assets are cache-busted', () => {
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 2],
+      // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
+      ['finance.js', 1], ['finance.css', 1],
       ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the

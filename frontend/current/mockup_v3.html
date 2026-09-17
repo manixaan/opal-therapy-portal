@@ -68,6 +68,7 @@
 </script>
 <link rel="stylesheet" href="/resourcehub.css?v=r30" />
 <link rel="stylesheet" href="/opa.css?v=1" />
+<link rel="stylesheet" href="/finance.css?v=1" />
 <link rel="stylesheet" href="/induction-assistant.css?v=3" />
 <link rel="stylesheet" href="/supportpop.css?v=1" />
 <link rel="stylesheet" href="/casenotes.css?v=1" />
@@ -93,6 +94,7 @@
      Resource Hub file previews; self-contained, injects its own styles. -->
 <script src="/docpreview.js?v=5" defer></script>
 <script src="/opa.js?v=2" defer></script>
+<script src="/finance.js?v=1" defer></script>
 <script src="/induction-assistant.js?v=3" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=2" defer></script>
@@ -146,7 +148,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=9" defer></script>
-<script src="/navigation.js?v=11" defer></script>
+<script src="/navigation.js?v=12" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -4098,6 +4100,9 @@ window.opIcon = function (name, size) {
   <button class="tab" data-tab="accounting" data-owner-only="1" style="display:none">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Accounting
   </button>
+  <button class="tab" data-tab="finance" data-owner-only="1" style="display:none" title="Finance — dashboard, payroll and invoicing on Xero">
+    <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg> Finance
+  </button>
   <button class="tab" data-tab="onboarding" title="Onboarding — new starter packs, credential verification and workforce compliance">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Onboarding
   </button>
@@ -5329,6 +5334,30 @@ window.opIcon = function (name, size) {
   </div>
   <div class="acct-section" id="acct-pricing"><div id="acct-pricing-body" class="acct-note">Loading…</div></div>
   <div class="acct-section" id="acct-synclog"><div id="acct-synclog-body" class="acct-note">Loading…</div></div>
+</div>
+</section>
+
+<!-- ============ FINANCE TAB (owner-only) ============ -->
+<section class="view" id="view-finance">
+<div class="fin-page">
+  <div class="fin-head">
+    <div>
+      <h1 style="margin:0 0 4px;">Finance</h1>
+      <div class="fin-sub" id="fin-status-line">Checking Xero connections…</div>
+    </div>
+    <div class="fin-head-actions">
+      <button class="btn" onclick="finRefresh(this)">Refresh</button>
+      <button class="btn" onclick="finOpenAccounting()">Xero settings</button>
+    </div>
+  </div>
+  <div class="fin-subnav" id="fin-subnav">
+    <button data-fin="dashboard" class="active">Dashboard</button>
+    <button data-fin="payroll">Payroll</button>
+    <button data-fin="invoicing">Invoicing</button>
+  </div>
+  <div class="fin-section active" id="fin-dashboard"><div id="fin-dashboard-body" class="fin-note">Loading…</div></div>
+  <div class="fin-section" id="fin-payroll"><div id="fin-payroll-body" class="fin-note">Loading…</div></div>
+  <div class="fin-section" id="fin-invoicing"><div id="fin-invoicing-body" class="fin-note">Loading…</div></div>
 </div>
 </section>
 
@@ -19477,7 +19506,7 @@ var ROLE_NAV = {
       ['People', ['onboarding', 'employees']],
       ['Recruitment', ['interviews']],
       ['Travel', ['travel', 'logbook']],
-      ['Business', ['accounting', 'settings', 'support']],
+      ['Business', ['finance', 'accounting', 'settings', 'support']],
     ] },
   },
   admin: {

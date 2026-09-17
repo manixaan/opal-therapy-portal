@@ -1,0 +1,43 @@
+/* Finance portal — dashboard, payroll, invoicing (owner-only). */
+.fin-page { padding: 16px; max-width: 1280px; }
+.fin-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.fin-head-actions { display:flex; gap:8px; }
+.fin-sub { font-size:13px; color:var(--muted); }
+.fin-subnav { display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--border); margin-bottom:16px; padding-bottom:8px; }
+.fin-subnav button { background:none; border:1px solid transparent; padding:6px 12px; border-radius:8px; cursor:pointer; color:var(--muted); font-size:13px; font-weight:600; }
+.fin-subnav button.active { color:var(--accent); border-color:var(--border); background:var(--surface-2,rgba(0,0,0,0.03)); }
+.fin-section { display:none; }
+.fin-section.active { display:block; }
+.fin-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+.fin-card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+.fin-card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+.fin-card .val { font-size:22px; font-weight:700; margin-top:4px; }
+.fin-card .hint { font-size:12px; color:var(--muted); margin-top:2px; }
+.fin-card.warn .val { color:#c2412e; }
+.fin-card.good .val { color:#2f7d4f; }
+.fin-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width: 900px) { .fin-grid { grid-template-columns:1fr; } }
+.fin-panel { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:16px; overflow-x:auto; }
+.fin-panel h3 { margin:0 0 10px; font-size:14px; }
+.fin-table { width:100%; border-collapse:collapse; font-size:13px; }
+.fin-table th, .fin-table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+.fin-table td.num, .fin-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+.fin-table tr.clickable { cursor:pointer; }
+.fin-table tr.clickable:hover td { background:var(--surface-2,rgba(0,0,0,0.03)); }
+.fin-note { font-size:12px; color:var(--muted); background:var(--surface-2,rgba(0,0,0,0.03)); padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+.fin-warn { font-size:12px; color:#8a5a00; background:#fff6e0; border:1px solid #f0d58a; padding:8px 12px; border-radius:8px; margin-bottom:12px; }
+.fin-pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); white-space:nowrap; }
+.fin-pill.paid, .fin-pill.posted { color:#2f7d4f; border-color:#2f7d4f55; }
+.fin-pill.overdue { color:#c2412e; border-color:#c2412e55; }
+.fin-pill.draft { color:var(--muted); }
+.fin-bars { display:flex; align-items:flex-end; gap:10px; height:140px; padding:8px 4px 0; }
+.fin-bar { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+.fin-bar .cols { display:flex; align-items:flex-end; gap:3px; height:110px; width:100%; justify-content:center; }
+.fin-bar .col { width:40%; max-width:26px; border-radius:4px 4px 0 0; background:var(--accent); opacity:.85; }
+.fin-bar .col.exp { background:#c2412e; opacity:.6; }
+.fin-bar .m { font-size:11px; color:var(--muted); white-space:nowrap; }
+.fin-legend { display:flex; gap:14px; font-size:11px; color:var(--muted); margin-top:6px; }
+.fin-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; background:var(--accent); }
+.fin-legend i.exp { background:#c2412e; opacity:.6; }
+.fin-empty { font-size:13px; color:var(--muted); padding:12px 0; }
+.fin-drawer { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-top:12px; background:var(--surface-2,rgba(0,0,0,0.02)); }
