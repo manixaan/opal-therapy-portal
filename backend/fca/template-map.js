@@ -9,11 +9,11 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 6b7ee4ab…32adce — re-hashed
+ * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 c15768a7…3171fc — re-hashed
  * 17 Sep 2026 after removing the preferred-name, pronouns and two NDIS-goal
  * controls plus the "Assessment purpose and scope" and "Consent and
  * information sharing" prompts; the header now carries the full name, and
- * every style was lifted one half-point with looser spacing: body 11pt)
+ * physical sizes follow the Anti-Bribery and Corruption Standard PDF: Arial 11pt body on 1.25 lines, 14pt H1, 9pt tables and footer, 1in side margins)
  *   54 unique w:tag content controls, 80 occurrences in total.
  *   25 of them are section/anchor controls, 29 are scalar (text) controls.
  *   14 scalar tags repeat, up to 5 times (OPAL_THERAPIST_FULL_NAME).
