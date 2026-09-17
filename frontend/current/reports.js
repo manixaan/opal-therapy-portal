@@ -96,7 +96,7 @@ var _reportGenieAnim = null;
    the close can be cancelled by a reopen mid-flight. `dir` is 'in'
    (opening) or 'out' (closing). Returns the Animation, or null when
    unsupported. */
-function reportPanelGenie(modal, dir) {
+function reportPanelGenie(modal, dir, onDone) {
   if (!modal.animate) return null;
   if (_reportGenieAnim) { try { _reportGenieAnim.cancel(); } catch (_) {} }
   var T = 'translate(-50%,-50%) ';
@@ -121,7 +121,20 @@ function reportPanelGenie(modal, dir) {
     fill: 'forwards'
   });
   _reportGenieAnim = a;
-  a.onfinish = a.oncancel = function () { modal.classList.remove('genie'); if (_reportGenieAnim === a) { _reportGenieAnim = null; } try { a.cancel(); } catch (_) {} };
+  // On finish, hand over to the caller *before* dropping the animation's
+  // forwards fill: cancelling first would snap the panel back to its `.open`
+  // state for a frame (the visible flash on close) and then CSS-transition
+  // it out.
+  var settled = false;
+  var settle = function (finished) {
+    if (settled) return; settled = true;
+    modal.classList.remove('genie');
+    if (_reportGenieAnim === a) { _reportGenieAnim = null; }
+    if (finished && typeof onDone === 'function') { try { onDone(); } catch (_) {} }
+    try { a.cancel(); } catch (_) {}
+  };
+  a.onfinish = function () { settle(true); };
+  a.oncancel = function () { settle(false); };
   return a;
 }
 function reportPanelPulseAnchor(el) {
@@ -186,14 +199,14 @@ function closeReportPanel() {
   overlay.classList.remove('open');
   overlay.classList.add('closing');
   var anchor = _reportAnchorEl;
-  var anim = reportPanelGenie(modal, 'out');
   var done = function () {
     if (_reportOpen) return; // reopened mid-flight
     modal.classList.remove('open');
     overlay.classList.remove('closing');
     reportPanelPulseAnchor(anchor); // the panel has landed — flash where it went
   };
-  if (anim) { anim.addEventListener('finish', done); } else { modal.classList.remove('open'); done(); }
+  var anim = reportPanelGenie(modal, 'out', done);
+  if (!anim) { done(); }
 }
 
 function switchReportMode(mode) {
