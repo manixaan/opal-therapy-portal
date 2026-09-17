@@ -560,6 +560,9 @@
     var vw = global.innerWidth, vh = global.innerHeight;
     var docks = [];
     if (doc.body.classList.contains('wk-open') && !doc.body.classList.contains('wk-hidden')) docks.push(doc.getElementById('wk-dock'));
+    // The assistant pop-up floats bottom-right; the card centres to its left
+    // so the two never cover each other.
+    if (doc.body.classList.contains('ia-open')) docks.push(doc.getElementById('ia-dock'));
     docks.forEach(function (d) { if (d) vw = Math.max(320, Math.min(vw, d.getBoundingClientRect().left)); });
     var pad = step && step.pad != null ? step.pad : 6;
 
