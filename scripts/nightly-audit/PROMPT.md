@@ -62,7 +62,10 @@ and skipping the tests on them is how a real defect goes unreported.
    found and what you could not find.
 2. **Guard check.** Every route you located must sit behind `requireAuth` and a
    permission/role middleware. A route without one is a finding ("broken:
-   unguarded endpoint"), regardless of what the tracker says.
+   unguarded endpoint"), regardless of what the tracker says. Exception: a
+   file whose header comment documents that every query is scoped to
+   `req.user.id` (personal data such as `snapshot-routes.js`, `mobile-routes.js`)
+   may use `requireAuth` alone; note it as "self-scoped by design", not broken.
 3. **Run the targeted tests.** Unit: `npx jest tests/<file>.test.js` for each
    matching unit file. Integration: run only matching files, e.g.
    `DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config
