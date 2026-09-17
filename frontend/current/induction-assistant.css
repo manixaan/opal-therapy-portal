@@ -2,22 +2,25 @@
    INDUCTION ASSISTANT (ia-*) — a dock beside the portal, like the workshop's.
    ═══════════════════════════════════════════════════════════════════════ */
 
-:root { --ia-dock-w: 420px; }
+/* A floating chat window, not a dock: it sits over the page bottom-right
+   and never insets or reflows anything. With the workshop open it moves to
+   the workshop dock's left so the two never overlap. */
+:root { --ia-dock-w: 400px; --ia-dock-h: min(640px, calc(100vh - 32px)); }
 @media (max-width: 1100px) { :root { --ia-dock-w: 360px; } }
 
-body.ia-open { padding-right: var(--ia-dock-w); }
 .ia-dock {
-  display: none; position: fixed; top: 0; right: 0; bottom: 0; width: var(--ia-dock-w); z-index: 9400;
-  flex-direction: column; background: var(--panel, #fff); border-left: 1px solid var(--border, #e9e3d9);
-  box-shadow: -2px 0 12px rgba(0, 0, 0, .06); font-size: 13.5px; color: var(--ink, #241f1a);
+  display: none; position: fixed; right: 16px; bottom: 16px; width: var(--ia-dock-w); height: var(--ia-dock-h);
+  z-index: 9600; flex-direction: column; background: var(--panel, #fff); border: 1px solid var(--border, #e9e3d9);
+  border-radius: 14px; box-shadow: 0 18px 50px rgba(10, 40, 35, .22); overflow: hidden;
+  font-size: 13.5px; color: var(--ink, #241f1a);
 }
 body.ia-open .ia-dock { display: flex; }
-/* Beside the workshop, not under it: with both open the assistant sits to
-   the workshop dock's left and the portal is inset by both. */
-body.wk-open.ia-open .ia-dock { right: var(--wk-dock-w, 460px); }
-body.wk-open.ia-open { padding-right: calc(var(--wk-dock-w, 460px) + var(--ia-dock-w)); }
+body.wk-open.ia-open .ia-dock { right: calc(var(--wk-dock-w, 460px) + 16px); }
+@media (max-width: 720px) {
+  .ia-dock { right: 8px; left: 8px; bottom: 8px; width: auto; height: min(80vh, calc(100vh - 16px)); }
+}
 
-.ia-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border, #e9e3d9); }
+.ia-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 12px 14px 10px; border-bottom: 1px solid var(--border, #e9e3d9); background: var(--accent-soft, #e4f2ec); }
 .ia-title { font-size: 16px; font-weight: 700; }
 .ia-sub { font-size: 12px; color: var(--ink-soft, #5d564e); margin-top: 2px; }
 .ia-x { appearance: none; background: none; border: 0; border-radius: 50%; width: 32px; height: 32px; font-size: 22px; line-height: 1; color: var(--ink-soft, #5d564e); cursor: pointer; }
@@ -81,6 +84,4 @@ body.wk-open.ia-open { padding-right: calc(var(--wk-dock-w, 460px) + var(--ia-do
 .rh2-asl-ai { display: inline-flex; align-items: center; gap: 6px; }
 .rh2-asl-ai-spark { color: var(--accent, #0f7c6c); }
 
-@media (max-width: 720px) {
-  :root { --ia-dock-w: 100vw; }
-}
+

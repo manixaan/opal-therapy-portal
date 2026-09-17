@@ -652,7 +652,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 8], ['induction.css', 3],
+      ['induction.js', 9], ['induction.css', 3],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
@@ -717,7 +717,7 @@ describe('changed assets are cache-busted', () => {
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 2],
-      ['induction-assistant.js', 3], ['induction-assistant.css', 2],
+      ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
