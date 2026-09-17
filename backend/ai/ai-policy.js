@@ -146,13 +146,23 @@ const AI_POLICIES = {
     allowedClassifications: [classification.PUBLIC, classification.INTERNAL],
     outputTypes: [outputTypes.ASSISTANT_RESPONSE],
     defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
-    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
-    allowedModels: ['clinical_standard', 'assistant_fast', 'mock'],
-    defaultModel: 'clinical_standard',
+    allowedProviders: [registry.PROVIDER_DIRECT, registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
+    allowedModels: ['assistant_direct', 'clinical_standard', 'assistant_fast', 'mock'],
+    defaultModel: 'assistant_direct',
     region: 'australia',
     mayReceiveClinicalData: false,
     auditCategory: 'assistant',
     guardrailInputScope: 'current_user_message',
+    /**
+     * DATA RESIDENCY WAIVER — the Owner's explicit decision (17 Sep 2026)
+     * that this feature's inputs, staff training content the practice writes
+     * about itself, may be processed through the vendor's public API rather
+     * than the Australian Bedrock path. It is the only feature that carries
+     * this, and validateAll refuses it to any policy that can receive
+     * clinical input or produce a clinical document. The Bedrock models stay
+     * allowed so a deployment without a vendor key can still run it onshore.
+     */
+    dataResidencyWaiver: true,
   },
 
   /**
@@ -263,6 +273,11 @@ function features() {
   return Object.keys(AI_POLICIES);
 }
 
+/** The features whose policy carries a data residency waiver. */
+function waiverFeatures() {
+  return Object.keys(AI_POLICIES).filter((f) => AI_POLICIES[f].dataResidencyWaiver === true);
+}
+
 /** Human review is derived, never declared — see ai-output-type.js. */
 function requiresHumanReview(outputType) {
   return outputTypes.requiresHumanReview(outputType);
@@ -332,14 +347,34 @@ function validateAll() {
       throw new Error(`${where} — guardrailInputScope '${policy.guardrailInputScope}' is not one of ${GUARDRAIL_INPUT_SCOPES.join(', ')}`);
     }
 
+    // THE WAIVER IS NARROW. A policy may carry dataResidencyWaiver only when
+    // nothing it can receive is clinical and nothing it can produce is a
+    // clinical document. Everything else keeps the residency rule below.
+    const waiver = policy.dataResidencyWaiver === true;
+    if (waiver) {
+      if (policy.allowedClassifications.includes(classification.CLINICAL)
+          || policy.outputTypes.includes(outputTypes.CLINICAL_DOCUMENT)
+          || policy.mayReceiveClinicalData) {
+        throw new Error(`${where} — a data residency waiver cannot be granted to a clinical-capable feature`);
+      }
+    }
+    // And the direct provider is reachable ONLY under a waiver: a model that
+    // is not resident in Australia may appear in no other policy.
+    for (const key of policy.allowedModels) {
+      const model = registry.get(key);
+      if (model.provider === registry.PROVIDER_DIRECT && !waiver) {
+        throw new Error(`${where} — model '${key}' is the direct provider, which needs a data residency waiver`);
+      }
+    }
+
     // Anything above PUBLIC must stay onshore, for every classification the
-    // feature may receive — not merely its default.
+    // feature may receive — not merely its default — unless waived.
     for (const level of policy.allowedClassifications) {
       const required = classification.requirementsFor(level);
       if (required.residency === 'australia' && policy.region !== 'australia') {
         throw new Error(`${where} — classification '${level}' requires region 'australia'`);
       }
-      if (required.residency === 'australia') {
+      if (required.residency === 'australia' && !waiver) {
         for (const key of policy.allowedModels) {
           if (registry.get(key).residency !== 'australia') {
             throw new Error(`${where} — model '${key}' is not resident in Australia`);
@@ -358,6 +393,7 @@ module.exports = {
   KNOWN_FUTURE_FEATURES,
   get,
   features,
+  waiverFeatures,
   requiresHumanReview,
   validateAll,
 };

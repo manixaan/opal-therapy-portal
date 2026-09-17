@@ -28,6 +28,9 @@ const BACKEND = path.join(__dirname, '..');
 const PROVIDER_ALLOWLIST = [
   path.join('ai', 'providers', 'bedrock-provider.js'),
   path.join('ai', 'providers', 'mock-provider.js'),
+  // The vendor's public API, for data-residency-waiver features only. The
+  // waiver itself is policed by ai-policy.js validateAll and tests/ai-direct-provider.test.js.
+  path.join('ai', 'providers', 'direct-api-provider.js'),
 ];
 
 /** Only this file may contain raw model identifiers. */
@@ -271,6 +274,8 @@ test('stripComments does not blind the scan to real code', () => {
 test('the allowlist is as small as it looks', () => {
   // Guards against the allowlist quietly growing. Widening it is a
   // governance decision and should require editing this expectation.
-  expect(PROVIDER_ALLOWLIST).toHaveLength(2);
+  // Three since 17 Sep 2026: the direct provider, reachable only under a
+  // data residency waiver (tests/ai-direct-provider.test.js pins that shape).
+  expect(PROVIDER_ALLOWLIST).toHaveLength(3);
   expect(MODEL_ID_ALLOWLIST).toHaveLength(1);
 });

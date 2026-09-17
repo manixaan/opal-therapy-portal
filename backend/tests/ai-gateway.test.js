@@ -121,15 +121,24 @@ test('BLOCKED: a real Australian profile that is simply not approved', () => {
 test('BLOCKED: clinical data can never reach a non-approved provider', () => {
   // There is no OpenAI provider, and no approved model may name one. This is
   // asserted structurally rather than by trying to call one, because the
-  // guarantee should hold for providers nobody has thought of yet.
-  const permitted = new Set([registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK]);
+  // guarantee should hold for providers nobody has thought of yet. The direct
+  // provider exists, but only a data-residency-waiver policy may list it,
+  // and a waiver policy can never be clinical-capable (validateAll).
+  const known = new Set([registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK, registry.PROVIDER_DIRECT]);
+  const onshore = new Set([registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK]);
   for (const model of Object.values(registry.APPROVED_MODELS)) {
-    expect(permitted.has(model.provider)).toBe(true);
+    expect(known.has(model.provider)).toBe(true);
   }
 
-  const clinicalPolicy = policy.get(CLINICAL_FEATURE);
-  for (const provider of clinicalPolicy.allowedProviders) {
-    expect(permitted.has(provider)).toBe(true);
+  for (const feature of policy.features()) {
+    const p = policy.get(feature);
+    const clinicalCapable = p.mayReceiveClinicalData
+      || p.allowedClassifications.includes(classification.CLINICAL)
+      || p.outputTypes.includes('clinical_document');
+    if (!clinicalCapable) continue;
+    expect(p.dataResidencyWaiver).not.toBe(true);
+    for (const provider of p.allowedProviders) expect(onshore.has(provider)).toBe(true);
+    for (const key of p.allowedModels) expect(registry.get(key).residency).toBe('australia');
   }
 });
 
@@ -139,6 +148,9 @@ test('BLOCKED: any region outside Australia, for every clinical feature', () => 
   for (const region of ['us-east-1', 'eu-west-1', 'ap-southeast-1', 'ap-northeast-1']) {
     process.env.AWS_REGION = region;
     for (const feature of policy.features()) {
+      // A waiver feature does not use the Bedrock region for its direct
+      // model; its Bedrock models still do (tests/ai-direct-provider.test.js).
+      if (policy.waiverFeatures().includes(feature)) continue;
       const decision = gateway.evaluate({ feature });
       expect(decision.ok).toBe(false);
       // Refused by config before residency logic runs, so the reason is the

@@ -68,6 +68,9 @@ function run() {
       for (const key of registry.keys()) {
         const model = registry.get(key);
         if (model.provider === registry.PROVIDER_MOCK) continue;
+        // The direct provider is offshore by definition; its own invariant —
+        // reachable only under a non-clinical waiver — is checked below.
+        if (model.provider === registry.PROVIDER_DIRECT) continue;
         // A Bedrock entry now carries `id: null` — the profile comes from
         // BEDROCK_MODEL_ID, and ai/aws/bedrock-config.js applies this exact
         // au.-prefix rule to that value before it can be used. Asserting it
@@ -83,6 +86,21 @@ function run() {
         }
       }
       return 'all onshore';
+    }),
+
+    check('the direct provider is reachable only under a non-clinical waiver', () => {
+      const waivers = policyEngine.waiverFeatures();
+      for (const feature of policyEngine.features()) {
+        const policy = policyEngine.get(feature);
+        const usesDirect = policy.allowedModels.some((k) => registry.get(k).provider === registry.PROVIDER_DIRECT);
+        if (usesDirect && !waivers.includes(feature)) throw new Error(`${feature} reaches the direct provider without a waiver`);
+        if (waivers.includes(feature) && (policy.mayReceiveClinicalData
+            || policy.allowedClassifications.includes('clinical')
+            || policy.outputTypes.includes('clinical_document'))) {
+          throw new Error(`${feature} holds a waiver but is clinical-capable`);
+        }
+      }
+      return waivers.length ? `waived: ${waivers.join(', ')}` : 'no waivers';
     }),
 
     check('retention-mandating models are blocked', () => {

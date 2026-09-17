@@ -28,6 +28,7 @@ const policyEngine = require('./ai/ai-policy');
 const killSwitch = require('./ai/ai-kill-switch');
 const selfCheck = require('./ai/ai-self-check');
 const bedrockConfig = require('./ai/aws/bedrock-config');
+const directApiConfig = require('./ai/direct-api-config');
 
 const log = require('./logger').createLogger('ai-security');
 
@@ -66,6 +67,9 @@ router.get(
           allowed_inputs: policy.allowedClassifications,
           output_types: policy.outputTypes,
           human_review: policy.outputTypes.includes('clinical_document'),
+          // Offshore by decision, never by accident: only a waiver feature
+          // can reach the vendor's public API, and this says which do.
+          data_residency_waiver: policy.dataResidencyWaiver === true,
         };
       }
 
@@ -90,9 +94,11 @@ router.get(
         // pinned and at which version; the identifier itself is an account
         // internal that nothing on a status page needs.
         bedrock_configuration: bedrockConfig.describe(registry),
-        // The CI boundary test is what makes this true; asserted here so the
-        // claim is visible to whoever is debugging.
-        direct_provider_access: false,
+        // Which features may reach the vendor's public API, by policy waiver.
+        // Everything else is confined to federated Bedrock by the boundary
+        // tests. Empty means no feature leaves Australia.
+        direct_provider_features: policyEngine.waiverFeatures(),
+        direct_provider_configured: directApiConfig.isConfigured(),
         features,
         checked_at: new Date().toISOString(),
       });

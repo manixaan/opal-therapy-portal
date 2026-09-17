@@ -48,8 +48,11 @@ const selfCheck = require('./ai-self-check');
 const audit = require('./ai-audit');
 const bedrockConfig = require('./aws/bedrock-config');
 
+const directApiConfig = require('./direct-api-config');
+
 const bedrockProvider = require('./providers/bedrock-provider');
 const mockProvider = require('./providers/mock-provider');
+const directApiProvider = require('./providers/direct-api-provider');
 
 
 const DEFAULT_MAX_TOKENS = 2048;
@@ -58,6 +61,9 @@ const DEFAULT_TIMEOUT_MS = 60000;
 const PROVIDERS = {
   [registry.PROVIDER_BEDROCK]: bedrockProvider,
   [registry.PROVIDER_MOCK]: mockProvider,
+  // Reachable only through a policy carrying dataResidencyWaiver — see
+  // evaluate() below and ai-policy.js validateAll.
+  [registry.PROVIDER_DIRECT]: directApiProvider,
 };
 
 /** Thrown when policy refuses. Carries a short reason code, never user text. */
@@ -150,14 +156,23 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
 
   const required = classification.requirementsFor(effectiveClassification);
 
+  // A waiver lifts residency for THIS request only when the request is not
+  // clinical — a waiver policy cannot be clinical-capable (validateAll), so
+  // this is belt to those braces, not the guard itself.
+  const waived = policy.dataResidencyWaiver === true
+    && effectiveClassification !== classification.CLINICAL
+    && outputType !== outputTypes.CLINICAL_DOCUMENT;
+  const residencyRequired = required.residency === 'australia' && !waived;
+
   // Region first, and fail closed. Everything below reasons about residency,
   // and reasoning about residency without knowing the region is how a default
-  // slips back in.
+  // slips back in. A waived request may have no region at all — the direct
+  // provider does not use one — but a Bedrock model still needs it (below).
   const regionResult = bedrockConfig.resolveRegion();
-  if (!regionResult.ok) return { ok: false, reason: regionResult.reason, policy };
-  const region = regionResult.region;
+  if (!regionResult.ok && !waived) return { ok: false, reason: regionResult.reason, policy };
+  const region = regionResult.ok ? regionResult.region : null;
 
-  if (required.residency === 'australia') {
+  if (residencyRequired) {
     if (!registry.AU_REGIONS.includes(region)) {
       return { ok: false, reason: `region_not_australian:${region}`, policy };
     }
@@ -190,7 +205,16 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
   // Bedrock only. The mock's id must stay `mock-model` or the offline path
   // (and every test that uses it) resolves to a profile that does not exist.
   let model = registryModel;
+  if (registryModel.provider === registry.PROVIDER_DIRECT) {
+    // The direct route: only under a waiver, only when the key is present.
+    if (!waived) return { ok: false, reason: 'direct_provider_requires_waiver', policy };
+    if (!directApiConfig.isConfigured()) return { ok: false, reason: 'direct_api_not_configured', policy };
+    const resolved = directApiConfig.resolveModelId(registryModel);
+    if (!resolved.ok) return { ok: false, reason: resolved.reason, policy };
+    model = { ...registryModel, id: resolved.id };
+  }
   if (registryModel.provider === registry.PROVIDER_BEDROCK) {
+    if (!regionResult.ok) return { ok: false, reason: regionResult.reason, policy };
     // REQUIRED, not an override. The registry carries no Bedrock id at all now
     // (see its header), so this is the only place one can come from. No id
     // means no call — never a fallback to something that merely parses.
@@ -212,7 +236,7 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
   if (!PROVIDERS[model.provider]) {
     return { ok: false, reason: `provider_not_implemented:${model.provider}`, policy };
   }
-  if (required.residency === 'australia' && model.residency !== 'australia') {
+  if (residencyRequired && model.residency !== 'australia') {
     return { ok: false, reason: `model_not_resident_in_australia:${modelKey}`, policy };
   }
 
@@ -225,6 +249,8 @@ function evaluate({ feature, modelKey: requestedModelKey, classification: declar
     classification: effectiveClassification,
     outputType,
     humanReviewRequired,
+    // Recorded so the audit row says, per call, that residency was waived.
+    residencyWaived: waived && model.provider === registry.PROVIDER_DIRECT,
     // How much of the request the guardrail evaluates on INPUT. A policy
     // fact, not a caller option — see ai-policy.js. Absent means the whole
     // request.

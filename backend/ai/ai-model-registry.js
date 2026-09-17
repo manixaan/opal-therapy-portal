@@ -34,9 +34,15 @@
 // importing it, so this direction cannot cycle.
 const { ALLOWED_REGIONS: AU_REGIONS } = require('./aws/bedrock-config');
 
-/** Provider ids. Only Bedrock is approved for anything real. */
+/**
+ * Provider ids. Bedrock is the route for anything that can carry personal or
+ * health information. DIRECT is the vendor's public API, reachable only by a
+ * policy carrying a data residency waiver (ai-policy.js) — today, the
+ * induction assistant, whose inputs are staff training material.
+ */
 const PROVIDER_BEDROCK = 'aws-bedrock';
 const PROVIDER_MOCK = 'mock';
+const PROVIDER_DIRECT = 'anthropic-direct';
 
 /**
  * Australian geo inference profiles carry this prefix. Checked independently
@@ -98,6 +104,22 @@ const APPROVED_MODELS = Object.freeze({
     description: 'Australian geo inference profile supplied by BEDROCK_MODEL_ID.',
   }),
 
+  /**
+   * The vendor's public API. NOT resident in Australia and NOT behind the
+   * guardrail; usable only under a data residency waiver, which the policy
+   * engine refuses to any feature that can touch clinical content. Carries a
+   * public model id because that id is a published product name, not an
+   * account fact; DIRECT_API_MODEL_ID overrides it. `regions: null` means
+   * the Bedrock region is irrelevant to it.
+   */
+  assistant_direct: Object.freeze({
+    id: 'claude-sonnet-5',
+    provider: PROVIDER_DIRECT,
+    regions: null,
+    residency: 'vendor',
+    description: 'Vendor public API — waiver features only (staff training content).',
+  }),
+
   /** Deterministic stand-in for tests and credential-free local dev. */
   mock: Object.freeze({
     id: 'mock-model',
@@ -151,7 +173,7 @@ function validate(key, region) {
       return `model_not_au_geo_profile:${model.id}`;
     }
   }
-  if (region && !model.regions.includes(region)) {
+  if (region && Array.isArray(model.regions) && !model.regions.includes(region)) {
     return `model_not_available_in_region:${region}`;
   }
   return null;
@@ -164,6 +186,7 @@ module.exports = {
   AU_GEO_PREFIX,
   PROVIDER_BEDROCK,
   PROVIDER_MOCK,
+  PROVIDER_DIRECT,
   get,
   keys,
   validate,

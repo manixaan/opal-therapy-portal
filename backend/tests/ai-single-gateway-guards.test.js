@@ -209,14 +209,28 @@ describe('the website and the iOS app share one path', () => {
 
 // ── No direct Anthropic route, no static credentials ────────────────────────
 
-describe('the only route out is federated Bedrock', () => {
-  test('nothing calls the Anthropic API directly', () => {
+describe('the only routes out are federated Bedrock and, under a waiver, the direct provider', () => {
+  // The direct route exists for ONE reason: a feature whose policy carries a
+  // data residency waiver (staff training content). The vendor key is read in
+  // exactly one module, and nothing outside backend/ai names the endpoint.
+  const KEY_READER = path.join('ai', 'direct-api-config.js');
+
+  test('nothing outside the direct-api config reads the vendor key or names the endpoint', () => {
     for (const f of sourceFiles()) {
       const src = strip(read(f));
+      const rel = path.relative(BACKEND, f);
       expect(src).not.toContain('api.anthropic.com');
       expect(src).not.toMatch(/['"]x-api-key['"]/);
-      expect(src).not.toMatch(/process\.env\.ANTHROPIC_API_KEY/);
+      if (rel !== KEY_READER) expect(src).not.toMatch(/ANTHROPIC_API_KEY/);
     }
+    expect(strip(read(path.join(BACKEND, KEY_READER)))).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  test('the direct provider is reachable only from the gateway, and only under a waiver', () => {
+    const importers = sourceFiles().filter((f) => /providers\/direct-api-provider/.test(strip(read(f))));
+    expect(importers.map((f) => path.relative(BACKEND, f))).toEqual(['ai/ai-gateway.js']);
+    const gateway = strip(read(path.join(BACKEND, 'ai', 'ai-gateway.js')));
+    expect(gateway).toContain("reason: 'direct_provider_requires_waiver'");
   });
 
   test('no static AWS credential is read anywhere', () => {
@@ -226,9 +240,9 @@ describe('the only route out is federated Bedrock', () => {
     }
   });
 
-  test('the AI SDK is imported in exactly one file', () => {
+  test('the AI SDKs are imported in exactly the two provider files', () => {
     const importers = sourceFiles().filter((f) => /@anthropic-ai\//.test(strip(read(f))));
-    expect(importers.map((f) => path.relative(BACKEND, f)))
-      .toEqual(['ai/providers/bedrock-provider.js']);
+    expect(importers.map((f) => path.relative(BACKEND, f)).sort())
+      .toEqual(['ai/providers/bedrock-provider.js', 'ai/providers/direct-api-provider.js']);
   });
 });
