@@ -595,15 +595,10 @@
 
     h += '<details class="wk-more"><summary>More options</summary>' +
       '<div class="wk-field"><label>Block type</label>' + typeSelect + '</div>';
-    h += '<div class="wk-field wk-field-roles"><label>Show it to</label><div class="wk-roles">';
-    ['owner', 'admin', 'therapist', 'read_only'].forEach(function (r) {
-      var on = !s.roles || s.roles.indexOf(r) !== -1;
-      var admitted = (W.wt.roles || []).indexOf(r) !== -1;
-      h += '<label class="wk-role' + (admitted ? '' : ' is-off') + '">' +
-        '<input type="checkbox" ' + (on && admitted ? 'checked' : '') + (admitted ? '' : ' disabled') +
-        ' onchange="OpalWorkshop._stepRole(\'' + r + '\', this.checked)"> ' + esc(r.replace('_', ' ')) + '</label>';
-    });
-    h += '</div></div></details>';
+    // No per-step role gate here. Who sees a walkthrough is decided by whom
+    // the Owner assigns its induction to, not by ticking roles on each step;
+    // steps stay visible to everyone the module admits (the stored default).
+    h += '</details>';
 
     return h;
   }

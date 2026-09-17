@@ -663,7 +663,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 13], ['workshop.css', 8],
+      ['workshop.js', 14], ['workshop.css', 8],
       // 1: themed confirm/alert/prompt dialogs — every native browser dialog
       // in the portal goes through dialog.js so it reads as the portal.
       // dialog.css 2: the confirm/alert layer moved above the Splose sync
