@@ -250,7 +250,11 @@ describe('an item on Assign Learning offers three actions, and only three', () =
     expect(card).toContain('aria-haspopup="menu"');
     expect(card).toContain('role="menu"');
     expect(card).toContain('RH2.aslMenu(event,');
-    expect(card).toMatch(/openAttr = !archived\s*\n\s*\? ' onclick="RH2\.laEdit\(/);
+    // The whole card opens it: the thumbnail and the body carry the same
+    // handler, and the footer stops the click so Assign and the menu stay theirs.
+    expect(card).toContain("var openFn = !archived ? 'RH2.laEdit(");
+    expect(card).toContain('<div class="rh2-course-body rh2-course-clickable"\' + openAttr');
+    expect(card).toContain('<div class="rh2-course-foot" onclick="event.stopPropagation()">');
     // The status is derived from the record, never typed on the card.
     const status = fn('aslStatus');
     for (const word of ['Archived', 'Empty', 'Draft', 'Draft changes', 'Published']) {
