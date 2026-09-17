@@ -272,9 +272,12 @@
         ],
       },
     });
-    if (!res.ok) { fail(res, 'The walkthrough could not be created.'); return; }
+    if (!res.ok) { fail(res, 'The walkthrough could not be created.'); return null; }
     closeShelf();
     edit(res.data.walkthrough.id);
+    // Handed back so the caller (the New induction dialog) can wrap it in an
+    // induction that appears on the catalogue and can be assigned.
+    return res.data.walkthrough;
   }
 
   function cancelNew() { W.naming = false; renderShelf(); }

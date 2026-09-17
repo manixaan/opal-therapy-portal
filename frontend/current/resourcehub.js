@@ -6102,10 +6102,31 @@
     }
     if (c.kind === 'walkthrough') {
       // The workshop owns walkthroughs: it creates this one and opens its
-      // editor. The dialog has done its job once the name is in.
+      // editor. But a walkthrough on its own lives on the workshop shelf,
+      // not in the induction library — it never appeared as a tile and
+      // could not be assigned. Since it was asked for as an induction, it
+      // becomes one: an induction of one task lesson that runs the
+      // walkthrough, created as a draft alongside it.
+      var category = c.category;
       S.la.create = null;
       render();
-      if (global.OpalWorkshop && global.OpalWorkshop.createNew) global.OpalWorkshop.createNew(title);
+      if (!(global.OpalWorkshop && global.OpalWorkshop.createNew)) return;
+      var wk = await global.OpalWorkshop.createNew(title);
+      if (wk && wk.key) {
+        var made = await api('/api/learning/workflows', {
+          method: 'POST',
+          body: {
+            title: title, category: category,
+            content: { sections: [{ title: title, items: [{
+              type: 'task', title: 'Complete the interactive walkthrough',
+              body: 'Work through the guided tour of the portal. It opens on the real screens.',
+              walkthrough_key: wk.key, required: true,
+            }] }] },
+          },
+        });
+        if (!made.ok) toast('Not added to the library', made.error || 'The walkthrough was created, but its induction could not be.');
+        loadLa();
+      }
       return;
     }
     c.busy = true;
