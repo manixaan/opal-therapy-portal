@@ -123,6 +123,39 @@ const AI_POLICIES = {
   },
 
   /**
+   * Induction assistant — the Owner's co-author for staff inductions and
+   * portal walkthroughs on the Assign Learning page.
+   *
+   * INTERNAL, not clinical: it works on training content written by and for
+   * staff — chapter titles, lesson text, quiz questions, walkthrough steps —
+   * and on the Owner's instructions about them. No participant data has any
+   * business here, so the feature does not declare the capacity to receive
+   * it: a policy that can receive clinical input is a policy under which
+   * clinical input will eventually arrive. INTERNAL still pins the call to
+   * Australia (requirementsFor), so nothing about this is offshore.
+   *
+   * Tool use is how it acts — listing, reading, creating and updating
+   * inductions through the same validators the routes use — and the gateway
+   * refuses streaming with tools, so every turn is a whole, inspected
+   * answer. Every tool call is a separate gateway generation and is audited
+   * as one. Assigning is deliberately NOT a tool: putting learning in front
+   * of a named person is the Owner's decision, made on the page.
+   */
+  induction_assistant: {
+    classification: classification.INTERNAL,
+    allowedClassifications: [classification.PUBLIC, classification.INTERNAL],
+    outputTypes: [outputTypes.ASSISTANT_RESPONSE],
+    defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
+    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
+    allowedModels: ['clinical_standard', 'assistant_fast', 'mock'],
+    defaultModel: 'clinical_standard',
+    region: 'australia',
+    mayReceiveClinicalData: false,
+    auditCategory: 'assistant',
+    guardrailInputScope: 'current_user_message',
+  },
+
+  /**
    * Completed onboarding forms -> a structured transcription of what they say.
    *
    * Declared INTERNAL, not clinical, and that is the accurate call: a returned

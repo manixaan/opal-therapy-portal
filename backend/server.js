@@ -544,6 +544,10 @@ app.use('/', require('./walkthrough-routes'));
 // Owner-controlled learning: workflow library, versioned assignments,
 // per-employee progress (owner admin surface + employee My Learning)
 app.use('/', require('./learning-routes'));
+// The Owner's induction assistant: chat with tools that build inductions
+// and walkthroughs through the learning validators (backend/ai policy:
+// induction_assistant). Mounted after the learning routes it extends.
+app.use('/', require('./induction-assistant-routes'));
 
 // ── Onboarding Packages ───────────────────────────────────────────────────
 // The employee router is mounted FIRST because it owns the PUBLIC

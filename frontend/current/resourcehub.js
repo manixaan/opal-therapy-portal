@@ -5740,7 +5740,11 @@
         // offers the import of the practice's existing inductions as one of
         // the templates — several buttons up here was several decisions
         // before starting.
-        '<button type="button" class="rh2-btn rh2-btn-primary rh2-asl-new" onclick="RH2.laCreate()">+ New induction</button>' +
+        '<span class="rh2-asl-head-acts">' +
+          '<button type="button" class="rh2-btn rh2-asl-ai" onclick="RH2.aslAssistant()">' +
+            '<span class="rh2-asl-ai-spark" aria-hidden="true">&#10022;</span> Assistant</button>' +
+          '<button type="button" class="rh2-btn rh2-btn-primary rh2-asl-new" onclick="RH2.laCreate()">+ New induction</button>' +
+        '</span>' +
       '</div>';
 
     if (la.loading && !la.workflows) {
@@ -5905,6 +5909,13 @@
     S.asl.menu = S.asl.menu === id ? null : id;
     render();
   }
+  /** The assistant dock lives in induction-assistant.js; this is the way in. */
+  function aslAssistant() {
+    if (global.OpalInductionAssistant && global.OpalInductionAssistant.toggle) global.OpalInductionAssistant.toggle();
+  }
+  /** Which induction the builder has open, for the assistant's "this one". */
+  function laEditorId() { return S.la.editor ? S.la.editor.id : null; }
+
   function aslMenuClose() {
     if (!S.asl.menu) return;
     S.asl.menu = null;
@@ -7317,6 +7328,8 @@
           ' placeholder="Induction title" aria-label="Induction title" oninput="RH2.laMeta(\'title\',this.value)">' +
         '<span class="rh2-quiet rh2-learn-ed-save" id="la-cb-savestate" role="status" aria-live="polite">' + esc(laCbSaveState()) + '</span>' +
         '<span class="rh2-cb-bar-acts">' +
+          '<button type="button" class="rh2-btn rh2-asl-ai" onclick="RH2.aslAssistant()">' +
+            '<span class="rh2-asl-ai-spark" aria-hidden="true">&#10022;</span> Assistant</button>' +
           '<button type="button" class="rh2-btn" onclick="RH2.laCbPreview()">Preview</button>' +
         '</span>' +
       '</div>' +
@@ -8243,6 +8256,8 @@
     aslFilterToggle: aslFilterToggle,
     aslMenu: aslMenu,
     aslMenuClose: aslMenuClose,
+    aslAssistant: aslAssistant,
+    _laEditorId: laEditorId,
     laViewAssignments: laViewAssignments,
     laAf: laAf,
     laAfQ: laAfQ,

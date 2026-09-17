@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r46'], ['resourcehub.css', 'r25'],
+      ['resourcehub.js', 'r47'], ['resourcehub.css', 'r26'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -717,6 +717,7 @@ describe('changed assets are cache-busted', () => {
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 2],
+      ['induction-assistant.js', 1], ['induction-assistant.css', 1],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.

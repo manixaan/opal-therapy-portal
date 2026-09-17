@@ -18,6 +18,7 @@ if (!poolDbName || !poolDbName.endsWith('_test')) {
 }
 
 const ALL_TABLES = [
+  'induction_assistant_messages', 'induction_assistant_conversations',
   'opa_messages', 'opa_conversations', 'opa_feature_knowledge',
   // Splose draft-and-publish (migration 058) — both reference events/users.
   'splose_change_alerts', 'splose_sync_queue',
