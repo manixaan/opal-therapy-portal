@@ -156,6 +156,45 @@ test('tools are organisation-scoped and threads are user-owned', async () => {
   expect(stolen.status).toBe(404);
 });
 
+test('creates, reads and updates a walkthrough through the same validators the workshop uses', async () => {
+  const { agent } = await agentFor('owner', org.id);
+  const STEPS = [
+    { type: 'intro', title: 'Welcome', body: 'Hi.' },
+    { type: 'callout', title: 'The rule', body: 'Splose is the source of truth.' },
+    { type: 'complete', title: 'Done', body: 'That is it.' },
+  ];
+  script([
+    { tool: 'create_walkthrough', input: { title: 'Splose basics', roles: ['therapist'], minutes: 4, steps: STEPS } },
+    { text: 'Created.' },
+  ]);
+  const made = await agent.post('/api/learning/assistant/chat').send({ message: 'Make a Splose walkthrough' });
+  expect(made.body.activity[0].tool).toBe('create_walkthrough');
+  const wkId = made.body.activity[0].id;
+
+  // The model reads first, then sends the COMPLETE step list back with the
+  // keys it was given, plus a new step — the shape the prompt asks for.
+  let read = null;
+  let n = 0;
+  routes._setGenerateForTests(async (opts) => {
+    const last = opts.messages[opts.messages.length - 1];
+    if (Array.isArray(last.content) && last.content[0].type === 'tool_result' && !read) read = JSON.parse(last.content[0].content);
+    n += 1;
+    if (n === 1) return { text: null, toolUse: { type: 'tool_use', id: 't1', name: 'get_walkthrough', input: { id: wkId } }, metadata: {} };
+    if (n === 2) {
+      const kept = read.steps.map((st) => ({ key: st.key, type: st.type, title: st.title, body: st.body }));
+      const steps = [kept[0], kept[1], { type: 'warning', title: 'Careful', body: 'Never delete.' }, kept[2]];
+      return { text: null, toolUse: { type: 'tool_use', id: 't2', name: 'update_walkthrough', input: { id: wkId, steps } }, metadata: {} };
+    }
+    return { text: 'Added a warning step.', toolUse: null, metadata: {} };
+  });
+  const upd = await agent.post('/api/learning/assistant/chat').send({ message: 'Add a warning', walkthroughId: wkId });
+  expect(read.steps).toHaveLength(3);
+  expect(upd.body.activity[0].tool).toBe('update_walkthrough');
+  const { rows } = await db.pool.query('SELECT draft_steps, status FROM walkthrough_modules WHERE id = $1', [wkId]);
+  expect(rows[0].draft_steps.map((s) => s.type)).toEqual(['intro', 'callout', 'warning', 'complete']);
+  expect(rows[0].draft_steps[0].key).toBe(read.steps[0].key);
+});
+
 test('a non-owner never reaches the model', async () => {
   const { agent } = await agentFor('admin', org.id);
   let called = false;

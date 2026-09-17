@@ -1546,7 +1546,7 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-course-archived .rh2-course-thumb { opacity: .55; }
 .rh2-course-menu-open { z-index: 20; }
 .rh2-course-thumb {
-  position: relative; height: 140px; border-radius: var(--radius-md) var(--radius-md) 0 0;
+  position: relative; height: 140px; border-radius: 0;
   background: #2b3f3d; display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .rh2-course-glyph { width: 108px; height: 72px; fill: none; stroke: rgba(255, 255, 255, .42); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -1572,11 +1572,34 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 12px 10px 16px; border-top: 1px solid var(--border-soft);
 }
-.rh2-course-status { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.rh2-course-status-published { color: var(--ok); }
-.rh2-course-status-changed { color: var(--info); }
-.rh2-course-status-draft, .rh2-course-status-empty { color: var(--warn); }
-.rh2-course-status-archived { color: var(--muted); }
+/* State is colour AND word, on the thumbnail ribbon, the footer pill and the
+   card's top edge: a draft is amber, published is green, draft changes on a
+   published one is blue, archived is grey. */
+.rh2-course-status { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; }
+.rh2-course-ribbon {
+  position: absolute; top: 10px; right: 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: 999px; color: #fff;
+}
+.rh2-course { border-top: 4px solid var(--border); }
+.rh2-course-st-published { border-top-color: var(--ok); }
+.rh2-course-st-published .rh2-course-ribbon { background: var(--ok); }
+.rh2-course-status-published { background: var(--ok-soft); color: var(--ok); }
+.rh2-course-st-draft, .rh2-course-st-empty { border-top-color: var(--warn); }
+.rh2-course-st-draft .rh2-course-thumb, .rh2-course-st-empty .rh2-course-thumb { background: #4d4030; }
+.rh2-course-st-draft .rh2-course-ribbon, .rh2-course-st-empty .rh2-course-ribbon { background: var(--warn); }
+.rh2-course-status-draft, .rh2-course-status-empty { background: var(--warn-soft); color: var(--warn); }
+.rh2-course-st-changed { border-top-color: var(--info); }
+.rh2-course-st-changed .rh2-course-ribbon { background: var(--info); }
+.rh2-course-status-changed { background: var(--info-soft); color: var(--info); }
+.rh2-course-st-archived { border-top-color: var(--muted); }
+.rh2-course-st-archived .rh2-course-ribbon { background: var(--muted); }
+.rh2-course-status-archived { background: var(--border-soft); color: var(--muted); }
+.rh2-course-list .rh2-course-ribbon { display: none; }
+.rh2-course-list { border-top-width: 1px; border-left: 4px solid var(--border); }
+.rh2-course-list.rh2-course-st-published { border-left-color: var(--ok); }
+.rh2-course-list.rh2-course-st-draft, .rh2-course-list.rh2-course-st-empty { border-left-color: var(--warn); }
+.rh2-course-list.rh2-course-st-changed { border-left-color: var(--info); }
+.rh2-course-list.rh2-course-st-archived { border-left-color: var(--muted); }
 .rh2-course-acts { display: inline-flex; align-items: center; gap: 4px; }
 .rh2-course-assign { min-height: 32px; padding: 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
 .rh2-course-menuwrap { position: relative; display: inline-flex; }

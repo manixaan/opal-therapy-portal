@@ -191,7 +191,7 @@ describe('the tool loop', () => {
     expect(calls).toHaveLength(1);
     // The model was handed the tools and the feature, never a raw model id.
     expect(calls[0].feature).toBe('induction_assistant');
-    expect(calls[0].tools.map((t) => t.name)).toEqual(expect.arrayContaining(['create_induction', 'get_induction', 'list_anchors']));
+    expect(calls[0].tools.map((t) => t.name)).toEqual(expect.arrayContaining(['create_induction', 'get_induction', 'list_anchors', 'get_walkthrough', 'update_walkthrough']));
     expect(calls[0].modelKey).toBeUndefined();
     // Audit: counts only.
     const audit = db.logAuditEvent.mock.calls.find((c) => c[0].action === 'learning.assistant_chat')[0];

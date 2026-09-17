@@ -12,8 +12,10 @@ body.ia-open { padding-right: var(--ia-dock-w); }
   box-shadow: -2px 0 12px rgba(0, 0, 0, .06); font-size: 13.5px; color: var(--ink, #241f1a);
 }
 body.ia-open .ia-dock { display: flex; }
-/* The two docks never share the screen: the assistant yields to the workshop. */
-body.wk-open .ia-dock { display: none; }
+/* Beside the workshop, not under it: with both open the assistant sits to
+   the workshop dock's left and the portal is inset by both. */
+body.wk-open.ia-open .ia-dock { right: var(--wk-dock-w, 460px); }
+body.wk-open.ia-open { padding-right: calc(var(--wk-dock-w, 460px) + var(--ia-dock-w)); }
 
 .ia-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border, #e9e3d9); }
 .ia-title { font-size: 16px; font-weight: 700; }

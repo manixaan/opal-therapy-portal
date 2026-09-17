@@ -557,10 +557,11 @@
     // With the workshop dock open, the stage is the portal beside it: the
     // shade stops at the dock and the card centres in what is left, so the
     // Owner reads the pop-up and its fields side by side.
-    var dock = (doc.body.classList.contains('wk-open') && !doc.body.classList.contains('wk-hidden'))
-      ? doc.getElementById('wk-dock') : null;
     var vw = global.innerWidth, vh = global.innerHeight;
-    if (dock) vw = Math.max(320, Math.min(vw, dock.getBoundingClientRect().left));
+    var docks = [];
+    if (doc.body.classList.contains('wk-open') && !doc.body.classList.contains('wk-hidden')) docks.push(doc.getElementById('wk-dock'));
+    if (doc.body.classList.contains('ia-open')) docks.push(doc.getElementById('ia-dock'));
+    docks.forEach(function (d) { if (d) vw = Math.max(320, Math.min(vw, d.getBoundingClientRect().left)); });
     var pad = step && step.pad != null ? step.pad : 6;
 
     var hole = null;

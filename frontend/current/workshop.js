@@ -395,6 +395,9 @@
         (W.dirty ? '' : ' disabled') + '>Save</button>' +
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.previewAsLearner()">As a new starter sees it</button>' +
       '<button type="button" class="wk-btn wk-btn-quiet" onclick="OpalWorkshop.startRecording()">Record steps</button>' +
+      (global.OpalInductionAssistant
+        ? '<button type="button" class="wk-btn wk-btn-quiet wk-btn-ai" onclick="OpalInductionAssistant.toggle()"><span class="wk-ai-spark" aria-hidden="true">&#10022;</span> Assistant</button>'
+        : '') +
     '</div>';
 
     // The steps, as a curriculum rail: a grip to drag, the block's icon, its
@@ -1290,6 +1293,9 @@
     createNew: createNew,
     cancelNew: cancelNew,
     edit: edit,
+    /** For the assistant: which walkthrough is open, and whether it has unsaved edits. */
+    currentId: function () { return W.wt ? W.wt.id : null; },
+    isDirty: function () { return !!W.dirty; },
     closeDock: closeDock,
     duplicate: duplicate,
     archive: archive,

@@ -115,7 +115,8 @@ function buildSystemPrompt(req) {
     '2. A WALKTHROUGH is a guided tour of the real portal screens: steps of type intro, callout (a note), page (a short read), highlight (spotlight a control — needs target from list_anchors), action (spotlight and wait for a click — needs target), warning, screenshot, quiz, checkpoint (a question they cannot pass until right), acknowledgement, complete (exactly one, last). A task lesson can run a walkthrough by its key.',
     '',
     'HOW YOU WORK',
-    '- Call one tool at a time and wait for its result. Read before you write: list_inductions or get_induction before changing anything that exists.',
+    '- Call one tool at a time and wait for its result. Read before you write: list_inductions / get_induction, or list_walkthroughs / get_walkthrough, before changing anything that exists.',
+    '- To change a walkthrough, send update_walkthrough the COMPLETE step list you want it to have (keep existing keys to preserve steps). Spotlight targets must come from list_anchors.',
     '- When the request is clear enough to act on, act — create the induction, then summarise what you made. When it is vague (no topic, no audience), ask one short question first.',
     '- Never overwrite an existing induction\'s content without saying what you will replace; prefer adding chapters.',
     '- Never invent practice policies, legal obligations or clinical procedures. Where a fact is needed that you do not have (a policy name, a manager, a phone number), leave a clearly marked placeholder like [Practice to confirm: …] and say so.',
@@ -235,6 +236,27 @@ const TOOLS = [
     name: 'list_anchors',
     description: 'List the named portal controls a walkthrough step can spotlight (highlight/action targets), grouped by screen.',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_walkthrough',
+    description: 'Read one walkthrough in full: its title, description, minutes, roles and every step with its key, type, body and target.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, key: { type: 'string' } } },
+  },
+  {
+    name: 'update_walkthrough',
+    description: 'Replace a walkthrough\'s title, description, minutes, roles and/or full step list (a draft — the Owner publishes from the workshop). Omit a field to leave it unchanged. Send the COMPLETE step list; keep existing keys to preserve steps.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        minutes: { type: 'integer' },
+        roles: { type: 'array', items: { type: 'string', enum: ['owner', 'admin', 'therapist', 'read_only'] } },
+        steps: { type: 'array', items: { type: 'object' } },
+      },
+      required: ['id'],
+    },
   },
   {
     name: 'create_walkthrough',
@@ -434,6 +456,47 @@ async function runTool(req, name, input, activity) {
     return { ok: true, result: { anchors_by_screen: groups } };
   }
 
+  if (name === 'get_walkthrough') {
+    var where = isUuid(input.id) ? ['id = $1', input.id] : (str(input.key, 80) ? ['key = $1', str(input.key, 80)] : null);
+    if (!where) return { ok: false, result: 'Give the walkthrough id or key (see list_walkthroughs).' };
+    const { rows } = await pool.query(
+      `SELECT * FROM walkthrough_modules WHERE ${where[0]} AND organisation_id IS NOT DISTINCT FROM $2`, [where[1], org]);
+    if (!rows[0]) return { ok: false, result: 'No walkthrough matches.' };
+    const m = rows[0];
+    return { ok: true, result: { id: m.id, key: m.key, title: m.title, description: m.description || '', minutes: m.minutes, roles: m.roles || [], status: m.status, published_version: Number(m.current_version) || 0, steps: Array.isArray(m.draft_steps) ? m.draft_steps : [] } };
+  }
+
+  if (name === 'update_walkthrough') {
+    if (!isUuid(input.id)) return { ok: false, result: 'That id is not a walkthrough id.' };
+    const { rows: found } = await pool.query(
+      'SELECT * FROM walkthrough_modules WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2', [input.id, org]);
+    const m = found[0];
+    if (!m) return { ok: false, result: 'No walkthrough has that id.' };
+    if (m.status === 'archived') return { ok: false, result: 'That walkthrough is archived; the Owner must unarchive it first.' };
+    const meta = wc.normaliseModuleMeta({
+      key: m.key,
+      title: input.title !== undefined ? input.title : m.title,
+      description: input.description !== undefined ? input.description : m.description,
+      minutes: input.minutes !== undefined ? input.minutes : m.minutes,
+      roles: input.roles !== undefined ? input.roles : m.roles,
+      group: m.group_key, thumb: m.thumb, start: m.start_context,
+    });
+    if (!meta.ok) return { ok: false, result: 'The walkthrough was refused: ' + meta.error };
+    const steps = wc.normaliseSteps(input.steps !== undefined ? input.steps : m.draft_steps, meta.meta.roles);
+    if (!steps.ok) return { ok: false, result: 'The steps were refused: ' + steps.error + '. Fix them and try again.' };
+    const { rows } = await pool.query(
+      `UPDATE walkthrough_modules SET title = $2, description = $3, minutes = $4, roles = $5::jsonb, draft_steps = $6::jsonb, updated_at = NOW()
+        WHERE id = $1 RETURNING *`,
+      [m.id, meta.meta.title, meta.meta.description, meta.meta.minutes, JSON.stringify(meta.meta.roles), JSON.stringify(steps.steps)]);
+    catalogue.invalidate(org);
+    await db.logAuditEvent({
+      action: 'walkthrough.updated', targetType: 'walkthrough', targetId: String(m.id),
+      actorUserId: req.user.id, organisationId: org, metadata: { key: m.key, via: 'induction_assistant' }, ipAddress: req.ip,
+    }).catch(() => {});
+    activity.push({ tool: name, id: m.id, key: m.key, title: rows[0].title, summary: 'Updated walkthrough “' + rows[0].title + '”' });
+    return { ok: true, result: { id: m.id, key: m.key, title: rows[0].title, steps: steps.steps.length } };
+  }
+
   if (name === 'create_walkthrough') {
     const meta = wc.normaliseModuleMeta(input);
     if (!meta.ok) return { ok: false, result: 'The walkthrough was refused: ' + meta.error };
@@ -589,6 +652,13 @@ router.post('/api/learning/assistant/chat', rateLimit, safe(async (req, res) => 
       'SELECT id, title FROM learning_workflows WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2',
       [body.workflowId, orgOf(req)]);
     if (rows[0]) focus = `\n\nThe Owner currently has the induction “${rows[0].title}” (id ${rows[0].id}) open in the builder. "This induction" means that one.`;
+  }
+
+  if (isUuid(body.walkthroughId)) {
+    const { rows } = await pool.query(
+      'SELECT id, title FROM walkthrough_modules WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2',
+      [body.walkthroughId, orgOf(req)]);
+    if (rows[0]) focus += `\n\nThe Owner currently has the walkthrough “${rows[0].title}” (id ${rows[0].id}) open in the workshop. "This walkthrough" means that one.`;
   }
 
   const system = buildSystemPrompt(req) + focus;

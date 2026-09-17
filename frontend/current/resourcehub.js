@@ -5522,11 +5522,12 @@
     var openFn = !archived ? 'RH2.laEdit(\'' + id + '\')' : 'RH2.laPreview(\'' + id + '\')';
     var openAttr = ' onclick="' + openFn + '" title="' + (!archived ? 'Open in the builder' : 'Preview') + '"';
 
-    return '<article class="rh2-course' + (list ? ' rh2-course-list' : '') +
+    return '<article class="rh2-course rh2-course-st-' + st.key + (list ? ' rh2-course-list' : '') +
       (archived ? ' rh2-course-archived' : '') + (selOn ? ' rh2-course-sel' : '') +
       (menuOpen ? ' rh2-course-menu-open' : '') + '">' +
       '<div class="rh2-course-thumb"' + openAttr + '>' +
         aslThumbSvg() +
+        '<span class="rh2-course-ribbon">' + st.label + '</span>' +
         (selectable
           ? '<label class="rh2-course-pick" onclick="event.stopPropagation()">' +
             '<input type="checkbox" class="rh2-learn-selbox" ' + (selOn ? 'checked ' : '') +

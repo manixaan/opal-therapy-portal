@@ -629,7 +629,7 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r49'], ['resourcehub.css', 'r28'],
+      ['resourcehub.js', 'r50'], ['resourcehub.css', 'r29'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -652,7 +652,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 7], ['induction.css', 3],
+      ['induction.js', 8], ['induction.css', 3],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
@@ -663,7 +663,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 10], ['workshop.css', 6],
+      ['workshop.js', 11], ['workshop.css', 7],
       // 1: themed confirm/alert/prompt dialogs — every native browser dialog
       // in the portal goes through dialog.js so it reads as the portal.
       // dialog.css 2: the confirm/alert layer moved above the Splose sync
@@ -717,7 +717,7 @@ describe('changed assets are cache-busted', () => {
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 2],
-      ['induction-assistant.js', 2], ['induction-assistant.css', 2],
+      ['induction-assistant.js', 3], ['induction-assistant.css', 2],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.

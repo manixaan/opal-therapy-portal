@@ -98,6 +98,11 @@
 
   function isOwner() { return String((global.APP_USER || {}).role || '') === 'owner'; }
 
+  /** The walkthrough open in the workshop, if any. */
+  function openWalkthroughId() {
+    try { return (global.OpalWorkshop && global.OpalWorkshop.currentId && global.OpalWorkshop.currentId()) || null; } catch (e) { return null; }
+  }
+
   /** The induction open in the builder, if the hub exposes one. */
   function openWorkflowId() {
     try {
@@ -160,7 +165,7 @@
           var open = '';
           if ((a.tool === 'create_induction' || a.tool === 'update_induction') && a.id) {
             open = ' <button type="button" class="ia-link" onclick="OpalInductionAssistant.openInduction(\'' + esc(a.id) + '\')">Open in the builder &rarr;</button>';
-          } else if (a.tool === 'create_walkthrough' && a.id) {
+          } else if ((a.tool === 'create_walkthrough' || a.tool === 'update_walkthrough') && a.id) {
             open = ' <button type="button" class="ia-link" onclick="OpalInductionAssistant.openWalkthrough(\'' + esc(a.id) + '\')">Open in the workshop &rarr;</button>';
           }
           return '<li><span class="ia-act-dot" aria-hidden="true"></span>' + esc(a.summary || a.tool) + open + '</li>';
@@ -260,15 +265,20 @@
     IA.lastUserText = msg;
     IA.busy = true;
     render();
+    // The assistant creates things partway through its work, and its reply
+    // can take half a minute. Refresh the library every few seconds while it
+    // is busy so a new tile appears when it is made, not when the reply lands.
+    startPolling();
 
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     IA.abort = ctrl;
     api('/api/learning/assistant/chat', {
       method: 'POST',
       signal: ctrl ? ctrl.signal : undefined,
-      body: { conversationId: IA.conversationId, message: msg, workflowId: openWorkflowId() },
+      body: { conversationId: IA.conversationId, message: msg, workflowId: openWorkflowId(), walkthroughId: openWalkthroughId() },
     }).then(function (j) {
       IA.busy = false; IA.abort = null;
+      stopPolling();
       if (j._status === 429) {
         IA.messages.push({ role: 'assistant', text: j.answer || 'Please wait a moment before sending more messages.', error: true });
       } else if (j.answer) {
@@ -281,10 +291,23 @@
       render();
     }).catch(function (err) {
       IA.busy = false; IA.abort = null;
+      stopPolling();
       IA.messages.push({ role: 'assistant', text: err && err.name === 'AbortError' ? 'Stopped.' : 'I could not get an answer just now.', retry: !(err && err.name === 'AbortError'), error: true });
       render();
     });
   }
+
+  var pollTimer = null;
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(function () {
+      var rh = global.RH2;
+      // Only the catalogue: a reload under an open builder would repaint the
+      // pane the Owner may be typing in.
+      if (rh && rh.aslReload && !openWorkflowId() && !openWalkthroughId()) rh.aslReload();
+    }, 4000);
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
   function retry() {
     if (!IA.lastUserText || IA.busy) return;
@@ -303,8 +326,19 @@
     render();
   }
 
-  /** The library and the open builder are stale once the assistant acted. */
+  /** The library, the open builder and the open workshop are stale once the assistant acted. */
   function afterActivity(activity) {
+    var wk = global.OpalWorkshop;
+    var wkId = openWalkthroughId();
+    if (wk && wkId && activity.some(function (a) { return a.id === wkId; })) {
+      // Reload the workshop's draft — unless the Owner has unsaved edits there,
+      // which must never be thrown away under them.
+      if (wk.isDirty && wk.isDirty()) {
+        IA.messages.push({ role: 'assistant', text: 'I updated the walkthrough you have open, but you have unsaved changes in the workshop. Save or close it, then reopen to see mine.', error: true });
+      } else if (wk.edit) {
+        wk.edit(wkId);
+      }
+    }
     var rh = global.RH2;
     if (!rh) return;
     var openId = openWorkflowId();

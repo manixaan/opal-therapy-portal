@@ -326,6 +326,8 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 .wk-field textarea { font-size: 14px; line-height: 1.5; }
 .wk-field input[type="text"] { font-size: 14px; }
 
+.wk-ai-spark { color: var(--accent, #0f7c6c); }
+
 /* ── Rich text for "what it says" ────────────────────────────────────────── */
 .wk-richwrap { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--card, #fff); overflow: hidden; }
 .wk-richwrap:focus-within { border-color: var(--accent, #2f6f4f); box-shadow: 0 0 0 3px rgba(15, 124, 108, .15); }
