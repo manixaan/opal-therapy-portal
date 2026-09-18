@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
 <!-- Day / night theme. theme.js is deliberately NOT deferred: it stamps
      data-theme on <html> before first paint so night mode never flashes white. -->
-<script src="/theme.js?v=1"></script>
+<script src="/theme.js?v=2"></script>
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
@@ -1235,6 +1235,12 @@ window.opIcon = function (name, size) {
     cursor: pointer; font-family: inherit;
   }
   .hdr-account-menu button:hover { background: var(--accent-soft); }
+  /* Appearance: Auto / Day / Night — theme.js marks the active one */
+  .hdr-theme-row { padding: 8px 10px 9px; margin: 4px 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .hdr-theme-label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .hdr-theme-seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--panel-sunk); }
+  .hdr-account-menu .hdr-theme-seg button { flex: 1; text-align: center; padding: 5px 0; font-size: 12px; font-weight: 600; color: var(--ink-soft); border-radius: 6px; }
+  .hdr-account-menu .hdr-theme-seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow-sm); }
 
   /* Role-nav dropdown (More / Travel) — holds the real tab buttons */
   .nav-more-wrap { position: relative; display: flex; align-items: stretch; }
@@ -4064,6 +4070,14 @@ window.opIcon = function (name, size) {
         <button role="menuitem" id="acct-settings-item" style="display:none;" onclick="toggleAccountMenu();switchTab('settings')">Settings</button>
         <button role="menuitem" onclick="toggleAccountMenu();window.OpalSupport.openReport()">Report an issue</button>
         <button role="menuitem" onclick="toggleAccountMenu();window.OpalSupport.openMyTickets()">My tickets</button>
+        <div class="hdr-theme-row" role="group" aria-label="Appearance">
+          <span class="hdr-theme-label">Appearance</span>
+          <div class="hdr-theme-seg">
+            <button type="button" data-theme-set="auto" onclick="window.OpalTheme.set('auto')">Auto</button>
+            <button type="button" data-theme-set="light" onclick="window.OpalTheme.set('light')">Day</button>
+            <button type="button" data-theme-set="dark" onclick="window.OpalTheme.set('dark')">Night</button>
+          </div>
+        </div>
         <button role="menuitem" onclick="window.signOut()">Sign out</button>
       </div>
     </span>
@@ -6129,6 +6143,19 @@ window.opIcon = function (name, size) {
                 <option value="day">Day</option>
                 <option value="week" selected>Week</option>
                 <option value="month">Month</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-label">
+              <strong>Appearance</strong>
+              <span>Day or night mode. Auto switches to night from 6pm to 6am. Saved on this device straight away.</span>
+            </div>
+            <div class="settings-row-control">
+              <select class="settings-select" data-theme-select aria-label="Appearance" onchange="window.OpalTheme.set(this.value)">
+                <option value="auto">Auto (time of day)</option>
+                <option value="light">Day</option>
+                <option value="dark">Night</option>
               </select>
             </div>
           </div>
