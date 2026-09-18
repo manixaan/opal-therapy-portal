@@ -22863,7 +22863,7 @@ async function loadSplosePractitionerLink() {
     var linked = d.linked;
     var opts = d.options || [];
     sel.innerHTML = '<option value="">Choose your name…</option>' + opts.map(function (o) {
-      var why = o.claimedBy ? ' — linked to ' + o.claimedBy : (!o.selectable ? ' — ask the owner' : '');
+      var why = o.claimedBy ? ' — linked to ' + o.claimedBy : (!o.selectable ? ' — not your sign-in email' : ' — your email');
       return '<option value="' + escapeHtml(o.id) + '"' + (o.selectable ? '' : ' disabled') + (linked && linked.id === o.id ? ' selected' : '') + '>' + escapeHtml(o.fullName) + escapeHtml(why) + '</option>';
     }).join('');
     if (linked) {
@@ -22871,9 +22871,9 @@ async function loadSplosePractitionerLink() {
       if (unlinkBtn) unlinkBtn.style.display = '';
       if (linkBtn) linkBtn.textContent = 'Change';
     } else {
-      detail.textContent = d.canChooseAny
-        ? 'Not linked — choose who you are in Splose. Nothing is booked or read as you until then.'
-        : 'Not linked — pick the entry with your email. If none is enabled, ask the practice owner.';
+      detail.textContent = d.matchCount
+        ? 'Not linked — only the Splose practitioner whose email is ' + (d.email || 'your sign-in email') + ' can be linked to this account.'
+        : 'Not linked — no Splose practitioner uses your sign-in email (' + (d.email || '') + '). Ask the practice owner to match the email in Splose, or to link you from Team Setup.';
       if (unlinkBtn) unlinkBtn.style.display = 'none';
       if (linkBtn) linkBtn.textContent = 'Link';
     }

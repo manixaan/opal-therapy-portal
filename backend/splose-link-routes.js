@@ -13,11 +13,14 @@
  *
  * Rules, fail-closed:
  *   • read_only accounts cannot touch practice-management identity at all;
- *   • a therapist may link ONLY the practitioner whose Splose email matches
- *     their portal email (case-insensitive) — anything else is the owner's
- *     call via PUT /api/therapists/:id;
- *   • owner/admin may link any practitioner, but never one already linked
- *     to another account in the practice — one person, one identity;
+ *   • EVERY role — owner and admin included — may self-link ONLY the
+ *     practitioner whose Splose email matches their own portal sign-in
+ *     (case-insensitive). Nobody can link someone else's calendar to their
+ *     own account by picking the wrong name (18 Sep 2026, Antony's rule);
+ *   • never one already linked to another active account — one person,
+ *     one identity. Moving a link belongs to the owner in Team Setup
+ *     (PUT /api/therapists/:id), which is an explicit act on another
+ *     person's profile, not a self-service pick;
  *   • unlinking is explicit (DELETE) — the upsert helper's COALESCE never
  *     clears the column, and nothing else may.
  *
@@ -48,7 +51,6 @@ const safe = (fn) => (req, res) => fn(req, res).catch((err) => {
 });
 
 const lower = (s) => String(s || '').trim().toLowerCase();
-const canChooseAny = (user) => user.role === 'owner' || user.role === 'admin';
 
 /** Practitioner ids already linked to OTHER accounts in this practice. */
 async function claimedByOthers(req) {
@@ -73,7 +75,6 @@ router.get('/api/splose/my-practitioner', safe(async (req, res) => {
   const [practitioners, claimed] = await Promise.all([sploseApi.getPractitioners(), claimedByOthers(req)]);
   const own = req.user.tp_splose_practitioner_id ? String(req.user.tp_splose_practitioner_id) : null;
   const me = lower(req.user.email);
-  const any = canChooseAny(req.user);
   const options = (practitioners || []).map((p) => {
     const id = String(p.id);
     const emailMatch = !!p.email && lower(p.email) === me;
@@ -83,11 +84,13 @@ router.get('/api/splose/my-practitioner', safe(async (req, res) => {
       fullName: p.fullName || `${p.firstname || ''} ${p.lastname || ''}`.trim() || id,
       emailMatch,
       claimedBy,
-      selectable: !claimedBy && (any || emailMatch),
+      selectable: !claimedBy && emailMatch,
     };
   });
   const linked = own ? (options.find((o) => o.id === own) || { id: own, fullName: 'Practitioner ' + own }) : null;
-  res.json({ linked, options, canChooseAny: any });
+  // `matchCount` tells the UI whether there is anything this person CAN
+  // link; zero means the owner must fix the email in Splose or link them.
+  res.json({ linked, options, canChooseAny: false, matchCount: options.filter((o) => o.emailMatch).length, email: me });
 }));
 
 /** PUT { practitionerId } — link this account to one Splose practitioner. */
@@ -99,7 +102,7 @@ router.put('/api/splose/my-practitioner', safe(async (req, res) => {
   const p = (practitioners || []).find((x) => String(x.id) === id);
   if (!p) return res.status(404).json({ error: 'That practitioner is not in Splose', code: 'practitioner_not_found' });
 
-  if (!canChooseAny(req.user) && lower(p.email) !== lower(req.user.email)) {
+  if (lower(p.email) !== lower(req.user.email)) {
     return res.status(403).json({
       error: 'You can only link the Splose practitioner whose email matches your portal sign-in. Ask the practice owner to link a different one.',
       code: 'practitioner_email_mismatch',

@@ -80,16 +80,25 @@ describe('GET /api/splose/my-practitioner', () => {
     expect(r.body.options.map((o) => [o.id, o.selectable])).toEqual([['88167', true], ['88200', false], ['88300', false]]);
   });
 
-  test('an owner may select anyone not already linked to another account', async () => {
+  test('an owner is held to the same rule: only the practitioner with their own email is selectable', async () => {
     db.pool.query.mockResolvedValue({ rows: [{ id: '88200', name: 'Paulita', display_name: null }] });
     const agent = await login(buildApp(), user({ role: 'owner', email: 'ann@opal.test', tp_splose_practitioner_id: '88300' }));
     const r = await agent.get('/api/splose/my-practitioner');
     expect(r.body.linked).toEqual(expect.objectContaining({ id: '88300', fullName: 'Ann Mathew' }));
-    expect(r.body.canChooseAny).toBe(true);
+    expect(r.body.canChooseAny).toBe(false);
+    expect(r.body.matchCount).toBe(1);
     const byId = Object.fromEntries(r.body.options.map((o) => [o.id, o]));
     expect(byId['88200'].selectable).toBe(false);
     expect(byId['88200'].claimedBy).toBe('Paulita');
-    expect(byId['88167'].selectable).toBe(true);
+    expect(byId['88167'].selectable).toBe(false);
+    expect(byId['88300'].selectable).toBe(true);
+  });
+
+  test('a person whose email matches nothing in Splose is told so (matchCount 0) and can select nothing', async () => {
+    const agent = await login(buildApp(), user({ email: 'nobody@opal.test' }));
+    const r = await agent.get('/api/splose/my-practitioner');
+    expect(r.body.matchCount).toBe(0);
+    expect(r.body.options.every((o) => o.selectable === false)).toBe(true);
   });
 
   test('read-only accounts are refused', async () => {
@@ -128,18 +137,21 @@ describe('PUT /api/splose/my-practitioner', () => {
     expect(db.upsertTherapistProfile).not.toHaveBeenCalled();
   });
 
-  test('an owner cannot take a practitioner already linked to another account', async () => {
-    db.pool.query.mockResolvedValue({ rows: [{ id: '88200', name: 'Paulita', display_name: null }] });
+  test('an owner cannot link someone else\'s practitioner either — even a free one', async () => {
     const agent = await login(buildApp(), user({ role: 'owner', email: 'ann@opal.test' }));
     const r = await agent.put('/api/splose/my-practitioner').send({ practitionerId: '88200' });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe('practitioner_already_linked');
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('practitioner_email_mismatch');
+    expect(db.upsertTherapistProfile).not.toHaveBeenCalled();
   });
 
-  test('an owner may link a free practitioner that is not their email', async () => {
+  test('an owner links their own matching practitioner; a matching one already taken by another account is 409', async () => {
     const agent = await login(buildApp(), user({ role: 'owner', email: 'ann@opal.test' }));
-    const r = await agent.put('/api/splose/my-practitioner').send({ practitionerId: '88200' });
-    expect(r.status).toBe(200);
+    expect((await agent.put('/api/splose/my-practitioner').send({ practitionerId: '88300' })).status).toBe(200);
+    db.pool.query.mockResolvedValue({ rows: [{ id: '88300', name: 'Someone', display_name: null }] });
+    const r = await agent.put('/api/splose/my-practitioner').send({ practitionerId: '88300' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('practitioner_already_linked');
   });
 
   test('an id Splose does not know is refused', async () => {
