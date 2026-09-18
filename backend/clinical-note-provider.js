@@ -54,7 +54,8 @@ const deid = require('./ai/deidentify');
  * is refused ('names_not_hidden'): the therapist writes that note by hand.
  */
 const TOKEN_INSTRUCTION = '\n\nPEOPLE ARE TOKENISED. The dictation refers to people by bracketed role tokens such as '
-  + '[CLIENT], [CLIENT_MOTHER], [THERAPIST] or [PERSON]. Reproduce every token EXACTLY as written, including the '
+  + '[CLIENT], [CLIENT_MOTHER], [THERAPIST] or [PERSON], and to contact details by tokens such as [EMAIL_1], '
+  + '[PHONE_1], [ADDRESS_1] or [NDIS_NUMBER_1]. Reproduce every token EXACTLY as written, including the '
   + 'square brackets, wherever that person is referred to. Never invent a token, never expand one into a name, '
   + 'never guess a name. Treat [CLIENT] as the participant the note is about.';
 
@@ -258,10 +259,11 @@ function restoreNames(sections, map) {
     if (!r.ok) throw new Error('names_not_hidden');
     return r.text;
   };
-  // A known full name in the clear in the MODEL's output means it was never
-  // hidden on the way in (or was reconstructed) — either way, refuse.
+  // A known full name — or a raw email, phone number, street address or
+  // NDIS number — in the MODEL's output means it was never hidden on the way
+  // in (or was reconstructed). Either way, refuse.
   const leak = [sections.identify, sections.sessionDetails, ...sections.plan, ...sections.warnings]
-    .some((t) => deid.containsKnownName(t, map));
+    .some((t) => deid.containsKnownName(t, map) || deid.containsStructuredIdentifier(t));
   if (leak) throw new Error('names_not_hidden');
   return {
     identify: one(sections.identify),

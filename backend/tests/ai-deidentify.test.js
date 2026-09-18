@@ -132,3 +132,65 @@ describe('reidentify — fail closed', () => {
     expect(describeToken('PERSON_2')).toBe('Person');
   });
 });
+
+describe('structured identifiers — email, phone, address, NDIS number', () => {
+  const { containsStructuredIdentifier, deidentifyStructured } = require('../ai/deidentify');
+  const map = buildIdentityMap([{ name: 'Aiden Blackwood-Tan', role: 'client' }, { name: 'Emily Rose', role: 'mother' }]);
+
+  test('each shape becomes a numbered token and comes back verbatim', () => {
+    const text = 'Aiden lives at Unit 4/12 Smith Street, Fremantle WA 6160. Mum emily.rose@example.com or 0412 345 678, also (08) 9321 1234. NDIS 431234567. Call 1300 123 456.';
+    const r = deidentify(text, map);
+    expect(r.text).toBe('[CLIENT] lives at [ADDRESS_1]. Mum [EMAIL_1] or [PHONE_1], also [PHONE_2]. NDIS [NDIS_NUMBER_1]. Call [PHONE_3].');
+    expect(r.candidates).toEqual([]);
+    expect(r.entries.map((e) => e.role)).toEqual(['client', 'email', 'address', 'ndis_number', 'phone', 'phone', 'phone']);
+    const back = reidentify(r.text, r.map);
+    expect(back.ok).toBe(true);
+    expect(back.text).toBe(text.replace('Aiden', 'Aiden Blackwood-Tan'));
+  });
+
+  test('clinical numbers are never mistaken for identifiers', () => {
+    const text = 'Aged 7, born 2019. Score 12/20, weight 24.5 kg, session cost $193.99 on 12/08/2026 at 10:30. Goal 3 of 4. Plan review in 90 days.';
+    const r = deidentify(text, map);
+    expect(r.text).toBe(text);
+    expect(containsStructuredIdentifier(text)).toBe(false);
+  });
+
+  test('the same value spoken twice shares one token', () => {
+    const r = deidentifyStructured('ring 0412 345 678 today and 0412345678 tomorrow');
+    expect(r.text).toBe('ring [PHONE_1] today and [PHONE_1] tomorrow');
+    expect(r.entries).toHaveLength(1);
+    expect(r.entries[0].count).toBe(2);
+  });
+
+  test('an email built from a known name is one opaque token, not a half-replaced name', () => {
+    const r = deidentify('contact emily.rose@example.com or Emily directly', map);
+    expect(r.text).toBe('contact [EMAIL_1] or [CLIENT_MOTHER] directly');
+  });
+
+  test('a token already in the text is never phonetically matched to a name', () => {
+    // "EMAIL" and "Emily" share a phonetic key; the token must stay opaque.
+    const r = deidentify('sent to [EMAIL_1] earlier', map);
+    expect(r.text).toBe('sent to [EMAIL_1] earlier');
+    expect(r.candidates).toEqual([]);
+  });
+
+  test('a lowercase dictated address with a state and postcode is caught', () => {
+    const r = deidentify('dropped him at 7b ocean drive scarborough wa 6019 after school', map);
+    expect(r.text).toBe('dropped him at [ADDRESS_1] after school');
+  });
+
+  test('the output-side check finds a raw identifier the model should never have', () => {
+    expect(containsStructuredIdentifier('Mother can be reached on 0412 345 678.')).toBe(true);
+    expect(containsStructuredIdentifier('Send to someone@example.org')).toBe(true);
+    expect(containsStructuredIdentifier('Lives at 12 Smith St')).toBe(true);
+    expect(containsStructuredIdentifier('Participant 431234567')).toBe(true);
+    expect(containsStructuredIdentifier('[PHONE_1] and [ADDRESS_1] were noted.')).toBe(false);
+  });
+
+  test('token labels read plainly on the phone', () => {
+    expect(describeToken('EMAIL_1')).toBe('Email address');
+    expect(describeToken('PHONE_2')).toBe('Phone number');
+    expect(describeToken('ADDRESS_1')).toBe('Address');
+    expect(describeToken('NDIS_NUMBER_1')).toBe('NDIS number');
+  });
+});

@@ -117,3 +117,34 @@ test('previewNames answers without any model call', async () => {
   expect(p.hidden).toEqual([{ token: 'CLIENT', label: 'Client', count: 1 }]);
   expect(p.candidates.map((c) => c.word)).toEqual(['Tobias', 'Kofi']);
 });
+
+test('a raw phone number or email in the model output refuses the draft', async () => {
+  mockProvider._setHandlerForTests(async () => ({
+    toolUse: { type: 'tool_use', name: 'case_note', input: {
+      identify: '[CLIENT] attended.', sessionDetails: 'Mother can be reached on 0412 345 678.', plan: ['Continue.'], warnings: [],
+    } },
+    text: '', requestId: 'req-leak', usage: { input_tokens: 1, output_tokens: 1 },
+  }));
+  await expect(provider.generateCaseNote(base())).rejects.toThrow('names_not_hidden');
+});
+
+test('contact details in the dictation travel as tokens and come back restored', async () => {
+  let seen = '';
+  mockProvider._setHandlerForTests(async (req) => {
+    seen = req.messages[0].content;
+    return {
+      toolUse: { type: 'tool_use', name: 'case_note', input: {
+        identify: '[CLIENT] attended.', sessionDetails: 'Mother ([EMAIL_1], [PHONE_1]) was present.', plan: ['Continue.'], warnings: [],
+      } },
+      text: '', requestId: 'req-ok', usage: { input_tokens: 1, output_tokens: 1 },
+    };
+  });
+  const res = await provider.generateCaseNote({
+    ...base(), transcript: 'Aiden attended. Mum (priya@example.com, 0412 345 678) was present.',
+  });
+  expect(seen).toContain('[EMAIL_1]');
+  expect(seen).toContain('[PHONE_1]');
+  expect(seen).not.toContain('priya@example.com');
+  expect(seen).not.toContain('0412');
+  expect(res.sessionDetails).toBe('Mother (priya@example.com, 0412 345 678) was present.');
+});

@@ -21,9 +21,18 @@
  *      to confirm on the phone. Confirmed ones become [PERSON_n]; dismissed
  *      ones are remembered so they are not asked again.
  *
+ *   3. STRUCTURED IDENTIFIERS — things with a reliable shape that need no
+ *      caller knowledge at all: email addresses, Australian phone numbers,
+ *      street addresses and NDIS numbers. Each becomes [EMAIL_n], [PHONE_n],
+ *      [ADDRESS_n] or [NDIS_NUMBER_n] and is restored afterwards exactly like
+ *      a name. This pass runs FIRST, so an email built from a person's name
+ *      is one opaque token rather than a half-replaced fragment.
+ *
  * reidentify() puts the names back and REFUSES the result if the model
  * emitted a token it was never given, or if any known name appears in the
- * clear — fail closed, never guess.
+ * clear — fail closed, never guess. containsStructuredIdentifier() is the
+ * matching output-side check: a raw email, phone, address or NDIS number in
+ * the model's answer can only mean it was never hidden on the way in.
  *
  * Pure: no I/O, no clock, no logging. Nothing here may log a name.
  */
@@ -144,10 +153,86 @@ function buildIdentityMap(people) {
 /** Split text into word / non-word runs, keeping everything. */
 function tokenise(text) {
   const out = [];
-  const re = /[A-Za-z][A-Za-z'’-]*|[^A-Za-z]+/g;
+  // A bracketed token already in the text (from the structured pass, or a
+  // confirmed earlier pass) is one opaque non-word run: it must never be
+  // matched as a name, offered as a candidate, or phonetically compared.
+  const re = /\[[A-Z][A-Z0-9_]*\]|[A-Za-z][A-Za-z'’-]*|[^A-Za-z[]+|\[/g;
   let m;
   while ((m = re.exec(text)) !== null) out.push({ text: m[0], word: /^[A-Za-z]/.test(m[0]) });
   return out;
+}
+
+// ── Structured identifiers ───────────────────────────────────────────────────
+
+/**
+ * Shapes that identify a person without any caller knowledge. Deliberately
+ * conservative: every pattern anchors on something a clinical narrative does
+ * not otherwise contain (an @, a leading 0/+61 with 8-9 more digits, a house
+ * number followed by a street type, the 43xxxxxxx NDIS prefix). Ages, dates,
+ * scores and dollar amounts never match. Order matters — addresses before
+ * phones so a postcode is consumed by the address, NDIS before phone so a
+ * 9-digit participant number is never read as a phone.
+ */
+const STREET_TYPES = 'street|st|road|rd|avenue|ave|av|drive|dr|court|ct|crescent|cres|cr|place|pl|way|lane|ln|parade|pde|boulevard|blvd|bvd|terrace|tce|close|cl|highway|hwy|circuit|cct|grove|gr|rise|loop|esplanade|esp|square|sq|mews|walk|promenade|prom|glade|gdns|gardens|retreat|rtt|entrance|ent|link|vista|view|heights|hts|track|trk|alley|circle|cir|crossing|xing|green|grn|quay|qy|ridge|rdge|row|strand|trail|trl';
+const AU_STATES = 'wa|nsw|vic|qld|sa|tas|nt|act';
+const STRUCTURED_PATTERNS = [
+  { role: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
+  {
+    role: 'address',
+    // "12 Smith Street", "Unit 4/12 Smith St, Fremantle WA 6160", "12a smith road subiaco"
+    re: new RegExp(
+      '\\b(?:(?:unit|apt|apartment|flat|suite|lot|shop)\\s*\\d{1,5}[a-z]?[,\\s/]+)?'
+      + '\\d{1,5}[a-z]?(?:\\s*[/-]\\s*\\d{1,5}[a-z]?)?\\s+'
+      + "(?:[A-Za-z][A-Za-z'’-]+\\s+){1,3}(?:" + STREET_TYPES + ')\\b\\.?'
+      + "(?:,?\\s+(?!(?:" + AU_STATES + ")\\b)[A-Za-z][A-Za-z'’-]+(?:\\s+[A-Za-z][A-Za-z'’-]+)?)?"
+      + '(?:,?\\s+(?:' + AU_STATES + ')\\b)?(?:,?\\s+\\d{4}\\b)?',
+      'gi',
+    ),
+  },
+  { role: 'ndis_number', re: /\b43\d{7}\b/g },
+  {
+    role: 'phone',
+    // +61 4xx xxx xxx · 04xx xxx xxx · (08) 9xxx xxxx · 08 9xxx xxxx · 1300/1800 xxx xxx · 13 xx xx
+    re: /(?:\+61[\s-]?\(?0?\)?[\s-]?[2-478](?:[\s-]?\d){8}|\(0[2-478]\)[\s-]?\d(?:[\s-]?\d){7}|\b0[2-478](?:[\s-]?\d){8}|\b1[38]00(?:[\s-]?\d){6}|\b13(?:[\s-]?\d){4})\b/g,
+  },
+];
+const STRUCTURED_TOKENS = { email: 'EMAIL', address: 'ADDRESS', ndis_number: 'NDIS_NUMBER', phone: 'PHONE' };
+
+/**
+ * Replace every structured identifier with a numbered token. The same value
+ * spoken twice gets the same token. Returns entries in the identity-map
+ * shape so reidentify() restores them with no special casing.
+ */
+function deidentifyStructured(text) {
+  let out = String(text || '');
+  const entries = [];
+  const byValue = new Map();
+  for (const { role, re } of STRUCTURED_PATTERNS) {
+    let n = 0;
+    out = out.replace(re, (m) => {
+      // Numeric identifiers compare on digits alone so "0412 345 678" and
+      // "0412345678" are one token; text ones on collapsed lowercase.
+      const norm = (role === 'phone' || role === 'ndis_number') ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
+      const key = `${role}:${norm}`;
+      let e = byValue.get(key);
+      if (!e) {
+        n++;
+        e = { token: `${STRUCTURED_TOKENS[role]}_${n}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
+        byValue.set(key, e);
+        entries.push(e);
+      }
+      e.count++;
+      // Keep trailing punctuation that the address pattern may have swallowed.
+      return `[${e.token}]`;
+    });
+  }
+  return { text: out, entries };
+}
+
+/** True when a raw email, phone, address or NDIS number appears in text. */
+function containsStructuredIdentifier(text) {
+  const t = String(text || '');
+  return STRUCTURED_PATTERNS.some(({ re }) => { re.lastIndex = 0; const hit = re.test(t); re.lastIndex = 0; return hit; });
 }
 
 function isPossessive(w) { return /[’']s$/i.test(w); }
@@ -190,7 +275,12 @@ function deidentify(text, map, opts = {}) {
     entries.push({ token: tokenFor('person', personN), role: 'person', name: original, variants, phonetic: new Set([phoneticKey(c)]), count: 0 });
   }
 
-  const toks = tokenise(String(text || ''));
+  // Structured identifiers first — they need no caller knowledge and must
+  // not be half-eaten by the name matcher (an email built from a name).
+  const structured = deidentifyStructured(text);
+  structured.entries.forEach((e) => entries.push(e));
+
+  const toks = tokenise(structured.text);
   const words = toks.map((t) => (t.word ? normaliseWord(stripPossessive(t.text)) : null));
   const out = [];
   const candidates = new Map();
@@ -300,10 +390,11 @@ function containsKnownName(text, map) {
 /** Human-readable label for a token, for the phone's names check. */
 function describeToken(token) {
   return token.replace(/_\d+$/, '').split('_').map((s) => s.charAt(0) + s.slice(1).toLowerCase()).join(' ')
-    .replace('Client Gp', "Client's GP").replace(/^Client (Mother|Father|Parent|Carer|Sibling|Teacher)$/, "Client's $1");
+    .replace('Client Gp', "Client's GP").replace(/^Client (Mother|Father|Parent|Carer|Sibling|Teacher)$/, "Client's $1")
+    .replace('Ndis Number', 'NDIS number').replace(/^Email$/, 'Email address').replace(/^Phone$/, 'Phone number');
 }
 
 module.exports = {
-  buildIdentityMap, deidentify, reidentify, containsKnownName, describeToken,
-  phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
+  buildIdentityMap, deidentify, reidentify, containsKnownName, containsStructuredIdentifier, describeToken,
+  deidentifyStructured, phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
 };
