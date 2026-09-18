@@ -225,6 +225,18 @@ describe('fca-v1.docx template facts', () => {
     expect(sizeOf('OPAL–NumberedList')).toBe(22);
   });
 
+  test('the master ships an OPAL – Table style in Word\'s table gallery, applied to its own tables', async () => {
+    const parts = await partsOf(templateBuffer);
+    const styles = parts['word/styles.xml'];
+    const m = /<w:style w:type="table"[^>]*w:styleId="OPAL–Table"[\s\S]*?<\/w:style>/.exec(styles);
+    expect(m).not.toBeNull();
+    expect(m[0]).toContain('<w:qFormat/>');                  // visible in the gallery
+    expect(m[0]).toContain('w:type="firstRow"');              // green header band
+    expect(m[0]).toContain('w:fill="2F5651"');
+    const tables = (doc.match(/<w:tbl>/g) || []).length;
+    expect((doc.match(/<w:tblStyle w:val="OPAL–Table"\/>/g) || []).length).toBe(tables);
+  });
+
   test('style ids use an en dash with no spaces', () => {
     expect(tm.STYLE.BODY).toBe('OPAL–Body');
     expect(tm.STYLE.HEADING2).toBe('OPAL–Heading2');

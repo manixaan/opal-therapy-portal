@@ -9,7 +9,7 @@
  * asserted by tests/fca-docx-engine.test.js against the shipped template, so
  * this file cannot silently drift from the document.
  *
- * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 062d91a2…a6def5 — re-hashed
+ * VERIFIED TEMPLATE FACTS (fca-v1.docx, sha256 968bc98f…c6dbe5 — re-hashed
  * 17 Sep 2026 after removing the preferred-name, pronouns and two NDIS-goal
  * controls plus the "Assessment purpose and scope" and "Consent and
  * information sharing" prompts; the header now carries the full name, and
