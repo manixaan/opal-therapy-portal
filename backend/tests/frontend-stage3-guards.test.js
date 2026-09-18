@@ -247,7 +247,7 @@ describe('role-based navigation (RBAC)', () => {
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
     expect(HTML).toContain("primary: ['profile', 'calendar', 'casenotes', 'resources']");
     // Support Tickets (2026-08-09) joined the owner Business group
-    expect(HTML).toContain("['Business', ['accounting', 'settings', 'support']]");
+    expect(HTML).toContain("['Business', ['finance', 'accounting', 'settings', 'support']]");
     // admin gets a Travel menu only — no business/practice groups
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
@@ -1182,7 +1182,7 @@ describe('free-time gap overlay removed', () => {
     expect(TRAVEL).toContain('function renderSegmentOverlay');
     expect(TRAVEL).toContain('openTravelPanel(seg)');
     // the shell still loads the module that draws them, ahead of reports.js
-    expect(HTML).toContain('<script src="/travel.js?v=1" defer></script>');
+    expect(HTML).toMatch(/<script src="\/travel\.js\?v=\d+" defer><\/script>/);
     expect(HTML.indexOf('/travel.js?v=')).toBeLessThan(HTML.indexOf('/reports.js?v='));
   });
 

@@ -69,13 +69,13 @@ describe('the shell wires the surface', () => {
     // js v=5: two-step editor panel, contents-mirroring outline with
     // drag-to-reorder, multi-article A4 pagination fix.
     // css v=5: the stepper and outline styles.
-    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=5" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=6" defer></script>');
+    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=6" />');
+    expect(SHELL).toContain('<script src="/templates.js?v=7" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=6'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=7'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {
