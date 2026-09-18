@@ -538,6 +538,9 @@ app.use('/', require('./instrument-register-routes'));
 // become a resource.
 app.use('/', require('./resource-ingestion-routes'));
 app.use('/', require('./opa-routes'));
+// "Which Splose practitioner am I?" — self-service link/unlink of the one
+// column every practitioner-scoped Splose read and write keys off.
+app.use('/', require('./splose-link-routes'));
 app.use('/', require('./store-search-routes'));
 
 // Interactive induction — per-user tutorial progress (module catalogue is

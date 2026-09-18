@@ -54,6 +54,9 @@ describe('identity chain UI', () => {
   });
   test('booking practitioner comes from the user\'s own mapping, never practitioners[0] blindly', () => {
     expect(HTML).not.toContain('window.SPLOSE_CONFIG.practitionerId = practitioners[0].id;');
+    // 18 Sep 2026: owners/admins are no longer handed practitioners[0] either.
+    expect(HTML).not.toContain('chosen = practitioners[0]');
+    expect(HTML).toContain('/api/splose/my-practitioner');
     expect(HTML).toContain('/api/profile/setup-status');
     expect(HTML).toContain('splosePractitionerId || null');
   });

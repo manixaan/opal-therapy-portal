@@ -6509,6 +6509,17 @@ window.opIcon = function (name, size) {
               </span>
             </div>
           </div>
+          <div class="settings-row" id="stg-splose-me-row">
+            <div class="settings-row-label">
+              <strong>Your Splose practitioner</strong>
+              <span id="stg-splose-me-detail">Checking…</span>
+            </div>
+            <div class="settings-row-control" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+              <select id="stg-splose-me-select" style="max-width:260px;" aria-label="Choose your Splose practitioner"></select>
+              <button class="btn btn-primary" id="stg-splose-me-link" onclick="linkSplosePractitioner(this)" style="font-size:12px;">Link</button>
+              <button class="btn" id="stg-splose-me-unlink" onclick="unlinkSplosePractitioner(this)" style="font-size:12px;display:none;">Disconnect</button>
+            </div>
+          </div>
           <div class="settings-row">
             <div class="settings-row-label">
               <strong>Manual sync</strong>
@@ -9772,7 +9783,10 @@ async function bootstrapSploseConfig() {
       const role = window.APP_USER && window.APP_USER.role;
       let chosen = null;
       if (ownPracId) chosen = practitioners.find(p => String(p.id) === String(ownPracId)) || { id: ownPracId, fullName: (window.APP_USER && (window.APP_USER.displayName || window.APP_USER.name)) || 'You' };
-      else if ((role === 'owner' || role === 'admin') && practitioners.length > 0) chosen = practitioners[0]; // practice-level default, shown by name on confirm
+      // No practice-level default for owners/admins any more: an unlinked
+      // owner was silently handed practitioners[0] and booked (and read) as
+      // that person. Everyone chooses in Settings → Integrations.
+      void role;
       if (chosen) {
         window.SPLOSE_CONFIG.practitionerId   = chosen.id;
         window.SPLOSE_CONFIG.practitionerName = chosen.fullName || chosen.name || '—';
@@ -9780,7 +9794,7 @@ async function bootstrapSploseConfig() {
       } else {
         window.SPLOSE_CONFIG.practitionerId = null;
         window.SPLOSE_CONFIG.practitionerName = null;
-        console.warn('⚠ No practitioner mapping for this account — booking disabled until the owner links one');
+        console.warn('⚠ No practitioner mapping for this account — booking disabled until you choose yours in Settings → Integrations');
       }
     }
 
@@ -19809,8 +19823,8 @@ async function loadSetupStatusCard() {
     html += row('Onboarding', st.onboardingComplete);
     if (isTherapist) html += row('Therapist profile', st.therapistProfile.exists,
       st.therapistProfile.exists ? (st.therapistProfile.displayName || 'Created') : 'Missing — the owner can create it in Settings → Users & Roles');
-    if (isTherapist) html += row('Splose practitioner link', st.splosePractitionerMapped,
-      st.splosePractitionerMapped ? 'Linked' : 'Pending — set up by the practice owner');
+    if (st.role !== 'read_only') html += row('Splose practitioner link', st.splosePractitionerMapped,
+      st.splosePractitionerMapped ? 'Linked' : 'Not chosen yet — Settings → Integrations → Your Splose practitioner');
     html += row('Outlook calendar', st.outlook.connected,
       st.outlook.connected ? ('Connected as ' + (st.outlook.email || '') + (st.outlook.lastSyncedAt ? ' · synced ' + _fmtAgo(st.outlook.lastSyncedAt) : ' · first sync pending')) : 'Not connected — Settings → Integrations');
     html += row('Home / travel base', st.travelBaseSet);
@@ -22820,7 +22834,82 @@ async function disconnectOutlookFromSettings(btn) {
   if (typeof refreshFreshnessNow === 'function') refreshFreshnessNow(false);
 }
 
+// ── "Which Splose practitioner am I?" (Settings → Integrations → Splose) ────
+// One practice API key; identity inside Splose is the practitioner linked to
+// this account. Therapists may only pick the practitioner whose Splose email
+// matches their sign-in; owners/admins may pick any free one. The server
+// re-checks every rule — this is presentation only.
+async function loadSplosePractitionerLink() {
+  var sel = document.getElementById('stg-splose-me-select');
+  var detail = document.getElementById('stg-splose-me-detail');
+  var linkBtn = document.getElementById('stg-splose-me-link');
+  var unlinkBtn = document.getElementById('stg-splose-me-unlink');
+  if (!sel || !detail) return;
+  try {
+    var r = await fetch('/api/splose/my-practitioner', { credentials: 'include' });
+    if (r.status === 403) { detail.textContent = 'Not available for this account'; sel.style.display = 'none'; if (linkBtn) linkBtn.style.display = 'none'; return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    var linked = d.linked;
+    var opts = d.options || [];
+    sel.innerHTML = '<option value="">Choose your name…</option>' + opts.map(function (o) {
+      var why = o.claimedBy ? ' — linked to ' + o.claimedBy : (!o.selectable ? ' — ask the owner' : '');
+      return '<option value="' + escapeHtml(o.id) + '"' + (o.selectable ? '' : ' disabled') + (linked && linked.id === o.id ? ' selected' : '') + '>' + escapeHtml(o.fullName) + escapeHtml(why) + '</option>';
+    }).join('');
+    if (linked) {
+      detail.textContent = 'Linked as ' + linked.fullName + ' — your calendar reads and bookings use this identity';
+      if (unlinkBtn) unlinkBtn.style.display = '';
+      if (linkBtn) linkBtn.textContent = 'Change';
+    } else {
+      detail.textContent = d.canChooseAny
+        ? 'Not linked — choose who you are in Splose. Nothing is booked or read as you until then.'
+        : 'Not linked — pick the entry with your email. If none is enabled, ask the practice owner.';
+      if (unlinkBtn) unlinkBtn.style.display = 'none';
+      if (linkBtn) linkBtn.textContent = 'Link';
+    }
+  } catch (e) {
+    detail.textContent = 'Could not load Splose practitioners right now';
+  }
+}
+async function linkSplosePractitioner(btn) {
+  var sel = document.getElementById('stg-splose-me-select');
+  var id = sel && sel.value;
+  if (!id) { showToast('Choose a practitioner', 'Pick your name from the list first.'); return; }
+  var name = sel.options[sel.selectedIndex].text;
+  var ok = await portalConfirm('Link this account to "' + name + '" in Splose?\n\nYour calendar, caseload and bookings will use that identity.');
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
+  try {
+    var r = await fetch('/api/splose/my-practitioner', {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ practitionerId: id }),
+    });
+    var d = await r.json().catch(function () { return {}; });
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    showToast('Splose practitioner linked', 'You are now ' + (d.linked && d.linked.fullName || name) + ' in Splose.');
+    if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
+    if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();
+  } catch (e) { showToast('Could not link', String(e.message || e)); }
+  if (btn) { btn.disabled = false; }
+  loadSplosePractitionerLink();
+}
+async function unlinkSplosePractitioner(btn) {
+  var ok = await portalConfirm('Disconnect this account from its Splose practitioner?\n\nBookings and calendar reads stop until you link again.');
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Disconnecting…'; }
+  try {
+    var r = await fetch('/api/splose/my-practitioner', { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Splose practitioner disconnected', 'Choose a new one when you are ready.');
+    if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
+    if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();
+  } catch (e) { showToast('Could not disconnect', String(e.message || e)); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
+  loadSplosePractitionerLink();
+}
+
 async function checkIntegrationStatuses() {
+  loadSplosePractitionerLink();
   // Splose: optimistic (we always attempt the patient-data connection)
   var slosePill    = document.getElementById('stg-splose-status');
   var sloseLastSync = document.getElementById('stg-splose-last-sync');
@@ -22920,7 +23009,12 @@ async function teamCreateProfile(userId, name, btn) {
 }
 
 async function teamSetSploseId(profileId, btn) {
-  var id = await portalPrompt('Splose practitioner ID for this therapist:\n(Practice owner: find it in Splose → Team, or ask the developer.)');
+  var listing = '';
+  try {
+    var pr = await fetch('/api/splose/practitioners', { credentials: 'include' });
+    if (pr.ok) listing = ((await pr.json()).data || []).map(function (p) { return '  ' + p.id + '  ' + (p.fullName || ''); }).join('\n');
+  } catch (e) {}
+  var id = await portalPrompt('Splose practitioner ID for this therapist:' + (listing ? '\n\n' + listing : '') + '\n\n(They can also pick themselves in Settings → Integrations if their Splose email matches.)');
   if (!id || !id.trim()) return;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {

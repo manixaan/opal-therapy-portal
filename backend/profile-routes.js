@@ -1220,7 +1220,10 @@ router.get('/api/profile/setup-status', requireAuth, async (req, res) => {
     const actions = [];
     if (!status.onboardingComplete) actions.push({ key: 'complete_onboarding', label: 'Finish the onboarding wizard' });
     if (isTherapist && !status.therapistProfile.exists) actions.push({ key: 'therapist_profile', label: 'Complete therapist profile setup — contact the practice owner' });
-    if (isTherapist && status.therapistProfile.exists && !status.splosePractitionerMapped) actions.push({ key: 'splose_mapping', label: 'Splose practitioner link pending — the practice owner sets this up' });
+    // Every role that touches Splose needs its own practitioner identity —
+    // owners and admins included, since an unlinked owner used to be handed
+    // the first practitioner in the list.
+    if (r.role !== 'read_only' && !status.splosePractitionerMapped) actions.push({ key: 'splose_mapping', label: 'Choose which Splose practitioner you are (Settings → Integrations)' });
     if (!status.outlook.connected) actions.push({ key: 'connect_outlook', label: 'Connect your Outlook calendar (Settings → Integrations)' });
     if (!status.travelBaseSet) actions.push({ key: 'travel_base', label: 'Set your home/travel base (Profile → Work locations)' });
     status.actions = actions;
