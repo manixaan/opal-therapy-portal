@@ -398,6 +398,17 @@ app.get('/', async (req, res) => {
   res.sendFile(path.join(frontendPath, 'mockup_v3.html'));
 });
 
+// ── Opal Assist — standalone page, same account guard as the shell ─────────
+app.get('/assist', async (req, res) => {
+  if (!req.session?.userId) return res.redirect('/login?returnUrl=%2Fassist');
+  const user = await getSessionUser(req.session.userId);
+  if (!user) return res.redirect('/login');
+  const status = user.account_status || 'active';
+  if (status !== 'active') return res.redirect('/');
+  if (user.must_change_password === true) return res.redirect('/create-password');
+  res.sendFile(path.join(frontendPath, 'assist.html'));
+});
+
 // ── Onboarding — requires active verified account ─────────────────────────
 app.get('/onboarding', async (req, res) => {
   if (!req.session?.userId) return res.redirect('/login');
@@ -541,6 +552,9 @@ app.use('/', require('./opa-routes'));
 // "Which Splose practitioner am I?" — self-service link/unlink of the one
 // column every practitioner-scoped Splose read and write keys off.
 app.use('/', require('./splose-link-routes'));
+// Opal Assist — the practice-wide assistant (backend/assist/*). The model
+// only ever sees tokens: see assist-routes.js and assist-deidentify.js.
+app.use('/', require('./assist-routes'));
 app.use('/', require('./store-search-routes'));
 
 // Interactive induction — per-user tutorial progress (module catalogue is
@@ -1176,6 +1190,15 @@ setTimeout(async () => {
 
 // Renew subscriptions every 2 days (well before the 3-day expiry)
 setInterval(renewOutlookWebhooks, 2 * 24 * 60 * 60 * 1000);
+
+// ── Opal Assist retention: expired conversations go daily and at boot ───────
+{
+  const { purgeExpired, RETENTION_DAYS } = require('./assist-routes');
+  const run = () => purgeExpired().then((n) => { if (n) console.log(`🧹 Opal Assist: ${n} conversation(s) past ${RETENTION_DAYS} days purged`); })
+    .catch((err) => { if (!/relation .* does not exist/i.test(err.message)) console.warn('Opal Assist purge failed:', err.message); });
+  setTimeout(run, 20000);
+  setInterval(run, 24 * 60 * 60 * 1000).unref();
+}
 
 // ===== FRIDAY LOCATION ALARM CRON =====
 // Fires every Friday at 16:00 AWST (08:00 UTC, since AWST = UTC+8).

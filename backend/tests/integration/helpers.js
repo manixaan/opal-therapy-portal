@@ -20,6 +20,8 @@ if (!poolDbName || !poolDbName.endsWith('_test')) {
 const ALL_TABLES = [
   // Practice integration connections (migration 069) — references users.
   'integration_connections',
+  // Opal Assist (migration 070) — turns before threads, threads before users.
+  'assist_messages', 'assist_conversations',
   'induction_assistant_messages', 'induction_assistant_conversations',
   'opa_messages', 'opa_conversations', 'opa_feature_knowledge',
   // Splose draft-and-publish (migration 058) — both reference events/users.

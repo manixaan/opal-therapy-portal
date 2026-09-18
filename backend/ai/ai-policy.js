@@ -123,6 +123,43 @@ const AI_POLICIES = {
   },
 
   /**
+   * Opal Assist — the practice-wide assistant (web page, Word, Excel,
+   * Outlook, and the phone). It exists to REPLACE every other AI tool a
+   * staff member might reach for, so it must be allowed to receive whatever
+   * they paste — including clinical narrative. Declared CLINICAL for that
+   * reason, which pins it to Australia and to Bedrock behind the guardrail,
+   * and makes a data residency waiver structurally impossible.
+   *
+   * What makes it safe to use freely is what happens BEFORE the gateway:
+   * backend/assist/assist-deidentify.js replaces every known person
+   * (practice-wide directory), every confirmed name and every contact
+   * detail with tokens, and the chat route REFUSES any text that still
+   * carries one. The model only ever sees tokens; the browser puts the
+   * names back for the person who typed them. Output is a plain assistant
+   * response — never a clinical document, so no draft is ever filed from
+   * here without a human copying it into the proper place.
+   */
+  opal_assist: {
+    classification: classification.CLINICAL,
+    allowedClassifications: [
+      classification.PUBLIC,
+      classification.INTERNAL,
+      classification.CLINICAL,
+    ],
+    outputTypes: [outputTypes.ASSISTANT_RESPONSE],
+    defaultOutputType: outputTypes.ASSISTANT_RESPONSE,
+    allowedProviders: [registry.PROVIDER_BEDROCK, registry.PROVIDER_MOCK],
+    allowedModels: ['assistant_fast', 'clinical_standard', 'clinical_complex', 'mock'],
+    defaultModel: 'assistant_fast',
+    region: 'australia',
+    mayReceiveClinicalData: true,
+    auditCategory: 'assistant',
+    // Same reasoning as Opa: the system prompt carries anti-injection
+    // scaffolding that a Prompt-attack filter is built to match.
+    guardrailInputScope: 'current_user_message',
+  },
+
+  /**
    * Induction assistant — the Owner's co-author for staff inductions and
    * portal walkthroughs on the Assign Learning page.
    *

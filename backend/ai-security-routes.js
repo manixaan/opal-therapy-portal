@@ -36,6 +36,7 @@ const log = require('./logger').createLogger('ai-security');
 const FEATURE_FLAGS = {
   clinical_note_generation: 'CLINICAL_NOTE_AI_ENABLED',
   opa_assistant: 'OPA_AI_ENABLED',
+  opal_assist: 'OPAL_ASSIST_ENABLED',
   induction_assistant: 'INDUCTION_AI_ENABLED',
 };
 
