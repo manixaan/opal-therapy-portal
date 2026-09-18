@@ -154,6 +154,10 @@ app.use('/api/profile/credentials', bodyParser.json({ limit: '12mb' }));
 // enforced in the route) — the /api/support subtree gets the larger limit.
 app.use('/api/support', bodyParser.json({ limit: '8mb' }));
 
+// Template appendices: an attached PDF travels as base64 (15 MB binary cap
+// enforced in templates/appendices.js ≈ 20 MB of base64).
+app.use('/api/templates/documents', bodyParser.json({ limit: '21mb' }));
+
 // Resource Hub file uploads: base64 bytes, 25 MB binary cap enforced in the
 // route (≈ 34 MB of base64). Same pattern as the two subtrees above.
 app.use('/api/rh2/resources', bodyParser.json({ limit: '36mb' }));

@@ -53,6 +53,8 @@
     saving: false,
     saveErr: '',
     exporting: '',
+    appendixCands: null,    // completed assessments offered as appendices; null = not loaded
+    appendixBusy: false,
     banner: null,
     preview: { rev: 0, status: 'idle', err: '' },
   };
@@ -307,6 +309,7 @@
           '</div>' +
           '<div id="tpl-pane-content" class="tpl-steppane" hidden>' +
             '<div id="tpl-sectionhost"></div>' +
+            '<div id="tpl-appendixhost"></div>' +
             '<div class="tpl-stepnav tpl-stepnav-back">' +
               '<button type="button" class="tpl-btn tpl-btn-quiet" ' +
                 'onclick="OpalTemplates.setStep(\'details\')">← Back to document details</button>' +
@@ -543,6 +546,113 @@
       host.dataset.dragWired = '1';
       host.addEventListener('pointerdown', onGripDown);
     }
+  }
+
+
+  // ── Appendices ────────────────────────────────────────────────────────────
+  // Supporting material attached to the document: a PDF from this machine, or
+  // a completed assessment already in Opal. Each becomes "Appendix A — …" in
+  // the report's Appendices section and travels whole in the PDF download.
+
+  var KIND_LABEL = { pdf: 'Attached PDF', whodas: 'WHODAS 2.0 assessment' };
+
+  function appendicesHtml() {
+    var list = (S.docu && S.docu.appendices) || [];
+    var cands = S.appendixCands || [];
+    var rows = list.map(function (a) {
+      var meta = KIND_LABEL[a.kind] || 'Attachment';
+      if (a.kind === 'pdf' && a.filename) meta += ' · ' + a.filename;
+      if (a.pageCount) meta += ' · ' + a.pageCount + ' page' + (a.pageCount === 1 ? '' : 's');
+      return '' +
+        '<div class="tpl-approw" data-id="' + esc(a.id) + '">' +
+          '<span class="tpl-app-letter" aria-hidden="true">' + esc(a.letter) + '</span>' +
+          '<span class="tpl-app-main">' +
+            '<span class="tpl-app-title">' + esc(a.title) + '</span>' +
+            '<span class="tpl-quiet">' + esc(meta) + '</span>' +
+          '</span>' +
+          '<a class="tpl-btn tpl-btn-quiet tpl-app-view" target="_blank" rel="noopener" ' +
+            'href="' + API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices/' + encodeURIComponent(a.id) + '.pdf">View</a>' +
+          '<button type="button" class="tpl-secrow-remove" title="Remove this appendix" ' +
+            'aria-label="Remove appendix ' + esc(a.letter) + '" ' +
+            'onclick="OpalTemplates.removeAppendix(\'' + esc(a.id) + '\')">✕</button>' +
+        '</div>';
+    }).join('');
+    if (!list.length) {
+      rows = '<p class="tpl-quiet">No appendices yet. Attach a PDF, or a completed assessment for this participant.</p>';
+    }
+
+    var pick = '';
+    if (S.docu.clientId) {
+      pick = cands.length
+        ? '<div class="tpl-section-addrow">' +
+            '<select id="tpl-appx-pick" class="tpl-level" aria-label="Completed assessments">' +
+              cands.map(function (c) {
+                return '<option value="' + esc(c.assessmentId) + '">' + esc(c.label) +
+                  (c.pageCount ? ' (' + c.pageCount + ' pp)' : '') + '</option>';
+              }).join('') +
+            '</select>' +
+            '<button type="button" class="tpl-btn tpl-btn-quiet" onclick="OpalTemplates.addAssessmentAppendix()">Add assessment</button>' +
+          '</div>'
+        : '<p class="tpl-quiet">' + (S.appendixCands === null
+            ? 'Looking for completed assessments…'
+            : 'No completed assessments with a PDF are available for this participant.') + '</p>';
+    } else {
+      pick = '<p class="tpl-quiet">Choose a participant on the document to attach their completed assessments.</p>';
+    }
+
+    return '' +
+      '<div class="tpl-group tpl-contents-card">' +
+        '<div class="tpl-contents-head">Appendices' +
+          ' <span class="tpl-quiet">(' + list.length + ')</span></div>' +
+        '<p class="tpl-hint">Each attachment is listed in the report’s Appendices section and on the ' +
+          'contents page as “Appendix A — …”. The PDF download carries the attached pages in full; ' +
+          'the Word download names each appendix and refers to the PDF.</p>' +
+        '<div id="tpl-appendices" class="tpl-outline">' + rows + '</div>' +
+        '<div class="tpl-section-actions">' +
+          '<label class="tpl-btn tpl-btn-quiet tpl-filebtn">' +
+            (S.appendixBusy ? 'Attaching…' : '+ Attach a PDF') +
+            '<input type="file" accept="application/pdf,.pdf" ' + (S.appendixBusy ? 'disabled ' : '') +
+              'onchange="OpalTemplates.attachPdf(this)" aria-label="Attach a PDF as an appendix">' +
+          '</label>' +
+          pick +
+        '</div>' +
+      '</div>';
+  }
+
+  function mountAppendices() {
+    var host = el('tpl-appendixhost');
+    if (!host) return;
+    host.innerHTML = (S.docu && S.docu.sections) ? appendicesHtml() : '';
+  }
+
+  async function loadAppendixCandidates() {
+    if (!S.docu || !S.docu.clientId) { S.appendixCands = []; mountAppendices(); return; }
+    var id = S.docu.id;
+    var r = await api(API + '/documents/' + encodeURIComponent(id) + '/appendices');
+    if (!S.docu || S.docu.id !== id) return;
+    S.appendixCands = r.ok ? (r.candidates || []) : [];
+    if (r.ok && r.appendices) S.docu.appendices = r.appendices;
+    mountAppendices();
+  }
+
+  function applyAppendixResult(r) {
+    if (r.appendices) S.docu.appendices = r.appendices;
+    if (r.candidates) S.appendixCands = r.candidates;
+    mountAppendices();
+    mountSections();
+    refreshPreview();
+  }
+
+  function fileToBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new global.FileReader();
+      reader.onerror = function () { reject(new Error('read failed')); };
+      reader.onload = function () {
+        var s = String(reader.result || '');
+        resolve(s.slice(s.indexOf(',') + 1));
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   /** Show the pane the user is on; both stay mounted so nothing typed is lost. */
@@ -793,6 +903,7 @@
     S.docu = r.document;
     seedSections();
     mountSections();
+    mountAppendices();
     setSaveState('Saved');
     repaintChips();
     refreshPreview();
@@ -1086,9 +1197,11 @@
     if (S.view === 'editor' && S.docu) {
       host.innerHTML = renderEditorShell();
       mountSections();
+      mountAppendices();
       mountFields();
       syncStep();
       refreshPreview();
+      if (S.docu.sections && S.appendixCands === null) loadAppendixCandidates();
       return;
     }
     host.innerHTML = renderCatalogue();
@@ -1100,6 +1213,46 @@
   var clientTimer = null;
 
   var PUBLIC = {
+    attachPdf: async function (input) {
+      var file = input && input.files && input.files[0];
+      if (!file || !S.docu) return;
+      if (file.size > 15 * 1024 * 1024) { toast('Too large', 'Attach a PDF under 15 MB.'); input.value = ''; return; }
+      S.appendixBusy = true;
+      mountAppendices();
+      var fileData;
+      try { fileData = await fileToBase64(file); }
+      catch (_) { S.appendixBusy = false; mountAppendices(); toast('Could not read the file', ''); return; }
+      var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices', {
+        method: 'POST',
+        body: { kind: 'pdf', fileName: file.name, title: file.name.replace(/\.pdf$/i, ''), fileData: fileData },
+      });
+      S.appendixBusy = false;
+      if (!r.ok) { mountAppendices(); toast('Could not attach', r.error); return; }
+      applyAppendixResult(r);
+      setSaveState('Saved');
+    },
+
+    addAssessmentAppendix: async function () {
+      var pick = el('tpl-appx-pick');
+      if (!pick || !pick.value || !S.docu) return;
+      var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices', {
+        method: 'POST', body: { kind: 'whodas', assessmentId: pick.value },
+      });
+      if (!r.ok) { toast('Could not attach', r.error); return; }
+      applyAppendixResult(r);
+      setSaveState('Saved');
+    },
+
+    removeAppendix: async function (id) {
+      if (!S.docu) return;
+      var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices/' + encodeURIComponent(id), {
+        method: 'DELETE',
+      });
+      if (!r.ok) { toast('Could not remove', r.error); return; }
+      applyAppendixResult(r);
+      setSaveState('Saved');
+    },
+
     startNew: function (templateId) {
       var tpl = (S.templates || []).filter(function (x) { return x.id === templateId; })[0];
       S.creating = { templateId: templateId, title: tpl ? tpl.name : '', clientId: '', clientLabel: '' };
@@ -1156,6 +1309,7 @@
       S.docu = r.document;
       S.values = {};
       seedSections();
+      S.appendixCands = null;
       S.addingSection = false;
       S.step = 'details';
       S.view = 'editor';
@@ -1174,6 +1328,7 @@
         g.fields.forEach(function (f) { if (f.entered) S.values[f.tag] = f.value || ''; });
       });
       seedSections();
+      S.appendixCands = null;
       S.addingSection = false;
       S.step = 'details';
       S.view = 'editor';

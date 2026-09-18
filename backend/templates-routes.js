@@ -39,6 +39,7 @@ const router = express.Router();
 
 const db = require('./database');
 const { pool } = require('./database');
+const { getBackend } = require('./storage');
 const { requireAuth } = require('./permissions');
 const log = require('./logger').createLogger('templates');
 
@@ -52,6 +53,7 @@ const catalogue = require('./templates/catalogue');
 const {
   resolveDocument, composePortalDocx, exportDocument, sectionStructure, DOCX_MIME,
 } = require('./templates/compose');
+const appendices = require('./templates/appendices');
 
 const orgOf = (req) => req.user?.organisation_id || null;
 
@@ -173,7 +175,11 @@ async function loadState(req, row) {
     loadOrganisationSettings(orgOf(req)),
   ]);
 
-  return resolveDocument({ template, row, client, portal, organisation });
+  const state = resolveDocument({ template, row, client, portal, organisation });
+  // Attachments ride on the state so compose, export and the serialiser all
+  // see the same list without a second lookup.
+  state.appendices = await appendices.listAppendices(row.id);
+  return state;
 }
 
 /**
@@ -187,7 +193,7 @@ const CUSTOM_ANCHOR_PARENT = 'OPAL_SECTION_ASSESSMENT_RESULTS';
  * normalisation, never the raw stored value, so what the user sees is exactly
  * what the preview and both exports will compose with.
  */
-function sectionsDescriptor(template, row) {
+function sectionsDescriptor(template, row, hasAppendices = false) {
   if (!template.sectionCatalogue) return null;
   const byTag = template.sectionCatalogue.SECTION_BY_TAG;
   const stored = (row && row.sections && typeof row.sections === 'object'
@@ -199,7 +205,7 @@ function sectionsDescriptor(template, row) {
       .map((c) => [String(c.id), c])
   );
 
-  const all = sectionStructure(template, row).sections;
+  const all = sectionStructure(template, row, { hasAppendices }).sections;
 
   const templateRows = all.filter((s) => s.kind !== 'custom')
     .slice()
@@ -296,7 +302,10 @@ function serialiseDocument(state) {
     fieldCount: template.scalars.length,
     // Present only for templates whose structure the editor may shape (the
     // FCA); null elsewhere so the frontend renders no section panel.
-    sections: sectionsDescriptor(template, row),
+    sections: sectionsDescriptor(template, row, (state.appendices || []).length > 0),
+    // Supporting material attached to this document, in appendix order.
+    // Ids, titles and sizes only — the bytes have their own route.
+    appendices: (state.appendices || []).map(appendices.serialiseAppendix),
     // Where clinician-created sections render: the section that hosts the
     // master's custom anchor. Supplied by the server so the frontend never
     // carries a binding identifier of its own.
@@ -730,6 +739,201 @@ async function sendExport(req, res, format) {
   res.setHeader('Cache-Control', 'no-store');
   return res.end(out.buffer);
 }
+
+// ── Appendices ───────────────────────────────────────────────────────────────
+//
+// Supporting material attached to one document: an uploaded PDF, or a
+// completed WHODAS 2.0 assessment already held in this portal. Both are named
+// inside the Appendices section (so the contents page lists them) and travel
+// whole in the PDF download. Same ownership rule as the document itself.
+
+const APPENDIX_KINDS = new Set(['pdf', 'whodas']);
+
+async function loadOwnAppendix(req, row, appendixId) {
+  if (!isUuid(appendixId)) return null;
+  const { rows } = await pool.query(
+    `SELECT * FROM template_document_appendices
+      WHERE id = $1 AND document_id = $2 AND organisation_id = $3`,
+    [appendixId, row.id, orgOf(req)]
+  );
+  return rows[0] || null;
+}
+
+/** Completed WHODAS assessments for this document's client that hold a PDF. */
+async function appendixCandidates(req, row) {
+  if (!row.splose_client_id) return [];
+  const { rows } = await pool.query(
+    `SELECT a.id, a.status, a.completed_at, a.administration_method, a.item_set,
+            a.template_key, wd.page_count
+       FROM whodas_assessments a
+       JOIN LATERAL (
+         SELECT page_count FROM whodas_generated_documents
+          WHERE assessment_id = a.id ORDER BY created_at DESC LIMIT 1
+       ) wd ON TRUE
+      WHERE a.organisation_id = $1 AND a.client_id = $2
+        AND a.status = 'completed' AND a.completed_at IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM template_document_appendices x
+           WHERE x.document_id = $3 AND x.whodas_assessment_id = a.id
+        )
+      ORDER BY a.completed_at DESC
+      LIMIT 50`,
+    [orgOf(req), row.splose_client_id, row.id]
+  );
+  return rows.map((a) => ({
+    assessmentId: a.id,
+    kind: 'whodas',
+    label: whodasTitle(a),
+    completedAt: a.completed_at,
+    pageCount: a.page_count || null,
+  }));
+}
+
+function whodasTitle(a) {
+  const when = a.completed_at ? new Date(a.completed_at) : null;
+  const date = when && !Number.isNaN(when.getTime())
+    ? when.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  return `WHODAS 2.0${a.item_set ? ` (${a.item_set})` : ''}${date ? ` — ${date}` : ''}`;
+}
+
+router.get('/api/templates/documents/:id/appendices', requireTemplateRead, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const rows = await appendices.listAppendices(row.id);
+  res.json({
+    appendices: rows.map(appendices.serialiseAppendix),
+    candidates: await appendixCandidates(req, row),
+  });
+}));
+
+router.post('/api/templates/documents/:id/appendices', requireTemplateWrite, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const template = catalogue.getTemplate(row.template_id);
+  if (!template || !template.sectionCatalogue) {
+    return res.status(400).json({ error: 'appendices_not_supported', message: 'This template has no appendices section.' });
+  }
+
+  const existing = await appendices.listAppendices(row.id);
+  if (existing.length >= appendices.MAX_APPENDICES) {
+    return res.status(400).json({ error: 'too_many_appendices', message: `A document holds at most ${appendices.MAX_APPENDICES} appendices.` });
+  }
+
+  const kind = str(req.body?.kind, 20);
+  if (!APPENDIX_KINDS.has(kind)) {
+    return res.status(400).json({ error: 'invalid_kind', message: 'Attach a PDF or a completed assessment.' });
+  }
+  const sortOrder = existing.length ? Math.max(...existing.map((a) => a.sort_order || 0)) + 1 : 0;
+
+  let inserted;
+  if (kind === 'pdf') {
+    const fileName = str(req.body?.fileName, 200).replace(/[\\/:*?"<>|]/g, '-') || 'attachment.pdf';
+    const title = str(req.body?.title, appendices.MAX_TITLE_CHARS) || fileName.replace(/\.pdf$/i, '');
+    if (typeof req.body?.fileData !== 'string' || !req.body.fileData) {
+      return res.status(400).json({ error: 'invalid_file', message: 'File content must be base64-encoded' });
+    }
+    const bytes = Buffer.from(req.body.fileData, 'base64');
+    let pageCount;
+    try {
+      pageCount = await appendices.inspectUploadedPdf(bytes);
+    } catch (err) {
+      if (err.code) return res.status(400).json({ error: err.code, message: err.message });
+      throw err;
+    }
+    const checksum = crypto.createHash('sha256').update(bytes).digest('hex');
+    const stored = await getBackend().put({
+      userId: req.user.id, docId: row.id, fileName, mime: 'application/pdf',
+      base64: bytes.toString('base64'),
+    });
+    ({ rows: [inserted] } = await pool.query(
+      `INSERT INTO template_document_appendices
+         (document_id, organisation_id, created_by_user_id, kind, title, sort_order,
+          filename, mime_type, byte_size, checksum, page_count,
+          storage_backend, storage_key, file_data)
+       VALUES ($1,$2,$3,'pdf',$4,$5,$6,'application/pdf',$7,$8,$9,$10,$11,$12)
+       RETURNING *`,
+      [row.id, orgOf(req), req.user.id, title, sortOrder, fileName, bytes.length, checksum, pageCount,
+        stored.backend, stored.storageKey || null, stored.inlineData || null]
+    ));
+  } else {
+    const assessmentId = str(req.body?.assessmentId, 60);
+    if (!isUuid(assessmentId)) {
+      return res.status(400).json({ error: 'invalid_assessment', message: 'Choose a completed assessment.' });
+    }
+    // Only a COMPLETED assessment of THIS document's client, in this org, with
+    // a generated PDF, may be attached — the same list the candidates route
+    // offers, checked again here so the choice cannot be widened by hand.
+    const { rows: found } = await pool.query(
+      `SELECT a.id, a.completed_at, a.item_set, a.status
+         FROM whodas_assessments a
+        WHERE a.id = $1 AND a.organisation_id = $2 AND a.client_id = $3
+          AND a.status = 'completed' AND a.completed_at IS NOT NULL
+          AND EXISTS (SELECT 1 FROM whodas_generated_documents d WHERE d.assessment_id = a.id)`,
+      [assessmentId, orgOf(req), row.splose_client_id || '']
+    );
+    const a = found[0];
+    if (!a) return res.status(404).json({ error: 'assessment_not_found', message: 'That completed assessment is not available for this participant.' });
+    const dup = existing.find((x) => x.whodas_assessment_id === a.id);
+    if (dup) return res.status(409).json({ error: 'already_attached', message: 'That assessment is already an appendix.' });
+    const title = str(req.body?.title, appendices.MAX_TITLE_CHARS) || whodasTitle(a);
+    ({ rows: [inserted] } = await pool.query(
+      `INSERT INTO template_document_appendices
+         (document_id, organisation_id, created_by_user_id, kind, title, sort_order, whodas_assessment_id)
+       VALUES ($1,$2,$3,'whodas',$4,$5,$6)
+       RETURNING *`,
+      [row.id, orgOf(req), req.user.id, title, sortOrder, a.id]
+    ));
+  }
+
+  await audit(req, 'template.appendix_added', row.id, {
+    templateId: row.template_id, appendixId: inserted.id, kind,
+    pageCount: inserted.page_count || null, byteSize: inserted.byte_size || null,
+  });
+
+  const all = await appendices.listAppendices(row.id);
+  const idx = all.findIndex((x) => x.id === inserted.id);
+  res.status(201).json({
+    appendix: appendices.serialiseAppendix(all[idx] || inserted, idx < 0 ? all.length - 1 : idx),
+    appendices: all.map(appendices.serialiseAppendix),
+    candidates: await appendixCandidates(req, row),
+  });
+}));
+
+router.delete('/api/templates/documents/:id/appendices/:appendixId', requireTemplateWrite, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const appx = await loadOwnAppendix(req, row, req.params.appendixId);
+  if (!appx) return res.status(404).json({ error: 'not_found' });
+
+  if (appx.kind === 'pdf' && appx.storage_key) {
+    try { await getBackend(appx.storage_backend || 'db').remove({ storageKey: appx.storage_key }); } catch (_) { /* row delete is the record */ }
+  }
+  await pool.query('DELETE FROM template_document_appendices WHERE id = $1', [appx.id]);
+  await audit(req, 'template.appendix_removed', row.id, { templateId: row.template_id, appendixId: appx.id, kind: appx.kind });
+
+  const all = await appendices.listAppendices(row.id);
+  res.json({ ok: true, appendices: all.map(appendices.serialiseAppendix), candidates: await appendixCandidates(req, row) });
+}));
+
+/** The attachment itself, for the therapist to look at. Clinical bytes: never cached. */
+router.get('/api/templates/documents/:id/appendices/:appendixId.pdf', requireTemplateRead, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const appx = await loadOwnAppendix(req, row, req.params.appendixId);
+  if (!appx) return res.status(404).json({ error: 'not_found' });
+
+  const bytes = await appendices.loadAppendixPdf(appx);
+  if (!bytes) return res.status(404).json({ error: 'no_document', message: 'The attached document is not available.' });
+
+  await audit(req, 'template.appendix_viewed', row.id, { templateId: row.template_id, appendixId: appx.id, kind: appx.kind });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Length', String(bytes.length));
+  res.setHeader('Content-Disposition', contentDisposition('inline', appx.filename || `${appx.title}.pdf`));
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store, private');
+  return res.end(bytes);
+}));
 
 router.get('/api/templates/documents/:id/export.docx', requireTemplateRead,
   safe((req, res) => sendExport(req, res, 'docx')));

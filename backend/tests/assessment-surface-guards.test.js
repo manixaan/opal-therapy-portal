@@ -724,7 +724,7 @@ describe('changed assets are cache-busted', () => {
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
-      ['templates.js', 6], ['templates.css', 5],
+      ['templates.js', 7], ['templates.css', 6],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

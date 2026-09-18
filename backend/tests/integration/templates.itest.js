@@ -501,3 +501,210 @@ test('a document with no client resolves no client data at all', async () => {
   expect(xml).toContain('<w:alias w:val="Participant full name"');
   expect(xml).not.toMatch(/OPAL_[A-Z0-9_]+/);
 });
+
+
+// ── Appendices ───────────────────────────────────────────────────────────────
+
+async function pdfWithPages(n) {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < n; i++) doc.addPage([595.28, 841.89]);
+  return Buffer.from(await doc.save());
+}
+
+async function pdfPageCount(agent, id) {
+  const res = await agent.get(`/api/templates/documents/${id}/export.pdf`)
+    .buffer().parse((r, cb) => {
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+  expect(res.status).toBe(200);
+  return (await PDFDocument.load(res.body)).getPageCount();
+}
+
+async function docxBody(agent, id) {
+  const res = await agent.get(`/api/templates/documents/${id}/export.docx`)
+    .buffer().parse((r, cb) => {
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+  expect(res.status).toBe(200);
+  return (await JSZip.loadAsync(res.body)).file('word/document.xml').async('string');
+}
+
+/** A completed WHODAS record with a generated 2-page PDF, for one client. */
+async function seedCompletedWhodas(organisationId, userId, clientId) {
+  const sha = 'a'.repeat(64);
+  const { rows: [tpl] } = await db.pool.query(
+    `INSERT INTO whodas_templates
+       (template_key, version, method, name, storage_path, sha256, page_count, media_box, crop_box)
+     VALUES ('whodas-36-interviewer', '1.0', 'interviewer', 'WHODAS 36 (test)', '/dev/null', $1, 2,
+             '[0,0,595,842]'::jsonb, '[0,0,595,842]'::jsonb)
+     ON CONFLICT DO NOTHING
+     RETURNING id`, [sha]
+  ).then(async (r) => (r.rows[0] ? r : db.pool.query(
+    `SELECT id FROM whodas_templates WHERE template_key = 'whodas-36-interviewer' AND version = '1.0'`
+  )));
+  const { rows: [a] } = await db.pool.query(
+    `INSERT INTO whodas_assessments
+       (organisation_id, client_id, administration_method, template_id, template_key, template_version,
+        template_sha256, status, started_by_user_id, completed_by_user_id, completed_at, work_school_applicable)
+     VALUES ($1, $2, 'interviewer', $3, 'whodas-36-interviewer', '1.0', $4, 'completed', $5, $5, NOW(), TRUE)
+     RETURNING id`, [organisationId, clientId, tpl.id, sha, userId]
+  );
+  const pdf = await pdfWithPages(2);
+  await db.pool.query(
+    `INSERT INTO whodas_generated_documents
+       (assessment_id, storage_backend, file_data, filename, mime_type, byte_size, checksum,
+        template_key, template_version, template_sha256, page_count, created_by_user_id)
+     VALUES ($1, 'db', $2, 'whodas.pdf', 'application/pdf', $3, $4, 'whodas-36-interviewer', '1.0', $5, 2, $6)`,
+    [a.id, pdf.toString('base64'), pdf.length, 'b'.repeat(64), sha, userId]
+  );
+  return a.id;
+}
+
+describe('appendices', () => {
+  test('an uploaded PDF becomes a lettered appendix in the contents, the Word file and the PDF', async () => {
+    const { agent } = await agentFor(app, 'therapist', orgA);
+    const created = await agent.post('/api/templates/documents')
+      .send({ templateId: 'fca', title: 'With appendix', clientId: JANE.id });
+    const id = created.body.document.id;
+    expect(created.body.document.appendices).toEqual([]);
+
+    const basePages = await pdfPageCount(agent, id);
+
+    const pdf = await pdfWithPages(3);
+    const attached = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'Sensory report.pdf', title: 'Sensory report', fileData: pdf.toString('base64') });
+    expect(attached.status).toBe(201);
+    expect(attached.body.appendix).toMatchObject({ letter: 'A', kind: 'pdf', title: 'Sensory report', pageCount: 3, filename: 'Sensory report.pdf' });
+    expect(JSON.stringify(attached.body)).not.toContain(pdf.toString('base64').slice(0, 40));
+
+    const reread = await agent.get(`/api/templates/documents/${id}`);
+    expect(reread.body.document.appendices).toHaveLength(1);
+
+    // Word: named inside the Appendices section as a real heading.
+    const body = await docxBody(agent, id);
+    expect(body).toContain('Appendix A — Sensory report');
+    expect(body).toContain('Attached PDF · Sensory report.pdf · 3 pages');
+
+    // PDF: a divider page plus the three attached pages, after the report.
+    expect(await pdfPageCount(agent, id)).toBe(basePages + 1 + 3);
+
+    // Viewable on its own.
+    const view = await agent.get(`/api/templates/documents/${id}/appendices/${attached.body.appendix.id}.pdf`);
+    expect(view.status).toBe(200);
+    expect(view.headers['content-type']).toContain('application/pdf');
+    expect(view.headers['cache-control']).toContain('no-store');
+
+    // Removing it takes the heading and the pages away again.
+    const gone = await agent.delete(`/api/templates/documents/${id}/appendices/${attached.body.appendix.id}`);
+    expect(gone.status).toBe(200);
+    expect(gone.body.appendices).toEqual([]);
+    expect(await pdfPageCount(agent, id)).toBe(basePages);
+    expect(await docxBody(agent, id)).not.toContain('Appendix A — Sensory report');
+  });
+
+  test('the Appendices section is put back whenever an appendix exists, even if it was removed', async () => {
+    const { agent } = await agentFor(app, 'therapist', orgA);
+    const id = (await agent.post('/api/templates/documents').send({ templateId: 'fca', title: 'No appendices section' })).body.document.id;
+    const all = (await agent.get(`/api/templates/documents/${id}`)).body.document.sections;
+    const without = all.filter((s) => !s.custom && s.tag !== 'OPAL_SECTION_APPENDICES' && s.included).map((s) => s.tag);
+    const shaped = await agent.patch(`/api/templates/documents/${id}`).send({ sections: { selected: without } });
+    expect(shaped.status).toBe(200);
+    expect(shaped.body.document.sections.find((s) => s.tag === 'OPAL_SECTION_APPENDICES').included).toBe(false);
+
+    const pdf = await pdfWithPages(1);
+    const attached = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'x.pdf', fileData: pdf.toString('base64') });
+    expect(attached.status).toBe(201);
+
+    const after = await agent.get(`/api/templates/documents/${id}`);
+    expect(after.body.document.sections.find((s) => s.tag === 'OPAL_SECTION_APPENDICES').included).toBe(true);
+    expect(await docxBody(agent, id)).toContain('Appendix A — x');
+  });
+
+  test('a completed WHODAS assessment of this participant can be attached; other clients\' cannot', async () => {
+    const { agent, user } = await agentFor(app, 'therapist', orgA);
+    const id = (await agent.post('/api/templates/documents')
+      .send({ templateId: 'fca', title: 'Jane FCA', clientId: JANE.id })).body.document.id;
+
+    const janeAssessment = await seedCompletedWhodas(orgA, user.id, JANE.id);
+    const otherAssessment = await seedCompletedWhodas(orgA, user.id, OTHER.id);
+
+    const listed = await agent.get(`/api/templates/documents/${id}/appendices`);
+    expect(listed.status).toBe(200);
+    expect(listed.body.candidates.map((c) => c.assessmentId)).toEqual([janeAssessment]);
+    expect(listed.body.candidates[0].label).toMatch(/^WHODAS 2\.0/);
+
+    const wrong = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'whodas', assessmentId: otherAssessment });
+    expect(wrong.status).toBe(404);
+
+    const basePages = await pdfPageCount(agent, id);
+    const ok = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'whodas', assessmentId: janeAssessment });
+    expect(ok.status).toBe(201);
+    expect(ok.body.appendix).toMatchObject({ letter: 'A', kind: 'whodas', assessmentId: janeAssessment, pageCount: 2 });
+    expect(ok.body.candidates).toEqual([]);   // no longer offered
+
+    const dup = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'whodas', assessmentId: janeAssessment });
+    expect(dup.status).toBe(409);
+
+    expect(await pdfPageCount(agent, id)).toBe(basePages + 1 + 2);
+    expect(await docxBody(agent, id)).toContain('WHODAS 2.0 completed assessment · 2 pages');
+  });
+
+  test('only a real PDF under the cap is accepted', async () => {
+    const { agent } = await agentFor(app, 'therapist', orgA);
+    const id = (await agent.post('/api/templates/documents').send({ templateId: 'fca', title: 'Bad uploads' })).body.document.id;
+    const notPdf = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'notes.txt', fileData: Buffer.from('hello').toString('base64') });
+    expect(notPdf.status).toBe(400);
+    expect(notPdf.body.error).toBe('not_a_pdf');
+    const empty = await agent.post(`/api/templates/documents/${id}/appendices`).send({ kind: 'pdf', fileName: 'x.pdf' });
+    expect(empty.status).toBe(400);
+    const kind = await agent.post(`/api/templates/documents/${id}/appendices`).send({ kind: 'docx' });
+    expect(kind.status).toBe(400);
+    expect((await agent.get(`/api/templates/documents/${id}`)).body.document.appendices).toEqual([]);
+  });
+
+  test('a read-only user cannot attach, and another therapist cannot reach my appendices', async () => {
+    const { agent } = await agentFor(app, 'therapist', orgA);
+    const id = (await agent.post('/api/templates/documents').send({ templateId: 'fca', title: 'Guarded' })).body.document.id;
+    const pdf = await pdfWithPages(1);
+    const ok = await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'x.pdf', fileData: pdf.toString('base64') });
+    expect(ok.status).toBe(201);
+
+    const { agent: reader } = await agentFor(app, 'read_only', orgA);
+    const denied = await reader.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'x.pdf', fileData: pdf.toString('base64') });
+    expect(denied.status).toBe(403);
+
+    const { agent: colleague } = await agentFor(app, 'therapist', orgA);
+    expect((await colleague.get(`/api/templates/documents/${id}/appendices`)).status).toBe(404);
+    expect((await colleague.delete(`/api/templates/documents/${id}/appendices/${ok.body.appendix.id}`)).status).toBe(404);
+    expect((await colleague.get(`/api/templates/documents/${id}/appendices/${ok.body.appendix.id}.pdf`)).status).toBe(404);
+
+    const { agent: elsewhere } = await agentFor(app, 'owner', orgB);
+    expect((await elsewhere.get(`/api/templates/documents/${id}/appendices`)).status).toBe(404);
+  });
+
+  test('audit records the attachment with ids only — never the file or its name', async () => {
+    const { agent } = await agentFor(app, 'therapist', orgA);
+    const id = (await agent.post('/api/templates/documents').send({ templateId: 'fca', title: 'Audited' })).body.document.id;
+    const pdf = await pdfWithPages(1);
+    await agent.post(`/api/templates/documents/${id}/appendices`)
+      .send({ kind: 'pdf', fileName: 'Very Private Name.pdf', title: 'Very Private Title', fileData: pdf.toString('base64') });
+    const { rows } = await db.pool.query(
+      `SELECT metadata FROM audit_logs WHERE action = 'template.appendix_added' ORDER BY created_at DESC LIMIT 1`
+    );
+    expect(rows).toHaveLength(1);
+    const meta = JSON.stringify(rows[0].metadata);
+    expect(meta).toContain('"kind":"pdf"');
+    expect(meta).not.toContain('Very Private');
+  });
+});

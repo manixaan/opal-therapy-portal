@@ -43,6 +43,9 @@ const { readMaster } = require('./catalogue');
 const { severDocx, scrubPortalSurface } = require('./export-boundary');
 const { readDocumentModel } = require('./document-model');
 const { renderTemplatePdf } = require('./pdf-export');
+const {
+  APPENDICES_SECTION_TAG, insertAppendixEntries, mergeAppendixPdfs, appendixItems,
+} = require('./appendices');
 
 const HEADING_LEVELS = [1, 2, 3];
 
@@ -115,15 +118,22 @@ function manifestCatalogue(template) {
   };
 }
 
-function sectionStructure(template, row) {
+function sectionStructure(template, row, { hasAppendices = false } = {}) {
   if (!template.sectionCatalogue) return { sections: [], dependentRows: [] };
 
   const stored = (row && row.sections && typeof row.sections === 'object'
     && !Array.isArray(row.sections)) ? row.sections : {};
 
+  // An attached appendix needs somewhere to print: the Appendices section is
+  // put back whenever the document carries one, whatever the stored choice.
+  let selectedStored = Array.isArray(stored.selected) ? stored.selected : undefined;
+  if (hasAppendices && selectedStored && !selectedStored.includes(APPENDICES_SECTION_TAG)) {
+    selectedStored = [...selectedStored, APPENDICES_SECTION_TAG];
+  }
+
   const cat = manifestCatalogue(template);
   const { selectedSections, sectionOrder } = normaliseSelection({
-    selectedSections: Array.isArray(stored.selected) ? stored.selected : undefined,
+    selectedSections: selectedStored,
     sectionOrder: Array.isArray(stored.order) ? stored.order : undefined,
   }, cat);
 
@@ -176,7 +186,8 @@ function sectionStructure(template, row) {
  */
 async function composePortalDocx(state) {
   const { template, row, scalarData } = state;
-  const structure = sectionStructure(template, row);
+  const appendices = Array.isArray(state.appendices) ? state.appendices : [];
+  const structure = sectionStructure(template, row, { hasAppendices: appendices.length > 0 });
   const composed = await composeDocx({
     templateBuffer: readMaster(template),
     manifest: {
@@ -201,7 +212,11 @@ async function composePortalDocx(state) {
       label: `template:${template.id}`,
     },
   });
-  const buffer = Buffer.isBuffer(composed) ? composed : composed.buffer;
+  let buffer = Buffer.isBuffer(composed) ? composed : composed.buffer;
+
+  // Every attachment is named inside the Appendices section, so the contents
+  // list and the Word download both carry it.
+  buffer = await insertAppendixEntries(buffer, appendices);
 
   // The master's template-maintainer language ("Using this FCA template",
   // the TEMPLATE CONTROL header band) is for people MAINTAINING the master,
@@ -312,11 +327,18 @@ async function exportDocument(state, format) {
   }
 
   const model = await readDocumentModel(severed.buffer);
-  const buffer = await renderTemplatePdf({
+  let buffer = await renderTemplatePdf({
     model,
     title,
     footer: template.footer,
   });
+
+  // The PDF is where attachments travel whole: a divider page per appendix,
+  // then its own pages, after the report.
+  const appendices = Array.isArray(state.appendices) ? state.appendices : [];
+  if (appendices.length) {
+    buffer = await mergeAppendixPdfs(buffer, await appendixItems(appendices));
+  }
 
   return {
     buffer,
