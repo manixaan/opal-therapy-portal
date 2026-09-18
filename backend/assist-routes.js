@@ -26,6 +26,7 @@
 const express = require('express');
 const db = require('./database');
 const { requireAuth } = require('./permissions');
+const { entraBearerAuth } = require('./assist/entra-auth');
 const provider = require('./assist/assist-provider');
 const deid = require('./assist/assist-deidentify');
 const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
@@ -43,7 +44,12 @@ const BLOCKED_ANSWER = 'Opal Assist could not help with that message — a safet
 const UNAVAILABLE = 'Opal Assist is not available right now. Please try again in a moment.';
 const DISABLED = 'Opal Assist is not switched on for this portal yet.';
 
-router.use('/api/assist', requireAuth, (req, res, next) => {
+// Two ways in: the portal session cookie (web page, phone) or a Microsoft
+// 365 bearer token from an Office task pane (entra-auth.js), which maps to
+// the same portal account by email. A bearer that fails is a 401, never a
+// fall-through; with no bearer the ordinary session path runs.
+const sessionOrBearer = (req, res, next) => (req.user && req.authVia === 'entra' ? next() : requireAuth(req, res, next));
+router.use('/api/assist', entraBearerAuth, sessionOrBearer, (req, res, next) => {
   if (req.user?.role === 'read_only') return res.status(403).json({ error: 'Read-only accounts cannot use Opal Assist', code: 'read_only_denied' });
   next();
 });

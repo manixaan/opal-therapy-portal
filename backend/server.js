@@ -101,11 +101,12 @@ app.use(helmet({
     useDefaults: false,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+      // appsforoffice.microsoft.com: Office.js for the Opal Assist task panes (/assist?surface=…)
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'https://appsforoffice.microsoft.com'],
       styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:    ["'self'", 'data:', 'https://fonts.gstatic.com'],
       imgSrc:     ["'self'", 'data:', 'blob:', 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'https://*.googleapis.com', 'https://*.ggpht.com'],
-      connectSrc: ["'self'", 'ws:', 'wss:', 'https://maps.googleapis.com'],
+      connectSrc: ["'self'", 'ws:', 'wss:', 'https://maps.googleapis.com', 'https://appsforoffice.microsoft.com', 'https://*.office.com', 'https://*.officeapps.live.com', 'https://login.microsoftonline.com'],
       workerSrc:  ["'self'", 'blob:'],
       objectSrc:  ["'none'"],
       baseUri:    ["'self'"],
@@ -399,7 +400,23 @@ app.get('/', async (req, res) => {
 });
 
 // ── Opal Assist — standalone page, same account guard as the shell ─────────
+// Office hosts that may frame the task pane. Everything else keeps the
+// global frame-ancestors 'self'. The pane itself carries no data: every API
+// call behind it is guarded (session or Microsoft bearer, assist-routes.js).
+const OFFICE_FRAME_ANCESTORS = [
+  "'self'", 'https://*.officeapps.live.com', 'https://*.office.com', 'https://*.office365.com',
+  'https://*.microsoft.com', 'https://*.sharepoint.com', 'https://*.cloud.microsoft', 'https://outlook.live.com',
+];
+const OFFICE_SURFACES = new Set(['word', 'excel', 'outlook']);
 app.get('/assist', async (req, res) => {
+  if (OFFICE_SURFACES.has(String(req.query.surface || ''))) {
+    // Inside Office there is no portal cookie (cross-site iframe); the pane
+    // signs in with a Microsoft token instead. Serve the shell, framable by
+    // Office only.
+    res.removeHeader('X-Frame-Options');
+    res.set('Content-Security-Policy', `frame-ancestors ${OFFICE_FRAME_ANCESTORS.join(' ')}`);
+    return res.sendFile(path.join(frontendPath, 'assist.html'));
+  }
   if (!req.session?.userId) return res.redirect('/login?next=%2Fassist');
   const user = await getSessionUser(req.session.userId);
   if (!user) return res.redirect('/login');

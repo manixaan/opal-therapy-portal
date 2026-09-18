@@ -29,6 +29,7 @@
       <header class="oa-head">
         <button class="oa-btn ghost sm" id="oa-menu" type="button" aria-label="Chats" style="display:none;">☰</button>
         <div class="oa-title" id="oa-title">New chat</div>
+        <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
       </header>
 
@@ -51,6 +52,13 @@
       </footer>
     </main>
   </div>
+  <script>
+    // Office task panes load the Office.js glue first; the web page never does.
+    (function () {
+      var sf = new URLSearchParams(location.search).get('surface');
+      if (['word', 'excel', 'outlook'].indexOf(sf) >= 0) document.write('<script src="/assist-office.js?v=1"><\/script>');
+    })();
+  </script>
   <script src="/assist.js?v=1"></script>
 </body>
 </html>

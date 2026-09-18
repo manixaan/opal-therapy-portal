@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Opal Assist — Word and Excel task pane add-in.
+  Template: __HOST__ and __CLIENT_ID__ are filled by scripts/build-office-manifest.js.
+  The pane is the portal's own /assist page; every API call behind it is
+  guarded by the portal (Microsoft 365 bearer sign-in, backend/assist/entra-auth.js).
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>__WORD_EXCEL_ID__</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Opal Therapy</ProviderName>
+  <DefaultLocale>en-AU</DefaultLocale>
+  <DisplayName DefaultValue="Opal Assist"/>
+  <Description DefaultValue="Opal Therapy's own AI. Names and contact details are hidden before anything leaves the practice."/>
+  <IconUrl DefaultValue="__HOST__/icons/office/opal-assist-32.png"/>
+  <HighResolutionIconUrl DefaultValue="__HOST__/icons/office/opal-assist-64.png"/>
+  <SupportUrl DefaultValue="__HOST__/assist"/>
+  <AppDomains>
+    <AppDomain>__HOST__</AppDomain>
+    <AppDomain>https://login.microsoftonline.com</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="__HOST__/assist?surface=word"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="OpalAssist.Group">
+                <Label resid="OpalAssist.Group.Label"/>
+                <Icon><bt:Image size="16" resid="OpalAssist.Icon.16"/><bt:Image size="32" resid="OpalAssist.Icon.32"/><bt:Image size="80" resid="OpalAssist.Icon.80"/></Icon>
+                <Control xsi:type="Button" id="OpalAssist.Open.Word">
+                  <Label resid="OpalAssist.Open.Label"/>
+                  <Supertip><Title resid="OpalAssist.Open.Label"/><Description resid="OpalAssist.Open.Tip"/></Supertip>
+                  <Icon><bt:Image size="16" resid="OpalAssist.Icon.16"/><bt:Image size="32" resid="OpalAssist.Icon.32"/><bt:Image size="80" resid="OpalAssist.Icon.80"/></Icon>
+                  <Action xsi:type="ShowTaskpane"><TaskpaneId>OpalAssist.Pane</TaskpaneId><SourceLocation resid="OpalAssist.Url.Word"/></Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="OpalAssist.Group.Excel">
+                <Label resid="OpalAssist.Group.Label"/>
+                <Icon><bt:Image size="16" resid="OpalAssist.Icon.16"/><bt:Image size="32" resid="OpalAssist.Icon.32"/><bt:Image size="80" resid="OpalAssist.Icon.80"/></Icon>
+                <Control xsi:type="Button" id="OpalAssist.Open.Excel">
+                  <Label resid="OpalAssist.Open.Label"/>
+                  <Supertip><Title resid="OpalAssist.Open.Label"/><Description resid="OpalAssist.Open.Tip"/></Supertip>
+                  <Icon><bt:Image size="16" resid="OpalAssist.Icon.16"/><bt:Image size="32" resid="OpalAssist.Icon.32"/><bt:Image size="80" resid="OpalAssist.Icon.80"/></Icon>
+                  <Action xsi:type="ShowTaskpane"><TaskpaneId>OpalAssist.Pane</TaskpaneId><SourceLocation resid="OpalAssist.Url.Excel"/></Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="OpalAssist.Icon.16" DefaultValue="__HOST__/icons/office/opal-assist-16.png"/>
+        <bt:Image id="OpalAssist.Icon.32" DefaultValue="__HOST__/icons/office/opal-assist-32.png"/>
+        <bt:Image id="OpalAssist.Icon.80" DefaultValue="__HOST__/icons/office/opal-assist-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="OpalAssist.Url.Word" DefaultValue="__HOST__/assist?surface=word"/>
+        <bt:Url id="OpalAssist.Url.Excel" DefaultValue="__HOST__/assist?surface=excel"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="OpalAssist.Group.Label" DefaultValue="Opal Assist"/>
+        <bt:String id="OpalAssist.Open.Label" DefaultValue="Open Opal Assist"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="OpalAssist.Open.Tip" DefaultValue="Chat beside your document. Names and contact details are hidden before anything leaves the practice."/>
+      </bt:LongStrings>
+    </Resources>
+    <WebApplicationInfo>
+      <Id>__CLIENT_ID__</Id>
+      <Resource>api://__HOST_NO_SCHEME__/__CLIENT_ID__</Resource>
+      <Scopes>
+        <Scope>openid</Scope>
+        <Scope>profile</Scope>
+        <Scope>email</Scope>
+        <Scope>User.Read</Scope>
+      </Scopes>
+    </WebApplicationInfo>
+  </VersionOverrides>
+</OfficeApp>

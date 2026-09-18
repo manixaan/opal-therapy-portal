@@ -61,9 +61,18 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  // Inside Office there is no portal cookie (cross-site iframe); the pane
+  // presents a Microsoft 365 token instead, which the server maps to the
+  // same portal account by email.
+  var office = function () { return global.OpalAssistOffice || null; };
   var api = function (path, opts) {
     opts = opts || {};
-    return fetch(path, { credentials: 'include', headers: opts.body ? { 'Content-Type': 'application/json' } : {}, method: opts.method || (opts.body ? 'POST' : 'GET'), body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal });
+    var headers = opts.body ? { 'Content-Type': 'application/json' } : {};
+    var withToken = office() ? office().token() : Promise.resolve(null);
+    return withToken.then(function (tok) {
+      if (tok) headers.Authorization = 'Bearer ' + tok;
+      return fetch(path, { credentials: 'include', headers: headers, method: opts.method || (opts.body ? 'POST' : 'GET'), body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal });
+    });
   };
 
   // ── Per-conversation map, this browser only ───────────────────────────────
@@ -270,12 +279,18 @@
     if (t.id === 'oa-review-edit') { S.review = null; renderReview(); $('oa-input').focus(); return; }
     if (t.id === 'oa-addname-btn') { var v = $('oa-addname').value.trim(); if (v) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([v]); runCheck(S.review.raw); } return; }
     if (t.id === 'oa-selection-clear') { setSelection(''); return; }
+    if (t.id === 'oa-use-selection') { if (office()) office().readSelection().then(function (txt) { setSelection(txt); if (!txt) setStatus('Nothing selected', 'warn'); }); return; }
     if (t.dataset.hide) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([t.dataset.hide]); runCheck(S.review.raw); return; }
     if (t.dataset.ignore) { S.ignoredWords.push(t.dataset.ignore); runCheck(S.review.raw); return; }
     if (t.dataset.open) return openThread(t.dataset.open);
     if (t.dataset.chip) { $('oa-input').value = t.dataset.chip + ':\n\n'; $('oa-input').focus(); return; }
     if (t.dataset.copy !== undefined) { var m = S.messages[+t.dataset.copy]; navigator.clipboard.writeText(restoreTokens(m.text, S.names)).then(function () { t.textContent = 'Copied'; setTimeout(function () { t.textContent = 'Copy'; }, 1200); }); return; }
-    if (t.dataset.insert !== undefined) { var mm = S.messages[+t.dataset.insert]; if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(restoreTokens(mm.text, S.names)); return; }
+    if (t.dataset.insert !== undefined) {
+      var mm = S.messages[+t.dataset.insert]; var restored = restoreTokens(mm.text, S.names);
+      if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(restored);
+      else if (office()) office().insert(restored).then(function (ok) { t.textContent = ok ? 'Inserted' : 'Could not insert'; setTimeout(function () { t.textContent = 'Insert into document'; }, 1500); });
+      return;
+    }
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
 
@@ -285,7 +300,14 @@
     if (global.innerWidth < 760) $('oa-menu').style.display = '';
     renderStack(); updateSelectionBar();
     api('/api/auth/me').then(function (r) { return r.ok ? r.json() : null; }).then(function (u) { S.user = u; }).catch(function () {});
-    api('/api/assist/config').then(function (r) { if (r.status === 401) { global.location.href = '/login?next=' + encodeURIComponent(global.location.pathname + global.location.search); return null; } return r.json(); })
+    if (office()) { $('oa-use-selection').style.display = ''; }
+    api('/api/assist/config').then(function (r) {
+      if (r.status === 401) {
+        if (office()) { setStatus('Sign in needed', 'off'); $('oa-hint').textContent = 'Opal Assist could not sign you in with Microsoft 365. ' + (office().state.error ? 'Office said: ' + office().state.error + '. ' : '') + 'Make sure your portal account uses the same email as your Microsoft sign-in.'; return null; }
+        global.location.href = '/login?next=' + encodeURIComponent(global.location.pathname + global.location.search); return null;
+      }
+      return r.json();
+    })
       .then(function (c) {
         if (!c) return;
         S.enabled = !!c.enabled;
@@ -296,5 +318,6 @@
     loadThreads();
   }
   global.OpalAssist = { setSelection: setSelection, newChat: newChat, onInsert: null, _state: S };
-  boot();
+  if (S.surface !== 'web' && office() && !office().state.ready && !office().state.error) document.addEventListener('opal-assist-office-ready', boot, { once: true });
+  else boot();
 })(typeof window !== 'undefined' ? window : globalThis);

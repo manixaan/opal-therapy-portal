@@ -6,10 +6,7 @@
       <stop offset="1.08" stop-color="#cf7b57"/>
     </linearGradient>
   </defs>
-  <!-- the portal's pebble, drawn as a path so it survives every renderer -->
+  <!-- the Opal cell: the portal's living pebble (brand-pebble), membrane + nucleus -->
   <path fill="url(#g)" d="M33 4c12 0 26 9 27 24 1 14-9 31-26 32C17 61 3 50 4 34 5 17 21 4 33 4z"/>
-  <!-- nucleus highlight -->
-  <path fill="rgba(255,255,255,0.55)" d="M27 18c6-1 12 2 13 8 1 5-4 10-10 10s-11-3-11-8c0-5 3-9 8-10z"/>
-  <!-- a four-point spark: the assist -->
-  <path fill="#fff" d="M45 34l2.2 6.3L53 42.5l-5.8 2.2L45 51l-2.2-6.3L37 42.5l5.8-2.2z"/>
+  <path fill="rgba(255,255,255,0.55)" d="M24 19c7-2 14 2 15 9 1 6-5 11-12 11S15 36 15 30c0-6 4-10 9-11z"/>
 </svg>
