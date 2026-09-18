@@ -70,6 +70,25 @@ async function publishFiles(codes) {
   }
 }
 const text = (s) => ({ fileMime: 'text/plain', fileData: Buffer.from(s.padEnd(60, ' ')).toString('base64') });
+const pdf = (buffer) => ({ fileMime: 'application/pdf', fileData: buffer.toString('base64') });
+// Since d208d3e the returned forms are read by fixed rules, not a model, so
+// the pack comes back as the real PDF forms filled in on Bob's offer terms
+// (full-time, $70,000, 38 hours, 7 October 2026).
+const forms = require('../fixtures/onboarding-forms');
+const BOB_CONTRACT = { ...forms.CONTRACT_COMPLETE, letter_date: '1 September 2026', recipient_name: 'Bob Brown', salutation_name: 'Bob', recipient_address: '1 High St, Perth WA 6000',
+  contract_date: '01/09/2026', commencement_date: '7 October 2026', employee_full_name: 'Bob Brown', employee_address: '1 High St, Perth WA 6000',
+  employment_type: 'Full-time', signatory_full_name: 'Bob Brown', signature_date: '02/09/2026', annual_salary_aud: '70,000.00', standard_hours: '38' };
+const BOB_DETAILS = { values: { ...forms.NED_COMPLETE.values,
+  p1_name_and_role_of_person_completing_th: 'Bob Brown - Administration Officer (new employee)', p1_date_the_form_was_completed: '02/09/2026',
+  p2_first_name: 'Bob', p2_preferred_name: 'Bob', p2_middle_name: '', p2_last_name: 'Brown', p2_date_of_birth: '02/01/1988',
+  p2_employment_start_date: '07/10/2026', p2_role_position_title: 'Administration Officer', p2_car_registration_details_if_applicabl: '',
+  p3_name_2: 'Beth Brown', p3_relationship_to_employee: 'Sister', p3_address_2: '2 High St, Perth WA 6000', p3_mobile: '0400 000 003', p3_email_2: 'beth@example.com',
+  p4_account_name: 'Bob Brown', p4_bsb: '066-123', p4_account_number: '12345678', p4_superannuation_fund_name: 'AustralianSuper', p4_super_member_number_usi: 'TEST0000002 / USI STA0100AU',
+  p6_i: 'Bob Brown', p6_signature: 'Bob Brown', p6_date: '02/09/2026' },
+  // An admin returns no licence, NDIS screening or WWCC copies: the "attached" questions are answered No.
+  ticks: [...forms.NED_COMPLETE.ticks.filter((t) => !['p4_copy_of_driver_s_licence_front_and_ba', 'p5_copy_of_ndis_worker_screening_clearan', 'p6_copy_of_wwcc_clearance_attached_attac'].includes(t)),
+    'p4_copy_of_driver_s_licence_front_and_ba_2', 'p5_copy_of_ndis_worker_screening_clearan_2', 'p6_copy_of_wwcc_clearance_attached_to'] };
+const BOB_SUPER = { ...forms.SUPER_COMPLETE, 'Full name': 'Bob Brown', Member: 'TEST0000002', 'Name on account': 'Bob Brown' };
 const ADMIN = { name: 'Bob Brown', personalEmail: 'bob@example.com', position: 'Administration Officer', roleCategory: 'administration', employmentType: 'full_time', proposedRole: 'admin', isTreatingTherapist: false, startDate: '2026-10-07', payBasis: 'annual', payRate: 70000, hoursPerWeek: 38 };
 
 beforeAll(() => {
@@ -88,7 +107,10 @@ beforeEach(async () => {
   org = await seedOrganisation('Opal Therapy Test');
   await require('../../onboarding-seed').seedOnboarding({ organisationId: org.id });
   await require('./onboarding-fixtures').configurePackDefaults(org.id);
-  await publishFiles(['DOC_CONTRACT_TEMPLATE', 'DOC_NEW_EMPLOYEE_DETAILS', 'DOC_OUTLOOK_SETUP', 'DOC_PORTAL_SETUP', 'DOC_PRIVACY_AGREEMENT', 'DOC_CODE_OF_CONDUCT_AGREEMENT']);
+  // Since 26abb43 the induction pack sends every policy and agreement, and
+  // nothing goes out while any of them lacks a file — so the practice's whole
+  // library is stood up with a file, as it would be after Edit Onboarding.
+  await publishFiles((await require('../../onboarding-db').listDocuments(org.id)).map((d) => d.code));
   jest.restoreAllMocks();
 });
 
@@ -156,8 +178,10 @@ describe('Payroll Setup and Phase 3', () => {
       { documentIndex: 5, kind: 'passport', confidence: 'high', signed: 'unknown' }, { documentIndex: 6, kind: 'police_check', confidence: 'high', signed: 'unknown' },
     ]);
     const up = await agent.post(`${base}/returns`).send({ files: [
-      { fileName: 'contract.txt', ...text('CONTRACT signed Bob Brown 38 hours 70000') }, { fileName: 'details.txt', ...text('NEW EMPLOYEE DETAILS Bob Brown 1 High St Perth') },
-      { fileName: 'super.txt', ...text('SUPER CHOICE AustralianSuper STA0100AU') }, { fileName: 'tax summary.txt', ...text('EMPLOYEE TAX DETAILS SUMMARY ATO myGov') },
+      { fileName: '01 - Contract of Employment.pdf', ...pdf(await forms.buildContractPdf(BOB_CONTRACT, { signature: 'Bob Brown' })) },
+      { fileName: '04 - New Employee Details.pdf', ...pdf(await forms.buildEmployeeDetailsPdf(BOB_DETAILS)) },
+      { fileName: '02 - Superannuation Form.pdf', ...pdf(await forms.buildSuperChoicePdf(BOB_SUPER, { signature: 'Bob Brown', signedDate: '02092026' })) },
+      { fileName: 'tax summary.txt', ...text('EMPLOYEE TAX DETAILS SUMMARY ATO myGov') },
       { fileName: 'passport.txt', ...text('PASSPORT Bob Brown Australia') }, { fileName: 'police.txt', ...text('NATIONAL POLICE CHECK no disclosable court outcomes') },
     ] });
     expect(up.status).toBe(201);
@@ -168,7 +192,7 @@ describe('Payroll Setup and Phase 3', () => {
     expect(rec.body.payroll.rows.map((r) => r.status)).toEqual(Array(10).fill('ready'));
     expect(rec.body.journey.summary.payroll.label).toBe('Ready for Review');
     // Police check is statutory: it waits for the register.
-    expect(rec.body.induction.readiness.blockers).toEqual(expect.arrayContaining(['Outlook account still needs to be set up', 'National Police Check has not been verified against the register']));
+    expect(rec.body.induction.readiness.blockers).toEqual(expect.arrayContaining(['Outlook account still needs to be set up', 'National Police Check certificate has not been verified against the register']));
     expect(rec.body.pack.items.find((i) => i.code === 'PACK_CONTRACT').progress).toBe('verified');
 
     // Approve payroll.
@@ -179,14 +203,18 @@ describe('Payroll Setup and Phase 3', () => {
     expect(pay[0]).toMatchObject({ bank_status: 'verified', payroll_setup_status: 'setup_required' });
     expect(pay[0].payroll_approved_at).toBeTruthy();
 
-    // The passport was recognised but nothing on it could be read: it needs a look, not silence.
-    const passport = rec.body.pack.items.find((i) => i.code === 'PACK_PASSPORT_VISA');
-    expect(passport.progress).toBe('attention');
-    expect(rec.body.attention.some((a) => a.kind === 'incorrect_document' && a.action.packItemId === passport.id)).toBe(true);
-    // Unblock Phase 3: verify the police check against the register and the passport by sight, mark Outlook done.
+    // The forms were read by the rules with nothing to query: no document needs a look.
+    expect(rec.body.attention.some((a) => a.kind === 'incorrect_document')).toBe(false);
+    // The passport copy satisfies the identity requirement without a model reading it.
+    expect(rec.body.pack.items.find((i) => i.code === 'REQ_IDENTITY').progress).toBe('verified');
+    // Unblock Phase 3: verify the police check against the register, mark Outlook done.
     const police = rec.body.pack.items.find((i) => i.code === 'PACK_POLICE_CHECK');
     await agent.post(`${base}/pack/items/${police.id}/verify`).send({ reference: 'ACIC 2026' });
-    await agent.post(`${base}/pack/items/${passport.id}/verify`).send({ note: 'Sighted' });
+    // A desk-based admin has no licence, NDIS screening or WWCC to return: the Owner sets those aside (8007b84).
+    for (const code of ['REQ_DRIVERS_LICENCE', 'REQ_NDIS_SCREENING', 'REQ_WWCC']) {
+      const item = rec.body.pack.items.find((i) => i.code === code);
+      if (item) expect((await agent.post(`${base}/pack/items/${item.id}/not-applicable`).send({ note: 'Not required for this role' })).status).toBe(200);
+    }
     await agent.post(`${base}/tasks/work_email/complete`).send({ note: 'bob@opaltherapy.com.au' });
     rec = await agent.get(base);
     if (!rec.body.induction.readiness.ready) console.log('BLOCKERS', JSON.stringify(rec.body.induction.readiness.blockers));
@@ -220,7 +248,7 @@ describe('Payroll Setup and Phase 3', () => {
     expect(drafted.body.pack.email.body).toContain('Hi Bob,');
     expect(drafted.body.pack.email.body).toMatch(/within seven days, by \d{2}\/\d{2}\/\d{4}\./);
     expect(createDraft.mock.calls[0][0].attachmentName).toBe('Opal Therapy Test - Bob Brown - Internal Induction Pack.zip');
-    expect(drafted.body.pack.zip.manifest.map((m) => m.title)).toEqual(expect.arrayContaining(['Outlook setup instructions', 'Opal Portal setup instructions', 'Privacy and Confidentiality Agreement', 'Code of Conduct Agreement']));
+    expect(drafted.body.pack.zip.manifest.map((m) => m.title)).toEqual(expect.arrayContaining(['Outlook setup instructions', 'Opal Portal setup instructions', 'Privacy and Confidentiality Agreement', 'Opal Therapy Code of Conduct Agreement']));
     // The record still holds Phase 2's own ZIP summary separately.
     expect(drafted.body.pack.phase).toBe('induction');
 
@@ -236,7 +264,7 @@ describe('Payroll Setup and Phase 3', () => {
     stubModel([], [{ documentIndex: 7, kind: 'privacy_agreement', confidence: 'high', signed: 'yes' }, { documentIndex: 8, kind: 'code_of_conduct', confidence: 'high', signed: 'yes' }]);
     const ret = await agent.post(`${base}/returns`).send({ files: [
       { fileName: 'privacy signed.txt', ...text('PRIVACY AND CONFIDENTIALITY AGREEMENT signed Bob Brown') },
-      { fileName: 'conduct signed.txt', ...text('CODE OF CONDUCT AGREEMENT signed Bob Brown') },
+      { fileName: 'Opal Therapy Code of Conduct Agreement signed.txt', ...text('OPAL THERAPY CODE OF CONDUCT AGREEMENT signed Bob Brown') },
     ] });
     expect(ret.status).toBe(201);
     rec = await agent.get(base);

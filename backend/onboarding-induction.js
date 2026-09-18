@@ -75,7 +75,9 @@ function buildReadiness({ assignment = {}, tasks = [], documentation = [], payro
     if (why) blockers.push(why);
   }
 
-  const included = documentation.filter((d) => d.status === 'included' && d.employee_returns && d.required);
+  // A document the Owner has set aside as not applicable (8007b84) no longer
+  // holds up internal induction — the same rule the returns route applies.
+  const included = documentation.filter((d) => d.status === 'included' && d.employee_returns && d.required && d.verification_status !== 'not_applicable');
   const employment = included.filter((d) => !STATUTORY.has(d.code));
   const compliance = included.filter((d) => STATUTORY.has(d.code));
   const outstanding = (list) => list.filter((d) => d.verification_status !== 'verified');

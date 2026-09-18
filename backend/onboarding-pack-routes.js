@@ -239,7 +239,23 @@ async function preparePack(assignment) {
  * document, so the pack assembles and sends end to end and Edit Onboarding
  * replaces it once with the real form.
  */
-async function ensurePlaceholderDocuments(organisationId) {
+// One publication pass per organisation at a time. The defaults page asks
+// for both phases in parallel (Promise.all) and each asks for the same
+// shipped files; two concurrent passes both saw "no version yet" and both
+// inserted version 1 — uq_onboarding_document_version, a 500 on Edit
+// Onboarding and a pack that never assembled (18 Sep 2026). The second
+// caller now waits for the first and finds the file already there.
+const _ensureChains = new Map();
+function ensurePlaceholderDocuments(organisationId) {
+  const key = String(organisationId || '');
+  const prev = _ensureChains.get(key) || Promise.resolve();
+  const run = prev.then(() => ensurePlaceholderDocumentsUnlocked(organisationId));
+  _ensureChains.set(key, run.catch(() => {}));
+  run.finally(() => { if (_ensureChains.get(key) === run) _ensureChains.delete(key); }).catch(() => {});
+  return run;
+}
+
+async function ensurePlaceholderDocumentsUnlocked(organisationId) {
   const fs = require('fs'); const path = require('path');
   const SHIPPED_DIRS = { documentation: path.join(__dirname, 'onboarding-templates', 'stage2'), induction: path.join(__dirname, 'onboarding-templates', 'stage3') };
   const MIME = { pdf: 'application/pdf', docx: offerDocxMime() };

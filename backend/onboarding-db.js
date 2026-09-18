@@ -272,13 +272,15 @@ async function upsertDocument(orgId, data, actorId, q = pool) {
  * Create the next DRAFT version of a document.
  * Bytes go through the same storage abstraction as employee documents.
  */
-async function createDocumentVersion(documentId, data, actorId, q = pool) {
+async function createDocumentVersion(documentId, data, actorId, q = pool, attempt = 0) {
   const { rows: maxRows } = await q.query(
     'SELECT COALESCE(MAX(version), 0) AS v FROM onboarding_document_versions WHERE document_id = $1',
     [documentId]
   );
   const version = Number(maxRows[0].v) + 1;
-  const { rows } = await q.query(
+  let rows;
+  try {
+    ({ rows } = await q.query(
     `INSERT INTO onboarding_document_versions
        (document_id, version, title, summary, body, file_name, file_mime, file_size_bytes,
         file_sha256, storage_backend, storage_key, file_data, source_url,
@@ -293,7 +295,16 @@ async function createDocumentVersion(documentId, data, actorId, q = pool) {
       dateOrNull(data.sourceLastModified), dateOrNull(data.effectiveDate),
       str(data.changeNote, 1000),
     ]
-  );
+  ));
+  } catch (err) {
+    // Two writers read the same MAX and raced for the same number. Outside a
+    // transaction the loser simply takes the next one; inside one the caller's
+    // transaction is already aborted, so the error stands.
+    if (err && err.code === '23505' && q === pool && attempt < 3) {
+      return createDocumentVersion(documentId, data, actorId, q, attempt + 1);
+    }
+    throw err;
+  }
   return rows[0];
 }
 
