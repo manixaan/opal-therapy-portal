@@ -15,10 +15,15 @@ portal, and every API call behind the pane is guarded by the portal
 2. **Expose an API** → *Set* the Application ID URI to exactly
    `api://<portal host>/<client id>` → *Add a scope* `access_as_user`
    (admins and users can consent) → *Add a client application* for each
-   Office client id below, ticking the scope:
-   `ea5a67f6-b6f3-4338-99d1-1a5c3c5b0a6c`, `d3590ed6-52b3-4102-aeff-aad2292ab01c`,
-   `bc59ab01-8403-45c6-8796-ac3ef710b3e3`, `93d53678-613d-4013-afc1-62e9e444a0a5`,
-   `57fb890c-0dab-4253-a5e0-7188c88b2bb4`, `08e18876-6177-487e-b8b5-cf950c1e598c`.
+   Office client id below, ticking the scope (these five were accepted by the
+   OT Services tenant on 18 Sep 2026; `ea5a67f6-…` from older docs is rejected):
+   `d3590ed6-52b3-4102-aeff-aad2292ab01c`, `bc59ab01-8403-45c6-8796-ac3ef710b3e3`,
+   `93d53678-613d-4013-afc1-62e9e444a0a5`, `57fb890c-0dab-4253-a5e0-7188c88b2bb4`,
+   `08e18876-6177-487e-b8b5-cf950c1e598c`.
+
+   Done for staging on 18 Sep 2026: app **Opal Assist**, client id
+   `21ca9a73-1152-4f7e-ae66-d0b853e679e0`, Application ID URI
+   `api://opal-portal-staging.azurewebsites.net/21ca9a73-1152-4f7e-ae66-d0b853e679e0`.
 3. **API permissions** → Microsoft Graph → Delegated → `openid`, `profile`,
    `email`, `User.Read` → Grant admin consent.
 4. **Portal settings** (App Service → Environment variables):
