@@ -1758,7 +1758,7 @@ router.get('/api/splose/debug/raw-appointment/:id', requireAuth, requireRole('ow
       const axios = require('axios');
       const response = await axios.get(
         `${(process.env.SPLOSE_BASE_URL || 'https://api.splose.com')}/v1/appointments/${req.params.id}`,
-        { headers: { Authorization: `Bearer ${process.env.SPLOSE_API_KEY}` } }
+        { headers: { Authorization: `Bearer ${sploseApi.getApiKey()}` } }
       );
       return res.json({ raw: response.data, source: 'direct-axios' });
     }
@@ -1779,7 +1779,7 @@ router.get('/api/splose/debug/raw-patient/:id', requireAuth, requireRole('owner'
     const axios = require('axios');
     const response = await axios.get(
       `${(process.env.SPLOSE_BASE_URL || 'https://api.splose.com')}/v1/patients/${req.params.id}`,
-      { headers: { Authorization: `Bearer ${process.env.SPLOSE_API_KEY}` } }
+      { headers: { Authorization: `Bearer ${sploseApi.getApiKey()}` } }
     );
     const raw = response.data;
     // Highlight all address-related fields so it's easy to spot in the response

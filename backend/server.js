@@ -1051,21 +1051,30 @@ if (require('./feature-flags').isSploseCalendarSyncEnabled()) {
 // confirms each one in the calendar. Off when the draft-sync flag is off or
 // there is no API key.
 const SPLOSE_WATCH_INTERVAL_MS = 2 * 60 * 1000;
-if (require('./feature-flags').isSploseDraftSyncEnabled() && process.env.SPLOSE_API_KEY) {
-  const { createWatcher } = require('./splose-draft-sync');
-  const watcher = createWatcher({
-    db, sploseApi: require('./splose-api'), io,
-    log: (m) => console.log('👀 ' + m),
-  });
-  app.set('sploseWatcher', watcher);
-  setTimeout(() => {
-    console.log('⏱️  Splose change watcher started (every 2 minutes)');
-    setInterval(() => { watcher.run().catch(() => {}); }, SPLOSE_WATCH_INTERVAL_MS);
-    watcher.run().catch(() => {});
-  }, 12000);
-} else {
-  console.log('ℹ️  Splose change watcher off (ENABLE_SPLOSE_DRAFT_SYNC=false or no SPLOSE_API_KEY)');
-}
+// The practice key may live in the database now (migration 069) — load it
+// into the client first, then decide whether there is anything to watch.
+// The watcher checks isConfigured() on every run, so an Owner disconnecting
+// Splose in Settings stops it without a restart.
+require('./splose-credentials').apply().then((conn) => {
+  const sploseApi = require('./splose-api');
+  console.log(`🔑 Splose connection: ${conn.source}`);
+  if (require('./feature-flags').isSploseDraftSyncEnabled() && sploseApi.isConfigured()) {
+    const { createWatcher } = require('./splose-draft-sync');
+    const watcher = createWatcher({
+      db, sploseApi, io,
+      log: (m) => console.log('👀 ' + m),
+    });
+    app.set('sploseWatcher', watcher);
+    const guarded = () => { if (sploseApi.isConfigured()) watcher.run().catch(() => {}); };
+    setTimeout(() => {
+      console.log('⏱️  Splose change watcher started (every 2 minutes)');
+      setInterval(guarded, SPLOSE_WATCH_INTERVAL_MS);
+      guarded();
+    }, 12000);
+  } else {
+    console.log('ℹ️  Splose change watcher off (ENABLE_SPLOSE_DRAFT_SYNC=false or Splose not connected)');
+  }
+}).catch((err) => console.error('Splose connection load failed:', err.message));
 
 // ===== OUTLOOK WEBHOOK INFRASTRUCTURE =====
 // When WEBHOOK_BASE_URL is set in .env, the server registers a Microsoft Graph

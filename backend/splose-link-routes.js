@@ -27,7 +27,8 @@
 const express = require('express');
 const db = require('./database');
 const sploseApi = require('./splose-api');
-const { requireAuth } = require('./permissions');
+const { requireAuth, requireRole } = require('./permissions');
+const sploseCredentials = require('./splose-credentials');
 
 const router = express.Router();
 
@@ -140,6 +141,54 @@ router.delete('/api/splose/my-practitioner', safe(async (req, res) => {
     metadata: { self: true }, ipAddress: req.ip,
   }).catch(() => {});
   res.json({ ok: true, linked: null });
+}));
+
+// ── The practice's Splose connection (Owner only) ───────────────────────────
+// One API key for the whole practice. The Owner can see where it comes from,
+// connect a new key (proved against Splose before it is stored) or
+// disconnect. The key is never returned, never logged, never echoed.
+
+router.use('/api/splose/connection', requireAuth, requireRole('owner'));
+
+router.get('/api/splose/connection', safe(async (req, res) => {
+  res.json(await sploseCredentials.status());
+}));
+
+router.put('/api/splose/connection', safe(async (req, res) => {
+  const apiKey = String(req.body?.apiKey || '').trim();
+  const label = String(req.body?.label || '').trim().slice(0, 120) || null;
+  if (!apiKey || apiKey.length < 16 || apiKey.length > 512 || /\s/.test(apiKey)) {
+    return res.status(400).json({ error: 'That does not look like a Splose API key', code: 'invalid_api_key' });
+  }
+  let proof;
+  try {
+    proof = await sploseApi.testKey(apiKey);
+  } catch (err) {
+    const status = err.response?.status;
+    return res.status(422).json({
+      error: status === 401 || status === 403 ? 'Splose rejected that key' : 'Splose could not be reached with that key',
+      code: 'api_key_rejected',
+    });
+  }
+  const conn = await sploseCredentials.connect({ apiKey, label, userId: req.user.id });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: req.user.organisation_id || null,
+    action: 'splose.connected', targetType: 'integration', targetId: 'splose',
+    metadata: { practitioners: proof.practitioners, label }, ipAddress: req.ip,
+  }).catch(() => {});
+  const { key, ...safeConn } = conn; // eslint-disable-line no-unused-vars
+  res.json({ ok: true, connection: safeConn, practitioners: proof.practitioners, names: proof.names });
+}));
+
+router.delete('/api/splose/connection', safe(async (req, res) => {
+  const conn = await sploseCredentials.disconnect({ userId: req.user.id });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: req.user.organisation_id || null,
+    action: 'splose.disconnected', targetType: 'integration', targetId: 'splose',
+    metadata: {}, ipAddress: req.ip,
+  }).catch(() => {});
+  const { key, ...safeConn } = conn; // eslint-disable-line no-unused-vars
+  res.json({ ok: true, connection: safeConn });
 }));
 
 module.exports = router;

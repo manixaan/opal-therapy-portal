@@ -16,7 +16,10 @@ jest.mock('../database', () => ({
 }));
 jest.mock('../email', () => ({ sendVerificationEmail: jest.fn(), sendPasswordResetEmail: jest.fn() }));
 jest.mock('../outlook-oauth', () => ({}));
-jest.mock('../splose-api', () => ({ getPractitioners: jest.fn() }));
+jest.mock('../splose-api', () => ({ getPractitioners: jest.fn(), testKey: jest.fn() }));
+jest.mock('../splose-credentials', () => ({
+  status: jest.fn(), connect: jest.fn(), disconnect: jest.fn(),
+}));
 
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
@@ -25,6 +28,7 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('../database');
 const sploseApi = require('../splose-api');
+const creds = require('../splose-credentials');
 
 function buildApp() {
   const app = express();
@@ -61,6 +65,7 @@ async function login(app, u) {
 beforeAll(async () => { HASH = await bcrypt.hash(PASS, 4); });
 beforeEach(() => {
   jest.clearAllMocks();
+  require('../auth')._resetLoginRateLimit();
   db.pool.query.mockResolvedValue({ rows: [], rowCount: 0 });
   sploseApi.getPractitioners.mockResolvedValue(PRACS);
 });
@@ -163,5 +168,70 @@ describe('DELETE /api/splose/my-practitioner', () => {
     expect(sql[1]).toEqual(['aaaaaaaa-1111-4111-8111-111111111111']);
     const audit = db.logAuditEvent.mock.calls.map((c) => c[0]).find((a) => a.action === 'splose.practitioner_unlinked');
     expect(audit).toEqual(expect.objectContaining({ targetId: '88167' }));
+  });
+});
+
+describe('practice connection — /api/splose/connection (owner only)', () => {
+  const KEY = 'splose-live-key-not-real-abcdef123456';
+  beforeEach(() => {
+    creds.status.mockResolvedValue({ source: 'environment', connected: true, label: null, connectedAt: null, connectedBy: null });
+    creds.connect.mockResolvedValue({ key: KEY, source: 'database', connected: true, label: 'New', connectedAt: 'now', connectedBy: 'Ann' });
+    creds.disconnect.mockResolvedValue({ key: null, source: 'disconnected', connected: false });
+    sploseApi.testKey.mockResolvedValue({ ok: true, practitioners: 3, names: ['Sam Okafor'] });
+  });
+
+  test('admins and therapists are refused', async () => {
+    for (const role of ['admin', 'therapist']) {
+      const agent = await login(buildApp(), user({ role }));
+      expect((await agent.get('/api/splose/connection')).status).toBe(403);
+      expect((await agent.put('/api/splose/connection').send({ apiKey: KEY })).status).toBe(403);
+      expect((await agent.delete('/api/splose/connection')).status).toBe(403);
+    }
+  });
+
+  test('the owner sees where the key comes from, never the key', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    const r = await agent.get('/api/splose/connection');
+    expect(r.status).toBe(200);
+    expect(r.body.source).toBe('environment');
+    expect(JSON.stringify(r.body)).not.toContain('not-real');
+  });
+
+  test('a new key is proved against Splose before it is stored, and the response never echoes it', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    const r = await agent.put('/api/splose/connection').send({ apiKey: KEY, label: 'New' });
+    expect(r.status).toBe(200);
+    expect(sploseApi.testKey).toHaveBeenCalledWith(KEY);
+    expect(creds.connect).toHaveBeenCalledWith(expect.objectContaining({ apiKey: KEY, label: 'New' }));
+    expect(r.body.practitioners).toBe(3);
+    expect(r.body.connection.source).toBe('database');
+    expect(JSON.stringify(r.body)).not.toContain(KEY);
+    const audit = db.logAuditEvent.mock.calls.map((c) => c[0]).find((a) => a.action === 'splose.connected');
+    expect(JSON.stringify(audit)).not.toContain(KEY);
+  });
+
+  test('a key Splose rejects is not stored', async () => {
+    sploseApi.testKey.mockRejectedValue(Object.assign(new Error('401'), { response: { status: 401 } }));
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    const r = await agent.put('/api/splose/connection').send({ apiKey: KEY });
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe('api_key_rejected');
+    expect(creds.connect).not.toHaveBeenCalled();
+  });
+
+  test('a malformed key is refused before any Splose call', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    const r = await agent.put('/api/splose/connection').send({ apiKey: 'short key' });
+    expect(r.status).toBe(400);
+    expect(sploseApi.testKey).not.toHaveBeenCalled();
+  });
+
+  test('disconnect is audited and reported', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    const r = await agent.delete('/api/splose/connection');
+    expect(r.status).toBe(200);
+    expect(r.body.connection.source).toBe('disconnected');
+    expect(creds.disconnect).toHaveBeenCalled();
+    expect(db.logAuditEvent.mock.calls.map((c) => c[0]).some((a) => a.action === 'splose.disconnected')).toBe(true);
   });
 });

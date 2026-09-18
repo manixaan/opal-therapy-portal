@@ -20,15 +20,49 @@ const axios = require('axios');
 
 const BASE_URL = (process.env.SPLOSE_BASE_URL || 'https://api.splose.com') + '/v1';
 
-function client() {
+// The practice API key. Seeded from the environment; splose-credentials.js
+// replaces it at boot and whenever the Owner connects or disconnects Splose
+// in Settings (migration 069). Every caller goes through client(), so one
+// setter is the whole surface. A key change empties the response cache —
+// that cache is keyed by path only and must never serve one tenant's data
+// under another key.
+let _apiKey = process.env.SPLOSE_API_KEY || null;
+
+function setApiKey(key) {
+  const next = key ? String(key) : null;
+  if (next !== _apiKey) { _cache.clear(); _inflight.clear(); }
+  _apiKey = next;
+}
+function getApiKey() { return _apiKey; }
+function isConfigured() { return !!_apiKey; }
+
+function client(keyOverride) {
+  const key = keyOverride || _apiKey;
+  if (!key) {
+    const err = new Error('Splose is not connected');
+    err.code = 'splose_not_connected';
+    throw err;
+  }
   return axios.create({
     baseURL: BASE_URL,
     headers: {
-      Authorization: `Bearer ${process.env.SPLOSE_API_KEY}`,
+      Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
     },
     timeout: 15000,
   });
+}
+
+/**
+ * Prove a CANDIDATE key against Splose before it is stored — a direct call
+ * outside the throttle queue and cache. Returns what the practice looks like
+ * so the Owner can confirm they pasted the right key.
+ */
+async function testKey(candidateKey) {
+  const c = client(candidateKey);
+  const r = await c.get('/practitioners', { params: { limit: 50 } });
+  const list = r.data?.data || [];
+  return { ok: true, practitioners: list.length, names: list.slice(0, 5).map((p) => `${p.firstname || ''} ${p.lastname || ''}`.trim()) };
 }
 
 // ─── Rate-limit queue ─────────────────────────────────────────────────────────
@@ -607,6 +641,10 @@ async function getSupportItems() {
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
+  setApiKey,
+  getApiKey,
+  isConfigured,
+  testKey,
   testConnection,
   getServices,
   getPractitioners,

@@ -6509,6 +6509,16 @@ window.opIcon = function (name, size) {
               </span>
             </div>
           </div>
+          <div class="settings-row settings-owner-only" id="stg-splose-conn-row">
+            <div class="settings-row-label">
+              <strong>Practice connection (API key)</strong>
+              <span id="stg-splose-conn-detail">Checking…</span>
+            </div>
+            <div class="settings-row-control" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+              <button class="btn btn-primary" id="stg-splose-conn-connect" onclick="connectSploseKey(this)" style="font-size:12px;">Connect with a new key</button>
+              <button class="btn" id="stg-splose-conn-disconnect" onclick="disconnectSploseKey(this)" style="font-size:12px;display:none;">Disconnect</button>
+            </div>
+          </div>
           <div class="settings-row" id="stg-splose-me-row">
             <div class="settings-row-label">
               <strong>Your Splose practitioner</strong>
@@ -22908,7 +22918,69 @@ async function unlinkSplosePractitioner(btn) {
   loadSplosePractitionerLink();
 }
 
+// ── The practice's Splose connection (Owner only) ─────────────────────────
+// One API key for the whole practice. The key is typed by the Owner, proved
+// against Splose by the server, stored encrypted, and never shown again.
+async function loadSploseConnection() {
+  var detail = document.getElementById('stg-splose-conn-detail');
+  var disc = document.getElementById('stg-splose-conn-disconnect');
+  var conn = document.getElementById('stg-splose-conn-connect');
+  var pill = document.getElementById('stg-splose-status');
+  if (!detail || !(window.APP_USER && window.APP_USER.role === 'owner')) return;
+  try {
+    var r = await fetch('/api/splose/connection', { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    if (d.connected) {
+      detail.textContent = d.source === 'database'
+        ? 'Connected' + (d.label ? ' — ' + d.label : '') + (d.connectedBy ? ' · by ' + d.connectedBy : '') + (d.connectedAt ? ' · ' + _fmtAgo(d.connectedAt) : '')
+        : 'Connected using the server\u2019s configured key — connect a new key here to replace it';
+      if (disc) disc.style.display = '';
+      if (conn) conn.textContent = 'Connect with a new key';
+      if (pill) { pill.className = 'settings-status-pill connected'; pill.innerHTML = '<span class="settings-status-dot"></span> Connected'; }
+    } else {
+      detail.textContent = d.source === 'disconnected'
+        ? 'Disconnected — no Splose data is read or written until a new key is connected'
+        : 'Not connected — paste the practice\u2019s Splose API key to connect';
+      if (disc) disc.style.display = 'none';
+      if (conn) conn.textContent = 'Connect';
+      if (pill) { pill.className = 'settings-status-pill disconnected'; pill.innerHTML = '<span class="settings-status-dot"></span> Not connected'; }
+    }
+  } catch (e) { detail.textContent = 'Connection status unavailable'; }
+}
+async function connectSploseKey(btn) {
+  var key = await portalPrompt('Paste the practice\u2019s Splose API key.\n\nIn Splose: Settings \u2192 Integrations \u2192 API. The key is checked against Splose, stored encrypted, and never shown again.');
+  if (!key || !key.trim()) return;
+  var label = await portalPrompt('Give this connection a label (optional), e.g. "Opal Therapy main account":', '');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking with Splose\u2026'; }
+  try {
+    var r = await fetch('/api/splose/connection', {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key.trim(), label: (label || '').trim() }),
+    });
+    var d = await r.json().catch(function () { return {}; });
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    showToast('Splose connected', d.practitioners + ' practitioner' + (d.practitioners === 1 ? '' : 's') + ' found' + (d.names && d.names.length ? ' (' + d.names.join(', ') + '\u2026)' : '') + '. Everyone should now check their own practitioner link.');
+    if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
+  } catch (e) { showToast('Could not connect Splose', String(e.message || e)); }
+  if (btn) { btn.disabled = false; }
+  loadSploseConnection(); loadSplosePractitionerLink();
+}
+async function disconnectSploseKey(btn) {
+  var ok = await portalConfirm('Disconnect the practice from Splose?\n\nNo appointments, clients or cases are read or written by anyone until a new key is connected. Nothing in Splose itself changes.');
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Disconnecting\u2026'; }
+  try {
+    var r = await fetch('/api/splose/connection', { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Splose disconnected', 'Connect a new key when the practice is ready.');
+  } catch (e) { showToast('Could not disconnect', String(e.message || e)); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
+  loadSploseConnection(); loadSplosePractitionerLink();
+}
+
 async function checkIntegrationStatuses() {
+  loadSploseConnection();
   loadSplosePractitionerLink();
   // Splose: optimistic (we always attempt the patient-data connection)
   var slosePill    = document.getElementById('stg-splose-status');
