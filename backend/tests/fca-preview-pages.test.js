@@ -10,11 +10,12 @@
  * elements, how big they are, and whether they are separate sheets.
  *
  * ── The defect these exist for ──────────────────────────────────────────────
- * The Opal template starts each major section on a new page with
- * `w:pageBreakBefore`. docx-preview 0.4.0 parses that property and never acts
- * on it — it breaks pages only on `w:br w:type="page"` runs and section breaks
- * — so the whole report came out as ONE page element: a single sheet metres
- * long, with no boundaries to space apart. See fca/preview-pagination.js.
+ * docx-preview 0.4.0 breaks pages only on `w:br w:type="page"` runs and
+ * section breaks. The Opal template carries NEITHER — the download must hold
+ * no page breaks at all (18 Sep 2026) — so unaided, the whole report renders
+ * as ONE page element: a single sheet metres long. The preview stream
+ * therefore starts a page at every report section instead; the download is
+ * untouched. See fca/preview-pagination.js.
  *
  * jsdom cannot run the vendored jszip build (its async scheduler never
  * settles), so the Node zip library is injected as window.JSZip. The renderer
@@ -108,24 +109,29 @@ afterAll(() => { if (rendered) rendered.close(); });
 
 // ── The document's own breaks ───────────────────────────────────────────────
 
-describe('the document declares its page breaks, and they survive to the preview', () => {
-  test('the composed report carries pageBreakBefore, not explicit break runs', async () => {
+describe('the download carries no page breaks; the preview starts each section on a page', () => {
+  test('the composed report carries NO page breaks of any kind — the download flows naturally', async () => {
     const xml = await documentXml(composed);
-    expect((xml.match(/<w:pageBreakBefore\b/g) || []).length).toBeGreaterThanOrEqual(15);
+    expect((xml.match(/<w:pageBreakBefore\b/g) || []).length).toBe(0);
     expect((xml.match(/<w:br w:type="page"/g) || []).length).toBe(0);
   });
 
-  test('the preview stream restates every one of them as a break the renderer reads', async () => {
+  test('the preview stream breaks before Contents and before every report section', async () => {
     const xml = await documentXml(composed);
-    const before = (xml.match(/<w:pageBreakBefore\b/g) || []).length;
+    const out = paginateDocumentXml(xml);
+    // 24 catalogue sections minus the 5 assessment-tool sub-blocks. Contents
+    // is a page start too, but the cover ends with a section break so no
+    // extra break is needed there — 19 breaks for 19 sections.
+    expect(out.sections).toBe(19);
+    expect(out.inserted).toBe(19);
     const next = await documentXml(paginated);
-    expect((next.match(/<w:br w:type="page"/g) || []).length).toBe(before);
+    expect((next.match(/<w:br w:type="page"/g) || []).length).toBe(19);
     expect((next.match(/<w:pageBreakBefore\b/g) || []).length).toBe(0);
   });
 
-  test('the DOWNLOAD is untouched — Word honours the property itself', async () => {
+  test('the DOWNLOAD is untouched — no break is written into the file the therapist edits', async () => {
     const xml = await documentXml(composed);
-    expect(xml).toContain('<w:pageBreakBefore');
+    expect(xml).not.toContain('<w:pageBreakBefore');
     expect(xml).not.toContain('<w:br w:type="page"');
     // …and the preview's rewrite is not shared with it: the same composition,
     // asked for twice, still produces the download's own unmodified XML.
@@ -174,6 +180,23 @@ describe('the document declares its page breaks, and they survive to the preview
     const out = paginateDocumentXml(xml);
     expect(out.found).toBe(1);
     expect(out.inserted).toBe(0);
+  });
+
+  test('a section control starts a page; an assessment-tool sub-block does not', () => {
+    const xml = '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+      + '<w:body><w:p><w:r><w:t>cover</w:t></w:r></w:p>'
+      + '<w:sdt><w:sdtPr><w:tag w:val="OPAL_SECTION_ASSESSMENT_METHOD"/></w:sdtPr><w:sdtContent>'
+      + '<w:p><w:r><w:t>Assessment Method</w:t></w:r></w:p>'
+      + '<w:sdt><w:sdtPr><w:tag w:val="OPAL_SECTION_ASSESSMENT_TOOL_WHODAS"/></w:sdtPr><w:sdtContent>'
+      + '<w:p><w:r><w:t>WHODAS</w:t></w:r></w:p></w:sdtContent></w:sdt>'
+      + '</w:sdtContent></w:sdt>'
+      + '<w:sdt><w:sdtPr><w:tag w:val="OPAL_SECTION_APPENDICES"/></w:sdtPr><w:sdtContent>'
+      + '<w:p><w:r><w:t>Appendices</w:t></w:r></w:p></w:sdtContent></w:sdt>'
+      + '</w:body></w:document>';
+    const out = paginateDocumentXml(xml);
+    expect(out.sections).toBe(2);
+    expect(out.inserted).toBe(2);
+    expect(out.found).toBe(0);
   });
 
   test('a package it cannot rewrite is returned exactly as it arrived', async () => {

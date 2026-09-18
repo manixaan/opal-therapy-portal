@@ -5,33 +5,34 @@
  * browser renderer. Pure: a Buffer in, a Buffer out, no I/O and no clock.
  *
  * ── The defect this exists for ──────────────────────────────────────────────
- * The Opal report template starts each major section on a new page the way
- * Word authors normally do it: `<w:pageBreakBefore/>` in the paragraph's
- * properties. The shipped template carries nineteen of them (Contents,
- * Referral Information, each functional domain, Summary and Recommendations,
- * the declaration, the appendices…).
+ * docx-preview 0.4.0 starts a new page element for exactly two things: a
+ * `w:br w:type="page"` run, and a section break. It never paginates by
+ * content. An FCA report with neither between its sections therefore renders
+ * as ONE page element: a single sheet several metres long, with no page
+ * boundaries and nothing to space apart.
  *
- * docx-preview 0.4.0 PARSES that property — `parseParagraphProperties` stores
- * it as `pageBreakBefore` — and then never reads it again. Its page grouping
- * (`splitBySection` / `groupByPageBreaks`) starts a new page element for
- * exactly two things: a `w:br w:type="page"` run, and a section break. The
- * FCA document has neither between its sections, so all nineteen breaks were
- * dropped and the whole report rendered as ONE page element: a single sheet
- * several metres long, with no page boundaries and nothing to space apart.
+ * ── The document carries NO page breaks, on purpose ─────────────────────────
+ * The shipped template used to start each major section with
+ * `w:pageBreakBefore`. Those flags were removed (18 Sep 2026, Antony's
+ * instruction): the downloaded Word file must contain no page breaks of any
+ * kind — headings never jump to a new page and Enter behaves; a therapist who
+ * wants a new page presses Enter until there is one. So the break information
+ * is no longer in the document, and the preview has to know the template's
+ * structure instead.
  *
- * ── Why this is the right layer ─────────────────────────────────────────────
- * The break information is already in the document and it is correct. Nothing
- * is invented here and no break is added between arbitrary paragraphs: every
- * inserted break stands where the template itself said "new page". This is a
- * renderer-input normalisation — the same instruction, restated in the one
- * form this renderer understands.
+ * ── What the preview breaks on ──────────────────────────────────────────────
+ * Every optional section of the report is a content control (`w:sdt`) whose
+ * tag starts `OPAL_SECTION_`. The preview starts a new page at the first
+ * paragraph of each such control — except the assessment-tool blocks
+ * (`OPAL_SECTION_ASSESSMENT_TOOL_*`), which are sub-blocks of the Assessment
+ * Method page — and at the Contents title. That reproduces the page plan the
+ * template used to declare (Contents, each main heading, each functional
+ * domain, each recommendation group) without a single break in the file.
  *
- * It is applied to the PREVIEW STREAM ONLY. The downloaded .docx is composed
- * by the same helper and shipped untouched, because Word honours
- * `w:pageBreakBefore` natively and rewriting it would change the file the
- * therapist edits. Content and ordering are identical either way: this adds
- * break paragraphs and removes the property they replace, and touches nothing
- * else.
+ * A `w:pageBreakBefore` property, if a template ever carries one again, is
+ * still honoured the old way. Either way this is applied to the PREVIEW
+ * STREAM ONLY: the download is composed by the same helper and shipped
+ * untouched.
  *
  * ── The two rules that keep the page count honest ───────────────────────────
  * 1. A break is never inserted before the first element in the document —
@@ -79,6 +80,61 @@ function bodyFlow(el, out) {
   return out;
 }
 
+const SECTION_TAG = /^OPAL_SECTION_/;
+const SUB_BLOCK_TAG = /^OPAL_SECTION_ASSESSMENT_TOOL_/;
+const CONTENTS_STYLE = 'OPAL\u2013DocumentTitle';
+
+/** The `w:tag` value of a content control, or null. */
+function sdtTag(sdt) {
+  const pr = directChild(sdt, 'w:sdtPr');
+  const tag = pr ? directChild(pr, 'w:tag') : null;
+  return tag ? tag.getAttribute('w:val') : null;
+}
+
+/** First paragraph in a content control's flow (nested controls flattened). */
+function firstParagraph(sdt) {
+  const content = directChild(sdt, 'w:sdtContent');
+  if (!content) return null;
+  const flow = bodyFlow(content, []);
+  return flow.find((n) => n.nodeName === 'w:p') || null;
+}
+
+/**
+ * Paragraphs that begin a report section: the first paragraph of every
+ * `OPAL_SECTION_*` control that is not an assessment-tool sub-block, at any
+ * nesting depth (the functional domains sit inside Assessment Results, the
+ * recommendation groups inside Summary and Recommendations).
+ */
+function sectionStarts(el, out) {
+  for (let n = el.firstChild; n; n = n.nextSibling) {
+    if (n.nodeType !== 1) continue;
+    if (n.nodeName === 'w:sdt') {
+      const tag = sdtTag(n) || '';
+      if (SECTION_TAG.test(tag) && !SUB_BLOCK_TAG.test(tag)) {
+        const p = firstParagraph(n);
+        if (p) out.add(p);
+      }
+      const content = directChild(n, 'w:sdtContent');
+      if (content) sectionStarts(content, out);
+    }
+  }
+  return out;
+}
+
+/** The "Contents" title paragraph — a document title that is not the cover's. */
+function isContentsTitle(p, text) {
+  const pPr = directChild(p, 'w:pPr');
+  const st = pPr ? directChild(pPr, 'w:pStyle') : null;
+  return !!st && st.getAttribute('w:val') === CONTENTS_STYLE && /^contents$/i.test(text);
+}
+
+function paragraphText(p) {
+  const ts = p.getElementsByTagName('w:t');
+  let out = '';
+  for (let i = 0; i < ts.length; i += 1) out += ts[i].textContent || '';
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 /** True when this paragraph already carries an explicit page-break run. */
 function hasPageBreakRun(p) {
   const brs = p.getElementsByTagName('w:br');
@@ -105,17 +161,19 @@ function breakParagraph(doc) {
 }
 
 /**
- * Rewrite one word/document.xml so every `w:pageBreakBefore` becomes the
- * explicit break run that precedes it.
+ * Rewrite one word/document.xml so the preview starts a new page at every
+ * report section (and at the Contents title), and so any `w:pageBreakBefore`
+ * a template still carries becomes the explicit break run that precedes it.
  *
- * @returns {{ xml: string, inserted: number, found: number }}
+ * @returns {{ xml: string, inserted: number, found: number, sections: number }}
  */
 function paginateDocumentXml(xml) {
   const doc = new DOMParser().parseFromString(String(xml), 'text/xml');
   const body = doc.getElementsByTagName('w:body')[0];
-  if (!body) return { xml: String(xml), inserted: 0, found: 0 };
+  if (!body) return { xml: String(xml), inserted: 0, found: 0, sections: 0 };
 
   const flow = bodyFlow(body, []);
+  const starts = sectionStarts(body, new Set());
   let inserted = 0;
   let found = 0;
   // Nothing precedes the first element, so the document already "starts a
@@ -127,24 +185,26 @@ function paginateDocumentXml(xml) {
 
     const pPr = directChild(node, 'w:pPr');
     const pageBreakBefore = pPr ? directChild(pPr, 'w:pageBreakBefore') : null;
+    let wantsBreak = starts.has(node) || isContentsTitle(node, paragraphText(node));
 
     if (pageBreakBefore) {
       found += 1;
-      const on = propertyIsOn(pageBreakBefore);
       // Removed either way: the property has been expressed as a real break,
       // and leaving it would double the break if the renderer ever learns to
       // read it.
       pPr.removeChild(pageBreakBefore);
-      if (on && !alreadyBroken) {
-        node.parentNode.insertBefore(breakParagraph(doc), node);
-        inserted += 1;
-      }
+      if (propertyIsOn(pageBreakBefore)) wantsBreak = true;
+    }
+
+    if (wantsBreak && !alreadyBroken) {
+      node.parentNode.insertBefore(breakParagraph(doc), node);
+      inserted += 1;
     }
 
     alreadyBroken = !!(pPr && directChild(pPr, 'w:sectPr')) || hasPageBreakRun(node);
   }
 
-  return { xml: new XMLSerializer().serializeToString(doc), inserted, found };
+  return { xml: new XMLSerializer().serializeToString(doc), inserted, found, sections: starts.size };
 }
 
 /**
@@ -182,5 +242,5 @@ async function paginateForPreview(buffer) {
 module.exports = {
   paginateForPreview,
   paginateDocumentXml,
-  _internals: { bodyFlow, hasPageBreakRun, directChild },
+  _internals: { bodyFlow, hasPageBreakRun, directChild, sectionStarts, sdtTag },
 };
