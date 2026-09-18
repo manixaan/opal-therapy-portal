@@ -61,6 +61,16 @@
   --c-leave-bg: #173a27;
   --tile-fg: #ece6dc;
   --tile-fg-soft: #bdb5aa;
+
+  /* Names some feature sheets use with a light fallback and the shell never
+     defines — give them night values so those surfaces flip too. */
+  --card: var(--panel);
+  --card-bg: var(--panel);
+  --surface-2: var(--panel-soft);
+  --line-soft: var(--border-soft);
+  --text-muted: var(--muted);
+  --ok-bg: var(--ok-soft);
+  --ok-line: #2c5a3d;
 }
 
 /* The dropdown chevron is an inline SVG with a baked-in stroke. */
@@ -79,4 +89,12 @@
   --border: #e9e3d9; --border-soft: #f4efe7;
   --accent: #0f7c6c; --accent-deep: #0a5d51; --accent-soft: #e4f2ec; --accent-ink: #0d6153;
   color: #241f1a;
+}
+
+/* Outlook-category calendar tiles. By day each carries a pastel wash from the
+   category palette; by night the wash is rebuilt from the category's own
+   border hue over the panel, and the text goes light. */
+:root[data-theme="dark"] .session.has-cat {
+  background: color-mix(in srgb, var(--cat-border) 26%, var(--panel)) !important;
+  color: var(--tile-fg) !important;
 }

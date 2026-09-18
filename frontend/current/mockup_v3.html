@@ -88,7 +88,7 @@
 <link rel="stylesheet" href="/onboarding-journey.css?v=39" />
 <link rel="stylesheet" href="/employees.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=1" />
+<link rel="stylesheet" href="/theme.css?v=2" />
 <script src="/resourcehub.js?v=r52" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
@@ -2468,7 +2468,7 @@ window.opIcon = function (name, size) {
   .cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .cal-sidebar {
     width: 212px; flex: 0 0 212px;
-    border-right: 1px solid var(--border); background: #fbfbfc;
+    border-right: 1px solid var(--border); background: var(--panel-soft);
     padding: 12px 10px; overflow-y: auto;
     display: flex; flex-direction: column; gap: 16px;
   }
@@ -2582,6 +2582,13 @@ window.opIcon = function (name, size) {
     min-height: 8px; /* 15-min slot (12px) minus the 4px gap */
     transition: box-shadow 0.15s ease;
     z-index: 2; /* sit above hour-line gridlines */
+  }
+  /* Outlook-category tiles: applyCategoryColour() supplies the three values.
+     !important keeps the precedence the old inline styles had. */
+  .session.has-cat {
+    background: var(--cat-bg) !important;
+    border-left-color: var(--cat-border) !important;
+    color: var(--cat-text) !important;
   }
   .session:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18); z-index: 3; }
   /* One line each, ellipsis instead of wrapping — the tile never grows to fit text */
@@ -9926,15 +9933,23 @@ function resolveEventColour(categories) {
   return null;
 }
 
+// Category colours ride custom properties rather than inline background/color,
+// so the stylesheet decides how they paint: the pastel wash by day, a deep wash
+// of the same hue by night (theme.css). Switching theme re-paints live tiles.
+function applyCategoryColour(el, colour) {
+  el.classList.add('has-cat');
+  el.style.setProperty('--cat-bg', colour.bg);
+  el.style.setProperty('--cat-border', colour.border);
+  el.style.setProperty('--cat-text', colour.text);
+}
+
 // Re-colour already-rendered Outlook event tiles after categories load.
 function recolourOutlookEvents() {
   Object.values(SESSIONS || {}).forEach(s => {
     if (!s.categories || !s.element) return;
     const colour = resolveEventColour(s.categories);
     if (!colour) return;
-    s.element.style.background    = colour.bg;
-    s.element.style.borderLeftColor = colour.border;
-    s.element.style.color          = colour.text;
+    applyCategoryColour(s.element, colour);
   });
 }
 
@@ -13206,9 +13221,7 @@ function addSession(col, opts) {
   // Apply Outlook category colour if available, otherwise fall back to CSS type colours
   const catColour = resolveEventColour(opts.categories);
   if (catColour) {
-    el.style.background     = catColour.bg;
-    el.style.borderLeftColor = catColour.border;
-    el.style.color           = catColour.text;
+    applyCategoryColour(el, catColour);
   } else if (opts.color) {
     el.style.background = opts.color;
   }
