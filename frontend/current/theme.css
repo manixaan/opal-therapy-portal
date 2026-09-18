@@ -1,0 +1,82 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   theme.css — the night palette.
+
+   The portal is token-driven (mockup_v3.html :root), so night mode is the
+   same tokens re-valued under <html data-theme="dark">, which theme.js sets.
+   Loaded last so it wins over every feature sheet. Warm charcoal rather
+   than blue-black, to stay in the family of the cream day theme.
+   ───────────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1d1b18;
+  --panel: #282522;
+  --panel-soft: #23211e;
+  --panel-sunk: #35312c;
+  --ink: #efe9e0;
+  --ink-soft: #c4bcb1;
+  --ink-faint: #a69e93;
+  --muted: #8e867c;
+  --border: #3f3a34;
+  --border-soft: #322e2a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 32px rgba(0, 0, 0, 0.55);
+
+  --accent: #1f9a86;
+  --accent-deep: #2bb39c;
+  --accent-soft: #16372f;
+  --accent-ink: #7fd6c4;
+  --accent-2: #e07f5f;
+  --accent-2-deep: #ec9679;
+  --accent-2-soft: #41271d;
+  --warn: #d89a3c;
+  --warn-soft: #3a2d13;
+  --warn-ink: #f0c377;
+  --danger: #e0604c;
+  --danger-soft: #42221c;
+  --danger-ink: #f5a394;
+  --ok: #4cae74;
+  --ok-soft: #1c3525;
+  --ok-ink: #8fd6aa;
+  --info: #6a9be0;
+  --info-soft: #1d2b42;
+  --info-ink: #a5c4f2;
+
+  /* Calendar tiles: the pastel washes become deep washes of the same hue;
+     the mid-tone border strips are kept so each type stays recognisable. */
+  --c-therapy-bg: #3b3212;   --c-initial-bg: #3b3212;   --c-assessment-bg: #3b3212;
+  --c-mdt-bg: #15383e;
+  --c-report-bg: #40211f;
+  --c-travel-bg: #2b274f;
+  --c-admin-bg: #173146;
+  --c-meeting-bg: #173a27;
+  --c-cpd-bg: #222c4c;
+  --c-lunch-bg: #153a32;
+  --c-personal-bg: #173443;
+  --c-sick-bg: #40202a;
+  --c-annual-bg: #25381a;
+  --c-teams-bg: #2b274f;
+  --c-outlook-bg: #3b3212;
+  --c-leave-bg: #173a27;
+  --tile-fg: #ece6dc;
+  --tile-fg-soft: #bdb5aa;
+}
+
+/* The dropdown chevron is an inline SVG with a baked-in stroke. */
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4bcb1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* Paper stays paper. Document previews and letter/report pages are white
+   sheets at any hour, so inside them the tokens return to their day values
+   and token-coloured text stays dark on the white page. The WHODAS form
+   carries its own fixed light palette, so it is kept as a day island too. */
+:root[data-theme="dark"] :is(.dp-page, .dp-text, .tpl-docx-render-wrapper > section, .fca-docx-render-wrapper > section, .oj-lt-page, .whodas-page, .whodas-modal__panel, .whodas-toolbar) {
+  color-scheme: light;
+  --bg: #faf6f0; --panel: #ffffff; --panel-soft: #faf8f4; --panel-sunk: #f1ece4;
+  --ink: #241f1a; --ink-soft: #5d564e; --ink-faint: #7a736a; --muted: #99928a;
+  --border: #e9e3d9; --border-soft: #f4efe7;
+  --accent: #0f7c6c; --accent-deep: #0a5d51; --accent-soft: #e4f2ec; --accent-ink: #0d6153;
+  color: #241f1a;
+}

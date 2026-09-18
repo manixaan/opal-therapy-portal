@@ -503,7 +503,7 @@ describe('calendar workspace redesign', () => {
 
   test('week view shows the full Mon-Sun week by default; Settings can hide weekends', () => {
     expect(HTML).toContain('var showWeekends = s.showWeekends !== false; // full Mon-Sun week by default');
-    expect(HTML).toContain('.cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: #fbfaf7; }');
+    expect(HTML).toContain('.cal-col[data-day="sat"], .cal-col[data-day="sun"] { background: var(--panel-soft); }');
     expect(HTML).toContain('Display Saturday and Sunday in week view'); // setting still there
   });
 

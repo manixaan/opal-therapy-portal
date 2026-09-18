@@ -725,6 +725,9 @@ describe('changed assets are cache-busted', () => {
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
       ['templates.js', 7], ['templates.css', 6],
+      // 1: day / night mode — theme.js stamps data-theme before first paint
+      // (auto follows the clock), theme.css re-values the shell tokens.
+      ['theme.js', 1], ['theme.css', 1],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
