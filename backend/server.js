@@ -400,7 +400,7 @@ app.get('/', async (req, res) => {
 
 // ── Opal Assist — standalone page, same account guard as the shell ─────────
 app.get('/assist', async (req, res) => {
-  if (!req.session?.userId) return res.redirect('/login?returnUrl=%2Fassist');
+  if (!req.session?.userId) return res.redirect('/login?next=%2Fassist');
   const user = await getSessionUser(req.session.userId);
   if (!user) return res.redirect('/login');
   const status = user.account_status || 'active';

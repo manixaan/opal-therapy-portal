@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Opal Assist</title>
+  <link rel="icon" href="/icons/opal-assist.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assist.css?v=1">
+</head>
+<body>
+  <div class="oa-app">
+    <aside class="oa-side" id="oa-side">
+      <div class="oa-brand">
+        <img src="/icons/opal-assist.svg" alt="">
+        <div><strong>Opal Assist</strong><span>Opal Therapy's own AI</span></div>
+      </div>
+      <div class="oa-side-actions">
+        <button class="oa-btn primary" id="oa-new" type="button">+ New chat</button>
+        <a class="oa-btn ghost" href="/" title="Back to the portal">Portal</a>
+      </div>
+      <nav class="oa-threads" id="oa-threads" aria-label="Recent chats"></nav>
+      <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.</div>
+    </aside>
+
+    <main class="oa-main">
+      <header class="oa-head">
+        <button class="oa-btn ghost sm" id="oa-menu" type="button" aria-label="Chats" style="display:none;">☰</button>
+        <div class="oa-title" id="oa-title">New chat</div>
+        <span class="oa-pill" id="oa-status">Checking…</span>
+      </header>
+
+      <section class="oa-body" id="oa-body" aria-live="polite">
+        <div class="oa-stack" id="oa-stack"></div>
+      </section>
+
+      <footer class="oa-compose">
+        <div class="oa-compose-inner">
+          <div id="oa-review-slot"></div>
+          <div class="oa-selection" id="oa-selection"><strong>Selected content attached</strong><span id="oa-selection-info"></span><button class="oa-btn ghost sm" id="oa-selection-clear" type="button">Remove</button></div>
+          <label class="sr-only" for="oa-input">Message Opal Assist</label>
+          <textarea class="oa-textarea" id="oa-input" placeholder="Ask Opal Assist… (Shift+Enter for a new line)"></textarea>
+          <div class="oa-compose-row">
+            <span class="oa-hint" id="oa-hint">Names, phone numbers, emails, addresses and NDIS numbers are replaced with tokens before sending. You see them; the AI never does.</span>
+            <button class="oa-btn" id="oa-stop" type="button" style="display:none;">Stop</button>
+            <button class="oa-btn primary" id="oa-send" type="button">Check &amp; send</button>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+  <script src="/assist.js?v=1"></script>
+</body>
+</html>

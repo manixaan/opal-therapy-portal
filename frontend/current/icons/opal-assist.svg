@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Opal Assist">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2aa792"/>
+      <stop offset="0.58" stop-color="#0f7c6c"/>
+      <stop offset="1.08" stop-color="#cf7b57"/>
+    </linearGradient>
+  </defs>
+  <!-- the portal's pebble, drawn as a path so it survives every renderer -->
+  <path fill="url(#g)" d="M33 4c12 0 26 9 27 24 1 14-9 31-26 32C17 61 3 50 4 34 5 17 21 4 33 4z"/>
+  <!-- nucleus highlight -->
+  <path fill="rgba(255,255,255,0.55)" d="M27 18c6-1 12 2 13 8 1 5-4 10-10 10s-11-3-11-8c0-5 3-9 8-10z"/>
+  <!-- a four-point spark: the assist -->
+  <path fill="#fff" d="M45 34l2.2 6.3L53 42.5l-5.8 2.2L45 51l-2.2-6.3L37 42.5l5.8-2.2z"/>
+</svg>
