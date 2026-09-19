@@ -55,7 +55,7 @@ const deid = require('./ai/deidentify');
  */
 const TOKEN_INSTRUCTION = '\n\nPEOPLE ARE TOKENISED. The dictation refers to people by bracketed role tokens such as '
   + '[CLIENT], [CLIENT_MOTHER], [THERAPIST] or [PERSON], and to contact details by tokens such as [EMAIL_1], '
-  + '[PHONE_1], [ADDRESS_1] or [NDIS_NUMBER_1]. Reproduce every token EXACTLY as written, including the '
+  + '[PHONE_1], [ADDRESS_1], [NDIS_NUMBER_1], [MEDICARE_NUMBER_1] or [DOB_1]. Reproduce every token EXACTLY as written, including the '
   + 'square brackets, wherever that person is referred to. Never invent a token, never expand one into a name, '
   + 'never guess a name. Treat [CLIENT] as the participant the note is about.';
 

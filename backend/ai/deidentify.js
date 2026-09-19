@@ -175,6 +175,10 @@ function tokenise(text) {
  */
 const STREET_TYPES = 'street|st|road|rd|avenue|ave|av|drive|dr|court|ct|crescent|cres|cr|place|pl|way|lane|ln|parade|pde|boulevard|blvd|bvd|terrace|tce|close|cl|highway|hwy|circuit|cct|grove|gr|rise|loop|esplanade|esp|square|sq|mews|walk|promenade|prom|glade|gdns|gardens|retreat|rtt|entrance|ent|link|vista|view|heights|hts|track|trk|alley|circle|cir|crossing|xing|green|grn|quay|qy|ridge|rdge|row|strand|trail|trl';
 const AU_STATES = 'wa|nsw|vic|qld|sa|tas|nt|act';
+const MONTHS = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+const DATE_SHAPES = '(?:\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}\\s*[/.-]\\s*\\d{1,2}\\s*[/.-]\\s*(?:\\d{4}|\\d{2})'
+  + '|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:' + MONTHS + ')\\.?,?(?:\\s+\\d{4})?'
+  + '|(?:' + MONTHS + ')\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?(?:\\s+\\d{4})?)';
 const STRUCTURED_PATTERNS = [
   { role: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   {
@@ -189,14 +193,40 @@ const STRUCTURED_PATTERNS = [
       'gi',
     ),
   },
+  {
+    role: 'address',
+    // "PO Box 12", "GPO Box 9 Perth WA 6848", "Locked Bag 3" — the suburb is
+    // taken only when a state or postcode follows, so ordinary words are not.
+    re: new RegExp(
+      '\\b(?:g?\\.?p\\.?\\s?o\\.?\\s?box|locked\\s+bag|private\\s+bag)\\s*\\d{1,6}'
+      + "(?:,?\\s+[A-Za-z][A-Za-z'’-]+(?:\\s+[A-Za-z][A-Za-z'’-]+)?(?=,?\\s+(?:(?:" + AU_STATES + ')\\b|\\d{4}\\b)))?'
+      + '(?:,?\\s+(?:' + AU_STATES + ')\\b)?(?:,?\\s+\\d{4}\\b)?',
+      'gi',
+    ),
+  },
+  // A postcode only when it is called one. A bare four-digit number is a year or a score.
+  { role: 'address', re: /(?<=\bpost\s?code(?:\s+is)?[:\s]{1,3})\d{4}\b/gi },
+  {
+    role: 'dob',
+    // Only a date that is SAID to be a birth date. Session dates are clinical
+    // content and stay. The cue stays in the text; the date becomes [DOB_n].
+    re: new RegExp('(?<=\\b(?:d\\.?\\s?o\\.?\\s?b\\.?|date\\s+of\\s+birth|birth\\s?date|birthday|born)(?:\\s+(?:is|was|on|in))?[:\\s-]{1,3})' + DATE_SHAPES + '\\b', 'gi'),
+  },
+  // Medicare: ten digits written 4-5-1 (optionally a reference digit), or
+  // any ten/eleven digits after the word.
+  { role: 'medicare', re: /\b[2-6]\d{3}[\s-]\d{5}[\s-]\d(?:\s?[/-]?\s?\d)?\b|(?<=\bmedicare(?:\s+(?:card|number|no\.?|num|#))*[:\s#-]{1,3})[2-6]\d{9,10}\b/gi },
   { role: 'ndis_number', re: /\b43\d{7}\b/g },
   {
     role: 'phone',
     // +61 4xx xxx xxx · 04xx xxx xxx · (08) 9xxx xxxx · 08 9xxx xxxx · 1300/1800 xxx xxx · 13 xx xx
     re: /(?:\+61[\s-]?\(?0?\)?[\s-]?[2-478](?:[\s-]?\d){8}|\(0[2-478]\)[\s-]?\d(?:[\s-]?\d){7}|\b0[2-478](?:[\s-]?\d){8}|\b1[38]00(?:[\s-]?\d){6}|\b13(?:[\s-]?\d){4})\b/g,
   },
+  // A landline without its area code: "9388 1234". Two years side by side
+  // ("2023-2024") are not a phone. Eight digits run together only after a cue.
+  { role: 'phone', re: /\b(?!(?:19|20)\d{2}[\s-](?:19|20)\d{2}\b)[2-9]\d{3}[\s-]\d{4}\b(?![\s-]?\d)|(?<=\b(?:ph|phone|tel|telephone|mob|mobile|call|ring|rang|fax)\.?[:\s]{1,3})[2-9]\d{7}\b/gi },
 ];
-const STRUCTURED_TOKENS = { email: 'EMAIL', address: 'ADDRESS', ndis_number: 'NDIS_NUMBER', phone: 'PHONE' };
+const STRUCTURED_TOKENS = { email: 'EMAIL', address: 'ADDRESS', ndis_number: 'NDIS_NUMBER', phone: 'PHONE', dob: 'DOB', medicare: 'MEDICARE_NUMBER' };
+const NUMERIC_ROLES = new Set(['phone', 'ndis_number', 'medicare']);
 
 /**
  * Replace every structured identifier with a numbered token. The same value
@@ -207,17 +237,17 @@ function deidentifyStructured(text) {
   let out = String(text || '');
   const entries = [];
   const byValue = new Map();
+  const counts = {}; // per ROLE, not per pattern — two address patterns share one numbering
   for (const { role, re } of STRUCTURED_PATTERNS) {
-    let n = 0;
     out = out.replace(re, (m) => {
       // Numeric identifiers compare on digits alone so "0412 345 678" and
       // "0412345678" are one token; text ones on collapsed lowercase.
-      const norm = (role === 'phone' || role === 'ndis_number') ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
+      const norm = NUMERIC_ROLES.has(role) ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
       const key = `${role}:${norm}`;
       let e = byValue.get(key);
       if (!e) {
-        n++;
-        e = { token: `${STRUCTURED_TOKENS[role]}_${n}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
+        counts[role] = (counts[role] || 0) + 1;
+        e = { token: `${STRUCTURED_TOKENS[role]}_${counts[role]}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
         byValue.set(key, e);
         entries.push(e);
       }
@@ -248,12 +278,47 @@ const SENTENCE_END = /[.!?]\s*$/;
 // Words that are often capitalised for reasons other than being a name.
 const COMMON_CAPITALISED = new Set(('i monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december ndis ot pt ndia australia australian perth wa western sydney melbourne brisbane adelaide english maths science school year term christmas easter covid ipad iphone lego youtube google zoom teams outlook splose opal opa australia mr mrs ms dr').split(/\s+/));
 
+// Everyday English that must never be offered as "is this a person?" by the
+// loose detectors below (a lowercase word after a person cue, a near-miss of a
+// name already in the conversation). Not a dictionary — the words that really
+// do follow "spoke with…" or sit one letter from a common name.
+const COMMON_WORDS = new Set(('a about above after again all also am an and any are around as at away back bad be because been before being best better big both but by '
+  + 'call called came can care class clear client clients come could day did do does doing done down each early end even every family feel felt few find first for from '
+  + 'gave get give go going good got great group had hand has have he help her here high him his home how i if in into is it its just keep kept kind knew know '
+  + 'lake last late later left less let life like line little long look made make man many mark may me meet men met might mind more most much must my need never new next '
+  + 'no not note notes now of off often old on once one only or other our out over own park part past plan play put ran read real really right room '
+  + 'said same saw say school see seen session she should show side since so some soon staff still such take team tell than that the their them then there these they thing things think this those '
+  + 'though time to today told too took toward two under until up upon us use used very want was way we week well went were what when where which while who why will with without work would '
+  + 'year yes yet you your parent parents mum dad mother father teacher carer coordinator provider support worker therapist doctor nurse everyone someone nobody anyone people person child children kids '
+  + 'dark mask mare widen laden loam bike hike mike luck lack lick duke nuke').split(/\s+/));
+// A person is about to be named: "spoke with …", "rang …", "his mum …".
+const PERSON_CUES = /^(with|to|from|rang|called|phoned|emailed|texted|messaged|met|saw|visited|contacted|thanked|asked|told|cc|attn)$/i;
+
+/** Damerau–Levenshtein distance, capped: returns 2 for anything further than 1. */
+function nearMiss(a, b) {
+  if (a === b) return 0;
+  const la = a.length; const lb = b.length;
+  if (Math.abs(la - lb) > 1) return 2;
+  let i = 0;
+  while (i < la && i < lb && a[i] === b[i]) i++;
+  const ra = a.slice(i); const rb = b.slice(i);
+  if (la === lb) {
+    if (ra.slice(1) === rb.slice(1)) return 1;                                   // one letter swapped for another
+    if (ra.length >= 2 && ra[0] === rb[1] && ra[1] === rb[0] && ra.slice(2) === rb.slice(2)) return 1; // two letters transposed
+    return 2;
+  }
+  return (la > lb ? ra.slice(1) === rb : rb.slice(1) === ra) ? 1 : 2;             // one letter added or dropped
+}
+
 /**
  * @param {string} text
  * @param {object} map          from buildIdentityMap
  * @param {object} [opts]
  * @param {string[]} [opts.confirmedNames]  candidate words the therapist said ARE people
  * @param {string[]} [opts.ignoredWords]    candidate words the therapist said are NOT
+ * @param {boolean}  [opts.looseCandidates] also OFFER (never replace) lowercase words after a
+ *                                          person cue and one-letter near-misses of a name that
+ *                                          did match — for free text with no linked client
  * @returns {{ text, entries: [{token, role, count}], candidates: [{word, reason}], map }}
  */
 function deidentify(text, map, opts = {}) {
@@ -287,6 +352,12 @@ function deidentify(text, map, opts = {}) {
   const knownNorm = new Set();
   entries.forEach((e) => e.variants.forEach((v) => knownNorm.add(v)));
 
+  const sentenceStart = () => {
+    const before = out.join('');
+    return out.length === 0 || /^\s*$/.test(before) || SENTENCE_END.test(before.trimEnd() + ' ');
+  };
+  const unmatched = []; // { w, raw, prev } — for the loose candidate pass
+
   // Exact multi-word / single-word / phonetic matching, longest first.
   let i = 0;
   while (i < toks.length) {
@@ -297,7 +368,7 @@ function deidentify(text, map, opts = {}) {
     for (let span = 3; span >= 1 && !matched; span--) {
       const idx = [];
       let j = i;
-      while (idx.length < span && j < toks.length) { if (toks[j].word) idx.push(j); else if (idx.length && /\s/.test(toks[j].text) === false) break; j++; }
+      while (idx.length < span && j < toks.length) { if (toks[j].word) idx.push(j); else if (idx.length && /\s/.test(toks[j].text) === false && !/^[._]$/.test(toks[j].text)) break; j++; }
       if (idx.length < span) continue;
       const phrase = idx.map((k) => words[k]).join(' ');
       for (const e of entries) {
@@ -305,7 +376,27 @@ function deidentify(text, map, opts = {}) {
       }
       if (!matched && span === 1) {
         const w = words[i];
-        if (w.length >= 4 && !COMMON_CAPITALISED.has(w)) {
+        const rawWord = stripPossessive(t.text);
+        // CAPITALISED-ONLY variants: short names ("Li") and names that are
+        // also everyday words ("Rose"). Lowercase they are English; with a
+        // capital they are a person. `midOnly` ones ("An", "Will") are also
+        // ordinary sentence openers, so they need a capital mid-sentence.
+        if (/^[A-Z]/.test(rawWord)) {
+          for (const e of entries) {
+            if (e.capVariants && e.capVariants.has(w) && !(e.midOnly && e.midOnly.has(w) && sentenceStart())) { matched = { e, last: i }; break; }
+          }
+        }
+        // "Noahs" — the possessive typed without its apostrophe.
+        if (!matched && w.length >= 5 && w.endsWith('s')) {
+          const stem = w.slice(0, -1);
+          for (const e of entries) { if (e.variants.has(stem)) { matched = { e, last: i, possessive: true }; break; } }
+        }
+        // "Whitlock-Tan" — a hyphenated word with a known name as one half.
+        if (!matched && w.includes('-')) {
+          const halves = w.split('-').filter((h) => h.length >= 4);
+          for (const e of entries) { if (halves.some((h) => e.variants.has(h))) { matched = { e, last: i }; break; } }
+        }
+        if (!matched && w.length >= 4 && !COMMON_CAPITALISED.has(w)) {
           const pk = phoneticKey(w);
           for (const e of entries) { if (e.phonetic.has(pk) && !e.variants.has(w) && Math.abs(w.length - e.name.split(' ')[0].length) <= 2) { matched = { e, last: i }; break; } }
         }
@@ -322,7 +413,7 @@ function deidentify(text, map, opts = {}) {
     if (matched) {
       const lastTok = toks[matched.last];
       matched.e.count++;
-      out.push(`[${matched.e.token}]` + (isPossessive(lastTok.text) ? "'s" : ''));
+      out.push(`[${matched.e.token}]` + (isPossessive(lastTok.text) || matched.possessive ? "'s" : ''));
       i = matched.last + 1;
       continue;
     }
@@ -344,9 +435,23 @@ function deidentify(text, map, opts = {}) {
       else if (RELATIONS.test(prev) && RELATION_LEADS.test(prev2) && capitalised) reason = 'named relation';
       else if (capitalised && !atSentenceStart && !COMMON_CAPITALISED.has(w) && !RELATIONS.test(w)) reason = 'capitalised mid-sentence';
       if (reason && !candidates.has(w)) candidates.set(w, { word: raw, reason });
+      if (!reason) unmatched.push({ w, raw, prev, prev2 });
     }
     out.push(t.text);
     i++;
+  }
+
+  // ── Loose candidates (offered, never replaced) ──
+  if (opts.looseCandidates) {
+    const present = [];
+    entries.forEach((e) => { if (e.count > 0) e.variants.forEach((v) => { if (!v.includes(' ') && v.length >= 4) present.push(v); }); });
+    for (const u of unmatched) {
+      if (candidates.has(u.w) || u.w.length < 3 || COMMON_WORDS.has(u.w) || COMMON_CAPITALISED.has(u.w) || RELATIONS.test(u.w) || /\d/.test(u.w)) continue;
+      let reason = null;
+      if (u.w.length >= 4 && present.some((v) => nearMiss(u.w, v) === 1)) reason = 'close to a name above';
+      else if (PERSON_CUES.test(u.prev) || (RELATIONS.test(u.prev) && RELATION_LEADS.test(u.prev2))) reason = 'after a person cue';
+      if (reason) candidates.set(u.w, { word: u.raw, reason });
+    }
   }
 
   return {
@@ -391,7 +496,7 @@ function containsKnownName(text, map) {
 function describeToken(token) {
   return token.replace(/_\d+$/, '').split('_').map((s) => s.charAt(0) + s.slice(1).toLowerCase()).join(' ')
     .replace('Client Gp', "Client's GP").replace(/^Client (Mother|Father|Parent|Carer|Sibling|Teacher)$/, "Client's $1")
-    .replace('Ndis Number', 'NDIS number').replace(/^Email$/, 'Email address').replace(/^Phone$/, 'Phone number');
+    .replace('Ndis Number', 'NDIS number').replace('Medicare Number', 'Medicare number').replace(/^Dob$/, 'Date of birth').replace(/^Email$/, 'Email address').replace(/^Phone$/, 'Phone number');
 }
 
 module.exports = {

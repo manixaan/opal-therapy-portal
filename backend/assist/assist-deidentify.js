@@ -38,8 +38,8 @@ const MAX_NAME_DECISIONS = 50;
 
 const lower = (s) => String(s || '').trim().toLowerCase();
 
-function entryFor({ token, role, name, variants }) {
-  return { token, role, name, variants, phonetic: new Set(), count: 0 };
+function entryFor({ token, role, name, variants, capVariants, midOnly }) {
+  return { token, role, name, variants, capVariants, midOnly, phonetic: new Set(), count: 0 };
 }
 
 /** Next free number for a role given tokens already handed out. */
@@ -67,7 +67,7 @@ async function knownEntries(known) {
       const e = await directory.byRef(k.ref);
       if (!e) continue;
       name = e.name; role = e.role;
-      out.push(entryFor({ token: k.token, role, name, variants: e.variants }));
+      out.push(entryFor({ token: k.token, role, name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }));
       out[out.length - 1].ref = k.ref;
     } else if (typeof k.name === 'string' && k.name.trim().length >= 2) {
       name = k.name.trim(); role = 'person';
@@ -90,7 +90,7 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
 
   // Pass 1: everything the directory knows, plus prior tokens, to find who
   // actually appears. Directory entries get provisional tokens.
-  const provisional = dir.entries.map((e) => entryFor({ token: `__DIR__${e.ref}`, role: e.role, name: e.name, variants: e.variants }));
+  const provisional = dir.entries.map((e) => entryFor({ token: `__DIR__${e.ref}`, role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }));
   provisional.forEach((p, i) => { p.ref = dir.entries[i].ref; });
   const pass1 = deid.deidentify(text, { entries: [...prior.entries, ...provisional] }, {
     confirmedNames: cleanList(confirmedNames), ignoredWords: cleanList(ignoredWords),
@@ -106,14 +106,14 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   for (const ref of hits.keys()) {
     const e = provisional.find((p) => p.ref === ref);
     const token = nextNumber(e.role, used);
-    assigned.push(Object.assign(entryFor({ token, role: e.role, name: e.name, variants: e.variants }), { ref }));
+    assigned.push(Object.assign(entryFor({ token, role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }), { ref }));
   }
 
   // Pass 2: only the people present, with their final tokens, so the
   // returned map is exact and confirmed unknown people number correctly.
   const confirmed = cleanList(confirmedNames).filter((n) => !prior.entries.some((e) => e.role === 'person' && lower(e.name) === lower(n)));
   const finalEntries = [...prior.entries, ...assigned];
-  const r = deid.deidentify(text, { entries: finalEntries }, { confirmedNames: confirmed, ignoredWords: cleanList(ignoredWords) });
+  const r = deid.deidentify(text, { entries: finalEntries }, { confirmedNames: confirmed, ignoredWords: cleanList(ignoredWords), looseCandidates: true });
 
   // The primitive copies entries, so prior ones are recognised by token.
   const priorTokens = new Set(prior.entries.map((e) => e.token));
@@ -165,7 +165,7 @@ async function assertClean({ text, known }) {
   if (deid.containsStructuredIdentifier(text)) return 'contact_detail_present';
   const dir = await directory.load();
   const prior = await knownEntries(known);
-  const r = deid.deidentify(text, { entries: [...prior.entries, ...dir.entries.map((e) => entryFor({ token: 'X_1', role: e.role, name: e.name, variants: e.variants }))] });
+  const r = deid.deidentify(text, { entries: [...prior.entries, ...dir.entries.map((e) => entryFor({ token: 'X_1', role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }))] });
   if (r.entries.length) return 'known_name_present';
   return null;
 }

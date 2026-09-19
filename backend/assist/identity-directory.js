@@ -9,7 +9,9 @@
  * practice — Splose patients and their contacts, Splose practitioners, and
  * portal staff — and the matcher is deliberately STRICTER than the case-note
  * one: exact variants only (no phonetic near-misses), single-word variants
- * only when the word is four letters or more and not an everyday word.
+ * only when the word is four letters or more (three when it is no English
+ * word) and not an everyday word; short and everyday names still match when
+ * written with a capital (capitalisedVariants).
  * Hundreds of names with fuzzy matching would hide ordinary English.
  *
  * Nothing here is written to the database. The directory is rebuilt from
@@ -39,6 +41,28 @@ const EVERYDAY = new Set((
   + 'paige patience penny reed sage sky star tex wade ward wren'
 ).split(/\s+/));
 
+/** Short words that open ordinary sentences — as a NAME they need a capital mid-sentence. */
+const SENTENCE_OPENERS = new Set(('an as at be by do go he if in is it me my no of on or so to up us we the and but for not you all any can had her was one our out day get has him his how man new now old see two way who boy did its let put say she too use sun '
+  + 'will mark art bill may june august april grace hope faith joy long short young rich read page chase frank guy max ray dean earl').split(/\s+/));
+const CALENDAR = new Set('may june april august'.split(' '));
+/** Three-letter names that are also English words — capital needed. Others ("sam", "tom", "amy") match in any case. */
+const SHORT_ENGLISH = new Set('pat rob bob ray max lee bud don dot gus hal jay kit lou mac ned peg rod ron roy sal sid ted tad van vic win jan kay ken len les liv meg mel nat pam pip sue eve ash cal gem kip lex mat may moe rex sky val jet job'.split(' '));
+
+/**
+ * Names the strict set leaves out, matched only when written with a capital:
+ * two- and three-letter names ("Li", "Wu", "Sam") and names that are everyday
+ * words ("Rose", "Hunter"). Month names stay full-name-only — "May" with a
+ * capital is the month far more often than the client.
+ */
+function capitalisedVariants(fullName) {
+  const cap = new Set(); const midOnly = new Set();
+  String(fullName || '').trim().split(/\s+/).map((p) => p.replace(/[^A-Za-z'’-]/g, '').toLowerCase()).forEach((w) => {
+    if (w.length < 2 || CALENDAR.has(w)) return;
+    if (w.length < 4 || EVERYDAY.has(w)) { cap.add(w); if (SENTENCE_OPENERS.has(w)) midOnly.add(w); }
+  });
+  return { cap, midOnly };
+}
+
 const lower = (s) => String(s || '').trim().toLowerCase();
 const nameOf = (o) => (o && (o.fullName || `${o.firstname || o.firstName || ''} ${o.lastname || o.lastName || ''}`.trim() || o.name || '')) || '';
 
@@ -59,6 +83,7 @@ function strictVariants(fullName) {
   parts.forEach((p) => {
     const w = p.toLowerCase();
     if (w.length >= 4 && !EVERYDAY.has(w)) out.add(w);
+    if (w.length === 3 && !EVERYDAY.has(w) && !SENTENCE_OPENERS.has(w) && !SHORT_ENGLISH.has(w)) out.add(w);
     p.split('-').forEach((h) => { const hw = h.toLowerCase(); if (hw.length >= 5 && !EVERYDAY.has(hw)) out.add(hw); });
   });
   return out;
@@ -126,7 +151,8 @@ async function load({ fresh = false } = {}) {
         seen.add(key);
         const variants = strictVariants(p.name);
         if (!variants.size) continue;
-        entries.push({ role: p.role, ref: p.ref, name: p.name, variants });
+        const c = capitalisedVariants(p.name);
+        entries.push({ role: p.role, ref: p.ref, name: p.name, variants, capVariants: c.cap, midOnly: c.midOnly });
       }
       _cache = { builtAt: Date.now(), entries, partial, missing, stale, notConnected, count: entries.length };
       return _cache;
@@ -144,4 +170,4 @@ async function byRef(ref) {
   return d.entries.find((e) => e.ref === ref) || null;
 }
 
-module.exports = { load, invalidate, byRef, strictVariants, EVERYDAY, _resetForTests, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };
+module.exports = { load, invalidate, byRef, strictVariants, capitalisedVariants, EVERYDAY, _resetForTests, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };

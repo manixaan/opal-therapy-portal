@@ -147,3 +147,44 @@ describe('directory resilience — one source failing never forgets people alrea
     expect(r.text).toBe('[CLIENT_1] was late');
   });
 });
+
+describe('gap closure — what a real paste contains (synthetic)', () => {
+  const full = (role, ref, name) => { const c = directory.capitalisedVariants(name); return { role, ref, name, variants: directory.strictVariants(name), capVariants: c.cap, midOnly: c.midOnly }; };
+  beforeEach(() => directory._setCacheForTests({ partial: false, entries: [
+    full('client', 'p1', 'Noah Whitlock'), full('client', 'p2', 'Rose Hill'), full('client', 'p3', 'Li Wu'),
+    full('therapist', 't1', 'Sam Okafor'), full('staff', 'u1', 'Will Young'), full('client', 'p4', 'May Tran'),
+  ] }));
+
+  test('date of birth, Medicare, bare landline, PO Box and a named postcode are hidden; a session date and a year range are not', async () => {
+    const r = await assist.check({ text: 'DOB 03/04/2019, born 3 April 2019. Seen 12/09/2026 under the 2025-2026 plan. Medicare 2123 45670 1. Ph 9388 1234. PO Box 12 Subiaco WA 6008, postcode 6008.' });
+    expect(r.text).toBe('DOB [DOB_1], born [DOB_2]. Seen 12/09/2026 under the 2025-2026 plan. Medicare [MEDICARE_NUMBER_1]. Ph [PHONE_1]. [ADDRESS_1], postcode [ADDRESS_2].');
+  });
+
+  test('short and everyday-word names are hidden with a capital and left alone as ordinary words', async () => {
+    const r = await assist.check({ text: 'Rose was upset in the rose garden. Li came late with the Wu family. OT is sam.' });
+    expect(r.text).toBe('[CLIENT_1] was upset in the rose garden. [CLIENT_2] came late with the [CLIENT_2] family. OT is [THERAPIST_1].');
+  });
+
+  test('a sentence-opener name needs a capital mid-sentence; a month name needs the full name', async () => {
+    const r = await assist.check({ text: 'Will attend next week. We will see Will then. In May we review May Tran.' });
+    expect(r.text).toBe('Will attend next week. We will see [STAFF_1] then. In May we review [CLIENT_1].');
+  });
+
+  test('missing apostrophe, dotted initial and hyphenated surname all resolve to the person', async () => {
+    const r = await assist.check({ text: 'Noahs bag; n.whitlock; the Whitlock-Tan family.' });
+    expect(r.text).toBe("[CLIENT_1]'s bag; [CLIENT_1]; the [CLIENT_1] family.");
+  });
+
+  test('a one-letter near-miss of a name in the message and a lowercase name after a person cue are OFFERED, never silently replaced', async () => {
+    const r = await assist.check({ text: 'Noah was tired and nowah slept. I spoke with tobias and with school.' });
+    expect(r.text).toContain('nowah');
+    expect(r.candidates).toEqual([{ word: 'nowah', reason: 'close to a name above' }, { word: 'tobias', reason: 'after a person cue' }]);
+  });
+
+  test('the send guard refuses each of the new shapes in the clear', async () => {
+    expect(await assist.assertClean({ text: 'born 3 April 2019' })).toBe('contact_detail_present');
+    expect(await assist.assertClean({ text: 'Medicare 2123 45670 1' })).toBe('contact_detail_present');
+    expect(await assist.assertClean({ text: 'Li came late' })).toBe('known_name_present');
+    expect(await assist.assertClean({ text: 'Seen 12/09/2026, aged 7, scored 42.' })).toBeNull();
+  });
+});
