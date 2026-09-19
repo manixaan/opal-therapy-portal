@@ -16817,13 +16817,17 @@ function __renderWeekHeader() {
   const todayKey = __perthDateStr(new Date());
   const order = __weekDayOrder();             // column order for the chosen week-start
   const startDate = __weekStartDate(monday);  // actual date of the first visible column
-  // Pin the time gutter first: header-gutter order 0, time-col order 10, so the
-  // day headers (1..7) and day columns (11..17) reorder WITHIN their own grid
-  // rows and never swap across the header/body rows.
+  // Pin the time gutter first: header-gutter order 0, all-day gutter order 10,
+  // time-col order 20, so the day headers (1..7), all-day cells (11..17) and day
+  // columns (21..27) reorder WITHIN their own grid rows and never swap across
+  // rows. The all-day row must be ordered too: left at the default 0 it sorts
+  // ahead of the headers and shifts the whole grid by a row.
   const gutterHead = document.querySelector('#cal-grid .cal-head:not([data-day])');
   if (gutterHead) gutterHead.style.order = '0';
+  const allDayGutter = document.querySelector('#cal-grid .allday-gutter');
+  if (allDayGutter) allDayGutter.style.order = '10';
   const timeColEl = document.getElementById('time-col');
-  if (timeColEl) timeColEl.style.order = '10';
+  if (timeColEl) timeColEl.style.order = '20';
   order.forEach((key, i) => {
     const d = new Date(startDate);
     d.setUTCDate(startDate.getUTCDate() + i);
@@ -16844,8 +16848,10 @@ function __renderWeekHeader() {
       head.onclick = () => switchToCalDay(clickDate);
       head.title = `Open Day View for ${__DAY_LABEL_BY_KEY[key]} ${d.getUTCDate()}`;
     }
+    const allDayCell = document.getElementById('allday-' + key);
+    if (allDayCell) allDayCell.style.order = String(i + 11);
     if (col) {
-      col.style.order = String(i + 11);
+      col.style.order = String(i + 21);
       // Mirror the header's today state onto the column for the subtle wash
       col.classList.toggle('today', ymd === todayKey);
     }
@@ -23936,6 +23942,7 @@ function detectAndMarkCalendarConflicts() {
   var byDay = {};
   Object.values(window.SESSIONS || {}).forEach(function(s) {
     if (!s || !s.element || s.element.classList.contains('cancelled')) return;
+    if (s.allDay) return; // all-day chips span the day by definition — not a booking clash
     if (!THERAPY_TYPES.has(s.type || 'outlook')) return;
     if (!s.day) return;
     if (!byDay[s.day]) byDay[s.day] = [];
