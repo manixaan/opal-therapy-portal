@@ -111,3 +111,12 @@ body.oa-pane .oa-side { display: none; }
 .oa-review-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 .oa-note { font-size: 12px; color: var(--muted); }
 .oa-note.warn { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin: 10px 0 0; }
+
+/* ── Document tools (Word pane) ────────────────────────────────────────── */
+.oa-tools-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.oa-tools-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); width: 100%; }
+.oa-tools-status { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.oa-tools-status.ok { color: var(--ok); }
+.oa-tools-status.warn { color: var(--warn); }
+.oa-tools-report { font-size: 12.5px; background: var(--warn-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 8px; max-height: 160px; overflow: auto; }
+.oa-tools-report ul { margin: 4px 0 0; padding-left: 18px; }
