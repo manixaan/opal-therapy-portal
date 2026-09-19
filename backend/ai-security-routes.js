@@ -115,6 +115,7 @@ router.get(
         // The last few outcomes, so "it says unavailable" can be answered
         // without server logs. Metadata only - the audit table holds no content.
         recent_outcomes: await recentOutcomes(),
+        warm_up: require('./assist/warmup').status(),
         checked_at: new Date().toISOString(),
       });
     } catch (err) {

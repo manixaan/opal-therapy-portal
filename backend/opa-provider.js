@@ -47,6 +47,7 @@
 
 const gateway = require('./ai/ai-gateway');
 const autoDeid = require('./assist/auto-deidentify');
+const { withOneRetry } = require('./assist/warmup');
 const { toPlainText, plainTextStream } = require('./assist/plain-text');
 
 const FEATURE = 'opa_assistant';
@@ -105,7 +106,8 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
 
   try {
     const safe = await autoDeid.prepare(messages, { system });
-    const res = await gateway.generate({
+    // A dropped connection is tried once more before anyone is told; a refusal never is.
+    const res = await withOneRetry(() => gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
@@ -113,7 +115,7 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
       messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),
-    });
+    }));
 
     const text = safe.restore((res.text || '').trim());
     if (!text) throw new Error('empty_response');
@@ -154,7 +156,9 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
     // Names back in first, then formatting marks out — a line at a time, so a mark split across chunks is still caught.
     const plain = plainTextStream(onText);
     const stream = safe.streamRestorer(plain.push);
-    const res = await gateway.generate({
+    // Retried only while nothing has been shown: once a word is on screen, a second attempt would repeat it.
+    let shown = false;
+    const res = await withOneRetry(() => gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
@@ -162,8 +166,8 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
       messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),
-      onText: stream.push,
-    });
+      onText: (t) => { shown = true; stream.push(t); },
+    }), () => !shown);
     stream.flush(); plain.flush();
 
     const text = toPlainText(safe.restore((res.text || '').trim())).trim();

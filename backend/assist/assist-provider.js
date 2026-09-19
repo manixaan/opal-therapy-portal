@@ -11,6 +11,7 @@
 
 const gateway = require('../ai/ai-gateway');
 const { toPlainText, plainTextStream } = require('./plain-text');
+const { withOneRetry } = require('./warmup');
 
 const FEATURE = 'opal_assist';
 const DEFAULT_MAX_TOKENS = 2048;
@@ -55,7 +56,9 @@ async function generate({ system, messages, userId, organisationId, onText } = {
     return { ...r, text: toPlainText(r && r.text).trim() };
   }
   try {
-    const res = await gateway.generate({
+    // A dropped connection is tried once more — but never after a word has been shown, and never after a refusal.
+    let shown = false;
+    const res = await withOneRetry(() => gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
@@ -63,8 +66,8 @@ async function generate({ system, messages, userId, organisationId, onText } = {
       messages,
       maxTokens: clampInt(process.env.OPAL_ASSIST_MAX_OUTPUT_TOKENS, DEFAULT_MAX_TOKENS, 64, 8192),
       timeoutMs: clampInt(process.env.OPAL_ASSIST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 5000, 120000),
-      ...(plain ? { onText: plain.push } : {}),
-    });
+      ...(plain ? { onText: (t) => { shown = true; plain.push(t); } } : {}),
+    }), () => !shown);
     if (plain) plain.flush();
     const text = toPlainText(res.text || '').trim();
     if (!text) throw new Error('empty_response');

@@ -1208,6 +1208,10 @@ setTimeout(async () => {
 // Renew subscriptions every 2 days (well before the 3-day expiry)
 setInterval(renewOutlookWebhooks, 2 * 24 * 60 * 60 * 1000);
 
+// ── AI warm-up: the directory, the fingerprints and the model path are made ready
+// in the background, so the first person to ask never waits on a cold start.
+require('./assist/warmup').start();
+
 // ── Opal Assist retention: expired conversations go daily and at boot ───────
 {
   const { purgeExpired, RETENTION_DAYS } = require('./assist-routes');
