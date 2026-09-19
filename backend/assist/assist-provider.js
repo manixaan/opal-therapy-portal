@@ -10,6 +10,7 @@
  */
 
 const gateway = require('../ai/ai-gateway');
+const { toPlainText, plainTextStream } = require('./plain-text');
 
 const FEATURE = 'opal_assist';
 const DEFAULT_MAX_TOKENS = 2048;
@@ -46,7 +47,13 @@ function mapError(err, where) {
  * Throws Error('content_blocked') | Error('provider_error') only.
  */
 async function generate({ system, messages, userId, organisationId, onText } = {}) {
-  if (_providerOverride) return _providerOverride({ system, messages, onText });
+  // Plain text only, whatever the model sends: streamed a line at a time, and the final text the same.
+  const plain = typeof onText === 'function' ? plainTextStream(onText) : null;
+  if (_providerOverride) {
+    const r = await _providerOverride({ system, messages, ...(plain ? { onText: plain.push } : {}) });
+    if (plain) plain.flush();
+    return { ...r, text: toPlainText(r && r.text).trim() };
+  }
   try {
     const res = await gateway.generate({
       feature: FEATURE,
@@ -56,9 +63,10 @@ async function generate({ system, messages, userId, organisationId, onText } = {
       messages,
       maxTokens: clampInt(process.env.OPAL_ASSIST_MAX_OUTPUT_TOKENS, DEFAULT_MAX_TOKENS, 64, 8192),
       timeoutMs: clampInt(process.env.OPAL_ASSIST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 5000, 120000),
-      ...(typeof onText === 'function' ? { onText } : {}),
+      ...(plain ? { onText: plain.push } : {}),
     });
-    const text = (res.text || '').trim();
+    if (plain) plain.flush();
+    const text = toPlainText(res.text || '').trim();
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {

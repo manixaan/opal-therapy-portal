@@ -23,6 +23,7 @@
  */
 
 const express = require('express');
+const { toPlainText } = require('./assist/plain-text');
 const router = express.Router();
 
 const db = require('./database');
@@ -243,7 +244,8 @@ router.post('/api/opa/chat', chatRateLimit, safe(async (req, res) => {
   }
 
   const parsed = parseModelText(modelText);
-  const answer = String(parsed.answer || '').slice(0, MAX_ANSWER_CHARS);
+  // Plain text only: no Markdown marks reach the chat bubble (or whatever the answer is pasted into).
+  const answer = toPlainText(String(parsed.answer || '')).trim().slice(0, MAX_ANSWER_CHARS);
   const actions = sanitiseActions(parsed.actions);
   const sources = knowledge.map((k) => ({ type: 'application', id: k.id, title: k.feature }));
 

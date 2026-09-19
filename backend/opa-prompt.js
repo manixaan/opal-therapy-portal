@@ -145,7 +145,8 @@ function buildSystemPrompt({ user, context, knowledge, format } = {}) {
       'RESPONSE CONTRACT\n' +
       'Reply in plain prose only — no JSON, no code fences, no metadata. Answer the ' +
       'question directly; use short numbered lists for steps. Do not describe or offer ' +
-      'navigation actions in any structured form.'
+      'navigation actions in any structured form. No Markdown: no asterisks for bold, no # ' +
+      'headings, no backticks. For a list, start each line with "• " or "1." and nothing else.'
     );
   } else {
   sections.push(
@@ -156,7 +157,9 @@ function buildSystemPrompt({ user, context, knowledge, format } = {}) {
     '- "actions" is optional, maximum 2 entries, and "target" must be one of the module keys ' +
     'in the NAVIGATION TARGETS list below. Offer an action only when navigating there ' +
     'genuinely helps.\n' +
-    '- "confidence" reflects how well the APPLICATION KNOWLEDGE supports your answer.'
+    '- "confidence" reflects how well the APPLICATION KNOWLEDGE supports your answer.\n' +
+    '- "answer" is plain text: no Markdown, no asterisks for bold, no # headings, no backticks. ' +
+    'For a list, start each line with "• " or "1." and nothing else.'
   );
   }
 

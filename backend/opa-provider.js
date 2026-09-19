@@ -47,6 +47,7 @@
 
 const gateway = require('./ai/ai-gateway');
 const autoDeid = require('./assist/auto-deidentify');
+const { toPlainText, plainTextStream } = require('./assist/plain-text');
 
 const FEATURE = 'opa_assistant';
 
@@ -150,7 +151,9 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
 
   try {
     const safe = await autoDeid.prepare(messages, { system });
-    const stream = safe.streamRestorer(onText);
+    // Names back in first, then formatting marks out — a line at a time, so a mark split across chunks is still caught.
+    const plain = plainTextStream(onText);
+    const stream = safe.streamRestorer(plain.push);
     const res = await gateway.generate({
       feature: FEATURE,
       userId,
@@ -161,9 +164,9 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
       timeoutMs: requestTimeoutMs(timeoutMs),
       onText: stream.push,
     });
-    stream.flush();
+    stream.flush(); plain.flush();
 
-    const text = safe.restore((res.text || '').trim());
+    const text = toPlainText(safe.restore((res.text || '').trim())).trim();
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {

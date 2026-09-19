@@ -5,6 +5,7 @@
  * prompt says so plainly and forbids guessing behind them.
  */
 
+const { PLAIN_TEXT_INSTRUCTION } = require('./plain-text');
 const SURFACES = {
   web: 'the Opal Assist web page',
   word: 'a task pane beside a Microsoft Word document',
@@ -33,6 +34,8 @@ function buildSystemPrompt({ user, surface, selection } = {}) {
 
     'WHAT YOU DO\nDraft, rewrite, summarise, structure, explain, plan, and check writing: emails, letters, reports, case-note wording, '
     + 'goal statements, plan review preparation, spreadsheets and formulas, meeting notes, policies. Ask a short clarifying question when the request is ambiguous.',
+
+    PLAIN_TEXT_INSTRUCTION,
 
     'WHAT YOU DO NOT DO\nYou do not make clinical decisions or diagnoses; you help a qualified clinician express and organise theirs, and you say so when asked to decide. '
     + 'You do not file, send or book anything — your output is text the staff member reviews and uses. You do not provide legal or financial advice beyond general information.',

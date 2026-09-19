@@ -121,7 +121,7 @@ test('the stream sends deltas then done; a guardrail refusal after deltas sends 
   expect(ok.headers['content-type']).toMatch(/text\/event-stream/);
   expect(ok.text).toMatch(/event: delta/);
   expect(ok.text).toMatch(/event: done/);
-  provider._setProviderForTests(async ({ onText }) => { onText('partial'); throw new Error('content_blocked'); });
+  provider._setProviderForTests(async ({ onText }) => { onText('partial words '); throw new Error('content_blocked'); });
   const blocked = await agent.post('/api/assist/chat/stream').send({ message: 'Hello again' });
   expect(blocked.text).toMatch(/event: delta/);
   expect(blocked.text).toMatch(/event: blocked/);
