@@ -41,6 +41,9 @@ const outputTypes = require('./ai-output-type');
  * @property {string}   defaultModel             registry key, in allowedModels
  * @property {string}   region                   'australia' | null
  * @property {boolean}  mayReceiveClinicalData
+ * @property {'required'|{exempt:string}} deidentification  MANDATORY. 'required' for anything a
+ *           clinician can type into: the gateway refuses the call unless every message is free of
+ *           known people, contact details and record numbers. An exemption must say why in words.
  * @property {string}   auditCategory
  */
 
@@ -64,6 +67,9 @@ const AI_POLICIES = {
     defaultModel: 'clinical_complex',
     region: 'australia',
     mayReceiveClinicalData: true,
+    // Every message is checked at the gateway: a known person, contact detail or
+    // record number still in the clear denies the call. See DEIDENTIFICATION below.
+    deidentification: 'required',
     auditCategory: 'clinical_documentation',
   },
 
@@ -105,6 +111,9 @@ const AI_POLICIES = {
     defaultModel: 'assistant_fast',
     region: 'australia',
     mayReceiveClinicalData: true,
+    // Every message is checked at the gateway: a known person, contact detail or
+    // record number still in the clear denies the call. See DEIDENTIFICATION below.
+    deidentification: 'required',
     auditCategory: 'assistant',
     /**
      * Guardrail INPUT evaluation is scoped to the CURRENT user message via
@@ -153,6 +162,9 @@ const AI_POLICIES = {
     defaultModel: 'assistant_fast',
     region: 'australia',
     mayReceiveClinicalData: true,
+    // Every message is checked at the gateway: a known person, contact detail or
+    // record number still in the clear denies the call. See DEIDENTIFICATION below.
+    deidentification: 'required',
     auditCategory: 'assistant',
     // Same reasoning as Opa: the system prompt carries anti-injection
     // scaffolding that a Prompt-attack filter is built to match.
@@ -188,6 +200,7 @@ const AI_POLICIES = {
     defaultModel: 'assistant_direct',
     region: 'australia',
     mayReceiveClinicalData: false,
+    deidentification: { exempt: 'owner-only course builder; works on staff names to assign learning, never client data; separately waived' },
     auditCategory: 'assistant',
     guardrailInputScope: 'current_user_message',
     /**
@@ -236,6 +249,7 @@ const AI_POLICIES = {
     defaultModel: 'clinical_standard',
     region: 'australia',
     mayReceiveClinicalData: false,
+    deidentification: { exempt: 'reads the uploaded staff onboarding form as a file — the document is the input; HR-only, no clinician access' },
     auditCategory: 'onboarding_extraction',
   },
 
@@ -275,6 +289,7 @@ const AI_POLICIES = {
     defaultModel: 'clinical_standard',
     region: 'australia',
     mayReceiveClinicalData: false,
+    deidentification: { exempt: 'reads a staff credential scan as a file — the document is the input; HR-only, no clinician access' },
     auditCategory: 'credential_extraction',
   },
 
@@ -379,6 +394,18 @@ function validateAll() {
 
     // A misspelt scope must fail at load, not silently narrow (or widen)
     // guardrail coverage at request time.
+    // DE-IDENTIFICATION IS NOT OPTIONAL. A new feature cannot be registered
+    // without saying which it is, and anything that may receive clinical data
+    // cannot be exempt.
+    const d = policy.deidentification;
+    const exempt = d && typeof d === 'object' && typeof d.exempt === 'string' && d.exempt.trim().length >= 20;
+    if (d !== 'required' && !exempt) {
+      throw new Error(`${where} — deidentification must be 'required' or { exempt: '<a real reason>' }`);
+    }
+    if (exempt && (policy.mayReceiveClinicalData || policy.allowedClassifications.includes(classification.CLINICAL))) {
+      throw new Error(`${where} — a feature that may receive clinical data cannot be exempt from de-identification`);
+    }
+
     if (policy.guardrailInputScope !== undefined
         && !GUARDRAIL_INPUT_SCOPES.includes(policy.guardrailInputScope)) {
       throw new Error(`${where} — guardrailInputScope '${policy.guardrailInputScope}' is not one of ${GUARDRAIL_INPUT_SCOPES.join(', ')}`);

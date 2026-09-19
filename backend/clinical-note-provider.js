@@ -181,6 +181,20 @@ async function generateCaseNote({
     deidSummary = { tokens: r.entries, candidateCount: r.candidates.length, version: 1 };
   }
 
+  // THE PRACTICE-WIDE PASS — always, identity or not. The per-client map above
+  // knows this client's circle; a dictation can still name another client, a
+  // colleague, a school, a phone number in an odd format. The same pipeline
+  // every Opal AI uses runs over what is left, and its tokens join the map so
+  // they are restored and leak-checked exactly like the rest.
+  {
+    const wide = await require('./assist/assist-deidentify').check({ text: sendText });
+    if (wide.hidden.length) {
+      sendText = wide.text;
+      deidMap = deidMap || { entries: [] };
+      wide.hidden.forEach((h) => deidMap.entries.push({ token: h.token, role: h.role, name: h.name, variants: new Set(), phonetic: new Set(), count: h.count }));
+    }
+  }
+
   const context = [
     session?.dateLabel ? `Session date: ${session.dateLabel}` : null,
     session?.serviceLabel ? `Service: ${session.serviceLabel}` : null,

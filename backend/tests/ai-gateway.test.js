@@ -214,7 +214,9 @@ test('the audit trail cannot carry clinical content, even when handed it', async
   // The highest-value assertion here. An audit log that also holds clinical
   // narrative doubles the breach surface and creates a second copy to secure,
   // retain and dispose of under APP 11.
-  const SECRET = 'Pamela has schizoaffective disorder and lives at 14 Example St';
+  // Tokenised, as every caller must now send it — the de-identification gate
+  // refuses a name or an address in the clear before the provider is reached.
+  const SECRET = '[CLIENT_1] has schizoaffective disorder and wanders from [ADDRESS_1] at night';
 
   mockProvider._setHandlerForTests(async () => ({
     text: SECRET, toolUse: null, providerRequestId: 'req-123', sourceRegion: 'ap-southeast-2',
@@ -230,9 +232,9 @@ test('the audit trail cannot carry clinical content, even when handed it', async
 
   expect(events).toHaveLength(1);
   const serialised = JSON.stringify(events[0]);
-  expect(serialised).not.toContain('Pamela');
+  expect(serialised).not.toContain('CLIENT_1');
   expect(serialised).not.toContain('schizoaffective');
-  expect(serialised).not.toContain('Example St');
+  expect(serialised).not.toContain('wanders');
 
   // What it SHOULD contain: the metadata needed to reconstruct the call.
   const { event } = events[0];

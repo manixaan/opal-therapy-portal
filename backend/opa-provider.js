@@ -103,12 +103,12 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
   }
 
   try {
-    const safe = await autoDeid.prepare(messages);
+    const safe = await autoDeid.prepare(messages, { system });
     const res = await gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
-      system,
+      system: safe.system,
       messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),
@@ -149,13 +149,13 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
   }
 
   try {
-    const safe = await autoDeid.prepare(messages);
+    const safe = await autoDeid.prepare(messages, { system });
     const stream = safe.streamRestorer(onText);
     const res = await gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
-      system,
+      system: safe.system,
       messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),

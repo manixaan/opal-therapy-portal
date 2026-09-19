@@ -268,14 +268,23 @@ function deidentifyStructured(text, opts = {}) {
   const entries = [];
   const byValue = new Map();
   const counts = {}; // per ROLE, not per pattern — two address patterns share one numbering
+  const keyOf = (role, m) => `${role}:${NUMERIC_ROLES.has(role) ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase()}`;
+  // Tokens already spoken for — earlier turns of the conversation, or tokens
+  // another pass put in this text. A new value never reuses one of them, and
+  // a value seen before keeps the token it had.
+  const reserved = opts.reservedTokens instanceof Set ? opts.reservedTokens : new Set();
+  (opts.priorStructured || []).forEach((p) => {
+    if (!p || !STRUCTURED_TOKENS[p.role] || !p.name || !p.token) return;
+    const e = { token: p.token, role: p.role, name: String(p.name), variants: new Set(), phonetic: new Set(), count: 0 };
+    byValue.set(keyOf(p.role, e.name), e); entries.push(e); reserved.add(p.token);
+  });
   const tokenise = (role, m) => {
     // Numeric identifiers compare on digits alone so "0412 345 678" and
     // "0412345678" are one token; text ones on collapsed lowercase.
-    const norm = NUMERIC_ROLES.has(role) ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
-    const key = `${role}:${norm}`;
+    const key = keyOf(role, m);
     let e = byValue.get(key);
     if (!e) {
-      counts[role] = (counts[role] || 0) + 1;
+      do { counts[role] = (counts[role] || 0) + 1; } while (reserved.has(`${STRUCTURED_TOKENS[role]}_${counts[role]}`));
       e = { token: `${STRUCTURED_TOKENS[role]}_${counts[role]}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
       byValue.set(key, e);
       entries.push(e);
@@ -409,7 +418,7 @@ function deidentify(text, map, opts = {}) {
 
   // Structured identifiers first — they need no caller knowledge and must
   // not be half-eaten by the name matcher (an email built from a name).
-  const structured = deidentifyStructured(text, { knownSpans: opts.knownSpans, ageGroupOf: opts.ageGroupOf });
+  const structured = deidentifyStructured(text, { knownSpans: opts.knownSpans, ageGroupOf: opts.ageGroupOf, reservedTokens: opts.reservedTokens, priorStructured: opts.priorStructured });
   structured.entries.forEach((e) => entries.push(e));
 
   const toks = tokenise(structured.text);
@@ -568,5 +577,5 @@ function describeToken(token) {
 
 module.exports = {
   buildIdentityMap, deidentify, reidentify, containsKnownName, containsStructuredIdentifier, describeToken,
-  deidentifyStructured, parseDate, DATE_SHAPES, phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
+  deidentifyStructured, STRUCTURED_TOKENS, parseDate, DATE_SHAPES, phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
 };

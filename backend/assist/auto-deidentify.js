@@ -26,7 +26,7 @@ const TOKEN = /\[([A-Z][A-Z0-9_]*)\]/g;
  * @param {Array<{role, content}>} messages
  * @returns {{ messages, restore(text), streamRestorer(onText), hiddenCount }}
  */
-async function prepare(messages) {
+async function prepare(messages, { system } = {}) {
   let known = [];
   const names = new Map(); // token → original text, this request only
   const out = [];
@@ -36,6 +36,15 @@ async function prepare(messages) {
     known = r.known;
     r.hidden.forEach((h) => { if (!names.has(h.token)) names.set(h.token, h.name); });
     out.push({ ...msg, content: r.text });
+  }
+
+  // The system prompt may carry a name too (the signed-in person, a page title).
+  let safeSystem = system;
+  if (typeof system === 'string' && system) {
+    const r = await assist.check({ text: system, known });
+    known = r.known;
+    r.hidden.forEach((h) => { if (!names.has(h.token)) names.set(h.token, h.name); });
+    safeSystem = r.text;
   }
 
   const restore = (text) => {
@@ -66,7 +75,7 @@ async function prepare(messages) {
     return { push, flush };
   };
 
-  return { messages: out, restore, streamRestorer, hiddenCount: names.size };
+  return { messages: out, system: safeSystem, restore, streamRestorer, hiddenCount: names.size };
 }
 
 module.exports = { prepare };

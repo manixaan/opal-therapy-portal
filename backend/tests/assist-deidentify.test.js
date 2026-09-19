@@ -42,6 +42,8 @@ describe('check — practice-wide, appearance-ordered', () => {
       { token: 'CLIENT_2', ref: 'splose:patient:1', role: 'client' },
       { token: 'CONTACT_1', ref: 'splose:contact:9', role: 'contact' },
       { token: 'STAFF_1', ref: 'user:u1', role: 'staff' },
+      // A contact detail keeps its token for the rest of the conversation.
+      { token: 'EMAIL_1', name: 'priya@example.com', role: 'email' },
     ]);
   });
 
@@ -227,5 +229,18 @@ describe('age group, named places, and the client\'s own record values', () => {
     expect(src).not.toMatch(/console\.(log|info|debug)/);
     // Nothing reachable from the module's exports carries a recorded value.
     expect(JSON.stringify(Object.keys(knownValues))).not.toMatch(/0412|2019/);
+  });
+});
+
+describe('contact-detail tokens are stable across a conversation', () => {
+  test('the same number keeps its token; a new number never takes a used one', async () => {
+    const first = await assist.check({ text: 'Mum is on 0412 345 678.' });
+    expect(first.text).toBe('Mum is on [PHONE_1].');
+    const second = await assist.check({ text: 'Dad is on 0499 111 222, mum again 0412345678.', known: first.known });
+    expect(second.text).toBe('Dad is on [PHONE_2], mum again [PHONE_1].');
+  });
+  test('a token another pass already wrote into the text is never handed out again', async () => {
+    const r = await assist.check({ text: '[CLIENT_1] and [PHONE_1] noted; Zara rang 0412 345 678.' });
+    expect(r.text).toBe('[CLIENT_1] and [PHONE_1] noted; [CLIENT_2] rang [PHONE_2].');
   });
 });

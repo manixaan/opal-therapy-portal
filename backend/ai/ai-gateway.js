@@ -300,6 +300,27 @@ function unavailableReason(feature) {
  * @throws {AiPolicyError} when policy refuses
  * @throws {Error} 'provider_error' on transport failure
  */
+/** @returns a reason code when any message still carries an identifier, else null. */
+async function deidentificationGate(messages) {
+  // Required lazily: the de-identifier sits above the gateway in the module graph.
+  const { assertClean } = require('../assist/assist-deidentify');
+  for (const m of Array.isArray(messages) ? messages : []) {
+    const parts = typeof m?.content === 'string' ? [{ type: 'text', text: m.content }] : (Array.isArray(m?.content) ? m.content : []);
+    for (const part of parts) {
+      if (part?.type === 'text' && typeof part.text === 'string') {
+        const reason = await assertClean({ text: part.text });
+        if (reason) return reason;
+      } else if (part?.type === 'tool_use' || part?.type === 'tool_result') {
+        const reason = await assertClean({ text: JSON.stringify(part.input ?? part.content ?? '') });
+        if (reason) return reason;
+      } else {
+        return 'uncheckable_content';
+      }
+    }
+  }
+  return null;
+}
+
 async function generate(opts = {}) {
   const {
     feature, messages, system, userId, organisationId,
@@ -342,6 +363,19 @@ async function generate(opts = {}) {
     if (typeof PROVIDERS[decision.model.provider].invokeStream !== 'function') {
       return deny('streaming_not_supported_by_provider', decision.policy);
     }
+  }
+
+  // THE DE-IDENTIFICATION GATE. One rule for every surface — portal, phone,
+  // Word, Excel, Outlook, and whatever is built next: if the feature's policy
+  // says 'required', every message is run through the same send guard the
+  // assistants use, HERE, where no caller can skip it. A known person, a
+  // contact detail, a record number or a client's own recorded detail still
+  // in the clear denies the call and is audited. Content that cannot be read
+  // as text (an image, a file) cannot be checked, so it is denied too.
+  if (decision.policy.deidentification === 'required') {
+    let reason = null;
+    try { reason = await deidentificationGate(messages); } catch (err) { reason = 'deidentification_unavailable'; }
+    if (reason) return deny(`not_deidentified:${reason}`, decision.policy);
   }
 
   // The database kill switch — an operator can stop every AI call in seconds

@@ -61,10 +61,16 @@ function nextNumber(role, used) {
 async function knownEntries(known) {
   const out = [];
   const used = new Set();
+  const structured = []; // contact details and record numbers from earlier turns keep their token
   for (const k of (Array.isArray(known) ? known : []).slice(0, MAX_KNOWN)) {
     if (!k || typeof k.token !== 'string' || !/^[A-Z]+_\d+$/.test(k.token)) continue;
     if (used.has(k.token)) continue;
     let name = null; let role = null;
+    if (deid.STRUCTURED_TOKENS[k.role] && typeof k.name === 'string' && k.name.trim() && k.token.startsWith(`${deid.STRUCTURED_TOKENS[k.role]}_`)) {
+      structured.push({ token: k.token, role: k.role, name: k.name.trim().slice(0, 200) });
+      used.add(k.token);
+      continue;
+    }
     if (typeof k.ref === 'string') {
       const e = await directory.byRef(k.ref);
       if (!e) continue;
@@ -77,7 +83,7 @@ async function knownEntries(known) {
     } else continue;
     used.add(k.token);
   }
-  return { entries: out, used };
+  return { entries: out, used, structured };
 }
 
 /**
@@ -90,7 +96,9 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   const prior = await knownEntries(known);
   const used = prior.used;
   // A client's own recorded phone, birth date, NDIS number or address, in any format.
-  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf };
+  // Tokens already written in the text (another pass put them there) are never handed out again.
+  for (const m of String(text || '').matchAll(/\[([A-Z][A-Z_]*_\d+)\]/g)) used.add(m[1]);
+  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf, reservedTokens: used, priorStructured: prior.structured };
 
   // Pass 1: everything the directory knows, plus prior tokens, to find who
   // actually appears. Directory entries get provisional tokens.
@@ -139,8 +147,10 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   const hidden = entries.filter((e) => e.count > 0).map((e) => ({
     token: e.token, label: labelFor(e), name: e.name, role: e.role, ref: e.ref || null, count: e.count,
   }));
-  const knownOut = entries.map((e) => (e.ref ? { token: e.token, ref: e.ref, role: e.role } : { token: e.token, name: e.name, role: e.role }))
-    .filter((k) => k.ref || (k.role === 'person'));
+  const priorStructuredTokens = new Set(prior.structured.map((p) => p.token));
+  const knownOut = r.map.entries.filter((e) => e.count > 0 || priorTokens.has(e.token) || priorStructuredTokens.has(e.token))
+    .map((e) => (e.ref ? { token: e.token, ref: e.ref, role: e.role } : { token: e.token, name: e.name, role: e.role }))
+    .filter((k) => k.ref || k.role === 'person' || deid.STRUCTURED_TOKENS[k.role]);
   return {
     text: out, hidden, candidates: r.candidates, known: knownOut,
     directoryPartial: !!dir.partial, directoryMissing: dir.missing || [], directoryNotConnected: dir.notConnected || [], directoryCount: dir.count || dir.entries.length,
