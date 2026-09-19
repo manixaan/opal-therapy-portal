@@ -142,7 +142,8 @@
       + (hidden ? '<ul class="oa-hidden">' + hidden + '</ul>' : '')
       + cands
       + '<div class="oa-addname"><input id="oa-addname" type="text" placeholder="Hide another name the check missed…" aria-label="Name to hide"><button class="oa-btn sm" type="button" id="oa-addname-btn">Hide it</button></div>'
-      + (r.directoryPartial ? '<p class="oa-note">Part of the practice directory was unavailable, so check the preview carefully.</p>' : '')
+      + (r.directoryPartial ? '<p class="oa-note warn"><b>Names may not be recognised right now.</b> ' + esc((r.directoryMissing || []).join(', ') || 'Part of the practice directory') + ' could not be loaded, so people from there are not hidden automatically. Type any name into the box above and press Hide it, or wait thirty seconds and press Check &amp; send again.</p>' : '')
+      + ((r.directoryNotConnected || []).length ? '<p class="oa-note warn"><b>Splose is not connected on this server,</b> so client and contact names are not recognised. Hide them yourself with the box above.</p>' : '')
       + '<div class="oa-review-actions"><button class="oa-btn" type="button" id="oa-review-edit">Edit message</button><button class="oa-btn primary" type="button" id="oa-review-send">Send</button></div>'
       + '</div>';
     $('oa-review-send').focus();
@@ -156,7 +157,7 @@
     return api('/api/assist/check', { body: { text: rawText, known: S.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords } })
       .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })
       .then(function (msg) {
-        var pending = { text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, raw: rawText };
+        var pending = { text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, raw: rawText };
         if (!S.selection) return pending;
         return api('/api/assist/check', { body: { text: S.selection, known: msg.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords } })
           .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })

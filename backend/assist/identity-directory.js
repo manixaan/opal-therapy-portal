@@ -64,34 +64,60 @@ function strictVariants(fullName) {
   return out;
 }
 
-/** People from Splose and the portal; failures in one source do not empty the others. */
+/**
+ * The four sources. Each returns [{role, ref, name}] and is remembered on its
+ * own, so one source failing (a Splose timeout, a 429 while the sync is busy)
+ * never takes away names the directory already knew: the last good copy of
+ * that source is used and the result is NOT marked partial. A source with no
+ * good copy yet IS partial, is named to the caller, and the directory is
+ * rebuilt after thirty seconds rather than the usual ten minutes — a partial
+ * directory held for ten minutes let real client names through the check
+ * (staging, 19 Sep 2026).
+ */
+const SOURCES = [
+  { key: 'splose_clients', label: 'Splose clients', splose: true,
+    run: async () => (await sploseApi.getPatients()).map((p) => ({ role: 'client', ref: `splose:patient:${p.id}`, name: nameOf(p) })) },
+  { key: 'splose_contacts', label: 'Splose contacts', splose: true,
+    run: async () => ((await sploseApi.getContacts()) || []).filter((c) => c && !c.archived && !c.deletedAt)
+      .map((c) => ({ role: 'contact', ref: `splose:contact:${c.id}`, name: nameOf(c) })) },
+  { key: 'splose_practitioners', label: 'Splose practitioners', splose: true,
+    run: async () => (await sploseApi.getPractitioners()).map((p) => ({ role: 'therapist', ref: `splose:practitioner:${p.id}`, name: nameOf(p) })) },
+  { key: 'portal_staff', label: 'Portal staff', splose: false,
+    run: async () => {
+      const q = await db.pool.query('SELECT id, name, display_name FROM users WHERE is_active = TRUE AND (name IS NOT NULL OR display_name IS NOT NULL)');
+      const out = [];
+      q.rows.forEach((u) => {
+        out.push({ role: 'staff', ref: `user:${u.id}`, name: u.display_name || u.name });
+        if (u.display_name && u.name && lower(u.display_name) !== lower(u.name)) out.push({ role: 'staff', ref: `user:${u.id}:name`, name: u.name });
+      });
+      return out;
+    } },
+];
+const PARTIAL_TTL_MS = 30 * 1000;
+const _lastGood = new Map(); // source key → people[]
+
+/** People from Splose and the portal; a failed source falls back to its last good copy. */
 async function gather() {
-  const people = [];
-  const push = (role, ref, name) => {
-    const n = String(name || '').trim();
-    if (n.length >= 2) people.push({ role, ref, name: n });
-  };
-  const tasks = [
-    sploseApi.isConfigured() ? sploseApi.getPatients().then((rows) => rows.forEach((p) => push('client', `splose:patient:${p.id}`, nameOf(p)))) : Promise.resolve(),
-    sploseApi.isConfigured() ? sploseApi.getContacts().then((rows) => (rows || []).forEach((c) => {
-      if (c && (c.archived || c.deletedAt)) return;
-      push('contact', `splose:contact:${c.id}`, nameOf(c));
-    })) : Promise.resolve(),
-    sploseApi.isConfigured() ? sploseApi.getPractitioners().then((rows) => rows.forEach((p) => push('therapist', `splose:practitioner:${p.id}`, nameOf(p)))) : Promise.resolve(),
-    db.pool.query('SELECT id, name, display_name FROM users WHERE is_active = TRUE AND (name IS NOT NULL OR display_name IS NOT NULL)')
-      .then((q) => q.rows.forEach((u) => { push('staff', `user:${u.id}`, u.display_name || u.name); if (u.display_name && u.name && lower(u.display_name) !== lower(u.name)) push('staff', `user:${u.id}:name`, u.name); })),
-  ];
-  const results = await Promise.allSettled(tasks);
-  const failed = results.filter((r) => r.status === 'rejected').length;
-  if (failed) console.warn(`[identity-directory] ${failed} of ${tasks.length} sources unavailable — directory is partial`);
-  return { people, partial: failed > 0 };
+  const active = SOURCES.filter((src) => !src.splose || sploseApi.isConfigured());
+  const results = await Promise.allSettled(active.map((src) => src.run()));
+  const people = []; const missing = []; const stale = [];
+  results.forEach((r, i) => {
+    const src = active[i];
+    if (r.status === 'fulfilled') { _lastGood.set(src.key, r.value); people.push(...r.value); return; }
+    // Status code and source name only — never a name, never a payload.
+    const code = (r.reason && r.reason.response && r.reason.response.status) || (r.reason && r.reason.code) || 'error';
+    if (_lastGood.has(src.key)) { stale.push(src.label); people.push(..._lastGood.get(src.key)); console.warn(`[identity-directory] ${src.key} unavailable (${code}) — using its last good copy`); }
+    else { missing.push(src.label); console.warn(`[identity-directory] ${src.key} unavailable (${code}) — no earlier copy, directory is partial`); }
+  });
+  const notConnected = SOURCES.filter((src) => src.splose && !sploseApi.isConfigured()).map((src) => src.label);
+  return { people: people.filter((p) => String(p.name || '').trim().length >= 2).map((p) => ({ ...p, name: String(p.name).trim() })), partial: missing.length > 0, missing, stale, notConnected };
 }
 
-/** The directory, cached ten minutes; concurrent callers share one build. */
+/** The directory, cached ten minutes (thirty seconds while partial); concurrent callers share one build. */
 async function load({ fresh = false } = {}) {
-  if (!fresh && _cache && Date.now() - _cache.builtAt < CACHE_TTL_MS) return _cache;
+  if (!fresh && _cache && Date.now() - _cache.builtAt < (_cache.partial ? PARTIAL_TTL_MS : CACHE_TTL_MS)) return _cache;
   if (!_building) {
-    _building = gather().then(({ people, partial }) => {
+    _building = gather().then(({ people, partial, missing, stale, notConnected }) => {
       const seen = new Set();
       const entries = [];
       for (const p of people) {
@@ -102,7 +128,7 @@ async function load({ fresh = false } = {}) {
         if (!variants.size) continue;
         entries.push({ role: p.role, ref: p.ref, name: p.name, variants });
       }
-      _cache = { builtAt: Date.now(), entries, partial, count: entries.length };
+      _cache = { builtAt: Date.now(), entries, partial, missing, stale, notConnected, count: entries.length };
       return _cache;
     }).finally(() => { _building = null; });
   }
@@ -110,6 +136,7 @@ async function load({ fresh = false } = {}) {
 }
 
 function invalidate() { _cache = null; }
+function _resetForTests() { _cache = null; _building = null; _lastGood.clear(); }
 
 /** Resolve a stable ref back to a directory entry (or null). */
 async function byRef(ref) {
@@ -117,4 +144,4 @@ async function byRef(ref) {
   return d.entries.find((e) => e.ref === ref) || null;
 }
 
-module.exports = { load, invalidate, byRef, strictVariants, EVERYDAY, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };
+module.exports = { load, invalidate, byRef, strictVariants, EVERYDAY, _resetForTests, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };

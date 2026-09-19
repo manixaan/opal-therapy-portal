@@ -105,3 +105,45 @@ describe('directory strict variants', () => {
     expect(v.has('smith')).toBe(false);
   });
 });
+
+describe('directory resilience — one source failing never forgets people already known', () => {
+  const splose = require('../splose-api');
+  const db = require('../database');
+  beforeEach(() => {
+    directory._resetForTests();
+    splose.isConfigured = () => true;
+    splose.getPatients.mockResolvedValue([{ id: 1, firstname: 'Noah', lastname: 'Whitlock' }]);
+    splose.getContacts.mockResolvedValue([]);
+    splose.getPractitioners.mockResolvedValue([]);
+    db.pool.query.mockResolvedValue({ rows: [] });
+  });
+  afterEach(() => { splose.isConfigured = () => false; directory._resetForTests(); });
+
+  test('a lone lowercase first name of a known client is hidden', async () => {
+    const r = await assist.check({ text: 'noah as ADD - what are things I can do?' });
+    expect(r.text).toBe('[CLIENT_1] as ADD - what are things I can do?');
+    expect(r.directoryPartial).toBe(false);
+  });
+
+  test('a source that fails with no earlier copy is named, and the directory is rebuilt on the next check rather than held', async () => {
+    splose.getPatients.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+    const first = await assist.check({ text: 'noah was late' });
+    expect(first.directoryPartial).toBe(true);
+    expect(first.directoryMissing).toEqual(['Splose clients']);
+    expect(first.text).toBe('noah was late');
+    // Thirty-second partial window: force it past, as the clock would.
+    directory._setCacheForTests(null);
+    const second = await assist.check({ text: 'noah was late' });
+    expect(second.directoryPartial).toBe(false);
+    expect(second.text).toBe('[CLIENT_1] was late');
+  });
+
+  test('a source that fails AFTER a good load falls back to its last good copy — nobody is forgotten', async () => {
+    await assist.check({ text: 'warm up' });
+    directory.invalidate();
+    splose.getPatients.mockRejectedValueOnce(Object.assign(new Error('429'), { response: { status: 429 } }));
+    const r = await assist.check({ text: 'noah was late' });
+    expect(r.directoryPartial).toBe(false);
+    expect(r.text).toBe('[CLIENT_1] was late');
+  });
+});

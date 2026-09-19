@@ -137,7 +137,10 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   }));
   const knownOut = entries.map((e) => (e.ref ? { token: e.token, ref: e.ref, role: e.role } : { token: e.token, name: e.name, role: e.role }))
     .filter((k) => k.ref || (k.role === 'person'));
-  return { text: out, hidden, candidates: r.candidates, known: knownOut, directoryPartial: !!dir.partial };
+  return {
+    text: out, hidden, candidates: r.candidates, known: knownOut,
+    directoryPartial: !!dir.partial, directoryMissing: dir.missing || [], directoryNotConnected: dir.notConnected || [], directoryCount: dir.count || dir.entries.length,
+  };
 }
 
 function labelFor(e) {
