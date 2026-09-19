@@ -195,6 +195,7 @@
         '<span class="opa-fab-pebble opa-head-pebble" aria-hidden="true"></span>' +
         '<span class="opa-head-id"><strong>Opa</strong><span>Opal Therapy Assistant</span></span>' +
         '<span class="opa-head-btns">' +
+          '<button type="button" data-act="assist" title="Open Opal Assist — the full-page assistant for writing and clinical questions" aria-label="Open Opal Assist in a new tab">&#8599;</button>' +
           '<button type="button" data-act="new" title="New chat" aria-label="Start a new chat">+</button>' +
           '<button type="button" data-act="min" title="Minimise" aria-label="Minimise Opa">&minus;</button>' +
           '<button type="button" data-act="max" title="Maximise" aria-label="Maximise Opa">&#9633;</button>' +
@@ -216,6 +217,8 @@
       else if (b.dataset.act === 'min') Opa.minimise();
       else if (b.dataset.act === 'max') Opa.maximise();
       else if (b.dataset.act === 'new') Opa.newChat();
+      // Opa answers questions about the portal; Opal Assist is the full-page assistant for everything else.
+      else if (b.dataset.act === 'assist') window.open('/assist', '_blank', 'noopener');
     });
 
     var input = panel.querySelector('#opa-input');
