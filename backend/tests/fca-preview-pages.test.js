@@ -153,6 +153,24 @@ describe('the download carries no page breaks; the preview starts each section o
     expect(out.xml).not.toContain('w:type="page"');
   });
 
+  test('a CONTINUOUS section break does not end the page — the cover\'s one still gets a break after it', () => {
+    const xml = '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+      + '<w:body>'
+      + '<w:p><w:r><w:t>cover</w:t></w:r></w:p>'
+      + '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr></w:p>'
+      + '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>contents</w:t></w:r></w:p>'
+      + '</w:body></w:document>';
+    const out = paginateDocumentXml(xml);
+    expect(out.inserted).toBe(1);
+  });
+
+  test('the master pushes Contents off the cover with blank lines, never a page break', async () => {
+    const xml = await documentXml(templateBuffer);
+    const cover = xml.slice(0, xml.indexOf('<w:p><w:pPr><w:sectPr>'));
+    expect(cover.endsWith('<w:p/>'.repeat(36))).toBe(true);
+    expect(cover).not.toContain('<w:br w:type="page"');
+  });
+
   test('a leading pageBreakBefore does not produce an empty first page', () => {
     const xml = '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
       + '<w:body><w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>first</w:t></w:r></w:p>'

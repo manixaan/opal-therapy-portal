@@ -161,6 +161,18 @@ function breakParagraph(doc) {
 }
 
 /**
+ * Does this paragraph's section break end the page? A `continuous` break does
+ * not — the renderer keeps flowing on the same sheet (the FCA cover ends in
+ * one, and the Contents title after it still needs its own page).
+ */
+function endsPageWithSection(pPr) {
+  const sectPr = pPr ? directChild(pPr, 'w:sectPr') : null;
+  if (!sectPr) return false;
+  const type = directChild(sectPr, 'w:type');
+  return !(type && type.getAttribute('w:val') === 'continuous');
+}
+
+/**
  * Rewrite one word/document.xml so the preview starts a new page at every
  * report section (and at the Contents title), and so any `w:pageBreakBefore`
  * a template still carries becomes the explicit break run that precedes it.
@@ -201,7 +213,7 @@ function paginateDocumentXml(xml) {
       inserted += 1;
     }
 
-    alreadyBroken = !!(pPr && directChild(pPr, 'w:sectPr')) || hasPageBreakRun(node);
+    alreadyBroken = endsPageWithSection(pPr) || hasPageBreakRun(node);
   }
 
   return { xml: new XMLSerializer().serializeToString(doc), inserted, found, sections: starts.size };
