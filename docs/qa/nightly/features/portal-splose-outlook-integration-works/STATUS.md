@@ -2,44 +2,74 @@
 
 - Tracker stage: **idea** · Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since last audit (2026-09-17T18:21Z UTC): **yes** — `494bd86`, `41a9e27`, `22ce321` (practitioner self-linking, practice API key moved into the database), plus `9092bc7`/`3ca64ca` (calendar overlay/sync-status perf) and today's `0726dde` (Outlook-category calendar tiles follow night mode)
+- Addressed since last audit (2026-09-18T19:20Z UTC, commit `0726dde`): **partially** — `ec47514`
+  and `cec0a03` add a small, unrelated capability to two of this feature's files (see below);
+  nothing in its actual sync/identity/credential *behaviour* changed
 - Created (any located code): **yes**
 
 ## Located files
 
-- `backend/splose-sync-routes.js` (`/api/splose-sync/*`, draft-and-publish queue), `backend/splose-api.js`, `backend/splose-caseload.js`, `backend/splose-draft-sync.js`, `backend/splose-poller.js` — unchanged since last audit.
-- **New tonight:** `backend/splose-link-routes.js` — `GET/PUT/DELETE /api/splose/my-practitioner` (self-service practitioner identity) and `GET/PUT/DELETE /api/splose/connection` (Owner-only practice API key management), both in the same file. `backend/splose-credentials.js` — resolves the effective key (database row wins over `SPLOSE_API_KEY`; explicit disconnect switches the env key off too) and pushes it into `splose-api.js` via `setApiKey()`.
-- **New migration:** `backend/migrations/069_integration_connections.sql` — one `integration_connections` row per provider, secret AES-GCM encrypted via `crypto-utils`.
-- `backend/outlook-oauth.js` (OAuth client); `backend/routes-outlook-integration.js` still exists but is **not mounted anywhere** — real Outlook routes are registered inline in `server.js`.
-- `backend/travel-routes.js`, `backend/travel-cascade.js`, `backend/travel-feasibility.js` — unchanged.
-- Frontend: Calendar tab (`mockup_v3.html:4613`), Travel & Flights tab (`mockup_v3.html:5600`). **New tonight:** Settings → Integrations → Splose gained a practitioner picker (`mockup_v3.html:6547`, `stg-splose-me-select`) and a "Connect with a new key" / disconnect row (`mockup_v3.html:6541`) — both inline script in `mockup_v3.html`, not a separate `.js` file, so no `?v=` pin applies.
+- `backend/splose-sync-routes.js`, `backend/splose-api.js`, `backend/splose-caseload.js`,
+  `backend/splose-draft-sync.js`, `backend/splose-poller.js`, `backend/splose-link-routes.js`,
+  `backend/splose-credentials.js`, migration `069_integration_connections.sql`,
+  `backend/outlook-oauth.js`, `backend/travel-routes.js`, `backend/travel-cascade.js`,
+  `backend/travel-feasibility.js` — all confirmed present.
+- Frontend: Calendar tab, Travel & Flights tab, Settings → Integrations → Splose
+  (practitioner picker + API-key connect/disconnect, inline script in `mockup_v3.html`).
 
-**Task mapping — "Multi Calendar Rules" does not map cleanly.** No file, route, table or UI string contains "multi calendar" or "calendar rule(s)" anywhere in `backend/` or `frontend/current/`. The closest conceptual neighbours are `sync-safety.js` (cross-source deletion-safety rules between the app, Outlook and Splose) and `outlook-mirror`'s propagation rules — but the architecture is explicitly the *opposite* of "multi calendar": `server.js` and `tests/outlook-mirror.test.js` both document a 2026-08 decision that "the calendar integration is Outlook-only — the app and Outlook mirror each other; Splose serves patient/client data only." There is no multi-calendar merge/precedence engine in this codebase. Tonight's new commits (practitioner self-linking, API-key-in-database) are Splose *identity/credential* work, not calendar-rule work, and don't supply a mapping either. This should be called out as a task the tracker names but the code does not implement under that name.
+**Tonight's touch, read in full:** `git diff 0726dde..HEAD -- backend/splose-api.js
+backend/splose-credentials.js` (24 lines) shows exactly two things, both from the unrelated
+de-identification feature:
+1. `splose-api.js` gains one new function, `getPatientIdentifiers()` — returns each active
+   patient's DOB/phones/NDIS/Medicare/address, explicitly documented as "for the de-identifier's
+   known-value matcher ONLY... must never leave the server or be logged."
+2. `splose-credentials.js`'s `apply()` gains two lines calling
+   `require('./assist/identity-directory').invalidate()` and
+   `require('./assist/known-values').clear()` after `setApiKey()` — clears an unrelated cache when
+   the Splose connection changes accounts.
+
+Neither touches `splose-link-routes.js`, any guard, any route, or the connection-resolution logic
+itself. `git log 0726dde..HEAD --oneline -- <all other located files>` — empty.
 
 ## Guard check
 
-- `splose-sync-routes.js` — `router.use('/api/splose-sync', requireAuth, denyReadOnly, requireDraftSync)` covers 6 of 7 routes. `GET /api/splose/cancellation-reasons` sits outside that prefix but carries its own inline `requireAuth, denyReadOnly`.
-- `splose-link-routes.js` (new) — `router.use('/api/splose/my-practitioner', requireAuth, ...)` with an inline `role === 'read_only'` 403 check inside the handler; `router.use('/api/splose/connection', requireAuth, requireRole('owner'))` for the practice-wide key. Both guarded, no gaps found.
-- No unguarded route found in either file.
+- `splose-sync-routes.js` — `router.use('/api/splose-sync', requireAuth, denyReadOnly,
+  requireDraftSync)`.
+- `splose-link-routes.js` — `router.use('/api/splose/my-practitioner', requireAuth, ...)` with an
+  inline `role === 'read_only'` 403 check; `router.use('/api/splose/connection', requireAuth,
+  requireRole('owner'))`.
+- No unguarded route found in either file; unchanged tonight.
 
 ## Tests run
 
-Re-run fresh tonight against an isolated database (`therapy_scheduler_qanight2`) after discovering the shared `therapy_scheduler_audit` database was being written to by another concurrent session mid-run — see note below.
+Re-run fresh tonight (`DB_NAME=therapy_scheduler_n4b`), including the two files that changed:
 
-- **New unit tests:** `tests/splose-link-routes.test.js` + `tests/splose-credentials.test.js` — **24/24 passed**.
-- **New integration test:** `tests/integration/splose-connection.itest.js` — **3/3 passed** (real Postgres, migration 069 applied cleanly).
-- Related unit files touched by the same commits: `tests/mobile-routes.test.js`, `tests/frontend-stage2-guards.test.js`, `tests/assessment-surface-guards.test.js`, `tests/splose-api-queue.test.js` — **138/138 passed** (4 suites).
-- Prior-baseline unit suite (10 files: `outlook-delta-preserve`, `outlook-mirror`, `reconciliation-engine`, `splose-api-queue`, `splose-draft-sync`, `splose-poller`, `sync-safety`, `sync`, `travel-cascade`, `travel-feasibility`) — re-run in full tonight, **184/184 passed** (9 files ran together at 180 + `splose-api-queue` at 4, verified separately = 184 total), still green with the new code on top.
-- Prior-baseline integration suite (5 files: `events-sync`, `outlook-claim`, `outlook-delta-preserve`, `reconcile-safety`, `splose-draft-sync`) — **55/55 passed** once re-run against the isolated database.
+- `npx jest tests/splose-link-routes.test.js tests/splose-credentials.test.js` — **PASS 24/24**.
+- `npx jest tests/splose-api-queue.test.js` (re-run specifically because `splose-api.js` changed
+  tonight) — **PASS 4/4**.
+- `npx jest tests/mobile-routes.test.js tests/frontend-stage2-guards.test.js
+  tests/assessment-surface-guards.test.js` — **PASS 134/134** (combined with the 4 above = 138,
+  matching last night's figure).
+- Prior-baseline unit suite (10 files) — **PASS 184/184**.
+- `DB_NAME=therapy_scheduler_n4b DB_PASSWORD=audit npx jest --config jest.integration.config.js
+  tests/integration/splose-connection.itest.js --runInBand` — **PASS 3/3**.
+- Prior-baseline integration suite (5 files) — **PASS 55/55**, no DB contention this run.
 
-**Cross-session DB contention (not a code defect):** the first pass of the integration re-run, against the task-suggested `DB_NAME=therapy_scheduler_audit`, produced 19 failing tests across 4 of 5 suites — foreign-key violations on `events.user_id` and logins returning 401 instead of 200/302. Investigation (`ps aux`) showed another live session running `npx jest ... tests/integration/fca-reports.itest.js ...` against the *same* `DB_NAME=therapy_scheduler_audit`, truncating/reseeding tables mid-run (per `.claude/rules/tests.md`'s documented risk of two sessions sharing one `_test` database). Re-running the identical five files against a private `DB_NAME=therapy_scheduler_qanight2` reproduced a clean 55/55 pass, confirming this was infrastructure contention, not a regression from the new Splose commits.
-
-No TODO/FIXME found in `splose-*.js`/`outlook-*.js`.
+Total 346 unit + 58 integration, all green — matches last night exactly, with
+`splose-api-queue.test.js` specifically re-confirmed on top of tonight's `getPatientIdentifiers()`
+addition. No TODO/FIXME found in `splose-*.js`/`outlook-*.js`.
 
 ## Why not `proven`
 
-`docs/qa/BROWSER_QA_RESULTS.md` flow E covers the Calendar tab's shell rendering, but it is dated 2026-08-01 — before ~20 calendar/travel commits *and* before the entirely new Settings → Integrations → Splose UI (practitioner picker, API-key connect/disconnect) existed at all. That new UI has zero browser or E2E proof anywhere in the repo (no `e2e/tests/*splose*` file); the developer commit messages self-report "picker exercised in-browser," which is not independent QA evidence. Same judgement the audit applied to Portal Onboarding Workflow tonight: strong, fresh API/integration proof is not the same as browser proof of the newest surface, so this stays `tab-unproven` rather than `proven` until a fresh pass specifically covers Settings → Integrations → Splose.
+`docs/qa/BROWSER_QA_RESULTS.md` flow E is dated 2026-08-01, before the calendar/travel commits and
+the Settings → Integrations → Splose UI existed. That UI still has zero browser or E2E proof
+anywhere in the repo. No new artifact appeared tonight. The identity/credential cache-clearing
+addition is server-side plumbing with its own passing unit coverage; it doesn't touch this gap.
 
 ## Disagreement
 
-Tracker stage is idea; the calendar/Splose/Outlook sync engine, plus tonight's new practitioner-identity and practice-credential management, is extensively built and freshly tested (24 + 138 + 184 unit, 3 + 55 integration, all green) — materially ahead of "idea," just not browser-proven yet for its newest surface.
+Tracker stage is idea; the calendar/Splose/Outlook sync engine plus the practitioner-identity and
+practice-credential management is extensively built and freshly tested (346 unit + 58 integration,
+all green) — materially ahead of "idea," just not browser-proven yet for its newest surface. The
+"Multi Calendar Rules" tracker task still does not map to any code, table, or UI string in the
+repo.

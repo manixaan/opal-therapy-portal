@@ -38,8 +38,8 @@ Frontend: `frontend/current/resourcehub.js` (`?v=r52`), `induction.js` (`?v=10`)
    and "Splose Inductions" are both built and tested; "Induction Playground" has no code or
    equivalent under another name anywhere in the repo — ask the practice what it was meant to
    describe, or drop it, before writing a build prompt for it.
-3. Given tonight's AI-touching induction assistant (`ba26286`, `71bd2c5`, `0f19b1e`, `ab55bbc`)
-   sits on a documented data-residency waiver, any further work here should stay `/opal-critical`.
+3. The AI-touching induction assistant (`ba26286`, `71bd2c5`, `0f19b1e`, `ab55bbc`) sits on a
+   documented data-residency waiver, so any further work here should stay `/opal-critical`.
 
 ## Done means
 `e2e/tests/tutorials.spec.js` passes with an assertion that matches the shipped Assign Learning

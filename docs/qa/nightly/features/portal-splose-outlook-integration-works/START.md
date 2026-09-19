@@ -1,5 +1,50 @@
-Proven — see STATUS.md
+/opal-feature
 
-Proof: 24 unit (`splose-link-routes.test.js`, `splose-credentials.test.js`) + 138 unit (`mobile-routes`, `frontend-stage2-guards`, `assessment-surface-guards`, `splose-api-queue`) + 184 unit (prior baseline: outlook-delta-preserve, outlook-mirror, reconciliation-engine, splose-poller, sync-safety, sync, travel-cascade, travel-feasibility) all pass, plus 3 integration (`splose-connection.itest.js`) + 55 integration (`events-sync`, `outlook-claim`, `outlook-delta-preserve`, `reconcile-safety`, `splose-draft-sync`) against a real database. Two caveats worth acting on before trusting this fully: (1) the tracker task "Multi Calendar Rules" has no matching code anywhere — the architecture is deliberately single-calendar (Outlook-only mirror), the opposite of "multi calendar"; (2) the brand-new Settings → Integrations → Splose UI (practitioner self-link, API-key connect/disconnect, landed today) has zero browser/E2E proof — the only browser QA on file (`docs/qa/BROWSER_QA_RESULTS.md`, 2026-08-01) predates it entirely.
+## Idea
+Portal - Splose - Outlook | Integration Works
+
+## Why
+(not yet written in the tracker)
+
+## Who uses it
+(not yet written in the tracker)
+
+## What they see
+(not yet written in the tracker)
+
+## What should happen
+(not yet written in the tracker)
+
+## Outcome
+(not yet written in the tracker)
+
+## Decisions
+(none recorded in the tracker)
+
+## Where it lives today
+
+`backend/splose-sync-routes.js`, `backend/splose-api.js`, `backend/splose-caseload.js`,
+`backend/splose-draft-sync.js`, `backend/splose-poller.js` (sync engine); `backend/splose-link-routes.js` +
+`backend/splose-credentials.js` (Settings → Integrations → Splose: practitioner self-link, practice
+API key); `backend/outlook-oauth.js`, `backend/travel-routes.js`. Frontend: Calendar tab, Travel &
+Flights tab, and the Settings → Integrations → Splose panel (inline script in `mockup_v3.html`).
+346 unit + 58 integration tests all pass tonight — see STATUS.md.
+
+## Start here
+
+Everything at the API/guard level is solid; the gap is proof that the newest UI actually works.
+Walk through Settings → Integrations → Splose in a browser: (1) as an owner, connect/disconnect
+the practice-wide Splose API key and confirm the connection status updates; (2) as a therapist,
+link your own Splose practitioner identity via the picker. `docs/qa/BROWSER_QA_RESULTS.md` flow E
+(2026-08-01) predates this UI entirely — either add a new flow row there or a spec under
+`e2e/tests/` covering both. Separately, the tracker task "Multi Calendar Rules" has no matching
+code anywhere in this repo — the architecture is deliberately single-calendar (an Outlook-only
+mirror), the opposite of "multi calendar" — worth a decision on whether the task name should
+change or the architecture should.
+
+## Done means
+
+A fresh `docs/qa/BROWSER_QA_RESULTS.md` entry or `e2e/tests/*.spec.js` spec exists covering the
+owner connect/disconnect flow and the therapist practitioner-link flow, moving this to `proven`.
 
 Tracker: eba1c6a7-3ba4-420f-acf4-1c5838991138
