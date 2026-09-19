@@ -579,6 +579,25 @@ async function getPatients() {
     });
 }
 
+/**
+ * The recorded identifying details of every active patient, for the
+ * de-identifier's known-value matcher ONLY (backend/assist/known-values.js).
+ * Deliberately separate from getPatients(): that list travels to the browser;
+ * this one carries birth dates and must never leave the server or be logged.
+ * Shares the same cached /patients fetch, so it costs no extra Splose call.
+ */
+async function getPatientIdentifiers() {
+  const items = await fetchAllPages('/patients');
+  return items.filter((p) => !p.archived && !p.deletedAt).map((p) => ({
+    id: p.id,
+    dateOfBirth: p.dateOfBirth || p.birthDate || p.dob || null,
+    phones: [p.mobilePhone, p.homePhone, p.workPhone, p.phone, p.phoneNumber].filter(Boolean),
+    ndisNumber: p.ndisNumber || null,
+    medicareNumber: p.medicareNumber || p.medicare || null,
+    addressL1: extractPatientAddress(p).addressL1 || null,
+  }));
+}
+
 // ─── Cases ────────────────────────────────────────────────────────────────────
 
 async function getCase(id) {
@@ -641,6 +660,7 @@ async function getSupportItems() {
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
+  getPatientIdentifiers,
   setApiKey,
   getApiKey,
   isConfigured,

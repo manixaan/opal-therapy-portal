@@ -179,7 +179,37 @@ const MONTHS = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?
 const DATE_SHAPES = '(?:\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}\\s*[/.-]\\s*\\d{1,2}\\s*[/.-]\\s*(?:\\d{4}|\\d{2})'
   + '|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:' + MONTHS + ')\\.?,?(?:\\s+\\d{4})?'
   + '|(?:' + MONTHS + ')\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?(?:\\s+\\d{4})?)';
+const MONTH_INDEX = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+/** Read a date written the Australian way. Returns { y, m, d } or null. Two-digit years are left to the caller (`y < 100`). */
+function parseDate(str) {
+  const t = String(str || '').trim().toLowerCase().replace(/(\d)(st|nd|rd|th)\b/g, '$1').replace(/\bof\s+/g, '').replace(/[.,]/g, ' ');
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  let y; let mo; let d;
+  if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else if ((m = t.match(/^(\d{1,2})\s*[/ -]\s*(\d{1,2})\s*[/ -]\s*(\d{4}|\d{2})$/))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+  else if ((m = t.match(/^(\d{1,2})\s+([a-z]{3})[a-z]*(?:\s+(\d{4}))?$/))) { d = +m[1]; mo = MONTH_INDEX[m[2]]; y = m[3] ? +m[3] : null; }
+  else if ((m = t.match(/^([a-z]{3})[a-z]*\s+(\d{1,2})(?:\s+(\d{4}))?$/))) { d = +m[2]; mo = MONTH_INDEX[m[1]]; y = m[3] ? +m[3] : null; }
+  else return null;
+  if (!mo || mo > 12 || !d || d > 31) return null;
+  return { y, m: mo, d };
+}
+
+// A named place a person attends: the NAME is identifying, the KIND is
+// clinical context. "Subiaco Primary School" → "[SCHOOL_1] (primary school)".
+const ORG_KINDS = [
+  ['school', 'Education Support Centre|Senior High School|Primary School|High School|Secondary College|Community College|Grammar School|Christian School|Catholic School|Special School|College|School|Kindergarten|Kindy|Pre-?primary|Early Learning Centre|Child ?[Cc]are Centre|Child ?[Cc]are|Day ?[Cc]are|University|TAFE'],
+  ['hospital', "Children'?s Hospital|Private Hospital|General Hospital|Hospital|Health Campus|Medical Centre|Health Centre|Health Service|Clinic"],
+];
+const ORG_SUFFIX = ORG_KINDS.map((k) => k[1]).join('|');
+const ORG_LEAD_IN = /^(?:The|At|In|From|To|With|And|Attends|Attending|Visited|Near|For|Of|On|Via|Both|Local|Their|His|Her|Our|A|An)\s+/;
+const ORG_RE = new RegExp("\\b(?:[A-Z][A-Za-z'’&-]*\\s+(?:of\\s+|the\\s+)?){1,4}(?:" + ORG_SUFFIX + ')\\b', 'g');
+function orgKind(match) {
+  for (const [kind, alt] of ORG_KINDS) { const m = match.match(new RegExp('(?:' + alt + ')$')); if (m) return { kind, label: m[0].toLowerCase() }; }
+  return { kind: 'school', label: 'school' };
+}
+
 const STRUCTURED_PATTERNS = [
+  { role: 'org', re: ORG_RE, inputOnly: true },
   { role: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   {
     role: 'address',
@@ -225,7 +255,7 @@ const STRUCTURED_PATTERNS = [
   // ("2023-2024") are not a phone. Eight digits run together only after a cue.
   { role: 'phone', re: /\b(?!(?:19|20)\d{2}[\s-](?:19|20)\d{2}\b)[2-9]\d{3}[\s-]\d{4}\b(?![\s-]?\d)|(?<=\b(?:ph|phone|tel|telephone|mob|mobile|call|ring|rang|fax)\.?[:\s]{1,3})[2-9]\d{7}\b/gi },
 ];
-const STRUCTURED_TOKENS = { email: 'EMAIL', address: 'ADDRESS', ndis_number: 'NDIS_NUMBER', phone: 'PHONE', dob: 'DOB', medicare: 'MEDICARE_NUMBER' };
+const STRUCTURED_TOKENS = { email: 'EMAIL', address: 'ADDRESS', ndis_number: 'NDIS_NUMBER', phone: 'PHONE', dob: 'DOB', medicare: 'MEDICARE_NUMBER', school: 'SCHOOL', hospital: 'HOSPITAL' };
 const NUMERIC_ROLES = new Set(['phone', 'ndis_number', 'medicare']);
 
 /**
@@ -233,36 +263,73 @@ const NUMERIC_ROLES = new Set(['phone', 'ndis_number', 'medicare']);
  * spoken twice gets the same token. Returns entries in the identity-map
  * shape so reidentify() restores them with no special casing.
  */
-function deidentifyStructured(text) {
+function deidentifyStructured(text, opts = {}) {
   let out = String(text || '');
   const entries = [];
   const byValue = new Map();
   const counts = {}; // per ROLE, not per pattern — two address patterns share one numbering
+  const tokenise = (role, m) => {
+    // Numeric identifiers compare on digits alone so "0412 345 678" and
+    // "0412345678" are one token; text ones on collapsed lowercase.
+    const norm = NUMERIC_ROLES.has(role) ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
+    const key = `${role}:${norm}`;
+    let e = byValue.get(key);
+    if (!e) {
+      counts[role] = (counts[role] || 0) + 1;
+      e = { token: `${STRUCTURED_TOKENS[role]}_${counts[role]}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
+      byValue.set(key, e);
+      entries.push(e);
+    }
+    e.count++;
+    return e;
+  };
+
+  // KNOWN VALUES first: spans the caller recognised as a recorded detail of a
+  // real client (a phone, birth date, NDIS number or address in ANY format).
+  // The caller supplies positions only; this module still never does I/O.
+  if (typeof opts.knownSpans === 'function') {
+    const spans = (opts.knownSpans(out) || []).filter((sp) => STRUCTURED_TOKENS[sp.role] && sp.end > sp.start)
+      .sort((x, y) => y.start - x.start);
+    let ceiling = Infinity;
+    const pieces = [];
+    for (const sp of spans) {
+      if (sp.end > ceiling) continue; // overlapping: keep the later one already taken
+      pieces.push(sp); ceiling = sp.start;
+    }
+    // Number in reading order, replace from the end so positions hold.
+    pieces.slice().reverse().forEach((sp) => { sp.entry = tokenise(sp.role, out.slice(sp.start, sp.end)); sp.entry.count--; });
+    for (const sp of pieces) { sp.entry.count++; out = out.slice(0, sp.start) + dress(sp.role, sp.entry, opts) + out.slice(sp.end); }
+  }
+
   for (const { role, re } of STRUCTURED_PATTERNS) {
     out = out.replace(re, (m) => {
-      // Numeric identifiers compare on digits alone so "0412 345 678" and
-      // "0412345678" are one token; text ones on collapsed lowercase.
-      const norm = NUMERIC_ROLES.has(role) ? m.replace(/\D/g, '') : m.replace(/\s+/g, ' ').trim().toLowerCase();
-      const key = `${role}:${norm}`;
-      let e = byValue.get(key);
-      if (!e) {
-        counts[role] = (counts[role] || 0) + 1;
-        e = { token: `${STRUCTURED_TOKENS[role]}_${counts[role]}`, role, name: m.trim(), variants: new Set(), phonetic: new Set(), count: 0 };
-        byValue.set(key, e);
-        entries.push(e);
+      if (role === 'org') {
+        const lead = (m.match(ORG_LEAD_IN) || [''])[0];
+        const body = m.slice(lead.length);
+        if (!/^[A-Z]/.test(body) || body.split(/\s+/).length < 2) return m; // "The School" names nothing
+        const { kind, label } = orgKind(body);
+        const e = tokenise(kind, body);
+        return `${lead}[${e.token}] (${label})`;
       }
-      e.count++;
-      // Keep trailing punctuation that the address pattern may have swallowed.
-      return `[${e.token}]`;
+      return dress(role, tokenise(role, m), opts);
     });
   }
   return { text: out, entries };
 }
 
+/** The token as written into the text. A birth date carries its age group, so the model keeps the clinical meaning without the date. */
+function dress(role, e, opts) {
+  if (role === 'dob' && typeof opts.ageGroupOf === 'function') {
+    const g = opts.ageGroupOf(e.name);
+    if (g) return `[${e.token}] (age group: ${g})`;
+  }
+  return `[${e.token}]`;
+}
+
 /** True when a raw email, phone, address or NDIS number appears in text. */
 function containsStructuredIdentifier(text) {
   const t = String(text || '');
-  return STRUCTURED_PATTERNS.some(({ re }) => { re.lastIndex = 0; const hit = re.test(t); re.lastIndex = 0; return hit; });
+  return STRUCTURED_PATTERNS.filter((p) => !p.inputOnly).some(({ re }) => { re.lastIndex = 0; const hit = re.test(t); re.lastIndex = 0; return hit; });
 }
 
 function isPossessive(w) { return /[’']s$/i.test(w); }
@@ -342,7 +409,7 @@ function deidentify(text, map, opts = {}) {
 
   // Structured identifiers first — they need no caller knowledge and must
   // not be half-eaten by the name matcher (an email built from a name).
-  const structured = deidentifyStructured(text);
+  const structured = deidentifyStructured(text, { knownSpans: opts.knownSpans, ageGroupOf: opts.ageGroupOf });
   structured.entries.forEach((e) => entries.push(e));
 
   const toks = tokenise(structured.text);
@@ -496,10 +563,10 @@ function containsKnownName(text, map) {
 function describeToken(token) {
   return token.replace(/_\d+$/, '').split('_').map((s) => s.charAt(0) + s.slice(1).toLowerCase()).join(' ')
     .replace('Client Gp', "Client's GP").replace(/^Client (Mother|Father|Parent|Carer|Sibling|Teacher)$/, "Client's $1")
-    .replace('Ndis Number', 'NDIS number').replace('Medicare Number', 'Medicare number').replace(/^Dob$/, 'Date of birth').replace(/^Email$/, 'Email address').replace(/^Phone$/, 'Phone number');
+    .replace('Ndis Number', 'NDIS number').replace('Medicare Number', 'Medicare number').replace(/^Dob$/, 'Date of birth').replace(/^School$/, 'School or education provider').replace(/^Hospital$/, 'Hospital or clinic').replace(/^Email$/, 'Email address').replace(/^Phone$/, 'Phone number');
 }
 
 module.exports = {
   buildIdentityMap, deidentify, reidentify, containsKnownName, containsStructuredIdentifier, describeToken,
-  deidentifyStructured, phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
+  deidentifyStructured, parseDate, DATE_SHAPES, phoneticKey, variantsOf, ROLE_TOKENS, TOKEN_RE,
 };

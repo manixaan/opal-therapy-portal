@@ -65,6 +65,9 @@ async function resolve() {
 async function apply() {
   const r = await resolve();
   sploseApi.setApiKey(r.key);
+  // A different (or no) Splose account: forget the people and record fingerprints of the last one.
+  require('./assist/identity-directory').invalidate();
+  require('./assist/known-values').clear();
   return r;
 }
 

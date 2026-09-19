@@ -25,6 +25,14 @@
  * and nothing it returns becomes clinical documentation. If that ever
  * changes, the policy must change with it.
  *
+ * ── DE-IDENTIFIED SINCE 19 SEP 2026 ───────────────────────────────────────
+ * Routing onshore answered WHERE the text goes; it did not change WHAT goes.
+ * Every turn now passes through backend/assist/auto-deidentify.js before the
+ * gateway: known people, contact details, birth dates, record numbers and
+ * named schools/hospitals become tokens, and the names are put back into the
+ * reply in this request's memory. The model never sees them. A de-identifier
+ * failure is a provider_error — the text is never sent as written.
+ *
  * Fail-closed: isEnabled() requires OPA_AI_ENABLED='true' AND a gateway
  * configuration that satisfies policy. Failures surface as a sanitised
  * Error('provider_error') after a status-only warn — never the body, which
@@ -38,6 +46,7 @@
  */
 
 const gateway = require('./ai/ai-gateway');
+const autoDeid = require('./assist/auto-deidentify');
 
 const FEATURE = 'opa_assistant';
 
@@ -94,17 +103,18 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
   }
 
   try {
+    const safe = await autoDeid.prepare(messages);
     const res = await gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
       system,
-      messages,
+      messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),
     });
 
-    const text = (res.text || '').trim();
+    const text = safe.restore((res.text || '').trim());
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {
@@ -117,7 +127,7 @@ async function generateOpaResponse({ system, messages, maxTokens, timeoutMs, use
     // possible — and collapsing it into provider_error would tell the user to
     // "try again in a moment", which invites them to resubmit content a control
     // has already declined.
-    if (err?.message === 'guardrail_intervened') throw new Error('content_blocked');
+    if (err?.message === 'guardrail_intervened' || err?.message === 'content_blocked') throw new Error('content_blocked');
     if (err?.message === 'guardrail_not_configured') throw new Error('provider_error');
     if (err?.message === 'provider_error') throw err;
     console.warn(`[opa-provider] request failed (reason: ${err?.message || 'unknown'})`);
@@ -139,23 +149,26 @@ async function generateOpaResponseStream({ system, messages, maxTokens, timeoutM
   }
 
   try {
+    const safe = await autoDeid.prepare(messages);
+    const stream = safe.streamRestorer(onText);
     const res = await gateway.generate({
       feature: FEATURE,
       userId,
       organisationId,
       system,
-      messages,
+      messages: safe.messages,
       maxTokens: maxOutputTokens(maxTokens),
       timeoutMs: requestTimeoutMs(timeoutMs),
-      onText,
+      onText: stream.push,
     });
+    stream.flush();
 
-    const text = (res.text || '').trim();
+    const text = safe.restore((res.text || '').trim());
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {
     if (err instanceof gateway.AiPolicyError) throw new Error('provider_error');
-    if (err?.message === 'guardrail_intervened') throw new Error('content_blocked');
+    if (err?.message === 'guardrail_intervened' || err?.message === 'content_blocked') throw new Error('content_blocked');
     if (err?.message === 'guardrail_not_configured') throw new Error('provider_error');
     if (err?.message === 'provider_error') throw err;
     console.warn(`[opa-provider] stream request failed (reason: ${err?.message || 'unknown'})`);

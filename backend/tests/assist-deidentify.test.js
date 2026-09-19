@@ -157,7 +157,7 @@ describe('gap closure — what a real paste contains (synthetic)', () => {
 
   test('date of birth, Medicare, bare landline, PO Box and a named postcode are hidden; a session date and a year range are not', async () => {
     const r = await assist.check({ text: 'DOB 03/04/2019, born 3 April 2019. Seen 12/09/2026 under the 2025-2026 plan. Medicare 2123 45670 1. Ph 9388 1234. PO Box 12 Subiaco WA 6008, postcode 6008.' });
-    expect(r.text).toBe('DOB [DOB_1], born [DOB_2]. Seen 12/09/2026 under the 2025-2026 plan. Medicare [MEDICARE_NUMBER_1]. Ph [PHONE_1]. [ADDRESS_1], postcode [ADDRESS_2].');
+    expect(r.text.replace(/ \(age group: [^)]+\)/g, '')).toBe('DOB [DOB_1], born [DOB_2]. Seen 12/09/2026 under the 2025-2026 plan. Medicare [MEDICARE_NUMBER_1]. Ph [PHONE_1]. [ADDRESS_1], postcode [ADDRESS_2].');
   });
 
   test('short and everyday-word names are hidden with a capital and left alone as ordinary words', async () => {
@@ -186,5 +186,46 @@ describe('gap closure — what a real paste contains (synthetic)', () => {
     expect(await assist.assertClean({ text: 'Medicare 2123 45670 1' })).toBe('contact_detail_present');
     expect(await assist.assertClean({ text: 'Li came late' })).toBe('known_name_present');
     expect(await assist.assertClean({ text: 'Seen 12/09/2026, aged 7, scored 42.' })).toBeNull();
+  });
+});
+
+describe('age group, named places, and the client\'s own record values', () => {
+  const splose = require('../splose-api');
+  const knownValues = require('../assist/known-values');
+  const { ageGroupOf } = require('../assist/age-groups');
+  afterEach(() => { splose.isConfigured = () => false; knownValues.clear(); });
+
+  test('a birth date is replaced by its token AND the age group, never the date', async () => {
+    expect(ageGroupOf('03/04/2019', new Date('2026-09-19'))).toBe('child, 5–10 years');
+    expect(ageGroupOf('3 April 1950', new Date('2026-09-19'))).toBe('older adult, 65 years and over');
+    const r = await assist.check({ text: 'DOB 03/04/2019.' });
+    expect(r.text).toMatch(/^DOB \[DOB_1\] \(age group: [a-z ]+, \d+–\d+ years\)\.$/);
+    expect(r.text).not.toContain('2019');
+  });
+
+  test('a named school or hospital loses its name and keeps its kind', async () => {
+    const r = await assist.check({ text: "He attends Subiaco Primary School and was seen at Perth Children's Hospital. The school was closed." });
+    expect(r.text).toBe("He attends [SCHOOL_1] (primary school) and was seen at [HOSPITAL_1] (children's hospital). The school was closed.");
+    expect(r.hidden.map((h) => h.name)).toEqual(['Subiaco Primary School', "Perth Children's Hospital"]);
+  });
+
+  test('a recorded phone, birth date, NDIS number and address are caught in formats no shape rule knows', async () => {
+    splose.isConfigured = () => true;
+    splose.getPatientIdentifiers = jest.fn().mockResolvedValue([
+      { id: 1, dateOfBirth: '2019-04-03', phones: ['+61 412 345 678', '(08) 9388 1234'], ndisNumber: '431234567', addressL1: 'Unit 4/12 Smith St' },
+    ]);
+    const r = await assist.check({ text: 'Rang 0412.345.678 then 93881234. Turned seven on 3.4.19. Visit at 12 smith, number 431 234 567. Other: 0499.111.222, 5.5.20, 14 smith.' });
+    expect(r.text.replace(/ \(age group: [^)]+\)/g, '')).toBe('Rang [PHONE_1] then [PHONE_2]. Turned seven on [DOB_1]. Visit at [ADDRESS_1], number [NDIS_NUMBER_1]. Other: 0499.111.222, 5.5.20, 14 smith.');
+    expect(await assist.assertClean({ text: 'call 0412.345.678' })).toBe('client_record_detail_present');
+  });
+
+  test('the matcher holds fingerprints, not values', async () => {
+    splose.isConfigured = () => true;
+    splose.getPatientIdentifiers = jest.fn().mockResolvedValue([{ id: 1, phones: ['0412 345 678'], dateOfBirth: '2019-04-03' }]);
+    await knownValues.matcher();
+    const src = require('fs').readFileSync(require.resolve('../assist/known-values'), 'utf8');
+    expect(src).not.toMatch(/console\.(log|info|debug)/);
+    // Nothing reachable from the module's exports carries a recorded value.
+    expect(JSON.stringify(Object.keys(knownValues))).not.toMatch(/0412|2019/);
   });
 });

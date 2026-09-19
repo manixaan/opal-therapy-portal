@@ -31,6 +31,8 @@
 
 const deid = require('../ai/deidentify');
 const directory = require('./identity-directory');
+const knownValues = require('./known-values');
+const { ageGroupOf } = require('./age-groups');
 
 const ROLE_TOKEN = { client: 'CLIENT', contact: 'CONTACT', therapist: 'THERAPIST', staff: 'STAFF', person: 'PERSON' };
 const MAX_KNOWN = 200;
@@ -87,13 +89,15 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   const dir = await directory.load();
   const prior = await knownEntries(known);
   const used = prior.used;
+  // A client's own recorded phone, birth date, NDIS number or address, in any format.
+  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf };
 
   // Pass 1: everything the directory knows, plus prior tokens, to find who
   // actually appears. Directory entries get provisional tokens.
   const provisional = dir.entries.map((e) => entryFor({ token: `__DIR__${e.ref}`, role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }));
   provisional.forEach((p, i) => { p.ref = dir.entries[i].ref; });
   const pass1 = deid.deidentify(text, { entries: [...prior.entries, ...provisional] }, {
-    confirmedNames: cleanList(confirmedNames), ignoredWords: cleanList(ignoredWords),
+    confirmedNames: cleanList(confirmedNames), ignoredWords: cleanList(ignoredWords), ...shape,
   });
 
   // Order the directory hits by first appearance in the tokenised text and
@@ -113,7 +117,7 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   // returned map is exact and confirmed unknown people number correctly.
   const confirmed = cleanList(confirmedNames).filter((n) => !prior.entries.some((e) => e.role === 'person' && lower(e.name) === lower(n)));
   const finalEntries = [...prior.entries, ...assigned];
-  const r = deid.deidentify(text, { entries: finalEntries }, { confirmedNames: confirmed, ignoredWords: cleanList(ignoredWords), looseCandidates: true });
+  const r = deid.deidentify(text, { entries: finalEntries }, { confirmedNames: confirmed, ignoredWords: cleanList(ignoredWords), looseCandidates: true, ...shape });
 
   // The primitive copies entries, so prior ones are recognised by token.
   const priorTokens = new Set(prior.entries.map((e) => e.token));
@@ -163,6 +167,8 @@ function cleanList(list) {
  */
 async function assertClean({ text, known }) {
   if (deid.containsStructuredIdentifier(text)) return 'contact_detail_present';
+  const knownSpans = await knownValues.matcher();
+  if (knownSpans && knownSpans(text).length) return 'client_record_detail_present';
   const dir = await directory.load();
   const prior = await knownEntries(known);
   const r = deid.deidentify(text, { entries: [...prior.entries, ...dir.entries.map((e) => entryFor({ token: 'X_1', role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }))] });
