@@ -595,6 +595,7 @@ async function getPatientIdentifiers() {
     ndisNumber: p.ndisNumber || null,
     medicareNumber: p.medicareNumber || p.medicare || null,
     addressL1: extractPatientAddress(p).addressL1 || null,
+    suburb: extractPatientAddress(p).suburb || null,
   }));
 }
 

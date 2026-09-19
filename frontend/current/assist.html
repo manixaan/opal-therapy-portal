@@ -60,11 +60,11 @@
     // Office task panes load the Office.js glue first; the web page never does.
     (function () {
       var sf = new URLSearchParams(location.search).get('surface');
-      if (['word', 'excel', 'outlook'].indexOf(sf) >= 0) document.write('<script src="/assist-office.js?v=1"><\/script>');
+      if (['word', 'excel', 'outlook'].indexOf(sf) >= 0) document.write('<script src="/assist-office.js?v=2"><\/script>');
       // Word also gets the document tools (formatting by code; no document text leaves Word).
       if (sf === 'word') document.write('<script src="/assist-word-format.js?v=1"><\/script>');
     })();
   </script>
-  <script src="/assist.js?v=2"></script>
+  <script src="/assist.js?v=3"></script>
 </body>
 </html>

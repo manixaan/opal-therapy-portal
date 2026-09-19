@@ -32,10 +32,23 @@
 const deid = require('../ai/deidentify');
 const directory = require('./identity-directory');
 const knownValues = require('./known-values');
-const { ageGroupOf } = require('./age-groups');
+const { ageGroupOf, ageGroupOfYears } = require('./age-groups');
 
 const ROLE_TOKEN = { client: 'CLIENT', contact: 'CONTACT', therapist: 'THERAPIST', staff: 'STAFF', person: 'PERSON' };
 const MAX_KNOWN = 200;
+// Capitals that are jargon, not a person's initials.
+const ACRONYMS = new Set('ot pt sp gp ea it hr wa sa nt act nsw vic qld tas adl asd adhd id gdd cp ms ra oa fca abi tbi sil sda ndis ndia dcp doc ed er ent mri ct ecg bp hr am pm tv pc ok na tba tbc fyi asap cc re ps'.split(' '));
+
+// Topics the Privacy Act treats as sensitive in themselves. Never hidden — the
+// clinician decides — but said out loud on the review card.
+const SENSITIVE_TOPICS = [
+  ['cultural or ethnic background', /\b(aboriginal|torres strait|indigenous|first nations|ethnic(?:ity)?|refugee|asylum seeker|visa status|migrant)\b/i],
+  ['religion', /\b(religio(?:n|us)|muslim|islam(?:ic)?|christian|catholic|jewish|hindu|buddhist|sikh|church|mosque|temple|synagogue)\b/i],
+  ['sexuality or gender identity', /\b(gay|lesbian|bisexual|transgender|non-binary|lgbt\w*|sexual orientation|gender identity)\b/i],
+  ['court, police or child protection', /\b(family court|court order|intervention order|restraining order|vro|fvro|police|charged|convicted|criminal|prison|child protection|dcp|department of communities|custody|out-of-home care|foster)\b/i],
+  ['abuse or violence', /\b(domestic violence|family violence|abuse[ds]?|assault(?:ed)?|neglect(?:ed)?|self-harm|suicid\w+)\b/i],
+  ['substance use', /\b(alcohol(?:ic|ism)?|drug use|substance (?:use|abuse)|methamphetamine|heroin|cannabis|rehab)\b/i],
+];
 const MAX_NAME_DECISIONS = 50;
 
 const lower = (s) => String(s || '').trim().toLowerCase();
@@ -98,7 +111,7 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   // A client's own recorded phone, birth date, NDIS number or address, in any format.
   // Tokens already written in the text (another pass put them there) are never handed out again.
   for (const m of String(text || '').matchAll(/\[([A-Z][A-Z_]*_\d+)\]/g)) used.add(m[1]);
-  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf, reservedTokens: used, priorStructured: prior.structured };
+  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf, ageGroupOfYears, reservedTokens: used, priorStructured: prior.structured };
 
   // Pass 1: everything the directory knows, plus prior tokens, to find who
   // actually appears. Directory entries get provisional tokens.
@@ -120,6 +133,23 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
     const token = nextNumber(e.role, used);
     assigned.push(Object.assign(entryFor({ token, role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }), { ref }));
   }
+
+  // People who ARE in this conversation are also matched by nickname ("Tony"
+  // for Antony) and by bare initials in capitals ("NW attended"). Practice-wide
+  // these would hide "Will" and "OT"; for a person already named here they are
+  // almost certainly that person.
+  [...prior.entries, ...assigned].forEach((e) => {
+    if (e.role === 'person') return;
+    const parts = String(e.name).trim().split(/\s+/).filter((w) => /^[A-Za-z]/.test(w));
+    const first = (parts[0] || '').toLowerCase();
+    const extra = new Set(e.variants);
+    (deid.DIMINUTIVES[first] || []).forEach((d) => { if (d.length >= 3 && !directory.EVERYDAY.has(d)) extra.add(d); });
+    e.variants = extra;
+    if (parts.length >= 2) {
+      const ini = parts.map((w) => w[0]).join('').toLowerCase();
+      if (ini.length >= 2 && ini.length <= 3 && !ACRONYMS.has(ini)) e.initials = new Set([ini]);
+    }
+  });
 
   // Pass 2: only the people present, with their final tokens, so the
   // returned map is exact and confirmed unknown people number correctly.
@@ -147,12 +177,27 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   const hidden = entries.filter((e) => e.count > 0).map((e) => ({
     token: e.token, label: labelFor(e), name: e.name, role: e.role, ref: e.ref || null, count: e.count,
   }));
+  // CAUTIONS — said, never enforced. (1) sensitive topics; (2) combination
+  // risk: tokens hide WHO, but several leftover specifics together can still
+  // point at one person in a small community.
+  const cautions = [];
+  const topics = SENSITIVE_TOPICS.filter(([, re]) => re.test(out)).map(([label]) => label);
+  if (topics.length) cautions.push({ kind: 'sensitive_topic', message: `This mentions ${topics.join(', ')}. Send only what the question needs.` });
+  const specifics = [
+    r.candidates.length > 0 && 'a name or place still written out',
+    /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b/.test(out) && 'an exact date',
+    /\[(?:SCHOOL|HOSPITAL|ORG)_\d+\]/.test(out) && /\[AGE_\d+\]|\[DOB_\d+\]/.test(out) && 'an age group with a named kind of place',
+    /\b(only|sole|rare|one of (?:two|three|the few))\b/i.test(out) && 'a detail described as rare or the only one',
+    /\b(twin|triplet|wheelchair|amputee|tracheostomy|peg[- ]fed|ventilator|guide dog|assistance dog)\b/i.test(out) && 'a distinctive personal detail',
+  ].filter(Boolean);
+  if (specifics.length >= 3) cautions.push({ kind: 'combination', message: `Together these could still point to one person: ${specifics.join('; ')}. Consider removing one.` });
+
   const priorStructuredTokens = new Set(prior.structured.map((p) => p.token));
   const knownOut = r.map.entries.filter((e) => e.count > 0 || priorTokens.has(e.token) || priorStructuredTokens.has(e.token))
     .map((e) => (e.ref ? { token: e.token, ref: e.ref, role: e.role } : { token: e.token, name: e.name, role: e.role }))
     .filter((k) => k.ref || k.role === 'person' || deid.STRUCTURED_TOKENS[k.role]);
   return {
-    text: out, hidden, candidates: r.candidates, known: knownOut,
+    text: out, hidden, candidates: r.candidates, known: knownOut, cautions,
     directoryPartial: !!dir.partial, directoryMissing: dir.missing || [], directoryNotConnected: dir.notConnected || [], directoryCount: dir.count || dir.entries.length,
   };
 }
@@ -182,7 +227,8 @@ async function assertClean({ text, known }) {
   const dir = await directory.load();
   const prior = await knownEntries(known);
   const r = deid.deidentify(text, { entries: [...prior.entries, ...dir.entries.map((e) => entryFor({ token: 'X_1', role: e.role, name: e.name, variants: e.variants, capVariants: e.capVariants, midOnly: e.midOnly }))] });
-  if (r.entries.length) return 'known_name_present';
+  // Shapes were judged above (and ages, links and place names are hidden on the way in, not refused); here only PEOPLE count.
+  if (r.entries.some((e) => !deid.STRUCTURED_TOKENS[e.role])) return 'known_name_present';
   return null;
 }
 

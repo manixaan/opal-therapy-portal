@@ -151,7 +151,8 @@ describe('structured identifiers — email, phone, address, NDIS number', () => 
   test('clinical numbers are never mistaken for identifiers', () => {
     const text = 'Aged 7, born 2019. Score 12/20, weight 24.5 kg, session cost $193.99 on 12/08/2026 at 10:30. Goal 3 of 4. Plan review in 90 days.';
     const r = deidentify(text, map);
-    expect(r.text).toBe(text);
+    // A typed age is the one figure that IS hidden (the model gets its age group); every other number stays.
+    expect(r.text).toBe(text.replace('Aged 7', 'Aged [AGE_1]'));
     expect(containsStructuredIdentifier(text)).toBe(false);
   });
 

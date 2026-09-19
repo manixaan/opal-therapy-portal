@@ -28,4 +28,11 @@ function ageGroupOf(written, today = new Date()) {
   return band ? band[2] : null;
 }
 
-module.exports = { ageGroupOf, BANDS };
+/** @returns the band label for an age in years (fractions allowed for months). */
+function ageGroupOfYears(years) {
+  if (!Number.isFinite(years) || years < 0 || years > 120) return null;
+  const band = BANDS.find(([lo, hi]) => Math.floor(years) >= lo && Math.floor(years) <= hi);
+  return band ? band[2] : null;
+}
+
+module.exports = { ageGroupOf, ageGroupOfYears, BANDS };

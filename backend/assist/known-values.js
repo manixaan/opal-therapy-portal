@@ -72,6 +72,9 @@ async function build() {
     if (dob) prints.set(print('dob', dob), 'dob');
     const ad = normAddress(r.addressL1);
     if (ad) prints.set(print('address', ad), 'address');
+    // The suburb a client lives in. Capital cities are not identifying and stay readable.
+    const sub = String(r.suburb || '').trim().toLowerCase();
+    if (sub.length >= 3 && !CITIES.has(sub)) prints.set(print('suburb', sub), 'suburb');
   }
   return { builtAt: Date.now(), prints };
 }
@@ -90,6 +93,8 @@ async function load() {
   return _building;
 }
 
+const CITIES = new Set('perth sydney melbourne brisbane adelaide hobart darwin canberra fremantle'.split(' '));
+const PLACE = /\b[A-Z][a-z'’-]+(?:\s+[A-Z][a-z'’-]+){0,2}\b/g;
 const DIGIT_RUN = /\+?\d[\d\s().-]{5,}\d/g;
 const ANY_DATE = new RegExp(DATE_SHAPES, 'gi');
 const HOUSE = /\b\d{1,5}[a-z]?\s+[A-Za-z][A-Za-z'’-]{2,}/g;
@@ -122,6 +127,16 @@ async function matcher() {
     HOUSE.lastIndex = 0;
     while ((m = HOUSE.exec(t)) !== null) {
       if (prints.get(print('address', normAddress(m[0]))) === 'address') spans.push({ start: m.index, end: m.index + m[0].length, role: 'address' });
+    }
+    PLACE.lastIndex = 0;
+    while ((m = PLACE.exec(t)) !== null) {
+      // Longest first: "Mount Lawley" before "Mount".
+      const words = m[0].split(/\s+/);
+      for (let n = words.length; n >= 1; n--) {
+        const cand = words.slice(0, n).join(' ');
+        if (prints.get(print('suburb', cand.toLowerCase())) === 'suburb') { spans.push({ start: m.index, end: m.index + cand.length, role: 'suburb' }); PLACE.lastIndex = m.index + cand.length; break; }
+        if (n === 1) PLACE.lastIndex = m.index + words[0].length;
+      }
     }
     return spans;
   };
