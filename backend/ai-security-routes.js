@@ -40,6 +40,17 @@ const FEATURE_FLAGS = {
   induction_assistant: 'INDUCTION_AI_ENABLED',
 };
 
+async function recentOutcomes() {
+  try {
+    const { rows } = await require('./database').pool.query(
+      `SELECT feature, status, deny_reason, provider, latency_ms, created_at
+         FROM ai_interactions ORDER BY created_at DESC LIMIT 15`);
+    return rows;
+  } catch {
+    return null; // unknown beats a confident wrong answer
+  }
+}
+
 router.get(
   '/api/ai/security-status',
   requireAuth,
@@ -101,6 +112,9 @@ router.get(
         direct_provider_features: policyEngine.waiverFeatures(),
         direct_provider_configured: directApiConfig.isConfigured(),
         features,
+        // The last few outcomes, so "it says unavailable" can be answered
+        // without server logs. Metadata only - the audit table holds no content.
+        recent_outcomes: await recentOutcomes(),
         checked_at: new Date().toISOString(),
       });
     } catch (err) {
