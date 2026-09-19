@@ -78,6 +78,9 @@ const AUTO = [
   ['B5 PO box', 'mail to PO Box 77 Subiaco WA 6008', ['PO Box 77', '6008']],
   ['B5 named postcode', 'postcode 6008', ['6008']],
   ['B6 client suburb (record match)', 'they live in Mount Lawley', ['Mount Lawley']],
+  ['B6 listed suburb', 'family moved to Hamilton Hill last year', ['Hamilton Hill']],
+  ['B6 listed suburb, one word', 'lives in Nedlands with dad', ['Nedlands']],
+  ['B6 regional centre', 'relocating to Margaret River', ['Margaret River']],
   ['B7 link', 'see https://facebook.com/noah.whitlock.77', ['facebook.com']],
   ['B7 handle', 'instagram is @noah_w2019', ['noah_w2019']],
   // C · government and health
@@ -126,6 +129,8 @@ const KEPT = [
   'Occupational Therapy and Speech Pathology both recommended.',
   'OT and PT to co-treat; GP letter requested.',
   'He walked 400 m with 2 rests, pain 3/10.',
+  'Martin and Wilson scales were both completed; success criteria met on the hill.',
+  'Referred to the Perth clinic; travels from the South West.',
 ];
 
 describe('nothing identifying survives (AUTO)', () => {

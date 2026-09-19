@@ -204,6 +204,60 @@ router.post('/api/assist/chat/stream', rateLimit, safe(async (req, res) => {
 }));
 
 // ── Conversations ────────────────────────────────────────────────────────────
+// ── Document actions: "in your own words" → a list of fixed tools ───────────
+// The pane runs formatting as CODE (assist-word-format.js / assist-excel-format.js).
+// This endpoint only translates a typed instruction into which of those tools
+// to run. It is sent the instruction — never the document — and the
+// instruction is de-identified like any other message (a person may type
+// "fix Noah's report"). The reply is filtered to the ids the pane offered, so
+// the model cannot invent an action.
+const ACTIONS = {
+  word: {
+    format: 'Apply the Opal document standard: fonts, sizes, colours, heading and table styles',
+    tidy: 'Remove surplus blank lines and blank pages made of empty lines',
+    pages: 'Start every main heading on a new page',
+    toc: 'Refresh the contents page, page numbers and cross-references',
+    check: 'Report problems without changing anything: missing appendices, heading-level jumps, empty headings, wrong fonts, double spaces, unfilled placeholders',
+  },
+  excel: {
+    table: 'Format the selected range as an Opal table: green header row, banded rows, borders, Arial',
+    fit: 'Auto-fit column widths and wrap long text in the selection',
+    freeze: 'Freeze the top row so headings stay visible',
+    totals: 'Add a totals row that sums every numeric column in the selection',
+    numbers: 'Format numeric columns consistently: currency for money headings, two decimals otherwise, dates as d/mm/yyyy',
+    check: 'Report problems without changing anything: blank cells, numbers stored as text, duplicate rows, mixed date formats',
+  },
+};
+router.post('/api/assist/actions', rateLimit, safe(async (req, res) => {
+  const body = req.body || {};
+  const surface = ACTIONS[body.surface] ? body.surface : null;
+  const instruction = typeof body.instruction === 'string' ? body.instruction.trim().slice(0, 600) : '';
+  if (!surface || !instruction) return res.status(400).json({ error: 'invalid_request' });
+  if (!provider.isEnabled()) return res.json({ status: 'unavailable', actions: [], note: DISABLED });
+  const menu = ACTIONS[surface];
+  const checked = await deid.check({ text: instruction });
+  const system = 'You translate one instruction from a staff member into document tools. Reply with ONLY a JSON object: '
+    + '{"actions": ["id", ...], "note": "one short sentence"}. Use only these ids, in the order they should run; an empty list if none fits. '
+    + 'Never include anything else, and never repeat the instruction.\n\nTOOLS\n'
+    + Object.entries(menu).map(([id, d]) => `${id}: ${d}`).join('\n');
+  let text;
+  try {
+    const r = await provider.generate({ system, messages: [{ role: 'user', content: checked.text }], userId: req.user.id, organisationId: orgOf(req) });
+    text = String(r.text || '');
+  } catch (err) {
+    if (err?.message === 'content_blocked') return res.json({ status: 'blocked', actions: [], note: BLOCKED_ANSWER });
+    return res.json({ status: 'unavailable', actions: [], note: UNAVAILABLE });
+  }
+  let parsed = null;
+  try { parsed = JSON.parse((text.match(/\{[\s\S]*\}/) || [''])[0]); } catch (e) { parsed = null; }
+  const actions = Array.isArray(parsed?.actions) ? [...new Set(parsed.actions.filter((id) => typeof id === 'string' && menu[id]))].slice(0, 6) : [];
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req), action: 'assist.actions', targetType: 'assist_surface', targetId: surface,
+    metadata: { surface, actions, instructionChars: instruction.length, hiddenCount: checked.hidden.length }, ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ status: 'ok', actions, note: actions.length ? '' : 'None of the document tools fits that. Ask it in the chat below instead.' });
+}));
+
 router.get('/api/assist/conversations', safe(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, title, surface, updated_at, expires_at FROM assist_conversations WHERE user_id = $1 AND expires_at > NOW() ORDER BY updated_at DESC LIMIT 20`, [req.user.id]);
@@ -234,5 +288,6 @@ async function purgeExpired() {
 
 module.exports = router;
 module.exports.purgeExpired = purgeExpired;
+module.exports.ACTIONS = ACTIONS;
 module.exports.RETENTION_DAYS = RETENTION_DAYS;
 module.exports._resetRateLimitForTests = _resetRateLimitForTests;

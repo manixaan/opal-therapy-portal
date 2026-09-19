@@ -146,3 +146,33 @@ test('another user\'s conversation is not found', async () => {
   expect((await agent.delete('/api/assist/conversations/' + CONV.id)).status).toBe(404);
   expect((await agent.post('/api/assist/chat').send({ message: 'hi', conversationId: CONV.id })).status).toBe(404);
 });
+
+describe('document actions — a typed instruction becomes a list of fixed tools', () => {
+  test('only the de-identified instruction reaches the model, and only offered tool ids come back', async () => {
+    let seen = null;
+    provider._setProviderForTests(async ({ system, messages }) => { seen = { system, messages }; return { text: 'Sure! {"actions": ["tidy", "toc", "delete_everything", "tidy"], "note": "ok"}' }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/actions').send({ surface: 'word', instruction: "Clean up Aiden's report and refresh the contents", document: 'SECRET BODY' });
+    expect(r.status).toBe(200);
+    expect(r.body.actions).toEqual(['tidy', 'toc']);
+    expect(seen.messages).toEqual([{ role: 'user', content: "Clean up [CLIENT_1]'s report and refresh the contents" }]);
+    expect(JSON.stringify(seen)).not.toMatch(/Aiden|SECRET BODY/);
+    expect(seen.system).toContain('tidy:');
+  });
+
+  test('an unknown surface or empty instruction is refused; a reply that is not JSON yields no actions', async () => {
+    provider._setProviderForTests(async () => ({ text: 'I would format the document.' }));
+    const agent = await login(buildApp(), user());
+    expect((await agent.post('/api/assist/actions').send({ surface: 'outlook', instruction: 'x' })).status).toBe(400);
+    expect((await agent.post('/api/assist/actions').send({ surface: 'excel', instruction: '  ' })).status).toBe(400);
+    const r = await agent.post('/api/assist/actions').send({ surface: 'excel', instruction: 'make it nice' });
+    expect(r.body.actions).toEqual([]);
+    expect(r.body.note).toMatch(/chat below/);
+  });
+
+  test('guarded like the rest: no session is 401, read-only is 403', async () => {
+    expect((await request(buildApp()).post('/api/assist/actions').send({ surface: 'word', instruction: 'x' })).status).toBe(401);
+    const agent = await login(buildApp(), user({ role: 'read_only' }));
+    expect((await agent.post('/api/assist/actions').send({ surface: 'word', instruction: 'x' })).status).toBe(403);
+  });
+});

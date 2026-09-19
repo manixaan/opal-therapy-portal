@@ -120,3 +120,7 @@ body.oa-pane .oa-side { display: none; }
 .oa-tools-status.warn { color: var(--warn); }
 .oa-tools-report { font-size: 12.5px; background: var(--warn-soft); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 8px; max-height: 160px; overflow: auto; }
 .oa-tools-report ul { margin: 4px 0 0; padding-left: 18px; }
+.oa-tools-words { display: flex; gap: 6px; width: 100%; margin-top: 2px; }
+.oa-tools-words input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12.5px; background: var(--bg); }
+.oa-tools-words input:focus-visible { border-color: var(--accent); background: var(--panel); }
+.oa-tools-template { font-size: 12px; color: var(--accent-deep); width: 100%; }

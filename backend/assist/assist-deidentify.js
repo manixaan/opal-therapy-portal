@@ -32,6 +32,7 @@
 const deid = require('../ai/deidentify');
 const directory = require('./identity-directory');
 const knownValues = require('./known-values');
+const { suburbSpans } = require('./suburbs-wa');
 const { ageGroupOf, ageGroupOfYears } = require('./age-groups');
 
 const ROLE_TOKEN = { client: 'CLIENT', contact: 'CONTACT', therapist: 'THERAPIST', staff: 'STAFF', person: 'PERSON' };
@@ -111,7 +112,10 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   // A client's own recorded phone, birth date, NDIS number or address, in any format.
   // Tokens already written in the text (another pass put them there) are never handed out again.
   for (const m of String(text || '').matchAll(/\[([A-Z][A-Z_]*_\d+)\]/g)) used.add(m[1]);
-  const shape = { knownSpans: await knownValues.matcher(), ageGroupOf, ageGroupOfYears, reservedTokens: used, priorStructured: prior.structured };
+  // …and place names: the client's own suburb by fingerprint, other listed suburbs by name.
+  const recorded = await knownValues.matcher();
+  const knownSpans = (t) => [...(recorded ? recorded(t) : []), ...suburbSpans(t)];
+  const shape = { knownSpans, ageGroupOf, ageGroupOfYears, reservedTokens: used, priorStructured: prior.structured };
 
   // Pass 1: everything the directory knows, plus prior tokens, to find who
   // actually appears. Directory entries get provisional tokens.

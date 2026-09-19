@@ -47,10 +47,6 @@
     table: { size: 9, headerFill: 'primary', headerText: 'white', band: 'mist', border: 'primary' },
   };
 
-  var say = function (msg, kind) {
-    var el = document.getElementById('oa-tools-status');
-    if (el) { el.textContent = msg; el.className = 'oa-tools-status' + (kind ? ' ' + kind : ''); }
-  };
   var supports = function (v) { try { return global.Office.context.requirements.isSetSupported('WordApi', v); } catch (e) { return false; } };
   var FF = String.fromCharCode(12); var NBSP = String.fromCharCode(160);
   var isEmpty = function (t) { return !String(t || '').split(NBSP).join('').replace(/\s/g, ''); };
@@ -174,42 +170,12 @@
         var place = (text.match(/\[(?:insert|client|name|date|tbc|todo)[^\]]*\]|XX+|TBC\b/gi) || []).length; if (place) found.push(place + ' unfilled placeholder' + (place > 1 ? 's' : '') + ' ([insert…], XX, TBC)');
         return found;
       });
-    }).then(function (found) {
-      var box = document.getElementById('oa-tools-report');
-      if (box) { box.hidden = false; box.innerHTML = ''; var h = document.createElement('strong'); h.textContent = found.length ? found.length + ' thing' + (found.length > 1 ? 's' : '') + ' to fix' : 'Nothing to fix'; box.appendChild(h); var ul = document.createElement('ul'); found.forEach(function (f) { var li = document.createElement('li'); li.textContent = f; ul.appendChild(li); }); box.appendChild(ul); }
-      return found.length ? 'Check finished: ' + found.length + ' to fix (listed below).' : 'Check finished: the document is clean.';
-    });
-  }
-
-  var TOOLS = [
-    ['format', 'Apply Opal format', applyStandard],
-    ['tidy', 'Tidy spacing', tidySpacing],
-    ['pages', 'Headings on new page', headingsOnNewPage],
-    ['toc', 'Update contents', updateContents],
-    ['check', 'Check document', checkDocument],
-  ];
-
-  function mount() {
-    var host = document.querySelector('.oa-compose-inner');
-    if (!host || document.getElementById('oa-tools')) return;
-    var wrap = document.createElement('div'); wrap.id = 'oa-tools'; wrap.className = 'oa-tools-bar';
-    var label = document.createElement('span'); label.className = 'oa-tools-label'; label.textContent = 'Document tools'; wrap.appendChild(label);
-    TOOLS.forEach(function (t) {
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'oa-btn sm'; b.id = 'oa-tool-' + t[0]; b.textContent = t[1];
-      b.addEventListener('click', function () {
-        var all = wrap.querySelectorAll('button'); all.forEach(function (x) { x.disabled = true; }); say('Working…');
-        Promise.resolve().then(t[2]).then(function (msg) { say(msg, 'ok'); })
-          .catch(function (err) { say('That did not work in this version of Word (' + ((err && (err.code || err.message)) || 'error') + '). Nothing was changed by this step; use Undo if needed.', 'warn'); })
-          .then(function () { all.forEach(function (x) { x.disabled = false; }); });
-      });
-      wrap.appendChild(b);
-    });
-    var status = document.createElement('div'); status.id = 'oa-tools-status'; status.className = 'oa-tools-status'; status.setAttribute('aria-live', 'polite');
-    status.textContent = 'These tools run inside Word. Nothing from the document is sent anywhere. Undo (Cmd+Z) reverses any of them.';
-    var report = document.createElement('div'); report.id = 'oa-tools-report'; report.className = 'oa-tools-report'; report.hidden = true;
-    host.insertBefore(report, host.firstChild); host.insertBefore(status, host.firstChild); host.insertBefore(wrap, host.firstChild);
+    }).then(function (found) { global.OpalAssistTools.report(found); return found.length ? 'Check finished: ' + found.length + ' to fix (listed below).' : 'Check finished: the document is clean.'; });
   }
 
   global.OpalAssistWordFormat = { STANDARD: STANDARD, applyStandard: applyStandard, tidySpacing: tidySpacing, headingsOnNewPage: headingsOnNewPage, updateContents: updateContents, checkDocument: checkDocument };
-  document.addEventListener('opal-assist-office-ready', function () { if (global.Word) mount(); });
+  global.OpalAssistTools.mount('word', 'Document tools', 'These tools run inside Word. Nothing from the document is sent anywhere. Undo reverses any of them. For margins, heading rules and numbered headings, start from the Opal template.', [
+    ['format', 'Apply Opal format', applyStandard], ['tidy', 'Tidy spacing', tidySpacing], ['pages', 'Headings on new page', headingsOnNewPage],
+    ['toc', 'Update contents', updateContents], ['check', 'Check document', checkDocument],
+  ]);
 })(typeof window !== 'undefined' ? window : globalThis);
