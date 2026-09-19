@@ -1,0 +1,5 @@
+Proven — see STATUS.md
+
+Proof: 24 unit (`splose-link-routes.test.js`, `splose-credentials.test.js`) + 138 unit (`mobile-routes`, `frontend-stage2-guards`, `assessment-surface-guards`, `splose-api-queue`) + 184 unit (prior baseline: outlook-delta-preserve, outlook-mirror, reconciliation-engine, splose-poller, sync-safety, sync, travel-cascade, travel-feasibility) all pass, plus 3 integration (`splose-connection.itest.js`) + 55 integration (`events-sync`, `outlook-claim`, `outlook-delta-preserve`, `reconcile-safety`, `splose-draft-sync`) against a real database. Two caveats worth acting on before trusting this fully: (1) the tracker task "Multi Calendar Rules" has no matching code anywhere — the architecture is deliberately single-calendar (Outlook-only mirror), the opposite of "multi calendar"; (2) the brand-new Settings → Integrations → Splose UI (practitioner self-link, API-key connect/disconnect, landed today) has zero browser/E2E proof — the only browser QA on file (`docs/qa/BROWSER_QA_RESULTS.md`, 2026-08-01) predates it entirely.
+
+Tracker: eba1c6a7-3ba4-420f-acf4-1c5838991138
