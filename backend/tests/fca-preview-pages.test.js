@@ -171,6 +171,34 @@ describe('the download carries no page breaks; the preview starts each section o
     expect(cover).not.toContain('<w:br w:type="page"');
   });
 
+  test('the preview drops those blank lines — its own break does the job, so page 2 is never an empty sheet', async () => {
+    expect(await documentXml(composed)).toContain('<w:p/>'.repeat(36));
+    expect(await documentXml(paginated)).not.toContain('<w:p/><w:p/>');
+  });
+
+  test('label/value tables use the Details style: dark first COLUMN, no dark header row, white label text', async () => {
+    const zip = await JSZip.loadAsync(templateBuffer);
+    const styles = await zip.file('word/styles.xml').async('string');
+    const details = styles.match(/w:styleId="OPAL–DetailsTable".*?<\/w:style>/s)[0];
+    expect(details).toContain('<w:name w:val="OPAL – Details Table"/>');
+    expect(details).toMatch(/w:type="firstCol">.*?<w:color w:val="FFFFFF"\/>.*?w:fill="2F5651"/s);
+    expect(details).not.toContain('w:type="firstRow"');
+    // No paragraph style under a table may force dark text over a dark cell.
+    for (const id of ['Normal', 'OPAL–Body', 'OPAL–TableBody']) {
+      const style = styles.match(new RegExp(`w:styleId="${id}".*?</w:style>`, 's'))[0];
+      expect(style).not.toContain('<w:color');
+    }
+    const tables = (await documentXml(templateBuffer)).match(/<w:tbl>.*?<\/w:tbl>/gs);
+    const detailTables = tables.filter((t) => t.includes('<w:tblStyle w:val="OPAL–DetailsTable"/>'));
+    expect(detailTables).toHaveLength(5);
+    for (const t of detailTables) {
+      expect(t).toContain('w:firstRow="0"');
+      // the first row's value cell is pale like any other — never the dark header fill
+      const valueCell = t.match(/<w:tc>.*?<\/w:tc>/gs)[1];
+      expect(valueCell).toContain('w:fill="F4F7F5"');
+    }
+  });
+
   test('a leading pageBreakBefore does not produce an empty first page', () => {
     const xml = '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
       + '<w:body><w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>first</w:t></w:r></w:p>'

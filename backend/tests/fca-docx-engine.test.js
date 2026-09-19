@@ -234,7 +234,8 @@ describe('fca-v1.docx template facts', () => {
     expect(m[0]).toContain('w:type="firstRow"');              // green header band
     expect(m[0]).toContain('w:fill="2F5651"');
     const tables = (doc.match(/<w:tbl>/g) || []).length;
-    expect((doc.match(/<w:tblStyle w:val="OPAL–Table"\/>/g) || []).length).toBe(tables);
+    // Column-header tables use OPAL – Table; label/value tables its Details sibling.
+    expect((doc.match(/<w:tblStyle w:val="OPAL–(Details)?Table"\/>/g) || []).length).toBe(tables);
   });
 
   test('style ids use an en dash with no spaces', () => {

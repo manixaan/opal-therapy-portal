@@ -161,6 +161,30 @@ function breakParagraph(doc) {
 }
 
 /**
+ * The download pushes a heading onto the next page with blank lines (the
+ * cover ends in a run of them), because it must hold no page break. The
+ * preview has a real break here, so those lines would only spill onto a blank
+ * sheet of their own: drop the empty paragraphs leading up to the break,
+ * stepping over a section-break paragraph without touching it.
+ */
+function dropSpacerLines(node) {
+  let prev = node.previousSibling;
+  while (prev) {
+    const before = prev.previousSibling;
+    if (prev.nodeType === 1) {
+      if (prev.nodeName !== 'w:p') break;
+      const pPr = directChild(prev, 'w:pPr');
+      const isSection = !!(pPr && directChild(pPr, 'w:sectPr'));
+      const isEmpty = !isSection && !paragraphText(prev)
+        && prev.getElementsByTagName('w:r').length === 0;
+      if (!isSection && !isEmpty) break;
+      if (isEmpty) prev.parentNode.removeChild(prev);
+    }
+    prev = before;
+  }
+}
+
+/**
  * Does this paragraph's section break end the page? A `continuous` break does
  * not — the renderer keeps flowing on the same sheet (the FCA cover ends in
  * one, and the Contents title after it still needs its own page).
@@ -209,9 +233,14 @@ function paginateDocumentXml(xml) {
     }
 
     if (wantsBreak && !alreadyBroken) {
+      dropSpacerLines(node);
       node.parentNode.insertBefore(breakParagraph(doc), node);
       inserted += 1;
     }
+
+    // The cover's spacer run sits BEFORE its section paragraph, and template
+    // guidance may stand between that and the Contents break.
+    if (pPr && directChild(pPr, 'w:sectPr')) dropSpacerLines(node);
 
     alreadyBroken = endsPageWithSection(pPr) || hasPageBreakRun(node);
   }
