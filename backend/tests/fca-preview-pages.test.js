@@ -167,12 +167,15 @@ describe('the download carries no page breaks; the preview starts each section o
   test('the master pushes Contents off the cover with blank lines, never a page break', async () => {
     const xml = await documentXml(templateBuffer);
     const cover = xml.slice(0, xml.indexOf('<w:p><w:pPr><w:sectPr>'));
-    expect(cover.endsWith('<w:p/>'.repeat(36))).toBe(true);
+    // 12 lines fit under the cover in Word; 9 leaves room for the section
+    // paragraph and a client name that wraps. One too many is an empty page 2.
+    expect(cover.endsWith('<w:p/>'.repeat(9))).toBe(true);
+    expect(cover.endsWith('<w:p/>'.repeat(10))).toBe(false);
     expect(cover).not.toContain('<w:br w:type="page"');
   });
 
   test('the preview drops those blank lines — its own break does the job, so page 2 is never an empty sheet', async () => {
-    expect(await documentXml(composed)).toContain('<w:p/>'.repeat(36));
+    expect(await documentXml(composed)).toContain('<w:p/>'.repeat(9));
     expect(await documentXml(paginated)).not.toContain('<w:p/><w:p/>');
   });
 
@@ -196,6 +199,29 @@ describe('the download carries no page breaks; the preview starts each section o
       // the first row's value cell is pale like any other — never the dark header fill
       const valueCell = t.match(/<w:tc>.*?<\/w:tc>/gs)[1];
       expect(valueCell).toContain('w:fill="F4F7F5"');
+    }
+  });
+
+  test('the PREVIEW paints the text of a dark label cell white — no table style out-ranks the label style', () => {
+    const win = rendered.win;
+    const label = Array.from(rendered.host.querySelectorAll('p'))
+      .find((p) => p.textContent.trim() === 'Participant Name');
+    expect(label).toBeTruthy();
+    const span = label.querySelector('span');
+    expect(win.getComputedStyle(span).color.replace(/\s/g, '')).toMatch(/^(rgb\(255,255,255\)|#ffffff)$/i);
+    // The table styles carry no text colour of their own for the previewer to rank above it.
+    const css = Array.from(rendered.host.querySelectorAll('style')).map((e) => e.textContent).join('\n');
+    expect(css).not.toMatch(/table\.[^{]*opal–(details)?table span\s*\{[^}]*color/i);
+  });
+
+  test('one contents style per level, under Word\'s own names — Update Field keeps the Opal look', async () => {
+    const zip = await JSZip.loadAsync(templateBuffer);
+    const styles = await zip.file('word/styles.xml').async('string');
+    for (const n of [1, 2, 3]) {
+      const found = styles.match(new RegExp(`<w:style [^>]*w:styleId="TOC${n}">.*?</w:style>`, 'gs'));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain(`<w:name w:val="toc ${n}"/>`);
+      expect(found[0]).toContain('<w:i w:val="0"/>');
     }
   });
 
