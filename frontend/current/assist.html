@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=4">
+  <link rel="stylesheet" href="/assist.css?v=5">
 </head>
 <body>
   <div class="oa-app">
@@ -62,12 +62,12 @@
       var sf = new URLSearchParams(location.search).get('surface');
       if (['word', 'excel', 'outlook'].indexOf(sf) >= 0) document.write('<script src="/assist-office.js?v=2"><\/script>');
       // Word also gets the document tools (formatting by code; no document text leaves Word).
-      if (sf === 'word' || sf === 'excel') document.write('<script src="/assist-tools.js?v=1"><\/script>');
-      if (sf === 'word') document.write('<script src="/assist-word-format.js?v=2"><\/script>');
+      if (sf === 'word' || sf === 'excel') document.write('<script src="/assist-tools.js?v=2"><\/script>');
+      if (sf === 'word') document.write('<script src="/assist-word-format.js?v=3"><\/script>');
       // Excel gets sheet tools on the same terms.
-      if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=1"><\/script>');
+      if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=2"><\/script>');
     })();
   </script>
-  <script src="/assist.js?v=3"></script>
+  <script src="/assist.js?v=4"></script>
 </body>
 </html>

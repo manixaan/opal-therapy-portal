@@ -99,6 +99,8 @@
   function renderStack() {
     var stack = $('oa-stack');
     if (!S.messages.length) {
+      // A task pane is narrow: one quiet line, not the full welcome.
+      if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist.svg" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
       stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist.svg" alt=""><h1>Opal Assist</h1>'
         + '<p>Draft letters and emails, tidy case-note wording, prepare for plan reviews, summarise documents, build spreadsheet formulas. '
         + 'Paste what you have — names and contact details are hidden before anything leaves the practice.</p>'
@@ -296,16 +298,33 @@
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
 
+  // Inside Office, Microsoft 365 sign-in is tried first. When Office cannot
+  // supply it (Word signed in to a different Microsoft account, consent not
+  // given, an older Office), the person signs in to the portal right here in
+  // the pane instead — the same account, the same guards.
+  function showPaneSignIn() {
+    setStatus('Sign in', 'off');
+    $('oa-send').disabled = true;
+    var code = office() && office().state.error ? ' (Office code ' + office().state.error + ')' : '';
+    var slot = $('oa-review-slot');
+    slot.innerHTML = '<div class="oa-signin"><strong>Sign in to use Opal Assist</strong>'
+      + '<p>Word could not pass on your Microsoft 365 sign-in' + esc(code) + '. Sign in with your portal account instead.</p>'
+      + '<button class="oa-btn primary" type="button" id="oa-pane-signin">Sign in to the portal</button></div>';
+    $('oa-pane-signin').addEventListener('click', function () {
+      global.location.href = '/login?next=' + encodeURIComponent(global.location.pathname + global.location.search);
+    });
+  }
+
   // ── Boot ──────────────────────────────────────────────────────────────────
   function boot() {
-    if (S.surface !== 'web') document.body.classList.add('oa-pane');
+    if (S.surface !== 'web') { document.body.classList.add('oa-pane'); $('oa-hint').textContent = 'Names and contact details are hidden before sending.'; $('oa-input').placeholder = 'Ask Opal Assist…'; }
     if (global.innerWidth < 760) $('oa-menu').style.display = '';
     renderStack(); updateSelectionBar();
     api('/api/auth/me').then(function (r) { return r.ok ? r.json() : null; }).then(function (u) { S.user = u; }).catch(function () {});
     if (office()) { $('oa-use-selection').style.display = ''; }
     api('/api/assist/config').then(function (r) {
       if (r.status === 401) {
-        if (office()) { setStatus('Sign in needed', 'off'); $('oa-hint').textContent = 'Opal Assist could not sign you in with Microsoft 365. ' + (office().state.error ? 'Office said: ' + office().state.error + '. ' : '') + 'Make sure your portal account uses the same email as your Microsoft sign-in.'; return null; }
+        if (office()) { showPaneSignIn(); return null; }
         global.location.href = '/login?next=' + encodeURIComponent(global.location.pathname + global.location.search); return null;
       }
       return r.json();

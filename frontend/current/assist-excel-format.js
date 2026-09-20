@@ -142,7 +142,7 @@
     }).then(function (found) { global.OpalAssistTools.report(found); return found.length ? 'Check finished: ' + found.length + ' to fix (listed below).' : 'Check finished: the table is clean.'; });
   }
 
-  global.OpalAssistTools.mount('excel', 'Sheet tools', 'These tools run inside Excel on the cells you select. Nothing from the workbook is sent anywhere. Undo reverses any of them.', [
+  global.OpalAssistTools.mount('excel', 'Sheet tools', 'Runs inside Excel on the selected cells. Nothing is sent. Undo reverses it.', [
     ['table', 'Opal table format', opalTable], ['fit', 'Fit columns', fitColumns], ['freeze', 'Freeze top row', freezeTop],
     ['totals', 'Add totals row', totalsRow], ['numbers', 'Tidy number formats', numberFormats], ['check', 'Check table', checkSheet],
   ]);

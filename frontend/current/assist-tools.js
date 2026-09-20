@@ -41,6 +41,7 @@
   function report(found) {
     var box = document.getElementById('oa-tools-report'); if (!box) return;
     box.hidden = false; box.innerHTML = '';
+    var d = document.getElementById('oa-tools-drawer'); if (d) d.hidden = false;
     box.appendChild(el('strong', null, found.length ? found.length + ' thing' + (found.length > 1 ? 's' : '') + ' to fix' : 'Nothing to fix'));
     var ul = el('ul'); found.forEach(function (f) { ul.appendChild(el('li', null, f)); }); box.appendChild(ul);
   }
@@ -87,8 +88,13 @@
     var build = function () {
       var host = document.querySelector('.oa-compose-inner');
       if (!host || document.getElementById('oa-tools')) return;
+      // One quiet row until asked for: the pane is for the chat first.
+      var toggle = el('button', 'oa-tools-toggle', title); toggle.type = 'button'; toggle.id = 'oa-tools-toggle'; toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'oa-tools');
+      var drawer = el('div', 'oa-tools-drawer'); drawer.id = 'oa-tools-drawer'; drawer.hidden = true;
+      var open = false; try { open = localStorage.getItem('oa.tools.open') === '1'; } catch (e) { /* private mode */ }
+      var setOpen = function (v) { drawer.hidden = !v; toggle.setAttribute('aria-expanded', v ? 'true' : 'false'); toggle.classList.toggle('open', v); try { localStorage.setItem('oa.tools.open', v ? '1' : '0'); } catch (e) { /* ignore */ } };
+      toggle.addEventListener('click', function () { setOpen(drawer.hidden); });
       bar = el('div', 'oa-tools-bar'); bar.id = 'oa-tools';
-      bar.appendChild(el('span', 'oa-tools-label', title));
       list.forEach(function (t) {
         tools[t[0]] = { label: t[1], fn: t[2] };
         var b = el('button', 'oa-btn sm', t[1]); b.type = 'button'; b.id = 'oa-tool-' + t[0];
@@ -108,7 +114,9 @@
       }
       var status = el('div', 'oa-tools-status', blurb); status.id = 'oa-tools-status'; status.setAttribute('aria-live', 'polite');
       var rep = el('div', 'oa-tools-report'); rep.id = 'oa-tools-report'; rep.hidden = true;
-      host.insertBefore(rep, host.firstChild); host.insertBefore(status, host.firstChild); host.insertBefore(bar, host.firstChild);
+      drawer.appendChild(bar); drawer.appendChild(status); drawer.appendChild(rep);
+      host.insertBefore(drawer, host.firstChild); host.insertBefore(toggle, host.firstChild);
+      setOpen(open);
     };
     var ready = function () { return (surface === 'word' && global.Word) || (surface === 'excel' && global.Excel); };
     if (global.OpalAssistOffice && global.OpalAssistOffice.state.ready && ready()) build();

@@ -124,3 +124,27 @@ body.oa-pane .oa-side { display: none; }
 .oa-tools-words input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12.5px; background: var(--bg); }
 .oa-tools-words input:focus-visible { border-color: var(--accent); background: var(--panel); }
 .oa-tools-template { font-size: 12px; color: var(--accent-deep); width: 100%; }
+
+/* ── Task pane: quiet by default ───────────────────────────────────────── */
+body.oa-pane .oa-head { padding: 8px 12px; }
+body.oa-pane .oa-title { font-size: 13px; color: var(--ink-soft); }
+body.oa-pane .oa-body { padding: 12px 12px 4px; }
+body.oa-pane .oa-compose { padding: 10px 12px 12px; }
+body.oa-pane .oa-empty-pane { padding: 28px 8px; }
+body.oa-pane .oa-empty-pane img { width: 36px; height: 36px; opacity: .9; }
+body.oa-pane .oa-empty-pane p { font-size: 13px; color: var(--muted); margin-top: 8px; }
+body.oa-pane .oa-textarea { min-height: 52px; }
+body.oa-pane .oa-compose-row .oa-hint { font-size: 11px; }
+.oa-tools-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; padding: 2px 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.oa-tools-toggle::after { content: "+"; font-size: 15px; font-weight: 500; line-height: 1; }
+.oa-tools-toggle.open::after { content: "\2212"; }
+.oa-tools-toggle:hover { color: var(--accent-deep); }
+.oa-tools-drawer { border: 1px solid var(--border-soft); background: var(--bg); border-radius: var(--radius-md); padding: 10px; margin-bottom: 10px; }
+.oa-tools-drawer .oa-tools-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.oa-tools-drawer .oa-tools-bar .oa-btn { text-align: center; padding: 6px 4px; font-size: 12px; }
+.oa-tools-drawer .oa-tools-words, .oa-tools-drawer .oa-tools-template { grid-column: 1 / -1; }
+.oa-tools-drawer .oa-tools-status { margin: 8px 0 0; font-size: 11.5px; }
+.oa-tools-drawer .oa-tools-report { margin: 8px 0 0; }
+.oa-signin { border: 1px solid var(--border); background: var(--panel); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow-sm); }
+.oa-signin strong { font-size: 13.5px; }
+.oa-signin p { margin: 4px 0 10px; font-size: 12.5px; color: var(--ink-soft); }

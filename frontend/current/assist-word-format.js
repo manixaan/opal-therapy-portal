@@ -174,7 +174,7 @@
   }
 
   global.OpalAssistWordFormat = { STANDARD: STANDARD, applyStandard: applyStandard, tidySpacing: tidySpacing, headingsOnNewPage: headingsOnNewPage, updateContents: updateContents, checkDocument: checkDocument };
-  global.OpalAssistTools.mount('word', 'Document tools', 'These tools run inside Word. Nothing from the document is sent anywhere. Undo reverses any of them. For margins, heading rules and numbered headings, start from the Opal template.', [
+  global.OpalAssistTools.mount('word', 'Document tools', 'Runs inside Word. Nothing is sent. Undo reverses it.', [
     ['format', 'Apply Opal format', applyStandard], ['tidy', 'Tidy spacing', tidySpacing], ['pages', 'Headings on new page', headingsOnNewPage],
     ['toc', 'Update contents', updateContents], ['check', 'Check document', checkDocument],
   ]);
