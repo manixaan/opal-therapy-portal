@@ -11,13 +11,13 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>__WORD_EXCEL_ID__</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>Opal Therapy</ProviderName>
   <DefaultLocale>en-AU</DefaultLocale>
   <DisplayName DefaultValue="Opal Assist"/>
   <Description DefaultValue="Opal Therapy's own AI. Names and contact details are hidden before anything leaves the practice."/>
-  <IconUrl DefaultValue="__HOST__/icons/office/opal-assist-32.png"/>
-  <HighResolutionIconUrl DefaultValue="__HOST__/icons/office/opal-assist-64.png"/>
+  <IconUrl DefaultValue="__HOST__/icons/office/opal-assist-32.png?v=2"/>
+  <HighResolutionIconUrl DefaultValue="__HOST__/icons/office/opal-assist-64.png?v=2"/>
   <SupportUrl DefaultValue="__HOST__/assist"/>
   <AppDomains>
     <AppDomain>__HOST__</AppDomain>
@@ -73,9 +73,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="OpalAssist.Icon.16" DefaultValue="__HOST__/icons/office/opal-assist-16.png"/>
-        <bt:Image id="OpalAssist.Icon.32" DefaultValue="__HOST__/icons/office/opal-assist-32.png"/>
-        <bt:Image id="OpalAssist.Icon.80" DefaultValue="__HOST__/icons/office/opal-assist-80.png"/>
+        <bt:Image id="OpalAssist.Icon.16" DefaultValue="__HOST__/icons/office/opal-assist-16.png?v=2"/>
+        <bt:Image id="OpalAssist.Icon.32" DefaultValue="__HOST__/icons/office/opal-assist-32.png?v=2"/>
+        <bt:Image id="OpalAssist.Icon.80" DefaultValue="__HOST__/icons/office/opal-assist-80.png?v=2"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="OpalAssist.Url.Word" DefaultValue="__HOST__/assist?surface=word"/>
