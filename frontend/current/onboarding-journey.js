@@ -3002,9 +3002,8 @@
   }
 
   async function cancelRecord() {
-    var reason = await portalPrompt('Cancel this onboarding? Give a reason for the record.');
-    if (reason === null) return;
-    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.recordId) + '/cancel', { method: 'POST', body: { reason: reason || 'Cancelled by the practice' } });
+    if (!await portalConfirm('Cancel this onboarding?', { danger: true })) return;
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.recordId) + '/cancel', { method: 'POST', body: { reason: 'Cancelled by the practice' } });
     if (!res.ok) return toast(res.error, true);
     toast('Onboarding cancelled.');
     S.record = null; nav('board');
