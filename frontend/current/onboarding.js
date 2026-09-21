@@ -1179,24 +1179,18 @@
       subtitle: a.applicantName,
       body: '<div class="ob-note is-warn">Cancelling stops this onboarding: any invitation link '
         + 'stops working immediately, and an account that never became staff is deactivated. '
-        + 'Nothing is deleted — the record and its history are kept.</div>'
-        + '<div class="ob-field">'
-        + '  <label for="ob-cx-reason">Why is it being cancelled?<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '  <textarea id="ob-cx-reason" name="reason" maxlength="500" required'
-        + '            placeholder="e.g. Started in error, or the candidate withdrew."></textarea>'
-        + '</div>',
+        + 'Nothing is deleted — the record and its history are kept.</div>',
       footer: '<button class="btn" onclick="Onboarding.closeModal()">Keep it</button>'
         + '<button class="btn primary" onclick="Onboarding.confirmCancelAssignment()">Cancel onboarding</button>',
     });
   }
 
   async function confirmCancelAssignment() {
-    var v = modalValues();
-    if (!v.reason || !v.reason.trim()) { modalError('A reason is required.'); return; }
     if (S.busy) return;
     S.busy = true;
+    // A confirmation, not a questionnaire: the route still records a reason, and this is it.
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
-      + '/cancel', { method: 'POST', body: { reason: v.reason.trim() } });
+      + '/cancel', { method: 'POST', body: { reason: 'Cancelled by the practice' } });
     S.busy = false;
     if (!res.ok) { modalError(res.error); return; }
     closeModal();

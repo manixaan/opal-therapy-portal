@@ -344,11 +344,6 @@
       body: '<div class="ob-note is-warn">Cancelling stops this onboarding: any invitation link '
         + 'stops working immediately, and an account that never became staff is deactivated. '
         + 'Nothing is deleted — the record and its history are kept.</div>'
-        + '<div class="ob-field">'
-        + '  <label for="oj-cx-reason">Why is it being cancelled?<span class="ob-req-mark" aria-hidden="true">*</span></label>'
-        + '  <textarea id="oj-cx-reason" maxlength="500" required'
-        + '            placeholder="e.g. Started in error, or the candidate withdrew."></textarea>'
-        + '</div>'
         + '<div id="oj-cx-error" class="ob-note is-danger" role="alert" hidden></div>',
       footer: '<div class="oj-actions oj-actions-tight">'
         + btn('Cancel onboarding', 'OnboardingJourney.confirmCancelRecord(\'' + jsq(id) + '\')', 'oj-btn-primary')
@@ -358,12 +353,10 @@
   }
 
   async function confirmCancelRecord(id) {
-    var ta = doc.getElementById('oj-cx-reason');
     var errEl = doc.getElementById('oj-cx-error');
-    var reason = ta && ta.value.trim();
     var fail = function (m) { if (errEl) { errEl.textContent = m; errEl.hidden = false; } };
-    if (!reason) { fail('A reason is required.'); return; }
-    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(id) + '/cancel', { method: 'POST', body: { reason: reason } });
+    // A confirmation, not a questionnaire: the route still records a reason, and this is it.
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(id) + '/cancel', { method: 'POST', body: { reason: 'Cancelled by the practice' } });
     if (!res.ok) { fail(res.error); return; }
     global.Onboarding.closeModal();
     toast('Onboarding cancelled');
