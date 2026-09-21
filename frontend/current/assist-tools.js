@@ -20,9 +20,17 @@
     word: [
       ['format', /(opal (format|standard|style|styling|template)|format(ting)? (this|the|it|to|accord)|house style|fix (the )?(fonts?|styles?|colou?rs?)|make it look|brand)/i],
       ['tidy', /(blank (page|line)s?|empty (page|line|paragraph)s?|extra (space|spacing|line)s?|spacing|tidy|clean ?up|gaps?)/i],
-      ['pages', /(heading|section|chapter)s? .*(new|own|separate|fresh) page|new page .*(heading|section)|page break/i],
-      ['toc', /(contents?( page)?|table of contents|toc|page numbers?|cross[- ]?ref)/i],
+      ['pages', /(heading|section|chapter)s? .*(new|own|separate|fresh) page|new page .*(heading|section)|page breaks? .*(heading|chapter)/i],
+      ['toc', /^(?!.*\bfooter\b).*(contents?( page)?|table of contents|toc|page numbers?|cross[- ]?ref)/i],
       ['check', /(check|review|proof|audit|anything (wrong|missing)|missing|appendi(x|ces)|placeholder|problems?|issues?|errors?|typos?)/i],
+      // Tools that act at the cursor or take a detail from the typed words themselves.
+      ['section', /section break|new section/i],
+      ['break', /^(?!.*\b(heading|chapter|section)s?\b).*(page break|(insert|add|start|put in) (a )?(new|blank) page)/i],
+      ['header', /\bheader\b/i],
+      ['footer', /\bfooter\b/i],
+      ['style', /(make|turn|set|change|style) .*\b(heading ?[1-4]|main heading|sub-?heading|title|subtitle|caption|normal|body text)\b/i],
+      ['table', /(insert|add|create|put in|new) .*\btable\b(?! of contents)|\d+\s*(x|by)\s*\d+ table/i],
+      ['layout', /(attach|send|share|use|show|read) .*(layout|structure|outline)|layout summary/i],
     ],
     excel: [
       ['table', /(opal (format|table|style)|format (this|the|it|as)|table format|make it look|header row|banded|brand)/i],
@@ -48,11 +56,11 @@
 
   function busy(on) { if (bar) bar.querySelectorAll('button,input').forEach(function (x) { x.disabled = on; }); }
 
-  /** Run tools one after another; stop at the first that fails. */
-  function run(ids) {
+  /** Run tools one after another; stop at the first that fails. `typed` is the person's own words, for tools that need a detail. */
+  function run(ids, typed) {
     busy(true); var done = [];
     return ids.reduce(function (chain, id) {
-      return chain.then(function () { say('Working: ' + tools[id].label + '…'); return tools[id].fn(); }).then(function (msg) { done.push(msg); });
+      return chain.then(function () { say('Working: ' + tools[id].label + '…'); return tools[id].fn(typed || ''); }).then(function (msg) { done.push(msg); });
     }, Promise.resolve()).then(function () { say(done.join(' '), 'ok'); })
       .catch(function (err) { say((done.length ? done.join(' ') + ' Then: ' : '') + 'that step did not work in this version of Office (' + ((err && (err.code || err.message)) || 'error') + '). Use Undo if needed.', 'warn'); })
       .then(function () { busy(false); });
@@ -73,13 +81,13 @@
   function doInWords(text) {
     text = String(text || '').trim(); if (!text) return Promise.resolve();
     var ids = localMatch(text);
-    if (ids.length) return run(ids);
+    if (ids.length) return run(ids, text);
     busy(true); say('Working out which tools fit…');
     return askServer(text).then(function (r) {
       busy(false);
       var valid = (r.actions || []).filter(function (id) { return tools[id]; });
       if (!valid.length) { say(r.note || 'None of the tools fits that. Ask it in the chat below instead.', 'warn'); return null; }
-      return run(valid);
+      return run(valid, text);
     }).catch(function () { busy(false); say('Opal Assist could not be reached. Use the buttons instead.', 'warn'); });
   }
 
@@ -98,7 +106,7 @@
       list.forEach(function (t) {
         tools[t[0]] = { label: t[1], fn: t[2] };
         var b = el('button', 'oa-btn sm', t[1]); b.type = 'button'; b.id = 'oa-tool-' + t[0];
-        b.addEventListener('click', function () { run([t[0]]); }); bar.appendChild(b);
+        b.addEventListener('click', function () { var w = document.getElementById('oa-tools-words'); run([t[0]], w ? w.value : ''); }); bar.appendChild(b);
       });
       var words = el('div', 'oa-tools-words');
       var input = el('input'); input.type = 'text'; input.id = 'oa-tools-words'; input.setAttribute('aria-label', 'Tell Opal Assist what to fix');

@@ -59,6 +59,65 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     expect(g.OpalAssistTools._localMatch('write me a poem')).toEqual([]);
   });
 
+  test('cursor and detail tools are picked by plain words, without stealing the older rules', () => {
+    const g = { document: { addEventListener() {}, querySelector() { return null; }, getElementById() { return null; } }, location: { search: '?surface=word' } };
+    new Function('window', 'globalThis', 'URLSearchParams', read('assist-tools.js'))(g, g, URLSearchParams);
+    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
+    const m = g.OpalAssistTools._localMatch;
+    expect(m('insert a page break here')).toEqual(['break']);
+    expect(m('add a section break')).toEqual(['section']);
+    expect(m('set the header to "Functional Capacity Assessment"')).toEqual(['header']);
+    expect(m('footer with page numbers')).toEqual(['footer']);
+    expect(m('make this a heading 2')).toEqual(['style']);
+    expect(m('insert a 4 x 3 table')).toEqual(['table']);
+    expect(m('update the table of contents')).toEqual(['toc']);
+    expect(m('attach the layout')).toEqual(['layout']);
+    // A question never runs a tool that changes the document by keyword alone.
+    expect(m('make headings start on a new page')).toEqual(['pages']);
+  });
+
+  test('the person\'s own words reach the tool: the detail is parsed in the pane, never supplied by the model', async () => {
+    const seen = [];
+    const g = { document: { addEventListener() {}, querySelector() { return null; }, getElementById() { return null; } }, location: { search: '?surface=word' } };
+    new Function('window', 'globalThis', 'URLSearchParams', read('assist-tools.js'))(g, g, URLSearchParams);
+    g.OpalAssistTools._register('header', 'Set header', (typed) => { seen.push(typed); return 'ok'; });
+    global.document = g.document; // the bar's status line looks the element up on the bare global
+    try { await g.OpalAssistTools.run(['header'], 'header "Report"'); } finally { delete global.document; }
+    expect(seen).toEqual(['header "Report"']);
+  });
+
+  test('Word detail parsers: wording, style and table size', () => {
+    const g = { document: { addEventListener() {} }, location: { search: '?surface=word' }, OpalAssistTools: { mount() {} } };
+    new Function('window', 'globalThis', 'URLSearchParams', read('assist-word-format.js'))(g, g, URLSearchParams);
+    const w = g.OpalAssistWordFormat;
+    expect(w._wordingFor('header', 'set the header to "Functional Capacity Assessment"')).toBe('Functional Capacity Assessment');
+    expect(w._wordingFor('footer', 'footer: Opal Therapy with page numbers')).toBe('Opal Therapy');
+    expect(w._wordingFor('header', "fix Noah's header")).toBe('');
+    expect(w._styleFor('make this a heading 2')[1]).toBe('Heading2');
+    expect(w._styleFor('turn it into the subtitle')[1]).toBe('Subtitle');
+    expect(w._styleFor('make it nicer')).toBeNull();
+    expect(w._tableSizeFor('insert a 4 x 3 table')).toEqual([4, 3]);
+    expect(w._tableSizeFor('table with 5 rows and 2 columns')).toEqual([5, 2]);
+    expect(w._tableSizeFor('a 99 by 99 table')).toEqual([30, 10]);
+    expect(w._tableSizeFor('add a table')).toEqual([3, 3]);
+  });
+
+  test('the layout summary goes to the chat only as selected content — the guarded, reviewed channel', () => {
+    const src = read('assist-word-format.js');
+    expect(src).toContain('global.OpalAssist.setSelection(summary)');
+    expect(src).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|\/api\//);
+    // The summary loads paragraph text only to pick out headings; body paragraphs are never pushed into it.
+    expect(src).toMatch(/if \(l && outline < 150\)/);
+  });
+
+  test('inside Word the prompt admits it cannot operate Word and names the tools; elsewhere it says nothing of them', () => {
+    const { buildSystemPrompt } = require('../assist/assist-prompt');
+    const word = buildSystemPrompt({ user: { name: 'Sam T' }, surface: 'word' });
+    expect(word).toContain('You cannot see or operate Word');
+    expect(word).toContain('Attach layout to chat');
+    expect(buildSystemPrompt({ user: { name: 'Sam T' }, surface: 'web' })).not.toContain('HELPING WITH WORD');
+  });
+
   test('every tool the server can name exists in the pane, and the reverse', () => {
     const { ACTIONS } = require('../assist-routes');
     for (const [surface, file] of [['word', 'assist-word-format.js'], ['excel', 'assist-excel-format.js']]) {

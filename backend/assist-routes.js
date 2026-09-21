@@ -218,6 +218,13 @@ const ACTIONS = {
     pages: 'Start every main heading on a new page',
     toc: 'Refresh the contents page, page numbers and cross-references',
     check: 'Report problems without changing anything: missing appendices, heading-level jumps, empty headings, wrong fonts, double spaces, unfilled placeholders',
+    break: 'Insert a page break at the cursor',
+    section: 'Insert a next-page section break at the cursor, so what follows can have its own header, footer or page numbering',
+    header: 'Set or clear the page header on every section, using the wording the person typed',
+    footer: 'Set or clear the page footer on every section, using the wording the person typed, optionally with Page X of Y',
+    style: 'Give the selected paragraphs a built-in style the person named: Heading 1-4, Title, Subtitle, Caption, Normal',
+    table: 'Insert an empty table in the Opal table style at the cursor, sized from the person\'s words (default 3 by 3)',
+    layout: 'Change nothing: attach a structure-only layout summary (headings, breaks, headers, footers — no body text) to the chat, for a question about WHY the layout looks the way it does',
   },
   excel: {
     table: 'Format the selected range as an Opal table: green header row, banded rows, borders, Arial',
