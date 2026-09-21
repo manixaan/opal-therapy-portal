@@ -538,3 +538,22 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 
 /* "Mark as sent" sits under the send buttons as a button of its own, not a quiet link. */
 .oj-actions-sent { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+
+/* The reading panel: what the portal read from a returned document, beside the document in the viewer. */
+.oj-rd-title { margin: 0 0 4px; font-size: 16px; }
+.oj-rd-source { margin: 0 0 10px; color: var(--ink-soft); font-size: 12.5px; }
+.oj-rd-note { margin: 0 0 12px; padding: 8px 10px; background: #fff4e0; border: 1px solid #f2d9a6; border-radius: 8px; color: #8a5a00; font-size: 12.5px; }
+.oj-rd-issues { margin: 0 0 12px; padding: 0; list-style: none; }
+.oj-rd-issue { color: #a3352b; font-size: 12.5px; margin: 0 0 3px; }
+.oj-rd-sub { margin: 18px 0 8px; font-size: 13px; color: var(--ink-soft); text-transform: none; }
+.oj-rd-row { padding: 9px 0 9px 10px; border-left: 3px solid var(--border); margin-bottom: 8px; }
+.oj-rd-row.is-done { border-left-color: #2f7d5b; }
+.oj-rd-row.is-you { border-left-color: #d99a1c; }
+.oj-rd-row label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
+.oj-rd-conf { font-weight: 500; color: #8a5a00; background: #fff4e0; border-radius: 6px; padding: 0 5px; margin-left: 4px; }
+.oj-rd-edit { display: flex; gap: 6px; align-items: center; }
+.oj-rd-edit input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13.5px; background: #fff; color: var(--ink); }
+.oj-rd-edit input:focus-visible { outline: var(--focus-ring, 2px solid #0f7c6c); outline-offset: 1px; }
+.oj-rd-edit input:disabled { background: #f4f6f5; color: var(--ink-soft); }
+.oj-rd-state { margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+.oj-rd-row.is-you .oj-rd-state { color: #8a5a00; }

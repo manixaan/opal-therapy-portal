@@ -67,6 +67,11 @@
     '.dp-btn:focus-visible{outline:var(--focus-ring,2px solid #0f7c6c);outline-offset:1px;}',
     '.dp-zoom{min-width:52px;text-align:center;color:var(--ink-soft,#5c6f6a);font-size:12.5px;font-variant-numeric:tabular-nums;}',
     '.dp-stage{flex:1;overflow:auto;padding:20px;display:block;text-align:center;-webkit-overflow-scrolling:touch;}',
+    // An optional panel beside the document (opts.side): the caller fills it.
+    '.dp-body{flex:1;display:flex;min-height:0;}',
+    '.dp-body > .dp-stage{min-width:0;}',
+    '.dp-side{flex:0 0 min(440px,38vw);overflow:auto;background:var(--panel,#fff);border-left:1px solid var(--border,#dce3e0);padding:16px 18px 28px;text-align:left;color:var(--ink,#1c2a27);-webkit-overflow-scrolling:touch;}',
+    '@media (max-width:900px){.dp-body{flex-direction:column;}.dp-side{flex:0 0 46vh;border-left:0;border-top:1px solid var(--border,#dce3e0);}}',
     '.dp-sheet{display:inline-block;text-align:center;transform-origin:top center;}',
     '.dp-page{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);margin:0 auto 16px;display:block;max-width:100%;}',
     '.dp-image{width:100%;height:auto;max-width:none;}',
@@ -127,7 +132,8 @@
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-labelledby', 'dp-title');
     el.innerHTML = toolbar()
-      + '<div class="dp-stage" id="dp-stage"><div class="dp-status" role="status">Loading preview…</div></div>';
+      + '<div class="dp-body"><div class="dp-stage" id="dp-stage"><div class="dp-status" role="status">Loading preview…</div></div>'
+      + (S.side ? '<aside class="dp-side" id="dp-side" aria-label="' + esc(S.side.label || 'Details') + '"></aside>' : '') + '</div>';
     doc.body.appendChild(el);
     el.addEventListener('click', onClick);
     // Click outside the document closes it. Remembering where the press
@@ -136,6 +142,7 @@
     doc.addEventListener('keydown', onKey, true);
     var closeBtn = el.querySelector('[data-dp="close"]');
     if (closeBtn) closeBtn.focus();
+    if (S.side && typeof S.side.render === 'function') { try { S.side.render(doc.getElementById('dp-side')); } catch (_) { /* the document still opens */ } }
   }
 
   /** The dim area around the page — the overlay itself or the empty stage. */
@@ -457,6 +464,7 @@
     S.downloadUrl = opts.downloadUrl ? String(opts.downloadUrl) : null;
     S.title = String(opts.title || 'Document preview');
     S.meta = String(opts.meta || '');
+    S.side = opts.side && typeof opts.side.render === 'function' ? opts.side : null;
     S.zoom = 1;
     S.docxFit = 1;
     S.pdf = null;

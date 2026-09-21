@@ -32,7 +32,7 @@ const wdb = require('./onboarding-workflow-db');
 const pdb = require('./onboarding-pack-db');
 const rdb = require('./onboarding-returns-db');
 const extraction = require('./onboarding-extraction');
-const formReader = require('./onboarding-form-reader');
+const documentReader = require('./onboarding-document-reader');
 const documentCheck = require('./onboarding-document-check');
 const reconcile = require('./onboarding-reconcile');
 const attention = require('./onboarding-attention');
@@ -145,7 +145,11 @@ async function processReturns(req, assignment) {
     const full = await wdb.getReturnedDocument(assignment.id, d.id);
     const bytes = await wdb.readReturnedDocumentBytes(full).catch(() => null);
     if (!bytes) { out.unreadable += 1; continue; }
-    const reading = await formReader.readReturnedDocument({ buffer: bytes, mime: full.file_mime }).catch((err) => { log.warn('form reading failed', { error: err, documentId: full.id }); return null; });
+    // Whatever shape it came back in — the fillable PDF, the Word copy, a print, a scan, a photo — it is read: by its
+    // fields, its text layer, or local OCR (onboarding-document-reader). The file name only hints at what it is.
+    const hint = FILENAME_HINTS.find(([re]) => re.test(`${full.title || ''} ${full.file_name || ''}`));
+    const read = await documentReader.readDocument({ buffer: bytes, mime: full.file_mime, kindHint: hint ? hint[1] : null }).catch((err) => { log.warn('document reading failed', { error: err && err.message, documentId: full.id }); return null; });
+    const reading = read && read.reading;
     if (reading) {
       await rdb.setDocumentCheck(full.id, reading.check);
       full.check_result = reading.check;
@@ -162,7 +166,7 @@ async function processReturns(req, assignment) {
     }
     const text = await extraction.readDocumentText(bytes, full.file_mime);
     if (text.status !== full.text_status) await wdb.setReturnedDocumentText(full.id, { textStatus: text.status, textChars: text.chars, pageCount: text.pages.length });
-    if (text.status === 'extracted' || reading) { readable.push({ index: readable.length + 1, id: full.id, title: full.title || full.file_name, row: full }); out.read += 1; } else out.unreadable += 1;
+    if (text.status === 'extracted' || reading || (read && read.text.source === 'ocr')) { readable.push({ index: readable.length + 1, id: full.id, title: full.title || full.file_name, row: full }); out.read += 1; } else out.unreadable += 1;
   }
 
   // 2. A form the rules did not recognise keeps whatever was read before;
@@ -468,6 +472,105 @@ router.post('/api/onboarding/journey/records/:id/returns/:docId/archive', requir
   res.json({ ok: true, attention: await attentionFor(assignment) });
 }));
 
+// ── The reading of one document, for the side-by-side review ────────────────
+
+/** A value a person typed: a date is taken the way people write it here (dd/mm/yyyy, "1 July 2029"), day first. */
+function typedValue(key, raw) {
+  const def = extraction.FIELDS[key];
+  const s = String(raw == null ? '' : raw).trim();
+  if (def && def.kind === 'date' && s) return require('./onboarding-form-reader').parseDate(s) || s;
+  return s;
+}
+
+const TEXT_SOURCE_LABEL = { form_fields: 'Read from the form\'s own fields', pdf_form: 'Read from the form\'s own fields', text_layer: 'Read from the document\'s text', pdf_text: 'Read from the document\'s text', text: 'Read from the document\'s text', word: 'Read from the Word file', docx: 'Read from the Word file', ocr: 'Read by OCR from a scan or photo' };
+
+/**
+ * What the portal read from ONE returned document, beside what is on record.
+ * A sensitive value is shown in full only to someone who holds that field's
+ * permission — the reviewer is comparing it with the page in front of them —
+ * and is masked for everyone else. Opening a reading is audited, by field key.
+ */
+async function readingFor(req, assignment, doc) {
+  const { hasPermission } = require('./permissions');
+  const [candidates, resolved, items] = await Promise.all([rdb.listCandidates(assignment.id), rdb.listResolved(assignment.id), pdb.listItems(assignment.id)]);
+  const mine = candidates.filter((c) => c.source_document_id === doc.id);
+  const byKey = new Map(resolved.map((r) => [r.field_key, r]));
+  const item = items.find((i) => i.id === doc.pack_item_id) || null;
+  const order = Object.keys(extraction.FIELDS);
+  const revealed = [];
+  const fields = [];
+  for (const c of mine.sort((a, b) => order.indexOf(a.field_key) - order.indexOf(b.field_key))) {
+    const def = extraction.FIELDS[c.field_key]; if (!def) continue;
+    const sensitive = c.sensitivity === 'sensitive';
+    const canSee = !sensitive || hasPermission(req.user, extraction.requiredPermissionFor(c.field_key));
+    const row = byKey.get(c.field_key) || null;
+    let onRecord = null;
+    if (row) {
+      if (!sensitive) onRecord = row.value_text;
+      else if (canSee) { const raw = await rdb.getResolvedRaw(assignment.id, row.id); onRecord = raw ? rdb.revealResolved(raw) : null; } else onRecord = row.value_masked;
+    }
+    const read = sensitive ? (canSee ? rdb.revealCandidate(c) : c.value_masked) : c.value_text;
+    if (sensitive && canSee) revealed.push(c.field_key);
+    fields.push({
+      key: c.field_key, label: def.label, group: def.group, kind: def.kind || 'text', sensitive, masked: sensitive && !canSee, confidence: c.confidence,
+      read, fieldId: row ? row.id : null, onRecord, status: row ? row.status : null, outcome: row ? row.outcome : null, reason: row ? row.outcome_reason : null,
+      settledBy: row ? (row.resolution === 'owner' ? 'practice' : row.resolution === 'auto' ? 'portal' : null) : null,
+      differs: !!(row && canSee && onRecord != null && read != null && String(onRecord) !== String(read)),
+      fromThisDocument: !!(row && row.source_document_id === doc.id), canEdit: !!row && canSee,
+    });
+  }
+  // What this kind of document is expected to carry and the reading did not find: the reviewer can type it in.
+  const expected = item ? (ITEM_FIELDS[item.code] || []) : [];
+  const missing = expected.filter((k) => extraction.FIELDS[k] && !mine.some((c) => c.field_key === k) && !(byKey.get(k) && ['accepted', 'corrected', 'applied'].includes(byKey.get(k).status)))
+    .map((k) => ({ key: k, label: extraction.FIELDS[k].label, kind: extraction.FIELDS[k].kind || 'text', sensitive: extraction.FIELDS[k].sensitive === true, canEdit: hasPermission(req.user, extraction.requiredPermissionFor(k)) }));
+  const check = doc.check_result || null;
+  const source = check ? (check.textSource || check.method) : null;
+  return {
+    document: { id: doc.id, title: doc.title || doc.file_name, fileName: doc.file_name, kind: doc.document_kind || null, packItem: item ? { id: item.id, title: item.title, verification: item.verification_status } : null,
+      signature: doc.signature_status || 'unknown', textSource: source, textSourceLabel: TEXT_SOURCE_LABEL[source] || (doc.text_status === 'no_text_layer' ? 'Nothing legible could be read' : 'Not read'),
+      ocrConfidence: check && check.ocrConfidence != null ? check.ocrConfidence : null, checkStatus: check ? check.status : null, issues: check ? (check.issues || []).map((i) => i.message) : [] },
+    fields, missing, revealed,
+  };
+}
+
+router.get('/api/onboarding/journey/records/:id/returns/:docId/reading', requirePermission('onboarding.review'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const doc = isUuid(req.params.docId) ? (await rdb.listReturns(assignment.id)).find((d) => d.id === req.params.docId) : null;
+  if (!doc) return notFound(res);
+  const { revealed, ...reading } = await readingFor(req, assignment, doc);
+  await auditOnboarding(req, 'returned_document_reading_viewed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: doc.id, fieldCount: reading.fields.length, sensitiveKeysShown: revealed } });
+  res.json({ ok: true, reading });
+}));
+
+/** The reviewer types in a value the reading missed: { key, value }. It is recorded as read from this document and settled by the practice. */
+router.post('/api/onboarding/journey/records/:id/returns/:docId/reading/fields', requirePermission('onboarding.review'), safe(async (req, res) => {
+  const assignment = await loadRecord(req);
+  if (!assignment) return notFound(res);
+  const doc = isUuid(req.params.docId) ? (await rdb.listReturns(assignment.id)).find((d) => d.id === req.params.docId) : null;
+  if (!doc) return notFound(res);
+  const key = String((req.body || {}).key || '');
+  if (!extraction.FIELDS[key]) return res.status(400).json({ error: 'That is not a field the portal keeps.', code: 'unknown_field' });
+  const perm = extraction.requiredPermissionFor(key);
+  if (perm !== 'onboarding.review' && !require('./permissions').hasPermission(req.user, perm)) return res.status(403).json({ error: `Missing permission: ${perm}` });
+  const value = extraction.normaliseValue(key, typedValue(key, (req.body || {}).value));
+  if (value === null || value === undefined || value === '') return res.status(400).json({ error: 'That value is not valid for this field.', code: 'invalid_value' });
+  try {
+    await rdb.upsertCandidate({ organisationId: assignment.organisation_id, assignmentId: assignment.id, runId: null, field: { key, value, confidence: 'high', sourceDocumentId: doc.id, sourceLabel: doc.title || doc.file_name, sourcePage: null } });
+    await processReturns(req, assignment);
+    const row = (await rdb.listResolved(assignment.id)).find((r) => r.field_key === key);
+    if (row) await rdb.resolveByOwner(assignment.id, row.id, { value, actorId: req.user.id, decision: 'correct' });
+  } catch (err) {
+    if (err.code === 'ENCRYPTION_UNAVAILABLE') return res.status(503).json({ error: 'Field encryption is not configured.', code: 'ENCRYPTION_UNAVAILABLE' });
+    throw err;
+  }
+  await auditOnboarding(req, 'field_entered_from_document', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, documentId: doc.id, fieldKey: key } });
+  await processReturns(req, assignment).catch((err) => { log.warn('reprocess after manual entry failed', { error: err && err.message }); });
+  const fresh = (await rdb.listReturns(assignment.id)).find((d) => d.id === doc.id) || doc;
+  const { revealed, ...reading } = await readingFor(req, assignment, fresh);
+  res.json({ ok: true, reading });
+}));
+
 /** The Owner settles a field: { decision: 'choose', candidateId } | { decision: 'accept' } | { decision: 'correct', value } | { decision: 'reject' } */
 router.post('/api/onboarding/journey/records/:id/fields/:fieldId/resolve', requirePermission('onboarding.review'), safe(async (req, res) => {
   const assignment = await loadRecord(req);
@@ -486,7 +589,7 @@ router.post('/api/onboarding/journey/records/:id/fields/:fieldId/resolve', requi
     value = rdb.revealResolved(raw);
     if (value == null) return res.status(400).json({ error: 'There is no value to accept — choose or type one.' });
   } else if (decision === 'correct') {
-    value = b.value;
+    value = typedValue(raw.field_key, b.value);
   } else if (decision !== 'reject') return res.status(400).json({ error: 'decision must be choose, accept, correct or reject' });
   let row;
   try { row = await rdb.resolveByOwner(assignment.id, raw.id, { value, actorId: req.user.id, decision }); } catch (err) {
@@ -560,4 +663,4 @@ router.get('/api/onboarding/journey/records/:id/profile', requirePermission('onb
 }));
 
 module.exports = router;
-module.exports._internals = { processReturns, attentionFor, matchDocument, syncProgress, completeOnboarding, KIND_TO_CODES, ITEM_FIELDS };
+module.exports._internals = { processReturns, attentionFor, matchDocument, syncProgress, completeOnboarding, readingFor, KIND_TO_CODES, ITEM_FIELDS };

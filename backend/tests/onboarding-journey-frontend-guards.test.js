@@ -325,8 +325,8 @@ describe('the changed assets are cache-busted', () => {
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
     // 10: the management surface is handed to onboarding-journey.js.
     expect(SHELL).toContain('src="/onboarding.js?v=14"');
-    expect(SHELL).toContain('src="/onboarding-journey.js?v=73"');
-    expect(SHELL).toContain('href="/onboarding-journey.css?v=39"');
+    expect(SHELL).toContain('src="/onboarding-journey.js?v=74"');
+    expect(SHELL).toContain('href="/onboarding-journey.css?v=40"');
   });
 
   test('no markup is built and thrown away — a statement never begins with "+ \'"', () => {
@@ -342,6 +342,18 @@ describe('the changed assets are cache-busted', () => {
     });
     expect(orphans).toEqual([]);
     expect(JOURNEY).toMatch(/body \+= '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter</);
+  });
+
+  test('View opens the document beside what was read from it, and a correction goes through the guarded routes', () => {
+    const JOURNEY = fs.readFileSync(path.join(FRONTEND, 'onboarding-journey.js'), 'utf8');
+    const VIEWER = fs.readFileSync(path.join(FRONTEND, 'docpreview.js'), 'utf8');
+    expect(JOURNEY).toMatch(/side: \{ label: 'What the portal read from this document'/);
+    expect(JOURNEY).toContain("'/reading'");
+    expect(JOURNEY).toContain("'/resolve', { method: 'POST', body: { decision: 'correct', value: value } }");
+    // The panel never decides what a user may see: a masked field arrives masked and is rendered disabled.
+    expect(JOURNEY).toMatch(/f\.canEdit \? ' oninput=/);
+    expect(VIEWER).toContain('id="dp-side"');
+    expect(VIEWER).toMatch(/S\.side = opts\.side && typeof opts\.side\.render === 'function'/);
   });
 
   test('no new tab was added — this all lives inside the existing one', () => {

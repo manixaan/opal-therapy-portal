@@ -2855,10 +2855,88 @@
   }
   function processReturns() { return returnsAct('/returns/process', {}, 'Re-read.'); }
   function previewReturn(id) {
-    var x = (S.record && S.record.returnedDocuments || []).filter(function (r) { return r.id === id; })[0];
+    var x = ((S.record && S.record.returnedDocuments) || []).filter(function (d) { return d.id === id; })[0];
     if (!x) return;
-    if (x.previewKind && global.DocPreview) global.DocPreview.open({ kind: x.previewKind, url: x.previewUrl + '?rev=' + Date.now(), downloadUrl: x.downloadUrl, title: x.title || x.fileName });
+    // The document on the left, what the portal read from it on the right: the reviewer checks one against the other.
+    if (x.previewKind && global.DocPreview) global.DocPreview.open({ kind: x.previewKind, url: x.previewUrl + '?rev=' + Date.now(), downloadUrl: x.downloadUrl, title: x.title || x.fileName,
+      side: { label: 'What the portal read from this document', render: function (el) { readingPanel(el, id); } } });
     else global.open(x.downloadUrl, '_blank', 'noopener');
+  }
+
+  // ── The reading panel (beside the document in the viewer) ──────────────────
+  var RD = { el: null, docId: null, reading: null, busy: false };
+  function readingUrl(rest) { return '/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/returns/' + encodeURIComponent(RD.docId) + '/reading' + (rest || ''); }
+  async function readingPanel(el, docId) {
+    RD.el = el; RD.docId = docId; RD.reading = null;
+    el.innerHTML = '<p class="oj-quiet">Reading…</p>';
+    var res = await api(readingUrl());
+    if (RD.docId !== docId || !el.isConnected) return;
+    if (!res.ok) { el.innerHTML = '<p class="oj-rd-issue">' + esc(res.error) + '</p>'; return; }
+    RD.reading = res.reading; drawReading();
+  }
+  /** Dates are shown the way the page shows them — day first — so the two can be compared at a glance. */
+  function readingShow(f, v) { var m = f.kind === 'date' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v == null ? '' : v)); return m ? m[3] + '/' + m[2] + '/' + m[1] : (v == null ? '' : String(v)); }
+  function readingState(f) {
+    if (f.masked) return ['is-quiet', 'Hidden — you do not hold the permission for this field'];
+    if (!f.fieldId) return ['is-quiet', 'Read, not yet reconciled'];
+    if (f.status === 'rejected') return ['is-quiet', 'Ignored'];
+    if (f.status === 'proposed') return ['is-you', f.outcome === 'conflict' ? 'Documents disagree — confirm the right value' : 'Check and confirm'];
+    if (f.differs && f.settledBy === 'practice') return ['is-done', 'On record — set by the practice (this document read “' + readingShow(f, f.read) + '”)'];
+    if (f.differs) return ['is-you', 'On record as “' + readingShow(f, f.onRecord) + '” — this document says “' + readingShow(f, f.read) + '”'];
+    return ['is-done', f.settledBy === 'practice' ? 'On record — confirmed by the practice' : 'On record'];
+  }
+  function drawReading() {
+    var r = RD.reading; var el = RD.el; if (!r || !el) return;
+    var d = r.document;
+    var h = '<h3 class="oj-rd-title">What the portal read</h3>'
+      + '<p class="oj-rd-source">' + esc(d.textSourceLabel) + (d.ocrConfidence != null ? ' · ' + esc(d.ocrConfidence) + '% legibility' : '') + (d.signature === 'present' ? ' · signed' : d.signature === 'missing' ? ' · <strong>signature missing</strong>' : '') + '</p>'
+      + (d.textSource === 'ocr' ? '<p class="oj-rd-note">Read from an image: check every value against the page — 0/O, 1/I and 5/S are the usual slips.</p>' : '')
+      + (d.issues.length ? '<ul class="oj-rd-issues">' + d.issues.map(function (m) { return '<li class="oj-rd-issue">' + esc(m) + '</li>'; }).join('') + '</ul>' : '');
+    if (!r.fields.length && !r.missing.length) h += '<p class="oj-quiet">Nothing on this document feeds the employee profile. Check it by eye and verify it.</p>';
+    h += r.fields.map(function (f, i) {
+      var st = readingState(f); var value = readingShow(f, f.onRecord != null && f.fieldId && f.status !== 'proposed' ? f.onRecord : f.read);
+      var settled = f.fieldId && f.status !== 'proposed' && f.status !== 'rejected' && (!f.differs || f.settledBy === 'practice');
+      return '<div class="oj-rd-row ' + st[0] + '"><label for="oj-rd-' + i + '">' + esc(f.label) + (f.confidence === 'medium' || f.confidence === 'low' ? ' <span class="oj-rd-conf">' + (f.confidence === 'low' ? 'unsure' : 'check') + '</span>' : '') + '</label>'
+        + '<div class="oj-rd-edit"><input id="oj-rd-' + i + '" type="text" value="' + esc(value == null ? '' : value) + '" data-orig="' + esc(value == null ? '' : value) + '"' + (f.canEdit ? ' oninput="OnboardingJourney.readingDirty(' + i + ')" onkeydown="if(event.key===\'Enter\'){OnboardingJourney.readingSave(' + i + ')}"' : ' disabled') + '>'
+        + (f.canEdit ? '<button type="button" class="oj-btn oj-btn-small' + (settled ? '' : ' oj-btn-primary') + '" id="oj-rd-b' + i + '"' + (settled ? ' hidden' : '') + ' onclick="OnboardingJourney.readingSave(' + i + ')">' + (settled ? 'Save' : 'Confirm') + '</button>' : '') + '</div>'
+        + '<p class="oj-rd-state">' + esc(st[1]) + '</p></div>';
+    }).join('');
+    if (r.missing.length) {
+      h += '<h4 class="oj-rd-sub">Not found on this document</h4>' + r.missing.map(function (m, i) {
+        return '<div class="oj-rd-row is-quiet"><label for="oj-rd-m' + i + '">' + esc(m.label) + '</label><div class="oj-rd-edit"><input id="oj-rd-m' + i + '" type="text" placeholder="' + (m.kind === 'date' ? 'dd/mm/yyyy' : 'Type it from the page') + '"' + (m.canEdit ? ' onkeydown="if(event.key===\'Enter\'){OnboardingJourney.readingAdd(' + i + ')}"' : ' disabled') + '>'
+          + (m.canEdit ? '<button type="button" class="oj-btn oj-btn-small" onclick="OnboardingJourney.readingAdd(' + i + ')">Add</button>' : '') + '</div></div>';
+      }).join('');
+    }
+    el.innerHTML = h;
+  }
+  function readingDirty(i) {
+    var input = doc.getElementById('oj-rd-' + i); var b = doc.getElementById('oj-rd-b' + i); if (!input || !b) return;
+    var f = RD.reading.fields[i]; var changed = input.value.trim() !== input.getAttribute('data-orig');
+    var settled = f.fieldId && f.status !== 'proposed' && f.status !== 'rejected' && (!f.differs || f.settledBy === 'practice');
+    b.hidden = settled && !changed; b.textContent = changed ? 'Save' : 'Confirm'; b.classList.toggle('oj-btn-primary', true);
+  }
+  async function readingDone(res, message) {
+    RD.busy = false;
+    if (!res.ok) { toast(res.code === 'invalid_value' ? 'That value is not valid for this field.' : res.error, true); return; }
+    toast(message);
+    if (res.reading) RD.reading = res.reading; else { var again = await api(readingUrl()); if (again.ok) RD.reading = again.reading; }
+    drawReading();
+    refreshRecordAfter(Promise.resolve({ ok: true }));
+  }
+  async function readingSave(i) {
+    var f = RD.reading && RD.reading.fields[i]; var input = doc.getElementById('oj-rd-' + i);
+    if (!f || !f.canEdit || !input || RD.busy) return;
+    var value = input.value.trim(); if (!value) return toast('Type the value as it appears on the document.', true);
+    RD.busy = true;
+    var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/fields/' + encodeURIComponent(f.fieldId) + '/resolve', { method: 'POST', body: { decision: 'correct', value: value } });
+    return readingDone(res, value === input.getAttribute('data-orig') ? 'Confirmed.' : 'Corrected.');
+  }
+  async function readingAdd(i) {
+    var m = RD.reading && RD.reading.missing[i]; var input = doc.getElementById('oj-rd-m' + i);
+    if (!m || !m.canEdit || !input || RD.busy) return;
+    var value = input.value.trim(); if (!value) return toast('Type the value as it appears on the document.', true);
+    RD.busy = true;
+    return readingDone(await api(readingUrl('/fields'), { method: 'POST', body: { key: m.key, value: value } }), 'Added.');
   }
   function assignReturn(docId, n) {
     var sel = doc.getElementById('oj-asg-' + n);
@@ -2976,7 +3054,7 @@
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
     emailMark: emailMark, emailKey: emailKey, emailHistory: emailHistory, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
-    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
+    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, readingDirty: readingDirty, readingSave: readingSave, readingAdd: readingAdd, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, itemNotApplicable: itemNotApplicable, itemApplicable: itemApplicable, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
     loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,

@@ -356,3 +356,76 @@ describe('returned documents: read, reconciled, applied', () => {
     expect(rec.body.profile.personal.dateOfBirth).toMatch(/^1998-03-14/);
   });
 });
+
+describe('the reading of one document, beside the document', () => {
+  const { PDFDocument, StandardFonts } = require('pdf-lib');
+  async function certificate(title, rows) {
+    const doc = await PDFDocument.create(); const font = await doc.embedFont(StandardFonts.Helvetica); const page = doc.addPage([595, 842]);
+    page.drawText(title, { x: 50, y: 760, size: 18, font });
+    rows.forEach(([l, v], i) => { page.drawText(`${l}:`, { x: 50, y: 700 - i * 26, size: 11, font }); page.drawText(v, { x: 260, y: 700 - i * 26, size: 11, font }); });
+    return Buffer.from(await doc.save());
+  }
+  const REVIEWER = ['onboarding.view', 'onboarding.assign', 'onboarding.review', 'onboarding.verify'];
+
+  test('a registry certificate is read; its reading shows each value with where it stands, and a correction lands on the record', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
+    const { base, id } = await settledAndSent(agent);
+    const up = await agent.post(`${base}/returns`).send({ files: [{ fileName: 'WWCC card.pdf', ...pdf(await certificate('Working With Children Check', [['Full name', 'Jane Marie Doe'], ['WWCC number', 'WWC0000001'], ['Expiry date', '01/07/2029']])) }] });
+    expect(up.status).toBe(201);
+    expect(up.body.processed).toMatchObject({ read: 1, matched: 1, aiUsed: false });
+    const doc = (await agent.get(base)).body.returnedDocuments.find((d) => d.fileName === 'WWCC card.pdf');
+    expect(doc.check).toMatchObject({ status: 'ok', kind: 'wwcc', textSource: 'text_layer' });
+
+    const res = await agent.get(`${base}/returns/${doc.id}/reading`);
+    expect(res.status).toBe(200);
+    expect(res.body.reading.document).toMatchObject({ kind: 'wwcc', textSource: 'text_layer', textSourceLabel: "Read from the document's text" });
+    const expiry = res.body.reading.fields.find((f) => f.key === 'wwcc_expiry');
+    expect(expiry).toMatchObject({ read: '2029-07-01', onRecord: '2029-07-01', canEdit: true, fromThisDocument: true });
+
+    // The reviewer sees the card says 2030, not 2029: the correction is the practice's, and it sticks.
+    const fix = await agent.post(`${base}/fields/${expiry.fieldId}/resolve`).send({ decision: 'correct', value: '01/07/2030' });
+    expect(fix.status).toBe(200);
+    const after = (await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading.fields.find((f) => f.key === 'wwcc_expiry');
+    expect(after).toMatchObject({ read: '2029-07-01', onRecord: '2030-07-01', status: 'applied', settledBy: 'practice', differs: true });
+    // Opening a reading is audited by field key — never by value.
+    const { rows } = await db.pool.query("SELECT metadata FROM audit_logs WHERE action = 'onboarding.returned_document_reading_viewed'");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].metadata).toMatchObject({ assignmentId: id, documentId: doc.id });
+    expect(JSON.stringify(rows.map((r) => r.metadata))).not.toContain('WWC0000001');
+  });
+
+  test('a value the reading missed can be typed in from the page, and is validated like any other', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
+    const { base } = await settledAndSent(agent);
+    await agent.post(`${base}/returns`).send({ files: [{ fileName: 'WWCC card.pdf', ...pdf(await certificate('Working With Children Check', [['WWCC number', 'WWC0000001']])) }] });
+    const doc = (await agent.get(base)).body.returnedDocuments.find((d) => d.fileName === 'WWCC card.pdf');
+    const reading = (await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading;
+    expect(reading.missing.map((m) => m.key)).toContain('wwcc_expiry');
+    expect((await agent.post(`${base}/returns/${doc.id}/reading/fields`).send({ key: 'wwcc_expiry', value: 'next year' })).status).toBe(400);
+    expect((await agent.post(`${base}/returns/${doc.id}/reading/fields`).send({ key: 'not_a_field', value: 'x' })).status).toBe(400);
+    const add = await agent.post(`${base}/returns/${doc.id}/reading/fields`).send({ key: 'wwcc_expiry', value: '01/07/2029' });
+    expect(add.status).toBe(200);
+    expect(add.body.reading.fields.find((f) => f.key === 'wwcc_expiry')).toMatchObject({ onRecord: '2029-07-01', settledBy: 'practice' });
+    expect(add.body.reading.missing.map((m) => m.key)).not.toContain('wwcc_expiry');
+  });
+
+  test('the reading is for reviewers only, and a sensitive value is masked without its own permission', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
+    const { base } = await settledAndSent(agent);
+    await agent.post(`${base}/returns`).send({ files: [{ fileName: 'Drivers licence.pdf', ...pdf(await certificate("Driver's Licence", [['Licence number', '7654321'], ['State of issue', 'WA'], ['Expiry date', '14/03/2031']])) }] });
+    const doc = (await agent.get(base)).body.returnedDocuments.find((d) => d.fileName === 'Drivers licence.pdf');
+    const full = (await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading.fields.find((f) => f.key === 'drivers_licence_number');
+    expect(full).toMatchObject({ sensitive: true, masked: false, read: '7654321' });
+
+    const { agent: reviewer } = await agentFor({ role: 'admin', email: 'reviewer@example.com', permissions: REVIEWER });
+    const seen = (await reviewer.get(`${base}/returns/${doc.id}/reading`)).body.reading.fields.find((f) => f.key === 'drivers_licence_number');
+    expect(seen.masked).toBe(true);
+    expect(seen.canEdit).toBe(false);
+    expect(String(seen.read)).not.toContain('7654321');
+    expect((await reviewer.post(`${base}/returns/${doc.id}/reading/fields`).send({ key: 'drivers_licence_number', value: '1111111' })).status).toBe(403);
+
+    const { agent: therapist } = await agentFor({ role: 'therapist', email: 'therapist@example.com' });
+    expect((await therapist.get(`${base}/returns/${doc.id}/reading`)).status).toBe(403);
+    expect((await therapist.post(`${base}/returns/${doc.id}/reading/fields`).send({ key: 'wwcc_expiry', value: '01/07/2029' })).status).toBe(403);
+  });
+});

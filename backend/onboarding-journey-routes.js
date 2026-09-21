@@ -284,7 +284,7 @@ async function recordDetail(req, assignment) {
     textStatus: d.text_status, packItemId: d.pack_item_id || null, matchStatus: d.match_status || 'pending', documentKind: d.document_kind || null,
     signatureStatus: d.signature_status || 'unknown',
     check: d.check_result || null, checkSummary: documentCheck.summarise(d.check_result),
-    previewKind: d.file_mime === 'application/pdf' ? 'pdf' : String(d.file_mime || '').includes('wordprocessingml') ? 'docx' : null,
+    previewKind: d.file_mime === 'application/pdf' ? 'pdf' : String(d.file_mime || '').includes('wordprocessingml') ? 'docx' : /^image\/(png|jpe?g)$/.test(String(d.file_mime || '')) ? 'image' : null,
     previewUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/preview`,
     downloadUrl: `/api/onboarding/assignments/${assignment.id}/returned-documents/${d.id}/download`,
   }));
