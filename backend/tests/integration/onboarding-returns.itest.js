@@ -394,6 +394,19 @@ describe('the reading of one document, beside the document', () => {
     expect(JSON.stringify(rows.map((r) => r.metadata))).not.toContain('WWC0000001');
   });
 
+  test('a document that disagrees with the offer names both sides — the offer terms are one of them', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity', 'onboarding.payroll'] });
+    const { base } = await settledAndSent(agent); // offered at $92,000
+    await agent.post(`${base}/returns`).send({ files: [{ fileName: '01 - Contract of Employment.pdf', ...pdf(await forms.buildContractPdf({ ...CONTRACT_ON_OFFER, annual_salary_aud: '88,000.00' }, { signature: 'Jane Marie Doe' })) }] });
+    const doc = (await agent.get(base)).body.returnedDocuments.find((d) => d.fileName === '01 - Contract of Employment.pdf');
+    const salary = (await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading.fields.find((f) => f.key === 'salary_annual');
+    expect(salary).toMatchObject({ status: 'proposed', outcome: 'conflict' });
+    expect(salary.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Your offer terms', value: expect.stringContaining('92,000'), thisDocument: false }),
+      expect.objectContaining({ value: expect.stringContaining('88,000'), thisDocument: true }),
+    ]));
+  });
+
   test('a value the reading missed can be typed in from the page, and is validated like any other', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
     const { base } = await settledAndSent(agent);

@@ -2881,7 +2881,7 @@
     if (f.masked) return ['is-quiet', 'Hidden — you do not hold the permission for this field'];
     if (!f.fieldId) return ['is-quiet', 'Read, not yet reconciled'];
     if (f.status === 'rejected') return ['is-quiet', 'Ignored'];
-    if (f.status === 'proposed') return ['is-you', f.outcome === 'conflict' ? 'Documents disagree — confirm the right value' : 'Check and confirm'];
+    if (f.status === 'proposed') return ['is-you', f.outcome === 'conflict' ? 'These do not agree — confirm the right value' : 'Check and confirm'];
     if (f.differs && f.settledBy === 'practice') return ['is-done', 'On record — set by the practice (this document read “' + readingShow(f, f.read) + '”)'];
     if (f.differs) return ['is-you', 'On record as “' + readingShow(f, f.onRecord) + '” — this document says “' + readingShow(f, f.read) + '”'];
     return ['is-done', f.settledBy === 'practice' ? 'On record — confirmed by the practice' : 'On record'];
@@ -2900,7 +2900,9 @@
       return '<div class="oj-rd-row ' + st[0] + '"><label for="oj-rd-' + i + '">' + esc(f.label) + (f.confidence === 'medium' || f.confidence === 'low' ? ' <span class="oj-rd-conf">' + (f.confidence === 'low' ? 'unsure' : 'check') + '</span>' : '') + '</label>'
         + '<div class="oj-rd-edit"><input id="oj-rd-' + i + '" type="text" value="' + esc(value == null ? '' : value) + '" data-orig="' + esc(value == null ? '' : value) + '"' + (f.canEdit ? ' oninput="OnboardingJourney.readingDirty(' + i + ')" onkeydown="if(event.key===\'Enter\'){OnboardingJourney.readingSave(' + i + ')}"' : ' disabled') + '>'
         + (f.canEdit ? '<button type="button" class="oj-btn oj-btn-small' + (settled ? '' : ' oj-btn-primary') + '" id="oj-rd-b' + i + '"' + (settled ? ' hidden' : '') + ' onclick="OnboardingJourney.readingSave(' + i + ')">' + (settled ? 'Save' : 'Confirm') + '</button>' : '') + '</div>'
-        + '<p class="oj-rd-state">' + esc(st[1]) + '</p></div>';
+        + '<p class="oj-rd-state">' + esc(st[1]) + '</p>'
+        + (f.status === 'proposed' && f.sources && f.sources.length ? '<ul class="oj-rd-sources">' + f.sources.map(function (o) { return '<li><span>' + esc(o.label) + (o.thisDocument ? ' (this document)' : '') + '</span><strong>' + esc(o.value) + '</strong></li>'; }).join('') + '</ul>' : '')
+        + '</div>';
     }).join('');
     if (r.missing.length) {
       h += '<h4 class="oj-rd-sub">Not found on this document</h4>' + r.missing.map(function (m, i) {

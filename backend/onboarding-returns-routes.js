@@ -515,6 +515,8 @@ async function readingFor(req, assignment, doc) {
       key: c.field_key, label: def.label, group: def.group, kind: def.kind || 'text', sensitive, masked: sensitive && !canSee, confidence: c.confidence,
       read, fieldId: row ? row.id : null, onRecord, status: row ? row.status : null, outcome: row ? row.outcome : null, reason: row ? row.outcome_reason : null,
       settledBy: row ? (row.resolution === 'owner' ? 'practice' : row.resolution === 'auto' ? 'portal' : null) : null,
+      // A conflict names every side — the offer's terms are one of them — so the reviewer sees what disagrees, not only that something does.
+      sources: row && row.outcome === 'conflict' ? (row.conflict_options || []).map((o) => ({ label: o.sourceKind === 'offer' ? 'Your offer terms' : (o.sourceLabel || 'Returned document'), value: o.display, thisDocument: o.sourceDocumentId === doc.id })) : [],
       differs: !!(row && canSee && onRecord != null && read != null && String(onRecord) !== String(read)),
       fromThisDocument: !!(row && row.source_document_id === doc.id), canEdit: !!row && canSee,
     });
