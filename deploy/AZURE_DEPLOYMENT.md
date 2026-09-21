@@ -393,3 +393,33 @@ routes. Existing DB-stored documents migrate per `backend/migrations/README.md`.
 | 8 | Alert rules + availability tests (§8) | 🔑 Antony |
 | 9 | Restore drill before go-live (§6.2) | 🔑 Antony |
 | 10 | VNet/private endpoints; managed-identity blob auth | ⏸ post-pilot |
+
+## Fast deploys — run from package (added 21 Sep 2026)
+
+A staging deploy used to take ~35 minutes: 13 for the gate and 21 for Azure to
+unpack the bundle (thousands of `node_modules` files) onto the `/home` network
+share. Two changes bring it to roughly 8:
+
+1. **The gate runs side by side** (`ci.yml`): one job for unit tests, syntax,
+   migration validation and audit; four integration shards, each with its own
+   PostgreSQL. Same tests, same pass/fail — about 4 minutes instead of 13.
+2. **The bundle is mounted, not unpacked.** With the app setting
+   `WEBSITE_RUN_FROM_PACKAGE=1`, App Service keeps the zip under
+   `/home/data/SitePackages` and mounts it read-only at `/home/site/wwwroot`.
+   The deploy workflow needs no change; with the setting off it still works,
+   slowly.
+
+Because the application folder becomes **read-only**, nothing may be written
+beside the code. On App Service the two local stores default to
+`/home/data/opal/resource-hub-files` and `/home/data/opal/local-documents`
+(writable, persistent), and `backend/startup.sh` copies anything an earlier
+deployment kept beside the code, once, without overwriting.
+
+**Order matters.** Deploy the code that contains the copy step FIRST, confirm
+`/ready`, and only then switch the setting on:
+
+Azure portal → `opal-portal-staging` → Settings → Environment variables →
+**+ Add** → Name `WEBSITE_RUN_FROM_PACKAGE`, Value `1` → Apply → Confirm.
+
+To go back: delete the setting and redeploy. Production is unchanged until the
+same two steps are done there deliberately.

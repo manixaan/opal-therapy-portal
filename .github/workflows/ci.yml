@@ -12,7 +12,9 @@ name: CI
 
 on:
   push:
-    branches: [main, production-pilot, azure-staging]
+    # `main` is NOT listed: a push to main runs this workflow once, through
+    # deploy-staging.yml (workflow_call). Listing it here ran the whole gate twice.
+    branches: [production-pilot, azure-staging]
   pull_request:
   workflow_call:
 
@@ -31,8 +33,13 @@ env:
   TZ: UTC
 
 jobs:
-  test:
-    name: Unit + integration tests
+  # ── The gate is the same as ever; it is only run side by side instead of in a
+  # line. Integration was 11½ of the job's 13 minutes (one database, one file
+  # at a time), so it is split into four shards, each with its OWN throwaway
+  # PostgreSQL. Within a shard the suite still runs serially (--runInBand): the
+  # files truncate between tests and must not share a database.
+  unit:
+    name: Unit tests, syntax, migrations, audit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,9 +79,6 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      - name: Integration tests (real PostgreSQL)
-        run: npm run test:integration
-
       - name: Migration validation — fresh database, repeatability, status
         run: |
           set -e
@@ -92,6 +96,53 @@ jobs:
 
       - name: Dependency security audit (zero known vulnerabilities)
         run: npm audit
+
+  integration:
+    name: Integration tests (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # a red shard should not hide what the others found
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install exact locked dependencies
+        run: npm ci
+
+      - name: Integration tests (real PostgreSQL) — shard ${{ matrix.shard }} of 4
+        run: npm run test:integration -- --shard=${{ matrix.shard }}/4
+
+  # One name for "everything passed", so the deploy workflows and any branch
+  # protection keep a single thing to depend on.
+  test:
+    name: Unit + integration tests
+    needs: [unit, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "unit, syntax, migrations, audit and all four integration shards passed"
 
   package:
     name: Build deployment bundle

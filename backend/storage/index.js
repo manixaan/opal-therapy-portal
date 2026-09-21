@@ -48,7 +48,9 @@ const dbBackend = {
 const localBackend = {
   name: 'local',
   _root() {
-    const root = process.env.DOCUMENT_STORAGE_PATH || path.join(__dirname, '..', '.local-documents');
+    // On App Service the code folder may be a read-only mounted package: keep files on the writable /home share.
+    const root = process.env.DOCUMENT_STORAGE_PATH
+      || (process.env.WEBSITE_SITE_NAME ? '/home/data/opal/local-documents' : path.join(__dirname, '..', '.local-documents'));
     fs.mkdirSync(root, { recursive: true });
     return root;
   },

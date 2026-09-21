@@ -42,9 +42,19 @@ function backendName() {
   return (process.env.RESOURCE_HUB_STORAGE_BACKEND || 'local').toLowerCase();
 }
 
+/**
+ * On Azure App Service the application folder may be a read-only mounted
+ * package (WEBSITE_RUN_FROM_PACKAGE), so the default lives on the persistent,
+ * writable /home share instead of beside the code. startup.sh copies anything
+ * an earlier deployment kept beside the code, once. An explicit
+ * RESOURCE_HUB_STORAGE_PATH always wins.
+ */
+function defaultRoot() {
+  return process.env.WEBSITE_SITE_NAME ? '/home/data/opal/resource-hub-files' : path.join(__dirname, '.resource-hub-files');
+}
+
 function root() {
-  const p = process.env.RESOURCE_HUB_STORAGE_PATH
-    || path.join(__dirname, '.resource-hub-files');
+  const p = process.env.RESOURCE_HUB_STORAGE_PATH || defaultRoot();
   fs.mkdirSync(p, { recursive: true });
   return fs.realpathSync(p);
 }

@@ -11,12 +11,28 @@
 #
 #  Migrations run on the App Service itself at startup (backend/startup.sh,
 #  advisory-locked), so this workflow needs no database network access.
+#
+#  Speed: the gate runs in parallel (ci.yml: one unit job + four integration
+#  shards, ~4 min instead of 13). The copy to Azure is ~2 min when the app
+#  setting WEBSITE_RUN_FROM_PACKAGE=1 is on (the zip is mounted, not unpacked
+#  file by file onto the network share, which took ~21 min). With the setting
+#  off this workflow still works exactly as before, just slowly.
 # ═══════════════════════════════════════════════════════════════════════════
 name: Deploy Staging
 
 on:
   push:
     branches: [main]
+    # Nothing under these paths is part of the deployed bundle (backend/ +
+    # frontend/current/): a change there should not cost a deploy.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'office-addin/**'
+      - 'e2e/**'
+      - 'handover/**'
+      - 'reference/**'
+      - '.claude/**'
   workflow_dispatch:
 
 concurrency:

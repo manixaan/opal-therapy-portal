@@ -148,7 +148,8 @@ az webapp config appsettings set -g "$RG" -n "$APP" -o none --settings \
   ALLOWED_EMAILS="synthetic.owner@example.test" \
   SYNC_MAX_AUTO_DELETE=25 SYNC_MAX_DELETE_PERCENT=30 \
   ENABLE_OUTLOOK_WRITE=false ENABLE_SPLOSE_WRITE=false ENABLE_AUTOMATIC_REMOTE_DELETE=false \
-  SCM_DO_BUILD_DURING_DEPLOYMENT=false
+  SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+  WEBSITE_RUN_FROM_PACKAGE=1
 echo "✓ app settings"
 
 echo ""
