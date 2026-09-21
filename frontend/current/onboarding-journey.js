@@ -1201,7 +1201,7 @@
         + btn('View', 'OnboardingJourney.previewSigned()') + '<a class="oj-btn" href="' + esc(Sg.downloadUrl) + '">Download</a>'
         + (c.assign ? '<label class="oj-btn oj-file" title="Upload a different signed letter — it supersedes this one and what was read from it">Replace<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this' + (done ? ', true' : '') + ')"></label>' : '') + '</div>';
     } else if (c.assign) {
-        + '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
+      body += '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter<input type="file" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden onchange="OnboardingJourney.uploadSigned(this)"></label></div>';
     }
     body += '</li></ol>';
 

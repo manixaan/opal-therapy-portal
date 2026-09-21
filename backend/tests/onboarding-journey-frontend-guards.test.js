@@ -325,8 +325,23 @@ describe('the changed assets are cache-busted', () => {
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
     // 10: the management surface is handed to onboarding-journey.js.
     expect(SHELL).toContain('src="/onboarding.js?v=14"');
-    expect(SHELL).toContain('src="/onboarding-journey.js?v=72"');
+    expect(SHELL).toContain('src="/onboarding-journey.js?v=73"');
     expect(SHELL).toContain('href="/onboarding-journey.css?v=39"');
+  });
+
+  test('no markup is built and thrown away — a statement never begins with "+ \'"', () => {
+    // Deleting the first line of a `body += '…' + '…'` chain leaves valid JS that
+    // renders nothing: that is how the "Upload the signed letter" button vanished.
+    const JOURNEY = fs.readFileSync(path.join(FRONTEND, 'onboarding-journey.js'), 'utf8');
+    const lines = JOURNEY.split('\n');
+    const orphans = [];
+    let prev = '';
+    lines.forEach((line, i) => {
+      if (/^\s*\+ /.test(line) && /[{;]\s*$/.test(prev)) orphans.push(i + 1);
+      if (line.trim() && !/^\s*\/\//.test(line)) prev = line;
+    });
+    expect(orphans).toEqual([]);
+    expect(JOURNEY).toMatch(/body \+= '<div class="oj-actions"><label class="oj-btn oj-btn-primary oj-file">Upload the signed letter</);
   });
 
   test('no new tab was added — this all lives inside the existing one', () => {
