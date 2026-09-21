@@ -282,3 +282,66 @@
   .cn-transcript.open .cn-tx-body { display: block; }
   .cn-meta-label { flex-basis: 92px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPOSER (casenotes-compose.js) — start a note in the portal.
+   Same tokens, same grammar: white bordered panels are for typing, the muted
+   lines beside them explain what happens to the words.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cn-list-head .cn-new { margin-left: auto; padding: 5px 10px; font-size: 12px; }
+.cn-list-head .cn-new + .cn-icon-btn { margin-left: 0; }
+
+.cnc-panel {
+  max-width: 860px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.cnc-step h2 { margin: 0 0 8px; }
+
+.cnc-results {
+  margin-top: 8px; max-height: 232px; overflow-y: auto;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md, 11px);
+}
+.cnc-result {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 12px; border: none; border-bottom: 1px solid var(--border-soft);
+  background: var(--panel); color: var(--ink); font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.cnc-results [role="listitem"]:last-child .cnc-result { border-bottom: none; }
+.cnc-result:hover { background: var(--bg); }
+.cnc-result:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+#cnc-results-host > .cn-quiet { margin-top: 8px; }
+
+.cnc-picked {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; background: var(--bg);
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md, 11px);
+}
+.cnc-picked-name { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.cnc-picked .btn { margin-left: auto; }
+
+.cnc-dictation { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.cnc-dictation .btn { display: inline-flex; align-items: center; gap: 6px; }
+.cnc-stop { border-color: var(--danger); color: var(--danger); }
+.cnc-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--danger);
+  animation: cnc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cnc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .cnc-dot { animation: none; } }
+
+.cnc-transcript { min-height: 220px; max-height: 56vh; overflow: auto; }
+.cnc-transcript:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cnc-interim { min-height: 18px; margin: 6px 0 0; font-size: 12.5px; font-style: italic; color: var(--muted); }
+.cnc-over { color: var(--warn); }
+
+.cnc-names { padding: 12px 14px; background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-md, 11px); }
+.cnc-hidden { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--ink); }
+.cnc-ask { margin: 10px 0 6px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.cnc-cand { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.cnc-cand-word { min-width: 110px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+
+.cnc-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

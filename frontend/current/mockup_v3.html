@@ -74,7 +74,7 @@
 <link rel="stylesheet" href="/finance.css?v=1" />
 <link rel="stylesheet" href="/induction-assistant.css?v=3" />
 <link rel="stylesheet" href="/supportpop.css?v=1" />
-<link rel="stylesheet" href="/casenotes.css?v=1" />
+<link rel="stylesheet" href="/casenotes.css?v=2" />
 <link rel="stylesheet" href="/fca.css?v=6" />
 <link rel="stylesheet" href="/letter.css?v=1" />
 <link rel="stylesheet" href="/templates.css?v=6" />
@@ -102,7 +102,8 @@
 <script src="/finance.js?v=1" defer></script>
 <script src="/induction-assistant.js?v=3" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
-<script src="/casenotes.js?v=2" defer></script>
+<script src="/casenotes.js?v=3" defer></script>
+<script src="/casenotes-compose.js?v=1" defer></script>
 <!-- Exact document preview. Vendored on our own origin: the rendered document
      contains participant health information, so no CDN request accompanies it.
      jszip is docx-preview's peer dependency. See vendor/DOCX_PREVIEW_VENDORED.md -->
@@ -4091,7 +4092,7 @@ window.opIcon = function (name, size) {
   <!-- Case Notes sits next to Calendar: it is the documentation half of the
        same clinical loop (the appointment you just ran → the draft note for
        it). Treating clinicians only — see ROLE_NAV (therapist + owner). -->
-  <button class="tab" data-tab="casenotes" title="Case Notes — review drafts dictated in the Opa mobile app">
+  <button class="tab" data-tab="casenotes" title="Case Notes — start a case note, or review drafts dictated in the Opa mobile app">
     <svg class="icon tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Case Notes
   </button>
   <button class="tab" data-tab="contacts">
@@ -4942,6 +4943,9 @@ window.opIcon = function (name, size) {
      drafts: nothing here finalises, approves or sends anything. -->
 <section class="view" id="view-casenotes">
   <div id="cn-root"></div>
+  <!-- Composer (casenotes-compose.js): shown in place of #cn-root while a new
+       note is being dictated or typed. -->
+  <div id="cnc-root" hidden></div>
 </section>
 
 <!-- ============ RESOURCES TAB (Resource Hub R1) ============ -->

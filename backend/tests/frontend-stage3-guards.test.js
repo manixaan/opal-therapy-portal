@@ -1370,8 +1370,8 @@ describe('case notes review surface', () => {
   const CN_CODE = CN_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
   test('assets are linked next to the other extracted asset pairs', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=1" />');
-    expect(HTML).toContain('<script src="/casenotes.js?v=2" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=2" />');
+    expect(HTML).toContain('<script src="/casenotes.js?v=3" defer></script>');
   });
 
   test('nav tab + view mount exist and are wired the same way as other tabs', () => {
@@ -1466,8 +1466,14 @@ describe('case notes review surface', () => {
     expect(CN_JS).toContain('esc(STATUS_LINE)');
   });
 
-  test('empty state points at the mobile app, not at a portal capability', () => {
-    expect(CN_JS).toContain("var EMPTY_STATE = 'No case-note drafts yet. Notes recorded in the Opa mobile app appear here for review.';");
+  test('empty state names both ways a draft gets here — the composer and the mobile app', () => {
+    expect(CN_JS).toContain("var EMPTY_STATE = 'No case-note drafts yet. Start one with New case note, or dictate in the Opa mobile app — either way it appears here for review.';");
+  });
+
+  test('the review surface only offers the way INTO the composer — it grows no capture field of its own', () => {
+    expect(CN_JS).toContain('data-cnc="open"');
+    expect(CN_JS).toContain('(global.CaseNotesCompose');
+    expect(CN_CODE).not.toMatch(/SpeechRecognition|names-check|\/generate'/);
   });
 
   test('fail-closed regeneration is surfaced honestly and fabricates nothing', () => {
@@ -1534,6 +1540,106 @@ describe('case notes review surface', () => {
     expect(CN_CSS).toContain('.cn-item:focus-visible');
     expect(CN_CSS).toContain('.cn-note:focus-visible');
     expect(CN_CSS).toContain('.cn-input:focus-visible');
+  });
+});
+
+/**
+ * CASE NOTES COMPOSER (casenotes-compose.js) — starting a note in the portal.
+ * The clinical promises here are the phone's, restated for a browser:
+ * dictation is on-device or absent, names are checked before generation, the
+ * only generation path is the governed one the mobile app already uses, and
+ * no transcript text is logged, stored or put in a URL.
+ */
+describe('case notes composer', () => {
+  const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+  const CNC_JS = fs.readFileSync(path.join(FRONTEND, 'casenotes-compose.js'), 'utf8');
+  const CNC_CSS = fs.readFileSync(path.join(FRONTEND, 'casenotes.css'), 'utf8');
+  const CNC_CODE = CNC_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  test('asset is linked after the review surface and has its own mount', () => {
+    expect(HTML).toMatch(/<script src="\/casenotes\.js\?v=\d+" defer><\/script>\n<script src="\/casenotes-compose\.js\?v=\d+" defer><\/script>/);
+    expect(HTML).toContain('<div id="cnc-root" hidden></div>');
+  });
+
+  test('no new endpoint — only the caseload picker and the governed draft routes', () => {
+    const paths = CNC_CODE.match(/'\/api\/[^']*'/g) || [];
+    expect(new Set(paths)).toEqual(new Set(["'/api/mobile/clients'", "'/api/mobile/case-note-drafts'"]));
+    expect(CNC_CODE).toContain("DRAFTS_API + '/names-check'");
+    expect(CNC_CODE).toContain("DRAFTS_API + '/generate'");
+    // no model door, no legacy stateless route, no cross-user parameter
+    for (const banned of ['/api/mobile/ai/', '/api/ai', '/api/opa', 'bedrock', 'anthropic', 'userId', 'user_id', 'therapistId']) {
+      expect(CNC_CODE).not.toContain(banned);
+    }
+    // the note is linked to a CLIENT from the caller's own caseload, by id
+    expect(CNC_CODE).toContain('linkedClientId: C.client.id');
+  });
+
+  test('dictation is on-device or not at all — never a cloud speech fallback', () => {
+    expect(CNC_CODE).toContain('rec.processLocally = true;');
+    expect(CNC_CODE).toContain("if (rec.processLocally !== true) throw new Error('not_local');");
+    expect(CNC_CODE).toContain("Ctor.available({ langs: [CNC_LANGS[i]], processLocally: true })");
+    expect(CNC_CODE).toContain("if (!cncCanRequireOnDevice(Ctor)) { C.dictation = 'unavailable';");
+    // every construction of the engine sits behind the capability check
+    expect((CNC_CODE.match(/new Ctor\(\)/g) || []).length).toBe(1);
+    const start = CNC_CODE.slice(CNC_CODE.indexOf('function startDictation()'), CNC_CODE.indexOf('rec = new Ctor();'));
+    expect(start).toContain('!cncCanRequireOnDevice(Ctor)');
+    // no audio capture or upload of any kind
+    for (const banned of ['getUserMedia', 'MediaRecorder', 'AudioContext', 'FormData', 'Blob(']) {
+      expect(CNC_CODE).not.toContain(banned);
+    }
+  });
+
+  test('silence is a pause, not a finish — and a live microphone never outlives the screen', () => {
+    expect(CNC_CODE).toContain('rec.continuous = true;');
+    expect(CNC_CODE).toContain("if (code === 'no-speech' || code === 'aborted') return;");
+    expect(CNC_CODE).toContain('try { startedAt = Date.now(); rec.start(); }');   // restart on engine-initiated end
+    expect(CNC_CODE).toContain("if (tab && tab.dataset.tab !== 'casenotes') stopDictation();");
+    expect(CNC_CODE).toContain("doc.addEventListener('visibilitychange', function () { if (doc.hidden) stopDictation(); });");
+  });
+
+  test('names are checked before anything is generated, and an edit withdraws the check', () => {
+    const gen = CNC_CODE.slice(CNC_CODE.indexOf('async function generate()'), CNC_CODE.indexOf('function clientHtml()'));
+    expect(gen).toContain('if (!C.names || !readyToCheck()) return;');
+    expect(gen).toContain('if (d.undecided.length) {');
+    expect(CNC_CODE).toContain('if (C.names) { C.names = null; C.decisions = {}; renderNames(); }');
+    // a stale answer (text or client changed while the check was in flight) is dropped
+    expect(CNC_CODE).toContain('if (sentText !== C.transcript || !C.client || sentClient !== C.client.id)');
+  });
+
+  test('a failed generation keeps the transcript and is never retried automatically', () => {
+    const gen = CNC_CODE.slice(CNC_CODE.indexOf('async function generate()'), CNC_CODE.indexOf('function clientHtml()'));
+    const fail = gen.slice(gen.indexOf('if (!r.ok) {'), gen.indexOf('var id = r.draftId'));
+    expect(fail).toContain('setMsg(');
+    expect(fail).not.toMatch(/C\.transcript\s*=|reset\(|generate\(|api\(/);
+    // success hands over to the review surface — drafts stay drafts
+    expect(gen).toContain('await global.CaseNotes.reload();');
+    expect(gen).toContain('global.CaseNotes.select(id);');
+    for (const banned of ['Approve', 'approve', 'Finalise', 'finalise', 'Send to Splose', 'Sign off', 'Publish', '/review']) {
+      expect(CNC_CODE).not.toContain(banned);
+    }
+  });
+
+  test('no clinical content is ever logged, stored in the browser, or put in a URL', () => {
+    expect(CNC_CODE).not.toMatch(/console\s*\./);
+    expect(CNC_CODE).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie/);
+    expect(CNC_CODE).not.toMatch(/\?[a-zA-Z]+=/);                 // no query strings at all
+    expect(CNC_CODE).not.toContain('encodeURIComponent');          // nothing is ever built into a path
+    expect(CNC_CODE).not.toMatch(/\b(confirm|prompt|alert)\s*\(/);
+    // untrusted values reach the DOM through esc() or textContent only
+    expect(CNC_CODE).toContain("esc(c.fullName)");
+    expect(CNC_CODE).toContain("esc(c.word)");
+    expect(CNC_CODE).toContain("host.textContent = C.interim ? '… ' + C.interim : '';");
+  });
+
+  test('accessibility basics: real buttons, tied labels, live status, focus styles', () => {
+    expect(CNC_JS).not.toMatch(/<a [^>]*data-cnc=/);
+    expect(CNC_JS).toContain('<label class="cn-sr-only" for="cnc-search">Search your clients</label>');
+    expect(CNC_JS).toContain('<label for="cnc-transcript">');
+    expect(CNC_JS).toContain('id="cnc-msg" role="status" aria-live="polite"');
+    expect(CNC_JS).toContain('aria-pressed="');
+    expect(CNC_CSS).toContain('.cnc-result:focus-visible');
+    expect(CNC_CSS).toContain('.cnc-transcript:focus-visible');
+    expect(CNC_CSS).toContain('@media (prefers-reduced-motion: reduce) { .cnc-dot { animation: none; } }');
   });
 });
 

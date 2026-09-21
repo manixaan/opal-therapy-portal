@@ -6,6 +6,10 @@
    /api/mobile/case-note-drafts routes (backend/case-note-routes.js). No new
    endpoint, no sync layer, no duplicated business logic.
 
+   STARTING a note (client picker, dictation, names check, generation) is
+   casenotes-compose.js, which hands the finished draft back here through
+   CaseNotes.reload() + select(). This file stays the review surface.
+
    Conventions (mirrors resourcehub.js / supportpop.js):
      - single IIFE, string-built HTML, esc() on EVERY untrusted value
      - no raw-HTML passthrough anywhere; transcript/note render as text
@@ -133,7 +137,7 @@
 
   var API_BASE = '/api/mobile/case-note-drafts';
   var STATUS_LINE = 'Draft — saved in Opal only. Nothing is sent to Splose or Outlook.';
-  var EMPTY_STATE = 'No case-note drafts yet. Notes recorded in the Opa mobile app appear here for review.';
+  var EMPTY_STATE = 'No case-note drafts yet. Start one with New case note, or dictate in the Opa mobile app — either way it appears here for review.';
   var METADATA_NOTE = 'These details come from the linked client record in Splose, or from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.';
   var GENERATION_OFF = 'Note generation is not enabled yet — you can still edit and save.';
   var NOT_EDITABLE = 'This note is no longer editable';
@@ -487,6 +491,11 @@
   function listPane() {
     var head = '<div class="cn-list-head">' +
       '<h2 id="cn-list-h">Your drafts</h2>' +
+      // The composer lives in casenotes-compose.js (data-cnc); this surface
+      // only offers the way in, and only when that module is loaded.
+      (global.CaseNotesCompose
+        ? '<button type="button" class="btn primary cn-new" data-cnc="open">' + icn('plus', 13) + ' New case note</button>'
+        : '') +
       '<button type="button" class="cn-icon-btn" data-cn="reload" title="Refresh list" aria-label="Refresh list">' +
         icn('refresh', 14) + '</button>' +
       '</div>';
@@ -696,7 +705,7 @@
     root.innerHTML =
       '<div class="cn-page-head">' +
         '<h1>Case Notes</h1>' +
-        '<p class="cn-quiet">Drafts dictated in the Opa mobile app, waiting for your review. ' +
+        '<p class="cn-quiet">Drafts you started here or dictated in the Opa mobile app, waiting for your review. ' +
           esc(STATUS_LINE) + '</p>' +
       '</div>' +
       '<div class="cn-layout">' + listPane() + detailPane() + '</div>';
