@@ -108,3 +108,14 @@ describe('Requires Your Attention', () => {
     expect(attention.buildAttention({ now: NOW, assignment: { status: 'starter_pack_sent', pack_due_at: '2026-12-01' } })).toEqual([]);
   });
 });
+
+describe("the offer's dates", () => {
+  test('a DATE column is the day the practice chose, wherever the server sits — never the UTC day before', () => {
+    // pg parses a DATE as local midnight. In Perth that instant is still the previous day in UTC.
+    const start = new Date(2026, 8, 28); // local midnight, 28 September
+    const out = reconcile.recordCandidates({ start_date: start, end_date: new Date(2027, 8, 27) });
+    expect(out.find((c) => c.key === 'start_date').value).toBe('2026-09-28');
+    expect(out.find((c) => c.key === 'end_date').value).toBe('2027-09-27');
+    expect(reconcile.recordCandidates({ start_date: '2026-09-28' }).find((c) => c.key === 'start_date').value).toBe('2026-09-28');
+  });
+});

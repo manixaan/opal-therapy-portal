@@ -154,8 +154,10 @@ function recordCandidates(assignment) {
   push('personal_email', a.applicant_email);
   push('mobile', a.mobile);
   push('employment_type', a.employment_type);
-  push('start_date', a.start_date ? String(a.start_date instanceof Date ? a.start_date.toISOString().slice(0, 10) : a.start_date).slice(0, 10) : null);
-  push('end_date', a.end_date ? String(a.end_date instanceof Date ? a.end_date.toISOString().slice(0, 10) : a.end_date).slice(0, 10) : null);
+  // pg hands a DATE back as local midnight: its LOCAL parts are the date. toISOString() would move it to UTC — the day before, anywhere east of Greenwich.
+  const day = (d) => (d instanceof Date ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : String(d).slice(0, 10));
+  push('start_date', a.start_date ? day(a.start_date) : null);
+  push('end_date', a.end_date ? day(a.end_date) : null);
   const num = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : String(Number(v)));
   push('hours_per_week', num(a.hours_per_week));
   push('job_title', a.job_title);
