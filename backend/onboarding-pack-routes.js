@@ -271,7 +271,9 @@ async function ensurePlaceholderDocumentsUnlocked(organisationId) {
     let doc = byCode.get(item.documentCode);
     const current = doc ? doc.current_file_name : null;
     // A file the practice uploaded stays. A placeholder gives way to a shipped file once one exists.
-    if (current && !(placeholderPdf.isPlaceholderName(current) && item.shippedFile)) continue;
+    // …and so does a shipped file the portal itself published, once the portal ships a newer one (refreshShipped).
+    const replaceable = current && item.shippedFile && (placeholderPdf.isPlaceholderName(current) || (item.refreshShipped && await shippedFileSuperseded(doc, path.join(SHIPPED_DIRS[item.stage], item.shippedFile))));
+    if (current && !replaceable) continue;
     const shippedPath = item.shippedFile ? path.join(SHIPPED_DIRS[item.stage], item.shippedFile) : null;
     const shipped = shippedPath && fs.existsSync(shippedPath) ? shippedPath : null;
     if (current && !shipped) continue; // a placeholder already, nothing better shipped
@@ -286,7 +288,7 @@ async function ensurePlaceholderDocumentsUnlocked(organisationId) {
       bytes = fs.readFileSync(shipped);
       fileName = `${item.title.replace(/[\\/:*?"<>|]+/g, ' ').trim()}.${item.shippedFile.split('.').pop()}`;
       fileMime = MIME[item.shippedFile.split('.').pop()] || 'application/octet-stream';
-      note = `Published by the portal from the shipped ${item.stage === 'induction' ? 'Stage 3' : 'Stage 2'} documents — replace in Edit Onboarding when the practice document changes`;
+      note = `${SHIPPED_NOTE} ${item.stage === 'induction' ? 'Stage 3' : 'Stage 2'} documents — replace in Edit Onboarding when the practice document changes`;
     } else {
       bytes = await placeholderPdf.buildPlaceholderPdf({ title: item.title, note: item.description || '' });
       fileName = `${placeholderPdf.PLACEHOLDER_PREFIX}${item.title}.pdf`; fileMime = 'application/pdf';
@@ -294,12 +296,25 @@ async function ensurePlaceholderDocumentsUnlocked(organisationId) {
     }
     const version = await odb.createDocumentVersion(doc.id, {
       title: item.title, fileName, fileMime, fileData: bytes.toString('base64'), fileSizeBytes: bytes.length,
+      fileSha256: require('crypto').createHash('sha256').update(bytes).digest('hex'),
       effectiveDate: new Date().toISOString().slice(0, 10), changeNote: note,
     }, null);
     await odb.publishDocumentVersion(doc.id, version.id, null);
     await odb.pool.query(`UPDATE onboarding_documents SET content_status = 'available', status = 'published', updated_at = NOW() WHERE id = $1`, [doc.id]);
     log.info(shipped ? 'shipped file published for a pack document' : 'placeholder published for a pack document', { code: item.documentCode });
   }
+}
+/** True when the library's current file is one the portal published from its shipped documents, and the shipped file has since changed. */
+const SHIPPED_NOTE = 'Published by the portal from the shipped';
+async function shippedFileSuperseded(doc, shippedPath) {
+  const fs = require('fs');
+  if (!doc || !fs.existsSync(shippedPath)) return false;
+  const current = (await odb.listDocumentVersions(doc.id)).find((v) => v.version === doc.current_version);
+  if (!current || !String(current.change_note || '').startsWith(SHIPPED_NOTE)) return false;
+  const shipped = fs.readFileSync(shippedPath);
+  // Versions published before the hash was recorded are compared by size.
+  if (!current.file_sha256) return Number(current.file_size_bytes) !== shipped.length;
+  return current.file_sha256 !== require('crypto').createHash('sha256').update(shipped).digest('hex');
 }
 function offerDocxMime() { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
 
@@ -336,6 +351,34 @@ async function ensureProfileOwner(assignment) {
   await require('./onboarding-journey-routes')._internals.ensureInduction(assignment, [], { force: true });
 }
 
+/**
+ * The Contract of Employment goes out filled: where the file behind the item
+ * is the fillable master (OPAL_COE_* controls), it is composed from the
+ * Stage 1 offer terms — the same facts as the Letter of Offer. A contract the
+ * practice uploaded without the controls is sent exactly as uploaded.
+ */
+async function personaliseItemFile(assignment, row, file) {
+  if (!file || row.code !== 'PACK_CONTRACT' || !String(file.mime || '').includes('wordprocessingml')) return file;
+  const contractDocx = require('./onboarding-contract-docx');
+  if (!(await contractDocx.isContractTemplate(file.bytes))) return file;
+  const offer = await require('./onboarding-journey-db').getCurrentOffer(assignment.id);
+  const st = (await odb.getOnboardingSettings()) || {};
+  const bytes = await contractDocx.buildContractDocx({
+    templateBuffer: file.bytes,
+    terms: {
+      positionTitle: assignment.job_title, employmentType: assignment.employment_type, startDate: assignment.start_date, endDate: assignment.end_date,
+      hoursPerWeek: assignment.hours_per_week, awardClassification: assignment.award_classification, workLocation: assignment.work_location,
+      payBasis: assignment.pay_basis, payRate: assignment.pay_rate,
+      ...Object.fromEntries(Object.entries((offer && offer.terms) || {}).filter(([, v]) => v != null && v !== '')),
+    },
+    applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
+    signatory: { name: st.offerSignatoryName, title: st.offerSignatoryTitle, email: st.offerSignatoryEmail, phone: st.offerSignatoryPhone },
+    issuedAt: new Date(),
+    isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
+  });
+  return { ...file, bytes, fileName: contractDocx.contractFileName(assignment.applicant_name) };
+}
+
 /** Resolve every included, sendable item to bytes and build the ZIP. */
 async function buildZipForRecord(req, assignment, phase = 'documentation') {
   const rows = (await pdb.listItems(assignment.id, undefined, phase)).filter((r) => r.status === 'included');
@@ -344,7 +387,7 @@ async function buildZipForRecord(req, assignment, phase = 'documentation') {
   for (const r of rows) {
     let file = null; let unavailableReason = null;
     if (r.sends_document) {
-      try { file = await pdb.readItemFile(r); } catch (err) { log.warn('pack item unreadable', { error: err, itemId: r.id }); }
+      try { file = await personaliseItemFile(assignment, r, await pdb.readItemFile(r)); } catch (err) { log.warn('pack item unreadable', { error: err, itemId: r.id }); }
       if (!file) unavailableReason = pdb.describeItemFile(r).unavailableReason || 'No file behind this document';
     }
     const extras = [];
@@ -623,7 +666,7 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const item = await pdb.getItem(assignment.id, req.params.itemId);
     if (!item) return notFound(res);
     let file = null;
-    try { file = await pdb.readItemFile(item); } catch (err) { log.warn('pack item unreadable', { error: err, itemId: item.id }); }
+    try { file = await personaliseItemFile(assignment, item, await pdb.readItemFile(item)); } catch (err) { log.warn('pack item unreadable', { error: err, itemId: item.id }); }
     if (!file) return res.status(404).json({ error: 'There is no file behind this document yet.' });
     noStore(res);
     res.set('Content-Type', file.mime);

@@ -57,7 +57,7 @@ const R = {
  */
 const DOCUMENTATION_PACK = [
   { code: 'PACK_CONTRACT', title: 'Contract of Employment', section: 'welcome_employment', sortOrder: 10, group: 'attachment',
-    documentCode: 'DOC_CONTRACT_TEMPLATE', shippedFile: 'contract-of-employment.docx', sends: true, returns: true, verifies: true,
+    documentCode: 'DOC_CONTRACT_TEMPLATE', shippedFile: 'contract-of-employment.docx', refreshShipped: true, sends: true, returns: true, verifies: true,
     description: 'Sent for signature; the signed contract comes back with the pack.' },
   { code: 'PACK_SUPER_CHOICE', title: 'Superannuation Form', section: 'payroll_tax_super', sortOrder: 20, group: 'attachment',
     documentCode: 'DOC_SUPER_CHOICE', shippedFile: 'superannuation-standard-choice-form.pdf', sends: true, returns: true, verifies: true,

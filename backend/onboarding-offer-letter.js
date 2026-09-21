@@ -44,9 +44,13 @@ function normaliseTerms(input, engineEmploymentTypes) {
     workPattern: s(b.workPattern, 200),
     offerClosingDate: date(b.offerClosingDate),
     superannuationRate: num(b.superannuationRate),
+    // Contract-only particular: the annual CPD allowance, in dollars. Blank means "as approved each year".
+    cpdAllowance: num(b.cpdAllowance),
   };
   if (Number.isNaN(terms.offerClosingDate)) errors.push('Offer closing date is not a valid date');
   if (Number.isNaN(terms.superannuationRate) || (terms.superannuationRate != null && (terms.superannuationRate < 0 || terms.superannuationRate > 30))) errors.push('Superannuation rate is not valid');
+
+  if (Number.isNaN(terms.cpdAllowance) || (terms.cpdAllowance != null && (terms.cpdAllowance < 0 || terms.cpdAllowance > 100000))) errors.push('CPD allowance is not valid');
 
   if (!terms.positionTitle) errors.push('Position is required');
   if (!engineEmploymentTypes.includes(terms.employmentType)) errors.push('Employment type is not recognised');

@@ -732,6 +732,7 @@
       + field(p + 'workPattern', 'Work pattern', input(p + 'workPattern', 'text', t.workPattern, 'maxlength="200" placeholder="worked between 8:30am and 4:30pm (flexible), Monday to Friday"'))
       + field(p + 'payCycle', 'Pay cycle', input(p + 'payCycle', 'text', t.payCycle, 'maxlength="40" placeholder="Fortnightly"'))
       + field(p + 'superannuationRate', 'Superannuation %', input(p + 'superannuationRate', 'number', t.superannuationRate, 'min="0" max="30" step="0.5" placeholder="12"'))
+      + field(p + 'cpdAllowance', 'CPD allowance (AUD per year)', input(p + 'cpdAllowance', 'number', t.cpdAllowance, 'min="0" step="50"'), 'Goes into the Contract of Employment. Blank: an amount approved by the Company each year.')
       + field(p + 'offerClosingDate', 'Offer closing date', input(p + 'offerClosingDate', 'date', isoDate(t.offerClosingDate)), 'Blank: 48 hours from the day the offer email goes out — the same window the email asks for.')
       + '</div></details>';
   }
@@ -745,7 +746,7 @@
       hoursPerWeek: v('hoursPerWeek') || null, probationMonths: v('probationMonths') || null,
       awardClassification: v('awardClassification') || null, workLocation: v('workLocation') || null,
       award: v('award') || null, workPattern: v('workPattern') || null, payCycle: v('payCycle') || null,
-      superannuationRate: v('superannuationRate') || null, offerClosingDate: v('offerClosingDate') || null,
+      superannuationRate: v('superannuationRate') || null, offerClosingDate: v('offerClosingDate') || null, cpdAllowance: v('cpdAllowance') || null,
     };
   }
 
@@ -797,7 +798,7 @@
       payBasis: terms.payBasis, payRate: terms.payRate, hoursPerWeek: terms.hoursPerWeek, probationMonths: terms.probationMonths,
       awardClassification: terms.awardClassification, workLocation: terms.workLocation, additionalTerms: terms.additionalTerms,
       award: terms.award, workPattern: terms.workPattern, payCycle: terms.payCycle,
-      superannuationRate: terms.superannuationRate, offerClosingDate: terms.offerClosingDate,
+      superannuationRate: terms.superannuationRate, offerClosingDate: terms.offerClosingDate, cpdAllowance: terms.cpdAllowance,
       packageId: v('oj-f-packageId') || null, notes: null,
     };
   }

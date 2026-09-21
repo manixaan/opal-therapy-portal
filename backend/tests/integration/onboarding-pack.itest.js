@@ -174,6 +174,29 @@ describe('the default pack', () => {
   });
 });
 
+describe('the Contract of Employment goes out filled', () => {
+  test('the fillable master is composed from the Stage 1 offer terms; without view permission it is refused', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const jane = await settled(agent, OT);
+    const contract = jane.pack.items.find((i) => i.code === 'PACK_CONTRACT');
+    const master = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'onboarding-templates', 'stage2', 'contract-of-employment.docx'));
+    const put = await agent.post(`${jane.base}/pack/items/${contract.id}/file`).send({ fileName: 'Contract of Employment.docx', fileMime: DOCX, fileData: master.toString('base64') });
+    expect(put.status).toBe(201);
+
+    const res = await agent.get(`${jane.base}/pack/items/${contract.id}/download`).buffer().parse(binary);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain(`Contract of Employment - ${OT.name} - Opal Therapy.docx`);
+    const zip = await require('jszip').loadAsync(res.body);
+    const xml = await zip.file('word/document.xml').async('string');
+    expect(xml).toContain(OT.name);
+    expect(xml).toContain(OT.position);
+    expect(xml).not.toMatch(/\[PORTAL/);
+
+    const { agent: therapist } = await agentFor({ role: 'therapist', email: 'therapist@example.com' });
+    expect((await therapist.get(`${jane.base}/pack/items/${contract.id}/download`)).status).toBe(403);
+  });
+});
+
 describe('editing one person\'s pack', () => {
   test('rename, replace the file, add a document, remove one — and nobody else changes', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
