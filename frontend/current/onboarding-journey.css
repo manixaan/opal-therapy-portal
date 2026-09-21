@@ -560,3 +560,7 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 
 .oj-rd-sources { margin: 6px 0 0; padding: 6px 8px; list-style: none; background: #fff4e0; border: 1px solid #f2d9a6; border-radius: 8px; font-size: 12.5px; color: #5c4a1c; }
 .oj-rd-sources li { display: flex; justify-content: space-between; gap: 10px; padding: 1px 0; }
+
+.oj-rd-verify { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #f7faf8; font-size: 13px; }
+.oj-rd-verify.is-done strong { color: #2f7d5b; }
+.oj-rd-verify .oj-rd-state { flex-basis: 100%; margin: 0; }

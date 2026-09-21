@@ -407,6 +407,24 @@ describe('the reading of one document, beside the document', () => {
     ]));
   });
 
+  test('the document can be verified from its reading, by someone who may verify — and by nobody else', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
+    const { base } = await settledAndSent(agent);
+    await agent.post(`${base}/returns`).send({ files: [{ fileName: 'WWCC card.pdf', ...pdf(await certificate('Working With Children Check', [['WWCC number', 'WWC0000001'], ['Expiry date', '01/07/2029']])) }] });
+    const doc = (await agent.get(base)).body.returnedDocuments.find((d) => d.fileName === 'WWCC card.pdf');
+    const before = (await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading.document;
+    expect(before).toMatchObject({ canVerify: true, packItem: { title: 'WWCC clearance' } });
+    expect(before.packItem.verification).not.toBe('verified');
+
+    const { agent: looker } = await agentFor({ role: 'admin', email: 'looker@example.com', permissions: ['onboarding.view', 'onboarding.review'] });
+    expect((await looker.get(`${base}/returns/${doc.id}/reading`)).body.reading.document.canVerify).toBe(false);
+    expect((await looker.post(`${base}/pack/items/${before.packItem.id}/verify`).send({})).status).toBe(403);
+
+    // No reference, no reason: one press.
+    expect((await agent.post(`${base}/pack/items/${before.packItem.id}/verify`).send({})).status).toBe(200);
+    expect((await agent.get(`${base}/returns/${doc.id}/reading`)).body.reading.document.packItem.verification).toBe('verified');
+  });
+
   test('a value the reading missed can be typed in from the page, and is validated like any other', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com', permissions: [...REVIEWER, 'onboarding.sensitive_identity'] });
     const { base } = await settledAndSent(agent);

@@ -530,6 +530,7 @@ async function readingFor(req, assignment, doc) {
   return {
     document: { id: doc.id, title: doc.title || doc.file_name, fileName: doc.file_name, kind: doc.document_kind || null, packItem: item ? { id: item.id, title: item.title, verification: item.verification_status } : null,
       signature: doc.signature_status || 'unknown', textSource: source, textSourceLabel: TEXT_SOURCE_LABEL[source] || (doc.text_status === 'no_text_layer' ? 'Nothing legible could be read' : 'Not read'),
+      canVerify: !!item && hasPermission(req.user, 'onboarding.verify'),
       ocrConfidence: check && check.ocrConfidence != null ? check.ocrConfidence : null, checkStatus: check ? check.status : null, issues: check ? (check.issues || []).map((i) => i.message) : [] },
     fields, missing, revealed,
   };

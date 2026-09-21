@@ -2893,6 +2893,14 @@
       + '<p class="oj-rd-source">' + esc(d.textSourceLabel) + (d.ocrConfidence != null ? ' · ' + esc(d.ocrConfidence) + '% legibility' : '') + (d.signature === 'present' ? ' · signed' : d.signature === 'missing' ? ' · <strong>signature missing</strong>' : '') + '</p>'
       + (d.textSource === 'ocr' ? '<p class="oj-rd-note">Read from an image: check every value against the page — 0/O, 1/I and 5/S are the usual slips.</p>' : '')
       + (d.issues.length ? '<ul class="oj-rd-issues">' + d.issues.map(function (m) { return '<li class="oj-rd-issue">' + esc(m) + '</li>'; }).join('') + '</ul>' : '');
+    if (d.packItem) {
+      var verified = d.packItem.verification === 'verified';
+      var open = r.fields.filter(function (f) { return f.status === 'proposed'; }).length;
+      h += '<div class="oj-rd-verify' + (verified ? ' is-done' : '') + '"><span>' + esc(d.packItem.title) + '</span>'
+        + (verified ? '<strong>✓ Verified</strong>'
+          : d.canVerify ? '<button type="button" class="oj-btn oj-btn-primary oj-btn-small" onclick="OnboardingJourney.readingVerify()">Verify this document</button>' : '')
+        + (!verified && open ? '<p class="oj-rd-state">' + open + (open === 1 ? ' value is' : ' values are') + ' still waiting for you below.</p>' : '') + '</div>';
+    }
     if (!r.fields.length && !r.missing.length) h += '<p class="oj-quiet">Nothing on this document feeds the employee profile. Check it by eye and verify it.</p>';
     h += r.fields.map(function (f, i) {
       var st = readingState(f); var value = readingShow(f, f.onRecord != null && f.fieldId && f.status !== 'proposed' ? f.onRecord : f.read);
@@ -2934,6 +2942,12 @@
     var res = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/fields/' + encodeURIComponent(f.fieldId) + '/resolve', { method: 'POST', body: { decision: 'correct', value: value } });
     return readingDone(res, value === input.getAttribute('data-orig') ? 'Confirmed.' : 'Corrected.');
   }
+  /** Verified with the page in front of you: the same guarded route as the list's Verify. */
+  async function readingVerify() {
+    var item = RD.reading && RD.reading.document.packItem; if (!item || RD.busy) return;
+    RD.busy = true;
+    return readingDone(await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId) + '/pack/items/' + encodeURIComponent(item.id) + '/verify', { method: 'POST', body: {} }), 'Verified.');
+  }
   async function readingAdd(i) {
     var m = RD.reading && RD.reading.missing[i]; var input = doc.getElementById('oj-rd-m' + i);
     if (!m || !m.canEdit || !input || RD.busy) return;
@@ -2974,11 +2988,7 @@
     return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'correct', value: value.trim() }, 'Corrected and applied.');
   }
   function rejectField(fieldId) { return returnsAct('/fields/' + encodeURIComponent(fieldId) + '/resolve', { decision: 'reject' }, 'Ignored.'); }
-  async function verifyItem(itemId) {
-    var ref = await portalPrompt('Verified against the register. Reference (optional):');
-    if (ref === null) return;
-    return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/verify', { reference: ref || undefined }, 'Verified.');
-  }
+  function verifyItem(itemId) { return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/verify', {}, 'Verified.'); }
   async function itemNotApplicable(itemId) {
     if (!await portalConfirm('Mark this document as not applicable? Nothing will need to come back for it, and it will no longer hold up the internal induction.')) return;
     return returnsAct('/pack/items/' + encodeURIComponent(itemId) + '/not-applicable', {}, 'Marked not applicable.');
@@ -3056,7 +3066,7 @@
     packPrepare: packPrepare, packItem: packItem, packFlag: packFlag, packRename: packRename, packUploadFile: packUploadFile,
     packRevertFile: packRevertFile, packPreview: packPreview, packAddOpen: packAddOpen, packAddClose: packAddClose, packAddSubmit: packAddSubmit,
     emailMark: emailMark, emailKey: emailKey, emailHistory: emailHistory, packSaveEmail: packSaveEmail, packResetEmail: packResetEmail, packCreateDraft: packCreateDraft, packMarkSent: packMarkSent, packUnmarkSent: packUnmarkSent,
-    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, readingDirty: readingDirty, readingSave: readingSave, readingAdd: readingAdd, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
+    uploadReturns: uploadReturns, processReturns: processReturns, previewReturn: previewReturn, readingDirty: readingDirty, readingSave: readingSave, readingAdd: readingAdd, readingVerify: readingVerify, assignReturn: assignReturn, placeReturn: placeReturn, unplaceReturn: unplaceReturn, archiveReturn: archiveReturn,
     resolveConflict: resolveConflict, acceptField: acceptField, correctField: correctField, rejectField: rejectField,
     verifyItem: verifyItem, rejectItem: rejectItem, itemNotApplicable: itemNotApplicable, itemApplicable: itemApplicable, approvePayroll: approvePayroll, approvePayrollSetup: approvePayrollSetup, packRestoreDefaults: packRestoreDefaults,
     loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,

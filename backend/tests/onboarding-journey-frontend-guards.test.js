@@ -325,8 +325,8 @@ describe('the changed assets are cache-busted', () => {
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
     // 10: the management surface is handed to onboarding-journey.js.
     expect(SHELL).toContain('src="/onboarding.js?v=14"');
-    expect(SHELL).toContain('src="/onboarding-journey.js?v=77"');
-    expect(SHELL).toContain('href="/onboarding-journey.css?v=41"');
+    expect(SHELL).toContain('src="/onboarding-journey.js?v=78"');
+    expect(SHELL).toContain('href="/onboarding-journey.css?v=42"');
   });
 
   test('no markup is built and thrown away — a statement never begins with "+ \'"', () => {
@@ -352,6 +352,9 @@ describe('the changed assets are cache-busted', () => {
     expect(JOURNEY).toContain("'/resolve', { method: 'POST', body: { decision: 'correct', value: value } }");
     // The panel never decides what a user may see: a masked field arrives masked and is rendered disabled.
     expect(JOURNEY).toMatch(/f\.canEdit \? ' oninput=/);
+    // Verify is one press — in the list and beside the document — and never asks for a reference or a reason.
+    expect(JOURNEY).toContain("OnboardingJourney.readingVerify()");
+    expect(JOURNEY).not.toMatch(/portalPrompt\('Verified against the register/);
     expect(VIEWER).toContain('id="dp-side"');
     expect(VIEWER).toMatch(/S\.side = opts\.side && typeof opts\.side\.render === 'function'/);
   });
