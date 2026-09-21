@@ -302,6 +302,23 @@ function readContract(text, source) {
   const party = flat.match(/\n\s*([A-Z][A-Za-z'’ .\-]{2,80}?),\s+residing at\s+([^\n]+?)\.?\s*\n/);
   const term = pick(/employment is\s+((?:a\s+)?(?:fixed[- ]term|indefinite|ongoing|permanent)[^.\n]*)/i);
   const basis = (flat.match(/\b(full[- ]time|part[- ]time|casual)\b/i) || [])[1] || '';
+  // The composed contract (onboarding-contract-docx): a particulars table, and an acceptance table the employee completes.
+  const row = (label) => pick(new RegExp(`^${label}\\s*:?[ \\t]+(.+)$`, 'im'));
+  const acceptance = lines.slice(Math.max(0, lines.findIndex((l) => /^to be completed by\b/i.test(l))));
+  const accepted = (label) => { const l = acceptance.find((x) => new RegExp(`^${label}\\b`, 'i').test(x)) || ''; const v = norm(l.replace(new RegExp(`^${label}\\s*:?`, 'i'), '')); return BLANK.test(v) ? '' : v.replace(/\s*\((?:signed|e-?signed)[^)]*\)\s*$/i, ''); };
+  if (/^commencement date\b/im.test(flat) && /^to be completed by\b/im.test(flat)) {
+    const tabular = new Map(Object.entries({
+      commencement_date: (row('Commencement Date').match(/^\d[^(]{4,30}/) || [''])[0].trim(), employee_full_name: accepted('Full Name'), employment_type: row('Employment Type'), workplace_address: row('Work Location'),
+      annual_salary_aud: (row('Annual Salary').match(/\$?\s*([\d][\d,]*(?:\.\d{1,2})?)/) || [])[1] || '', standard_hours: (row('Ordinary Hours of Work').match(/^(\d{1,2}(?:\.\d+)?)/) || [])[1] || '',
+      employee_signature: accepted('Signature'), signatory_full_name: accepted('Full Name'), signature_date: accepted('Date'),
+    }).map(([k, v]) => [k, { value: v }]));
+    const spec = SPECS.CONTRACT;
+    const r = applyRules(spec, tabular, {});
+    // This contract carries no home address, and an hourly engagement no annual salary: neither is a blank the employee left.
+    const issues = r.issues.filter((i) => !/^Employee address/.test(i.message) && !(/^Annual salary is blank/.test(i.message) && /^hourly rate\b/im.test(flat)));
+    const candidates = candidatesFrom(r.values, r.extras, null).map((c) => (source === 'ocr' ? { ...c, confidence: 'medium' } : c));
+    return { kind: 'contract', signed: r.signed, candidates, check: { status: issues.length ? 'attention' : 'ok', method: source === 'ocr' ? 'ocr' : source === 'word' ? 'docx' : 'text', kind: 'contract', fields: r.fields.filter((f) => spec.fields.some((e) => e.label === f.label && tabular.has(e.name))), issues, checkedAt: stamp() } };
+  }
   const raw = new Map(Object.entries({
     commencement_date: pick(/will commence on\s+(\d[^.\n]{4,30})/i), employee_full_name: party ? norm(party[1]) : '', employee_address: party ? norm(party[2]) : '',
     employment_type: /fixed/i.test(term) ? term : basis, workplace_address: pick(/based at\s+(.+?)\s+or any other location/i),

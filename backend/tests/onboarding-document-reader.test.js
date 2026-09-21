@@ -177,6 +177,47 @@ describe('the prose contract', () => {
   });
 });
 
+describe('the contract the portal composes from the offer', () => {
+  const contractDocx = require('../onboarding-contract-docx');
+  const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
+  const TERMS = { positionTitle: 'Occupational Therapist', employmentType: 'full_time', startDate: '2026-10-19', payBasis: 'annual', payRate: 88000, hoursPerWeek: 38, probationMonths: 6 };
+  async function composed(accept) {
+    const bytes = await contractDocx.buildContractDocx({ templateBuffer: fs.readFileSync(path.join(__dirname, '..', 'onboarding-templates', 'stage2', 'contract-of-employment.docx')), terms: TERMS, applicant: { name: 'Rowan Mockford', email: 'rowan.mockford@example.com' }, signatory: { name: 'Ann Owner', title: 'Director' }, issuedAt: new Date('2026-09-21T02:00:00Z'), isTreatingTherapist: true });
+    if (!accept) return bytes;
+    const zip = await JSZip.loadAsync(bytes);
+    const xml = new DOMParser().parseFromString((await zip.file('word/document.xml').async('string')).replace(/^\uFEFF/, ''), 'text/xml');
+    const text = (n) => Array.from(n.getElementsByTagName('w:t')).map((t) => t.textContent).join('').trim();
+    for (const tr of Array.from(xml.getElementsByTagName('w:tr'))) {
+      const cells = Array.from(tr.getElementsByTagName('w:tc')); if (cells.length !== 2 || !(text(cells[0]) in accept)) continue;
+      const para = cells[1].getElementsByTagName('w:p')[0]; const r = xml.createElement('w:r'); const t = xml.createElement('w:t');
+      Array.from(para.getElementsByTagName('w:t')).forEach((old) => { old.textContent = ''; });
+      t.appendChild(xml.createTextNode(accept[text(cells[0])])); r.appendChild(t); para.appendChild(r);
+    }
+    zip.file('word/document.xml', new XMLSerializer().serializeToString(xml));
+    return zip.generateAsync({ type: 'nodebuffer' });
+  }
+
+  test('its particulars table and the completed acceptance table are read', async () => {
+    const r = await reader.readDocument({ buffer: await composed({ 'Full Name': 'Rowan Blake Mockford', Signature: 'Rowan Blake Mockford', Date: '21/09/2026' }), mime: DOCX });
+    expect(r.reading.kind).toBe('contract');
+    expect(cand(r, 'start_date')).toBe('2026-10-19');
+    expect(cand(r, 'salary_annual')).toBe('88000');
+    expect(cand(r, 'hours_per_week')).toBe('38');
+    expect(cand(r, 'employment_type')).toBe('full_time');
+    expect(cand(r, 'surname')).toBe('Mockford');
+    expect(r.reading.signed).toBe('present');
+    expect(r.reading.check.status).toBe('ok');
+  });
+
+  test('sent back without a signature, it says so', async () => {
+    const r = await reader.readDocument({ buffer: await composed(null), mime: DOCX });
+    expect(r.reading.signed).toBe('missing');
+    expect(messages(r).join(' ')).toMatch(/Employee signature is empty/);
+    expect(messages(r).join(' ')).toMatch(/Date signed is blank/);
+    expect(messages(r).join(' ')).not.toMatch(/Employee address/);
+  });
+});
+
 describe('no model reads a returned document', () => {
   test('neither the reader nor the OCR module reaches the AI gateway, a vendor SDK or the network', () => {
     for (const file of ['onboarding-document-reader.js', 'onboarding-ocr.js', 'onboarding-ocr-worker.js']) {
