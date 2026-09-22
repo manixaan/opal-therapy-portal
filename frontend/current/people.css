@@ -58,7 +58,7 @@
 .ppl-field { display: block; margin: 0 0 10px; }
 .ppl-field > span { display: block; font-size: 12px; font-weight: 500; color: var(--ink-soft); margin-bottom: 4px; }
 .ppl-inline { display: flex; gap: 8px; align-items: center; }
-.ppl-inline select { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.ppl-inline select { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 28px 8px 10px; border: 1px solid var(--border); border-radius: 8px; background-color: var(--panel); color: var(--ink); }
 .ppl-inline select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .ppl-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
 .ppl-actions .btn, .ppl-inline .btn { font-size: 12.5px; }

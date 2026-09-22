@@ -73,8 +73,21 @@
   --ok-line: #2c5a3d;
 }
 
-/* The dropdown chevron is an inline SVG with a baked-in stroke. */
-:root[data-theme="dark"] select {
+/* The dropdown chevron is an inline SVG with a baked-in stroke.
+   Every select in the portal is appearance:none, so the chevron IS the
+   arrow. Feature styles that set the `background:` shorthand on a select
+   reset repeat/position/size — which tiled this chevron across the whole
+   box in dark mode and dropped it entirely in light mode (22 Sep 2026).
+   The geometry is pinned here for every select, whatever a feature sets,
+   and the light chevron is restated at a specificity that beats
+   `.feature select`. */
+html select:not([multiple]) {
+  background-repeat: no-repeat !important;
+  background-position: right 9px center !important;
+  background-size: 11px !important;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235d564e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+html:root[data-theme="dark"] select:not([multiple]) {
   background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4bcb1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 

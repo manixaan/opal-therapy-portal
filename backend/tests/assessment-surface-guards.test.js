@@ -640,7 +640,7 @@ describe('changed assets are cache-busted', () => {
       // people 1: Settings → Users & Roles redesigned — one row per person
       // (accounts + open invites from /api/admin/people), a side panel per
       // person, and the Splose practitioner chosen from a dropdown of names.
-      ['people.js', 1], ['people.css', 1],
+      ['people.js', 1], ['people.css', 2],
       // 2: the dashboard renders one card per module group (portal, then
       // Splose), and every step screenshot links to its full-size image. The
       // CSS carries the figure link and the stacked-card spacing.
@@ -733,7 +733,7 @@ describe('changed assets are cache-busted', () => {
       ['templates.js', 7], ['templates.css', 6],
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
-      ['theme.js', 2], ['theme.css', 2],
+      ['theme.js', 2], ['theme.css', 3],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
