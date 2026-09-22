@@ -26,6 +26,8 @@ const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
 const SHELL_SOURCES = [
   'mockup_v3.html', 'resourcehub.js', 'scheduler.js', 'opa.js',
   'supportpop.js', 'navigation.js', 'induction.js', 'casenotes.js',
+  // 22 Sep 2026: Users & Roles renders from people.js — its data-help anchors live there.
+  'people.js',
 ].map((f) => fs.readFileSync(path.join(FRONTEND, f), 'utf8')).join('\n');
 
 const KNOWN_ROLES = ['owner', 'admin', 'therapist', 'read_only'];
