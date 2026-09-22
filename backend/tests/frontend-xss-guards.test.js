@@ -88,7 +88,11 @@ describe('invite UI email-state truthfulness', () => {
     expect(SRC).toContain('Invite created — email NOT sent');
     expect(SRC).toContain("d.emailFailed");
     expect(SRC).toContain('invite-link-box');
-    expect(SRC).toContain('copyPendingInviteLink');
+    // 22 Sep 2026: the pending-invite copy-link action moved to people.js
+    // (Settings → Users & Roles side panel); it still fetches the real link.
+    const PEOPLE = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'current', 'people.js'), 'utf8');
+    expect(PEOPLE).toContain("'/api/invites/' + p.invite.id + '/link'");
+    expect(PEOPLE).toContain('registerUrl');
     // The old unconditional lie is gone
     expect(SRC).not.toContain("showMsg('✓ Invite sent!', true)");
   });
