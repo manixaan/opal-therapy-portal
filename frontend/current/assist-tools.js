@@ -18,17 +18,18 @@
   // Keyword rules, per surface. Order is the order the tools should run in.
   var RULES = {
     word: [
-      ['format', /(opal (format|standard|style|styling|template)|format(ting)? (this|the|it|to|accord)|house style|fix (the )?(fonts?|styles?|colou?rs?)|make it look|brand)/i],
+      ['format', /^(?!.*format(ting)? check)(?!.*check (the )?format).*(opal (format|standard|style|styling|template)|format(ting)? (this|the|it|to|accord)|house style|fix (the )?(fonts?|styles?|colou?rs?)|make it look|brand)/i],
       ['tidy', /(blank (page|line)s?|empty (page|line|paragraph)s?|extra (space|spacing|line)s?|spacing|tidy|clean ?up|gaps?)/i],
       ['pages', /(heading|section|chapter)s? .*(new|own|separate|fresh) page|new page .*(heading|section)|page breaks? .*(heading|chapter)/i],
       ['toc', /^(?!.*(\bfooter\b|caption)).*(contents?( page)?|table of contents|toc|page numbers?)/i],
+      ['formatcheck', /format(ting)? check|check (the )?format(ting)?|what('s| is) wrong with the format/i],
       ['refs', /(fix|update|make|convert|real|proper|live) .*(caption|cross[- ]?ref|reference|figure number|table number|appendix (link|ref))|caption|cross[- ]?ref/i],
       ['recs', /recommendations? .*(table|overview)|(table|overview) .*recommendations?/i],
       ['write', /(write|draft|fill( in)?|complete) .*(section|this|paragraph|domain)/i],
       ['rephrase', /(rephrase|reword|rewrite|simplify|plain english|parent[- ]friendly|shorter|clearer)/i],
       ['strengthen', /(strengthen|improve|justify|reasonable and necessary) .*recommendation|recommendation .*(stronger|justif)/i],
       ['finding', /key finding/i],
-      ['check', /^(?!.*(caption|cross[- ]?ref)).*(check|review|proof|audit|anything (wrong|missing)|missing|appendi(x|ces)|placeholder|problems?|issues?|errors?|typos?)/i],
+      ['check', /^(?!.*(caption|cross[- ]?ref|format)).*(check|review|proof|audit|anything (wrong|missing)|missing|appendi(x|ces)|placeholder|problems?|issues?|errors?|typos?)/i],
       // Tools that act at the cursor or take a detail from the typed words themselves.
       ['section', /section break|new section/i],
       ['break', /^(?!.*\b(heading|chapter|section)s?\b).*(page break|(insert|add|start|put in) (a )?(new|blank) page)/i],
@@ -61,6 +62,41 @@
     var d = document.getElementById('oa-tools-drawer'); if (d) d.hidden = false;
     box.appendChild(el('strong', null, found.length ? found.length + ' thing' + (found.length > 1 ? 's' : '') + ' to fix' : 'Nothing to fix'));
     var ul = el('ul'); found.forEach(function (f) { ul.appendChild(el('li', null, f)); }); box.appendChild(ul);
+  }
+
+  /**
+   * Findings with a place and a fix. Each row: the finding, "Show" (select it in the document), "Fix" when the
+   * rule can repair itself; "Fix all" at the top. After a fix the check runs again and the list is redrawn.
+   */
+  function reportActions(found, recheck) {
+    var box = document.getElementById('oa-tools-report'); if (!box) return;
+    box.hidden = false; box.innerHTML = '';
+    var d = document.getElementById('oa-tools-drawer'); if (d) d.hidden = false;
+    var fixable = found.filter(function (f) { return f.fix; });
+    var head = el('div', 'oa-findings-head');
+    head.appendChild(el('strong', null, found.length ? found.length + ' thing' + (found.length > 1 ? 's' : '') + ' to fix' : 'Nothing to fix'));
+    if (fixable.length) {
+      var all = el('button', 'oa-btn sm primary', 'Fix all (' + fixable.length + ')'); all.type = 'button';
+      all.addEventListener('click', function () {
+        busy(true); say('Fixing ' + fixable.length + '…');
+        // Later fixes first, so a deletion never shifts a paragraph a still-pending fix points at.
+        fixable.slice().reverse().reduce(function (chain, f) { return chain.then(function () { return f.fix(); }); }, Promise.resolve())
+          .then(function () { return recheck ? recheck() : null; }).then(function (msg) { say(msg || 'Done.', 'ok'); })
+          .catch(function (err) { say('A fix did not work (' + ((err && (err.code || err.message)) || 'error') + '). Use Undo if needed.', 'warn'); return recheck && recheck(); })
+          .then(function () { busy(false); });
+      });
+      head.appendChild(all);
+    }
+    box.appendChild(head);
+    var ul = el('ul', 'oa-findings');
+    found.forEach(function (f) {
+      var li = el('li'); li.appendChild(el('span', 'oa-finding-text', f.text));
+      var acts = el('span', 'oa-finding-acts');
+      if (f.show) { var sh = el('button', 'oa-btn ghost xs', 'Show'); sh.type = 'button'; sh.addEventListener('click', function () { f.show().catch(function () { say('Could not select that in the document.', 'warn'); }); }); acts.appendChild(sh); }
+      if (f.fix) { var fx = el('button', 'oa-btn xs', 'Fix'); fx.type = 'button'; fx.addEventListener('click', function () { busy(true); f.fix().then(function (msg) { say(msg || 'Fixed.', 'ok'); return recheck ? recheck() : null; }).catch(function (err) { say('That fix did not work (' + ((err && (err.code || err.message)) || 'error') + '). Use Undo if needed.', 'warn'); }).then(function () { busy(false); }); }); acts.appendChild(fx); }
+      li.appendChild(acts); ul.appendChild(li);
+    });
+    box.appendChild(ul);
   }
 
   function busy(on) { if (bar) bar.querySelectorAll('button,input').forEach(function (x) { x.disabled = on; }); }
@@ -141,5 +177,5 @@
     document.addEventListener('opal-assist-office-ready', function () { if (ready()) build(); });
   }
 
-  global.OpalAssistTools = { mount: mount, report: report, say: say, run: run, _localMatch: localMatch, _register: function (id, label, fn) { tools[id] = { label: label, fn: fn }; } };
+  global.OpalAssistTools = { mount: mount, report: report, reportActions: reportActions, say: say, run: run, _localMatch: localMatch, _register: function (id, label, fn) { tools[id] = { label: label, fn: fn }; } };
 })(typeof window !== 'undefined' ? window : globalThis);

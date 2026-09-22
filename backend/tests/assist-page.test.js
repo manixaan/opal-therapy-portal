@@ -62,7 +62,7 @@ describe('shared tool bar, Excel tools and the Word template', () => {
   test('cursor and detail tools are picked by plain words, without stealing the older rules', () => {
     const g = { document: { addEventListener() {}, querySelector() { return null; }, getElementById() { return null; } }, location: { search: '?surface=word' } };
     new Function('window', 'globalThis', 'URLSearchParams', read('assist-tools.js'))(g, g, URLSearchParams);
-    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout', 'margins', 'orientation', 'firstpage', 'refs', 'recs', 'write', 'rephrase', 'strengthen', 'finding'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
+    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout', 'margins', 'orientation', 'firstpage', 'refs', 'recs', 'write', 'rephrase', 'strengthen', 'finding', 'formatcheck'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
     const m = g.OpalAssistTools._localMatch;
     expect(m('insert a page break here')).toEqual(['break']);
     expect(m('add a section break')).toEqual(['section']);
@@ -82,6 +82,8 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     expect(m('strengthen this recommendation')).toEqual(['strengthen']);
     expect(m('write the key finding')).toEqual(['finding']);
     expect(m('are any appendices missing?')).toEqual(['check']);
+    expect(m('run a format check')).toEqual(['formatcheck']);
+    expect(m('format this to the Opal standard')).toEqual(['format']);
     // A question never runs a tool that changes the document by keyword alone.
     expect(m('make headings start on a new page')).toEqual(['pages']);
   });
@@ -99,12 +101,24 @@ describe('shared tool bar, Excel tools and the Word template', () => {
   test('the front row is the FCA workflow; page setup and cursor tools are reachable by words only', () => {
     const src = read('assist-word-format.js');
     const visible = [...src.matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+(?:\('[a-z]+'\))?\]/g)].map((m) => m[1]);
-    expect(visible).toEqual(['format', 'check', 'refs', 'recs', 'table', 'toc', 'write', 'rephrase', 'strengthen', 'finding']);
+    expect(visible).toEqual(['formatcheck', 'format', 'check', 'refs', 'recs', 'table', 'toc', 'write', 'rephrase', 'strengthen', 'finding']);
     const hidden = [...src.matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+, true\]/g)].map((m) => m[1]);
     expect(hidden).toEqual(expect.arrayContaining(['margins', 'orientation', 'firstpage', 'header', 'footer', 'break', 'section']));
     // Writing shortcuts never call the model themselves: they fill the chat box and the person presses Send.
     expect(src).toContain("box.value = WRITING[kind]; box.focus();");
     expect(src).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|\/api\//);
+  });
+
+  test('format check findings carry a locator and, where safe, a fix; Fix all runs from the end of the document', () => {
+    const fmt = read('assist-word-format.js'); const tools = read('assist-tools.js');
+    // Every finding has show:; rules that need judgement carry fix: null rather than a guess.
+    expect((fmt.match(/F\.push\(\{ rule: '[a-z]+', text: /g) || []).length).toBeGreaterThanOrEqual(12);
+    expect(fmt).toMatch(/rule: 'jump'[^\n]*fix: null/);
+    expect(fmt).toMatch(/rule: 'fakehead'[^\n]*fix: null/);
+    expect(fmt).toMatch(/rule: 'toc'[^\n]*fix: updateContents/);
+    expect(fmt).toContain("select('Select')");
+    expect(tools).toContain('fixable.slice().reverse().reduce(');
+    expect(fmt).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|\/api\//);
   });
 
   test('the finish check knows the FCA master: unfilled prompts, guidance blocks, OPAL headings', () => {

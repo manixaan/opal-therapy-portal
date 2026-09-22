@@ -213,6 +213,7 @@ router.post('/api/assist/chat/stream', rateLimit, safe(async (req, res) => {
 // the model cannot invent an action.
 const ACTIONS = {
   word: {
+    formatcheck: 'List every departure from the Opal styling with where it is and a Fix button for each: fonts, blank lines, double spaces, headings, tables, captions, out-of-date contents page',
     format: 'Apply the Opal document standard: fonts, sizes, colours, heading and table styles',
     tidy: 'Remove surplus blank lines and blank pages made of empty lines',
     pages: 'Start every main heading on a new page',

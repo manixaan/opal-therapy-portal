@@ -494,12 +494,97 @@
     };
   }
 
+  /**
+   * FORMAT CHECK — every Opal styling rule, each finding with a place in the document and, where it is safe
+   * to do by code, its own fix. "Show" selects the paragraph so Word scrolls to it; "Fix" repairs that one
+   * finding; "Fix all" runs them in document order. After any fix the check runs again, so what is listed is
+   * always what is still there. Nothing is sent anywhere.
+   */
+  var RULE_TEXT = {
+    font: function (n) { return 'Not in ' + STANDARD.font + (n > 1 ? ' (' + n + ' paragraphs)' : ''); },
+  };
+  function formatCheck() {
+    return global.Word.run(function (ctx) {
+      var paras = ctx.document.body.paragraphs; paras.load('items/text,items/styleBuiltIn,items/style,items/font/name,items/font/size,items/tableNestingLevel,items/keepWithNext,items/alignment');
+      var tables = ctx.document.body.tables; tables.load('items/headerRowCount,items/rowCount,items/values,items/font/name,items/font/size');
+      var fields = ctx.document.body.fields; fields.load('items/type,items/result/text');
+      return ctx.sync().then(function () {
+        var items = paras.items; var F = [];
+        var at = function (i) { return function () { return selectParagraph(i); }; };
+        var where = function (i) { var t = items[i].text.replace(/\s+/g, ' ').trim(); return t ? '"' + t.slice(0, 48) + (t.length > 48 ? '…' : '') + '"' : 'paragraph ' + (i + 1); };
+        var lastLevel = 0; var run = 0; var runStart = -1; var toc = null;
+        fields.items.forEach(function (f) { if (String(f.type).toLowerCase() === 'toc') toc = f; });
+
+        items.forEach(function (p, i) {
+          var l = levelOf(p); var empty = isEmpty(p.text) && !hasBreak(p.text); var inTable = p.tableNestingLevel > 0;
+          // Blank-line runs
+          if (empty && !inTable) { run++; if (run === 1) runStart = i; }
+          else {
+            if (run > 1) F.push({ rule: 'blank', text: (run - 1) + ' extra blank line' + (run > 2 ? 's' : '') + ' before ' + where(i), show: at(runStart + 1), fix: fixDeleteRange(runStart + 1, run - 1) });
+            run = 0;
+          }
+          if (empty) { if (l) F.push({ rule: 'emptyhead', text: 'Empty heading (shows as a blank line in the contents)', show: at(i), fix: fixDeleteRange(i, 1) }); return; }
+          // Font
+          if (p.font.name && p.font.name !== STANDARD.font) F.push({ rule: 'font', text: (p.font.name + ' instead of ' + STANDARD.font + ' at ' + where(i)), show: at(i), fix: fixFont(i) });
+          // Headings
+          if (l) {
+            if (lastLevel && l > lastLevel + 1) F.push({ rule: 'jump', text: 'Heading level jumps from ' + lastLevel + ' to ' + l + ' at ' + where(i), show: at(i), fix: null });
+            lastLevel = l;
+            if (!p.keepWithNext) F.push({ rule: 'keep', text: 'Heading can be left alone at the foot of a page: ' + where(i), show: at(i), fix: fixKeep(i) });
+          }
+          // Looks like a heading, is not one
+          if (!l && !inTable && p.font.size >= 13 && p.text.length < 90 && !/[.!?]\s*$/.test(p.text.trim()) && !/^(title|subtitle|opal – document title|opal – subtitle)$/i.test(p.style || '')) {
+            F.push({ rule: 'fakehead', text: 'Large text that is not a Heading style (the contents will miss it): ' + where(i), show: at(i), fix: null });
+          }
+          // Double spaces
+          var dbl = (p.text.match(/[^\s.]  +\S/g) || []).length;
+          if (dbl) F.push({ rule: 'dbl', text: dbl + ' double space' + (dbl > 1 ? 's' : '') + ' in ' + where(i), show: at(i), fix: fixDoubleSpaces(i) });
+          // Typed captions
+          if (!inTable && /^\s*(Table|Figure)\s+\d+\s*[:.—-]/.test(p.text)) F.push({ rule: 'caption', text: 'Caption numbered by hand: ' + where(i), show: at(i), fix: fixReferences });
+        });
+        if (run > 1) F.push({ rule: 'blank', text: (run - 1) + ' extra blank line' + (run > 2 ? 's' : '') + ' at the end', show: at(runStart + 1), fix: fixDeleteRange(runStart + 1, run - 1) });
+
+        // Tables
+        tables.items.forEach(function (t, i) {
+          var probs = [];
+          if (!t.headerRowCount) probs.push('no header row');
+          if (t.font.name && t.font.name !== STANDARD.font) probs.push(t.font.name);
+          if (t.font.size && t.font.size !== STANDARD.table.size) probs.push(t.font.size + ' pt');
+          if (probs.length) F.push({ rule: 'table', text: 'Table ' + (i + 1) + ' (' + probs.join(', ') + ') is not in the Opal table style', show: function () { return selectTable(i); }, fix: fixTable(i) });
+        });
+
+        // Contents page vs the headings
+        var heads = items.filter(function (p) { var l = levelOf(p); return l && l <= 3 && !isEmpty(p.text) && p.tableNestingLevel === 0; }).map(function (p) { return p.text.replace(/\s+/g, ' ').trim(); });
+        if (!toc) { if (heads.length > 6) F.push({ rule: 'toc', text: 'No contents page (the report has ' + heads.length + ' headings)', show: at(0), fix: null }); }
+        else {
+          var lines = String(toc.result.text || '').split(/[\r\n\v]+/).map(function (x) { return x.replace(/\t.*$/, '').replace(/\s+\d+\s*$/, '').replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+          var missing = heads.filter(function (h) { return !/^contents$/i.test(h) && lines.indexOf(h) < 0; }).length;
+          var stale = lines.filter(function (h) { return heads.indexOf(h) < 0; }).length;
+          if (missing || stale) F.push({ rule: 'toc', text: 'Contents page is out of date: ' + (missing ? missing + ' heading' + (missing > 1 ? 's' : '') + ' missing' : '') + (missing && stale ? ', ' : '') + (stale ? stale + ' entr' + (stale > 1 ? 'ies' : 'y') + ' no longer in the report' : ''), show: function () { return selectField(toc); }, fix: updateContents });
+        }
+        return F;
+      });
+    }).then(function (F) {
+      global.OpalAssistTools.reportActions(F, formatCheck);
+      return F.length ? 'Format check: ' + F.length + ' thing' + (F.length > 1 ? 's' : '') + ' to fix, listed below.' : 'Format check: the document follows the Opal styling.';
+    });
+  }
+  // ── Locators and single fixes (each re-reads the document, so indexes are fresh) ──
+  function selectParagraph(i) { return global.Word.run(function (ctx) { var ps = ctx.document.body.paragraphs; ps.load('items'); return ctx.sync().then(function () { if (ps.items[i]) ps.items[i].select('Select'); return ctx.sync(); }); }); }
+  function selectTable(i) { return global.Word.run(function (ctx) { var ts = ctx.document.body.tables; ts.load('items'); return ctx.sync().then(function () { if (ts.items[i]) ts.items[i].select('Select'); return ctx.sync(); }); }); }
+  function selectField(f) { return global.Word.run(function (ctx) { var fs = ctx.document.body.fields; fs.load('items/type'); return ctx.sync().then(function () { var t = fs.items.filter(function (x) { return String(x.type).toLowerCase() === 'toc'; })[0]; if (t) t.select('Select'); return ctx.sync(); }); }); }
+  function fixDeleteRange(from, n) { return function () { return global.Word.run(function (ctx) { var ps = ctx.document.body.paragraphs; ps.load('items/text,items/tableNestingLevel'); return ctx.sync().then(function () { var d = 0; for (var k = from; k < from + n && k < ps.items.length; k++) { var p = ps.items[k]; if (isEmpty(p.text) && !hasBreak(p.text) && p.tableNestingLevel === 0) { p.delete(); d++; } } return ctx.sync().then(function () { return d + ' blank line' + (d === 1 ? '' : 's') + ' removed.'; }); }); }); }; }
+  function fixFont(i) { return function () { return global.Word.run(function (ctx) { var ps = ctx.document.body.paragraphs; ps.load('items'); return ctx.sync().then(function () { if (ps.items[i]) ps.items[i].font.name = STANDARD.font; return ctx.sync().then(function () { return 'Set to ' + STANDARD.font + '.'; }); }); }); }; }
+  function fixKeep(i) { return function () { return global.Word.run(function (ctx) { var ps = ctx.document.body.paragraphs; ps.load('items'); return ctx.sync().then(function () { if (ps.items[i]) ps.items[i].keepWithNext = true; return ctx.sync().then(function () { return 'Heading now stays with its text.'; }); }); }); }; }
+  function fixDoubleSpaces(i) { return function () { return global.Word.run(function (ctx) { var ps = ctx.document.body.paragraphs; ps.load('items'); return ctx.sync().then(function () { if (!ps.items[i]) return 'Gone.'; var r = ps.items[i].search('  ', { matchWildcards: false }); r.load('items'); return ctx.sync().then(function () { r.items.forEach(function (x) { x.insertText(' ', 'Replace'); }); return ctx.sync().then(function () { return r.items.length + ' double space' + (r.items.length === 1 ? '' : 's') + ' fixed.'; }); }); }); }); }; }
+  function fixTable(i) { return function () { return global.Word.run(function (ctx) { var ts = ctx.document.body.tables; ts.load('items/headerRowCount'); return ctx.sync().then(function () { if (ts.items[i]) styleTable(ts.items[i], ts.items[i].headerRowCount); return ctx.sync().then(function () { return 'Table ' + (i + 1) + ' in the Opal table style.'; }); }); }); }; }
+
   global.OpalAssistWordFormat = { STANDARD: STANDARD, applyStandard: applyStandard, tidySpacing: tidySpacing, headingsOnNewPage: headingsOnNewPage, updateContents: updateContents, checkDocument: checkDocument,
-    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary, setMargins: setMargins, setOrientation: setOrientation, firstPageHeader: firstPageHeader, fixReferences: fixReferences, recommendationsToTable: recommendationsToTable, _levelOf: levelOf, _UNFILLED: UNFILLED,
+    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary, setMargins: setMargins, setOrientation: setOrientation, firstPageHeader: firstPageHeader, fixReferences: fixReferences, recommendationsToTable: recommendationsToTable, formatCheck: formatCheck, _levelOf: levelOf, _UNFILLED: UNFILLED,
     _wordingFor: wordingFor, _styleFor: styleFor, _tableSizeFor: tableSizeFor };
   // Front row: what an FCA or a letter needs most days. Everything else stays reachable through "say it".
   global.OpalAssistTools.mount('word', 'Document tools', 'Runs inside Word. Nothing is sent. Undo reverses it.', [
-    ['format', 'Opal format', applyStandard], ['check', 'Finish check', checkDocument],
+    ['formatcheck', 'Format check', formatCheck], ['format', 'Opal format', applyStandard], ['check', 'Finish check', checkDocument],
     ['refs', 'Fix references', fixReferences], ['recs', 'Recommendations to table', recommendationsToTable],
     ['table', 'Insert table', insertOpalTable], ['toc', 'Update contents', updateContents],
     ['write', 'Write this section', writingTool('write')], ['rephrase', 'Rephrase', writingTool('rephrase')],
