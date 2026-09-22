@@ -68,12 +68,21 @@ describe('identity chain UI', () => {
     expect(HTML).toContain('id="invite-treating"');
     expect(HTML).toContain('isTreatingTherapist: inviteRole ===');
   });
-  test('setup-status card + owner team-setup panel exist', () => {
+  test('setup-status card + owner people surface exist', () => {
     expect(HTML).toContain('id="pf-setup-card"');
     expect(HTML).toContain('async function loadSetupStatusCard()');
-    expect(HTML).toContain('id="stg-team-setup"');
-    expect(HTML).toContain("fetch('/api/admin/team-setup'");
-    expect(HTML).toContain('teamCreateProfile');
-    expect(HTML).toContain('teamSetSploseId');
+    // 22 Sep 2026: Users & Roles is people.js — one row per person, a side
+    // panel, and the Splose practitioner picked from a dropdown of names.
+    expect(HTML).toContain('id="people-root"');
+    expect(HTML).toMatch(/<script src="\/people\.js\?v=\d+" defer><\/script>/);
+    const PEOPLE = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'current', 'people.js'), 'utf8');
+    expect(PEOPLE).toContain("'/api/admin/people'");
+    expect(PEOPLE).toContain('/splose-link');
+    expect(PEOPLE).toContain('/api/splose/practitioners');
+    expect(PEOPLE).not.toMatch(/portalPrompt|window\.prompt\('Splose/);
+    // The old typed-id prompt and per-block loaders are gone from the shell.
+    for (const gone of ['teamSetSploseId', 'loadTeamSetup', 'id="stg-team-setup"', "fetch('/api/admin/team-setup'"]) {
+      expect(`${gone}:${HTML.includes(gone)}`).toBe(`${gone}:false`);
+    }
   });
 });

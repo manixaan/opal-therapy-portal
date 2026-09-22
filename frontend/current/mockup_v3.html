@@ -87,12 +87,13 @@
 <link rel="stylesheet" href="/splose-sync.css?v=1" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=42" />
 <link rel="stylesheet" href="/employees.css?v=1" />
+<link rel="stylesheet" href="/people.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=2" />
 <script src="/resourcehub.js?v=r52" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
-<script src="/induction-modules.js?v=3" defer></script>
+<script src="/induction-modules.js?v=4" defer></script>
 <script src="/induction.js?v=10" defer></script>
 <script src="/workshop.js?v=15" defer></script>
 <!-- Shared document viewer (pdf.js + docx-preview overlay). Used by the
@@ -131,6 +132,8 @@
 <!-- Employees: the people register and one profile per person, read from
      the onboarding employee endpoints. Renders into #emp-root inside #view-employees. -->
 <script src="/employees.js?v=1" defer></script>
+<!-- Settings → Users & Roles: merged people list + side panel -->
+<script src="/people.js?v=1" defer></script>
 <!-- Interview Preparation: the Owner's structured recruitment interviews.
      Every /api/interviews route requires the `interviews.access` permission,
      which only the Owner holds by default, so this module renders nothing
@@ -6814,62 +6817,9 @@ window.opIcon = function (name, size) {
       <!-- User Management — Owner only -->
       <div class="settings-section settings-owner-only" id="settings-user-management">
         <h2>Users &amp; Roles</h2>
-        <p class="section-desc">Manage team members, approve new accounts, and control access levels.</p>
-
-        <!-- Action bar -->
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;">
-          <button class="btn primary" data-help="settings-invite-user" onclick="showInviteModal()" style="font-size:13px;">
-            + Invite team member
-          </button>
-          <button class="btn" onclick="loadUserListForOwner()" style="font-size:12px;color:var(--muted);">
-            ⟳ Refresh
-          </button>
-          <span id="stg-invite-msg" style="font-size:12px;display:none;"></span>
-        </div>
-
-        <!-- Pending approval banner (shows when accounts need attention) -->
-        <div id="stg-pending-banner" style="display:none;background:var(--warn-soft);border:1.5px solid #ecc668;border-radius:10px;padding:12px 16px;font-size:13px;color:var(--warn-ink);margin-bottom:18px;">
-          <strong>Accounts awaiting approval</strong> — scroll down to review and approve new team members.
-        </div>
-
-        <!-- All users list -->
-        <div class="settings-group">
-          <div class="settings-group-header" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>Team Members</span>
-            <span id="stg-user-count" style="font-size:11px;color:var(--muted);font-weight:400;"></span>
-          </div>
-          <div id="stg-user-list" style="padding:16px;font-size:13px;color:var(--muted);">Loading…</div>
-        </div>
-
-        <!-- Pending Invites list -->
-        <div class="settings-group" style="margin-top:20px;" id="stg-team-setup-wrap">
-          <div class="settings-group-header">Team setup status</div>
-          <div style="padding:0 16px 6px;font-size:11.5px;color:var(--muted);">Onboarding progress per member — therapist profile, Splose link, Outlook mailbox (yours to verify, tokens never shown).</div>
-          <div id="stg-team-setup" style="padding:8px 16px 14px;font-size:12.5px;color:var(--muted);">Loading…</div>
-        </div>
-
-        <div class="settings-group" style="margin-top:20px;" id="stg-pending-invites-wrap">
-          <div class="settings-group-header">Pending Invites</div>
-          <div id="stg-pending-invites" style="padding:16px;font-size:13px;color:var(--muted);">Loading…</div>
-        </div>
-      </div>
-
-      <!-- Role-change modal -->
-      <div id="role-change-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9999;align-items:center;justify-content:center;">
-        <div style="background:var(--panel);border-radius:14px;padding:28px 32px;width:360px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-          <h3 style="margin:0 0 4px;font-size:16px;font-weight:700;">Change role</h3>
-          <p style="margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);">Select a new role for <strong id="rcm-user-name"></strong>.</p>
-          <input type="hidden" id="rcm-user-id" />
-          <select id="rcm-role-select" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:20px;">
-            <option value="therapist">Therapist</option>
-            <option value="admin">Admin</option>
-            <option value="owner">Owner</option>
-          </select>
-          <div style="display:flex;gap:10px;">
-            <button class="btn primary" onclick="submitRoleChange()" id="rcm-submit" style="font-size:13px;">Save role</button>
-            <button class="btn" onclick="closeRoleModal()" style="font-size:13px;">Cancel</button>
-          </div>
-        </div>
+        <p class="section-desc">Everyone in the practice, one line each. Click a person to set their role, approve them, and link their Splose practitioner.</p>
+        <!-- Rendered by people.js: merged accounts + invites, side panel per person. -->
+        <div id="people-root"><p class="ppl-quiet">Loading…</p></div>
       </div>
 
       <!-- Suspend modal -->
@@ -23099,229 +23049,7 @@ async function checkIntegrationStatuses() {
 }
 
 // ── Team setup status (owner/admin): the identity-chain dashboard ─────────
-async function loadTeamSetup() {
-  var el = document.getElementById('stg-team-setup');
-  if (!el) return;
-  try {
-    var r = await fetch('/api/admin/team-setup', { credentials: 'include' });
-    if (!r.ok) { el.textContent = 'Not available for your role.'; return; }
-    var d = await r.json();
-    var rows = (d.members || []).filter(function (m) { return m.isActive !== false; });
-    if (!rows.length) { el.textContent = 'No members yet.'; return; }
-    var b = function (ok, txt) { return '<span style="white-space:nowrap;">'+ (ok ? '': '') + ''+ txt + '</span>'; };
-    el.innerHTML = rows.map(function (m) {
-      var isTher = m.role === 'therapist';
-      var bits = [
-        b(m.accountStatus === 'active', 'account'),
-        b(m.onboardingComplete, 'onboarding'),
-      ];
-      if (isTher) bits.push(b(m.therapistProfile.exists, 'profile'));
-      if (isTher) bits.push(b(!!m.splosePractitionerId, 'Splose link'));
-      bits.push(b(m.outlook.connected, m.outlook.connected ? ('Outlook: ' + escapeHtml(m.outlook.email || '')) : 'Outlook'));
-      bits.push(b(m.travelBaseSet, 'travel base'));
-      var actions = '';
-      if (isTher && !m.therapistProfile.exists) {
-        actions += ' <button class="btn" style="font-size:11px;" onclick="teamCreateProfile(\'' + m.id + '\',\'' + escapeHtml(m.name || m.email) + '\', this)">Create profile</button>';
-      }
-      if (isTher && m.therapistProfile.exists && !m.splosePractitionerId) {
-        actions += ' <button class="btn" style="font-size:11px;" onclick="teamSetSploseId(\'' + m.therapistProfile.id + '\', this)">Link Splose ID</button>';
-      }
-      return '<div style="padding:7px 0;border-bottom:1px solid var(--border);">' +
-        '<strong>' + escapeHtml(m.name || m.email) + '</strong> <span class="acct-pill" style="font-size:10px;">' + escapeHtml(m.role) + '</span>' + actions +
-        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:3px;font-size:11.5px;color:var(--muted);">' + bits.join(' ') + '</div></div>';
-    }).join('');
-  } catch (e) { el.textContent = 'Could not load team setup.'; }
-}
-
-async function teamCreateProfile(userId, name, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
-  try {
-    var r = await fetch('/api/therapists', {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: userId, displayName: name }),
-    });
-    if (!r.ok) throw new Error((await r.json()).error || 'failed');
-    showToast('Therapist profile created', 'Their calendar identity is now set up.');
-  } catch (e) { showToast('Could not create profile', String(e.message || e)); }
-  loadTeamSetup();
-}
-
-async function teamSetSploseId(profileId, btn) {
-  var listing = '';
-  try {
-    var pr = await fetch('/api/splose/practitioners', { credentials: 'include' });
-    if (pr.ok) listing = ((await pr.json()).data || []).map(function (p) { return '  ' + p.id + '  ' + (p.fullName || ''); }).join('\n');
-  } catch (e) {}
-  var id = await portalPrompt('Splose practitioner ID for this therapist:' + (listing ? '\n\n' + listing : '') + '\n\n(They can also pick themselves in Settings → Integrations if their Splose email matches.)');
-  if (!id || !id.trim()) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-  try {
-    var r = await fetch('/api/therapists/' + profileId, {
-      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ splosePractitionerId: id.trim() }),
-    });
-    if (!r.ok) throw new Error((await r.json()).error || 'failed');
-    showToast('Splose practitioner linked', 'Their appointments are now scoped to this ID.');
-  } catch (e) { showToast('Could not save mapping', String(e.message || e)); }
-  loadTeamSetup();
-}
-
-// ── Load user list for owners (admin management) ──────────────
-async function loadUserListForOwner() {
-  if (!window.APP_USER || !['owner','admin'].includes(window.APP_USER.role)) return;
-  loadPendingInvites();
-  loadTeamSetup();
-
-  var el = document.getElementById('stg-user-list');
-  if (el) el.innerHTML = '<p style="padding:12px 0;color:var(--muted);">Loading…</p>';
-
-  try {
-    var res  = await fetch('/api/admin/users', { credentials: 'include' });
-    var data = await res.json();
-    if (!el) return;
-
-    if (!data.users || !data.users.length) {
-      el.innerHTML = '<p style="color:var(--muted)">No team members found.</p>';
-      return;
-    }
-
-    var isOwner = window.APP_USER.role === 'owner';
-    var myId    = window.APP_USER.id;
-
-    // Show pending banner if any accounts need approval
-    var pendingCount = data.users.filter(function(u) {
-      return u.accountStatus === 'pending_approval' || u.accountStatus === 'pending_verification';
-    }).length;
-    var banner = document.getElementById('stg-pending-banner');
-    if (banner) banner.style.display = pendingCount > 0 ? 'block' : 'none';
-
-    var countEl = document.getElementById('stg-user-count');
-    if (countEl) countEl.textContent = data.users.length + ' member' + (data.users.length !== 1 ? 's' : '');
-
-    // Status labels + colors
-    var statusBadge = {
-      active:               '<span style="background:var(--ok-soft);color:#2f7d4f;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Active</span>',
-      pending_verification: '<span style="background:var(--warn-soft);color:var(--warn-ink);border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending email</span>',
-      pending_approval:     '<span style="background:#fcf3e8;color:var(--warn-ink);border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Pending approval</span>',
-      suspended:            '<span style="background:var(--danger-soft);color:#c2412e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Suspended</span>',
-      deactivated:          '<span style="background:var(--panel-sunk);color:#6e675e;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;">Deactivated</span>',
-    };
-    var roleLabels = { owner: 'Owner', admin: 'Admin', therapist: 'Therapist' };
-
-    var html = '';
-    // Sort: pending first, then active, then suspended/deactivated
-    var ORDER = { pending_approval:1, pending_verification:2, active:3, suspended:4, deactivated:5 };
-    data.users.sort(function(a,b) { return (ORDER[a.accountStatus]||9) - (ORDER[b.accountStatus]||9); });
-
-    data.users.forEach(function(u) {
-      var isMe     = u.id === myId;
-      var status   = u.accountStatus || 'active';
-      var badge    = statusBadge[status] || '';
-      var roleLabel = roleLabels[u.role] || u.role;
-
-      // Info flags
-      var flags = [];
-      if (!u.hasOutlook)      flags.push('<span title="Outlook not connected" style="font-size:11px;color:#cf8b1f;">No calendar</span>');
-      if (!u.hasWorkLocation) flags.push('<span title="No work location set" style="font-size:11px;color:var(--ink-faint);">No location</span>');
-
-      // Action buttons (owner only, can't action yourself)
-      var actions = '';
-      if (isOwner && !isMe) {
-        if (status === 'pending_approval' || status === 'pending_verification') {
-          actions += '<button class="btn primary" onclick="adminApprove(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;">Approve</button> ';
-        }
-        if (status === 'active') {
-          actions += '<button class="btn" onclick="openRoleModal(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\',\'' + u.role + '\')" style="font-size:11px;padding:5px 10px;">Role</button> ';
-          actions += '<button class="btn" onclick="openSuspendModal(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:#c2412e;">Suspend</button> ';
-        }
-        if (status === 'suspended') {
-          actions += '<button class="btn primary" onclick="adminActivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;">Re-activate</button> ';
-          actions += '<button class="btn" onclick="adminDeactivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;color:var(--ink-faint);">Deactivate</button> ';
-        }
-        if (status === 'deactivated') {
-          actions += '<button class="btn primary" onclick="adminActivate(\'' + u.id + '\',\'' + escapeHtml(u.name) + '\')" style="font-size:11px;padding:5px 10px;">Restore</button> ';
-        }
-      }
-
-      html += '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;">';
-      html += '<div style="flex:1;min-width:0;">';
-      html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">';
-      html += '<strong style="font-size:13.5px;">' + escapeHtml(u.name || u.email) + '</strong>';
-      html += '<span style="font-size:12px;color:var(--muted);">' + roleLabel + '</span>';
-      html += badge;
-      if (isMe) html += '<span style="font-size:11px;color:var(--ink-faint);background:var(--panel-sunk);border-radius:10px;padding:2px 8px;">You</span>';
-      html += '</div>';
-      html += '<div style="font-size:12px;color:var(--muted);">' + escapeHtml(u.email) + '</div>';
-      if (flags.length) html += '<div style="display:flex;gap:8px;margin-top:4px;">' + flags.join('') + '</div>';
-      html += '</div>';
-      if (actions) html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex-shrink:0;">' + actions + '</div>';
-      html += '</div>';
-    });
-
-    el.innerHTML = '<div style="padding:0;">' + html + '</div>';
-  } catch (e) {
-    if (el) el.innerHTML = '<p style="color:var(--muted)">Could not load user list.</p>';
-  }
-}
-
-// ── Admin actions ─────────────────────────────────────────────
-async function adminApprove(userId, userName) {
-  if (!await portalConfirm('Approve account for ' + userName + '? They will receive an email and can sign in immediately.')) return;
-  try {
-    var r = await fetch('/api/admin/users/' + userId + '/approve', { method: 'PATCH', credentials: 'include' });
-    var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { showToast(''+ userName + '\'s account approved'); loadUserListForOwner(); }
-    else       showToast(''+ (d.error || 'Failed to approve'), true);
-  } catch (_) { showToast('Network error', true); }
-}
-
-async function adminActivate(userId, userName) {
-  if (!await portalConfirm('Re-activate account for ' + userName + '?')) return;
-  try {
-    var r = await fetch('/api/admin/users/' + userId + '/activate', { method: 'PATCH', credentials: 'include' });
-    var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { showToast(''+ userName + '\'s account re-activated'); loadUserListForOwner(); }
-    else       showToast(''+ (d.error || 'Failed to activate'), true);
-  } catch (_) { showToast('Network error', true); }
-}
-
-async function adminDeactivate(userId, userName) {
-  if (!await portalConfirm('Permanently deactivate ' + userName + '? Their data is preserved but they cannot sign in.\n\nYou can restore them later.', { danger: true })) return;
-  try {
-    var r = await fetch('/api/admin/users/' + userId + '/deactivate', { method: 'PATCH', credentials: 'include' });
-    var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { showToast('Account deactivated'); loadUserListForOwner(); }
-    else       showToast(''+ (d.error || 'Failed'), true);
-  } catch (_) { showToast('Network error', true); }
-}
-
-function openRoleModal(userId, userName, currentRole) {
-  document.getElementById('rcm-user-id').value   = userId;
-  document.getElementById('rcm-user-name').textContent = userName;
-  document.getElementById('rcm-role-select').value = currentRole || 'therapist';
-  document.getElementById('role-change-modal').style.display = 'flex';
-}
-function closeRoleModal() {
-  document.getElementById('role-change-modal').style.display = 'none';
-}
-async function submitRoleChange() {
-  var userId = document.getElementById('rcm-user-id').value;
-  var role   = document.getElementById('rcm-role-select').value;
-  var name   = document.getElementById('rcm-user-name').textContent;
-  var btn    = document.getElementById('rcm-submit');
-  btn.disabled = true; btn.textContent = 'Saving…';
-  try {
-    var r = await fetch('/api/admin/users/' + userId + '/role', {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role }),
-    });
-    var d = await r.json().catch(function() { return {}; });
-    if (r.ok) { closeRoleModal(); showToast(''+ name + 'is now '+ role); loadUserListForOwner(); }
-    else       showToast(''+ (d.error || 'Failed to change role'), true);
-  } catch (_) { showToast('Network error', true); }
-  btn.disabled = false; btn.textContent = 'Save role';
-}
+// Team list, approvals, role changes and the Splose practitioner picker now live in people.js (window.People).
 
 function openSuspendModal(userId, userName) {
   document.getElementById('sm-user-id').value = userId;
@@ -23533,10 +23261,8 @@ function closeInviteModal() {
 (function() {
   document.addEventListener('click', function(e) {
     var invite  = document.getElementById('invite-modal-overlay');
-    var roleChg = document.getElementById('role-change-modal');
     var suspMdl = document.getElementById('suspend-modal');
     if (invite  && e.target === invite)  closeInviteModal();
-    if (roleChg && e.target === roleChg) closeRoleModal();
     if (suspMdl && e.target === suspMdl) closeSuspendModal();
   });
 })();
@@ -23617,38 +23343,6 @@ async function submitInvite() {
   }
 }
 
-async function loadPendingInvites() {
-  var el = document.getElementById('stg-pending-invites');
-  if (!el) return;
-  try {
-    var res = await fetch('/api/invites', { credentials: 'include' });
-    if (!res.ok) { el.innerHTML = '<p style="color:var(--muted)">Could not load invites.</p>'; return; }
-    var d = await res.json();
-    var invites = d.invites || [];
-    if (!invites.length) { el.innerHTML = '<p style="color:var(--muted);padding:8px 0;">No pending invites.</p>'; return; }
-    var roleLabels = { owner: 'Owner', admin: 'Admin', therapist: 'Therapist' };
-    var html = '';
-    invites.forEach(function(inv) {
-      var expDate = inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('en-AU') : '—';
-      var isExpired = inv.expires_at && new Date(inv.expires_at) < new Date();
-      html += '<div class="settings-row" style="align-items:center;">' +
-        '<div class="settings-row-label">' +
-          '<strong>' + escapeHtml(inv.email) + '</strong>' +
-          '<span>' + (roleLabels[inv.role] || inv.role) + ' · Expires ' + expDate + (isExpired ? ' <span style="color:var(--danger);">(expired)</span>' : '') + '</span>' +
-        '</div>' +
-        '<div class="settings-row-control" style="display:flex;gap:6px;">' +
-          (inv.id ? '<button class="btn" onclick="revokeInvite(\'' + inv.id + '\', this)" style="font-size:11.5px;color:var(--danger);border-color:var(--danger);">Revoke</button>' : '') +
-          (inv.id ? '<button class="btn" onclick="resendInvite(\'' + inv.id + '\', this)" style="font-size:11.5px;">Resend</button>' : '') +
-          (inv.id && !isExpired ? '<button class="btn" onclick="copyPendingInviteLink(\'' + inv.id + '\', this)" style="font-size:11.5px;">Copy link</button>' : '') +
-        '</div>' +
-      '</div>';
-    });
-    el.innerHTML = html;
-  } catch(e) {
-    el.innerHTML = '<p style="color:var(--muted)">Could not load invites.</p>';
-  }
-}
-
 // Copy helpers for manual invite-link delivery (email-less environments).
 function copyInviteLinkFromBox(btn) {
   var urlEl = document.getElementById('invite-link-url');
@@ -23656,45 +23350,6 @@ function copyInviteLinkFromBox(btn) {
   navigator.clipboard.writeText(urlEl.value).then(function() {
     btn.textContent = '✓ Copied'; setTimeout(function() { btn.textContent = 'Copy link'; }, 2000);
   }).catch(function() { urlEl.select(); document.execCommand('copy'); btn.textContent = '✓ Copied'; });
-}
-
-async function copyPendingInviteLink(id, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
-  try {
-    var res = await fetch('/api/invites/' + id + '/link', { credentials: 'include' });
-    var d = await res.json();
-    if (!res.ok || !d.registerUrl) throw new Error(d.error || 'no link');
-    await navigator.clipboard.writeText(d.registerUrl);
-    if (btn) { btn.textContent = '✓ Copied'; setTimeout(function() { btn.disabled = false; btn.textContent = 'Copy link'; }, 2000); }
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Copy link'; }
-    showToast('Could not fetch invite link', true);
-  }
-}
-
-async function revokeInvite(id, btn) {
-  if (!await portalConfirm('Revoke this invite? The link will stop working.', { danger: true })) return;
-  if (btn) { btn.disabled=true; btn.textContent='Revoking…'; }
-  try {
-    var res = await fetch('/api/invites/' + id, { method: 'DELETE', credentials: 'include' });
-    if (!res.ok) throw new Error();
-    loadPendingInvites();
-  } catch(e) {
-    if (btn) { btn.disabled=false; btn.textContent='Revoke'; }
-    showToast('Error', 'Could not revoke invite. Please try again.');
-  }
-}
-
-async function resendInvite(id, btn) {
-  if (btn) { btn.disabled=true; btn.textContent='Sending…'; }
-  try {
-    var res = await fetch('/api/invites/' + id + '/resend', { method: 'POST', credentials: 'include' });
-    if (!res.ok) throw new Error();
-    if (btn) { btn.textContent='✓ Sent'; setTimeout(function() { btn.disabled=false; btn.textContent='Resend'; }, 2500); }
-  } catch(e) {
-    if (btn) { btn.disabled=false; btn.textContent='Resend'; }
-    showToast('Error', 'Could not resend invite. Please try again.');
-  }
 }
 
 // ── Bug report ────────────────────────────────────────────────

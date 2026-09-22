@@ -183,6 +183,69 @@ describe('DELETE /api/splose/my-practitioner', () => {
   });
 });
 
+describe('Owner links a practitioner to ANOTHER person — /api/admin/people/:userId/splose-link', () => {
+  const TARGET = 'bbbbbbbb-2222-4222-8222-222222222222';
+  const targetRow = (over) => ({ id: TARGET, email: 'paulita@opal.test', name: 'Paulita Reyes', display_name: null, organisation_id: ORG, is_active: true, splose_practitioner_id: null, ...over });
+
+  test('admins and therapists are refused (403)', async () => {
+    for (const role of ['admin', 'therapist']) {
+      const agent = await login(buildApp(), user({ role }));
+      expect((await agent.put('/api/admin/people/' + TARGET + '/splose-link').send({ practitionerId: '88200' })).status).toBe(403);
+      expect((await agent.delete('/api/admin/people/' + TARGET + '/splose-link')).status).toBe(403);
+    }
+    expect(db.upsertTherapistProfile).not.toHaveBeenCalled();
+  });
+
+  test('owner links a free practitioner to someone else — no email match needed, audited self:false with the user id', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner', email: 'ann@opal.test' }));
+    db.pool.query
+      .mockResolvedValueOnce({ rows: [targetRow()] })   // load target
+      .mockResolvedValueOnce({ rows: [] });             // nobody else claims it
+    const r = await agent.put('/api/admin/people/' + TARGET + '/splose-link').send({ practitionerId: '88200' });
+    expect(r.status).toBe(200);
+    expect(r.body.linked).toEqual({ id: '88200', fullName: 'Paulita Reyes' });
+    expect(db.upsertTherapistProfile).toHaveBeenCalledWith(expect.objectContaining({ userId: TARGET, splosePractitionerId: '88200', organisationId: ORG }));
+    const audit = db.logAuditEvent.mock.calls.map((c) => c[0]).find((a) => a.action === 'splose.practitioner_linked');
+    expect(audit).toEqual(expect.objectContaining({ targetId: '88200', metadata: expect.objectContaining({ self: false, userId: TARGET }) }));
+    expect(JSON.stringify(audit)).not.toMatch(/paulita@/);
+  });
+
+  test('a practitioner already worn by another active account is a 409', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    db.pool.query
+      .mockResolvedValueOnce({ rows: [targetRow()] })
+      .mockResolvedValueOnce({ rows: [{ name: 'Sam Okafor', display_name: null }] });
+    const r = await agent.put('/api/admin/people/' + TARGET + '/splose-link').send({ practitionerId: '88167' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('practitioner_already_linked');
+    expect(db.upsertTherapistProfile).not.toHaveBeenCalled();
+  });
+
+  test('a person outside the owner\'s organisation is a 404, and an id Splose does not know is a 404', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    db.pool.query.mockResolvedValueOnce({ rows: [targetRow({ organisation_id: '99999999-9999-4999-8999-999999999999' })] });
+    expect((await agent.put('/api/admin/people/' + TARGET + '/splose-link').send({ practitionerId: '88200' })).status).toBe(404);
+    db.pool.query.mockResolvedValueOnce({ rows: [targetRow()] });
+    const r = await agent.put('/api/admin/people/' + TARGET + '/splose-link').send({ practitionerId: '77777' });
+    expect(r.status).toBe(404);
+    expect(r.body.code).toBe('practitioner_not_found');
+    expect((await agent.put('/api/admin/people/not-a-uuid/splose-link').send({ practitionerId: '88200' })).status).toBe(400);
+  });
+
+  test('owner disconnects someone else: the column is cleared for THAT user and the previous id is audited', async () => {
+    const agent = await login(buildApp(), user({ role: 'owner' }));
+    db.pool.query.mockResolvedValueOnce({ rows: [targetRow({ splose_practitioner_id: '88200' })] });
+    const r = await agent.delete('/api/admin/people/' + TARGET + '/splose-link');
+    expect(r.status).toBe(200);
+    expect(r.body.linked).toBeNull();
+    const sql = db.pool.query.mock.calls.find((c) => /UPDATE therapist_profiles/.test(c[0]));
+    expect(sql[0]).toMatch(/splose_practitioner_id = NULL/);
+    expect(sql[1]).toEqual([TARGET]);
+    const audit = db.logAuditEvent.mock.calls.map((c) => c[0]).find((a) => a.action === 'splose.practitioner_unlinked');
+    expect(audit).toEqual(expect.objectContaining({ targetId: '88200', metadata: { self: false, userId: TARGET } }));
+  });
+});
+
 describe('practice connection — /api/splose/connection (owner only)', () => {
   const KEY = 'splose-live-key-not-real-abcdef123456';
   beforeEach(() => {

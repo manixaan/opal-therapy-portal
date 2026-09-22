@@ -634,7 +634,13 @@ describe('changed assets are cache-busted', () => {
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
       // group 'splose', taught from redacted demo-workspace captures.
-      ['induction-modules.js', 3],
+      // 4: the Users & Roles tour points at the merged people list
+      // (#people-root) — the three blocks it used to spotlight are gone.
+      ['induction-modules.js', 4],
+      // people 1: Settings → Users & Roles redesigned — one row per person
+      // (accounts + open invites from /api/admin/people), a side panel per
+      // person, and the Splose practitioner chosen from a dropdown of names.
+      ['people.js', 1], ['people.css', 1],
       // 2: the dashboard renders one card per module group (portal, then
       // Splose), and every step screenshot links to its full-size image. The
       // CSS carries the figure link and the stacked-card spacing.

@@ -146,6 +146,84 @@ router.delete('/api/splose/my-practitioner', safe(async (req, res) => {
   res.json({ ok: true, linked: null });
 }));
 
+// ── Owner links a practitioner to ANOTHER person (Settings → Users & Roles) ──
+// The explicit act on someone else's profile that the self-service rule
+// defers to. Same fail-closed checks minus the email match: the practitioner
+// must exist in Splose and must not be claimed by a different active account.
+// A missing therapist profile is created on the way. Audited with ids only,
+// `self: false`, and the target user id.
+
+router.use('/api/admin/people/:userId/splose-link', requireAuth, requireRole('owner'));
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function loadTargetUser(req, res) {
+  const userId = String(req.params.userId || '');
+  if (!UUID_RE.test(userId)) { res.status(400).json({ error: 'Invalid user id', code: 'invalid_user' }); return null; }
+  const q = await db.pool.query(
+    `SELECT u.id, u.email, u.name, u.display_name, u.organisation_id, u.is_active,
+            tp.splose_practitioner_id
+       FROM users u LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+      WHERE u.id = $1`, [userId]);
+  const target = q.rows[0];
+  if (!target || (target.organisation_id || null) !== (req.user.organisation_id || null)) {
+    res.status(404).json({ error: 'That person is not in your practice', code: 'user_not_found' });
+    return null;
+  }
+  return target;
+}
+
+router.put('/api/admin/people/:userId/splose-link', safe(async (req, res) => {
+  const target = await loadTargetUser(req, res);
+  if (!target) return;
+  const id = String(req.body?.practitionerId || '').trim();
+  if (!id || id.length > 64) return res.status(400).json({ error: 'practitionerId is required', code: 'invalid_practitioner' });
+
+  const practitioners = await sploseApi.getPractitioners();
+  const p = (practitioners || []).find((x) => String(x.id) === id);
+  if (!p) return res.status(404).json({ error: 'That practitioner is not in Splose', code: 'practitioner_not_found' });
+
+  const claimed = await db.pool.query(
+    `SELECT u.name, u.display_name
+       FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id
+      WHERE tp.splose_practitioner_id = $1 AND tp.user_id <> $2 AND u.is_active = TRUE
+        AND u.organisation_id IS NOT DISTINCT FROM $3
+      LIMIT 1`, [id, target.id, req.user.organisation_id || null]);
+  if (claimed.rows[0]) {
+    const who = claimed.rows[0].display_name || claimed.rows[0].name || 'another account';
+    return res.status(409).json({ error: `That practitioner is already linked to ${who}. Disconnect it there first.`, code: 'practitioner_already_linked' });
+  }
+
+  await db.upsertTherapistProfile({
+    userId: target.id,
+    organisationId: target.organisation_id || null,
+    displayName: target.display_name || target.name || p.fullName || 'Therapist',
+    splosePractitionerId: id,
+  });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: req.user.organisation_id || null,
+    action: 'splose.practitioner_linked', targetType: 'splose_practitioner', targetId: id,
+    metadata: { self: false, userId: target.id, previous: target.splose_practitioner_id || null }, ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ ok: true, linked: { id, fullName: p.fullName || id } });
+}));
+
+router.delete('/api/admin/people/:userId/splose-link', safe(async (req, res) => {
+  const target = await loadTargetUser(req, res);
+  if (!target) return;
+  const previous = target.splose_practitioner_id ? String(target.splose_practitioner_id) : null;
+  await db.pool.query(
+    'UPDATE therapist_profiles SET splose_practitioner_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
+    [target.id],
+  );
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: req.user.organisation_id || null,
+    action: 'splose.practitioner_unlinked', targetType: 'splose_practitioner', targetId: previous,
+    metadata: { self: false, userId: target.id }, ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ ok: true, linked: null });
+}));
+
 // ── The practice's Splose connection (Owner only) ───────────────────────────
 // One API key for the whole practice. The Owner can see where it comes from,
 // connect a new key (proved against Splose before it is stored) or

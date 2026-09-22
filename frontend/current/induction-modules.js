@@ -1413,11 +1413,11 @@
             "section": "user-management"
           },
           "type": "highlight",
-          "target": "#stg-user-list",
+          "target": "#people-root",
           "pad": 6,
           "rounded": "10px",
-          "title": "Team Members",
-          "body": "Everyone with an account is listed here with their role and a status badge: **Active**, **Pending email** (they haven’t verified their address yet), **Pending approval** (waiting on you), **Suspended** or **Deactivated**.\n\nSmall flags like **No calendar** or **No location** point out members whose setup isn’t finished. Accounts that need your attention sort to the top."
+          "title": "Everyone, one line each",
+          "body": "Every person in the practice is one row: their role, a status badge — **Active**, **Invited**, **Pending email**, **Needs approval**, **Suspended** or **Deactivated** — and whether their **Splose practitioner** and **Outlook** are connected.\n\nAccounts that need your attention sort to the top. Suspended and deactivated people are tucked behind **Show inactive**. Click any row to open that person."
         },
         {
           "type": "action",
@@ -1477,27 +1477,27 @@
         },
         {
           "type": "highlight",
-          "target": "#stg-user-list",
+          "target": "#people-root",
           "pad": 6,
           "rounded": "10px",
           "title": "Approve the new account",
-          "body": "Here’s the step people forget: even after verifying their email, a new account **waits for your approval**. If they try to sign in, they see a pending-approval screen — they’re not stuck, they’re waiting for you.\n\nBack here, a banner appears and their row shows **Pending approval** with an **Approve** button. Approve, and they can sign in straight away. Their first sign-in runs a short setup wizard — their details, connecting Outlook, and their work location."
+          "body": "Here’s the step people forget: even after verifying their email, a new account **waits for your approval**. If they try to sign in, they see a pending-approval screen — they’re not stuck, they’re waiting for you.\n\nBack here, a banner counts the accounts waiting and their row shows **Needs approval**. Click the row and press **Approve account**. They can sign in straight away; their first sign-in runs a short setup wizard — their details, connecting Outlook, and their work location."
         },
         {
           "type": "highlight",
-          "target": "#stg-pending-invites-wrap",
+          "target": "#people-root",
           "pad": 6,
           "rounded": "10px",
           "title": "Keeping track of invitations",
-          "body": "Invitations you’ve sent are listed under **Pending Invites** with the role and expiry date.\n\nFor an invitation that’s still open: **Resend** emails the same link again, **Copy link** puts it on your clipboard to share yourself, and **Revoke** kills the link for good — use it if an invitation went out by mistake. Note that **Resend won’t revive an expired link** — for those, send a fresh invitation instead."
+          "body": "Someone you’ve invited who hasn’t created their account yet appears in the same list with an **Invited** badge. Click them to see the expiry date.\n\nFor an invitation that’s still open: **Resend** emails the same link again, **Copy link** puts it on your clipboard to share yourself, and **Revoke** kills the link for good — use it if an invitation went out by mistake. Note that **Resend won’t revive an expired link** — for those, send a fresh invitation instead."
         },
         {
           "type": "highlight",
-          "target": "#stg-team-setup-wrap",
+          "target": "#people-root",
           "pad": 6,
           "rounded": "10px",
-          "title": "Team setup status",
-          "body": "This panel tracks each member’s setup at a glance: account, onboarding, and — for therapists — their profile and Splose link, plus whether their **Outlook** mailbox is connected (it shows which address, never any passwords) and whether their travel base is set.\n\nIf something’s missing, a fix-up button appears right here — for example **Create profile** for a therapist without a calendar identity yet."
+          "title": "Finishing someone’s setup",
+          "body": "Open a person and everything you do for them is in one panel: their **role**, approving or suspending the account, and — for anyone with a calendar — **which Splose practitioner they are**, chosen from a dropdown of names. A name already linked to someone else is greyed out, so two people can never share a calendar.\n\n**Outlook** shows whether they’ve connected their mailbox (which address, never any passwords) — only they can connect or disconnect it, from their own Settings."
         },
         {
           "type": "quiz",

@@ -1445,6 +1445,101 @@ router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), 
 });
 
 /**
+ * GET /api/admin/people
+ * Owner: ONE row per person for Settings → Users & Roles — every account in
+ * this organisation plus every invite that has not become an account yet.
+ * Carries what the Owner needs to finish setting someone up (role, status,
+ * therapist profile, Splose practitioner, Outlook mailbox, pending invite).
+ * Never tokens, never invite tokens. Org-scoped — unlike the older
+ * /api/admin/users and /api/admin/team-setup views this one only shows the
+ * caller's own organisation.
+ */
+router.get('/api/admin/people', requireAuth, requireRole('owner'), async (req, res) => {
+  try {
+    const orgId = req.user.organisation_id || null;
+    const [users, invites] = await Promise.all([
+      pool.query(`
+        SELECT u.id, u.email, u.name, u.display_name, u.role, u.role_title,
+               u.account_status, u.email_verified, u.is_active,
+               u.profile_completed, u.last_login_at, u.created_at,
+               u.activated_from_onboarding_at,
+               (u.access_token IS NOT NULL AND u.access_token <> '') AS outlook_connected,
+               u.outlook_connected_email,
+               tp.id AS therapist_profile_id,
+               tp.display_name AS therapist_display_name,
+               tp.splose_practitioner_id,
+               d.last_synced_at AS outlook_last_synced_at
+          FROM users u
+          LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+          LEFT JOIN outlook_delta_state d ON d.user_id = u.id
+         WHERE u.organisation_id IS NOT DISTINCT FROM $1
+         ORDER BY u.created_at`, [orgId]),
+      pool.query(`
+        SELECT id, email, role, display_name_hint, invited_at, expires_at, status
+          FROM user_invites
+         WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'pending'
+         ORDER BY invited_at DESC`, [orgId]),
+    ]);
+
+    const now = Date.now();
+    const inviteByEmail = new Map();
+    for (const i of invites.rows) {
+      const key = String(i.email || '').toLowerCase();
+      if (!inviteByEmail.has(key)) inviteByEmail.set(key, i);
+    }
+    const inviteShape = (i) => i ? ({
+      id: i.id, role: i.role, invitedAt: i.invited_at, expiresAt: i.expires_at,
+      expired: !!(i.expires_at && new Date(i.expires_at).getTime() < now),
+    }) : null;
+
+    const people = users.rows.map(u => {
+      const email = String(u.email || '').toLowerCase();
+      const inv = inviteByEmail.get(email);
+      if (inv) inviteByEmail.delete(email);
+      return {
+        kind: 'user',
+        id: u.id, email: u.email,
+        name: u.display_name || u.name || u.email.split('@')[0],
+        role: u.role, roleTitle: u.role_title || null,
+        accountStatus: u.account_status || 'active',
+        isActive: !!u.is_active, emailVerified: !!u.email_verified,
+        profileCompleted: !!u.profile_completed,
+        fromOnboarding: !!u.activated_from_onboarding_at || u.role === 'pre_employee',
+        lastLoginAt: u.last_login_at, createdAt: u.created_at,
+        therapistProfile: { exists: !!u.therapist_profile_id, id: u.therapist_profile_id || null, displayName: u.therapist_display_name || null },
+        splosePractitionerId: u.splose_practitioner_id ? String(u.splose_practitioner_id) : null,
+        outlook: {
+          connected: !!u.outlook_connected,
+          email: u.outlook_connected ? (u.outlook_connected_email || u.email) : null,
+          lastSyncedAt: u.outlook_last_synced_at || null,
+        },
+        invite: inviteShape(inv),
+        isMe: u.id === req.user.id,
+      };
+    });
+    for (const inv of inviteByEmail.values()) {
+      people.push({
+        kind: 'invite',
+        id: inv.id, email: inv.email,
+        name: inv.display_name_hint || inv.email.split('@')[0],
+        role: inv.role, roleTitle: null,
+        accountStatus: 'invited', isActive: false, emailVerified: false, profileCompleted: false,
+        fromOnboarding: false, lastLoginAt: null, createdAt: inv.invited_at,
+        therapistProfile: { exists: false, id: null, displayName: null },
+        splosePractitionerId: null,
+        outlook: { connected: false, email: null, lastSyncedAt: null },
+        invite: inviteShape(inv),
+        isMe: false,
+      });
+    }
+    res.json({ people });
+  } catch (err) {
+    console.error('GET /api/admin/people error:', err);
+    res.status(500).json({ error: 'Failed to load people' });
+  }
+});
+
+/**
  * GET /api/admin/team-setup
  * Owner/admin: per-member setup-completion view for onboarding a new
  * therapist (Stage 2), doubling as the Outlook connection debug view —
