@@ -62,7 +62,7 @@ describe('shared tool bar, Excel tools and the Word template', () => {
   test('cursor and detail tools are picked by plain words, without stealing the older rules', () => {
     const g = { document: { addEventListener() {}, querySelector() { return null; }, getElementById() { return null; } }, location: { search: '?surface=word' } };
     new Function('window', 'globalThis', 'URLSearchParams', read('assist-tools.js'))(g, g, URLSearchParams);
-    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout', 'margins', 'orientation', 'firstpage'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
+    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout', 'margins', 'orientation', 'firstpage', 'refs', 'recs', 'write', 'rephrase', 'strengthen', 'finding'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
     const m = g.OpalAssistTools._localMatch;
     expect(m('insert a page break here')).toEqual(['break']);
     expect(m('add a section break')).toEqual(['section']);
@@ -76,6 +76,12 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     expect(m('make it landscape')).toEqual(['orientation']);
     expect(m('different header on the first page')).toEqual(['firstpage']);
     expect(m('cover page footer')).toEqual(['firstpage']);
+    expect(m('fix the captions and cross references')).toEqual(['refs']);
+    expect(m('put the recommendations in the overview table')).toEqual(['recs']);
+    expect(m('rephrase this for the parents')).toEqual(['rephrase']);
+    expect(m('strengthen this recommendation')).toEqual(['strengthen']);
+    expect(m('write the key finding')).toEqual(['finding']);
+    expect(m('are any appendices missing?')).toEqual(['check']);
     // A question never runs a tool that changes the document by keyword alone.
     expect(m('make headings start on a new page')).toEqual(['pages']);
   });
@@ -88,6 +94,30 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     global.document = g.document; // the bar's status line looks the element up on the bare global
     try { await g.OpalAssistTools.run(['header'], 'header "Report"'); } finally { delete global.document; }
     expect(seen).toEqual(['header "Report"']);
+  });
+
+  test('the front row is the FCA workflow; page setup and cursor tools are reachable by words only', () => {
+    const src = read('assist-word-format.js');
+    const visible = [...src.matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+(?:\('[a-z]+'\))?\]/g)].map((m) => m[1]);
+    expect(visible).toEqual(['format', 'check', 'refs', 'recs', 'table', 'toc', 'write', 'rephrase', 'strengthen', 'finding']);
+    const hidden = [...src.matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+, true\]/g)].map((m) => m[1]);
+    expect(hidden).toEqual(expect.arrayContaining(['margins', 'orientation', 'firstpage', 'header', 'footer', 'break', 'section']));
+    // Writing shortcuts never call the model themselves: they fill the chat box and the person presses Send.
+    expect(src).toContain("box.value = WRITING[kind]; box.focus();");
+    expect(src).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|\/api\//);
+  });
+
+  test('the finish check knows the FCA master: unfilled prompts, guidance blocks, OPAL headings', () => {
+    const g = { document: { addEventListener() {} }, location: { search: '?surface=word' }, OpalAssistTools: { mount() {} } };
+    new Function('window', 'globalThis', 'URLSearchParams', read('assist-word-format.js'))(g, g, URLSearchParams);
+    const w = g.OpalAssistWordFormat;
+    expect(w._levelOf({ style: 'OPAL – Heading 2' })).toBe(2);
+    expect(w._levelOf({ styleBuiltIn: 'Heading1' })).toBe(1);
+    expect(w._levelOf({ style: 'OPAL – Body' })).toBe(0);
+    expect(w._UNFILLED.test('[Describe initiation, drive, interest]')).toBe(true);
+    expect(w._UNFILLED.test('[PARTICIPANT GOAL / MEASURABLE OUTCOME]')).toBe(true);
+    expect(w._UNFILLED.test('The participant [name withheld] attended.')).toBe(false);
+    expect(w._UNFILLED.test('Aiden reported fatigue after 20 minutes.')).toBe(false);
   });
 
   test('Word detail parsers: wording, style and table size', () => {
@@ -129,7 +159,7 @@ describe('shared tool bar, Excel tools and the Word template', () => {
   test('every tool the server can name exists in the pane, and the reverse', () => {
     const { ACTIONS } = require('../assist-routes');
     for (const [surface, file] of [['word', 'assist-word-format.js'], ['excel', 'assist-excel-format.js']]) {
-      const ids = [...read(file).matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+\]/g)].map((m) => m[1]).sort();
+      const ids = [...read(file).matchAll(/\['([a-z]+)', '[^']+', [A-Za-z]+(?:\('[a-z]+'\))?(?:, true)?\]/g)].map((m) => m[1]).sort();
       expect(ids).toEqual(Object.keys(ACTIONS[surface]).sort());
     }
   });

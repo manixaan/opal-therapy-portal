@@ -64,6 +64,11 @@
   var isEmpty = function (t) { return !String(t || '').split(NBSP).join('').replace(/\s/g, ''); };
   var hasBreak = function (t) { return String(t || '').indexOf(FF) >= 0; };
 
+  // Heading level of a paragraph: built-in Heading n or the FCA master's "OPAL – Heading n" (any dash, any spacing).
+  var levelOf = function (p) { var m = String(p.styleBuiltIn || '').match(/^Heading([1-9])$/) || String(p.style || '').match(/heading\s*([1-9])$/i); return m ? +m[1] : 0; };
+  var UNFILLED = /\[(?:[A-Z][^\]]{3,}|insert[^\]]*|describe[^\]]*|state[^\]]*|specify[^\]]*|summarise[^\]]*|explain[^\]]*)\]|\bXX+\b|\bTBC\b/;
+  var GUIDANCE = /DELETE OR REPLACE BEFORE ISSUE|clinical prompt/i;
+
   /** One table, to the standard. Shared by "Apply Opal format" and "Insert table". */
   function styleTable(t, headerRows) {
     t.font.name = STANDARD.font; t.font.size = STANDARD.table.size; t.font.color = STANDARD.colour.ink;
@@ -125,16 +130,17 @@
         });
       }
       // Paragraphs carry direct formatting that a style change does not reach: bring the typeface home.
-      var paras = ctx.document.body.paragraphs; paras.load('items/style,items/tableNestingLevel');
+      var paras = ctx.document.body.paragraphs; paras.load('items/style,items/styleBuiltIn,items/tableNestingLevel');
       var tables = ctx.document.body.tables; tables.load('items');
       return chain.then(function () { return ctx.sync(); }).then(function () {
-        paras.items.forEach(function (p) { p.font.name = STANDARD.font; });
+        var kept = 0;
+        paras.items.forEach(function (p) { p.font.name = STANDARD.font; if (levelOf(p)) { p.keepWithNext = true; kept++; } });
         tables.items.forEach(function (t) {
           styleTable(t, t.headerRowCount);
         });
         return ctx.sync();
-      }).then(function () { return 'Opal standard applied: ' + done + ' styles, ' + tables.items.length + ' tables, ' + paras.items.length + ' paragraphs set to ' + STANDARD.font + '.'; });
-    });
+      }).then(function () { return 'Opal standard applied: ' + done + ' styles, ' + tables.items.length + ' tables, ' + paras.items.length + ' paragraphs in ' + STANDARD.font + ', headings kept with their text.'; });
+    }).then(function (msg) { return tidySpacing().then(function (t) { return msg + ' ' + t; }); });
   }
 
   /** Runs of empty paragraphs become one; empty paragraphs at the very end go. Tables are left alone. */
@@ -189,13 +195,19 @@
   /** Read-only. What a careful reviewer would flag, found by rule. */
   function checkDocument() {
     return global.Word.run(function (ctx) {
-      var paras = ctx.document.body.paragraphs; paras.load('items/text,items/styleBuiltIn,items/style,items/font/name,items/tableNestingLevel');
+      var paras = ctx.document.body.paragraphs; paras.load('items/text,items/styleBuiltIn,items/style,items/font/name,items/tableNestingLevel,items/keepWithNext');
+      var tracking = null;
+      if (supports('1.4')) { ctx.document.load('changeTrackingMode'); tracking = ctx.document; }
       return ctx.sync().then(function () {
         var items = paras.items; var text = items.map(function (p) { return p.text; }).join('\n');
-        var level = function (p) { var m = String(p.styleBuiltIn || '').match(/^Heading([1-9])$/) || String(p.style || '').match(/heading\s*([1-9])$/i); return m ? +m[1] : 0; };
+        var level = levelOf;
         var found = []; var last = 0; var blanks = 0; var run = 0; var offFont = 0; var emptyHeads = 0; var headings = 0;
+        var unfilled = 0; var guidance = 0; var loose = 0;
         items.forEach(function (p) {
+          if (UNFILLED.test(p.text)) unfilled++;
+          if (GUIDANCE.test(p.text) || /clinical prompt/i.test(p.style || '')) guidance++;
           var l = level(p);
+          if (l && !p.keepWithNext) loose++;
           if (l) { headings++; if (isEmpty(p.text)) emptyHeads++; else { if (last && l > last + 1) found.push('Heading level jumps from ' + last + ' to ' + l + ' at "' + p.text.slice(0, 40) + '"'); last = l; } }
           if (isEmpty(p.text) && p.tableNestingLevel === 0) { run++; if (run === 2) blanks++; } else run = 0;
           if (p.font.name && p.font.name !== STANDARD.font && !isEmpty(p.text)) offFont++;
@@ -206,12 +218,18 @@
         items.forEach(function (p) { var m = level(p) && p.text.match(/^\s*Appendix\s+([A-Z]|\d{1,2})\b/); if (m) present['Appendix ' + m[1]] = true; });
         Object.keys(referred).forEach(function (a) { if (!present[a]) found.push(a + ' is mentioned but has no heading of its own'); });
         Object.keys(present).forEach(function (a) { if ((text.match(new RegExp('\\b' + a + '\\b', 'g')) || []).length < 2) found.push(a + ' exists but is never referred to in the report'); });
+        if (unfilled) found.push(unfilled + ' unfilled prompt' + (unfilled > 1 ? 's' : '') + ' still in square brackets');
+        if (guidance) found.push(guidance + ' "delete or replace before issue" guidance block' + (guidance > 1 ? 's' : '') + ' still in the report');
+        if (tracking && tracking.changeTrackingMode && tracking.changeTrackingMode !== 'Off') found.push('Track Changes is on — turn it off and accept all changes before issuing');
+        if (loose) found.push(loose + ' heading' + (loose > 1 ? 's' : '') + ' can be left alone at the foot of a page — use "Opal format"');
+        // Typed captions and references that Word cannot keep up to date.
+        var typedCaps = items.filter(function (p) { return /^\s*(Table|Figure)\s+\d+\s*[:.\u2014-]/.test(p.text); }).length;
+        if (typedCaps) found.push(typedCaps + ' caption' + (typedCaps > 1 ? 's' : '') + ' numbered by hand — use "Fix references" so they renumber themselves');
         if (!headings) found.push('No headings use a Heading style, so a contents page cannot be built');
         if (emptyHeads) found.push(emptyHeads + ' empty heading' + (emptyHeads > 1 ? 's' : '') + ' (they appear as blank lines in the contents page)');
         if (blanks) found.push(blanks + ' place' + (blanks > 1 ? 's' : '') + ' with two or more blank lines in a row — use "Tidy spacing"');
         if (offFont) found.push(offFont + ' paragraph' + (offFont > 1 ? 's' : '') + ' not in ' + STANDARD.font + ' — use "Apply Opal format"');
         var dbl = (text.match(/[^\s.]  +\S/g) || []).length; if (dbl) found.push(dbl + ' double spaces');
-        var place = (text.match(/\[(?:insert|client|name|date|tbc|todo)[^\]]*\]|XX+|TBC\b/gi) || []).length; if (place) found.push(place + ' unfilled placeholder' + (place > 1 ? 's' : '') + ' ([insert…], XX, TBC)');
         return found;
       });
     }).then(function (found) { global.OpalAssistTools.report(found); return found.length ? 'Check finished: ' + found.length + ' to fix (listed below).' : 'Check finished: the document is clean.'; });
@@ -370,16 +388,126 @@
     });
   }
 
+  /**
+   * Typed "Table 1:" captions become SEQ fields; "Appendix B" mentions become live cross-references to a
+   * bookmarked appendix heading; then every field is refreshed. Nothing is reworded.
+   */
+  function fixReferences() {
+    if (!supports('1.5')) return Promise.resolve('This version of Word cannot insert fields from an add-in. Use References > Insert Caption / Cross-reference.');
+    return global.Word.run(function (ctx) {
+      var paras = ctx.document.body.paragraphs; paras.load('items/text,items/style,items/styleBuiltIn,items/tableNestingLevel');
+      var fields = ctx.document.body.fields; fields.load('items/type,items/code');
+      return ctx.sync().then(function () {
+        var caps = 0; var refs = 0; var marks = 0;
+        // 1. Captions: the number in "Table 3:" / "Figure 2 —" becomes { SEQ Table \* ARABIC }.
+        var capParas = paras.items.filter(function (p) { return p.tableNestingLevel === 0 && /^\s*(Table|Figure)\s+\d+\s*[:.—-]/.test(p.text); });
+        var capRanges = capParas.map(function (p) { var m = p.text.match(/^\s*(Table|Figure)\s+(\d+)/); var r = p.search(m[1] + ' ' + m[2], { matchCase: true }); r.load('items'); return [r, m[1]]; });
+        return ctx.sync().then(function () {
+          capRanges.forEach(function (x) { if (x[0].items.length) { x[0].items[0].insertText(x[1] + ' ', 'Replace').getRange('End').insertField('After', 'Seq', x[1] + ' \\* ARABIC', false); caps++; } });
+          return ctx.sync();
+        }).then(function () {
+          // 2. Appendix headings get a bookmark; every other "Appendix X" mention becomes { REF bookmark \h }.
+          var heads = {};
+          paras.items.forEach(function (p) { var m = levelOf(p) && p.text.match(/^\s*Appendix\s+([A-Z]|\d{1,2})\b/); if (m && !heads[m[1]]) heads[m[1]] = p; });
+          var names = Object.keys(heads); if (!names.length) return;
+          names.forEach(function (k) { heads[k].getRange('Whole').insertBookmark('OpalAppendix' + k); marks++; });
+          var searches = names.map(function (k) { var r = ctx.document.body.search('Appendix ' + k, { matchCase: true, matchWholeWord: true }); r.load('items'); return [k, r]; });
+          return ctx.sync().then(function () {
+            var pending = [];
+            searches.forEach(function (x) { x[1].items.forEach(function (r) { var pp = r.paragraphs.getFirst(); pp.load('text,style,styleBuiltIn'); var ff = r.fields; ff.load('items'); pending.push([x[0], r, pp, ff]); }); });
+            return ctx.sync().then(function () {
+              pending.forEach(function (x) {
+                if (levelOf(x[2]) || x[3].items.length) return; // the heading itself, or already a field
+                x[1].insertField('Replace', 'Ref', 'OpalAppendix' + x[0] + ' \\h', false); refs++;
+              });
+              return ctx.sync();
+            });
+          });
+        }).then(function () {
+          var all = ctx.document.body.fields; all.load('items'); return ctx.sync().then(function () { all.items.forEach(function (f) { f.updateResult(); }); return ctx.sync(); });
+        }).then(function () {
+          return (caps ? caps + ' caption' + (caps > 1 ? 's' : '') + ' now numbered by Word. ' : '') + (refs ? refs + ' appendix mention' + (refs > 1 ? 's' : '') + ' now live cross-references. ' : '') + (caps || refs ? 'Contents and fields refreshed.' : 'No typed captions or appendix mentions found; contents and fields refreshed.');
+        });
+      });
+    });
+  }
+
+  /**
+   * The FCA's "RECOMMENDATION — …" paragraphs each sit under a support heading. The Recommendation overview
+   * table gets one row per recommendation, the support column filled from that heading and the rest left for
+   * the therapist. Rows the table already has are reused; more are added as needed.
+   */
+  function recommendationsToTable() {
+    return global.Word.run(function (ctx) {
+      var paras = ctx.document.body.paragraphs; paras.load('items/text,items/style,items/styleBuiltIn,items/tableNestingLevel');
+      var tables = ctx.document.body.tables; tables.load('items/rowCount,items/values');
+      return ctx.sync().then(function () {
+        var recs = []; var heading = '';
+        paras.items.forEach(function (p) {
+          if (levelOf(p) && p.tableNestingLevel === 0) heading = p.text.trim();
+          if (/^\s*RECOMMENDATION\s*[—:-]/i.test(p.text) && !UNFILLED.test(p.text)) recs.push({ support: heading, text: p.text.replace(/^\s*RECOMMENDATION\s*[—:-]\s*/i, '').trim() });
+        });
+        if (!recs.length) return 'No written recommendations found. Each one starts "RECOMMENDATION —" in the report, and ones still in square brackets are skipped.';
+        var table = null;
+        tables.items.forEach(function (t) { if (!table && t.values.length && /support/i.test(String(t.values[0][0])) && /goal|outcome|evidence|delivery/i.test(t.values[0].join(' '))) table = t; });
+        if (!table) return 'The Recommendation overview table was not found (its first heading cell should read "Support").';
+        var need = recs.length - (table.rowCount - 1);
+        if (need > 0) table.addRows('End', need);
+        recs.forEach(function (r, i) { var cell = table.getCell(i + 1, 0); cell.body.clear(); cell.body.insertParagraph(r.support || r.text.slice(0, 60), 'Start'); });
+        return ctx.sync().then(function () { return recs.length + ' recommendation' + (recs.length > 1 ? 's' : '') + ' listed in the overview table by support type. Fill delivery, evidence, goal and review for each row.'; });
+      });
+    });
+  }
+
+  /**
+   * Writing shortcuts: attach the selection (or, with nothing selected, the paragraph at the cursor and its
+   * heading) as selected content and put a fixed instruction in the chat box. The person still presses Send
+   * and still sees the check-before-send card.
+   */
+  var WRITING = {
+    write: 'Write this section of the report from my notes above. Keep to what the notes support; where the section asks for report, observation and interpretation, label which is which. Australian English, third person, past tense for what happened, present tense for current function.',
+    rephrase: 'Rephrase the selected text: plain English a parent or participant can follow, shorter sentences, person-centred language, same meaning, same facts. Give only the rewrite.',
+    strengthen: 'Strengthen this recommendation so it states the functional impact, the participant goal it serves, the support and its frequency or amount, and the expected outcome, in NDIS "reasonable and necessary" terms. Do not add facts I have not given. Give only the rewrite.',
+    finding: 'Write the KEY FINDING for this section: one paragraph that states the overall pattern of functional capacity described above and its most material support implication. Give only the paragraph.',
+  };
+  function writingTool(kind) {
+    return function () {
+      var office = global.OpalAssistOffice; if (!office || !global.OpalAssist) return Promise.resolve('The chat is not ready yet.');
+      return global.Word.run(function (ctx) {
+        var sel = ctx.document.getSelection(); sel.load('text');
+        return ctx.sync().then(function () {
+          if (sel.text && sel.text.trim()) return sel.text;
+          // Nothing selected: the paragraph at the cursor, with the heading it sits under.
+          var p = sel.paragraphs.getFirst(); p.load('text');
+          var before = p.getRange('Start').expandTo(ctx.document.body.getRange('Start')).paragraphs; before.load('items/text,items/style,items/styleBuiltIn');
+          return ctx.sync().then(function () {
+            var h = ''; for (var i = before.items.length - 1; i >= 0; i--) if (levelOf(before.items[i])) { h = before.items[i].text.trim(); break; }
+            return (h ? h + '\n\n' : '') + p.text;
+          });
+        });
+      }).then(function (text) {
+        if (!String(text || '').trim()) return 'Put the cursor in the section, or select the text, then press the button.';
+        global.OpalAssist.setSelection(text);
+        var box = document.getElementById('oa-input'); if (box) { box.value = WRITING[kind]; box.focus(); }
+        return 'Ready in the chat below: check what will be sent, then press Send.';
+      });
+    };
+  }
+
   global.OpalAssistWordFormat = { STANDARD: STANDARD, applyStandard: applyStandard, tidySpacing: tidySpacing, headingsOnNewPage: headingsOnNewPage, updateContents: updateContents, checkDocument: checkDocument,
-    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary, setMargins: setMargins, setOrientation: setOrientation, firstPageHeader: firstPageHeader,
+    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary, setMargins: setMargins, setOrientation: setOrientation, firstPageHeader: firstPageHeader, fixReferences: fixReferences, recommendationsToTable: recommendationsToTable, _levelOf: levelOf, _UNFILLED: UNFILLED,
     _wordingFor: wordingFor, _styleFor: styleFor, _tableSizeFor: tableSizeFor };
+  // Front row: what an FCA or a letter needs most days. Everything else stays reachable through "say it".
   global.OpalAssistTools.mount('word', 'Document tools', 'Runs inside Word. Nothing is sent. Undo reverses it.', [
-    ['format', 'Apply Opal format', applyStandard], ['tidy', 'Tidy spacing', tidySpacing], ['pages', 'Headings on new page', headingsOnNewPage],
-    ['toc', 'Update contents', updateContents], ['check', 'Check document', checkDocument],
-    ['break', 'Page break here', pageBreakHere], ['section', 'Section break here', sectionBreakHere],
-    ['header', 'Set header', setHeader], ['footer', 'Set footer', setFooter],
-    ['style', 'Style selection', styleSelection], ['table', 'Insert table', insertOpalTable],
-    ['layout', 'Attach layout to chat', layoutSummary],
-    ['margins', 'Set margins', setMargins], ['orientation', 'Landscape / portrait', setOrientation], ['firstpage', 'First-page header', firstPageHeader],
+    ['format', 'Opal format', applyStandard], ['check', 'Finish check', checkDocument],
+    ['refs', 'Fix references', fixReferences], ['recs', 'Recommendations to table', recommendationsToTable],
+    ['table', 'Insert table', insertOpalTable], ['toc', 'Update contents', updateContents],
+    ['write', 'Write this section', writingTool('write')], ['rephrase', 'Rephrase', writingTool('rephrase')],
+    ['strengthen', 'Strengthen recommendation', writingTool('strengthen')], ['finding', 'Key finding', writingTool('finding')],
+    ['tidy', 'Tidy spacing', tidySpacing, true], ['pages', 'Headings on new page', headingsOnNewPage, true],
+    ['break', 'Page break here', pageBreakHere, true], ['section', 'Section break here', sectionBreakHere, true],
+    ['header', 'Set header', setHeader, true], ['footer', 'Set footer', setFooter, true],
+    ['style', 'Style selection', styleSelection, true], ['layout', 'Attach layout to chat', layoutSummary, true],
+    ['margins', 'Set margins', setMargins, true], ['orientation', 'Landscape / portrait', setOrientation, true], ['firstpage', 'First-page header', firstPageHeader, true],
   ]);
 })(typeof window !== 'undefined' ? window : globalThis);

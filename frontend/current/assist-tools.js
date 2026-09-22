@@ -21,8 +21,14 @@
       ['format', /(opal (format|standard|style|styling|template)|format(ting)? (this|the|it|to|accord)|house style|fix (the )?(fonts?|styles?|colou?rs?)|make it look|brand)/i],
       ['tidy', /(blank (page|line)s?|empty (page|line|paragraph)s?|extra (space|spacing|line)s?|spacing|tidy|clean ?up|gaps?)/i],
       ['pages', /(heading|section|chapter)s? .*(new|own|separate|fresh) page|new page .*(heading|section)|page breaks? .*(heading|chapter)/i],
-      ['toc', /^(?!.*\bfooter\b).*(contents?( page)?|table of contents|toc|page numbers?|cross[- ]?ref)/i],
-      ['check', /(check|review|proof|audit|anything (wrong|missing)|missing|appendi(x|ces)|placeholder|problems?|issues?|errors?|typos?)/i],
+      ['toc', /^(?!.*(\bfooter\b|caption)).*(contents?( page)?|table of contents|toc|page numbers?)/i],
+      ['refs', /(fix|update|make|convert|real|proper|live) .*(caption|cross[- ]?ref|reference|figure number|table number|appendix (link|ref))|caption|cross[- ]?ref/i],
+      ['recs', /recommendations? .*(table|overview)|(table|overview) .*recommendations?/i],
+      ['write', /(write|draft|fill( in)?|complete) .*(section|this|paragraph|domain)/i],
+      ['rephrase', /(rephrase|reword|rewrite|simplify|plain english|parent[- ]friendly|shorter|clearer)/i],
+      ['strengthen', /(strengthen|improve|justify|reasonable and necessary) .*recommendation|recommendation .*(stronger|justif)/i],
+      ['finding', /key finding/i],
+      ['check', /^(?!.*(caption|cross[- ]?ref)).*(check|review|proof|audit|anything (wrong|missing)|missing|appendi(x|ces)|placeholder|problems?|issues?|errors?|typos?)/i],
       // Tools that act at the cursor or take a detail from the typed words themselves.
       ['section', /section break|new section/i],
       ['break', /^(?!.*\b(heading|chapter|section)s?\b).*(page break|(insert|add|start|put in) (a )?(new|blank) page)/i],
@@ -108,6 +114,7 @@
       bar = el('div', 'oa-tools-bar'); bar.id = 'oa-tools';
       list.forEach(function (t) {
         tools[t[0]] = { label: t[1], fn: t[2] };
+        if (t[3]) return; // reachable by words, not a button
         var b = el('button', 'oa-btn sm', t[1]); b.type = 'button'; b.id = 'oa-tool-' + t[0];
         b.addEventListener('click', function () { var w = document.getElementById('oa-tools-words'); run([t[0]], w ? w.value : ''); }); bar.appendChild(b);
       });

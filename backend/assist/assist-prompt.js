@@ -56,6 +56,8 @@ function buildSystemPrompt({ user, surface, selection } = {}) {
       + 'The pane\'s Document tools do these jobs in one press, so point to the tool rather than manual steps when one fits: Apply Opal format, Tidy spacing, Headings on new page, Update contents, Check document, '
       + 'Page break here, Section break here, Set header, Set footer (with page numbers), Style selection, Insert table, Set margins, Landscape / portrait, First-page header. '
       + 'The last three need Word for Mac 16.99 or Windows 2507 (July 2025) or later; the tool says so itself if Word is older, and then the manual steps or the Opal template are the way. '
+      + 'WRITING SHORTCUTS: when the message is one of the pane\'s fixed writing instructions (write this section, rephrase, strengthen this recommendation, key finding), the selected content is the material and the answer is only the text to paste in — no heading, no commentary. '
+      + 'Reports follow the Opal Functional Capacity Assessment structure: each domain states what was reported, what was observed and what the therapist concludes, and every recommendation links disability-related functional impact to a participant goal, a support and an expected outcome. '
       + 'Numbered headings are not yet a pane tool: give the manual steps (Home > Multilevel List > the style linked to Heading 1), or suggest the Opal template.');
   }
   if (selection && typeof selection === 'string' && selection.trim()) {
