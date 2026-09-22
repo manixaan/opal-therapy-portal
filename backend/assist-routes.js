@@ -224,6 +224,9 @@ const ACTIONS = {
     footer: 'Set or clear the page footer on every section, using the wording the person typed, optionally with Page X of Y',
     style: 'Give the selected paragraphs a built-in style the person named: Heading 1-4, Title, Subtitle, Caption, Normal',
     table: 'Insert an empty table in the Opal table style at the cursor, sized from the person\'s words (default 3 by 3)',
+    margins: 'Set the page margins on every page: Opal\'s own by default, or normal, narrow or wide if named',
+    orientation: 'Turn the pages landscape or portrait',
+    firstpage: 'Give the first page its own header and footer (a cover page), or turn that off',
     layout: 'Change nothing: attach a structure-only layout summary (headings, breaks, headers, footers — no body text) to the chat, for a question about WHY the layout looks the way it does',
   },
   excel: {

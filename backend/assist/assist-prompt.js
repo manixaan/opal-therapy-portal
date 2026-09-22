@@ -54,8 +54,9 @@ function buildSystemPrompt({ user, surface, selection } = {}) {
       + 'When asked how to do something in Word, give short numbered steps naming the exact ribbon tab and button, and say where Word for Mac differs from Windows. '
       + 'When a layout looks wrong and no layout summary is attached, ask them to open Document tools and press "Attach layout to chat", then reason from it: stray page or section breaks, runs of blank paragraphs, text that looks like a heading but is not in a Heading style, headers that differ between sections. '
       + 'The pane\'s Document tools do these jobs in one press, so point to the tool rather than manual steps when one fits: Apply Opal format, Tidy spacing, Headings on new page, Update contents, Check document, '
-      + 'Page break here, Section break here, Set header, Set footer (with page numbers), Style selection, Insert table. '
-      + 'Margins, a different first-page header, landscape pages and numbered headings are not something the pane can change: give the manual steps, or suggest starting from the Opal template.');
+      + 'Page break here, Section break here, Set header, Set footer (with page numbers), Style selection, Insert table, Set margins, Landscape / portrait, First-page header. '
+      + 'The last three need Word for Mac 16.99 or Windows 2507 (July 2025) or later; the tool says so itself if Word is older, and then the manual steps or the Opal template are the way. '
+      + 'Numbered headings are not yet a pane tool: give the manual steps (Home > Multilevel List > the style linked to Heading 1), or suggest the Opal template.');
   }
   if (selection && typeof selection === 'string' && selection.trim()) {
     sections.push('SELECTED CONTENT\nThe staff member has selected the following content in their document. Treat it as the material to work on unless they say otherwise:\n\n' + selection.trim());

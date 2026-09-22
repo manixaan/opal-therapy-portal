@@ -26,11 +26,14 @@
       // Tools that act at the cursor or take a detail from the typed words themselves.
       ['section', /section break|new section/i],
       ['break', /^(?!.*\b(heading|chapter|section)s?\b).*(page break|(insert|add|start|put in) (a )?(new|blank) page)/i],
-      ['header', /\bheader\b/i],
-      ['footer', /\bfooter\b/i],
+      ['header', /^(?!.*(first|cover|title) page).*\bheader\b/i],
+      ['footer', /^(?!.*(first|cover|title) page).*\bfooter\b/i],
       ['style', /(make|turn|set|change|style) .*\b(heading ?[1-4]|main heading|sub-?heading|title|subtitle|caption|normal|body text)\b/i],
       ['table', /(insert|add|create|put in|new) .*\btable\b(?! of contents)|\d+\s*(x|by)\s*\d+ table/i],
       ['layout', /(attach|send|share|use|show|read) .*(layout|structure|outline)|layout summary/i],
+      ['margins', /margins?/i],
+      ['orientation', /landscape|portrait|orientation|sideways/i],
+      ['firstpage', /(first|cover|title) page.*(header|footer)|(header|footer).*(first|cover|title) page|different first page/i],
     ],
     excel: [
       ['table', /(opal (format|table|style)|format (this|the|it|as)|table format|make it look|header row|banded|brand)/i],

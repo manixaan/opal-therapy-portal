@@ -62,7 +62,7 @@ describe('shared tool bar, Excel tools and the Word template', () => {
   test('cursor and detail tools are picked by plain words, without stealing the older rules', () => {
     const g = { document: { addEventListener() {}, querySelector() { return null; }, getElementById() { return null; } }, location: { search: '?surface=word' } };
     new Function('window', 'globalThis', 'URLSearchParams', read('assist-tools.js'))(g, g, URLSearchParams);
-    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
+    ['format', 'tidy', 'pages', 'toc', 'check', 'break', 'section', 'header', 'footer', 'style', 'table', 'layout', 'margins', 'orientation', 'firstpage'].forEach((id) => g.OpalAssistTools._register(id, id, () => {}));
     const m = g.OpalAssistTools._localMatch;
     expect(m('insert a page break here')).toEqual(['break']);
     expect(m('add a section break')).toEqual(['section']);
@@ -72,6 +72,10 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     expect(m('insert a 4 x 3 table')).toEqual(['table']);
     expect(m('update the table of contents')).toEqual(['toc']);
     expect(m('attach the layout')).toEqual(['layout']);
+    expect(m('set narrow margins')).toEqual(['margins']);
+    expect(m('make it landscape')).toEqual(['orientation']);
+    expect(m('different header on the first page')).toEqual(['firstpage']);
+    expect(m('cover page footer')).toEqual(['firstpage']);
     // A question never runs a tool that changes the document by keyword alone.
     expect(m('make headings start on a new page')).toEqual(['pages']);
   });
@@ -115,6 +119,10 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     const word = buildSystemPrompt({ user: { name: 'Sam T' }, surface: 'word' });
     expect(word).toContain('You cannot see or operate Word');
     expect(word).toContain('Attach layout to chat');
+    expect(word).toContain('Set margins');
+    expect(word).not.toContain('are not something the pane can change');
+    // Page setup is gated in the pane on the desktop-only API set, never assumed.
+    expect(read('assist-word-format.js')).toMatch(/if \(!supportsDesktop\('1\.3'\)\) return Promise\.resolve\(OLD_WORD\);[\s\S]*pageSetup/);
     expect(buildSystemPrompt({ user: { name: 'Sam T' }, surface: 'web' })).not.toContain('HELPING WITH WORD');
   });
 

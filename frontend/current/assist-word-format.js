@@ -55,6 +55,11 @@
   };
 
   var supports = function (v) { try { return global.Office.context.requirements.isSetSupported('WordApi', v); } catch (e) { return false; } };
+  // Page setup lives in the desktop-only sets: Word for Mac 16.99.2+ / Windows 2507+ (WordApiDesktop 1.3).
+  var supportsDesktop = function (v) { try { return global.Office.context.requirements.isSetSupported('WordApiDesktop', v); } catch (e) { return false; } };
+  var OLD_WORD = 'This version of Word cannot change page setup from an add-in (it needs Word for Mac 16.99 or Windows 2507, July 2025, or later). Use Layout > Margins / Orientation, or start from the Opal template.';
+  // The Opal template's margins, in points (top 1701 / right 720 / bottom 1134 / left 720 twips).
+  var MARGINS = { opal: [85, 36, 57, 36], normal: [72, 72, 72, 72], narrow: [36, 36, 36, 36], wide: [72, 144, 72, 144] };
   var FF = String.fromCharCode(12); var NBSP = String.fromCharCode(160);
   var isEmpty = function (t) { return !String(t || '').split(NBSP).join('').replace(/\s/g, ''); };
   var hasBreak = function (t) { return String(t || '').indexOf(FF) >= 0; };
@@ -330,8 +335,43 @@
     });
   }
 
+  /** Margins for the whole document. Opal's own unless the person named normal, narrow or wide. */
+  function setMargins(typed) {
+    if (!supportsDesktop('1.3')) return Promise.resolve(OLD_WORD);
+    var m = String(typed || '').match(/\b(normal|narrow|wide)\b/i); var name = m ? m[1].toLowerCase() : 'opal'; var v = MARGINS[name];
+    return global.Word.run(function (ctx) {
+      var ps = ctx.document.pageSetup;
+      ps.topMargin = v[0]; ps.rightMargin = v[1]; ps.bottomMargin = v[2]; ps.leftMargin = v[3];
+      return ctx.sync().then(function () { return (name === 'opal' ? 'Opal' : name.charAt(0).toUpperCase() + name.slice(1)) + ' margins set on every page.'; });
+    });
+  }
+
+  /** Landscape or portrait, from the typed word; with neither, the page turns the other way. */
+  function setOrientation(typed) {
+    if (!supportsDesktop('1.3')) return Promise.resolve(OLD_WORD);
+    var t = String(typed || ''); var want = /landscape|sideways|wide page/i.test(t) ? 'Landscape' : /portrait|upright/i.test(t) ? 'Portrait' : null;
+    return global.Word.run(function (ctx) {
+      var ps = ctx.document.pageSetup; ps.load('orientation');
+      return ctx.sync().then(function () {
+        var next = want || (ps.orientation === 'Landscape' ? 'Portrait' : 'Landscape');
+        ps.orientation = next;
+        return ctx.sync().then(function () { return 'Pages are now ' + next.toLowerCase() + '. For one landscape page only, put a section break before and after it first.'; });
+      });
+    });
+  }
+
+  /** A first page with its own header and footer (a cover page), or the same on every page. */
+  function firstPageHeader(typed) {
+    if (!supportsDesktop('1.3')) return Promise.resolve(OLD_WORD);
+    var off = /\b(same|remove|off|no different|turn off|undo)\b/i.test(String(typed || ''));
+    return global.Word.run(function (ctx) {
+      ctx.document.pageSetup.differentFirstPageHeaderFooter = !off;
+      return ctx.sync().then(function () { return off ? 'The first page now shares the document header and footer.' : 'The first page now has its own header and footer, blank until you fill it. Set header / Set footer still write the ordinary ones.'; });
+    });
+  }
+
   global.OpalAssistWordFormat = { STANDARD: STANDARD, applyStandard: applyStandard, tidySpacing: tidySpacing, headingsOnNewPage: headingsOnNewPage, updateContents: updateContents, checkDocument: checkDocument,
-    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary,
+    pageBreakHere: pageBreakHere, sectionBreakHere: sectionBreakHere, setHeader: setHeader, setFooter: setFooter, styleSelection: styleSelection, insertOpalTable: insertOpalTable, layoutSummary: layoutSummary, setMargins: setMargins, setOrientation: setOrientation, firstPageHeader: firstPageHeader,
     _wordingFor: wordingFor, _styleFor: styleFor, _tableSizeFor: tableSizeFor };
   global.OpalAssistTools.mount('word', 'Document tools', 'Runs inside Word. Nothing is sent. Undo reverses it.', [
     ['format', 'Apply Opal format', applyStandard], ['tidy', 'Tidy spacing', tidySpacing], ['pages', 'Headings on new page', headingsOnNewPage],
@@ -340,5 +380,6 @@
     ['header', 'Set header', setHeader], ['footer', 'Set footer', setFooter],
     ['style', 'Style selection', styleSelection], ['table', 'Insert table', insertOpalTable],
     ['layout', 'Attach layout to chat', layoutSummary],
+    ['margins', 'Set margins', setMargins], ['orientation', 'Landscape / portrait', setOrientation], ['firstpage', 'First-page header', firstPageHeader],
   ]);
 })(typeof window !== 'undefined' ? window : globalThis);
