@@ -2,94 +2,40 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **needs-refinement** (unchanged — the dynamic-contract gap closed in the prior window, see below)
-- Addressed in this change window (2026-09-22 → 2026-09-23): no — zero commits landed in this window
-  at all. The 9-commit burst described below (dynamic Contract of Employment, cancellation-flow UI,
-  start-date fix) landed in the *prior* window (2026-09-21 → 2026-09-22) and is unchanged tonight.
+- Evidence label: **needs-refinement**
+- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
 - Created (any located code): yes — by far the largest subsystem in the codebase
 
 ## Located files
 
-Unchanged since the prior window (re-confirmed via `git diff` — zero commits touched
-`backend`/`frontend/current` in this window). One important addition from the prior window:
-`backend/onboarding-contract-docx.js` (new — composes the Contract of Employment from Stage 1 offer
-terms) and `backend/scripts/build-contract-template.js` (rebuilds the Stage 2 master docx with
-`OPAL_COE_*` Word content controls). `backend/onboarding-document-reader.js` gained particulars/
-acceptance-table extraction for the composed contract.
+- Stage 1 (Letter of Offer / Outlook draft): `backend/onboarding-journey-routes.js`, `onboarding-journey.js`, `onboarding-journey-db.js`, `onboarding-offer-letter.js`/`-offer-docx.js`/`-offer-pdf.js`/`-offer-template.js`/`-offer-email.js`, `onboarding-email-markup.js`. Frontend: `frontend/current/onboarding-journey.js`/`.css`.
+- Stage 2 (finalise + store documents): `backend/onboarding-pack-routes.js`/`-pack.js`/`-pack-db.js`/`-pack-email.js`, `onboarding-returns-routes.js`/`-returns-db.js`/`-returns-zip.js`, `onboarding-document-check.js`/`-document-reader.js`/`-extraction.js`/`-form-reader.js`/`-ocr.js`/`-ocr-worker.js`, `onboarding-contract-docx.js` (dynamic Contract of Employment). Storage is `backend/storage/index.js` — three backends only: `db` (Postgres, default), `local`, `blob` (Azure). **No SharePoint backend exists anywhere in code** — the only "sharepoint" hit in the whole backend/frontend is a CSP allowlist entry for the unrelated Opal Assist Office add-in.
+- Stage 3 (internal induction): `backend/onboarding-induction.js`, `onboarding-learning-bridge.js`, `onboarding-workflow-routes.js` (`send_induction_in_outlook` step). Frontend: `frontend/current/induction.js`, `induction-modules.js`.
+- Shared/management: `backend/onboarding-routes.js`, `onboarding-assignment-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-library-routes.js`, `onboarding-employee-routes.js` (self-scoped), `onboarding-workflow-db.js`, `onboarding-db.js`. Frontend shell: `frontend/current/onboarding.js`, `onboarding.html`, `onboarding-invite.html`.
+- Note: `backend/onboarding-policies/` (named in CLAUDE.md's own repo map) does not exist on disk — stale entry in the repo map.
 
 ## Guard check
 
-No new guard defects. `personaliseItemFile()` (added in `7e3f921`) composes the contract inside the
-existing, already-guarded preview/download/ZIP routes (`requirePermission('onboarding.view')`); it
-does not add a new route.
+All `onboarding-*-routes.js` apply `requireAuth` at `router.use()` plus per-route `requirePermission('onboarding.*')` (view/assign/review/payroll/manage_compliance/manage_packages/manage_documents/audit). `onboarding-employee-routes.js` is `requireAuth`-only but self-scoped by design (every route resolves strictly from `req.user.id`, no user-id parameter anywhere). No unguarded onboarding endpoint found.
 
-## Tests
+## Tests (re-run fresh tonight)
 
-Re-run fresh tonight (not reused from last night's result):
+- Unit: `npx jest tests/onboarding-*.test.js` — 24 files, 23 passed / 1 failed (597/598 individual tests). The one failure (`onboarding-document-reader.test.js`, "the OCR language data is shipped with the portal") is `@tesseract.js-data/eng` being declared in `backend/package.json` but missing from `backend/node_modules` in this sandbox — a missing-dependency environment artifact, not a code defect (this audit cannot run `npm install`). Confirmed identical to every prior audit night since 2026-09-20.
+- Integration: `onboarding-defaults.itest.js`, `onboarding-journey.itest.js`, `onboarding-pack.itest.js`, `onboarding-payroll-xero.itest.js`, `onboarding-workflow.itest.js`, `onboarding.itest.js` — run tonight, 6 suites / 168 tests, all pass. (`onboarding-induction.itest.js` and `onboarding-returns.itest.js` were run in a separate batch alongside other features — both clean, see Inductions/Employee Personal Page STATUS.)
+- Browser/E2E: `docs/qa/BROWSER_QA_RESULTS.md` row C proves the **employee self-service** flow (login → `/onboarding` → review → profile → setup card) live — 7/7. It does not cover the admin Stage 1/2/3 management console (journey board, Outlook-draft creation, document-return verification). No e2e spec covers onboarding management specifically.
 
-- Unit: `npx jest tests/onboarding-*.test.js` → 23 suites passed, 1 failed → **597 passed, 1 failed,
-  598 total** — identical to last night. The one failure
-  (`onboarding-document-reader.test.js`, "the OCR language data is shipped with the portal, not
-  fetched when a document arrives") is the same confirmed **environment artifact, not a code defect**:
-  `@tesseract.js-data/eng` is declared in `backend/package.json:28` but genuinely absent from
-  `backend/node_modules` in this sandbox (`ls backend/node_modules/@tesseract.js-data` → No such file
-  or directory, re-checked tonight). Per this audit's own hard limits, `npm install`/`npm ci` cannot be
-  run to fix this; a properly provisioned environment (CI, staging) would install it.
-- Integration: all 8 files matching `tests/integration/onboarding*.itest.js` (session-unique
-  `DB_NAME`, no contention issues tonight — this session ran alone) → **182/182, 8/8 suites**, all
-  passing. Last night's figure (138/138) named 7 suites; this run additionally exercised
-  `onboarding-induction.itest.js` — no failures anywhere in the set, no regression either way.
-- Browser/E2E: unchanged — no e2e spec covers onboarding; `BROWSER_QA_RESULTS.md` row C predates
-  ~70 commits of subsequent work.
+## Open tasks from the tracker (all `status: todo`)
 
-## Open tasks from the tracker (all `status: todo`, unchanged by the tracker itself tonight)
-
-- **Stage 1** — "Send button emails it" is still an Outlook-draft-then-manual-send, not a direct
-  send — re-confirmed unchanged tonight (`graphMail.createDraft(...)` is still the only path, in
-  `onboarding-journey-routes.js:1004`, `onboarding-pack-routes.js:768`,
-  `onboarding-workflow-routes.js:631`). Same scope-mismatch worth a team decision as before.
-- **Stage 2, dynamic contract — closed in the prior window, unchanged tonight.** `7e3f921` (rebuilds the Stage 2 master docx with
-  `OPAL_COE_*` Word content controls via `backend/scripts/build-contract-template.js`, and adds
-  `backend/onboarding-contract-docx.js` which composes it per person from the *same* Stage 1 offer
-  terms the Letter of Offer uses — `offerDocx.buildScalars`: remuneration, position, dates, super, pay
-  cycle, probation, plus a new `cpdAllowance` term) and `28ab180` (teaches
-  `onboarding-document-reader.js` to read the composed contract back — particulars table,
-  acceptance block, commencement date, employment type, location, salary, hours, signature; reports
-  unsigned returns) together implement exactly what the tracker's own Stage 2 decision prompt (`c7`)
-  asked for. A contract the practice uploaded *without* the content controls still passes through
-  untouched (backward compatible). **The tracker's own checklist items `c7` ("Decide: agree which
-  parts...") and `c5` ("Make the employee contract dynamic...") are still shown as unchecked in the
-  tracker** — the tracker still has not caught up to those commits (re-confirmed via tonight's fresh
-  tracker fetch); worth ticking once someone confirms the built behaviour matches the intended
-  fixed/dynamic split.
-- **Stage 2, SharePoint storage — still not implemented, unchanged.** Re-checked tonight:
-  `grep -rn sharepoint backend/*.js -i` → one hit only, `backend/server.js:408`, still just a CSP
-  `frame-ancestors` allowlist entry for the unrelated Opal Assist Office task pane. No upload/storage
-  dependency or code exists. Documents currently live in Postgres via `onboarding-catalogue.js` /
-  `onboarding-pack.js` / `onboarding-pack-routes.js`.
-- **stage 3** — still no code or tracker detail, unchanged.
+- **Stage 1** — "Send button emails it" is still an Outlook-draft-then-manual-send, not a direct send (`graphMail.createDraft(...)` is the only path, in `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-workflow-routes.js`). This is a mature, consistently-applied pattern across all three stages, not an open experiment — but the team should confirm it's still the wanted final design.
+- **Stage 2, dynamic contract** — built (`onboarding-contract-docx.js` composes the Contract of Employment from the same offer terms the Letter of Offer uses; `onboarding-document-reader.js` reads it back). Passing tests. The tracker's own checklist items for this are still shown unchecked.
+- **Stage 2, SharePoint storage** — not implemented anywhere in code (see Located files). This audit reads the open tracker question ("is SharePoint storage still wanted") as genuinely open at the decision level, not reflected as an in-progress fork in the code — there is no partial SharePoint scaffolding to point to either way.
+- **stage 3** — no further tracker detail recorded.
 
 ## Commits in the window that touched it
 
-None this window (2026-09-22 → 2026-09-23) — `develop` did not move since last night (both audits sit
-on `74601fc`). Prior window (2026-09-21 → 2026-09-22), for reference:
-
-- 9982ef2 fix(onboarding): the signed letter can be uploaded again (fixed a dead-markup rendering
-  regression from an earlier prose-removal pass)
-- d5397f2 fix(onboarding): the offer's start date is the day the practice chose (UTC/local
-  off-by-one in start-date reconciliation)
-- 79ab945 feat(onboarding): every returned document is read — Word, print, scan or photo
-- **7e3f921 feat(onboarding): the Contract of Employment goes out filled from the offer**
-- 3884e82, 4141680 ui(onboarding): cancelling an onboarding is a confirmation, not a reason (board
-  bin + Track view)
-- **28ab180 feat(onboarding): the composed Contract of Employment is read when it comes back**
-- cc08f1b ui(onboarding): conflict panel names every side and value, offer terms included
-- 810d1fa ui(onboarding): Verify is one press, beside the document in the reading panel
+None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit (597/598, same known artifact) and integration (168/168 in this session's own grouping) both re-run tonight — no regression.
 
 ## Disagreement
 
-Same two points as last night, one already resolved (in the prior window, not tonight):
-1. ~~Stage 2's dynamic employee contract doesn't exist~~ — built in the prior window, see above. The
-   tracker's own checkboxes for this still haven't been updated to reflect it (re-confirmed tonight).
-2. Stage 1's "Send button emails the letter" still does not match the shipped design (Outlook draft,
-   not a real send) — unchanged, still a real scope decision for the team, not a bug.
+1. Stage 1's "Send button emails it" does not match a literal-send reading of the tracker text — it is Outlook-draft-then-manual-send. Confirmed intentional and consistently applied, but worth a fresh decision now that Stage 2 has moved forward.
+2. SharePoint storage: the tracker asks whether it's "still wanted." The code shows no trace of it ever having been started — this is a live open decision, not a stalled build.

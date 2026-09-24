@@ -15,19 +15,18 @@ AI integrator that will help when it comes to creating these inductions."
 ## Where it lives today
 
 `frontend/current/workshop.js`/`.css` (the builder this audit believes
-satisfies "Induction Playground" — see STATUS.md's Disagreement section
-for why a prior audit night concluded otherwise), `induction-modules.js`
-(19 built-in modules covering "Portal/Splose Inductions"),
-`backend/walkthrough-routes.js`, `learning-routes.js`,
-`induction-assistant-routes.js`. 639 unit + 128 integration tests pass.
+satisfies "Induction Playground" — a prior audit night read it differently,
+see STATUS.md), `induction-modules.js` (19 built-in modules covering
+"Portal/Splose Inductions"), `backend/walkthrough-routes.js`,
+`learning-routes.js`, `induction-assistant-routes.js`. Unit and integration
+tests pass — see STATUS.md.
 
 ## Start here
 
 Two independent things: (1) a one-line fix to `e2e/tests/tutorials.spec.js:59`
 — replace the stale `'All learning'` heading assertion with `'Assign
-Learning'` (confirmed the actual `<h1>` text in `resourcehub.js:5738`);
-(2) get a person to confirm whether `workshop.js` is what "Induction
-Playground" meant, since this and a prior audit night disagree.
+Learning'` (the actual `<h1>` text in `resourcehub.js`); (2) get a person to
+confirm whether `workshop.js` is what "Induction Playground" meant.
 
 ## Done means
 

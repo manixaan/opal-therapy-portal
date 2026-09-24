@@ -3,19 +3,7 @@
 **Idea**
 Report Templates
 
-**Why**
-(not yet written in the tracker)
-
-**Who uses it**
-(not yet written in the tracker)
-
-**What they see**
-(not yet written in the tracker)
-
-**What should happen**
-(not yet written in the tracker)
-
-**Outcome**
+**Why** / **Who uses it** / **What they see** / **What should happen** / **Outcome**
 (not yet written in the tracker)
 
 No decisions recorded. Tasks (FCA, Progress Letter, Client Agreement Form)
@@ -28,8 +16,8 @@ detail lives entirely in the codebase, not in tracker text.
 the shared `backend/fca/` engine, and `backend/templates/` (Service
 Agreement lives here as a template id, not its own route file). Frontend:
 `frontend/current/fca.js`, `letter.js`, `templates.js`, entered through the
-Resource Hub's Library → Templates collection. 1050 unit tests and 201
-integration tests all pass — see STATUS.md.
+Resource Hub's Library → Templates collection. Unit and integration tests
+all pass — see STATUS.md.
 
 ## Start here
 
@@ -38,8 +26,7 @@ actually renders and downloads correctly for a real user. Open
 `e2e/tests/portal.spec.js` and add a flow that logs in as therapist/owner,
 opens Library → Templates, starts an FCA (or Progress Letter, or Service
 Agreement) document, and confirms the preview renders and a download
-succeeds — following the existing pattern used for Splose/Outlook checks
-in the same file.
+succeeds.
 
 ## Done means
 

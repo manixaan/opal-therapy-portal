@@ -3,19 +3,7 @@
 **Idea**
 Interactive Assessments
 
-**Why**
-(not yet written in the tracker)
-
-**Who uses it**
-(not yet written in the tracker)
-
-**What they see**
-(not yet written in the tracker)
-
-**What should happen**
-(not yet written in the tracker)
-
-**Outcome**
+**Why** / **Who uses it** / **What they see** / **What should happen** / **Outcome**
 (not yet written in the tracker)
 
 No decisions recorded. Task-level notes (verbatim), "Assessment Review":
@@ -33,15 +21,13 @@ Pauly to then added into the portal as an interactive workflow"
 `backend/whodas-routes.js` + `backend/whodas/` (fully built, guarded, tested),
 `backend/assessments-routes.js` + `backend/assessments/definitions.js`
 (every other instrument deliberately returns a "source required"
-placeholder, not a bug). Frontend: `frontend/current/whodas.js`,
-`assessment.js`. 1050+201 tests pass — see STATUS.md.
+placeholder). Frontend: `frontend/current/whodas.js`, `assessment.js`. See
+STATUS.md for test results (all pass).
 
 ## Start here
 
-This tracker task is a human sourcing/review job, not a coding task — the
-checklist (review the Assessment tab, mark keep/remove, find originals,
-hand to a developer) happens outside this repository. The one thing a
-Claude Code session can usefully do: add an E2E check in
+This tracker task is a human sourcing/review job, not a coding task. The
+one thing a Claude Code session can usefully do: add an E2E check in
 `e2e/tests/tutorials.spec.js` or `portal.spec.js` that opens a client's
 Assessments section and completes a WHODAS 2.0 instrument end to end,
 since that's the one instrument actually built and it has zero browser
@@ -50,7 +36,8 @@ proof today.
 ## Done means
 
 An E2E spec proving WHODAS 2.0 completes and scores correctly through the
-UI moves this from `tab-unproven` to `proven`. Confirm `ENABLE_WHODAS_ASSESSMENT`
-is actually `true` wherever this needs to be reachable first.
+UI moves this from `tab-unproven` to `proven`. Confirm
+`ENABLE_WHODAS_ASSESSMENT` is actually `true` wherever this needs to be
+reachable first.
 
 Tracker: f0210ee7-ed35-4228-a28c-d5d4c83da371

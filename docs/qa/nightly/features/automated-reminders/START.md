@@ -23,22 +23,20 @@ No decisions recorded. Task notes (verbatim):
 
 Therapist Snapshot: `backend/snapshot-routes.js` (self-scoped, guarded,
 integration-tested) and the header report panel in `mockup_v3.html`. The
-client appointment reminder task has **nothing built** — no route, no
+client appointment reminder task has nothing built — no route, no
 SMS/email integration, no scheduled job found anywhere in the backend.
 
 ## Start here
 
-These are two different pieces of work under one card:
-1. **Client reminders** is greenfield — start with the tracker's own first
-   checklist item ("look at what appointment and client details we
-   already hold") by reading `backend/scheduler-routes.js` and the events
-   schema for what's already stored, then decide the send channel
-   (SMS/email) before writing any code — this needs a provider decision
-   from the team first.
+Two different pieces of work under one card:
+1. **Client reminders** is greenfield — start by reading
+   `backend/scheduler-routes.js` and the events schema for what client/
+   appointment data is already stored, then get the team to pick a send
+   channel (SMS/email) before writing any code.
 2. **Therapist Snapshot** just needs proof — add a browser or E2E check
-   that opens the Today/Weekly snapshot panel (`openReportPanel('daily', ...)`
-   in `mockup_v3.html`) and confirms it renders real data, since the
-   backend already passes `tests/integration/snapshot.itest.js`.
+   that opens the Today/Weekly snapshot panel in `mockup_v3.html` and
+   confirms it renders real data; the backend already passes
+   `tests/integration/snapshot.itest.js`.
 
 ## Done means
 

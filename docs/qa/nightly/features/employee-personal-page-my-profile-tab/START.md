@@ -24,7 +24,7 @@ matter of testing and ver[ification]".
 notifications), `frontend/current/profile.js` and the `PROFILE TAB` markup
 in `mockup_v3.html`. The People register is `frontend/current/employees.js`
 + `onboarding-routes.js`/`onboarding-employee-routes.js`. See STATUS.md for
-test results (all pass except one sandbox-only false failure).
+test results (all pass except one known sandbox-only false failure).
 
 ## Start here
 
@@ -33,9 +33,8 @@ walk My Profile end to end on a real account and confirm each section
 against the tracker's list. One thing to correct before that walkthrough:
 the tracker expects a 24-hour reminder for setting work locations; the
 actual code (`runLocationAlarmCheck` in `backend/server.js`) only fires on
-Fridays for the coming week, so don't test for a rolling 24-hour prompt
-that isn't there — either update the tracker's expectation or raise
-whether the original 24-hour design is still wanted.
+Fridays for the coming week — either update the tracker's expectation or
+raise whether the original 24-hour design is still wanted.
 
 ## Done means
 

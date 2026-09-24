@@ -21,12 +21,11 @@ Before writing code: this tracker card is empty (no why/who/outcome, no
 tasks). The smallest useful first step is filling in the tracker card
 itself with what's actually wanted, since the code already does something
 under this name (split across Resource Hub PD events and My Profile CPD)
-and it's unclear whether that's the intended scope or something narrower/
-broader is meant. If it's about proving the existing CPD flow works,
-`docs/qa/BROWSER_QA_RESULTS.md` row I already flags some CPD/document UI
-as intentionally stubbed ("Coming soon") in the current build — check
-which parts of `profile.js`'s CPD section are real vs. placeholder before
-assuming a bug.
+and it's unclear whether that's the intended scope. If it's about proving
+the existing CPD flow works, `docs/qa/BROWSER_QA_RESULTS.md` row I already
+flags some CPD/document UI as intentionally stubbed ("Coming soon") in the
+current build — check which parts of `profile.js`'s CPD section are real
+vs. placeholder before assuming a bug.
 
 ## Done means
 

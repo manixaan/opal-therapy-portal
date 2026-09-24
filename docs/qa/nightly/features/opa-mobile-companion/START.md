@@ -3,19 +3,7 @@
 **Idea**
 Opa Mobile Companion
 
-**Why**
-(not yet written in the tracker)
-
-**Who uses it**
-(not yet written in the tracker)
-
-**What they see**
-(not yet written in the tracker)
-
-**What should happen**
-(not yet written in the tracker)
-
-**Outcome**
+**Why** / **Who uses it** / **What they see** / **What should happen** / **Outcome**
 (not yet written in the tracker)
 
 No decisions recorded yet at the feature level. Task-level notes (verbatim):
@@ -41,41 +29,31 @@ No decisions recorded yet at the feature level. Task-level notes (verbatim):
 
 Backend: `backend/mobile-routes.js`, `backend/case-note-routes.js`,
 `backend/clinical-note-provider.js`, `backend/case-note-style.js`. The
-mobile app's own UI is still not in this repository. **New 2026-09-22**:
+mobile app's own UI is not in this repository. Also present:
 `frontend/current/casenotes-compose.js` — a desktop-portal case-note
 composer (client picker, on-device dictation, names check, governed draft)
-that reuses the same mobile backend endpoints. See STATUS.md for the full
-file list and test results — both the mobile backend and this new desktop
-composer are solidly built and unit/integration tested (412 + 6 tests
-passing); nothing anywhere proves either end-to-end experience in a real
-browser or on the test device.
+reusing the same mobile backend endpoints. Both are solidly unit/
+integration tested — see STATUS.md — but nothing proves either end-to-end
+experience in a real browser or on the test device.
 
 ## Start here
 
-This is CRITICAL level (clinical/sensitive data, AI governance). Three
-things, in order: (1) fix the stale `docs/mobile/CASE_NOTE_AI_PRIVACY.md`
-claim that the feature needs `ANTHROPIC_API_KEY` — it routes through
-Bedrock only, per `clinical-note-provider.js` and `ai-policy.js`, and this
-now also misdescribes the new desktop composer since it shares the same
-`/generate` endpoint; (2) confirm whether `CLINICAL_NOTE_AI_ENABLED` is
-actually `true` anywhere it matters; (3) add a Playwright E2E spec (e.g.
+This is CRITICAL level (clinical/sensitive data, AI governance). In order:
+(1) fix the stale `docs/mobile/CASE_NOTE_AI_PRIVACY.md` claim that the
+feature needs `ANTHROPIC_API_KEY` — it routes through Bedrock only; (2)
+confirm whether `CLINICAL_NOTE_AI_ENABLED` is actually `true` anywhere it
+matters; (3) add a Playwright E2E spec (e.g.
 `e2e/tests/case-notes-compose.spec.js`) that logs in as a therapist, opens
-Case Notes → "New case note," picks a caseload client, types (not dictates —
-SpeechRecognition isn't reliably automatable in CI) a transcript, runs the
-names check, answers any flagged words, generates a draft, and asserts it
+Case Notes → "New case note," picks a caseload client, types (not dictates)
+a transcript, runs the names check, generates a draft, and asserts it
 lands in the review surface (`casenotes.js`) linked to the right client —
-follow `portal.spec.js`'s login/tab-navigation pattern. That's the smallest
-test that turns "solid backend + guarded frontend" into real end-to-end
-proof for the desktop half of this feature. The mobile pilot's own
-walkthrough (dictation → AI summary → portal save on the test device) is
-still a manual verification this audit cannot do.
+follow `portal.spec.js`'s login/tab-navigation pattern.
 
 ## Done means
 
 For the desktop composer: the E2E spec above passing. For the mobile pilot:
-the tracker's own checklist items (accuracy against the clinical pathway,
-correct linking to the client/case, no loss or duplication, Ann's sign-off)
-being worked through by a person on the test device — there is no test file
-this audit can point to that would prove that half on its own.
+the tracker's own checklist worked through by a person on the test device
+— there is no test file this audit can point to that would prove that half
+on its own.
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613
