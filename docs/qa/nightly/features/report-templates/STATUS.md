@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes — a large, well-hardened shared subsystem
 
 ## Located files
@@ -21,7 +21,7 @@ All three route files apply `requireAuth` at the router level, then a documented
 
 ## Tests (re-run fresh tonight)
 
-- Unit: `fca-docx-engine.test.js`, `fca-frontend-helpers.test.js`, `fca-preview-lifecycle.test.js`, `fca-preview-pages.test.js`, `fca-resolve-scalars.test.js`, `fca-wizard-behaviour.test.js`, `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — run standalone tonight (16 suites / 695 tests, effectively all pass; `fca-wizard-behaviour.test.js` showed 2 timing-based flakes when run concurrently under CPU contention with 15 other suites, but passed 58/58 when re-run in isolation — CPU-contention flakiness under this sandbox's load, not a regression, though the test's fragility under load is worth a note to the team).
+- Unit: `fca-docx-engine.test.js`, `fca-frontend-helpers.test.js`, `fca-preview-lifecycle.test.js`, `fca-preview-pages.test.js`, `fca-resolve-scalars.test.js`, `fca-wizard-behaviour.test.js`, `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — run tonight bundled with the Xero/Finance/Assessments cluster (26 suites / 1127 tests total, 0 failures) — clean this time, no repeat of last night's `fca-wizard-behaviour.test.js` CPU-contention flake.
 - Integration: `fca-reports.itest.js`, `progress-note-letters.itest.js`, `templates.itest.js` — run tonight in the combined Xero+Report Templates+Assessments batch (8 suites / 232 tests, 0 failures).
 - Browser/E2E: none. Neither e2e spec mentions FCA, letters, agreements, or templates. `docs/qa/BROWSER_QA_RESULTS.md` has no mention of Report Templates anywhere.
 
@@ -31,7 +31,7 @@ All three route files apply `requireAuth` at the router level, then a documented
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit and integration both re-run tonight with results consistent with prior nights — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit and integration both re-run tonight with results consistent with prior nights — no regression.
 
 ## Disagreement
 

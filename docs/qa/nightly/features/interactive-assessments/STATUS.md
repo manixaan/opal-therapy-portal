@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes — WHODAS 2.0 is fully built; every other instrument is a deliberate "source required" placeholder, not a bug
 
 ## Located files
@@ -30,7 +30,7 @@
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
 
 ## Disagreement
 

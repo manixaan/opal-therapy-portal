@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven** (mixed — the two tasks are in very different states)
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): partially — Therapist Snapshot yes, client appointment reminders no
 
 ## Located files
@@ -28,7 +28,7 @@
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight, unchanged since 2026-09-22. Re-verified fresh: integration (`snapshot.itest.js`) re-run tonight with identical (passing) results — no regression.
+None — `develop` sits on `74601fc` again tonight, unchanged since 2026-09-22 (fourth night running). Re-verified fresh: integration (`snapshot.itest.js`) re-run tonight with identical (passing) results — no regression.
 
 ## Disagreement
 

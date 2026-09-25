@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all. The desktop case-note composer (`1c17e78`) landed two windows ago (2026-09-21) and is unchanged.
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all. The desktop case-note composer (`1c17e78`) landed three windows ago (2026-09-21) and is unchanged.
 - Created (any located code): yes — backend API surface, plus a first-party desktop composition UI, not just a mobile-draft review surface
 
 ## Important: this is a genuinely separate mobile app, not a tab in this portal
@@ -42,11 +42,11 @@ for the team, over a stricter reading that would call the backend alone
 ## Findings worth the team's attention
 
 - `CLINICAL_NOTE_AI_ENABLED=false` by default (`.env.example`) — consistent with pilot status; confirm the actual deployed value if the pilot is believed live.
-- Stale privacy doc: `docs/mobile/CASE_NOTE_AI_PRIVACY.md` still says the feature requires `ANTHROPIC_API_KEY`; the code routes exclusively through AWS Bedrock. This is the compliance-facing privacy contract for clinical dictation data — worth correcting before the pilot is treated as production-ready. Flagged on every prior audit night; still unfixed.
+- Stale privacy doc: `docs/mobile/CASE_NOTE_AI_PRIVACY.md` still says the feature requires `ANTHROPIC_API_KEY` (re-confirmed tonight at line 3); the code routes exclusively through AWS Bedrock. This is the compliance-facing privacy contract for clinical dictation data — worth correcting before the pilot is treated as production-ready. Flagged on every prior audit night; still unfixed.
 
 ## Commits in the window that touched it
 
-None this window — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
+None this window — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
 
 ## Disagreement
 

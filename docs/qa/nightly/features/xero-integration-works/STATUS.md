@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all. The one commit that built this feature (`427a063`, "Finance tab — dashboard, payroll and invoicing over Xero") landed 2026-09-17, a week before this window.
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all. The one commit that built this feature (`427a063`, "Finance tab — dashboard, payroll and invoicing over Xero") landed 2026-09-17, over a week before this window.
 - Created (any located code): yes — extensively
 
 ## Located files
@@ -30,7 +30,7 @@ Both route files guard every route with `requireAuth` + `requireRole('owner')`, 
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit (77/77) and integration (part of the 232/232 combined batch) both re-run tonight — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running on the same commit). Re-verified fresh: unit (26/26 suites in the shared Xero+Report Templates+Assessments cluster, 1127/1127 tests) and integration (8/8 suites, 232/232 tests in the combined batch) both re-run tonight — no regression.
 
 ## Disagreement
 

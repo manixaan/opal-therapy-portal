@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes — by far the largest subsystem in the codebase
 
 ## Located files
@@ -33,7 +33,7 @@ All `onboarding-*-routes.js` apply `requireAuth` at `router.use()` plus per-rout
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit (597/598, same known artifact) and integration (168/168 in this session's own grouping) both re-run tonight — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit (597/598, same known artifact) and integration (168/168 in this session's own grouping) both re-run tonight — no regression.
 
 ## Disagreement
 

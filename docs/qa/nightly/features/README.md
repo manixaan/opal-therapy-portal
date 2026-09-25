@@ -5,7 +5,7 @@ rewritten every night; `START.md` is a starter prompt (replaced with a
 two-line "proven" note once a feature reaches that label). Full method:
 `scripts/nightly-audit/PROMPT.md`.
 
-| Folder | Tracker stage | Evidence label | Addressed this window (09-23→09-24) | START.md |
+| Folder | Tracker stage | Evidence label | Addressed this window (09-24→09-25) | START.md |
 |---|---|---|---|---|
 | [xero-integration-works](xero-integration-works/) | idea | tab-unproven | no | [Start](xero-integration-works/START.md) |
 | [update-opal-docs-register](update-opal-docs-register/) | idea | untouched | no | [Start](update-opal-docs-register/START.md) |
@@ -24,12 +24,12 @@ two-line "proven" note once a feature reaches that label). Full method:
 Counts: 1 proven · 8 tab-unproven · 2 needs-refinement · 2 untouched · 0 built-untested · 0 broken
 (unchanged from every prior night since 2026-09-22, at both the label level and the underlying
 evidence — this was another completely quiet window: `develop` did not move at all since the last
-audit, sitting on commit `74601fc` for the third night running, and the tracker itself was untouched
-by any human since the 2026-09-23 write-back. Every feature was re-verified fresh tonight anyway:
+audit, sitting on commit `74601fc` for the fourth night running, and the tracker itself was untouched
+by any human since the 2026-09-24 write-back. Every feature was re-verified fresh tonight anyway:
 targeted unit and integration tests re-run from a cold state by this session, all passing with the
 same two known non-code sandbox artifacts as every prior night since 2026-09-20 — see the morning
 brief's §7).
 
 Untracked, no matching feature card: **Opal Assist** (`backend/assist-routes.js`,
-`backend/assist/`, `frontend/current/assist*`) — flagged for a **seventh** consecutive night; still no
+`backend/assist/`, `frontend/current/assist*`) — flagged for an **eighth** consecutive night; still no
 tracker card, still no browser/E2E coverage.

@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes
 
 ## Located files
@@ -22,7 +22,7 @@ AI-gateway routing (data-residency waiver) confirmed clean: the induction assist
 
 - Unit: `induction-assistant.test.js`, `induction-registry.test.js`, `learning-admin-routes.test.js`, `learning-content.test.js`, `learning-routes.test.js`, `walkthrough-content.test.js`, `assign-learning-guards.test.js` — this session ran the 6-file core group directly (6 suites / 223 tests, all pass); broader combined runs with Resource Hub tests were also clean.
 - Integration: `induction-assistant.itest.js`, `learning-admin.itest.js`, `learning.itest.js`, `onboarding-induction.itest.js`, `tutorial-progress.itest.js` — run tonight in the PD/Profile + Inductions/Resources batch (12 suites / 176 tests, only the unrelated `readonly-and-hardening.itest.js` artifact failed elsewhere in that batch — nothing in the induction/learning files failed).
-- Browser/E2E: `e2e/tests/tutorials.spec.js` covers the owner's Assign Learning catalogue vs. learner dashboard, and the walkthrough lifecycle. **Confirmed stale tonight**: line 59 asserts `page.getByRole('heading', { name: 'All learning' })`, but `grep -n "All learning" frontend/current/resourcehub.js` returns no match — the string was removed by `56f3aaa` (2026-09-17, "redesign Assign Learning as a course-builder workflow"), replaced by a tab strip (Inductions/Assignments/Staff progress). This assertion would fail if the spec ran, and has now been stale for 7 consecutive nights (2026-09-17 → 2026-09-24), unfixed.
+- Browser/E2E: `e2e/tests/tutorials.spec.js` covers the owner's Assign Learning catalogue vs. learner dashboard, and the walkthrough lifecycle. **Confirmed stale tonight**: line 59 asserts `page.getByRole('heading', { name: 'All learning' })`, but `grep -n "All learning" frontend/current/resourcehub.js` returns no match — the string was removed by `56f3aaa` (2026-09-17, "redesign Assign Learning as a course-builder workflow"), replaced by a tab strip (Inductions/Assignments/Staff progress). This assertion would fail if the spec ran, and has now been stale for 8 consecutive nights (2026-09-17 → 2026-09-25), unfixed.
 
 ## Open tasks from the tracker
 
@@ -31,7 +31,7 @@ AI-gateway routing (data-residency waiver) confirmed clean: the induction assist
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit and integration both re-run tonight with the same results as prior nights — no regression. The stale `tutorials.spec.js:59` assertion is still unfixed; no e2e file changed.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit and integration both re-run tonight with the same results as prior nights — no regression. The stale `tutorials.spec.js:59` assertion is still unfixed; no e2e file changed.
 
 ## Disagreement
 

@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes — but as the existing Resource Hub, not a distinct "clinical resources" subsystem
 
 ## Important: this tracker item has no distinct implementation of its own
@@ -38,7 +38,7 @@ None — no tasks recorded for this feature.
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: both unit and integration batches re-run tonight with identical (passing) results — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: both unit and integration batches re-run tonight with identical (passing) results — no regression.
 
 ## Disagreement
 

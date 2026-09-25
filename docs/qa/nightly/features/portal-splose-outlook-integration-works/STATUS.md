@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in this change window (2026-09-23 → 2026-09-24): no — zero commits landed in this window at all
+- Addressed in this change window (2026-09-24 → 2026-09-25): no — zero commits landed in this window at all
 - Created (any located code): yes — extensively, long predating this window
 
 ## Located files
@@ -22,7 +22,7 @@ Every route file guards through `requireAuth`: `splose-link-routes.js` (`require
 
 - Unit: `splose-link-routes.test.js`, `splose-api-queue.test.js`, `splose-credentials.test.js`, `splose-poller.test.js`, `splose-draft-sync.test.js`, `sync.test.js`, `sync-safety.test.js`, `sync-status-route.test.js`, `outlook-mirror.test.js`, `outlook-delta-preserve.test.js`, `scheduler-geo.test.js`, `scheduler-helpers.test.js`, `scheduler-matrix.test.js`, `travel-cascade.test.js`, `travel-feasibility.test.js`, `availability-engine.test.js`, `contact-matching.test.js` — run standalone by an investigation agent tonight (5 core Splose files: 71/71 pass); broader combined run also clean.
 - Integration: `splose-connection.itest.js`, `splose-draft-sync.itest.js`, `admin-people.itest.js`, `routes-users.itest.js`, `users.itest.js` — run tonight in the Splose/Mobile/Snapshot batch (9 suites / 79 tests, 0 failures).
-- Browser/E2E: `docs/qa/BROWSER_QA_RESULTS.md` (2026-08-01) rows C, D, E, F, J cover Splose link pending state, per-user Outlook not-connected state, the disabled Travel & Flights tab, and Splose 403 fail-closed boundaries. `e2e/tests/portal.spec.js` exercises Splose fail-closed/permission checks. **Neither self-service nor owner-assigns Splose-linking screen has any e2e or browser-QA coverage** — confirmed again tonight by grep, matching every prior audit night since 2026-09-18.
+- Browser/E2E: `docs/qa/BROWSER_QA_RESULTS.md` (2026-08-01) rows C, D, E, F, J cover Splose link pending state, per-user Outlook not-connected state, the disabled Travel & Flights tab, and Splose 403 fail-closed boundaries. `e2e/tests/portal.spec.js` exercises Splose fail-closed/permission checks. **Neither self-service nor owner-assigns Splose-linking screen has any e2e or browser-QA coverage** — confirmed again tonight by grep, matching every prior audit night since 2026-09-18 (now eight consecutive nights).
 
 ## Open tasks from the tracker
 
@@ -30,8 +30,8 @@ Every route file guards through `requireAuth`: `splose-link-routes.js` (`require
 
 ## Commits in the window that touched it
 
-None — `develop` sits on `74601fc` again tonight. Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
+None — `develop` sits on `74601fc` again tonight (fourth night running). Re-verified fresh: unit and integration both re-run tonight with identical results — no regression.
 
 ## Disagreement
 
-None on tracker-vs-evidence. Worth flagging directly to the team: the Splose-practitioner-linking UI gap has now been open and independently re-confirmed for **seven** consecutive audit nights (2026-09-18 through 2026-09-24), still covering two unproven UI paths.
+None on tracker-vs-evidence. Worth flagging directly to the team: the Splose-practitioner-linking UI gap has now been open and independently re-confirmed for **eight** consecutive audit nights (2026-09-18 through 2026-09-25), still covering two unproven UI paths.
