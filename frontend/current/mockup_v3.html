@@ -17530,6 +17530,9 @@ function clearAllDayChips() {
  */
 async function loadOutlookEventsToCalendar() {
   console.log('📡 Loading Outlook events to calendar...');
+  // A reload (after a booking, sync, move…) keeps the user's place in the grid.
+  const _gridBefore = document.getElementById('cal-grid');
+  const _scrollBefore = _gridBefore ? _gridBefore.scrollTop : 0;
   // Ensure category colours are loaded before rendering so tiles get the right colour immediately
   if (Object.keys(window.OUTLOOK_CATEGORY_COLOURS || {}).length === 0) {
     await loadOutlookCategories();
@@ -17610,16 +17613,19 @@ async function loadOutlookEventsToCalendar() {
     // initial render — tiles refresh their address chip when the Splose data arrives.
     enrichOutlookTilesWithSploseAddresses();
 
-    // Initial scroll: 24h grid is 1440px tall; default to ~6am so the user
-    // isn't staring at midnight on first load. If today is in the visible
-    // week, scroll to the current hour minus one hour for context.
+    // Initial scroll, once per week shown: the current hour minus one when
+    // today is in view, else 7am. Any later reload of the same week restores
+    // where the user was — it used to jump to midnight after every booking.
     requestAnimationFrame(() => {
       const grid = document.getElementById('cal-grid');
       if (!grid) return;
       const todayKey = __perthDateStr(new Date());
       const mon = window.__currentWeekMonday;
+      const weekKey = mon ? __ymd(mon) : '';
+      if (window.__calScrolledWeek === weekKey) { grid.scrollTop = _scrollBefore; return; }
+      window.__calScrolledWeek = weekKey;
       // Grid starts at START_H — scroll to just above current hour (clamped to 0)
-      let target = 0;
+      let target = Math.max(0, 7 - START_H) * HOUR_PX;
       if (mon) {
         const fri = new Date(mon); fri.setUTCDate(mon.getUTCDate() + 4);
         if (todayKey >= __ymd(mon) && todayKey <= __ymd(fri)) {
