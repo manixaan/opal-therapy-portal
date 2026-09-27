@@ -3238,18 +3238,18 @@ window.opIcon = function (name, size) {
   /* Work-base field */
   .wb-field {
     display: flex; gap: 10px; align-items: center; margin-top: 10px;
-    padding: 10px 14px; background: #f5f1ea; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; background: var(--panel-sunk); border: 1px solid var(--border); border-radius: 8px;
   }
   .wb-field label { font-size: 12px; color: var(--ink-soft); font-weight: 600; min-width: 120px; }
   .wb-field input[type="text"] {
     flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
-    font: inherit; font-size: 12.5px; background: var(--panel);
+    font: inherit; font-size: 12.5px; background: var(--panel); color: var(--ink);
   }
   .wb-field input[type="text"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(111,93,212,0.15); }
   .wb-field .wb-hint { font-size: 11px; color: var(--ink-soft); }
   .wb-field select {
     padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
-    font: inherit; font-size: 12.5px; background-color: var(--panel);
+    font: inherit; font-size: 12.5px; background-color: var(--panel); color: var(--ink);
   }
   .wb-field .wb-remove {
     background: none; border: none; color: var(--ink-soft);
