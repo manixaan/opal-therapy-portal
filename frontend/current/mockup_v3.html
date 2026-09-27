@@ -20414,7 +20414,8 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
   if (!inputEl || inputEl._placesInit) return;
   inputEl._placesInit = true;
 
-  // Own autocomplete over the server-side Places proxy (/api/maps/places).
+  // Own autocomplete over the server-side Place Autocomplete proxy
+  // (/api/maps/autocomplete, then /api/maps/place/:id for coordinates).
   // The Google PlaceAutocompleteElement uses a CLOSED shadow DOM — it cannot
   // be styled and rendered as a tiny unstyled box — so we keep our native
   // input and draw our own suggestion panel in the design system. The API
@@ -20426,16 +20427,33 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
   list.style.display = 'none';
   wrap.appendChild(list);
 
-  var items = [], hi = -1, seq = 0, timer = null;
+  var items = [], hi = -1, seq = 0, timer = null, token = null;
 
+  // One token per typing session: Google bills the keystrokes and the final
+  // details lookup together.
+  function newToken() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+      : 'tok-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
   function close() { list.style.display = 'none'; list.innerHTML = ''; items = []; hi = -1; }
   function choose(i) {
     var it = items[i]; if (!it) return;
+    var tok = token; token = null;
     inputEl.value = it.addr;
-    inputEl.dataset.lat = it.lat; inputEl.dataset.lng = it.lng;
     close();
-    if (onSelect) onSelect(it.addr, it.lat, it.lng);
-    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    // Suggestions carry no coordinates — fetch them for the picked place.
+    fetch('/api/maps/place/' + encodeURIComponent(it.placeId) + (tok ? '?sessionToken=' + encodeURIComponent(tok) : ''),
+      { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .catch(function () { return {}; })
+      .then(function (d) {
+        var addr = d.addr || it.addr;
+        var lat = d.lat != null ? String(d.lat) : '', lng = d.lng != null ? String(d.lng) : '';
+        inputEl.value = addr;
+        if (lat && lng) { inputEl.dataset.lat = lat; inputEl.dataset.lng = lng; }
+        if (onSelect) onSelect(addr, lat, lng);
+        inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+      });
   }
   function render() {
     if (!items.length) { close(); return; }
@@ -20462,27 +20480,21 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
     var q = inputEl.value.trim();
     delete inputEl.dataset.lat; delete inputEl.dataset.lng;
     if (timer) clearTimeout(timer);
-    if (q.length < 3) { close(); return; }
+    if (q.length < 2) { close(); return; }
+    if (!token) token = newToken();
     timer = setTimeout(function () {
       var mySeq = ++seq;
-      fetch('/api/maps/places', { method: 'POST', credentials: 'include',
+      fetch('/api/maps/autocomplete', { method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q + ', WA, Australia', maxResultCount: 6 }) })
-        .then(function (r) { return r.ok ? r.json() : { places: [] }; })
+        body: JSON.stringify({ input: q, sessionToken: token }) })
+        .then(function (r) { return r.ok ? r.json() : { suggestions: [] }; })
         .then(function (j) {
           if (mySeq !== seq) return; // a newer query superseded this response
-          items = (j.places || []).map(function (pl) {
-            return {
-              name: (pl.displayName && pl.displayName.text) || pl.formattedAddress || '',
-              addr: pl.formattedAddress || (pl.displayName && pl.displayName.text) || '',
-              lat: String(pl.location && pl.location.latitude != null ? pl.location.latitude : ''),
-              lng: String(pl.location && pl.location.longitude != null ? pl.location.longitude : ''),
-            };
-          }).filter(function (it) { return it.addr; });
+          items = (j.suggestions || []).filter(function (it) { return it.addr && it.placeId; });
           hi = items.length ? 0 : -1;
           render();
         }).catch(function () {});
-    }, 220);
+    }, 150);
   });
 }
 

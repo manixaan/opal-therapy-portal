@@ -7,6 +7,8 @@
  * Routes (all require authentication):
  *   POST /api/maps/routes   — Google Routes API  (travel time / distance)
  *   POST /api/maps/places   — Places Text Search  (cafes/clinics near suburb)
+ *   POST /api/maps/autocomplete — Place Autocomplete (address fields, as you type)
+ *   GET  /api/maps/place/:id    — Place Details      (lat/lng of a picked suggestion)
  *   GET  /api/maps/geocode  — Geocoding API       (address → lat/lng)
  *   GET  /api/maps/sdk-url  — Returns the Maps JS SDK URL so the frontend can
  *                             dynamically load it without a hardcoded key
@@ -25,6 +27,12 @@ const { requireAuth } = require('./permissions');
 const GOOGLE_BASE = 'https://maps.googleapis.com';
 const ROUTES_URL  = 'https://routes.googleapis.com/directions/v2:computeRoutes';
 const PLACES_URL  = 'https://places.googleapis.com/v1/places:searchText';
+const AUTOCOMPLETE_URL  = 'https://places.googleapis.com/v1/places:autocomplete';
+const PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places';
+
+// Western Australia's bounding box — suggestions are limited to it, as the old ", WA" query was.
+const WA_BOUNDS = { low: { latitude: -35.2, longitude: 112.9 }, high: { latitude: -13.6, longitude: 129.0 } };
+const PLACE_ID_RE = /^[A-Za-z0-9_-]{1,300}$/;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +48,12 @@ function mapsUnavailable(res) {
 function sanitiseString(val, maxLen = 500) {
   if (typeof val !== 'string') return '';
   return val.replace(/\0/g, '').trim().slice(0, maxLen);
+}
+
+// Google bills autocomplete keystrokes + the final details call as one session
+// when they share a token; accept only a plain token, otherwise send none.
+function sanitiseSessionToken(val) {
+  return typeof val === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(val) ? val : '';
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -132,6 +146,76 @@ router.post('/api/maps/places', requireAuth, async (req, res) => {
   } catch (err) {
     const status = err.response?.status || 502;
     res.status(status).json({ error: 'Places API error', detail: err.response?.data || err.message });
+  }
+});
+
+/**
+ * POST /api/maps/autocomplete
+ * Body: { input: string, sessionToken?: string }
+ * Proxies to Place Autocomplete (New) — matches partial words as the user
+ * types, restricted to Australia and to WA. Returns
+ * { suggestions: [{ placeId, name, addr }] }; coordinates come from
+ * GET /api/maps/place/:placeId once one is picked.
+ */
+router.post('/api/maps/autocomplete', requireAuth, async (req, res) => {
+  const key = getKey();
+  if (!key) return mapsUnavailable(res);
+
+  const input = sanitiseString(req.body?.input, 200);
+  if (!input) return res.status(400).json({ error: 'input is required' });
+  const sessionToken = sanitiseSessionToken(req.body?.sessionToken);
+
+  try {
+    const resp = await axios.post(
+      AUTOCOMPLETE_URL,
+      {
+        input,
+        includedRegionCodes: ['au'],
+        locationRestriction: { rectangle: WA_BOUNDS },
+        ...(sessionToken ? { sessionToken } : {}),
+      },
+      { headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key }, timeout: 8000 }
+    );
+    const suggestions = (resp.data?.suggestions || [])
+      .map((s) => s.placePrediction)
+      .filter((p) => p && p.placeId)
+      .map((p) => ({
+        placeId: p.placeId,
+        name: p.structuredFormat?.mainText?.text || p.text?.text || '',
+        addr: p.text?.text || '',
+      }));
+    res.json({ suggestions });
+  } catch (err) {
+    res.status(err.response?.status || 502).json({ error: 'Autocomplete API error' });
+  }
+});
+
+/**
+ * GET /api/maps/place/:placeId?sessionToken=…
+ * Place Details (New) for a picked suggestion → { addr, lat, lng }.
+ */
+router.get('/api/maps/place/:placeId', requireAuth, async (req, res) => {
+  const key = getKey();
+  if (!key) return mapsUnavailable(res);
+
+  const placeId = String(req.params.placeId || '');
+  if (!PLACE_ID_RE.test(placeId)) return res.status(400).json({ error: 'Invalid place id' });
+  const sessionToken = sanitiseSessionToken(req.query?.sessionToken);
+
+  try {
+    const resp = await axios.get(`${PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`, {
+      params: sessionToken ? { sessionToken } : {},
+      headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'formattedAddress,location' },
+      timeout: 8000,
+    });
+    const d = resp.data || {};
+    res.json({
+      addr: d.formattedAddress || '',
+      lat: d.location?.latitude ?? null,
+      lng: d.location?.longitude ?? null,
+    });
+  } catch (err) {
+    res.status(err.response?.status || 502).json({ error: 'Place Details API error' });
   }
 });
 
