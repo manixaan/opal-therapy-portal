@@ -20573,7 +20573,7 @@ window.showQuickAdd = function(...args) {
   position: fixed;
   right: 0; top: 0; bottom: 0;
   width: 480px; max-width: 100vw;
-  background: #f8f9fc;
+  background: var(--bg);
   box-shadow: -6px 0 32px rgba(0,0,0,0.13);
   /* above the sticky app header (z 1000) so the panel top is never clipped */
   z-index: 1100;
@@ -20589,7 +20589,7 @@ window.showQuickAdd = function(...args) {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 12px;
   background: var(--panel);
-  border-bottom: 1px solid #ece6dc;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .bsp-header-left { display: flex; align-items: center; gap: 8px; }
@@ -20600,15 +20600,15 @@ window.showQuickAdd = function(...args) {
   border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   color: var(--ink-faint); transition: background 0.15s, color 0.15s;
 }
-.bsp-close:hover { background: #f1f4f8; color: var(--ink); }
+.bsp-close:hover { background: var(--panel-soft); color: var(--ink); }
 .bsp-close svg { width: 15px; height: 15px; }
 
 /* ── Pre-fill strip ── */
 .bsp-prefill-strip {
   display: flex; align-items: center; gap: 7px;
   padding: 7px 16px;
-  background: var(--info-soft); border-bottom: 1px solid #c3d4ec;
-  font-size: 12px; color: #3d6cae; flex-shrink: 0;
+  background: var(--info-soft); border-bottom: 1px solid var(--border);
+  font-size: 12px; color: var(--info); flex-shrink: 0;
 }
 .bsp-prefill-strip svg { stroke: #4d79b3; flex-shrink: 0; }
 .bsp-prefill-clear {
@@ -20676,14 +20676,14 @@ window.showQuickAdd = function(...args) {
   cursor: pointer;
   display: flex; align-items: flex-start;
   padding: 3px 5px;
-  font-size: 10px; font-weight: 600; color: #3d6cae;
+  font-size: 10px; font-weight: 600; color: var(--info);
   transition: background 0.15s, border-color 0.15s;
   box-sizing: border-box;
   overflow: hidden;
 }
 .cal-preview-block:hover {
   background: rgba(74,127,193,0.28);
-  border-color: #3d6cae;
+  border-color: var(--info);
 }
 .cal-preview-block.preview-selected {
   background: rgba(74,127,193,0.35);
@@ -20715,12 +20715,12 @@ window.showQuickAdd = function(...args) {
 .bsp-step-heading {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 14px; padding-bottom: 12px;
-  border-bottom: 1px solid #ece6dc;
+  border-bottom: 1px solid var(--border);
 }
 .bsp-step-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.6px; color: #3d6cae;
-  background: var(--info-soft); border: 1px solid #c3d4ec;
+  letter-spacing: 0.6px; color: var(--info);
+  background: var(--info-soft); border: 1px solid var(--border);
   padding: 2px 7px; border-radius: 20px;
 }
 .bsp-step-title {
@@ -20738,7 +20738,7 @@ window.showQuickAdd = function(...args) {
   align-items: center; gap: 12px;
   padding: 11px 13px;
   background: var(--panel);
-  border: 1.5px solid #ece6dc;
+  border: 1.5px solid var(--border);
   border-radius: 10px;
   cursor: pointer; text-align: left;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
@@ -20752,12 +20752,12 @@ window.showQuickAdd = function(...args) {
 /* Force all click events to resolve at the button, not child elements */
 .booking-cat-chip > * { pointer-events: none; }
 .booking-cat-chip:hover {
-  border-color: #3d6cae;
+  border-color: var(--info);
   background: #f5f9ff;
   box-shadow: 0 1px 6px rgba(74,127,193,0.10);
 }
 .booking-cat-chip.active {
-  border-color: #3d6cae;
+  border-color: var(--info);
   background: var(--info-soft);
   box-shadow: 0 0 0 3px rgba(74,127,193,0.14);
 }
@@ -20794,7 +20794,7 @@ window.showQuickAdd = function(...args) {
 .bcat-desc {
   font-size: 11px; color: var(--ink-faint); line-height: 1.4;
 }
-.booking-cat-chip.active .bcat-name { color: #3d6cae; }
+.booking-cat-chip.active .bcat-name { color: var(--info); }
 
 /* Default duration badge */
 .bcat-dur {
@@ -20804,24 +20804,24 @@ window.showQuickAdd = function(...args) {
   padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
 }
 .booking-cat-chip.active .bcat-dur {
-  background: #dbe6f5; color: #3d6cae;
+  background: var(--info-soft); color: var(--info);
 }
 
 /* ── When & Where timing section ── */
 .bsp-timing-section {
   background: var(--panel);
-  border: 1.5px solid #ece6dc;
+  border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
   margin-top: 14px; margin-bottom: 16px;
 }
 .bsp-section-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: #3d6cae;
+  letter-spacing: 0.5px; color: var(--info);
   margin-bottom: 12px;
 }
 .bsp-field-label {
-  font-size: 11px; font-weight: 600; color: #46403a;
+  font-size: 11px; font-weight: 600; color: var(--ink-soft);
   display: block; margin-bottom: 5px;
 }
 .bsp-optional { font-weight: 400; color: var(--muted); }
@@ -20834,11 +20834,11 @@ window.showQuickAdd = function(...args) {
 .bsp-day-chip {
   flex: 1; min-width: 44px;
   padding: 6px 8px; font-size: 12px; font-weight: 600;
-  border: 1.5px solid #ece6dc; border-radius: 7px;
-  background: var(--panel-soft); cursor: pointer; color: #46403a;
+  border: 1.5px solid var(--border); border-radius: 7px;
+  background: var(--panel-soft); cursor: pointer; color: var(--ink-soft);
   transition: all 0.15s; text-align: center;
 }
-.bsp-day-chip:hover { border-color: #3d6cae; background: var(--info-soft); color: #3d6cae; }
+.bsp-day-chip:hover { border-color: var(--info); background: var(--info-soft); color: var(--info); }
 .bsp-day-chip.active {
   background: #3d6cae; border-color: #3d6cae;
   color: white; box-shadow: 0 1px 4px rgba(74,127,193,0.3);
@@ -20852,14 +20852,14 @@ window.showQuickAdd = function(...args) {
 .bsp-time-field { flex: 1; }
 .bsp-time-field input[type="time"] {
   width: 100%; padding: 8px 10px;
-  font-size: 15px; font-weight: 600; color: #3d6cae;
-  background: #f0f4ff; border: 1.5px solid #c3d4ec;
+  font-size: 15px; font-weight: 600; color: var(--info);
+  background: var(--info-soft); border: 1.5px solid var(--border);
   border-radius: 8px; font-family: inherit;
   cursor: pointer; outline: none;
   transition: border-color 0.15s;
   box-sizing: border-box;
 }
-.bsp-time-field input[type="time"]:focus { border-color: #3d6cae; }
+.bsp-time-field input[type="time"]:focus { border-color: var(--info); }
 .bsp-time-arrow {
   display: flex; align-items: center; padding-bottom: 9px;
   color: var(--muted);
@@ -20873,8 +20873,8 @@ window.showQuickAdd = function(...args) {
   margin-bottom: 8px;
 }
 .bsp-dur-value {
-  font-size: 13px; font-weight: 700; color: #3d6cae;
-  background: #dbe6f5; padding: 2px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; color: var(--info);
+  background: var(--info-soft); padding: 2px 8px; border-radius: 6px;
 }
 
 /* Slider track & thumb */
@@ -20906,11 +20906,11 @@ window.showQuickAdd = function(...args) {
 }
 .bsp-dur-preset {
   padding: 4px 9px; font-size: 11px; font-weight: 600;
-  border: 1.5px solid #ece6dc; border-radius: 6px;
+  border: 1.5px solid var(--border); border-radius: 6px;
   background: var(--panel-soft); color: var(--ink-faint);
   cursor: pointer; transition: all 0.12s;
 }
-.bsp-dur-preset:hover { border-color: #3d6cae; color: #3d6cae; background: var(--info-soft); }
+.bsp-dur-preset:hover { border-color: var(--info); color: var(--info); background: var(--info-soft); }
 .bsp-dur-preset.active {
   background: #3d6cae; border-color: #3d6cae;
   color: white;
@@ -20920,11 +20920,11 @@ window.showQuickAdd = function(...args) {
 .bsp-loc-field input[type="text"] {
   width: 100%; padding: 8px 10px;
   font-size: 13px; color: var(--ink);
-  border: 1.5px solid #ece6dc; border-radius: 8px;
+  border: 1.5px solid var(--border); border-radius: 8px;
   font-family: inherit; outline: none; background: var(--panel-soft);
   transition: border-color 0.15s; box-sizing: border-box;
 }
-.bsp-loc-field input[type="text"]:focus { border-color: #3d6cae; background: var(--panel); }
+.bsp-loc-field input[type="text"]:focus { border-color: var(--info); background: var(--panel); }
 .bsp-loc-unsure { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft, #5c554d); cursor: pointer; }
 .bsp-loc-unsure input { margin: 0; }
 
