@@ -143,7 +143,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=16" defer></script>
+<script src="/travel.js?v=17" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12582,6 +12582,11 @@ async function confirmBooking() {
       showToast('No time set', 'Please go back to step 1 and set a day and start time.', 'warn');
       return;
     }
+    if (t.day && typeof ensureDayBase === 'function' && !(await ensureDayBase(t.day).catch(() => null))) return;
+    if (t.day && typeof isLeaveDay === 'function' && isLeaveDay(t.day)) {
+      const ask = (typeof portalConfirm === 'function') ? portalConfirm : (m) => Promise.resolve(window.confirm(m));
+      if (!(await ask('This day is marked On leave in My Profile. Add it anyway?', { title: 'On leave', ok: 'Add anyway', cancel: 'Cancel' }))) return;
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Adding to Outlook…'; }
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
@@ -12654,9 +12659,9 @@ async function confirmBooking() {
     return;
   }
 
-  // A day with no base yet: ask once where the therapist is based, so the
-  // first and last travel legs have somewhere to start and end.
-  if (typeof ensureDayBase === 'function') { try { await ensureDayBase(slot.day); } catch (_) {} }
+  // A day with no work location blocks the booking until one is set — the
+  // first and last travel legs start and end there.
+  if (typeof ensureDayBase === 'function' && !(await ensureDayBase(slot.day).catch(() => null))) return;
   // On leave that day? Ask before booking a client into it.
   if (typeof isLeaveDay === 'function' && isLeaveDay(slot.day)) {
     const ask = (typeof portalConfirm === 'function') ? portalConfirm : (m) => Promise.resolve(window.confirm(m));
@@ -15302,8 +15307,9 @@ function titleBase(s) {
 const WORK_BASES = {
   office: { id: 'office', label: 'Perth metro office', addr: '100 Burrendah Blvd, Willetton WA 6155', suburb: 'Willetton', region: 'central', icon: '', color: '#8b80c8' },
   homes:  [
-    // Seeded sample so the UI shows something on first load. Remove/edit freely.
-    { id: 'home-1', label: 'Home (Riverton)',   kind: 'local',  addr: '', suburb: 'Riverton', region: 'south', icon: '', color: '#9a5f0e' }
+    // An empty row to fill in — no sample suburb, so it anchors no travel
+    // until the therapist gives it an address (27 Sep 2026).
+    { id: 'home-1', label: 'Home',   kind: 'local',  addr: '', suburb: '', region: 'central', icon: '', color: '#9a5f0e' }
   ]
 };
 
@@ -15821,17 +15827,10 @@ function weekKeyFor(monday) {
 // Seed with realistic history so copy-from-last-month works. Keys here reference
 // base IDs in LOCATIONS (office / home-1 / …) plus 'leave' for full-day leave.
 const WORK_LOCATION = {};
-function seedWorkLocations() {
-  const H = (WORK_BASES.homes && WORK_BASES.homes[0] && WORK_BASES.homes[0].id) || 'home-1';
-  const thisMon = mondayOf(TODAY);
-  WORK_LOCATION[weekKeyFor(thisMon)] = { mon:'office', tue:'office', wed:'office', thu:'office', fri:'office' };
-  WORK_LOCATION[weekKeyFor(addDays(thisMon, -7))]  = { mon:'office', tue:'office', wed:'office', thu:'office', fri:H };
-  WORK_LOCATION[weekKeyFor(addDays(thisMon, -14))] = { mon:'office', tue:'office', wed:H, thu:'office', fri:'office' };
-  WORK_LOCATION[weekKeyFor(addDays(thisMon, -21))] = { mon:'office', tue:'office', wed:H, thu:'office', fri:'office' };
-  WORK_LOCATION[weekKeyFor(addDays(thisMon, -28))] = { mon:'office', tue:'office', wed:H, thu:'office', fri:'office' };
-  // Next week left blank → triggers alarm
-  WORK_LOCATION[weekKeyFor(addDays(thisMon, 7))] = {};
-}
+// No demo pre-fill: a week the therapist has not set stays blank, so the
+// booking gate and travel legs see "not set" instead of a fake office week
+// (27 Sep 2026). Saved weeks arrive from /api/profile/work-schedule.
+function seedWorkLocations() {}
 seedWorkLocations();
 
 let WL_CURRENT_MONDAY = mondayOf(TODAY);
@@ -21382,6 +21381,10 @@ function _bspApplyTimingPrefill(opts) {
   window.openBookingPanel = function(opts) {
     _bspDurManual = false; // reset manual flag for fresh booking
     if (_origOpen) _origOpen(opts);
+    // A slot on a day with no work location: ask first; no answer, no booking.
+    if (opts && opts.day && typeof dayWorkLocationStatus === 'function' && dayWorkLocationStatus(opts.day) === 'unset') {
+      ensureDayBase(opts.day).catch(() => null).then(k => { if (!k && _bspOpen) closeBookingPanel(false); });
+    }
     // Apply prefill to timing fields after panel opens
     if (opts && (opts.startH !== undefined || opts.day)) {
       setTimeout(() => _bspApplyTimingPrefill(opts), 20);

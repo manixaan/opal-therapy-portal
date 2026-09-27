@@ -441,26 +441,28 @@ function calendarWeekLocations() {
 function dayAnchorBase(day) {
   const weekObj = calendarWeekLocations();
   const locKey = weekObj && weekObj[day];
-  if (locKey && locKey !== 'leave' && locKey !== 'unset') {
-    const base = getBase(locKey);
-    if (base) {
-      return {
-        suburb: base.suburb || null,
-        label:  base.label  || 'Base',
-        addr:   base.addr   || null,
-        region: base.region || suburbRegion(base.suburb) || 'central',
-        remote: base.kind === 'remote'
-      };
-    }
+  // Only a base the therapist actually chose for this day anchors travel. The
+  // office is "coming soon" (no real office yet) and never counts. With no
+  // base there is no start/end leg — no guessing from another base
+  // (27 Sep 2026: "Start 19 min · Como" came from an unset week).
+  const base = (locKey && locKey !== 'leave' && locKey !== 'unset' && locKey !== 'office') ? getBase(locKey) : null;
+  if (base && (base.addr || base.suburb || base.kind === 'remote')) {
+    return {
+      suburb: base.suburb || null,
+      label:  base.label  || 'Base',
+      addr:   base.addr   || null,
+      region: base.region || suburbRegion(base.suburb) || 'central',
+      remote: base.kind === 'remote'
+    };
   }
-  // Fallback: the first local home base with an address (the office is
-  // "coming soon" and not a real place yet); the office only if nothing else.
-  const home = ((typeof WORK_BASES !== 'undefined' && WORK_BASES.homes) || []).find(h => h.kind !== 'remote' && (h.addr || h.suburb));
-  if (home) {
-    return { suburb: home.suburb || null, label: home.label || 'Home', addr: home.addr || null, region: home.region || suburbRegion(home.suburb) || 'central', remote: false };
-  }
-  const o = (typeof WORK_BASES !== 'undefined' && WORK_BASES.office) || {};
-  return { suburb: o.suburb || null, label: o.label || 'Perth metro office', addr: o.addr || null, region: o.region || 'central', remote: !o.addr && !o.suburb };
+  return { suburb: null, label: 'Work location not set', addr: null, region: 'central', remote: false, unset: true };
+}
+
+/* Is this day ready to book? 'set' | 'unset' | 'leave' — the booking gate. */
+function dayWorkLocationStatus(day) {
+  const locKey = (calendarWeekLocations() || {})[day];
+  if (locKey === 'leave') return 'leave';
+  return dayAnchorBase(day).unset ? 'unset' : 'set';
 }
 
 /* ---------- Normalized travel-segment store ----------
@@ -556,19 +558,26 @@ async function setTravelOverride(sessionId, side, spec) {
 
 /* Ask once for the day's base when a booking lands on a day that has none
    (owner's call, 7 Sep 2026: ask, don't silently assume the office). */
+/* The booking gate: resolves the day's base key once one is set, or null —
+   and a null means do NOT book. A day with no real base (blank, or the
+   "coming soon" office) must be given one first, here or in My Profile. */
 function ensureDayBase(day) {
   try {
     const wk = calendarWeekLocations();
-    if (!wk || (wk[day] && wk[day] !== 'unset')) return Promise.resolve(wk ? wk[day] : null);
+    if (!wk) return Promise.resolve(null);
+    const status = dayWorkLocationStatus(day);
+    if (status !== 'unset') return Promise.resolve(wk[day]);
     if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
     const opts = Object.keys(typeof LOCATIONS !== 'undefined' ? LOCATIONS : {})
       .filter(k => k !== 'leave' && k !== 'unset' && !LOCATIONS[k].comingSoon)
+      .filter(k => { const b = getBase(k); return b && (b.addr || b.suburb || b.kind === 'remote'); })
       .map(k => ({ key: k, label: LOCATIONS[k].label || k }));
-    if (!opts.length) return Promise.resolve(null);
+    opts.push({ key: '__setup', label: 'Set up work locations for this week →' });
     const dayName = ({ mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' })[day] || day;
-    return travelChooser('Where are you based on ' + dayName + '?',
-      'Travel to the first session and back from the last one is worked out from here. You can change it any day in My Profile › Work locations.', opts)
+    return travelChooser('Where are you working on ' + dayName + '?',
+      'Set this before booking — travel to the first session and back from the last one is worked out from it.', opts)
       .then(key => {
+        if (key === '__setup') { openWorkLocationsForCalendarWeek(); return null; }
         if (key) {
           // Write to the calendar's week (not the profile editor's cursor) and save.
           wk[day] = key;
@@ -579,6 +588,21 @@ function ensureDayBase(day) {
         return key;
       });
   } catch (e) { return Promise.resolve(null); }
+}
+
+/* My Profile › Work locations, on the week the calendar is showing. */
+function openWorkLocationsForCalendarWeek() {
+  const mon = window.__currentWeekMonday;
+  if (typeof closeBookingPanel === 'function') closeBookingPanel(false);
+  // Closing the panel rewrites the hash; switch tab after the router has run.
+  setTimeout(() => {
+    if (typeof switchTab === 'function') switchTab('profile');
+    if (mon && typeof WL_CURRENT_MONDAY !== 'undefined') {
+      WL_CURRENT_MONDAY = new Date(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate());
+    }
+    if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
+    if (typeof pfOpenArea === 'function') pfOpenArea('pf-location');
+  }, 40);
 }
 
 /* A small themed chooser (dialog.css look) — resolves the chosen key or null. */
