@@ -1021,6 +1021,14 @@ function renderSegmentOverlay(col, seg) {
     return;
   }
   // Travel kinds: 'start' | 'between' | 'end'
+  // Keep the block inside the day: a long drive home after a late session ran
+  // past midnight, stretched the column and left a white band under the grid
+  // (29 Sep 2026). The label still carries the full travel time.
+  const dayStart = START_H * 60, dayEnd = END_H * 60;
+  if (seg.startMin < dayStart || seg.endMin > dayEnd) {
+    seg = Object.assign({}, seg, { startMin: Math.max(seg.startMin, dayStart), endMin: Math.min(seg.endMin, dayEnd) });
+    if (seg.endMin <= seg.startMin) return;
+  }
   const el = document.createElement('div');
   el.className = 'travel-overlay ' + seg.kind;
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
