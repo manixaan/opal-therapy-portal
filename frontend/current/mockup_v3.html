@@ -20591,6 +20591,10 @@ window.showQuickAdd = function(...args) {
   transition: opacity 0.28s ease;
 }
 #booking-panel-backdrop.open { opacity: 1; pointer-events: auto; }
+/* While the panel is open the week grid stays live above the backdrop, so a
+   click or drag on the calendar picks a new time instead of hitting the
+   backdrop (which closed the panel and wiped the preview — 30 Sep 2026). */
+body.bsp-open #cal-grid { position: relative; z-index: 1091; }
 
 /* ── Slide-over panel ── */
 #booking-side-panel {
@@ -20981,6 +20985,9 @@ function initBookingPanel() {
 }
 
 function openBookingPanel(opts = {}) {
+  // Re-picking a time on the calendar while the panel is already open updates
+  // the time and keeps what was filled in (client, address, notes).
+  if (_bspOpen && opts.startH !== undefined && opts.keepState === undefined) opts = Object.assign({}, opts, { keepState: true });
   // Ensure we stay on the calendar tab
   if (typeof switchTab === 'function') {
     const tabCalendar = document.querySelector('.tab[data-tab="calendar"]');
@@ -20992,6 +20999,7 @@ function openBookingPanel(opts = {}) {
 
   document.getElementById('booking-side-panel').classList.add('open');
   document.getElementById('booking-panel-backdrop').classList.add('open');
+  document.body.classList.add('bsp-open');
   _bspOpen = true;
   _bspDirty = false;
 
@@ -21020,6 +21028,7 @@ function closeBookingPanel(confirmIfDirty = false) {
   // Confirmation dialog removed — clicking outside or pressing Escape always closes immediately
   document.getElementById('booking-side-panel').classList.remove('open');
   document.getElementById('booking-panel-backdrop').classList.remove('open');
+  document.body.classList.remove('bsp-open');
   _bspOpen = false;
   _bspDirty = false;
   _bspPrefill = null;
