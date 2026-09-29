@@ -2338,6 +2338,13 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
           WHERE e.id = $1`, [localDbId]);
     }
 
+    // The client link belongs to the event whether or not Splose sync is on
+    // (invoicing, case notes and travel all read it).
+    if (req.body.splose && req.body.splose.patientId) {
+      await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
+        [localDbId, String(req.body.splose.patientId), req.body.splose.patientName || null]).catch(() => {});
+    }
+
     // 2. Draft-and-publish (058): a client booking that names its Splose client
     //    is queued for "Sync Splose" — nothing is written to Splose here.
     let sploseQueued = null;

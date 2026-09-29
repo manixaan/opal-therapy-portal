@@ -115,4 +115,20 @@ describe('POST /api/outlook/events — local-first', () => {
     const { rows: [row] } = await db.pool.query(`SELECT user_id FROM events WHERE id = $1`, [res.body.dbId]);
     expect(row.user_id).toBe(clinician.id);
   });
+
+  test('the client link is stored on the event even when Splose sync is off', async () => {
+    const prev = process.env.ENABLE_SPLOSE_DRAFT_SYNC;
+    process.env.ENABLE_SPLOSE_DRAFT_SYNC = 'false';
+    try {
+      const app = buildApp();
+      const { agent } = await agentFor(app, 'therapist');
+      const res = await agent.post('/api/outlook/events').send({ ...booking, splose: { patientId: 90001, patientName: 'Harper Testwell' } });
+      expect(res.status).toBe(201);
+      expect(res.body.sploseQueued).toBeNull();
+      const { rows: [row] } = await db.pool.query(`SELECT client_id, client_name FROM events WHERE id = $1`, [res.body.dbId]);
+      expect(row).toEqual({ client_id: '90001', client_name: 'Harper Testwell' });
+    } finally {
+      if (prev === undefined) delete process.env.ENABLE_SPLOSE_DRAFT_SYNC; else process.env.ENABLE_SPLOSE_DRAFT_SYNC = prev;
+    }
+  });
 });

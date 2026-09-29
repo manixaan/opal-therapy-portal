@@ -12791,8 +12791,16 @@ async function confirmBooking() {
       return;
     }
 
+    // Booked onto another person's calendar? Then it is not on the grid being
+    // viewed: draw nothing here (a tile would vanish on reload and leave its
+    // travel legs behind) and say whose calendar it went to.
+    const _meId = window.APP_USER && window.APP_USER.id;
+    const _bookedFor = (_outlookTherapistUserId && _meId && _outlookTherapistUserId !== _meId && _bspSelectedTherapist)
+      ? (_bspSelectedTherapist.displayName || 'the selected therapist') : null;
+    if (typeof clearBspTravelPreview === 'function') clearBspTravelPreview();
+
     // Add to local calendar canvas
-    const col = document.getElementById('day-' + slot.day);
+    const col = _bookedFor ? null : document.getElementById('day-' + slot.day);
     if (col) {
       const sub = patient ? `${patient.first} ${patient.last}` : (TYPE_LABEL[type] || '');
       // The optimistic tile is the SAVED appointment: it carries the row id
@@ -12832,7 +12840,9 @@ async function confirmBooking() {
     // above re-renders from the cached list, which does not have it yet.
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
-    showToast(`${_outlookTitle} added`, outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar');
+    showToast(_bookedFor ? `${_outlookTitle} added to ${_bookedFor}'s calendar` : `${_outlookTitle} added`,
+      _bookedFor ? 'Open All therapists (Master view) to see it' : (outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar'));
+    if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 150);
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the
@@ -21073,9 +21083,12 @@ async function loadBspTherapists() {
       sploseUserId: p.splose_user_id || null,
     }));
 
-    // Auto-select the first (and for v1, only) therapist
+    // Default to the signed-in person's own calendar; only fall back to the
+    // first therapist when they have none (e.g. an owner with no clinician
+    // profile). Bookings are filed on the chosen person's calendar.
     if (_bspTherapists.length && !_bspSelectedTherapist) {
-      _bspSelectedTherapist = _bspTherapists[0];
+      const meId = window.APP_USER && window.APP_USER.id;
+      _bspSelectedTherapist = _bspTherapists.find(t => t.userId && t.userId === meId) || _bspTherapists[0];
     }
     renderBspTherapistStrip();
   } catch (_) { /* non-fatal */ }
@@ -21092,8 +21105,10 @@ function renderBspTherapistStrip() {
   const list = _bspTherapists.filter(t =>
     t.isActive !== false && !BSP_TEST_NAME_RE.test(t.displayName || ''));
   if (!list.length) { strip.style.display = 'none'; _bspSelectedTherapist = _bspSelectedTherapist || null; return; }
-  if (_bspSelectedTherapist && BSP_TEST_NAME_RE.test(_bspSelectedTherapist.displayName || '')) {
-    _bspSelectedTherapist = list[0];
+  const _meId = window.APP_USER && window.APP_USER.id;
+  if (_bspSelectedTherapist && BSP_TEST_NAME_RE.test(_bspSelectedTherapist.displayName || '')
+      && _bspSelectedTherapist.userId !== _meId) {
+    _bspSelectedTherapist = list.find(t => t.userId === _meId) || list[0];
   }
   if (list.length === 1) {
     // Context already determines the therapist — concise read-only line
