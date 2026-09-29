@@ -698,7 +698,8 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 5],
+      // 6: work locations load at start-up so the calendar's booking gate sees them.
+      ['profile.js', 6],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -706,7 +707,8 @@ describe('changed assets are cache-busted', () => {
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
       // shows where the drive will go until an address is typed.
-      ['travel.js', 18],
+      // 19: ensureDayBase waits for the saved work locations before prompting.
+      ['travel.js', 19],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -898,11 +900,14 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // After a booking the grid reloads from the server, so the saved row is shown
     // even though the week jump re-renders from the stale cache.
-    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 14000);
+    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 16000);
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
-    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = true;/);
+    // Marked Outlook-synced only when Outlook took it — the calendar works without Outlook (29 Sep 2026).
+    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = !!outlookId;/);
+    // A booking the portal refused is never drawn as if it were saved.
+    expect(cb).toMatch(/showToast\('Appointment not saved'/);
     expect(SHELL).toMatch(/manual_addr_db_' \+ event\.id/);
     // Deleting a tile redraws the legs around where it was.
     const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);

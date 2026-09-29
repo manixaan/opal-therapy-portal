@@ -562,6 +562,14 @@ async function setTravelOverride(sessionId, side, spec) {
    and a null means do NOT book. A day with no real base (blank, or the
    "coming soon" office) must be given one first, here or in My Profile. */
 function ensureDayBase(day) {
+  // Wait for the saved work locations first (profile.js loads them at start-up);
+  // deciding before they arrive made every day look "not set".
+  const ready = (typeof window !== 'undefined' && typeof window.ensureWorkScheduleLoaded === 'function')
+    ? Promise.resolve(window.ensureWorkScheduleLoaded()).catch(() => null)
+    : Promise.resolve();
+  return ready.then(() => ensureDayBaseNow(day));
+}
+function ensureDayBaseNow(day) {
   try {
     const wk = calendarWeekLocations();
     if (!wk) return Promise.resolve(null);

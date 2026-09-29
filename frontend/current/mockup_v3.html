@@ -143,7 +143,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=18" defer></script>
+<script src="/travel.js?v=19" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -151,7 +151,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=5" defer></script>
+<script src="/profile.js?v=6" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -12587,14 +12587,17 @@ async function confirmBooking() {
       const ask = (typeof portalConfirm === 'function') ? portalConfirm : (m) => Promise.resolve(window.confirm(m));
       if (!(await ask('This day is marked On leave in My Profile. Add it anyway?', { title: 'On leave', ok: 'Add anyway', cancel: 'Cancel' }))) return;
     }
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding to Outlook…'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
     const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
 
     try {
-      // Write to Outlook
+      // Save to the portal calendar (Outlook is mirrored server-side when
+      // connected). A failed save shows an error — no tile is drawn for an
+      // event that was never stored.
       let outlookId = null;
+      let saveErr = null;
       try {
         const oResp = await fetch('/api/outlook/events', {
           method: 'POST',
@@ -12602,17 +12605,21 @@ async function confirmBooking() {
           credentials: 'include',
           body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO }),
         });
-        const oResult = await oResp.json();
+        const oResult = await oResp.json().catch(() => ({}));
         if (oResp.ok) {
-          outlookId = oResult.outlookId;
+          outlookId = oResult.outlookId || null;
           __registerBookingUndo(oResult.dbId, outlookTitle);
           if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
-          console.log('✅ Outlook event created:', outlookId);
         } else {
-          console.warn('⚠️ Outlook write failed (non-fatal):', oResult.error);
+          saveErr = oResult.error || ('HTTP ' + oResp.status);
         }
       } catch (oErr) {
-        console.warn('⚠️ Outlook write skipped (non-fatal):', oErr.message);
+        saveErr = oErr.message || 'network error';
+      }
+      if (saveErr) {
+        showToast('Event not saved', saveErr, 'warn');
+        resetBtn();
+        return;
       }
 
       // Add to local calendar canvas
@@ -12773,12 +12780,15 @@ async function confirmBooking() {
         }
         console.log('✅ Outlook event created:', outlookId);
       } else {
-        outlookNote = `Outlook: ${oResult.error || 'write failed — check Outlook connection'}`;
-        console.warn('⚠️ Outlook write failed:', oResult.error);
+        // The portal refused the booking itself — nothing was saved, so no tile.
+        showToast('Appointment not saved', oResult.error || ('HTTP ' + oResp.status), 'warn');
+        resetBtn();
+        return;
       }
     } catch (oErr) {
-      outlookNote = 'Outlook not connected — event not added to calendar';
-      console.warn('⚠️ Outlook write skipped:', oErr.message);
+      showToast('Appointment not saved', oErr.message || 'network error', 'warn');
+      resetBtn();
+      return;
     }
 
     // Add to local calendar canvas
@@ -12803,7 +12813,7 @@ async function confirmBooking() {
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
       });
       if (_optId && SESSIONS[_optId]) {
-        SESSIONS[_optId].outlookSynced = true;
+        SESSIONS[_optId].outlookSynced = !!outlookId;
         if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
       }
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
@@ -12822,7 +12832,7 @@ async function confirmBooking() {
     // above re-renders from the cached list, which does not have it yet.
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
-    showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
+    showToast(`${_outlookTitle} added`, outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar');
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the

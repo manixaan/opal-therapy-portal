@@ -1612,6 +1612,25 @@ async function loadWorkSchedule() {
   }
 }
 
+// The calendar needs the saved work locations too, not only My Profile: without
+// them every day reads as "not set", so the booking gate stops every booking
+// until the Profile tab has been opened once (29 Sep 2026 — "sometimes it
+// works, next time it does not"). Loaded once at start-up; the booking gate
+// awaits this before deciding a day has no location.
+var _wsLoadPromise = null;
+function ensureWorkScheduleLoaded() {
+  if (!_wsLoadPromise) _wsLoadPromise = loadWorkSchedule();
+  return _wsLoadPromise;
+}
+window.ensureWorkScheduleLoaded = ensureWorkScheduleLoaded;
+(function bootWorkSchedule() {
+  var tries = 0;
+  (function wait() {
+    if (window.APP_USER) { ensureWorkScheduleLoaded(); return; }
+    if (tries++ < 60) setTimeout(wait, 500);
+  })();
+})();
+
 // ── Notification preferences persistence ──────────────────────────────────
 
 var NOTIF_PREF_IDS = {

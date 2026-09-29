@@ -2284,102 +2284,64 @@ router.get('/api/splose/dormant-cases', requireAuth, requireSploseOwner, async (
  * caller's. Ignored (silently falls back to caller) for non-owner/admin callers.
  */
 router.post('/api/outlook/events', requireAuth, async (req, res) => {
+  // LOCAL-FIRST (29 Sep 2026): the portal calendar is the system of record and
+  // works with no Outlook account at all. The event is saved to the portal
+  // database FIRST; Outlook is a best-effort mirror of the calendar owner's own
+  // mailbox. Previously the event was written only after Outlook accepted it,
+  // so an expired or missing Outlook sign-in silently lost the booking (the
+  // browser drew a tile that vanished on the next refresh).
   try {
     const { dbEventId, title, startTime, endTime, location, categories,
             sploseId, targetTherapistUserId } = req.body;
 
-    // Resolve whose Outlook calendar to write to
+    if (!title || !startTime || !endTime) {
+      return res.status(400).json({ error: 'title, startTime, and endTime are required' });
+    }
+    if (req.user?.role === 'read_only' || req.user?.role === 'pre_employee') {
+      return res.status(403).json({ error: 'Your account cannot create bookings' });
+    }
+
+    // Whose calendar the event belongs to
     let targetUser;
     const callerIsManager = ['owner', 'admin'].includes(req.user?.role);
     if (targetTherapistUserId && callerIsManager) {
       targetUser = await db.getUser(targetTherapistUserId);
-      if (!targetUser) {
+      if (!targetUser || (req.user.organisation_id && targetUser.organisation_id !== req.user.organisation_id)) {
         return res.status(404).json({ error: 'Target therapist user not found' });
       }
     } else {
       targetUser = await db.getUser(req.session.userId);
     }
 
-    // If the resolved user has no Outlook token, fall back to any active org member
-    // who does. This covers the common case where an owner/admin account was never
-    // connected to Outlook but the therapist account in the same org was.
-    let accessToken;
-    try {
-      accessToken = await getValidAccessToken(targetUser);
-    } catch (tokenErr) {
-      // organisation_id may be null — use IS NOT DISTINCT FROM to match nulls,
-      // or just find any connected user when org is unset (single-practice setup).
-      const orgId = targetUser?.organisation_id || req.user?.organisation_id;
-      const fallback = await db.pool.query(
-        `SELECT id FROM users
-         WHERE access_token IS NOT NULL AND access_token != ''
-           AND is_active = true
-           AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
-         ORDER BY created_at
-         LIMIT 1`,
-        [orgId]
-      );
-      if (fallback.rows.length) {
-        const fallbackUser = await db.getUser(fallback.rows[0].id);
-        accessToken = await getValidAccessToken(fallbackUser);
-        console.log(`🔄 Outlook write: using token from ${fallbackUser.email} (fallback — caller had no token)`);
-      } else {
-        return res.status(400).json({
-          error: 'No Outlook account connected',
-          message: 'No user in this organisation has linked their Outlook account. Connect Outlook via the Settings → Integrations page.',
-        });
-      }
-    }
-
-    if (!title || !startTime || !endTime) {
-      return res.status(400).json({ error: 'title, startTime, and endTime are required' });
-    }
-
-    const result = await outlookApi.createOutlookEvent(accessToken, {
-      title,
-      startTime,
-      endTime,
-      location: location || '',
-      categories: categories || [],
-      appEventId: dbEventId || null,
-      sploseId:   sploseId  || null,
-    });
-
-    // Link to existing DB record when caller supplied one
-    if (dbEventId) {
-      await db.updateEventOutlookId(dbEventId, result.outlookId);
-    }
-
-    // Always write to the local DB immediately so the event survives a page
-    // refresh without waiting for the 5-minute delta sync. The upsert is
-    // idempotent — if the delta sync later re-imports the same event it will
-    // just update the existing row rather than creating a duplicate.
+    // 1. Save to the portal — authoritative, never depends on Outlook.
     let localDbId = dbEventId || null;
-    try {
-      const localRow = await db.upsertOutlookEvent(req.session.userId, {
-        outlookId:       result.outlookId,
+    if (localDbId) {
+      // Mirroring an existing row: it must be on the target calendar.
+      const own = await db.pool.query('SELECT 1 FROM events WHERE id = $1 AND user_id = $2', [localDbId, targetUser.id]);
+      if (!own.rows.length) return res.status(404).json({ error: 'Event not found' });
+    } else {
+      const row = await db.createEvent(targetUser.id, {
         title,
         startTime,
         endTime,
-        location:        location || '',
-        categories:      categories || [],
-        isCancelled:     false,
-        lastModifiedAt:  new Date().toISOString(),
-        sploseId:        sploseId || null,   // stored so the Splose poller can cross-reference
-        createdBySource: 'app',              // this event originated in the app, not Outlook
-        eventType:       classifyEventType(categories || [], false),
+        location: location || '',
+        categories: categories || [],
+        sploseId: sploseId || null,
+        eventType: classifyEventType(categories || [], false),
       });
-      if (localRow && localRow.id) localDbId = localRow.id;
-      console.log(`💾 Event saved to local DB: ${result.outlookId}`);
-    } catch (dbErr) {
-      // Non-fatal — the Outlook event was created; delta sync will import it
-      console.warn('⚠️  Local DB save failed (non-fatal):', dbErr.message);
+      localDbId = row.id;
+      // Ownership stamps the master scheduler and practitioner queries rely on.
+      await db.pool.query(
+        `UPDATE events e SET
+            therapist_profile_id = COALESCE(e.therapist_profile_id, (SELECT tp.id FROM therapist_profiles tp WHERE tp.user_id = e.user_id LIMIT 1)),
+            organisation_id      = COALESCE(e.organisation_id, (SELECT u.organisation_id FROM users u WHERE u.id = e.user_id))
+          WHERE e.id = $1`, [localDbId]);
     }
 
-    // Draft-and-publish (058): a client booking that names its Splose client
-    // is queued for "Sync Splose" — nothing is written to Splose here.
+    // 2. Draft-and-publish (058): a client booking that names its Splose client
+    //    is queued for "Sync Splose" — nothing is written to Splose here.
     let sploseQueued = null;
-    if (localDbId && req.body.splose && req.body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
+    if (req.body.splose && req.body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
       try {
         const sp = req.body.splose;
         const qrow = await draftSync.enqueueChange(db, {
@@ -2401,17 +2363,47 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       }
     }
 
-    console.log(`✅ Outlook event created: ${result.outlookId} — "${title}"`);
-    // dbId (additive, 2026-08-09): the local row id, so the frontend can offer
-    // Cmd+Z undo (DELETE /api/outlook/events/:dbId) for a fresh booking.
-    res.status(201).json({ sploseQueued, ok: true, outlookId: result.outlookId, dbId: localDbId });
-  } catch (err) {
-    if (handleFeatureDisabled(err, res)) return;
-    console.error('Outlook create event error:', err.response?.data || err.message);
-    if (req.body.dbEventId) {
-      await db.updateEventWriteError(req.body.dbEventId, err.message).catch(() => {});
+    // 3. Mirror to the calendar owner's own Outlook, when connected. Never to
+    //    another person's mailbox: a copy there would come back through that
+    //    person's delta sync as a duplicate appointment on their calendar.
+    let outlookId = null;
+    let outlookStatus = 'not_connected';
+    if (targetUser && targetUser.access_token) {
+      try {
+        const accessToken = await getValidAccessToken(targetUser);
+        const result = await outlookApi.createOutlookEvent(accessToken, {
+          title,
+          startTime,
+          endTime,
+          location: location || '',
+          categories: categories || [],
+          appEventId: localDbId,
+          sploseId:   sploseId  || null,
+        });
+        outlookId = result.outlookId;
+        await db.updateEventOutlookId(localDbId, outlookId);
+        outlookStatus = 'synced';
+      } catch (outlookErr) {
+        if (outlookErr && outlookErr.code === 'FEATURE_DISABLED') {
+          outlookStatus = 'disabled';
+        } else {
+          outlookStatus = 'failed';
+          console.warn('⚠️  Outlook mirror failed (booking kept in the portal):', outlookErr.response?.data || outlookErr.message);
+          await db.updateEventWriteError(localDbId, outlookErr.message).catch(() => {});
+        }
+      }
     }
-    res.status(500).json({ error: 'Failed to create Outlook event', details: err.message });
+
+    console.log(`✅ Event saved: ${localDbId} — "${title}" (Outlook: ${outlookStatus})`);
+    // dbId: the local row id, so the frontend can offer Cmd+Z undo
+    // (DELETE /api/outlook/events/:dbId) for a fresh booking.
+    res.status(201).json({
+      ok: true, dbId: localDbId, sploseQueued,
+      outlookId, savedToOutlook: outlookStatus === 'synced', outlookStatus,
+    });
+  } catch (err) {
+    console.error('Event create error:', err.message);
+    res.status(500).json({ error: 'Could not save the event' });
   }
 });
 
@@ -2502,9 +2494,19 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
       return res.json({ ok: true, savedToDb: true, savedToOutlook: false, reason: 'no_outlook_id' });
     }
 
-    const user = await db.getUser(req.session.userId);
-    const accessToken = await getValidAccessToken(user);
-    await outlookApi.updateOutlookEvent(accessToken, outlookId, { location });
+    // The location is saved; Outlook is a best-effort mirror.
+    try {
+      const user = await db.getUser(req.session.userId);
+      const accessToken = await getValidAccessToken(user);
+      await outlookApi.updateOutlookEvent(accessToken, outlookId, { location });
+    } catch (mirrorErr) {
+      console.warn(`📍 Location saved; Outlook mirror skipped: ${mirrorErr.message}`);
+      await db.pool.query(
+        `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'updated', 'app', 'outlook', 'failed', $2)`,
+        [dbId, mirrorErr.message]
+      ).catch(() => {});
+      return res.json({ ok: true, savedToDb: true, savedToOutlook: false, reason: 'outlook_unavailable' });
+    }
 
     // Log successful write-back
     await db.pool.query(
@@ -2550,6 +2552,10 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
  * marked sync_status='pending', a sync_log row + notification record the
  * failure, and the next delta sync / retry reconciles the mirror.
  *
+ * LOCAL-FIRST (29 Sep 2026): an event with no Outlook copy, or a server with
+ * Outlook write-back switched off, is still edited in the portal — the
+ * calendar works without Outlook. Only the mirror step is skipped.
+ *
  * Body: { title?, startTime?, endTime?, location? }
  */
 router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
@@ -2564,18 +2570,8 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
 
     const outlookId = ev.rows[0].outlook_id;
-    if (!outlookId) {
-      return res.status(400).json({ error: 'This event has no Outlook ID — push it to Outlook first' });
-    }
-
-    // Staged-rollout gate (unchanged semantics): when Outlook write-back is
-    // disabled the route makes NO change at all — local edits that can never
-    // reach Outlook would silently diverge from the mirror.
     const flags = require('./feature-flags');
-    if (!flags.isOutlookWriteEnabled()) {
-      handleFeatureDisabled(flags.featureDisabledError('ENABLE_OUTLOOK_WRITE', 'Outlook write-back'), res);
-      return;
-    }
+    const mirrorToOutlook = !!outlookId && flags.isOutlookWriteEnabled();
 
     // 1. Persist the local change FIRST — it must survive an Outlook failure.
     await db.updateEvent(dbId, { title, startTime, endTime, location, lastModifiedBy: 'app' });
@@ -2597,6 +2593,12 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
           if (qrow) require('./splose-sync-routes').notifyQueued(l.user_id);
         }
       } catch (qErr) { console.warn('⚠️  Splose draft queue (update) failed (non-fatal):', qErr.message); }
+    }
+
+    // Portal-only event (or write-back off): the portal edit is the whole job.
+    if (!mirrorToOutlook) {
+      return res.json({ ok: true, outlookId: outlookId || null, savedToDb: true, savedToOutlook: false,
+        outlookStatus: outlookId ? 'disabled' : 'not_linked' });
     }
 
     // 2. Propagate to Outlook (partial update — only defined fields are sent).

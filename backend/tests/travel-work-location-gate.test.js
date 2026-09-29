@@ -83,4 +83,24 @@ describe('work-location gate', () => {
     await c.ensureDayBase('mon');
     expect(offered).toEqual(['home-1', '__setup']);
   });
+
+  // 29 Sep 2026: the saved schedule used to load only when My Profile opened,
+  // so a fresh calendar saw every day as "not set" and the gate stopped every
+  // booking. The gate now waits for the start-up load before deciding.
+  test('ensureDayBase waits for the saved work locations before prompting', async () => {
+    const week = {};
+    const c = load(week, BASES);
+    let prompted = false;
+    c.travelChooser = () => { prompted = true; return Promise.resolve(null); };
+    c.ensureWorkScheduleLoaded = () => new Promise((resolve) => setTimeout(() => { week.tue = 'home-1'; resolve(); }, 10));
+    await expect(c.ensureDayBase('tue')).resolves.toBe('home-1');
+    expect(prompted).toBe(false);
+  });
+
+  test('a failed schedule load still lets the gate ask rather than hang', async () => {
+    const c = load({}, BASES);
+    c.ensureWorkScheduleLoaded = () => Promise.reject(new Error('offline'));
+    c.travelChooser = () => Promise.resolve(null);
+    await expect(c.ensureDayBase('wed')).resolves.toBeNull();
+  });
 });
