@@ -246,8 +246,10 @@ describe('role-based navigation (RBAC)', () => {
     expect(HTML).toContain("['Practice Management', ['contacts', 'activity', 'billing', 'ndis', 'dormant']]");
     // Resource Hub R2 promoted 'resources' into the owner's primary nav
     expect(HTML).toContain("primary: ['profile', 'calendar', 'casenotes', 'resources']");
-    // Support Tickets (2026-08-09) joined the owner Business group
-    expect(HTML).toContain("['Business', ['finance', 'accounting', 'settings', 'support']]");
+    // Support Tickets (2026-08-09) joined the owner Business group; Invoicing
+    // (2026-09-29) sits beside Finance and is also permission-gated (manage_billing).
+    expect(HTML).toContain("['Business', ['finance', 'invoicing', 'accounting', 'settings', 'support']]");
+    expect(HTML).toContain("invoicing: 'manage_billing'");
     // admin gets a Travel menu only — no business/practice groups
     const roleNav = HTML.indexOf('var ROLE_NAV = {');
     expect(roleNav).toBeGreaterThan(-1);
@@ -255,6 +257,7 @@ describe('role-based navigation (RBAC)', () => {
     expect(adminCfg).toContain("label: 'Menu'");
     expect(adminCfg).not.toContain('accounting');
     expect(adminCfg).not.toContain('billing');
+    expect(adminCfg).not.toContain('invoicing');
   });
 
   test('switch-time guard blocks unpermitted tabs and lands on Calendar', () => {

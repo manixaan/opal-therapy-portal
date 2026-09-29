@@ -190,6 +190,9 @@ app.use('/api/interviews', bodyParser.json({ limit: '4mb' }));
 // save before the route could validate a single field.
 app.use('/api/templates', bodyParser.json({ limit: '4mb' }));
 
+// Trip-cost receipts (PDF / photo, ≤ 8 MB decoded) travel as base64 JSON.
+app.use('/api/invoicing/trips', bodyParser.json({ limit: '12mb' }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -686,6 +689,8 @@ app.post('/api/accounting/webhooks/xero', accountingRoutes.xeroWebhookHandler);
 app.use('/', accountingRoutes);
 // Finance portal — dashboard, payroll, invoicing (owner-only, read-only over Xero)
 app.use('/', require('./finance-routes'));
+// Invoicing — calendar-driven NDIS invoices, travel + rural trip billing (manage_billing)
+app.use('/', require('./invoicing-routes'));
 
 console.log('✅ Routes registered');
 
