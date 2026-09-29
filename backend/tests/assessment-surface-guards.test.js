@@ -710,7 +710,8 @@ describe('changed assets are cache-busted', () => {
       // 19: ensureDayBase waits for the saved work locations before prompting.
       // 20: the booking preview survives overlay redraws and previews the onward leg.
       // 21: mid-day trips home when the gap allows (calendar + booking preview).
-      ['travel.js', 21],
+      // 22: legs the open booking replaces are skipped by every redraw.
+      ['travel.js', 22],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -905,6 +906,12 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(travel).toMatch(/const TRAVEL_HOME_MIN_STAY = 30;/);
     expect(SHELL).toMatch(/const startMinutes = calYToMinutes\(col, e\.clientY, 'floor'\);/);
     expect(travel).not.toMatch(/preview placeholder/);
+    // Every redraw skips the legs an open booking replaces (not only a CSS class),
+    // and a fresh booking starts with an empty address (30 Sep 2026).
+    expect(travel).toMatch(/function renderSegmentOverlay\(col, seg\) \{\n  if \(_bspIsSuppressed\(seg\)\) return;/);
+    // The piggy-back start adjustment re-renders the block (clearPreviewBlocks) and must re-hide the replaced legs.
+    expect(travel).toMatch(/earliest start after the drive';\n[\s\S]{0,300}_bspSuppressLegs\(pred\.s\.id, null\);\n  \}/);
+    expect(SHELL).toMatch(/const _loc = document\.getElementById\('bsp-location'\);\n  if \(_loc\) _loc\.value = '';/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);

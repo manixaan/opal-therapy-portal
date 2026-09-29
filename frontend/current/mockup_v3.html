@@ -143,7 +143,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=21" defer></script>
+<script src="/travel.js?v=22" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12886,6 +12886,13 @@ function resetWizard() {
   if (lead) lead.textContent = 'Pick a patient first.';
   const summary = document.getElementById('confirm-summary');
   if (summary) summary.innerHTML = '<h4>Appointment summary</h4>';
+  // A fresh booking starts with no address: the previous booking's address
+  // used to stay in the box, so the next session was routed (and could be
+  // saved) to the wrong place (30 Sep 2026).
+  const _loc = document.getElementById('bsp-location');
+  if (_loc) _loc.value = '';
+  const _uns = document.getElementById('bsp-location-unsure');
+  if (_uns) _uns.checked = false;
   if (typeof renderRightContext === 'function') renderRightContext();
 }
 

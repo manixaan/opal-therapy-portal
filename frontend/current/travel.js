@@ -754,11 +754,53 @@ function _bspTargetAddress() {
   const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
   return p ? (p.address || p.suburb || '') : '';
 }
+/* Legs the open booking replaces. Recorded here (not only as a CSS class on
+   the drawn element) so EVERY redraw skips them while the panel is open —
+   whatever triggers the redraw (30 Sep 2026: the old End leg still showed
+   under a piggy-backed session). */
+let _bspSuppress = { from: null, to: null };
+function _bspPanelOpen() {
+  const p = document.getElementById('booking-side-panel');
+  return !!(p && p.classList.contains('open'));
+}
+function _bspIsSuppressed(seg) {
+  if (!_bspPanelOpen()) return false;
+  return (!!_bspSuppress.from && seg.fromSessionId === _bspSuppress.from)
+      || (!!_bspSuppress.to && seg.toSessionId === _bspSuppress.to);
+}
+function _bspSuppressLegs(fromId, toId) {
+  if (fromId) {
+    _bspSuppress.from = fromId;
+    document.querySelectorAll('.travel-overlay[data-from-session="' + fromId + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  }
+  if (toId) {
+    _bspSuppress.to = toId;
+    document.querySelectorAll('.travel-overlay[data-to-session="' + toId + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  }
+}
+/* Short name for the new session's place: the typed suburb, else the client's
+   (Splose addresses often carry no suburb: "13 Lecania St, WA, 6112"). */
+function _bspTargetLabel(toKey) {
+  const typed = ((document.getElementById('bsp-location') || {}).value || '').trim();
+  const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
+  const sub = typed ? addrSuburb(typed) : ((p && p.suburb) || addrSuburb(toKey));
+  return (sub && !/^\d/.test(sub) && !/\bWA\b/.test(sub)) ? stripSuburb(sub) : ((p && p.suburb) || 'this session');
+}
+let _bspLastSuppress = { from: null, to: null };
 function clearBspTravelPreview() {
+  _bspLastSuppress = _bspSuppress;
+  _bspSuppress = { from: null, to: null };
+  // Skipped legs were never drawn: once nothing replaces them (panel closed),
+  // redraw so they come back.
+  if ((_bspLastSuppress.from || _bspLastSuppress.to) && !_bspPanelOpen()) scheduleOverlayRefresh();
   document.querySelectorAll('.travel-overlay.preview').forEach(el => el.remove());
   document.querySelectorAll('.travel-overlay.suppressed').forEach(el => el.classList.remove('suppressed'));
 }
 function bspTravelPreview() {
+  _bspTravelPreviewInner();
+  _bspRedrawIfTargetsMoved();
+}
+function _bspTravelPreviewInner() {
   clearBspTravelPreview();
   const panel = document.getElementById('booking-side-panel');
   if (!panel || !panel.classList.contains('open')) return;
@@ -775,7 +817,7 @@ function bspTravelPreview() {
   // session) is what this booking would replace: hide it the moment the
   // panel is open for a slot after that session, before any address exists,
   // so the old return leg never sits under the placeholder.
-  document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  _bspSuppressLegs(pred.s.id, null);
   const fromKey = locTravelKey(sessionLocation(pred.s));
   const toKey = _bspTargetAddress();
   if (!col) return;
@@ -793,7 +835,7 @@ function bspTravelPreview() {
       home.toBase + ' min · ' + (sessionLocation(pred.s).suburb || 'previous') + ' → ' + baseName, false,
       'Preview: back to ' + baseName + ' after the previous session — the gap is long enough to go back');
     if (home.fromBase > 0) _bspPreviewLeg(col, 'start', startMin - home.fromBase, startMin, 'Start',
-      home.fromBase + ' min · ' + baseName + ' → ' + (addrSuburb(toKey) || 'this session'), false,
+      home.fromBase + ' min · ' + baseName + ' → ' + _bspTargetLabel(toKey), false,
       'Preview: out from ' + baseName + ' to this session');
     _bspOnwardPreview(col, day, pred.s, startMin, toKey, dur);
     return;
@@ -810,6 +852,10 @@ function bspTravelPreview() {
     }
     const text = document.getElementById('bsp-prefill-text');
     if (text && !/earliest start/.test(text.textContent)) text.textContent += ' · earliest start after the drive';
+    // Re-rendering the preview block runs clearPreviewBlocks, which also
+    // un-hides the replaced legs: hide them again before drawing the new ones
+    // (30 Sep 2026 — the old End leg showed under a piggy-backed session).
+    _bspSuppressLegs(pred.s.id, null);
   }
   if (startMin < predEnd) return;
   if (travel <= 0) {
@@ -818,10 +864,20 @@ function bspTravelPreview() {
   } else {
     const tight = (startMin - predEnd) < travel;
     _bspPreviewLeg(col, 'between', Math.max(predEnd, startMin - travel), startMin, tight ? 'Tight' : 'Travel',
-      travel + ' min · ' + (sessionLocation(pred.s).suburb || 'previous') + ' → ' + (addrSuburb(toKey) || 'next session'), tight,
+      travel + ' min · ' + (sessionLocation(pred.s).suburb || 'previous') + ' → ' + _bspTargetLabel(toKey), tight,
       (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address');
   }
   _bspOnwardPreview(col, day, pred.s, startMin, toKey, dur);
+}
+
+/* The booking now replaces different legs than before (a new time or day):
+   redraw so the previously skipped ones return. */
+function _bspRedrawIfTargetsMoved() {
+  const was = _bspLastSuppress, now = _bspSuppress;
+  if ((was.from && was.from !== now.from) || (was.to && was.to !== now.to)) {
+    _bspLastSuppress = { from: now.from, to: now.to };
+    scheduleOverlayRefresh();
+  }
 }
 
 /* One dashed preview leg. Labels are plain text (escaped here). */
@@ -847,13 +903,13 @@ function _bspPreviewLeg(col, kind, startMin, endMin, icon, label, tight, title) 
 function _bspOnwardPreview(col, day, predS, startMin, fromKey, dur) {
   const endMin = startMin + (dur || 60);
   const next = sessionsForDay(day).filter(x => sessionStartMin(x) >= endMin && !isTravelBlock(x) && x.id !== predS.id)[0] || null;
-  const fromSub = addrSuburb(fromKey) || 'this session';
+  const fromSub = _bspTargetLabel(fromKey);
   if (next) {
     const toKey = locTravelKey(sessionLocation(next));
     const toLabel = sessionLocation(next).suburb || 'next session';
     if (!toKey || !fromKey) return;
     // The next session's own inbound leg is what these replace.
-    document.querySelectorAll('.travel-overlay[data-to-session="' + next.id + '"]:not(.preview)').forEach(x => x.classList.add('suppressed'));
+    _bspSuppressLegs(null, next.id);
     const nextStart = sessionStartMin(next);
     const home = midDayViaBase(fromKey, toKey, nextStart - endMin, day);
     if (home) {
@@ -1119,6 +1175,7 @@ function reapplyBspTravelPreview() {
    share a single entry point and the renderer can't drift from the
    segment store. */
 function renderSegmentOverlay(col, seg) {
+  if (_bspIsSuppressed(seg)) return; // replaced by the open booking's preview
   if (seg.kind === 'gap') {
     // FREE-TIME/GAP OVERLAY REMOVED (2026-08-09, Antony's directive): the
     // green hatched "Free window / Idle gap" bands and cards made the calendar
