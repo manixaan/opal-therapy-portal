@@ -315,6 +315,22 @@ describe('day route mirrors the calendar\'s travel rules', () => {
     const wed = DR.buildDayLegs({ user, date: '2026-09-23', sessions: [ev('a', 'X', 1)] });
     expect(wed.legs).toEqual([]);
   });
+  // 30 Sep 2026 — same rule as the calendar (travel.js midDayViaBase).
+  test('a gap long enough to go back to base becomes Return + Start legs', () => {
+    const mins = { '1 A St, Willetton|5 Base Rd, Canning Vale WA': 12, '5 Base Rd, Canning Vale WA|2 B St, Riverton': 10 };
+    const minutesFor = (o, d) => mins[o + '|' + d] ?? 15;
+    const a = { ...ev('a', '1 A St, Willetton', 1), end_time: '2026-09-25T02:00:00Z' };
+    const far = { ...ev('b', '2 B St, Riverton', 5), start_time: '2026-09-25T05:00:00Z' }; // 3 h gap ≥ 12 + 10 + 30
+    const home = DR.buildDayLegs({ user, date: '2026-09-25', sessions: [a, far], minutesFor });
+    expect(home.legs.map(l => [l.kind, l.fromEventId, l.toEventId])).toEqual([
+      ['OUTBOUND', null, 'a'], ['RETURN', 'a', null], ['OUTBOUND', null, 'b'], ['RETURN', 'b', null]]);
+    const near = { ...ev('b', '2 B St, Riverton', 2), start_time: '2026-09-25T02:45:00Z' }; // 45 min gap < 52
+    const chain = DR.buildDayLegs({ user, date: '2026-09-25', sessions: [a, near], minutesFor });
+    expect(chain.legs.map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+    // Without route facts the rule cannot decide and chains (never guesses a trip home).
+    expect(DR.buildDayLegs({ user, date: '2026-09-25', sessions: [a, far] }).legs.map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+  });
+
   test('a manual pin beats the Outlook location', () => {
     expect(DR.eventAddress({ location: 'Outlook text', manual_location: { address: '9 Pin St' } })).toBe('9 Pin St');
   });

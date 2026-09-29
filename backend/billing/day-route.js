@@ -13,6 +13,9 @@
  *     a remote base means no start/end leg.
  *   • between legs: consecutive sessions in time order.
  *   • end leg (RETURN): to the last session's `travel.after` point, else base.
+ *   • a gap long enough to drive back to the base, stay TRAVEL_HOME_MIN_STAY
+ *     minutes and drive out again is a trip home (Return + Start legs), not a
+ *     drive between clients — travel.js `midDayViaBase`, same rule (30 Sep 2026).
  * Differences, deliberate for billing: only billable in-person sessions form
  * the route (a telehealth or DNA session is not a stop), and a between leg is
  * kept whenever the two addresses differ even if the gap is tight — the drive
@@ -22,6 +25,7 @@
 const { canonAddr } = require('./route-facts');
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const TRAVEL_HOME_MIN_STAY = 30; // mirrors travel.js
 
 function parseYmd(ymd) {
   const [y, m, d] = String(ymd).split('-').map(Number);
@@ -86,13 +90,43 @@ function eventAddress(ev) {
 }
 
 /**
+ * Pairs whose route facts buildDayLegs may need (so the caller can fetch them
+ * all first): the direct drive between consecutive sessions and, when the day
+ * has a base, each side of a possible trip home.
+ */
+function candidatePairs({ user, date, sessions }) {
+  const pairs = [];
+  const base = dayBase(user, date);
+  for (let i = 0; i < sessions.length - 1; i++) {
+    const a = eventAddress(sessions[i]), b = eventAddress(sessions[i + 1]);
+    if (!a || !b) continue;
+    pairs.push({ origin: a, destination: b });
+    if (base && !base.remote && base.address) {
+      pairs.push({ origin: a, destination: base.address }, { origin: base.address, destination: b });
+    }
+  }
+  return pairs;
+}
+
+/** { toBase, fromBase } when the gap allows a trip home; null otherwise. */
+function viaBase(base, from, to, gapMin, minutesFor) {
+  if (!minutesFor || !base || base.remote || !base.address || !(gapMin > 0)) return null;
+  if (canonAddr(base.address) === canonAddr(from) || canonAddr(base.address) === canonAddr(to)) return null;
+  const toBase = minutesFor(from, base.address);
+  const fromBase = minutesFor(base.address, to);
+  if (toBase == null || fromBase == null) return null; // cannot decide → chain, as without facts
+  return gapMin >= toBase + fromBase + TRAVEL_HOME_MIN_STAY ? { toBase, fromBase } : null;
+}
+
+/**
  * @param {object} p
  * @param {object} p.user      users row (work_location_schedule, default_work_location)
  * @param {string} p.date      YYYY-MM-DD (local)
  * @param {Array}  p.sessions  events rows sorted by start_time (in-person billable only)
+ * @param {Function} [p.minutesFor]  (origin, destination) → minutes|null; enables the trip-home rule
  * @returns {{legs:Array, base:object|null, baseUnset:boolean}}
  */
-function buildDayLegs({ user, date, sessions }) {
+function buildDayLegs({ user, date, sessions, minutesFor }) {
   const legs = [];
   const base = dayBase(user, date);
   if (!sessions.length) return { legs, base, baseUnset: !base };
@@ -111,7 +145,17 @@ function buildDayLegs({ user, date, sessions }) {
   for (let i = 0; i < sessions.length - 1; i++) {
     const a = sessions[i], b = sessions[i + 1];
     const from = eventAddress(a), to = eventAddress(b);
-    if (!from || !to || canonAddr(from) === canonAddr(to)) continue;
+    if (!from || !to) continue;
+    const gapMin = Math.round((new Date(b.start_time) - new Date(a.end_time)) / 60000);
+    const home = viaBase(base, from, to, gapMin, minutesFor);
+    if (home) {
+      legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
+        origin: from, destination: base.address, destinationLabel: base.label });
+      legs.push({ id: `start:${b.id}`, kind: 'OUTBOUND', fromEventId: null, toEventId: b.id, midday: true,
+        origin: base.address, destination: to, originLabel: base.label });
+      continue;
+    }
+    if (canonAddr(from) === canonAddr(to)) continue;
     legs.push({ id: `between:${a.id}:${b.id}`, kind: 'BETWEEN', fromEventId: a.id, toEventId: b.id, origin: from, destination: to });
   }
   const endPt = resolveSpec(meta(last).after, user) || base;
@@ -126,4 +170,4 @@ function buildDayLegs({ user, date, sessions }) {
   return { legs, base, baseUnset: !base && !explicitStart };
 }
 
-module.exports = { weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, buildDayLegs };
+module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, buildDayLegs };

@@ -192,6 +192,9 @@ describe('normal invoicing', () => {
     route('A home', 'B home', 20, 12);
     route('B home', 'C home', 24, 9.2);
     route('C home', 'Base Rd, Canning Vale', 40, 30);
+    // Base is 30 min from each client: a 60-minute gap is too short to go home (30 + 30 + 30), so the day chains.
+    route('A home', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'B home', 30, 22);
+    route('B home', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'C home', 30, 22);
     await event(pr, { clientId: 'c1', clientName: 'Trevor Sampi', date: d, start: '09:00', location: 'A home' });
     await event(pr, { clientId: 'c2', clientName: 'Rosemary Carey', date: d, start: '11:00', location: 'B home' });
     await event(pr, { clientId: 'c3', clientName: 'Dorothy Cox', date: d, start: '13:00', location: 'C home' });
@@ -216,6 +219,30 @@ describe('normal invoicing', () => {
       expect(invoice.payer_name).toBe('MARS Plan Manager');
       expect(invoice.status).toBe('DRAFT');
     }
+  });
+
+  test('a long gap between sessions is a trip home: Return + Start legs, same as the calendar', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ returnTravelPayable: true });
+    const d = day(1);
+    const pr = await practitioner(org.id, 'P', 'Base', [d]);
+    await profile(agent, 'm1', planManaged('Morning Client', 1));
+    await profile(agent, 'a1', planManaged('Afternoon Client', 1));
+    route('Base', 'M home', 15, 10); route('M home', 'Base', 15, 10);
+    route('Base', 'A home', 20, 14); route('A home', 'Base', 20, 14); route('M home', 'A home', 25, 18);
+    await event(pr, { clientId: 'm1', clientName: 'Morning Client', date: d, start: '09:00', location: 'M home' });
+    await event(pr, { clientId: 'a1', clientName: 'Afternoon Client', date: d, start: '14:00', location: 'A home' }); // 4 h gap
+    await run(agent, d, d);
+    const kinds = [];
+    for (const inv of await invoices(agent)) {
+      const lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+      kinds.push(...lab.calculation.legs.filter(l => l.included).map(l => l.kind));
+      expect(lab.calculation.legs.some(l => l.kind === 'BETWEEN')).toBe(false);
+      expect(lab.calculation.dayTotalMinutes).toBe(15 + 15 + 20 + 20);
+    }
+    expect(kinds.sort()).toEqual(['OUTBOUND', 'OUTBOUND', 'OUTBOUND', 'OUTBOUND', 'RETURN', 'RETURN', 'RETURN', 'RETURN']);
   });
 
   test('E + H — one client three days → one invoice; re-running never duplicates', async () => {

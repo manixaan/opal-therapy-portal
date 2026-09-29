@@ -89,6 +89,7 @@ sessions (Teams) are billed with no travel.
 - **Start:** the first session's `travel.before` point, otherwise the day's work base (`users.work_location_schedule` via the calendar's own `weekKeyFor`, then `default_work_location`). The office and unset or leave days never anchor travel. A remote base has no start or return leg.
 - **Between:** consecutive sessions.
 - **Return:** to the last session's `travel.after` point, otherwise the base.
+- **Trip home between sessions:** when the gap between two sessions is at least *drive back to base + drive out again + 30 minutes*, the practitioner is taken to have gone back to the day's base. That gap becomes a Return leg and an Outbound leg instead of a direct drive. Shorter gaps chain. This is the calendar's own rule (`travel.js#midDayViaBase`); with no route facts to decide, it chains and never guesses a trip home.
 
 Only billable in-person sessions are stops.
 

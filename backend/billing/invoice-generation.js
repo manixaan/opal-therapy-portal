@@ -176,7 +176,11 @@ async function prepare(q, orgId, opts) {
       continue;
     }
     const ordered = list.map(s => s.ev).sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-    const route = DR.buildDayLegs({ user: list[0].ev, date, sessions: ordered });
+    // Facts for a possible trip home decide between chaining and going back to base.
+    const cand = DR.candidatePairs({ user: list[0].ev, date, sessions: ordered });
+    const candFacts = await RF.resolveRouteFacts(q, orgId, cand);
+    const minutesFor = (o, d2) => { const f = candFacts.get(RF.routeKey(o, d2)); return f && f.status === 'ok' ? f.minutes : null; };
+    const route = DR.buildDayLegs({ user: list[0].ev, date, sessions: ordered, minutesFor });
     if (route.baseUnset) {
       issues.raise('WORK_LOCATION_NOT_SET', { practitionerId: userId, serviceDate: date, extraKey: userId,
         message: `No work location is set for ${list[0].ev.practitioner_name} on ${S.displayDate(date)}, so there is no start or return leg. Set it in My Profile → Work locations, then reprocess.`,
