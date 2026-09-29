@@ -708,7 +708,8 @@ describe('changed assets are cache-busted', () => {
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
       // shows where the drive will go until an address is typed.
       // 19: ensureDayBase waits for the saved work locations before prompting.
-      ['travel.js', 19],
+      // 20: the booking preview survives overlay redraws and previews the onward leg.
+      ['travel.js', 20],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -892,7 +893,12 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
     expect(travel).toMatch(/kind: 'between', startMin: Math\.max\(seg\.startMin, seg\.endMin - seg\.travelMin\)/);
     expect(travel).toMatch(/classList\.add\('suppressed'\)/);
-    expect(travel).toMatch(/preview placeholder/);
+    // The live preview survives the redraw a route answer triggers, and draws
+    // the leg after the new session too (29 Sep 2026: the old End leg used to
+    // reappear under a follow-on session). No placeholder before an address.
+    expect(travel).toMatch(/segs\.forEach\(seg => renderSegmentOverlay\(col, seg\)\);\n  reapplyBspTravelPreview\(\);/);
+    expect(travel).toMatch(/_bspOnwardPreview\(col, day, pred\.s, startMin, toKey\);/);
+    expect(travel).not.toMatch(/preview placeholder/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);

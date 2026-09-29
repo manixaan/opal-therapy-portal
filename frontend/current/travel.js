@@ -779,16 +779,10 @@ function bspTravelPreview() {
   const fromKey = locTravelKey(sessionLocation(pred.s));
   const toKey = _bspTargetAddress();
   if (!col) return;
-  if (!fromKey || !toKey) {
-    // No destination yet: a placeholder where the drive will go.
-    const ph = document.createElement('div');
-    ph.className = 'travel-overlay between preview placeholder';
-    ph.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
-    ph.style.height = '16px';
-    ph.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">' + (fromKey ? 'type the address to see the drive from ' + _tpEsc(sessionLocation(pred.s).suburb || 'the previous session') : 'previous session has no address') + '</span>';
-    col.appendChild(ph);
-    return;
-  }
+  // No destination yet: nothing is drawn — the old leg is already hidden, and
+  // the new legs appear live once the address is placed (29 Sep 2026: the
+  // placeholder strip sat on top of the new session and looked unfinished).
+  if (!fromKey || !toKey) return;
   const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
   const earliest = Math.ceil((predEnd + travel) / 15) * 15;
   // An explicit back-to-back keeps its start at or after the drive allows.
@@ -826,6 +820,46 @@ function bspTravelPreview() {
   el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : 'Travel') + '</span>' +
     '<span class="t-label">' + travel + ' min · ' + _tpEsc(sessionLocation(pred.s).suburb || 'previous') + ' → ' + _tpEsc(toSub) + '</span>';
   el.title = (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address';
+  col.appendChild(el);
+  _bspOnwardPreview(col, day, pred.s, startMin, toKey);
+}
+
+/* The leg AFTER the new session: to the next session that day, or to where the
+   day ends (the previous session's own "after" answer, else the day's base).
+   It replaces the End leg hidden above, so the sheet shows the day as it will
+   be once the booking is confirmed. Dashed like every preview. */
+function _bspOnwardPreview(col, day, predS, startMin, fromKey) {
+  const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
+  const endMin = startMin + dur;
+  const next = sessionsForDay(day).filter(x => sessionStartMin(x) >= endMin && !isTravelBlock(x) && x.id !== predS.id)[0] || null;
+  let toKey = null, toLabel = null, kind = 'end';
+  if (next) {
+    toKey = locTravelKey(sessionLocation(next));
+    toLabel = sessionLocation(next).suburb || 'next session';
+    kind = 'between';
+  } else {
+    const pt = resolveTravelPoint(sessionTravelOverride(predS, 'after'), day) || dayAnchorBase(day);
+    if (!pt || pt.remote || pt.unset) return;
+    toKey = pt.addr || pt.suburb;
+    toLabel = pt.label || pt.suburb || 'base';
+  }
+  if (!toKey || !fromKey) return;
+  // The next session's own inbound leg is what this one replaces.
+  if (next) document.querySelectorAll('.travel-overlay[data-to-session="' + next.id + '"]:not(.preview)').forEach(x => x.classList.add('suppressed'));
+  const mins = (canonAddr(fromKey) === canonAddr(toKey)) ? 0 : travelMinutes(fromKey, toKey);
+  if (!(mins > 0)) return;
+  const legEnd = next ? Math.min(sessionStartMin(next), endMin + mins) : endMin + mins;
+  const el = document.createElement('div');
+  el.className = 'travel-overlay ' + kind + ' preview';
+  el.style.top = tToY(Math.floor(endMin / 60), endMin % 60) + 'px';
+  const px = (legEnd - endMin) / 60 * HOUR_PX;
+  el.style.height = Math.max(12, px - 2) + 'px';
+  const tight = !!next && (sessionStartMin(next) - endMin) < mins;
+  if (tight) el.style.borderLeftColor = '#9c3322';
+  const fromSub = addrSuburb(fromKey) || 'this session';
+  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : (next ? 'Travel' : 'End')) + '</span>' +
+    '<span class="t-label">' + mins + ' min · ' + _tpEsc(fromSub) + ' → ' + _tpEsc(toLabel) + '</span>';
+  el.title = 'Preview: about ' + mins + ' min from this session to ' + toLabel + (next ? ' (the next session)' : ' (where the day ends)');
   col.appendChild(el);
 }
 // Hook the panel: every timing / location change re-runs the preview.
@@ -1006,6 +1040,20 @@ function refreshDayOverlays(day) {
   clearDayOverlays(day);
   const segs = computeDayTravelSegments(day);
   segs.forEach(seg => renderSegmentOverlay(col, seg));
+  reapplyBspTravelPreview();
+}
+
+/* A redraw removes every overlay, the booking preview included, and brings
+   back the leg the preview had hidden. Typing an address triggers exactly such
+   a redraw (its route answer arrives a moment later), so the old End leg used
+   to reappear under the new session (29 Sep 2026). While the booking panel is
+   open, the preview is re-applied once after any redraw. */
+let _bspReapplyTimer = null;
+function reapplyBspTravelPreview() {
+  const panel = document.getElementById('booking-side-panel');
+  if (!panel || !panel.classList.contains('open')) return;
+  clearTimeout(_bspReapplyTimer);
+  _bspReapplyTimer = setTimeout(() => { _bspReapplyTimer = null; try { bspTravelPreview(); } catch (e) { /* preview only */ } }, 0);
 }
 
 /* Segment-aware renderer. Dispatches by kind so start/between/end/gap
