@@ -103,4 +103,32 @@ describe('work-location gate', () => {
     c.travelChooser = () => Promise.resolve(null);
     await expect(c.ensureDayBase('wed')).resolves.toBeNull();
   });
+
 });
+
+// 30 Sep 2026: a gap long enough to drive back to the day's base, stay 30
+// minutes and drive out again is a trip home, not a drive between clients.
+describe('mid-day trip home (midDayViaBase)', () => {
+  const MINS = { 'Nedlands|1 Holman St, Derby WA 6728': 32, '1 Holman St, Derby WA 6728|Claremont': 27, 'Nedlands|Claremont': 18 };
+  function ctxFor(week) {
+    const c = load(week, BASES);
+    c.travelMinutes = (a, b) => MINS[a + '|' + b] ?? 20;
+    return c;
+  }
+  test('a gap of return + outbound + 30 minutes goes via base', () => {
+    const c = ctxFor({ tue: 'home-1' });
+    expect(c.midDayViaBase('Nedlands', 'Claremont', 32 + 27 + 30, 'tue')).toMatchObject({ toBase: 32, fromBase: 27 });
+  });
+  test('a shorter gap chains straight to the next session', () => {
+    const c = ctxFor({ tue: 'home-1' });
+    expect(c.midDayViaBase('Nedlands', 'Claremont', 32 + 27 + 29, 'tue')).toBeNull();
+  });
+  test('no base, a remote base, or a session already at base never goes "home"', () => {
+    expect(ctxFor({}).midDayViaBase('Nedlands', 'Claremont', 600, 'tue')).toBeNull();
+    const remote = load({ tue: 'home-r' }, { ...BASES, homes: [...BASES.homes, { id: 'home-r', label: 'Motel', kind: 'remote' }] });
+    remote.travelMinutes = () => 10;
+    expect(remote.midDayViaBase('Nedlands', 'Claremont', 600, 'tue')).toBeNull();
+    expect(ctxFor({ tue: 'home-1' }).midDayViaBase('1 Holman St, Derby WA 6728', 'Claremont', 600, 'tue')).toBeNull();
+  });
+});
+

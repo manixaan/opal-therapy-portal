@@ -568,7 +568,8 @@ describe('calendar drag-selection coordinate fix', () => {
   });
 
   test('pointer paths and the ghost block all consume the shared helpers', () => {
-    expect(HTML).toContain('const startMinutes = calYToMinutes(col, e.clientY);');
+    // A click books the slot it is in (floor); drag ends still round (30 Sep 2026).
+    expect(HTML).toContain("const startMinutes = calYToMinutes(col, e.clientY, 'floor');");
     expect(HTML).toContain('const yPos = calMinutesToY(startMinutes);');
     expect(HTML).toContain('const hover = calYToMinutes(col, pointerClientY);');
     expect(HTML).toContain("dragState.block.style.top    = `${calMinutesToY(selStart)}px`;");

@@ -143,7 +143,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=20" defer></script>
+<script src="/travel.js?v=21" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -11311,10 +11311,14 @@ const SLOT_SNAP_MIN = 15;  // selection snaps to 15-minute slots
    ghost block, the booking panel and the saved event can never disagree.
    (The previous code hardcoded 60px/hour here after the grid moved to
    48px/hour — a 7:00 PM selection painted at the 11:45 PM position.) */
-function calYToMinutes(col, clientY) {
+// mode 'floor' = the slot the pointer is IN (a click / press). Rounding to the
+// nearest slot booked the NEXT slot for any click in a slot's lower half
+// (30 Sep 2026: "clicking a blank cell jumps"). Drag ends still round.
+function calYToMinutes(col, clientY, mode) {
   const y = clientY - col.getBoundingClientRect().top;
   const raw = (y / HOUR_PX) * 60 + START_H * 60;
-  const snapped = Math.round(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
+  const snap = mode === 'floor' ? Math.floor : Math.round;
+  const snapped = snap(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
   return Math.max(START_H * 60, Math.min(END_H * 60, snapped));
 }
 function calMinutesToY(minutesOfDay) {
@@ -11335,7 +11339,7 @@ function _calColPointerDown(e) {
       e.target.closest('.travel-overlay')) return;
 
   const col = e.currentTarget;
-  const startMinutes = calYToMinutes(col, e.clientY);
+  const startMinutes = calYToMinutes(col, e.clientY, 'floor');
 
   _calDragPending = {
     col,

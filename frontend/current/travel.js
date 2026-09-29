@@ -783,6 +783,21 @@ function bspTravelPreview() {
   // the new legs appear live once the address is placed (29 Sep 2026: the
   // placeholder strip sat on top of the new session and looked unfinished).
   if (!fromKey || !toKey) return;
+  const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
+  // A real gap after the previous session: it goes back to base first (same
+  // rule as the calendar, midDayViaBase), then out to the new session.
+  const home = (!pred.explicit && startMin > predEnd) ? midDayViaBase(fromKey, toKey, startMin - predEnd, day) : null;
+  if (home) {
+    const baseName = home.base.label || home.base.suburb || 'base';
+    if (home.toBase > 0) _bspPreviewLeg(col, 'end', predEnd, predEnd + home.toBase, 'Return',
+      home.toBase + ' min · ' + (sessionLocation(pred.s).suburb || 'previous') + ' → ' + baseName, false,
+      'Preview: back to ' + baseName + ' after the previous session — the gap is long enough to go back');
+    if (home.fromBase > 0) _bspPreviewLeg(col, 'start', startMin - home.fromBase, startMin, 'Start',
+      home.fromBase + ' min · ' + baseName + ' → ' + (addrSuburb(toKey) || 'this session'), false,
+      'Preview: out from ' + baseName + ' to this session');
+    _bspOnwardPreview(col, day, pred.s, startMin, toKey, dur);
+    return;
+  }
   const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
   const earliest = Math.ceil((predEnd + travel) / 15) * 15;
   // An explicit back-to-back keeps its start at or after the drive allows.
@@ -791,7 +806,6 @@ function bspTravelPreview() {
     startEl.value = String(Math.floor(earliest / 60)).padStart(2, '0') + ':' + String(earliest % 60).padStart(2, '0');
     if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
     if (typeof renderCalendarPreviewBlocks === 'function') {
-      const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10);
       renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(startMin / 60), startM: startMin % 60, startMin, durationMin: dur, score: 100 }]);
     }
     const text = document.getElementById('bsp-prefill-text');
@@ -800,67 +814,70 @@ function bspTravelPreview() {
   if (startMin < predEnd) return;
   if (travel <= 0) {
     // Same place as the previous session: say so instead of drawing nothing.
-    const note = document.createElement('div');
-    note.className = 'travel-overlay between preview';
-    note.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
-    note.style.height = '14px';
-    note.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">no drive · same place as the previous session</span>';
-    col.appendChild(note);
-    return;
+    _bspPreviewLeg(col, 'between', predEnd, predEnd + 12, 'Travel', 'no drive · same place as the previous session', false, '');
+  } else {
+    const tight = (startMin - predEnd) < travel;
+    _bspPreviewLeg(col, 'between', Math.max(predEnd, startMin - travel), startMin, tight ? 'Tight' : 'Travel',
+      travel + ' min · ' + (sessionLocation(pred.s).suburb || 'previous') + ' → ' + (addrSuburb(toKey) || 'next session'), tight,
+      (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address');
   }
-  const legStart = Math.max(predEnd, startMin - travel);
-  const el = document.createElement('div');
-  el.className = 'travel-overlay between preview';
-  el.style.top = tToY(Math.floor(legStart / 60), legStart % 60) + 'px';
-  const px = (startMin - legStart) / 60 * HOUR_PX;
-  el.style.height = Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) + 'px';
-  const tight = (startMin - predEnd) < travel;
-  if (tight) el.style.borderLeftColor = '#9c3322';
-  const toSub = addrSuburb(toKey) || 'next session';
-  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : 'Travel') + '</span>' +
-    '<span class="t-label">' + travel + ' min · ' + _tpEsc(sessionLocation(pred.s).suburb || 'previous') + ' → ' + _tpEsc(toSub) + '</span>';
-  el.title = (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address';
-  col.appendChild(el);
-  _bspOnwardPreview(col, day, pred.s, startMin, toKey);
+  _bspOnwardPreview(col, day, pred.s, startMin, toKey, dur);
 }
 
-/* The leg AFTER the new session: to the next session that day, or to where the
-   day ends (the previous session's own "after" answer, else the day's base).
-   It replaces the End leg hidden above, so the sheet shows the day as it will
-   be once the booking is confirmed. Dashed like every preview. */
-function _bspOnwardPreview(col, day, predS, startMin, fromKey) {
-  const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
-  const endMin = startMin + dur;
-  const next = sessionsForDay(day).filter(x => sessionStartMin(x) >= endMin && !isTravelBlock(x) && x.id !== predS.id)[0] || null;
-  let toKey = null, toLabel = null, kind = 'end';
-  if (next) {
-    toKey = locTravelKey(sessionLocation(next));
-    toLabel = sessionLocation(next).suburb || 'next session';
-    kind = 'between';
-  } else {
-    const pt = resolveTravelPoint(sessionTravelOverride(predS, 'after'), day) || dayAnchorBase(day);
-    if (!pt || pt.remote || pt.unset) return;
-    toKey = pt.addr || pt.suburb;
-    toLabel = pt.label || pt.suburb || 'base';
-  }
-  if (!toKey || !fromKey) return;
-  // The next session's own inbound leg is what this one replaces.
-  if (next) document.querySelectorAll('.travel-overlay[data-to-session="' + next.id + '"]:not(.preview)').forEach(x => x.classList.add('suppressed'));
-  const mins = (canonAddr(fromKey) === canonAddr(toKey)) ? 0 : travelMinutes(fromKey, toKey);
-  if (!(mins > 0)) return;
-  const legEnd = next ? Math.min(sessionStartMin(next), endMin + mins) : endMin + mins;
+/* One dashed preview leg. Labels are plain text (escaped here). */
+function _bspPreviewLeg(col, kind, startMin, endMin, icon, label, tight, title) {
+  if (!(endMin > startMin)) return;
   const el = document.createElement('div');
   el.className = 'travel-overlay ' + kind + ' preview';
-  el.style.top = tToY(Math.floor(endMin / 60), endMin % 60) + 'px';
-  const px = (legEnd - endMin) / 60 * HOUR_PX;
-  el.style.height = Math.max(12, px - 2) + 'px';
-  const tight = !!next && (sessionStartMin(next) - endMin) < mins;
+  el.style.top = tToY(Math.floor(startMin / 60), startMin % 60) + 'px';
+  const px = (endMin - startMin) / 60 * HOUR_PX;
+  el.style.height = Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) + 'px';
   if (tight) el.style.borderLeftColor = '#9c3322';
-  const fromSub = addrSuburb(fromKey) || 'this session';
-  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : (next ? 'Travel' : 'End')) + '</span>' +
-    '<span class="t-label">' + mins + ' min · ' + _tpEsc(fromSub) + ' → ' + _tpEsc(toLabel) + '</span>';
-  el.title = 'Preview: about ' + mins + ' min from this session to ' + toLabel + (next ? ' (the next session)' : ' (where the day ends)');
+  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + _tpEsc(icon) + '</span>' +
+    '<span class="t-label">' + _tpEsc(label) + '</span>';
+  if (title) el.title = title;
   col.appendChild(el);
+}
+
+/* The legs AFTER the new session: to the next session that day (directly, or
+   via base when the gap allows — the same rule as the calendar), or to where
+   the day ends (the previous session's own "after" answer, else the base).
+   They replace the legs hidden above, so the sheet shows the day as it will
+   be once the booking is confirmed. Dashed like every preview. */
+function _bspOnwardPreview(col, day, predS, startMin, fromKey, dur) {
+  const endMin = startMin + (dur || 60);
+  const next = sessionsForDay(day).filter(x => sessionStartMin(x) >= endMin && !isTravelBlock(x) && x.id !== predS.id)[0] || null;
+  const fromSub = addrSuburb(fromKey) || 'this session';
+  if (next) {
+    const toKey = locTravelKey(sessionLocation(next));
+    const toLabel = sessionLocation(next).suburb || 'next session';
+    if (!toKey || !fromKey) return;
+    // The next session's own inbound leg is what these replace.
+    document.querySelectorAll('.travel-overlay[data-to-session="' + next.id + '"]:not(.preview)').forEach(x => x.classList.add('suppressed'));
+    const nextStart = sessionStartMin(next);
+    const home = midDayViaBase(fromKey, toKey, nextStart - endMin, day);
+    if (home) {
+      const baseName = home.base.label || home.base.suburb || 'base';
+      if (home.toBase > 0) _bspPreviewLeg(col, 'end', endMin, endMin + home.toBase, 'Return', home.toBase + ' min · ' + fromSub + ' → ' + baseName, false, 'Preview: back to ' + baseName);
+      if (home.fromBase > 0) _bspPreviewLeg(col, 'start', nextStart - home.fromBase, nextStart, 'Start', home.fromBase + ' min · ' + baseName + ' → ' + toLabel, false, 'Preview: out to the next session');
+      return;
+    }
+    const mins = (canonAddr(fromKey) === canonAddr(toKey)) ? 0 : travelMinutes(fromKey, toKey);
+    if (!(mins > 0)) return;
+    const tight = (nextStart - endMin) < mins;
+    _bspPreviewLeg(col, 'between', endMin, Math.min(nextStart, endMin + mins), tight ? 'Tight' : 'Travel',
+      mins + ' min · ' + fromSub + ' → ' + toLabel, tight, 'Preview: about ' + mins + ' min from this session to ' + toLabel + ' (the next session)');
+    return;
+  }
+  const pt = resolveTravelPoint(sessionTravelOverride(predS, 'after'), day) || dayAnchorBase(day);
+  if (!pt || pt.remote || pt.unset || !fromKey) return;
+  const toKey = pt.addr || pt.suburb;
+  const toLabel = pt.label || pt.suburb || 'base';
+  if (!toKey) return;
+  const mins = (canonAddr(fromKey) === canonAddr(toKey)) ? 0 : travelMinutes(fromKey, toKey);
+  if (!(mins > 0)) return;
+  _bspPreviewLeg(col, 'end', endMin, endMin + mins, 'End', mins + ' min · ' + fromSub + ' → ' + toLabel, false,
+    'Preview: about ' + mins + ' min from this session to ' + toLabel + ' (where the day ends)');
 }
 // Hook the panel: every timing / location change re-runs the preview.
 (function installBspTravelPreview() {
@@ -892,6 +909,26 @@ async function applyTravelChainAfterBooking(newDbId, ctx) {
       body: JSON.stringify({ before: null, after: inherit }),
     });
   } catch (e) { /* best effort — the default is the same base most days */ }
+}
+
+/* Minimum time at base for a gap to count as a trip home (see the between
+   loop in computeDayTravelSegments and billing/day-route.js). */
+const TRAVEL_HOME_MIN_STAY = 30;
+
+/* { base, baseKey, toBase, fromBase } when the gap allows driving back to the
+   day's base, staying TRAVEL_HOME_MIN_STAY minutes and driving out again;
+   null otherwise (no base set, a remote base, or either end already at base). */
+function midDayViaBase(fromKey, toKey, gapMin, day) {
+  if (!fromKey || !toKey || !(gapMin > 0)) return null;
+  const base = dayAnchorBase(day);
+  if (!base || base.unset || base.remote) return null;
+  const baseKey = base.addr || base.suburb;
+  if (!baseKey) return null;
+  if (canonAddr(baseKey) === canonAddr(fromKey) || canonAddr(baseKey) === canonAddr(toKey)) return null;
+  const toBase = travelMinutes(fromKey, baseKey);
+  const fromBase = travelMinutes(baseKey, toKey);
+  if (!(gapMin >= toBase + fromBase + TRAVEL_HOME_MIN_STAY)) return null;
+  return { base, baseKey, toBase, fromBase };
 }
 
 function computeDayTravelSegments(day) {
@@ -953,6 +990,11 @@ function computeDayTravelSegments(day) {
   }
 
   // --- between consecutive pairs ---
+  // A gap long enough to drive back to the day's base, stay a while and come
+  // out again is a trip home, not a drive between clients (30 Sep 2026): the
+  // previous session gets a Return leg and the next one a Start leg from base.
+  // Shorter gaps chain session to session. billing/day-route.js applies the
+  // same rule, so invoiced travel matches the calendar.
   for (let i = 0; i < sessions.length - 1; i++) {
     const curr = sessions[i], next = sessions[i + 1];
     const gapStart = sessionEndMin(curr);
@@ -969,6 +1011,23 @@ function computeDayTravelSegments(day) {
     // Lunch block inside this gap? Don't emit — lunch is its own block.
     const lunchIn = sessions.some(x => x.type === 'lunch' && sessionStartMin(x) >= gapStart && sessionEndMin(x) <= gapEnd);
     if (lunchIn) continue;
+
+    const home = midDayViaBase(fromKey, toKey, gapMin, day);
+    if (home) {
+      const baseLoc = { suburb: home.base.suburb, label: home.base.label, region: home.base.region, address: home.base.addr || null };
+      if (home.toBase > 0) segs.push({ day, kind: 'end', midday: true, fromLoc: from, toLoc: baseLoc,
+        startMin: gapStart, endMin: gapStart + home.toBase, travelMin: home.toBase, freeMin: 0,
+        fromSessionId: curr.id, toSessionId: null, anchorBaseId: calendarWeekLocations()[day] || null,
+        cacheKey: routeKey(fromKey, home.baseKey, 'driving') });
+      segs.push({ day, kind: 'gap', fromLoc: baseLoc, toLoc: baseLoc,
+        startMin: gapStart + home.toBase, endMin: gapEnd - home.fromBase, travelMin: 0,
+        freeMin: gapMin - home.toBase - home.fromBase, fromSessionId: null, toSessionId: null, anchorBaseId: null, cacheKey: '' });
+      if (home.fromBase > 0) segs.push({ day, kind: 'start', midday: true, fromLoc: baseLoc, toLoc: to,
+        startMin: gapEnd - home.fromBase, endMin: gapEnd, travelMin: home.fromBase, freeMin: 0,
+        fromSessionId: null, toSessionId: next.id, anchorBaseId: calendarWeekLocations()[day] || null,
+        cacheKey: routeKey(home.baseKey, toKey, 'driving') });
+      continue;
+    }
 
     const freeAfterTravel = Math.max(0, gapMin - travel);
     const kind = (gapMin >= 45 && freeAfterTravel >= 25) ? 'gap' : 'between';
@@ -1015,7 +1074,7 @@ function computeDayTravelSegments(day) {
 
   // --- trailing free window: last session (after return travel) → working-day end ---
   {
-    const endSeg = segs.find(x => x.kind === 'end');
+    const endSeg = segs.find(x => x.kind === 'end' && !x.midday);
     const tailStart = endSeg ? endSeg.endMin : sessionEndMin(last);
     if (workE - tailStart >= 45) {
       segs.push({ day, kind: 'gap', fromLoc: sessionLocation(last), toLoc: {},
@@ -1095,12 +1154,14 @@ function renderSegmentOverlay(col, seg) {
   el.style.height = Math.min(Math.max(12, segSlotPx - 4), Math.max(4, segSlotPx - 2)) + 'px';
   const tight = seg.kind === 'between' && (seg.endMin - seg.startMin) < seg.travelMin + 5;
   if (tight) el.style.borderLeftColor = '#9c3322';
-  const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel';
+  const icon = seg.midday ? (seg.kind === 'end' ? 'Return' : 'Start')
+    : (seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel');
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
     <span class="t-label">${seg.travelMin} min · ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to}</span>`;
-  const kindLabel = seg.kind === 'start' ? 'Morning drive from' :
+  const kindLabel = seg.midday ? (seg.kind === 'end' ? 'Back to base between sessions:' : 'Out from base:') :
+                    seg.kind === 'start' ? 'Morning drive from' :
                     seg.kind === 'end'   ? 'Evening drive to'    :
                                            'Travel';
   el.title = `${kindLabel} ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to} ≈ ${seg.travelMin} min. Click for travel details.`;
@@ -1260,7 +1321,8 @@ function _renderTravelPanel(seg) {
 
   // Before / After — the session's own answer to where the day starts or ends.
   // Only the day's ends carry one; between-session legs chain in time order.
-  var planSession = seg.kind === 'start' ? toSession : seg.kind === 'end' ? fromSession : null;
+  // Mid-day trips home follow the gap rule; only the day's real ends take an answer.
+  var planSession = seg.midday ? null : seg.kind === 'start' ? toSession : seg.kind === 'end' ? fromSession : null;
   if (planSession && !isTravelBlock(planSession) && planSession.dbId) {
     var side = seg.kind === 'start' ? 'before' : 'after';
     var current = sessionTravelOverride(planSession, side);
