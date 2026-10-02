@@ -21,7 +21,7 @@ const express = require('express');
 const { contentDisposition } = require('./content-disposition');
 const router  = express.Router();
 const db      = require('./database');
-const { requireAuth } = require('./permissions');
+const { requireAuth, requirePermission } = require('./permissions');
 const credentialExtraction = require('./credential-extraction');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -1091,6 +1091,37 @@ router.get('/api/profile/work-schedule', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('GET work-schedule error:', err);
+    res.status(500).json({ error: 'Failed to load work schedule' });
+  }
+});
+
+/**
+ * GET /api/profile/work-schedule/:userId
+ * Smart Booking "Booking for" another clinician: their week's work locations
+ * and travel bases, so route and Return Home use THEIR base, not the caller's.
+ * Read-only, owner/admin (view_all_travel), same organisation only; any other
+ * caller or target is a 404/403 with nothing disclosed.
+ */
+router.get('/api/profile/work-schedule/:userId', requireAuth, requirePermission('view_all_travel'), async (req, res) => {
+  try {
+    const target = String(req.params.userId || '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(target)) {
+      return res.status(400).json({ error: 'Invalid user id' });
+    }
+    const { rows } = await db.pool.query(
+      `SELECT work_location_schedule, default_work_location
+         FROM users
+        WHERE id = $1 AND is_active = TRUE
+          AND organisation_id IS NOT DISTINCT FROM $2`,
+      [target, req.user.organisation_id || null]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Clinician not found' });
+    res.json({
+      workLocationSchedule: rows[0].work_location_schedule || null,
+      travelBases:          rows[0].default_work_location  || null,
+    });
+  } catch (err) {
+    console.error('GET clinician work-schedule error:', err.message);
     res.status(500).json({ error: 'Failed to load work schedule' });
   }
 });

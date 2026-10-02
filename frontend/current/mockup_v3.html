@@ -88,6 +88,7 @@
 <link rel="stylesheet" href="/onboarding-journey.css?v=42" />
 <link rel="stylesheet" href="/employees.css?v=1" />
 <link rel="stylesheet" href="/people.css?v=2" />
+<link rel="stylesheet" href="/booking-route.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=3" />
 <script src="/resourcehub.js?v=r52" defer></script>
@@ -143,7 +144,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=18" defer></script>
+<script src="/travel.js?v=19" defer></script>
+<!-- Route-aware Smart Booking: client location selector, work-location
+     notice, and the "What next?" continuation after a booking. Extends the
+     booking panel; the route maths live in travel.js, loaded just above. -->
+<script src="/booking-route.js?v=1" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -4621,6 +4626,9 @@ window.opIcon = function (name, size) {
         <div class="bsp-timing-section">
           <div class="bsp-section-title">When &amp; Where</div>
 
+          <!-- Smart Scheduling needs the clinician's base for the day (booking-route.js) -->
+          <div class="bsp-wl-notice" id="bsp-wl-notice" role="status" hidden></div>
+
           <!-- Day selector -->
           <div class="bsp-day-row">
             <label class="bsp-field-label">Day</label>
@@ -4671,9 +4679,16 @@ window.opIcon = function (name, size) {
 
           <!-- Location -->
           <div class="bsp-loc-field">
-            <label class="bsp-field-label">Location <span class="bsp-optional" id="bsp-location-req">required for client sessions</span></label>
-            <input type="text" id="bsp-location" placeholder="Start typing an address…" autocomplete="off">
+            <label class="bsp-field-label" for="bsp-loc-select">Location <span class="bsp-optional" id="bsp-location-req">required for client sessions</span></label>
+            <!-- Client location selector: Splose address, saved service locations,
+                 previously used addresses, + Add another (booking-route.js). -->
+            <select id="bsp-loc-select" class="bsp-loc-select" aria-label="Client location" hidden></select>
+            <input type="text" id="bsp-location" placeholder="Start typing an address…" autocomplete="off" aria-label="Location address">
+            <div class="bsp-loc-add" id="bsp-loc-add" hidden></div>
+            <div class="bsp-loc-meta" id="bsp-loc-meta" hidden></div>
             <label class="bsp-loc-unsure"><input type="checkbox" id="bsp-location-unsure"> Unsure — I'll set it on the calendar later</label>
+            <!-- Route-aware travel from the previous stop (travel.js runBspRoutePreview) -->
+            <div class="bsp-route-status" id="bsp-route-status" hidden></div>
           </div>
         </div>
 
@@ -11314,11 +11329,16 @@ const SLOT_SNAP_MIN = 15;  // selection snaps to 15-minute slots
 function calYToMinutes(col, clientY) {
   const y = clientY - col.getBoundingClientRect().top;
   const raw = (y / HOUR_PX) * 60 + START_H * 60;
-  const snapped = Math.round(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
+  const snapped = calSnapMin(raw);
   return Math.max(START_H * 60, Math.min(END_H * 60, snapped));
 }
 function calMinutesToY(minutesOfDay) {
   return ((minutesOfDay - START_H * 60) / 60) * HOUR_PX;
+}
+/* The one 15-minute grid every calendar gesture lands on: drag-to-create,
+   moving and resizing appointments, and the proposed Smart Booking block. */
+function calSnapMin(minutes) {
+  return Math.round(minutes / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
 }
 
 let _calDragPending = null; // { col, day, startY, startMinutes, pointerId }
@@ -11332,6 +11352,7 @@ function _calColPointerDown(e) {
       e.target.closest('.resize-handle') ||
       e.target.closest('.slot-card') ||
       e.target.classList.contains('drag-block') ||
+      e.target.closest('.cal-preview-block') ||
       e.target.closest('.travel-overlay')) return;
 
   const col = e.currentTarget;
@@ -11413,31 +11434,13 @@ function createDragBlock(col, startMinutes, durationMinutes) {
   const height = (durationMinutes / 60) * HOUR_PX - 4;
 
   const block = document.createElement('div');
-  block.className = 'drag-block';
-  block.style.cssText = `
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: ${yPos}px;
-    height: ${height}px;
-    background: var(--accent-soft);
-    border: 1.5px solid var(--accent);
-    border-radius: 8px;
-    cursor: ns-resize;
-    z-index: 100;
-    box-shadow: 0 2px 8px rgba(122, 155, 142, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent-deep);
-    font-weight: 600;
-    font-size: 13px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    transition: box-shadow 0.15s ease-out;
-  `;
+  // Same proposed treatment as the Smart Booking preview block (.cal-proposed):
+  // a session-shaped tile, lighter and dashed — not a different event style.
+  block.className = 'drag-block cal-proposed';
+  block.style.top = `${yPos}px`;
+  block.style.height = `${height}px`;
 
-  const startTime = minutesToTime(startMinutes);
-  block.innerHTML = `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${durationMinutes} min</div></div>`;
+  block.innerHTML = calProposedLabel(startMinutes, durationMinutes);
 
   col.appendChild(block);
   dragState.block = block;
@@ -11472,16 +11475,23 @@ function handleDragMove(event) {
 
     dragState.block.style.top    = `${calMinutesToY(selStart)}px`;
     dragState.block.style.height = `${((selEnd - selStart) / 60) * HOUR_PX - 4}px`;
-    dragState.block.style.boxShadow = '0 4px 12px rgba(122, 155, 142, 0.2)';
 
-    const startTime = minutesToTime(selStart);
-    const durMinutes = selEnd - selStart;
-    // Short blocks can't fit two stacked lines — compact to one line (or
-    // time only for 15-min slots) so the label never spills past the edges.
-    dragState.block.innerHTML = durMinutes < 45
-      ? `<div style="text-align:center;line-height:1;pointer-events:none;font-size:10.5px;font-weight:600;white-space:nowrap;">${startTime}${durMinutes >= 30 ? ` &middot; ${durMinutes} min` : ''}</div>`
-      : `<div style="text-align: center; line-height: 1.3; pointer-events: none;"><div style="font-weight: 600;">${startTime}</div><div style="font-size: 11px; color: var(--ink-soft); margin-top: 2px;">${durMinutes} min</div></div>`;
+    dragState.block.innerHTML = calProposedLabel(selStart, selEnd - selStart);
   });
+}
+
+/* Label for a proposed (not yet saved) block — the drag selection and the
+   Smart Booking preview share it. Laid out like a session tile: time range
+   first, then a quiet "Proposed" line and the client when there is room.
+   Short blocks keep one line so nothing spills past the edges. */
+function calProposedLabel(startMin, durMin, who) {
+  const endMin = startMin + durMin;
+  const f = (m) => { const h = Math.floor(m / 60) % 24, mm = m % 60; return (h % 12 || 12) + ':' + String(mm).padStart(2, '0') + (h < 12 ? 'am' : 'pm'); };
+  const range = f(startMin) + '–' + f(endMin);
+  if (durMin < 30) return '<span class="cp-time">' + range + '</span>';
+  if (durMin < 45) return '<span class="cp-time">' + range + '</span><span class="cp-tag"> · Proposed</span>';
+  return '<span class="cp-time">' + range + '</span><span class="cp-line"><span class="cp-tag">Proposed</span>' +
+    (who ? ' · ' + escapeHtml(who) : ' · ' + durMin + ' min') + '</span>';
 }
 
 function handleDragEnd(event) {
@@ -12719,8 +12729,12 @@ async function confirmBooking() {
     // Required for a client session (travel is built from it) unless the
     // therapist ticks Unsure — then it is set later from the calendar.
     const _typedLoc = (_t && _t.location) || '';
-    const _outlookLocation = isClientSession ? (_typedLoc || patient?.address || '') : '';
     const _unsure = !!document.getElementById('bsp-location-unsure')?.checked;
+    // Unsure is an explicit "not known yet": the booking carries no address,
+    // so no travel is routed from a guessed one (it is set later on the calendar).
+    const _outlookLocation = (isClientSession && !_unsure) ? (_typedLoc || patient?.address || '') : '';
+    const _locEl = document.getElementById('bsp-location');
+    const _locMeta = (_locEl && !_unsure) ? { placeId: _locEl.dataset.placeId || '', locId: _locEl.dataset.locId || '' } : { placeId: '', locId: '' };
     if (isClientSession && !_outlookLocation && !_unsure) {
       resetBtn();
       showToast('Where is the session?', 'Type the address, or tick "Unsure" to set it on the calendar later.', 'warn');
@@ -12797,7 +12811,8 @@ async function confirmBooking() {
         sub, patient: sub,
         patientId: patient?.id,
         region: patient?.region || 'central',
-        suburb: patient?.suburb || '',
+        suburb: _unsure ? '' : (patient?.suburb || ''),
+        locationUnknown: _unsure && !_outlookLocation,
         dbId: newDbId, outlookId,
         address: _outlookLocation || null, location: _outlookLocation || null,
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
@@ -12823,6 +12838,20 @@ async function confirmBooking() {
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
     showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
+    // Route-aware continuation (booking-route.js): "What would you like to do
+    // next?" — Return Home / Book Another Client / Go Somewhere Else. Only a
+    // SAVED appointment (newDbId) can be the previous stop of a route.
+    if (isClientSession && typeof onBookingCreated === 'function') {
+      onBookingCreated({
+        dbId: newDbId, day: slot.day,
+        startMin: slot.startH * 60 + slot.startM, endMin, durationMin: dur,
+        location: _outlookLocation || '', unsure: _unsure && !_outlookLocation,
+        placeId: _locMeta.placeId, locId: _locMeta.locId,
+        patientId: patient?.id || null, patientName: _patName, suburb: _unsure ? '' : (patient?.suburb || ''),
+        serviceLeaf: BOOKING_STATE.serviceType || null,
+        therapistId: _bspSelectedTherapist?.id || null,
+      });
+    }
 
     // Trigger a background delta sync so the new event lands in the local DB
     // immediately — without this the event disappears on page refresh until the
@@ -14800,7 +14829,7 @@ function onBlockPointerMove(e) {
   // Compute snap position (15-min grid) for the ghost and the drop target
   const rawMinutes = (clampedTop / HOUR_PX) * 60 + START_H * 60;
   const snappedStart = Math.max(START_H * 60,
-    Math.min(END_H * 60 - drag.durationMin, Math.round(rawMinutes / 15) * 15));
+    Math.min(END_H * 60 - drag.durationMin, calSnapMin(rawMinutes)));
 
   if (drag.ghost.parentElement !== col) col.appendChild(drag.ghost);
   drag.ghost.style.top = ((snappedStart - START_H * 60) / 60 * HOUR_PX) + 'px';
@@ -14901,22 +14930,21 @@ function onBlockResizeMove(e) {
   let newStart = resize.origStartMin;
   let newDur   = resize.origDurMin;
 
-  // Snap to 15-min grid, enforce 15-min minimum duration, clamp to calendar window
-  const SNAP = 15;
-  const MIN  = 15;
+  // Snap to the shared 15-min grid, enforce a one-slot minimum duration, clamp to calendar window
+  const MIN  = SLOT_SNAP_MIN;
   const MAX_END = END_H * 60;
   const MIN_START = START_H * 60;
 
   if (resize.edge === 'top') {
     // Dragging the top edge changes start time, keeps end time fixed
     const endMin = resize.origStartMin + resize.origDurMin;
-    let target = Math.round((resize.origStartMin + dMin) / SNAP) * SNAP;
+    let target = calSnapMin(resize.origStartMin + dMin);
     target = Math.max(MIN_START, Math.min(endMin - MIN, target));
     newStart = target;
     newDur   = endMin - target;
   } else {
     // Bottom edge: keep start fixed, change duration
-    let targetEnd = Math.round((resize.origStartMin + resize.origDurMin + dMin) / SNAP) * SNAP;
+    let targetEnd = calSnapMin(resize.origStartMin + resize.origDurMin + dMin);
     targetEnd = Math.min(MAX_END, Math.max(resize.origStartMin + MIN, targetEnd));
     newDur = targetEnd - resize.origStartMin;
   }
@@ -20456,7 +20484,9 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
         var lat = d.lat != null ? String(d.lat) : '', lng = d.lng != null ? String(d.lng) : '';
         inputEl.value = addr;
         if (lat && lng) { inputEl.dataset.lat = lat; inputEl.dataset.lng = lng; }
-        if (onSelect) onSelect(addr, lat, lng);
+        inputEl.dataset.placeId = it.placeId; // dedupes a saved client location / destination
+        inputEl.dataset.placeName = it.name || '';
+        if (onSelect) onSelect(addr, lat, lng, it.placeId);
         inputEl.dispatchEvent(new Event('change', { bubbles: true }));
       });
   }
@@ -20483,7 +20513,7 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
   inputEl.addEventListener('blur', function () { setTimeout(close, 150); });
   inputEl.addEventListener('input', function () {
     var q = inputEl.value.trim();
-    delete inputEl.dataset.lat; delete inputEl.dataset.lng;
+    delete inputEl.dataset.lat; delete inputEl.dataset.lng; delete inputEl.dataset.placeId; delete inputEl.dataset.placeName;
     if (timer) clearTimeout(timer);
     if (q.length < 2) { close(); return; }
     if (!token) token = newToken();
@@ -20665,34 +20695,38 @@ window.showQuickAdd = function(...args) {
 
 /* ── Calendar slot hover hint — REMOVED ── */
 
-/* ── Calendar preview blocks (suggested slots) ── */
-.cal-preview-block {
+/* ── Proposed blocks: the drag selection and the Smart Booking preview ──
+   A proposed appointment is a session tile that is not saved yet: same
+   shape, inset, radius, padding and type as .session, told apart only by a
+   lighter fill and a dashed outline. (The star and the heavy blue fill were
+   removed 2 Oct 2026.) */
+.cal-proposed {
   position: absolute;
-  left: 2px; right: 2px;
-  background: rgba(74,127,193,0.18);
-  border: 1.5px dashed #3d6cae;
-  border-radius: 5px;
-  z-index: 20;
-  cursor: pointer;
-  display: flex; align-items: flex-start;
-  padding: 3px 5px;
-  font-size: 10px; font-weight: 600; color: var(--info);
-  transition: background 0.15s, border-color 0.15s;
+  left: 3px; right: 3px;
   box-sizing: border-box;
+  border-radius: 4px;
+  padding: 2px 6px 2px 5px;
+  background: var(--info-soft, #eef3fa);
+  background: color-mix(in srgb, var(--info, #3d6cae) 9%, var(--panel, #fff));
+  border: 1px dashed var(--info, #3d6cae);
+  border-left: 3px solid var(--info, #3d6cae);
+  color: var(--ink, #1f2933);
+  font-size: 11px; line-height: 1.25; font-weight: 400;
+  opacity: 0.92;
   overflow: hidden;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  z-index: 20;
+  cursor: ns-resize;
+  pointer-events: auto;
 }
-.cal-preview-block:hover {
-  background: rgba(74,127,193,0.28);
-  border-color: var(--info);
-}
-.cal-preview-block.preview-selected {
-  background: rgba(74,127,193,0.35);
-  border: 2px solid #3d6cae;
-  color: #2c4d78;
-}
-.cal-preview-block .preview-label {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
+.cal-proposed .cp-time { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; pointer-events: none; }
+.cal-proposed .cp-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--ink-soft); pointer-events: none; }
+.cal-proposed .cp-tag { font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--info, #3d6cae); pointer-events: none; }
+.cal-preview-block { cursor: grab; transition: box-shadow 0.15s, opacity 0.15s; }
+.cal-preview-block:hover { opacity: 1; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
+.cal-preview-block.dragging { cursor: grabbing; opacity: 1; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18); }
+.cal-preview-block:not(.preview-selected) { opacity: 0.7; }
+.drag-block.cal-proposed { z-index: 100; pointer-events: none; }
 
 /* ── Drag-selection overlay ── */
 .cal-drag-select {
@@ -21195,13 +21229,14 @@ function renderCalendarPreviewBlocks(slots) {
     const fmtT    = (h, m) => { const h12 = h%12||12; return `${h12}:${pad(m)}${h<12?'a':'p'}`; };
 
     const el = document.createElement('div');
-    el.className = 'cal-preview-block' + (idx === 0 ? ' preview-selected' : '');
+    el.className = 'cal-preview-block cal-proposed' + (idx === 0 ? ' preview-selected' : '');
     el.dataset.slotIdx = idx;
     el.style.top    = tToY(slot.startH, slot.startM || 0) + 'px';
     const prevSlotPx = slot.durationMin / 60 * HOUR_PX;
     el.style.height = Math.min(Math.max(18, prevSlotPx - 4), Math.max(4, prevSlotPx - 2)) + 'px';
-    el.innerHTML = `<span class="preview-label">${idx===0?'★ ':''} ${fmtT(slot.startH, slot.startM||0)}–${fmtT(endH,endM)}</span>`;
-    el.title = `${idx===0?'Best fit: ':'Alt: '}${slot.dayLabel} ${fmtT(slot.startH, slot.startM||0)} – ${fmtT(endH, endM)} (score ${slot.score})`;
+    const _who = (typeof getSelectedPatient === 'function' && getSelectedPatient()) || null;
+    el.innerHTML = calProposedLabel(slot.startMin, slot.durationMin, _who ? `${_who.first} ${_who.last}` : '');
+    el.title = `Proposed: ${fmtT(slot.startH, slot.startM||0)} – ${fmtT(endH, endM)}${idx === 0 ? '' : ' (alternative)'} — not saved until you press Create appointment`;
 
     el.addEventListener('click', () => {
       // Select this slot in the panel
@@ -21387,10 +21422,10 @@ function _bspApplyTimingPrefill(opts) {
   window.openBookingPanel = function(opts) {
     _bspDurManual = false; // reset manual flag for fresh booking
     if (_origOpen) _origOpen(opts);
-    // A slot on a day with no work location: ask first; no answer, no booking.
-    if (opts && opts.day && typeof dayWorkLocationStatus === 'function' && dayWorkLocationStatus(opts.day) === 'unset') {
-      ensureDayBase(opts.day).catch(() => null).then(k => { if (!k && _bspOpen) closeBookingPanel(false); });
-    }
+    // A day with no work location is flagged INSIDE the panel (the WHEN &
+    // WHERE notice, booking-route.js) instead of a popup that closed the panel
+    // and lost the booking. Create appointment still asks for the base before
+    // saving (ensureDayBase in confirmBooking).
     // Apply prefill to timing fields after panel opens
     if (opts && (opts.startH !== undefined || opts.day)) {
       setTimeout(() => _bspApplyTimingPrefill(opts), 20);

@@ -2422,12 +2422,32 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
  * Splose or Outlook. Body: { before: spec|null, after: spec|null } where spec
  * is { kind:'base', id } or { kind:'address', address, suburb?, label? }.
  */
+// Optional route facts a Smart Booking leg carries with its destination
+// (Return Home / Go Somewhere Else): the routed minutes and metres, where the
+// destination was picked (purpose), and its Google place. All optional; bad
+// values are dropped, never stored.
+function cleanTravelFacts(v, out) {
+  const num = (x, max) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= max ? Math.round(x) : null);
+  const travelMin = num(v.travelMin, 24 * 60);
+  if (travelMin !== null) out.travelMin = travelMin;
+  const distanceMeters = num(v.distanceMeters, 2000000);
+  if (distanceMeters !== null) out.distanceMeters = distanceMeters;
+  if (v.purpose === 'home' || v.purpose === 'elsewhere') out.purpose = v.purpose;
+  if (typeof v.placeId === 'string' && /^[A-Za-z0-9_-]{1,300}$/.test(v.placeId)) out.placeId = v.placeId;
+  if (typeof v.destinationId === 'string' && /^[0-9a-f-]{36}$/i.test(v.destinationId)) out.destinationId = v.destinationId;
+  const lat = Number(v.lat), lng = Number(v.lng);
+  if (v.lat != null && v.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    out.lat = lat; out.lng = lng;
+  }
+  if (typeof v.routedAt === 'string' && Number.isFinite(Date.parse(v.routedAt))) out.routedAt = new Date(Date.parse(v.routedAt)).toISOString();
+  return out;
+}
 function cleanTravelSpec(v) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v !== 'object') return undefined;
   if (v.kind === 'base') {
     if (typeof v.id !== 'string' || !v.id || v.id.length > 64) return undefined;
-    return { kind: 'base', id: v.id };
+    return cleanTravelFacts(v, { kind: 'base', id: v.id });
   }
   if (v.kind === 'address') {
     const address = typeof v.address === 'string' ? v.address.trim().slice(0, 200) : '';
@@ -2435,7 +2455,7 @@ function cleanTravelSpec(v) {
     const out = { kind: 'address', address };
     if (typeof v.suburb === 'string' && v.suburb.trim()) out.suburb = v.suburb.trim().slice(0, 80);
     if (typeof v.label  === 'string' && v.label.trim())  out.label  = v.label.trim().slice(0, 80);
-    return out;
+    return cleanTravelFacts(v, out);
   }
   return undefined;
 }
@@ -3062,3 +3082,4 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.cleanTravelSpec = cleanTravelSpec;

@@ -563,8 +563,14 @@ describe('calendar drag-selection coordinate fix', () => {
     expect(HTML).toContain('function calMinutesToY(minutesOfDay)');
     const fn = HTML.slice(HTML.indexOf('function calYToMinutes'), HTML.indexOf('function calYToMinutes') + 400);
     expect(fn).toContain('/ HOUR_PX) * 60 + START_H * 60');
-    expect(fn).toContain('SLOT_SNAP_MIN) * SLOT_SNAP_MIN');
+    expect(fn).toContain('calSnapMin(raw)');
     expect(fn).toContain('Math.min(END_H * 60'); // clamped to the visible range
+    // One 15-minute grid for every gesture: create, move, resize (2 Oct 2026).
+    expect(HTML).toContain('return Math.round(minutes / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;');
+    expect(HTML).toContain('Math.min(END_H * 60 - drag.durationMin, calSnapMin(rawMinutes))');
+    expect(HTML).toContain('let target = calSnapMin(resize.origStartMin + dMin);');
+    expect(HTML).toContain('let targetEnd = calSnapMin(resize.origStartMin + resize.origDurMin + dMin);');
+    expect(HTML).not.toMatch(/Math\.round\([^)]*\/ ?(15|SNAP)\) \* (15|SNAP)/);
   });
 
   test('pointer paths and the ghost block all consume the shared helpers', () => {

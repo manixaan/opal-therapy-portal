@@ -143,22 +143,41 @@ function isFresh(entry) {
 }
 
 /* Async route fetch. Writes into ROUTE_CACHE. Dedupes in-flight requests.
-   Falls back gracefully to the suburb table when no API key is configured. */
-async function fetchRoute(origin, destination, mode) {
-  const key = routeKey(origin, destination, mode);
+   Falls back gracefully to the suburb table when no API key is configured.
+   opts (Smart Booking, 2 Oct 2026):
+     departureTime  ISO string — routes the leg at the time it will be driven.
+                    Cached under its own 15-minute bucket, and the answer also
+                    warms the plain key so the calendar's legs show the same
+                    number instead of an estimate.
+     fresh          true — ignore a cached ESTIMATE (a Retry after a failure).
+   result.source is 'routes-api' for a real answer and 'estimate' when the
+   Routes call failed: Smart Booking treats an estimate as "not calculated". */
+function _departureBucket(iso) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return '';
+  return String(Math.floor(t / (15 * 60 * 1000)));
+}
+async function fetchRoute(origin, destination, mode, opts) {
+  const o = opts || {};
+  const bucket = _departureBucket(o.departureTime);
+  const plainKey = routeKey(origin, destination, mode);
+  const key = bucket ? plainKey + '|t' + bucket : plainKey;
   const cached = ROUTE_CACHE.get(key);
-  if (isFresh(cached)) return cached;
+  if (isFresh(cached) && !(o.fresh && cached.source !== 'routes-api')) return cached;
+  if (o.fresh && cached && cached.source !== 'routes-api') ROUTE_CACHE.delete(key);
   if (ROUTE_INFLIGHT.has(key)) return ROUTE_INFLIGHT.get(key);
 
   const work = (async () => {
     let result;
     if (GOOGLE_MAPS_API_KEY) {
       try {
+        const body = { origin, destination, mode: mode || 'driving' };
+        if (bucket) body.departureTime = new Date(Date.parse(o.departureTime)).toISOString();
         const resp = await fetch('/api/maps/routes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ origin, destination, mode: mode || 'driving' })
+          body: JSON.stringify(body)
         });
         const json = await resp.json();
         const r0 = json.routes && json.routes[0];
@@ -180,6 +199,10 @@ async function fetchRoute(origin, destination, mode) {
     }
     result.fetchedAt = Date.now();
     ROUTE_CACHE.set(key, result);
+    if (key !== plainKey) {
+      const plain = ROUTE_CACHE.get(plainKey);
+      if (!isFresh(plain) || plain.source !== 'routes-api') ROUTE_CACHE.set(plainKey, Object.assign({}, result));
+    }
     return result;
   })();
 
@@ -348,6 +371,7 @@ function sessionsForDay(day) {
    and on the patient's address (patient.suburb / .postalCode) for mobile visits.
    This stub mirrors that shape so the rest of the travel engine can be wired
    against it today and only the fetch layer swaps in production. */
+const CLIENT_ROUTE_TYPES = new Set(['therapy', 'initial', 'assessment', 'mdt']);
 function sploseLocationForSession(s) {
   // 0) Explicit per-session address takes precedence. This is the field the
   //    Splose integration will eventually populate from appointment.locationId
@@ -362,6 +386,16 @@ function sploseLocationForSession(s) {
       label:  s.patient ? `${s.patient} · ${s.address}` : s.address,
       region: s.region || (sub ? suburbRegion(sub) : 'central'),
       kind:   s.patient ? 'visit' : 'session'
+    };
+  }
+  // 0b) A client session with no location (booked "Unsure", or imported
+  //     without one) has no place yet. Routing it from the office or a guess
+  //     would draw a drive that never happens — no leg until it has one.
+  if (s.locationUnknown || (CLIENT_ROUTE_TYPES.has(s.type) && !s.suburb)) {
+    return {
+      source: 'unset', address: null, suburb: null,
+      label: s.patient ? s.patient + ' (location not set)' : 'Location not set',
+      region: s.region || 'central', kind: 'unknown'
     };
   }
   // 1) Mobile / home visit — the therapist is wherever the patient lives
@@ -726,100 +760,314 @@ function travelChainAfterMove(sessionId) {
   if (spec) setTravelOverride(sessionId, 'after', spec);
 }
 
-/* ---------- Live travel preview while booking ----------
-   While Smart Booking is open, the calendar shows the drive from the previous
-   session on that day to the address being typed, and — when the booking was
-   started from a travel leg ("add a stop") — keeps the start at or after the
-   earliest time that drive allows. Re-runs on every day / time / duration /
-   location change; nothing here is persisted. */
+/* ---------- Route-aware Smart Booking (2 Oct 2026) ----------
+   The next appointment and the drive into it are ONE unit: given where the
+   clinician finishes the previous stop, the system works out the earliest
+   realistic start and keeps the proposed appointment there as the client,
+   location, day, duration or previous stop change. The clinician can still
+   move it LATER; earlier than the drive allows is clamped with a warning.
+
+   Three numbers, kept apart on purpose:
+     route minutes   what Google says the drive takes (never invented — a
+                     failed lookup is an error state, not an estimate)
+     buffer minutes  an operational allowance, SMART_ROUTE_CONFIG / settings
+     booking grid    appointment starts snap UP to the next 15-minute slot;
+                     the travel block itself shows the real duration.
+
+   Nothing here writes a record: the proposed travel and appointment are
+   previews until Create appointment. */
+var SMART_ROUTE_CONFIG = { slotMin: 15, defaultBufferMin: 0, maxBufferMin: 60, debounceMs: 300 };
+
+/* Operational buffer added to every routed leg. APP_SETTINGS.travelBufferMin
+   overrides the default when it is a whole number of minutes in range. */
+function routeBufferMin() {
+  const s = (typeof window !== 'undefined' && window.APP_SETTINGS) || {};
+  const v = Number(s.travelBufferMin);
+  if (s.travelBufferMin != null && s.travelBufferMin !== '' && Number.isFinite(v) && v >= 0 && v <= SMART_ROUTE_CONFIG.maxBufferMin) return Math.round(v);
+  return SMART_ROUTE_CONFIG.defaultBufferMin;
+}
+function ceilToSlot(min, slot) { const g = slot || SMART_ROUTE_CONFIG.slotMin; return Math.ceil(min / g) * g; }
+function snapToSlot(min, slot) { const g = slot || SMART_ROUTE_CONFIG.slotMin; return Math.round(min / g) * g; }
+
+/* PURE — where can the next appointment start?
+   in:  prevEndMin, travelMin, bufferMin, durationMin, desiredStartMin (null =
+        "earliest"), busy [{ id, startMin, endMin, label }] (confirmed blocks,
+        the previous stop excluded), dayEndMin, slotMin
+   out: { earliestStartMin, startMin, endMin, travelStartMin, travelEndMin,
+          clampedFromMin, movedForConflicts: [busy…], conflicts: [busy…] (at a
+          manual start), fits } — duration is never changed. */
+function planNextStop(input) {
+  const i = input || {};
+  const slot = i.slotMin || SMART_ROUTE_CONFIG.slotMin;
+  const prevEnd = Number(i.prevEndMin) || 0;
+  const travel = Math.max(0, Math.round(Number(i.travelMin) || 0));
+  const buffer = Math.max(0, Math.round(Number(i.bufferMin) || 0));
+  const dur = Math.max(slot, Math.round(Number(i.durationMin) || 60));
+  const dayEnd = i.dayEndMin != null ? i.dayEndMin : 24 * 60;
+  const busy = (i.busy || []).filter(b => b && b.endMin > prevEnd).slice().sort((a, b) => a.startMin - b.startMin);
+  const earliest = ceilToSlot(prevEnd + travel + buffer, slot);
+  const overlapping = (s) => busy.filter(b => b.startMin < s + dur && b.endMin > s);
+  const out = {
+    earliestStartMin: earliest, travelStartMin: prevEnd, travelEndMin: prevEnd + travel,
+    travelMin: travel, bufferMin: buffer, durationMin: dur,
+    clampedFromMin: null, movedForConflicts: [], conflicts: [], fits: true,
+  };
+  let start;
+  if (i.desiredStartMin != null && Number.isFinite(Number(i.desiredStartMin))) {
+    const want = snapToSlot(Number(i.desiredStartMin), slot);
+    if (want < earliest) { out.clampedFromMin = want; start = earliest; }
+    else start = want;
+    // A start the clinician chose is kept; a collision there is reported, not moved.
+    if (out.clampedFromMin == null) {
+      out.conflicts = overlapping(start);
+      out.startMin = start; out.endMin = start + dur; out.fits = start + dur <= dayEnd;
+      return out;
+    }
+  } else {
+    start = earliest;
+  }
+  // Earliest (or clamped) start: walk past confirmed blocks to the next slot
+  // where the whole appointment fits. No whole-day optimisation.
+  for (let guard = 0; guard < 96; guard++) {
+    const hit = overlapping(start);
+    if (!hit.length) break;
+    hit.forEach(h => { if (out.movedForConflicts.indexOf(h) < 0) out.movedForConflicts.push(h); });
+    start = ceilToSlot(Math.max.apply(null, hit.map(h => h.endMin)), slot);
+  }
+  out.startMin = start; out.endMin = start + dur;
+  out.fits = start + dur <= dayEnd && !overlapping(start).length;
+  return out;
+}
+
+/* The live state of the route preview. `context` is the previous CONFIRMED
+   stop when continuing a route ("Book another client"); manualStart is set
+   when the clinician types a start or drags the proposed block. */
+var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null };
+
+function _sessionByDbId(dbId) {
+  if (!dbId || !window.SESSIONS) return null;
+  return Object.values(window.SESSIONS).find(s => s && String(s.dbId) === String(dbId) && !s.cancelled) || null;
+}
+/* The stop this booking continues from. An explicit route context (Book
+   another client / add a stop) is resolved by its saved event id — the
+   calendar re-renders tiles under new ids — and falls back to the context's
+   own structured copy of the stop. Otherwise the last session that ends
+   before the slot. */
 function _bspPredecessor(day, startMin) {
-  const ctx = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.travelFrom) || null;
-  if (ctx && ctx.sessionId && window.SESSIONS && window.SESSIONS[ctx.sessionId] && window.SESSIONS[ctx.sessionId].day === day) {
-    return { s: window.SESSIONS[ctx.sessionId], explicit: true };
+  const ctx = (BOOKING_ROUTE && BOOKING_ROUTE.context) ||
+              ((typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.travelFrom) || null);
+  if (ctx && (!ctx.day || ctx.day === day)) {
+    const s = (ctx.sessionId && window.SESSIONS && window.SESSIONS[ctx.sessionId]) || _sessionByDbId(ctx.dbId);
+    if (s && s.day === day) {
+      const loc = sessionLocation(s);
+      return { s, explicit: true, endMin: sessionEndMin(s), fromKey: locTravelKey(loc), suburb: loc.suburb || '', label: ctx.label || _stopName(s) || 'previous stop' };
+    }
+    if (ctx.day === day && ctx.endMin != null) {
+      return { s: { id: ctx.sessionId || '' }, explicit: true, endMin: ctx.endMin, fromKey: ctx.address || ctx.suburb || null,
+               suburb: ctx.suburb || (ctx.address ? addrSuburb(ctx.address) : ''), label: ctx.label || 'previous stop' };
+    }
   }
   const before = sessionsForDay(day).filter(s => sessionEndMin(s) <= startMin && !isTravelBlock(s));
-  return before.length ? { s: before[before.length - 1], explicit: false } : null;
+  if (!before.length) return null;
+  const s = before[before.length - 1], loc = sessionLocation(s);
+  return { s, explicit: false, endMin: sessionEndMin(s), fromKey: locTravelKey(loc), suburb: loc.suburb || '', label: _stopName(s) || 'previous session' };
 }
+/* A stop's display name: the client, not the Outlook title convention. */
+function _stopName(s) {
+  if (!s) return '';
+  return s.patient || String(s.title || '').replace(/^Client Appointment\s+[—–-]\s+/i, '').trim();
+}
+function _bspUnsure() { const u = document.getElementById('bsp-location-unsure'); return !!(u && u.checked); }
+/* Where the proposed appointment is. "Unsure" means unknown — never the
+   client's address on file. */
 function _bspTargetAddress() {
+  if (_bspUnsure()) return '';
   const typed = (document.getElementById('bsp-location') || {}).value || '';
   if (typed.trim()) return typed.trim();
   const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
   return p ? (p.address || p.suburb || '') : '';
 }
+function _bspIsClientBooking() {
+  return !(typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.category && BOOKING_STATE.category !== 'client');
+}
 function clearBspTravelPreview() {
   document.querySelectorAll('.travel-overlay.preview').forEach(el => el.remove());
   document.querySelectorAll('.travel-overlay.suppressed').forEach(el => el.classList.remove('suppressed'));
 }
+function _hhmm(min) { return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
+
+/* The compact route line under Location. kind: hidden | info | loading | error | warn | ok */
+function setBspRouteStatus(kind, html) {
+  BOOKING_ROUTE.status = kind;
+  const el = document.getElementById('bsp-route-status');
+  if (!el) return;
+  if (kind === 'hidden' || !html) { el.hidden = true; el.innerHTML = ''; el.className = 'bsp-route-status'; return; }
+  el.hidden = false;
+  el.className = 'bsp-route-status ' + kind;
+  el.setAttribute('aria-live', 'polite');
+  el.innerHTML = html;
+}
+
+function _previewLeg(col, startMin, endMin, cls, html, title) {
+  const el = document.createElement('div');
+  el.className = cls === 'placeholder' ? 'travel-overlay between preview placeholder' : 'travel-overlay between preview' + (cls ? ' ' + cls : '');
+  el.style.top = tToY(Math.floor(startMin / 60), startMin % 60) + 'px';
+  const px = Math.max(0, endMin - startMin) / 60 * HOUR_PX;
+  el.style.height = (endMin > startMin ? Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) : 16) + 'px';
+  el.innerHTML = html;
+  if (title) el.title = title;
+  col.appendChild(el);
+  return el;
+}
+
+/* Debounced entry point — every panel change lands here. */
 function bspTravelPreview() {
+  clearTimeout(BOOKING_ROUTE.timer);
+  BOOKING_ROUTE.timer = setTimeout(runBspRoutePreview, SMART_ROUTE_CONFIG.debounceMs);
+  // Repaint the cached state at once so the calendar never lags a keystroke.
+  runBspRoutePreview({ cachedOnly: true });
+}
+
+function runBspRoutePreview(opts) {
+  const o = opts || {};
   clearBspTravelPreview();
   const panel = document.getElementById('booking-side-panel');
-  if (!panel || !panel.classList.contains('open')) return;
-  const day = (document.querySelector('.bsp-day-chip.active') || {}).dataset ? document.querySelector('.bsp-day-chip.active').dataset.day : null;
+  if (!panel || !panel.classList.contains('open') || !_bspIsClientBooking()) { setBspRouteStatus('hidden'); return; }
+  const chip = document.querySelector('.bsp-day-chip.active');
+  const day = chip && chip.dataset ? chip.dataset.day : null;
   const startEl = document.getElementById('bsp-start');
-  if (!day || !startEl || !startEl.value) return;
+  if (!day || !startEl || !startEl.value) { setBspRouteStatus('hidden'); return; }
   const [sh, sm] = startEl.value.split(':').map(Number);
-  let startMin = sh * 60 + (sm || 0);
+  const startMin = sh * 60 + (sm || 0);
+  const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
   const pred = _bspPredecessor(day, startMin);
-  if (!pred) return;
-  const predEnd = sessionEndMin(pred.s);
+  if (!pred) { setBspRouteStatus('hidden'); return; }
   const col = document.getElementById('day-' + day);
-  // The leg currently leaving the previous session (home, or the next
-  // session) is what this booking would replace: hide it the moment the
-  // panel is open for a slot after that session, before any address exists,
-  // so the old return leg never sits under the placeholder.
-  document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
-  const fromKey = locTravelKey(sessionLocation(pred.s));
+  const esc = _tpEsc;
+  const fromName = esc(pred.label) + (pred.suburb ? ' (' + esc(pred.suburb) + ')' : '');
+  // The leg leaving the previous stop (home, or the next session) is what this
+  // booking replaces: hide it while the proposal is on screen.
+  if (pred.s && pred.s.id) document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  const legTop = pred.endMin;
+  const placeholder = (text) => { if (col) _previewLeg(col, legTop, legTop, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>'); };
+
+  if (_bspUnsure()) {
+    placeholder('location not set');
+    setBspRouteStatus('warn', '<strong>Smart Travel is off for this booking.</strong> Travel from ' + fromName + ' is calculated once the location is set on the calendar.');
+    return;
+  }
   const toKey = _bspTargetAddress();
-  if (!col) return;
-  if (!fromKey || !toKey) {
-    // No destination yet: a placeholder where the drive will go.
-    const ph = document.createElement('div');
-    ph.className = 'travel-overlay between preview placeholder';
-    ph.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
-    ph.style.height = '16px';
-    ph.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">' + (fromKey ? 'type the address to see the drive from ' + _tpEsc(sessionLocation(pred.s).suburb || 'the previous session') : 'previous session has no address') + '</span>';
-    col.appendChild(ph);
+  if (!pred.fromKey) {
+    placeholder('previous stop has no address');
+    setBspRouteStatus('warn', 'The previous stop has no address, so travel cannot be calculated. Set it on that appointment.');
     return;
   }
-  const travel = (fromKey === toKey) ? 0 : travelMinutes(fromKey, toKey);
-  const earliest = Math.ceil((predEnd + travel) / 15) * 15;
-  // An explicit back-to-back keeps its start at or after the drive allows.
-  if (pred.explicit && startMin < earliest) {
-    startMin = earliest;
-    startEl.value = String(Math.floor(earliest / 60)).padStart(2, '0') + ':' + String(earliest % 60).padStart(2, '0');
-    if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
-    if (typeof renderCalendarPreviewBlocks === 'function') {
-      const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10);
-      renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(startMin / 60), startM: startMin % 60, startMin, durationMin: dur, score: 100 }]);
+  if (!toKey) {
+    placeholder('choose the location to see the drive');
+    setBspRouteStatus('info', 'After ' + fromName + ' — choose the location to calculate travel.');
+    return;
+  }
+  if (BOOKING_ROUTE.manualTiming) {
+    setBspRouteStatus('warn', 'Manual timing — travel from ' + fromName + ' is not calculated. <button type="button" class="bsp-route-btn" data-route="retry">Calculate travel</button>');
+    return;
+  }
+
+  // The route: same place = no drive; otherwise a REAL routed answer.
+  let route = null;
+  if (canonAddr(pred.fromKey) === canonAddr(toKey)) {
+    route = { durationMin: 0, distanceMeters: 0, source: 'routes-api' };
+  } else {
+    const dep = (typeof DAY_DATES !== 'undefined' && DAY_DATES && DAY_DATES[day]) ? DAY_DATES[day] + 'T' + _hhmm(pred.endMin) + ':00+08:00' : null;
+    const bucket = _departureBucket(dep);
+    const key = routeKey(pred.fromKey, toKey, 'driving') + (bucket ? '|t' + bucket : '');
+    const cached = ROUTE_CACHE.get(key);
+    // Retry skips a cached failure; anything else fresh is reused (no new call).
+    if (isFresh(cached) && !(o.fresh && cached.source !== 'routes-api')) route = cached;
+    else {
+      placeholder('calculating travel…');
+      setBspRouteStatus('loading', '<span class="bsp-route-spin" aria-hidden="true"></span>Calculating travel from ' + fromName + '…');
+      if (o.cachedOnly) {
+        // A repaint never routes; make sure a full run is on its way.
+        if (!ROUTE_INFLIGHT.has(key)) { clearTimeout(BOOKING_ROUTE.timer); BOOKING_ROUTE.timer = setTimeout(runBspRoutePreview, SMART_ROUTE_CONFIG.debounceMs); }
+        return;
+      }
+      const mySeq = ++BOOKING_ROUTE.seq;
+      fetchRoute(pred.fromKey, toKey, 'driving', { departureTime: dep, fresh: !!o.fresh })
+        .catch(() => null)
+        .then(() => { if (mySeq === BOOKING_ROUTE.seq) runBspRoutePreview(); });
+      return;
     }
-    const text = document.getElementById('bsp-prefill-text');
-    if (text && !/earliest start/.test(text.textContent)) text.textContent += ' · earliest start after the drive';
   }
-  if (startMin < predEnd) return;
-  if (travel <= 0) {
-    // Same place as the previous session: say so instead of drawing nothing.
-    const note = document.createElement('div');
-    note.className = 'travel-overlay between preview';
-    note.style.top = tToY(Math.floor(predEnd / 60), predEnd % 60) + 'px';
-    note.style.height = '14px';
-    note.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">Travel</span><span class="t-label">no drive · same place as the previous session</span>';
-    col.appendChild(note);
+  if (route.source !== 'routes-api') {
+    // A failed lookup: keep everything the clinician chose, invent nothing.
+    placeholder('travel not calculated');
+    setBspRouteStatus('error', '<strong>Unable to calculate travel right now.</strong> Retry or continue with manual timing. ' +
+      '<button type="button" class="bsp-route-btn" data-route="retry">Retry</button> ' +
+      '<button type="button" class="bsp-route-btn" data-route="manual">Continue with manual timing</button>');
     return;
   }
-  const legStart = Math.max(predEnd, startMin - travel);
-  const el = document.createElement('div');
-  el.className = 'travel-overlay between preview';
-  el.style.top = tToY(Math.floor(legStart / 60), legStart % 60) + 'px';
-  const px = (startMin - legStart) / 60 * HOUR_PX;
-  el.style.height = Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) + 'px';
-  const tight = (startMin - predEnd) < travel;
-  if (tight) el.style.borderLeftColor = '#9c3322';
-  const toSub = addrSuburb(toKey) || 'next session';
-  el.innerHTML = '<span class="t-ico" style="font-size:10px;font-weight:600;opacity:.7;">' + (tight ? 'Tight' : 'Travel') + '</span>' +
-    '<span class="t-label">' + travel + ' min · ' + _tpEsc(sessionLocation(pred.s).suburb || 'previous') + ' → ' + _tpEsc(toSub) + '</span>';
-  el.title = (tight ? 'Not enough time: ' : '') + 'about ' + travel + ' min from the previous session to this address';
-  col.appendChild(el);
+
+  const busy = sessionsForDay(day)
+    .filter(s => s !== pred.s && !isTravelBlock(s) && sessionEndMin(s) > pred.endMin)
+    .map(s => ({ id: s.id, startMin: sessionStartMin(s), endMin: sessionEndMin(s), label: s.patient || s.title || 'appointment' }));
+  const plan = planNextStop({
+    prevEndMin: pred.endMin, travelMin: route.durationMin, bufferMin: routeBufferMin(), durationMin: dur,
+    desiredStartMin: (pred.explicit && !BOOKING_ROUTE.manualStart) ? null : startMin,
+    busy, dayEndMin: (typeof END_H !== 'undefined' ? END_H : 24) * 60,
+  });
+
+  // An explicit route moves the proposal; an implicit neighbour only advises.
+  let shownStart = startMin;
+  if (pred.explicit && plan.startMin !== startMin) {
+    shownStart = plan.startMin;
+    startEl.value = _hhmm(plan.startMin);
+    if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
+  }
+  if (typeof renderCalendarPreviewBlocks === 'function' && pred.explicit) {
+    renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(shownStart / 60), startM: shownStart % 60, startMin: shownStart, durationMin: dur, score: 100 }]);
+    // renderCalendarPreviewBlocks clears the travel preview — re-suppress.
+    if (pred.s && pred.s.id) document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  }
+
+  const toSub = addrSuburb(toKey) || 'next stop';
+  const fmt = (m) => (typeof fmtTime === 'function') ? fmtTime(Math.floor(m / 60), m % 60) : _hhmm(m);
+  const tight = shownStart < plan.earliestStartMin;
+  if (col && plan.travelMin > 0) {
+    const small = plan.travelMin < 20;
+    _previewLeg(col, plan.travelStartMin, plan.travelEndMin, tight ? 'tight' : '',
+      '<span class="t-ico">' + (tight ? 'Tight' : 'Travel') + '</span><span class="t-label">' + plan.travelMin + ' min' +
+      (small ? '' : ' · ' + esc(pred.suburb || 'previous') + ' → ' + esc(toSub)) + '</span>',
+      'Travel ' + plan.travelMin + ' min · ' + (pred.suburb || 'previous stop') + ' → ' + toSub + (plan.bufferMin ? ' (+' + plan.bufferMin + ' min buffer)' : ''));
+  } else if (col) {
+    _previewLeg(col, legTop, legTop, '', '<span class="t-ico">Travel</span><span class="t-label">no drive · same place</span>');
+  }
+
+  const parts = [];
+  parts.push(plan.travelMin > 0 ? '<strong>' + plan.travelMin + ' min</strong> drive from ' + fromName : 'Same place as ' + fromName + ' — no drive');
+  if (plan.bufferMin) parts.push('+' + plan.bufferMin + ' min buffer');
+  parts.push('earliest start <strong>' + fmt(plan.earliestStartMin) + '</strong>');
+  let kind = 'ok';
+  const notes = [];
+  // A clamp is remembered until the clinician picks another start, so the
+  // follow-up repaint (which now sees the clamped time) keeps the warning.
+  if (pred.explicit && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  const clamp = pred.explicit && BOOKING_ROUTE.lastClamp && BOOKING_ROUTE.lastClamp.to === shownStart ? BOOKING_ROUTE.lastClamp : null;
+  if (clamp) { kind = 'warn'; notes.push(fmt(clamp.from) + ' is earlier than the drive allows — moved to ' + fmt(clamp.to) + '.'); }
+  if (plan.movedForConflicts.length) notes.push('Moved to ' + fmt(plan.startMin) + ': ' + plan.movedForConflicts.map(b => esc(b.label)).join(', ') + ' is already booked then.');
+  if (plan.conflicts.length) { kind = 'warn'; notes.push('Overlaps ' + plan.conflicts.map(b => esc(b.label)).join(', ') + '.'); }
+  if (!pred.explicit && tight) { kind = 'warn'; notes.push('Not enough time to get here from ' + fromName + '.'); }
+  if (!plan.fits) { kind = 'warn'; notes.push('No free slot left on this day after the drive.'); }
+  setBspRouteStatus(kind, parts.join(' · ') + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : ''));
 }
+
+/* Retry / manual-timing buttons in the status line. */
+document.addEventListener('click', e => {
+  const b = e.target && e.target.closest && e.target.closest('[data-route]');
+  if (!b || !b.closest('#bsp-route-status')) return;
+  if (b.dataset.route === 'retry') { BOOKING_ROUTE.manualTiming = false; runBspRoutePreview({ fresh: true }); }
+  if (b.dataset.route === 'manual') { BOOKING_ROUTE.manualTiming = true; runBspRoutePreview(); }
+});
+
 // Hook the panel: every timing / location change re-runs the preview.
 (function installBspTravelPreview() {
   const wrap = (name, after) => {
@@ -831,8 +1079,10 @@ function bspTravelPreview() {
   const run = () => setTimeout(bspTravelPreview, 0);
   wrap('_bspUpdateLivePreview', run);
   wrap('clearPreviewBlocks', clearBspTravelPreview);
+  // A clinician-chosen start (typed, or a dragged proposal) is kept if the drive allows it.
+  wrap('bspOnStartChange', () => { BOOKING_ROUTE.manualStart = true; BOOKING_ROUTE.lastClamp = null; });
   document.addEventListener('input',  e => { if (e.target && e.target.id === 'bsp-location') run(); });
-  document.addEventListener('change', e => { if (e.target && e.target.id === 'bsp-location') run(); });
+  document.addEventListener('change', e => { if (e.target && (e.target.id === 'bsp-location' || e.target.id === 'bsp-location-unsure')) run(); });
 })();
 
 /* After a stop is booked: the new session inherits the predecessor's `after`
@@ -841,7 +1091,7 @@ function bspTravelPreview() {
    day closes back to where it used to. */
 async function applyTravelChainAfterBooking(newDbId, ctx) {
   if (!newDbId || !ctx) return;
-  const pred = ctx.sessionId && window.SESSIONS ? window.SESSIONS[ctx.sessionId] : null;
+  const pred = (ctx.sessionId && window.SESSIONS ? window.SESSIONS[ctx.sessionId] : null) || _sessionByDbId(ctx.dbId);
   const inherit = pred ? sessionTravelOverride(pred, 'after') : null;
   if (!inherit) return; // the day default carries over on its own
   try {
@@ -998,6 +1248,16 @@ function refreshDayOverlays(day) {
   clearDayOverlays(day);
   const segs = computeDayTravelSegments(day);
   segs.forEach(seg => renderSegmentOverlay(col, seg));
+  // Clearing the column also removed Smart Booking's proposed travel: put it
+  // back (from cache — no new routing call) while the panel is open.
+  if (typeof _scheduleBspRepaint === 'function') _scheduleBspRepaint();
+}
+let _bspRepaintTimer = null;
+function _scheduleBspRepaint() {
+  const panel = document.getElementById('booking-side-panel');
+  if (!panel || !panel.classList || !panel.classList.contains('open')) return;
+  clearTimeout(_bspRepaintTimer);
+  _bspRepaintTimer = setTimeout(() => { _bspRepaintTimer = null; runBspRoutePreview({ cachedOnly: true }); }, 0);
 }
 
 /* Segment-aware renderer. Dispatches by kind so start/between/end/gap

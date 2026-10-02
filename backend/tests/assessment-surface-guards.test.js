@@ -706,7 +706,12 @@ describe('changed assets are cache-busted', () => {
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
       // shows where the drive will go until an address is typed.
-      ['travel.js', 18],
+      // 19: route-aware Smart Booking — routed preview with loading/error
+      // states, the earliest feasible start, departure-time routing.
+      ['travel.js', 19],
+      // 1: booking-route.js/.css are new — client location selector, the
+      // work-location notice and the "What next?" continuation.
+      ['booking-route.js', 1], ['booking-route.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -898,7 +903,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // After a booking the grid reloads from the server, so the saved row is shown
     // even though the week jump re-renders from the stale cache.
-    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 14000);
+    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 16000);
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
