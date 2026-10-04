@@ -963,7 +963,9 @@ function runBspRoutePreview(opts) {
     return;
   }
   if (!toKey) {
-    placeholder('choose the location to see the drive');
+    // No location yet is the normal starting state, not a warning: the panel
+    // line asks for it. A chip on the calendar here sat at the previous
+    // stop's end, away from the proposal, and read like a stray travel leg.
     setBspRouteStatus('info', 'After ' + fromName + ' — choose the location to calculate travel.');
     return;
   }

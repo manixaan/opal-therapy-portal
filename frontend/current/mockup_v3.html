@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=19" defer></script>
+<script src="/travel.js?v=20" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -12601,20 +12601,33 @@ async function confirmBooking() {
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
     const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
+    // The Outlook category is what the backend classifies the saved row by
+    // (sync-utils classifyEventType), so the tile's type follows the booking
+    // leaf: reports and resource preparation are support activities, PD and
+    // supervision are CPD, lunch is lunch. Sent with no category the row came
+    // back 'outlook' while the optimistic tile said Admin / Case noting.
+    const LEAF_KIND = {
+      fca: ['Report Writing', 'report'], 'at-report': ['Report Writing', 'report'],
+      'progress-report': ['Report Writing', 'report'], 'resource-prep': ['Report Writing', 'report'],
+      pd: ['PD', 'cpd'], supervision: ['PD', 'cpd'], lunch: ['Lunch', 'lunch'],
+    };
+    const [outlookCategory, tileType] = LEAF_KIND[BOOKING_STATE.serviceType] || ['Admin', 'admin'];
 
     try {
       // Write to Outlook
       let outlookId = null;
+      let newDbId   = null;
       try {
         const oResp = await fetch('/api/outlook/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO }),
+          body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO, categories: [outlookCategory] }),
         });
         const oResult = await oResp.json();
         if (oResp.ok) {
           outlookId = oResult.outlookId;
+          newDbId   = oResult.dbId || null;
           __registerBookingUndo(oResult.dbId, outlookTitle);
           if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
           console.log('✅ Outlook event created:', outlookId);
@@ -12628,11 +12641,20 @@ async function confirmBooking() {
       // Add to local calendar canvas
       const col = document.getElementById('day-' + t.day);
       if (col) {
-        addSession(col, {
-          day: t.day, type: 'admin',
+        // The optimistic tile is the saved row, stamped like a loaded Outlook
+        // tile so the reload below replaces it — unstamped, it stayed beside
+        // the reloaded copy and the event showed twice.
+        const _optId = addSession(col, {
+          day: t.day, type: tileType,
           startH: t.startH, startM: t.startM, endH: t.endH, endM: t.endM,
           title: outlookTitle, sub: CAT_LABELS[cat] || cat,
+          categories: [outlookCategory], dbId: newDbId, outlookId,
+          startTimeIso: new Date(t.startISO).toISOString(), endTimeIso: new Date(t.endISO).toISOString(),
         });
+        if (_optId && SESSIONS[_optId]) {
+          SESSIONS[_optId].outlookSynced = true;
+          if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
+        }
         if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
       }
 

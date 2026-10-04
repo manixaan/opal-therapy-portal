@@ -906,6 +906,21 @@ describe('grouped booking-type picker', () => {
     expect(HTML).toContain('function selectBookingLeaf');
     expect(HTML).toContain('selectBookingCat(leaf.cat)'); // rides the existing category plumbing
   });
+
+  test('a non-client booking is classified by its leaf and shows once', () => {
+    const start = HTML.indexOf('async function confirmBooking()');
+    const body = HTML.slice(start, HTML.indexOf('// ── Client session path', start));
+    // Resource preparation is a support activity, not Admin / Case noting.
+    expect(body).toContain("'resource-prep': ['Report Writing', 'report']");
+    expect(body).toContain('categories: [outlookCategory]');
+    expect(body).toContain('type: tileType');
+    expect(body).not.toContain("type: 'admin'");
+    // The optimistic tile carries the saved row and the Outlook stamp, so the
+    // reload's __clearOutlookTiles sweep replaces it instead of duplicating it.
+    expect(body).toContain('dbId: newDbId, outlookId');
+    expect(body).toContain('SESSIONS[_optId].outlookSynced = true');
+    expect(body).toContain("dataset.outlookTile = '1'");
+  });
 });
 
 // ── Master Scheduler Phase 2: availability layer (2026-08-08) ────────────────

@@ -355,6 +355,8 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     env.ev('bspTravelPreview()'); await flush();
     expect(status(env).textContent).toMatch(/choose the location/);
     expect(env.routeCalls()).toHaveLength(0);
+    // Nothing on the calendar until there is a location to route to.
+    expect(env.win.document.querySelectorAll('.travel-overlay.preview')).toHaveLength(0);
   });
 
   test('closing the panel cancels the route preview and forgets the context', async () => {
