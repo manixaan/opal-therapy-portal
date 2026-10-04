@@ -378,6 +378,38 @@ function safeProfile(user, permissions) {
 //  Called when user clicks the verification link in their email.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Was this account created through an owner's invite? True only when an
+ * invite for the same email and organisation was ACCEPTED at the moment the
+ * account was created — registerUserFromInvite creates the user and accepts
+ * the invite in one transaction. The time match keeps an old accepted invite
+ * from activating a later self-registration with the same email. Fail-closed:
+ * anything unexpected (or an error) answers false → pending_approval.
+ */
+async function registeredThroughInvite(user) {
+  if (!user || !user.id) return false;
+  try {
+    // Compared in SQL, against the stored row, so no timezone round trip.
+    const { rows } = await db.pool.query(
+      `SELECT 1
+         FROM users u
+         JOIN user_invites i
+           ON LOWER(i.email) = LOWER(u.email)
+          AND i.organisation_id IS NOT DISTINCT FROM u.organisation_id
+        WHERE u.id = $1
+          AND i.status = 'accepted'
+          AND i.accepted_at IS NOT NULL
+          AND ABS(EXTRACT(EPOCH FROM (i.accepted_at - u.created_at))) <= 120
+        LIMIT 1`,
+      [user.id]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.error('verify-email invite check failed (defaulting to approval):', err.message);
+    return false;
+  }
+}
+
 router.get('/api/auth/verify-email', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).json({ error: 'Verification token is required', code: 'missing_token' });
@@ -398,10 +430,14 @@ router.get('/api/auth/verify-email', async (req, res) => {
       return res.status(400).json({ error: 'This verification link has expired. Please request a new one.', code: 'expired' });
     }
 
-    // Determine next status: invite-based → active, allowlist self-reg → pending_approval
-    // If account was pending_verification, advance to pending_approval.
-    // Exception: if this is the only owner, auto-activate.
-    const newStatus = user.account_status === 'pending_verification' ? 'pending_approval' : user.account_status;
+    // Next status: an account created through an owner's invite is already
+    // approved — verifying the email activates it. A self-registration
+    // (allowlist) waits for the owner: pending_approval. Previously every
+    // account went to pending_approval, so invitees had to be approved twice.
+    let newStatus = user.account_status;
+    if (user.account_status === 'pending_verification') {
+      newStatus = (await registeredThroughInvite(user)) ? 'active' : 'pending_approval';
+    }
 
     await db.pool.query(
       `UPDATE users
