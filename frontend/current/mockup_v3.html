@@ -144,11 +144,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=20" defer></script>
+<script src="/travel.js?v=21" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=1" defer></script>
+<script src="/booking-route.js?v=2" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -3175,6 +3175,16 @@ window.opIcon = function (name, size) {
     background: repeating-linear-gradient(45deg, rgba(3,105,161,0.09), rgba(3,105,161,0.09) 5px, rgba(3,105,161,0.17) 5px, rgba(3,105,161,0.17) 10px); }
   .travel-overlay.end   { border-left-color: #8b80c8; color: #6d63a8;
     background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
+  /* Movable travel (travel.js attachTravelLegDrag): the leg's time is the
+     therapist's; dragging stores it on the owning appointment. */
+  .travel-overlay.movable { cursor: grab; touch-action: none; }
+  .travel-overlay.movable.dragging { cursor: grabbing; opacity: .85; z-index: 6; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+  .travel-overlay.movable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .travel-overlay.moved .t-ico::after { content: ' · moved'; font-weight: 500; }
+  .travel-overlay.tight { border-left-color: #9c3322; }
+  /* A leg that overlaps an appointment (a telehealth taken before driving
+     home) sits as a strip on the right, above the tile, so it can be grabbed. */
+  .travel-overlay.overlaps { left: auto; right: 2px; width: 40%; z-index: 3; }
   /* (.gap-overlay.smart green-hatch highlight removed with the gap overlay, 2026-08-09) */
   /* Option scoring visuals inside the ranked-options panel */
   .gap-opt .g-score {
@@ -3966,6 +3976,11 @@ window.opIcon = function (name, size) {
   .bk-group .bk-item:last-child { padding-bottom: 10px; }
   .bk-item:hover { background: var(--accent-soft); color: var(--accent-deep); }
   .bk-item.active { background: var(--accent-soft); color: var(--accent-deep); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+  .bk-item[disabled] { opacity: .5; cursor: not-allowed; background: none; }
+  .bk-client-rule { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .bk-client-rule.required #bk-client-rule-text { color: var(--accent-deep); font-weight: 600; }
+  .bk-client-none { margin-left: auto; font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; cursor: pointer; }
+  .bk-client-none:hover { border-color: var(--accent); color: var(--accent-deep); }
   .bk-item.bk-single {
     border: 1px solid var(--border-soft); border-radius: var(--radius-md);
     background: var(--panel); padding-left: 12px; font-weight: 600; color: var(--ink);
@@ -4007,6 +4022,16 @@ window.opIcon = function (name, size) {
 .tp-plan-stop { margin-top: 10px; font-size: 13px; }
 .tp-plan-stop select { font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border, #d9e1dc); background: var(--panel, #fff); color: inherit; max-width: 100%; }
 .tp-plan-hint { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.tp-linked { font-size: 13px; margin-bottom: 4px; }
+.tp-timing { font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+/* Travel badge on event tiles (travel.js decorateTravelBadges) */
+.session .travel-badge { position: absolute; bottom: 6px; right: 3px; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 4px; border: 1px solid transparent; background: transparent; color: inherit; opacity: .55; cursor: pointer; z-index: 2; }
+.session .travel-badge:hover, .session .travel-badge:focus-visible { opacity: 1; border-color: currentColor; }
+.session .travel-badge.tb-on { opacity: .9; color: #0f7c6c; }
+.session .travel-badge.tb-add { opacity: .4; }
+.session .travel-badge.tb-add::after { content: ''; position: absolute; width: 14px; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
+.cal-grid.outlook-only .travel-badge, .cal-grid.hide-cat-travel .travel-badge { display: none !important; }
 .tc-opts { margin-top: 8px; }
 .tp-plan-oneoff { margin-top: 10px; font-size: 13px; }
 .tp-plan-oneoff label, .tp-addr-edit { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
@@ -4485,42 +4510,42 @@ window.opIcon = function (name, size) {
 
           <details class="bk-group" open>
             <summary>Direct services</summary>
-            <!-- Mirrors Splose: replaced at boot by the practice's live
-                 appointment services (loadSploseServices), one leaf per
-                 service so every client booking carries its service id.
-                 These static leaves are the offline fallback. -->
+            <!-- The practice's fixed list. Each leaf is matched to its live
+                 Splose service at boot (loadSploseServices) so a booking carries
+                 the service id for billing; the title never shows a billing
+                 code. A leaf Splose has no service for stays unavailable. -->
             <div id="bk-direct-services">
-              <button class="bk-item" data-leaf="therapy" onclick="selectBookingLeaf('therapy')">Therapy session</button>
-              <button class="bk-item" data-leaf="assessment" onclick="selectBookingLeaf('assessment')">Assessment session</button>
-              <button class="bk-item" data-leaf="initial" onclick="selectBookingLeaf('initial')">Initial assessment consultation</button>
-              <button class="bk-item" data-leaf="mdt" onclick="selectBookingLeaf('mdt')">MDT meeting</button>
-              <button class="bk-item" data-leaf="telehealth" onclick="selectBookingLeaf('telehealth')">Telehealth</button>
+              <button class="bk-item" data-leaf="assessment" onclick="selectBookingLeaf('assessment')">Assessment Session</button>
+              <button class="bk-item" data-leaf="assessment-ei" onclick="selectBookingLeaf('assessment-ei')">Assessment Session – Early Intervention Under 9</button>
+              <button class="bk-item" data-leaf="initial" onclick="selectBookingLeaf('initial')">Initial Assessment / Consultation</button>
+              <button class="bk-item" data-leaf="initial-ei" onclick="selectBookingLeaf('initial-ei')">Initial Assessment / Consultation – Early Intervention Under 9</button>
+              <button class="bk-item" data-leaf="mdt" onclick="selectBookingLeaf('mdt')">MDT Meeting</button>
+              <button class="bk-item" data-leaf="mdu" onclick="selectBookingLeaf('mdu')">MDU Meeting</button>
+              <button class="bk-item" data-leaf="telehealth" onclick="selectBookingLeaf('telehealth')">Telehealth Therapy Session</button>
+              <button class="bk-item" data-leaf="telehealth-ei" onclick="selectBookingLeaf('telehealth-ei')">Telehealth Therapy Session – Early Intervention Under 9</button>
+              <button class="bk-item" data-leaf="therapy" onclick="selectBookingLeaf('therapy')">Therapy Session</button>
+              <button class="bk-item" data-leaf="therapy-ei" onclick="selectBookingLeaf('therapy-ei')">Therapy Session – Early Intervention Under 9</button>
             </div>
           </details>
 
           <details class="bk-group">
             <summary>Requested reports</summary>
-            <button class="bk-item" data-leaf="fca" onclick="selectBookingLeaf('fca')">FCA</button>
-            <button class="bk-item" data-leaf="at-report" onclick="selectBookingLeaf('at-report')">AT report</button>
-            <button class="bk-item" data-leaf="progress-report" onclick="selectBookingLeaf('progress-report')">Progress report</button>
+            <button class="bk-item" data-leaf="fca" onclick="selectBookingLeaf('fca')">Functional Capacity Assessment (FCA)</button>
+            <button class="bk-item" data-leaf="at-report" onclick="selectBookingLeaf('at-report')">Assistive Technology (AT)</button>
+            <button class="bk-item" data-leaf="progress-report" onclick="selectBookingLeaf('progress-report')">Progress Report</button>
+            <button class="bk-item" data-leaf="support-letter" onclick="selectBookingLeaf('support-letter')">Support Letter</button>
           </details>
 
           <details class="bk-group">
             <summary>Non-face-to-face</summary>
-            <button class="bk-item" data-leaf="case-noting" onclick="selectBookingLeaf('case-noting')">Case noting</button>
-            <button class="bk-item" data-leaf="resource-prep" onclick="selectBookingLeaf('resource-prep')">Resource preparation</button>
+            <button class="bk-item" data-leaf="case-noting" onclick="selectBookingLeaf('case-noting')">Case Noting</button>
+            <button class="bk-item" data-leaf="resource-prep" onclick="selectBookingLeaf('resource-prep')">Resource Preparation</button>
             <button class="bk-item" data-leaf="emails" onclick="selectBookingLeaf('emails')">Emails</button>
-            <button class="bk-item" data-leaf="phone-calls" onclick="selectBookingLeaf('phone-calls')">Phone calls</button>
+            <button class="bk-item" data-leaf="phone-calls" onclick="selectBookingLeaf('phone-calls')">Phone Calls</button>
           </details>
 
-          <details class="bk-group">
-            <summary>Provider travel</summary>
-            <div class="bk-note">Bill up to 30 minutes each way to a client.</div>
-            <div class="bk-note">For the last client of the day, up to 30 minutes of the return leg is billable.</div>
-            <div class="bk-note">Travel hours bill at the provider-travel rate (half the hourly rate).</div>
-            <div class="bk-note">Kilometres are recorded in the Travel Logbook for tax purposes.</div>
-            <div class="bk-note quiet">Travel blocks are created automatically between in-person sessions.</div>
-          </details>
+          <!-- Provider travel is not a booking type: travel is worked out from
+               the day's physical appointments and moved on the calendar. -->
 
           <div class="bk-section-label" style="margin-top:12px;">Non-billable</div>
           <button class="bk-item bk-single" data-leaf="pd" onclick="selectBookingLeaf('pd')">Professional development</button>
@@ -4533,6 +4558,12 @@ window.opIcon = function (name, size) {
         <div id="cat-client-section">
           <div class="cat-form">
             <p class="lead" style="margin:0 0 10px 0;">Pick the patient. Region tag drives clustering — same-suburb clients get grouped on the same day.</p>
+            <!-- Client rule for the chosen booking type (selectBookingCat): required
+                 for direct services and reports, optional for non-face-to-face. -->
+            <div class="bk-client-rule" id="bk-client-rule" hidden>
+              <span id="bk-client-rule-text"></span>
+              <button type="button" class="bk-client-none" id="bk-client-none" onclick="clearBookingClient()" hidden>No client</button>
+            </div>
             <div class="row between" style="margin-bottom:10px;">
               <div class="splose-pill">
                 <span class="sync-dot" style="width:6px;height:6px;"></span>
@@ -4679,7 +4710,7 @@ window.opIcon = function (name, size) {
 
           <!-- Location -->
           <div class="bsp-loc-field">
-            <label class="bsp-field-label" for="bsp-loc-select">Location <span class="bsp-optional" id="bsp-location-req">required for client sessions</span></label>
+            <label class="bsp-field-label" for="bsp-loc-select">Location <span class="bsp-optional" id="bsp-location-req">optional — no address means you stay where you are</span></label>
             <!-- Client location selector: Splose address, saved service locations,
                  previously used addresses, + Add another (booking-route.js). -->
             <select id="bsp-loc-select" class="bsp-loc-select" aria-label="Client location" hidden></select>
@@ -12286,24 +12317,39 @@ function resetBookingState() {
 // Each leaf maps onto one of the original category flows; custom-flow leaves
 // pre-fill the event name so the user only confirms time and place.
 var BOOKING_LEAVES = {
-  // Client-session leaves carry the Splose service they book against and the
-  // portal session type (colour, duration, clustering). Replaced at boot by
-  // the live Splose service list — see loadSploseServices().
-  'therapy':         { cat: 'client',      label: 'Therapy session',                 type: 'therapy',    serviceId: 125320 },
-  'assessment':      { cat: 'client',      label: 'Assessment session',              type: 'assessment', serviceId: 131003 },
-  'initial':         { cat: 'client',      label: 'Initial assessment consultation', type: 'initial',    serviceId: 125821 },
-  'mdt':             { cat: 'client',      label: 'MDT meeting',                     type: 'mdt',        serviceId: 166733 },
-  'telehealth':      { cat: 'client',      label: 'Telehealth session',              type: 'therapy',    serviceId: 487597 },
-  'fca':             { cat: 'custom',      label: 'FCA report', prefill: 'FCA report' },
-  'at-report':       { cat: 'custom',      label: 'AT report', prefill: 'AT report' },
-  'progress-report': { cat: 'custom',      label: 'Progress report', prefill: 'Progress report' },
-  'case-noting':     { cat: 'bulk-noting', label: 'Case noting' },
-  'resource-prep':   { cat: 'custom',      label: 'Resource preparation', prefill: 'Resource preparation' },
-  'emails':          { cat: 'email',       label: 'Emails' },
-  'phone-calls':     { cat: 'custom',      label: 'Phone calls', prefill: 'Phone calls' },
-  'pd':              { cat: 'custom',      label: 'Professional development', prefill: 'Professional development' },
-  'supervision':     { cat: 'custom',      label: 'Supervision', prefill: 'Supervision' },
-  'lunch':           { cat: 'custom',      label: 'Lunch', prefill: 'Lunch' },
+  // Direct services — client REQUIRED. Each carries the portal session type
+  // (colour, duration, clustering) and a match for its Splose service; the
+  // service id is filled from Splose at boot (loadSploseServices). The ids
+  // here are the known services, kept as the offline fallback; a leaf with
+  // none (the Early Intervention variants, MDU) is unavailable until Splose
+  // names it. `noDefaultAddress`: never pre-fill the client's address — a
+  // telehealth or MDT can happen from anywhere, and no address means "where
+  // I already am" (travel.js).
+  'assessment':      { cat: 'client', group: 'direct', client: 'required', label: 'Assessment Session', type: 'assessment', serviceId: 131003 },
+  'assessment-ei':   { cat: 'client', group: 'direct', client: 'required', label: 'Assessment Session – Early Intervention Under 9', type: 'assessment', serviceId: null, ei: true },
+  'initial':         { cat: 'client', group: 'direct', client: 'required', label: 'Initial Assessment / Consultation', type: 'initial', serviceId: 125821 },
+  'initial-ei':      { cat: 'client', group: 'direct', client: 'required', label: 'Initial Assessment / Consultation – Early Intervention Under 9', type: 'initial', serviceId: null, ei: true },
+  'mdt':             { cat: 'client', group: 'direct', client: 'required', label: 'MDT Meeting', type: 'mdt', serviceId: 166733, noDefaultAddress: true },
+  'mdu':             { cat: 'client', group: 'direct', client: 'required', label: 'MDU Meeting', type: 'mdt', serviceId: null, noDefaultAddress: true },
+  'telehealth':      { cat: 'client', group: 'direct', client: 'required', label: 'Telehealth Therapy Session', type: 'therapy', serviceId: 487597, noDefaultAddress: true },
+  'telehealth-ei':   { cat: 'client', group: 'direct', client: 'required', label: 'Telehealth Therapy Session – Early Intervention Under 9', type: 'therapy', serviceId: null, ei: true, noDefaultAddress: true },
+  'therapy':         { cat: 'client', group: 'direct', client: 'required', label: 'Therapy Session', type: 'therapy', serviceId: 125320 },
+  'therapy-ei':      { cat: 'client', group: 'direct', client: 'required', label: 'Therapy Session – Early Intervention Under 9', type: 'therapy', serviceId: null, ei: true },
+  // Requested reports — client REQUIRED.
+  'fca':             { cat: 'custom', group: 'report', client: 'required', label: 'Functional Capacity Assessment (FCA)', prefill: 'Functional Capacity Assessment (FCA)' },
+  'at-report':       { cat: 'custom', group: 'report', client: 'required', label: 'Assistive Technology (AT)', prefill: 'Assistive Technology (AT)' },
+  'progress-report': { cat: 'custom', group: 'report', client: 'required', label: 'Progress Report', prefill: 'Progress Report' },
+  'support-letter':  { cat: 'custom', group: 'report', client: 'required', label: 'Support Letter', prefill: 'Support Letter' },
+  // Non-face-to-face — client OPTIONAL. All four share the custom form (name +
+  // notes) so each creates exactly the event it names.
+  'case-noting':     { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Case Noting', prefill: 'Case Noting' },
+  'resource-prep':   { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Resource Preparation', prefill: 'Resource Preparation' },
+  'emails':          { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Emails', prefill: 'Emails' },
+  'phone-calls':     { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Phone Calls', prefill: 'Phone Calls' },
+  // Non-billable — no client.
+  'pd':              { cat: 'custom', group: 'other', client: 'none', label: 'Professional development', prefill: 'Professional development' },
+  'supervision':     { cat: 'custom', group: 'other', client: 'none', label: 'Supervision', prefill: 'Supervision' },
+  'lunch':           { cat: 'custom', group: 'other', client: 'none', label: 'Lunch', prefill: 'Lunch' },
 };
 /* Portal session type for a Splose service, from its name. Drives colour,
    default duration and clustering; the Splose service itself is what gets
@@ -12312,15 +12358,31 @@ function sploseServiceType(title) {
   var t = String(title || '');
   if (/initial/i.test(t)) return 'initial';
   if (/assessment/i.test(t)) return 'assessment';
-  if (/mdt/i.test(t)) return 'mdt';
+  if (/\bmd[tu]\b/i.test(t)) return 'mdt';
   return 'therapy';
 }
 
-/* Mirror Splose's appointment services into the Direct services group so the
-   booking types a therapist sees are exactly the practice's own, each leaf
-   carrying its service id. Support activities (reports, case noting) and
-   provider travel stay portal-side. Falls back to the static leaves when the
-   list cannot be loaded. */
+/* PURE — which direct-service leaf a Splose service name is, or null.
+   "Therapy Session (Early Intervention - Under 9) (Occupational Therapy)" →
+   'therapy-ei'. Early Intervention is its own leaf, never the plain one. */
+function directLeafForService(title) {
+  var t = String(title || '').toLowerCase();
+  var ei = /early\s*intervention|under\s*9|\bu9\b/.test(t) ? '-ei' : '';
+  if (/\bmdu\b/.test(t)) return ei ? null : 'mdu';
+  if (/\bmdt\b/.test(t)) return ei ? null : 'mdt';
+  if (/telehealth/.test(t)) return 'telehealth' + ei;
+  if (/initial/.test(t)) return 'initial' + ei;
+  if (/assessment/.test(t)) return 'assessment' + ei;
+  if (/therapy/.test(t)) return 'therapy' + ei;
+  return null;
+}
+
+/* Fill each direct-service leaf's Splose service id (and duration) from the
+   practice's live appointment services. The list shown is fixed — titles stay
+   the practice's own names, never a Splose name with a billing code. Where
+   Splose has several services for one leaf, the known id wins, else the
+   first by name. A leaf Splose has no service for is shown unavailable rather
+   than booked against the wrong service. */
 async function loadSploseServices() {
   var box = document.getElementById('bk-direct-services');
   if (!box) return;
@@ -12331,33 +12393,80 @@ async function loadSploseServices() {
     var live = data.filter(function (s) { return !s.archived && /appointment/i.test(String(s.for || 'appointment')); });
     if (!live.length) return;
     live.sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); });
-    // Drop the static client leaves; keep everything else (reports, admin…).
-    Object.keys(BOOKING_LEAVES).forEach(function (k) { if (BOOKING_LEAVES[k].cat === 'client') delete BOOKING_LEAVES[k]; });
-    var html = '';
+    var byLeaf = {};
     live.forEach(function (s) {
-      var id = 'svc-' + s.id;
-      var title = s.title || s.name || ('Service ' + s.id);
-      BOOKING_LEAVES[id] = { cat: 'client', label: title, type: sploseServiceType(title), serviceId: Number(s.id), duration: Number(s.duration) || null };
-      html += '<button class="bk-item" data-leaf="' + id + '" onclick="selectBookingLeaf(\'' + id + '\')">' + escapeHtml(title) + '</button>';
+      var k = directLeafForService(s.title || s.name);
+      if (k && BOOKING_LEAVES[k]) (byLeaf[k] = byLeaf[k] || []).push(s);
     });
-    box.innerHTML = html;
+    Object.keys(BOOKING_LEAVES).forEach(function (k) {
+      var leaf = BOOKING_LEAVES[k];
+      if (leaf.group !== 'direct') return;
+      var list = byLeaf[k] || [];
+      // The known id (the static one) wins, and still counts when Splose names
+      // the service in a way the patterns above do not recognise.
+      if (leaf.knownServiceId === undefined) leaf.knownServiceId = leaf.serviceId;
+      var known = leaf.knownServiceId;
+      var byKnown = function (s) { return known != null && Number(s.id) === Number(known); };
+      var pick = list.find(byKnown) || list[0] || live.find(byKnown) || null;
+      leaf.serviceId = pick ? Number(pick.id) : null;
+      leaf.duration = pick ? (Number(pick.duration) || null) : null;
+    });
     window.SPLOSE_SERVICES = live;
-    console.log('✅ Booking types mirror ' + live.length + ' Splose appointment services');
+    refreshDirectServiceAvailability();
+    var missing = Object.keys(BOOKING_LEAVES).filter(function (k) { return BOOKING_LEAVES[k].group === 'direct' && !BOOKING_LEAVES[k].serviceId; });
+    if (missing.length) console.warn('Direct services with no Splose service (unavailable): ' + missing.join(', '));
+    console.log('✅ Direct services matched to ' + live.length + ' Splose appointment services');
   } catch (e) {
     console.warn('Splose services unavailable — static booking types kept:', e.message);
   }
 }
+/* A direct service with no Splose service cannot be billed — disable it. */
+function refreshDirectServiceAvailability() {
+  document.querySelectorAll('#bk-direct-services .bk-item').forEach(function (b) {
+    var leaf = BOOKING_LEAVES[b.dataset.leaf];
+    var ok = !!(leaf && leaf.serviceId);
+    b.disabled = !ok;
+    b.title = ok ? '' : 'Not set up in Splose yet — add this service in Splose to book it.';
+  });
+}
+document.addEventListener('DOMContentLoaded', function () { try { refreshDirectServiceAvailability(); } catch (e) { /* booking panel not on this page */ } });
 
 function selectBookingLeaf(id) {
   var leaf = BOOKING_LEAVES[id]; if (!leaf) return;
+  if (leaf.group === 'direct' && !leaf.serviceId) {
+    showToast('Not set up in Splose', leaf.label + ' has no Splose service yet, so it cannot be billed.', 'warn');
+    return;
+  }
   document.querySelectorAll('.bk-item').forEach(function (b) { b.classList.toggle('active', b.dataset.leaf === id); });
+  var prev = BOOKING_STATE.serviceType && BOOKING_LEAVES[BOOKING_STATE.serviceType];
   BOOKING_STATE.serviceType = id;
   BOOKING_STATE.serviceLabel = leaf.label;
   selectBookingCat(leaf.cat);
   if (leaf.prefill) {
+    // The name follows the leaf: a name another leaf filled in is replaced (a
+    // stale "FCA" must not title a Resource Preparation); one the user typed is kept.
     var nameEl = document.getElementById('custom-name');
-    if (nameEl && !nameEl.value) nameEl.value = leaf.prefill;
+    if (nameEl && (!nameEl.value || (prev && prev.prefill && nameEl.value === prev.prefill))) nameEl.value = leaf.prefill;
   }
+}
+
+/* The selected booking type's leaf, or null. */
+function currentBookingLeaf() {
+  var st = BOOKING_STATE && BOOKING_STATE.serviceType;
+  return (st && BOOKING_LEAVES[st]) || null;
+}
+/* 'required' | 'optional' | 'none' — the client rule for the chosen type. */
+function bookingClientRule() {
+  var leaf = currentBookingLeaf();
+  if (leaf && leaf.client) return leaf.client;
+  return BOOKING_STATE && BOOKING_STATE.category === 'client' ? 'required' : 'none';
+}
+/* Optional-client types: back to "no client". */
+function clearBookingClient() {
+  document.querySelectorAll('.patient-card.selected').forEach(function (el) { el.classList.remove('selected'); });
+  BOOKING_STATE.selectedPatient = null;
+  BOOKING_STATE.selectedCaseId = null;
+  if (typeof renderRightContext === 'function') renderRightContext();
 }
 
 function selectBookingCat(cat) {
@@ -12386,6 +12495,21 @@ function selectBookingCat(cat) {
     document.getElementById(sectionMap[cat]).style.display = 'block';
   }
 
+  // Reports and non-face-to-face activities pick a client too — required for
+  // a report, optional for the rest. The client list sits above the form.
+  const rule = bookingClientRule();
+  if (cat !== 'client' && rule !== 'none') document.getElementById('cat-client-section').style.display = 'block';
+  if (rule === 'none' && cat !== 'client') clearBookingClient();
+  const ruleBox = document.getElementById('bk-client-rule');
+  if (ruleBox) {
+    const show = cat !== 'client' || rule === 'required';
+    ruleBox.hidden = !show;
+    ruleBox.classList.toggle('required', rule === 'required');
+    const txt = document.getElementById('bk-client-rule-text');
+    if (txt) txt.textContent = rule === 'required' ? 'Client required for this booking type' : 'Client optional — link one, or leave it unlinked';
+    const none = document.getElementById('bk-client-none');
+    if (none) none.hidden = rule !== 'optional';
+  }
 }
 
 /* ---------- Pick the right Splose busy-time type ID for a booking category ----------
@@ -12435,7 +12559,22 @@ function _getBspTiming() {
 }
 
 /* ---------- Step 1: Capture form data and advance ---------- */
-function createBookingNow() {
+/* A fresh id per deliberate Create: the server answers a repeat of it (double
+   click, network retry) with the first booking instead of writing a second. */
+function newBookingRequestId() {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* older browser */ }
+  return 'bk-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+/* The client a booking carries, by its type's rule — null when none is picked. */
+function bookingClientFor() {
+  const p = (typeof getSelectedPatient === 'function') ? getSelectedPatient() : null;
+  return p && p.id != null ? p : null;
+}
+
+async function createBookingNow() {
+  // One click, one booking: a second click while the first is still saving
+  // does nothing. The button is disabled at once, not after the awaits below.
+  if (BOOKING_STATE.submitting) return;
   const cat = BOOKING_STATE.category;
 
   if (!cat) {
@@ -12453,11 +12592,16 @@ function createBookingNow() {
     return;
   }
 
+  // Client rule for the type (the server checks the same rule).
+  const rule = bookingClientRule();
+  if (rule === 'required' && !bookingClientFor()) {
+    const leaf = currentBookingLeaf();
+    showToast('Select a client', (leaf ? leaf.label : 'This booking') + ' must be linked to a client.', 'warn');
+    return;
+  }
+
   if (cat === 'client') {
-    if (!BOOKING_STATE.selectedPatient && !getSelectedPatient()) {
-      showToast('Select a patient', 'Please select a patient before creating the appointment.', 'warn');
-      return;
-    }
+    // client presence checked above
   } else if (cat === 'email') {
     const title = document.getElementById('email-title').value.trim();
     if (!title) { showToast('Title required', 'Please enter a title for this email block.', 'warn'); return; }
@@ -12475,7 +12619,17 @@ function createBookingNow() {
   }
 
   // One surface, one action — create straight from the form.
-  confirmBooking();
+  BOOKING_STATE.submitting = true;
+  BOOKING_STATE.requestId = newBookingRequestId();
+  const btn = document.getElementById('create-booking-btn');
+  if (btn) btn.disabled = true;
+  try {
+    await confirmBooking();
+  } finally {
+    BOOKING_STATE.submitting = false;
+    BOOKING_STATE.requestId = null;
+    if (btn) btn.disabled = false;
+  }
 }
 
 /* ---------- Step 4: Confirmation and Calendar Add ---------- */
@@ -12600,7 +12754,18 @@ async function confirmBooking() {
     if (btn) { btn.disabled = true; btn.textContent = 'Adding to Outlook…'; }
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
-    const outlookTitle = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
+    // The client, by the type's rule (required for a report, optional for
+    // non-face-to-face, none otherwise) — named in the title and stored on the
+    // event so the link survives a reload.
+    const _leaf   = currentBookingLeaf();
+    const _client = bookingClientRule() !== 'none' ? bookingClientFor() : null;
+    const _clientName = _client ? `${_client.first || ''} ${_client.last || ''}`.trim() : '';
+    const _baseTitle  = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
+    const outlookTitle = _clientName ? `${_baseTitle} — ${_clientName}` : _baseTitle;
+    // Address is optional for every event. One given moves the therapist
+    // there for travel; none means they stay where they were (travel.js).
+    const _unsureNc = !!document.getElementById('bsp-location-unsure')?.checked;
+    const _location = _unsureNc ? '' : (t.location || '');
     // The Outlook category is what the backend classifies the saved row by
     // (sync-utils classifyEventType), so the tile's type follows the booking
     // leaf: reports and resource preparation are support activities, PD and
@@ -12608,7 +12773,8 @@ async function confirmBooking() {
     // back 'outlook' while the optimistic tile said Admin / Case noting.
     const LEAF_KIND = {
       fca: ['Report Writing', 'report'], 'at-report': ['Report Writing', 'report'],
-      'progress-report': ['Report Writing', 'report'], 'resource-prep': ['Report Writing', 'report'],
+      'progress-report': ['Report Writing', 'report'], 'support-letter': ['Report Writing', 'report'],
+      'resource-prep': ['Report Writing', 'report'],
       pd: ['PD', 'cpd'], supervision: ['PD', 'cpd'], lunch: ['Lunch', 'lunch'],
     };
     const [outlookCategory, tileType] = LEAF_KIND[BOOKING_STATE.serviceType] || ['Admin', 'admin'];
@@ -12622,7 +12788,12 @@ async function confirmBooking() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ title: outlookTitle, startTime: t.startISO, endTime: t.endISO, categories: [outlookCategory] }),
+          body: JSON.stringify({
+            title: outlookTitle, startTime: t.startISO, endTime: t.endISO, categories: [outlookCategory],
+            ...(_location ? { location: _location } : {}),
+            ...(_leaf ? { booking: { kind: BOOKING_STATE.serviceType, clientId: _client ? String(_client.id) : null, clientName: _clientName || null } } : {}),
+            ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
+          }),
         });
         const oResult = await oResp.json();
         if (oResp.ok) {
@@ -12647,8 +12818,10 @@ async function confirmBooking() {
         const _optId = addSession(col, {
           day: t.day, type: tileType,
           startH: t.startH, startM: t.startM, endH: t.endH, endM: t.endM,
-          title: outlookTitle, sub: CAT_LABELS[cat] || cat,
+          title: outlookTitle, sub: _location || (_leaf ? _leaf.label : (CAT_LABELS[cat] || cat)),
           categories: [outlookCategory], dbId: newDbId, outlookId,
+          address: _location || null, location: _location || null,
+          ...(_client ? { patient: _clientName, patientId: _client.id } : {}),
           startTimeIso: new Date(t.startISO).toISOString(), endTimeIso: new Date(t.endISO).toISOString(),
         });
         if (_optId && SESSIONS[_optId]) {
@@ -12747,22 +12920,16 @@ async function confirmBooking() {
       ? `Client Appointment — ${_patName}`
       : (_patName ? `${TYPE_LABEL[type] || 'Session'} — ${_patName}` : (TYPE_LABEL[type] || 'Session'));
     const _outlookCategory = OUTLOOK_CATEGORY_BY_TYPE[type] || null;
-    // Location: what was typed in the panel, else the client's address on file.
-    // Required for a client session (travel is built from it) unless the
-    // therapist ticks Unsure — then it is set later from the calendar.
+    // Location: exactly what the panel holds — optional for every service.
+    // An address moves the therapist there for travel; none (a telehealth from
+    // the car, a remote MDT) means they have not moved (travel.js). Never the
+    // client's address on file behind the therapist's back — the panel offers
+    // it as a visible choice. Unsure is the same "no address" for now.
     const _typedLoc = (_t && _t.location) || '';
     const _unsure = !!document.getElementById('bsp-location-unsure')?.checked;
-    // Unsure is an explicit "not known yet": the booking carries no address,
-    // so no travel is routed from a guessed one (it is set later on the calendar).
-    const _outlookLocation = (isClientSession && !_unsure) ? (_typedLoc || patient?.address || '') : '';
+    const _outlookLocation = _unsure ? '' : _typedLoc;
     const _locEl = document.getElementById('bsp-location');
-    const _locMeta = (_locEl && !_unsure) ? { placeId: _locEl.dataset.placeId || '', locId: _locEl.dataset.locId || '' } : { placeId: '', locId: '' };
-    if (isClientSession && !_outlookLocation && !_unsure) {
-      resetBtn();
-      showToast('Where is the session?', 'Type the address, or tick "Unsure" to set it on the calendar later.', 'warn');
-      document.getElementById('bsp-location')?.focus();
-      return;
-    }
+    const _locMeta = (_locEl && _outlookLocation) ? { placeId: _locEl.dataset.placeId || '', locId: _locEl.dataset.locId || '' } : { placeId: '', locId: '' };
     let outlookId   = null;
     let newDbId     = null; // the saved row, so the optimistic tile is editable at once
     let outlookNote = '';
@@ -12778,6 +12945,9 @@ async function confirmBooking() {
           ...(_outlookLocation         ? { location: _outlookLocation }                         : {}),
           ...(_outlookCategory         ? { categories: [_outlookCategory] }                     : {}),
           ...(_outlookTherapistUserId  ? { targetTherapistUserId: _outlookTherapistUserId }     : {}),
+          // Booking type + client: the server enforces the client rule and stores both.
+          ...(BOOKING_LEAVES[BOOKING_STATE.serviceType] ? { booking: { kind: BOOKING_STATE.serviceType, clientId: patient?.id != null ? String(patient.id) : null, clientName: _patName || null } } : {}),
+          ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
           // Draft-and-publish (058): a client session names its Splose client
           // so the backend can queue the appointment for "Sync Splose".
           ...((isClientSession && patient?.id) ? { splose: {
@@ -12833,8 +13003,11 @@ async function confirmBooking() {
         sub, patient: sub,
         patientId: patient?.id,
         region: patient?.region || 'central',
-        suburb: _unsure ? '' : (patient?.suburb || ''),
-        locationUnknown: _unsure && !_outlookLocation,
+        // No address → no place: the tile must not become a stop at the
+        // client's suburb (a telehealth from the car is not a home visit).
+        suburb: _outlookLocation ? (patient?.suburb || '') : '',
+        locationUnknown: !_outlookLocation,
+        booking: BOOKING_LEAVES[BOOKING_STATE.serviceType] ? { kind: BOOKING_STATE.serviceType } : null,
         dbId: newDbId, outlookId,
         address: _outlookLocation || null, location: _outlookLocation || null,
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
@@ -12890,6 +13063,16 @@ async function confirmBooking() {
 
 /* ---------- Reset wizard (after successful booking) ---------- */
 function resetWizard() {
+  // Forget the last booking's type and its form text: a name left in the
+  // custom form titled the next booking ("FCA" on a Resource Preparation),
+  // and a stale highlighted leaf looked chosen while the category was not.
+  BOOKING_STATE.serviceType = null;
+  BOOKING_STATE.serviceLabel = null;
+  BOOKING_STATE.formData = {};
+  document.querySelectorAll('.bk-item.active').forEach(b => b.classList.remove('active'));
+  ['custom-name', 'custom-notes', 'email-title', 'email-notes', 'admin-notes', 'bulk-noting-notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
   // Reset booking category to 'client'
   selectBookingCat('client');
 
@@ -13162,6 +13345,9 @@ function isRemoteSession(s) {
 function sessionNeedsFullAddress(s) {
   if (!s) return false;
   if (isRemoteSession(s)) return false;
+  // Booked in the portal: the address was the therapist's choice, and none
+  // means "where I already am" (travel.js) — never flag it as missing.
+  if (s.booking) return false;
   // Category-based check: only "Client Appointments" need a location
   const cats = (s.categories || []).map(c => c.toLowerCase());
   if (cats.length > 0) return cats.some(c => LOCATION_REQUIRED_CATEGORIES.has(c));
@@ -14492,9 +14678,11 @@ function bdSaveAddress(id) {
     status.textContent = fromPlaces ? 'Saved from Maps': '✓ Saved (will persist on reload)';
   }
 
-  // Trigger travel recalculation, then push updated travel blocks to Outlook
-  if (typeof buildTravelBlocks === 'function') buildTravelBlocks();
-  if (typeof syncTravelBlocksToOutlook === 'function') syncTravelBlocksToOutlook(s.day);
+  // Recalculate travel. Legs are computed from the day's physical stops and
+  // never written anywhere: this used to push every segment (free-time gaps
+  // included) to Outlook as travel events, keyed "[object Object]", so each
+  // reload pushed them again and the imported copies sat beside the legs.
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
 }
 
 // ─── Outlook travel-block helpers ───────────────────────────────────────────
@@ -17824,6 +18012,8 @@ function groupEventsByDay(events) {
           endTimeIso: event.end_time,
           // Per-session travel answers (before / after) — see travel.js
           travel: (event.custom_metadata && event.custom_metadata.travel) || null,
+          // Booked in the portal: its type and client (booking-rules.js).
+          booking: (event.custom_metadata && event.custom_metadata.booking) || null,
         });
         console.log(`📍 ${dayOfWeek.toUpperCase()} ${parts.day}/${parts.month}: ${event.title} at ${perthTime} [${classified}]`);
       } else {
@@ -17913,6 +18103,9 @@ async function enrichOutlookTilesWithSploseAddresses() {
   Object.values(SESSIONS).forEach(s => {
     if (!s.outlookSynced || !s.startTimeIso) return;
     if (s.address && s.locationObj && !s.locationObj.isMissing) return; // already has address
+    // A portal booking's location is the therapist's choice: none means they
+    // stay where they were. Splose's address for the client must not fill it.
+    if (s.booking) return;
 
     const outlookMs = new Date(s.startTimeIso).getTime();
     if (isNaN(outlookMs)) return;
@@ -18126,6 +18319,7 @@ function mergeEventsIntoDayData(eventsByDay) {
             startTimeIso: session.startTimeIso,
             endTimeIso: session.endTimeIso,
             travel: session.travel || null,
+            booking: session.booking || null,
           });
           if (SESSIONS[id]) {
             SESSIONS[id].outlookSynced = true;

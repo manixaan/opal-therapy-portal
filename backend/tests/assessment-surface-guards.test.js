@@ -708,10 +708,10 @@ describe('changed assets are cache-busted', () => {
       // shows where the drive will go until an address is typed.
       // 19: route-aware Smart Booking — routed preview with loading/error
       // states, the earliest feasible start, departure-time routing.
-      ['travel.js', 20],
+      ['travel.js', 21],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
-      ['booking-route.js', 1], ['booking-route.css', 1],
+      ['booking-route.js', 2], ['booking-route.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -890,10 +890,15 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // The engine never reads the profile editor's week cursor directly.
     expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
     expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
-    // Smart Booking: a client session needs a location unless Unsure is ticked.
+    // Location is optional for every booking (4 Oct 2026): nothing blocks a
+    // client session without one, and none is filled in behind the user.
     expect(SHELL).toMatch(/id="bsp-location-unsure"/);
-    expect(SHELL).toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
-    expect(travel).toMatch(/kind: 'between', startMin: Math\.max\(seg\.startMin, seg\.endMin - seg\.travelMin\)/);
+    expect(SHELL).not.toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
+    expect(SHELL).toMatch(/const _outlookLocation = _unsure \? '' : _typedLoc;/);
+    // Legs are placed by placeTravelLeg — arriving as the next stop starts,
+    // never before the previous physical stop ends — and can be moved.
+    expect(travel).toMatch(/function placeTravelLeg\(/);
+    expect(travel).toMatch(/floorMin: sessionEndMin\(curr\)/);
     expect(travel).toMatch(/classList\.add\('suppressed'\)/);
     expect(travel).toMatch(/preview placeholder/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
@@ -903,7 +908,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // After a booking the grid reloads from the server, so the saved row is shown
     // even though the week jump re-renders from the stale cache.
-    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 16000);
+    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 20000);
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);

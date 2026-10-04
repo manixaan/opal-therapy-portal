@@ -894,17 +894,73 @@ describe('grouped booking-type picker', () => {
   test('billable + non-billable sections with collapsible groups', () => {
     expect(HTML).toContain('class="bk-section-label">Billable<');
     expect(HTML).toContain('>Non-billable<');
-    for (const g of ['Direct services', 'Requested reports', 'Non-face-to-face', 'Provider travel']) {
+    for (const g of ['Direct services', 'Requested reports', 'Non-face-to-face']) {
       expect(HTML).toContain('<summary>' + g + '</summary>');
     }
-    for (const leaf of ['Therapy session', 'Assessment session', 'Initial assessment consultation',
-      'FCA', 'AT report', 'Progress report', 'Case noting', 'Resource preparation',
-      'Telehealth', 'Professional development', 'Supervision', 'Lunch']) {
+    // Provider travel is not a booking type (4 Oct 2026): travel comes from
+    // the day's physical appointments and is moved on the calendar.
+    expect(HTML).not.toContain('<summary>Provider travel</summary>');
+    for (const leaf of ['Assessment Session', 'Assessment Session – Early Intervention Under 9',
+      'Initial Assessment / Consultation', 'Initial Assessment / Consultation – Early Intervention Under 9',
+      'MDT Meeting', 'MDU Meeting', 'Telehealth Therapy Session', 'Telehealth Therapy Session – Early Intervention Under 9',
+      'Therapy Session', 'Therapy Session – Early Intervention Under 9',
+      'Functional Capacity Assessment (FCA)', 'Assistive Technology (AT)', 'Progress Report', 'Support Letter',
+      'Case Noting', 'Resource Preparation', 'Emails', 'Phone Calls',
+      'Professional development', 'Supervision', 'Lunch']) {
       expect(HTML).toContain('>' + leaf + '</button>');
     }
-    expect(HTML).toContain('Bill up to 30 minutes each way');
     expect(HTML).toContain('function selectBookingLeaf');
     expect(HTML).toContain('selectBookingCat(leaf.cat)'); // rides the existing category plumbing
+  });
+
+  test('client rules: required for direct services and reports, optional for non-face-to-face', () => {
+    const start = HTML.indexOf('var BOOKING_LEAVES = {');
+    const leaves = HTML.slice(start, HTML.indexOf('\n};', start));
+    const rule = (id) => (leaves.match(new RegExp("'" + id + "':\\s*\\{[^}]*client: '(\\w+)'")) || [])[1];
+    for (const id of ['assessment', 'assessment-ei', 'initial', 'initial-ei', 'mdt', 'mdu', 'telehealth', 'telehealth-ei', 'therapy', 'therapy-ei',
+      'fca', 'at-report', 'progress-report', 'support-letter']) expect(rule(id)).toBe('required');
+    for (const id of ['case-noting', 'resource-prep', 'emails', 'phone-calls']) expect(rule(id)).toBe('optional');
+    for (const id of ['pd', 'supervision', 'lunch']) expect(rule(id)).toBe('none');
+    // Each non-face-to-face leaf names itself — none rides the case-noting form.
+    expect(leaves).toContain("'resource-prep':   { cat: 'custom'");
+    expect(leaves).toContain("'case-noting':     { cat: 'custom'");
+    // The panel enforces it before anything is sent; the server checks again.
+    expect(HTML).toContain("if (rule === 'required' && !bookingClientFor())");
+    expect(HTML).toContain('id="bk-client-none"');
+  });
+
+  test('one click, one booking', () => {
+    const start = HTML.indexOf('async function createBookingNow()');
+    const body = HTML.slice(start, HTML.indexOf('/* ---------- Step 4', start));
+    expect(body).toContain('if (BOOKING_STATE.submitting) return;');
+    expect(body).toContain('BOOKING_STATE.requestId = newBookingRequestId();');
+    expect(body).toMatch(/if \(btn\) btn\.disabled = true;\s+try \{\s+await confirmBooking\(\);/);
+    // Both save paths send the request id the server dedupes on.
+    expect((HTML.match(/requestId: BOOKING_STATE\.requestId/g) || []).length).toBe(2);
+    // A new booking starts clean — no title or type from the last one.
+    expect(HTML).toMatch(/function resetWizard\(\) \{[\s\S]{0,600}BOOKING_STATE\.serviceType = null;[\s\S]{0,600}'custom-name'/);
+  });
+
+  test('direct services map to Splose services without showing billing codes', () => {
+    expect(HTML).toContain('function directLeafForService(title)');
+    expect(HTML).toContain('refreshDirectServiceAvailability()');
+    // Live Splose names never become button labels.
+    const start = HTML.indexOf('async function loadSploseServices()');
+    const body = HTML.slice(start, HTML.indexOf('function refreshDirectServiceAvailability', start));
+    expect(body).not.toContain('box.innerHTML');
+    // Splose names map to the right leaf; Early Intervention never lands on the plain one.
+    const fnSrc = HTML.slice(HTML.indexOf('function directLeafForService(title)'), HTML.indexOf('/* Fill each direct-service leaf'));
+    const directLeafForService = new Function(fnSrc + '; return directLeafForService;')();
+    expect(directLeafForService('Therapy Session (Early Intervention - Under 9) (Occupational Therapy)')).toBe('therapy-ei');
+    expect(directLeafForService('Therapy Session (Occupational Therapy)')).toBe('therapy');
+    expect(directLeafForService('Telehealth Therapy Session (Under 9)')).toBe('telehealth-ei');
+    expect(directLeafForService('Telehealth Session')).toBe('telehealth');
+    expect(directLeafForService('Initial Assessment / Consultation')).toBe('initial');
+    expect(directLeafForService('Initial Assessment - Early Intervention')).toBe('initial-ei');
+    expect(directLeafForService('Assessment Session')).toBe('assessment');
+    expect(directLeafForService('MDT Meeting')).toBe('mdt');
+    expect(directLeafForService('MDU Meeting')).toBe('mdu');
+    expect(directLeafForService('Provider Travel')).toBeNull();
   });
 
   test('a non-client booking is classified by its leaf and shows once', () => {
@@ -1199,7 +1255,7 @@ describe('free-time gap overlay removed', () => {
   });
 
   test('travel-leg indicators still render on the calendar', () => {
-    expect(TRAVEL).toContain("el.className = 'travel-overlay ' + seg.kind;");
+    expect(TRAVEL).toContain("el.className = 'travel-overlay ' + seg.kind + (seg.moved ? ' moved' : '') + (seg.tight ? ' tight' : '');");
     expect(TRAVEL).toContain('function renderSegmentOverlay');
     expect(TRAVEL).toContain('openTravelPanel(seg)');
     // the shell still loads the module that draws them, ahead of reports.js

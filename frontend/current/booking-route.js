@@ -199,7 +199,14 @@
   BR.captureDraft = captureDraft;
 
   /* ─────────────────────── Client location selector (§5–7) ─────────────────── */
-  var LOC = { clientId: null, list: [], seq: 0, mode: 'none', label: 'Other', applying: false, pending: null, pendingUnsure: false, patient: null };
+  var LOC = { clientId: null, list: [], seq: 0, mode: 'none', label: 'Other', applying: false, pending: null, pendingUnsure: false, patient: null, userPicked: false };
+  /* The chosen booking type says not to assume the client's address (a
+     telehealth, an MDT/MDU — they can happen from anywhere). */
+  function leafNoDefaultAddress() {
+    var b = bookingState(); var leaves = (typeof BOOKING_LEAVES !== 'undefined' && BOOKING_LEAVES) || {};
+    var leaf = b && b.serviceType ? leaves[b.serviceType] : null;
+    return !!(leaf && leaf.noDefaultAddress);
+  }
 
   function sploseFallback(p) {
     var a = p && (p.address || '').trim();
@@ -250,7 +257,9 @@
       input.hidden = false; input.placeholder = 'Start typing an address…';
       return;
     }
-    var html = '';
+    // Address is optional for every booking: "No address" means the therapist
+    // stays where they were for travel (travel.js).
+    var html = '<option value="__none">No address — I stay where I am</option>';
     if (LOC.list.length) {
       html += '<optgroup label="Known locations">' + LOC.list.map(function (l, i) {
         return '<option value="' + i + '" title="' + esc(l.address) + '">' + esc(optionText(l)) + '</option>';
@@ -286,6 +295,28 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
     LOC.applying = false;
     setMeta((SOURCE_TEXT[l.source] || 'Saved') + ' · ' + l.address);
+  }
+
+  function applyNone() {
+    var input = $('bsp-location'), sel = $('bsp-loc-select'), add = $('bsp-loc-add');
+    if (!input) return;
+    LOC.mode = 'noaddr';
+    if (sel) sel.value = '__none';
+    if (add) add.hidden = true;
+    input.hidden = true;
+    LOC.applying = true;
+    input.value = '';
+    ['placeId', 'lat', 'lng', 'locId', 'locSource'].forEach(function (k) { delete input.dataset[k]; });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    LOC.applying = false;
+    setMeta('No address — travel treats you as staying where you were before this.');
+  }
+  /* The booking type changed: re-pick the default unless the therapist chose. */
+  function relevelLocationDefault() {
+    if (LOC.userPicked || !LOC.clientId || !isClientCategory()) return;
+    if (LOC.mode !== 'select' && LOC.mode !== 'noaddr') return;
+    if (leafNoDefaultAddress()) { if (LOC.mode !== 'noaddr') applyNone(); }
+    else if (LOC.mode === 'noaddr' && LOC.list.length) applySelection(0);
   }
 
   function enterAddMode() {
@@ -349,6 +380,8 @@
       return true;
     }
     if (idx != null && idx >= 0) { applySelection(idx); return true; }
+    if (LOC.mode === 'noaddr' && LOC.userPicked) { applyNone(); return true; }
+    if (leafNoDefaultAddress()) { applyNone(); return true; }
     if (LOC.list.length) { applySelection(0); return true; }
     return false;
   }
@@ -389,7 +422,8 @@
     var field = document.querySelector('.bsp-loc-field');
     if (field) field.classList.toggle('is-unsure', on);
     if (on) setMeta('Smart Travel can’t calculate travel until a location is provided — set it on the calendar later.', 'warn');
-    else if (LOC.mode === 'select') { var sv = sel && sel.value; if (sv && sv !== '__add') applySelection(Number(sv)); }
+    else if (LOC.mode === 'select') { var sv = sel && sel.value; if (sv && sv !== '__add' && sv !== '__none') applySelection(Number(sv)); }
+    else if (LOC.mode === 'noaddr') applyNone();
     else setMeta('');
   }
 
@@ -398,6 +432,7 @@
     var id = p ? String(p.id) : null;
     if (id === LOC.clientId) { renderLocationUIIfNeeded(); return; }
     LOC.clientId = id;
+    LOC.userPicked = false;
     if (!id) {
       LOC.list = []; LOC.patient = null; LOC.mode = 'none';
       renderLocationUI(); setMeta('');
@@ -705,7 +740,9 @@
     wired = true;
     var sel = $('bsp-loc-select'), input = $('bsp-location'), add = $('bsp-loc-add'), unsure = $('bsp-location-unsure');
     if (sel) sel.addEventListener('change', function () {
+      LOC.userPicked = true;
       if (sel.value === '__add') enterAddMode();
+      else if (sel.value === '__none') applyNone();
       else if (sel.value !== '') applySelection(Number(sel.value));
     });
     if (add) add.addEventListener('click', function (e) {
@@ -731,7 +768,7 @@
     if (wl) wl.addEventListener('click', function (e) { if (e.target.closest('[data-br="set-weekly"]')) saveDraftAndSetLocation(); });
 
     wrapGlobal('renderRightContext', onPatientMaybeChanged);
-    wrapGlobal('selectBookingCat', function () { onPatientMaybeChanged(); refreshWorkLocationNotice(); });
+    wrapGlobal('selectBookingCat', function () { onPatientMaybeChanged(); relevelLocationDefault(); refreshWorkLocationNotice(); });
     wrapGlobal('bspSelectDay', refreshWorkLocationNotice);
     wrapGlobal('selectBspTherapist', function () {
       var c = selectedClinician();

@@ -366,18 +366,32 @@ function sessionsForDay(day) {
     .sort((a, b) => sessionStartMin(a) - sessionStartMin(b));
 }
 
-/* Real-world lookup: the authoritative session location lives on the Splose
-   appointment (appointment.locationId → /locations/{id}) for onsite sessions,
-   and on the patient's address (patient.suburb / .postalCode) for mobile visits.
-   This stub mirrors that shape so the rest of the travel engine can be wired
-   against it today and only the fetch layer swaps in production. */
+/* Where a session puts the therapist — LAST KNOWN PHYSICAL LOCATION model
+   (4 Oct 2026). The calendar is a chronological record of the day:
+
+     an event WITH an address   → the therapist is now at that address
+     an event WITHOUT one       → the therapist has NOT moved
+
+   so a location comes only from the event's own data — its address, or the
+   suburb of a home visit Splose recorded — never from its type. Telehealth
+   is not "at home", an MDT is not "online", admin is not "at the office":
+   with no address each simply leaves the therapist where they were, and
+   travel is routed between the physical stops either side
+   (computeDayTravelSegments). kind 'none' / 'unknown' / 'remote' are the
+   no-move kinds; isPhysicalLocation() is the test. */
 const CLIENT_ROUTE_TYPES = new Set(['therapy', 'initial', 'assessment', 'mdt']);
+/* An address string that names a call, not a place ("Microsoft Teams
+   Meeting", "Zoom", "Phone call"). Outlook copies the meeting link's label
+   into location, which used to be routed as if it were a street. */
+const NON_PLACE_ADDRESS = /^\s*(microsoft\s+teams(\s+meeting)?|teams(\s+meeting|\s+call)?|zoom(\s+meeting)?|google\s+meet|webex|skype|online|virtual|remote|telehealth|phone(\s+call)?|by\s+phone|n\/?a|none|tbc|tbd)\b/i;
+function isPlaceAddress(addr) {
+  const a = String(addr || '').trim();
+  if (!a || NON_PLACE_ADDRESS.test(a) || /^https?:\/\//i.test(a)) return false;
+  return true;
+}
 function sploseLocationForSession(s) {
-  // 0) Explicit per-session address takes precedence. This is the field the
-  //    Splose integration will eventually populate from appointment.locationId
-  //    or patient.address; storing it on the session keeps the dependency
-  //    one-way and future-proofs travel routing for address-level precision.
-  if (s.address) {
+  // 1) The event's own address: the therapist is there.
+  if (s.address && isPlaceAddress(s.address)) {
     const sub = s.suburb ? stripSuburb(s.suburb) : addrSuburb(s.address);
     return {
       source: 'session.address',
@@ -388,18 +402,13 @@ function sploseLocationForSession(s) {
       kind:   s.patient ? 'visit' : 'session'
     };
   }
-  // 0b) A client session with no location (booked "Unsure", or imported
-  //     without one) has no place yet. Routing it from the office or a guess
-  //     would draw a drive that never happens — no leg until it has one.
-  if (s.locationUnknown || (CLIENT_ROUTE_TYPES.has(s.type) && !s.suburb)) {
-    return {
-      source: 'unset', address: null, suburb: null,
-      label: s.patient ? s.patient + ' (location not set)' : 'Location not set',
-      region: s.region || 'central', kind: 'unknown'
-    };
+  // 2) Remote by the event's own data (Quick Add online mode, a Teams link).
+  const isRemote = /^(teams|webinar|online)/i.test(s.suburb || '') || (s.address && !isPlaceAddress(s.address));
+  if (isRemote) {
+    return { source: 'remote', address: null, suburb: null, label: 'Remote / online', region: 'remote', kind: 'remote' };
   }
-  // 1) Mobile / home visit — the therapist is wherever the patient lives
-  if (s.patient && s.suburb) {
+  // 3) A home visit Splose recorded by suburb only (no street yet).
+  if (s.patient && s.suburb && !s.locationUnknown) {
     return {
       source: 'splose:/patients/' + (s.patientId || '?'),
       address: null,
@@ -409,40 +418,23 @@ function sploseLocationForSession(s) {
       kind:   'visit'
     };
   }
-  // 2) Remote session (MDT on Teams, CPD webinar) — no physical suburb
-  const isRemote = /^(teams|webinar)/i.test(s.suburb || '');
-  if (isRemote) {
-    return {
-      source: 'splose:/appointments/… (remote)',
-      address: null, suburb: null, label: 'Remote / online', region: 'remote', kind: 'remote'
-    };
-  }
-  // 3) Admin / case-noting — home-based by default. Resolves to the day's
-  //    anchor base (home if set in the Mon–Fri dropdown, else the office).
-  //    This is what gives us "session → home" travel blocks automatically
-  //    whenever a patient session is followed by an admin/case-noting block.
-  if (HOME_BASED_TYPES.has(s.type)) {
-    const anchor = dayAnchorBase(s.day);
-    return {
-      source: 'home-base anchor',
-      address: anchor.addr || null,
-      suburb: anchor.suburb || null,
-      label:  anchor.label || 'Home base',
-      region: anchor.region || 'central',
-      kind:   'home-base'
-    };
-  }
-  // 4) Onsite — Splose appointment.locationId points at Opal Therapy (office).
-  //    Fall back to the user's configured Perth metro office.
-  const office = WORK_BASES.office || {};
+  // 4) No address: the therapist stays where they were. 'unknown' marks a
+  //    client session whose place may be set later; 'none' is everything else.
+  const clientish = s.locationUnknown || CLIENT_ROUTE_TYPES.has(s.type);
   return {
-    source: 'splose:/locations/{office}',
-    address: office.addr || null,
-    suburb: office.suburb || 'Willetton',
-    label:  office.label  || 'Perth metro office',
-    region: office.region || 'central',
-    kind:   'onsite'
+    source: 'no-address', address: null, suburb: null,
+    label: clientish ? (s.patient ? s.patient + ' (no address)' : 'No address') : 'No address — location unchanged',
+    region: s.region || 'central', kind: clientish ? 'unknown' : 'none'
   };
+}
+/* Does this location move the therapist? */
+function isPhysicalLocation(loc) {
+  return !!(loc && loc.kind !== 'none' && loc.kind !== 'unknown' && loc.kind !== 'remote' && locTravelKey(loc));
+}
+/* A session that is a stop on the day's route: a real appointment (not a
+   travel block) with a physical location. */
+function isPhysicalStop(s) {
+  return !!s && !isTravelBlock(s) && isPhysicalLocation(sessionLocation(s));
 }
 
 function sessionLocation(s) {
@@ -690,7 +682,8 @@ function addStopAfterSession(sessionId, patientId) {
     if (typeof selectBookingLeaf === 'function' && typeof BOOKING_LEAVES !== 'undefined') {
       const cur = BOOKING_STATE.serviceType && BOOKING_LEAVES[BOOKING_STATE.serviceType];
       if (!cur || cur.cat !== 'client') {
-        const firstClientLeaf = Object.keys(BOOKING_LEAVES).find(k => BOOKING_LEAVES[k].cat === 'client');
+        const firstClientLeaf = (BOOKING_LEAVES.therapy && BOOKING_LEAVES.therapy.serviceId) ? 'therapy'
+          : Object.keys(BOOKING_LEAVES).find(k => BOOKING_LEAVES[k].cat === 'client' && BOOKING_LEAVES[k].serviceId);
         if (firstClientLeaf) selectBookingLeaf(firstClientLeaf);
       }
     }
@@ -859,18 +852,28 @@ function _bspPredecessor(day, startMin) {
   if (ctx && (!ctx.day || ctx.day === day)) {
     const s = (ctx.sessionId && window.SESSIONS && window.SESSIONS[ctx.sessionId]) || _sessionByDbId(ctx.dbId);
     if (s && s.day === day) {
-      const loc = sessionLocation(s);
-      return { s, explicit: true, endMin: sessionEndMin(s), fromKey: locTravelKey(loc), suburb: loc.suburb || '', label: ctx.label || _stopName(s) || 'previous stop' };
+      // Continuing from an event with no address (a telehealth): the drive
+      // starts from the last place the therapist actually was.
+      const at = isPhysicalStop(s) ? s : _lastPhysicalStopBefore(day, sessionEndMin(s), s);
+      const loc = sessionLocation(at || s);
+      return { s, explicit: true, endMin: sessionEndMin(s), fromKey: at ? locTravelKey(loc) : null, suburb: at ? (loc.suburb || '') : '',
+               label: ctx.label || _stopName(at || s) || 'previous stop' };
     }
     if (ctx.day === day && ctx.endMin != null) {
       return { s: { id: ctx.sessionId || '' }, explicit: true, endMin: ctx.endMin, fromKey: ctx.address || ctx.suburb || null,
                suburb: ctx.suburb || (ctx.address ? addrSuburb(ctx.address) : ''), label: ctx.label || 'previous stop' };
     }
   }
-  const before = sessionsForDay(day).filter(s => sessionEndMin(s) <= startMin && !isTravelBlock(s));
-  if (!before.length) return null;
-  const s = before[before.length - 1], loc = sessionLocation(s);
+  // The last PHYSICAL stop: events with no address in between leave the
+  // therapist where they were, so they are not where the drive starts.
+  const s = _lastPhysicalStopBefore(day, startMin, null);
+  if (!s) return null;
+  const loc = sessionLocation(s);
   return { s, explicit: false, endMin: sessionEndMin(s), fromKey: locTravelKey(loc), suburb: loc.suburb || '', label: _stopName(s) || 'previous session' };
+}
+function _lastPhysicalStopBefore(day, endByMin, include) {
+  const before = sessionsForDay(day).filter(x => (x === include || sessionEndMin(x) <= endByMin) && isPhysicalStop(x));
+  return before.length ? before[before.length - 1] : null;
 }
 /* A stop's display name: the client, not the Outlook title convention. */
 function _stopName(s) {
@@ -1104,8 +1107,38 @@ async function applyTravelChainAfterBooking(newDbId, ctx) {
   } catch (e) { /* best effort — the default is the same base most days */ }
 }
 
+/* PURE — when a travel leg sits on the calendar. The leg itself (who, from
+   where, to where, how long) is computed; only its time is the therapist's.
+     arrival legs ('start', 'between'): auto = arrive as the next stop starts,
+       never before the previous physical stop ends (floorMin);
+       offsetMin is minutes from the next stop's START.
+     the leg home ('end'): auto = leave as the last physical stop ends;
+       offsetMin is minutes from its END.
+   A dragged leg keeps its offset — it moves with its appointment and never
+   snaps back to the automatic time. */
+function placeTravelLeg(input) {
+  const i = input || {};
+  const travel = Math.max(0, Math.round(Number(i.travelMin) || 0));
+  const anchor = Number(i.anchorMin) || 0;
+  const manual = i.offsetMin != null && Number.isFinite(Number(i.offsetMin));
+  let start, tight = false;
+  if (i.kind === 'end') {
+    start = manual ? anchor + Number(i.offsetMin) : anchor;
+    tight = start < anchor;                       // leaving before the session ends
+  } else {
+    if (manual) {
+      start = anchor + Number(i.offsetMin);
+    } else {
+      start = anchor - travel;
+      if (i.floorMin != null && start < i.floorMin) { start = i.floorMin; }
+    }
+    tight = start + travel > anchor || (i.floorMin != null && start < i.floorMin);
+  }
+  return { startMin: start, endMin: start + travel, travelMin: travel, moved: manual, tight };
+}
+
 function computeDayTravelSegments(day) {
-  const sessions = sessionsForDay(day);
+  const sessions = sessionsForDay(day).filter(s => !isTravelBlock(s));
   const segs = [];
   const workS = (typeof WORK_S !== 'undefined' ? WORK_S : 8) * 60;
   const workE = (typeof WORK_E !== 'undefined' ? WORK_E : 18) * 60;
@@ -1119,119 +1152,114 @@ function computeDayTravelSegments(day) {
   }
 
   const base = dayAnchorBase(day); // base for start/end of day (from Mon-Fri dropdown)
+  const offsetOf = (s, side) => {
+    const v = s && s.travel ? s.travel[side === 'before' ? 'beforeOffsetMin' : 'afterOffsetMin'] : null;
+    return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+  };
+  const locOf = (l) => ({ suburb: l.suburb || null, label: l.label, region: l.region, address: l.address || l.addr || null, addr: l.address || l.addr || null });
 
-  // --- start: base → first session ---
-  const first = sessions[0];
-  const firstLoc = sessionLocation(first);
-  // Prefer the full street address when the session was booked with one —
-  // gives the Routes API a precise origin/destination rather than the suburb
-  // centroid, which matters for the 5-10 min disparity between, say,
-  // "Willetton 6155" and "31 Yale Rd, Willetton WA 6155".
-  // The first session may say where the day starts (travel.before); the day's
-  // base is the default. Between legs always chain in time order.
-  const startPt  = resolveTravelPoint(sessionTravelOverride(first, 'before'), day) || base;
-  const baseKey  = startPt.addr  || startPt.suburb;
-  const firstKey = locTravelKey(firstLoc);
-  if (!startPt.remote && baseKey && firstKey && baseKey !== firstKey) {
-    const travel = travelMinutes(baseKey, firstKey);
-    if (travel > 0) {
-      const endMin   = sessionStartMin(first);
-      const startMin = Math.max(0, endMin - travel);
+  // The route: only events that put the therapist somewhere. An event with
+  // no address (telehealth, a remote MDT, emails…) leaves them where they
+  // were, so travel runs between the physical stops either side of it.
+  const stops = sessions.filter(isPhysicalStop);
+
+  if (stops.length) {
+    // --- start: base → first physical stop ---
+    // The first stop may say where the day starts (travel.before).
+    const first = stops[0];
+    const firstLoc = sessionLocation(first);
+    const startPt  = resolveTravelPoint(sessionTravelOverride(first, 'before'), day) || base;
+    const baseKey  = startPt.addr || startPt.suburb;
+    const firstKey = locTravelKey(firstLoc);
+    if (!startPt.remote && baseKey && firstKey && baseKey !== firstKey) {
+      const travel = travelMinutes(baseKey, firstKey);
+      if (travel > 0) {
+        const at = placeTravelLeg({ kind: 'start', anchorMin: sessionStartMin(first), travelMin: travel, offsetMin: offsetOf(first, 'before') });
+        segs.push({
+          day, kind: 'start',
+          fromLoc: { suburb: startPt.suburb, label: startPt.label, region: startPt.region, address: startPt.addr || null, addr: startPt.addr || null },
+          toLoc:   locOf(firstLoc),
+          startMin: Math.max(0, at.startMin), endMin: at.endMin,
+          travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+          fromSessionId: null, toSessionId: first.id,
+          ownerSessionId: first.id, ownerSide: 'before',
+          anchorBaseId: startPt.baseId || calendarWeekLocations()[day] || 'office',
+          overridden: !!sessionTravelOverride(first, 'before'),
+          cacheKey: routeKey(baseKey, firstKey, 'driving')
+        });
+      }
+    }
+
+    // --- between physical stops (non-physical events in between are skipped) ---
+    for (let i = 0; i < stops.length - 1; i++) {
+      const curr = stops[i], next = stops[i + 1];
+      const from = sessionLocation(curr), to = sessionLocation(next);
+      const fromKey = locTravelKey(from), toKey = locTravelKey(to);
+      const travel  = travelMinutes(fromKey, toKey);
+      if (travel <= 0) continue;                    // same place — no drive
+      const at = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: sessionEndMin(curr),
+                                  travelMin: travel, offsetMin: offsetOf(next, 'before') });
       segs.push({
-        day, kind: 'start',
-        fromLoc: { suburb: startPt.suburb, label: startPt.label, region: startPt.region, address: startPt.addr || null },
-        toLoc:   { suburb: firstLoc.suburb, label: firstLoc.label, region: firstLoc.region, address: firstLoc.address || null },
-        startMin, endMin,
-        travelMin: travel, freeMin: 0,
-        fromSessionId: null, toSessionId: first.id,
-        anchorBaseId: startPt.baseId || calendarWeekLocations()[day] || 'office',
-        overridden: !!sessionTravelOverride(first, 'before'),
-        cacheKey: routeKey(baseKey, firstKey, 'driving')
+        day, kind: 'between',
+        fromLoc: locOf(from), toLoc: locOf(to),
+        startMin: at.startMin, endMin: at.endMin,
+        travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+        fromSessionId: curr.id, toSessionId: next.id,
+        ownerSessionId: next.id, ownerSide: 'before',
+        anchorBaseId: null,
+        cacheKey: routeKey(fromKey, toKey, 'driving')
       });
     }
-  }
 
-  // --- leading free window: working-day start → (travel to) first session ---
-  {
-    const startSeg = segs.find(x => x.kind === 'start');
-    const leadEnd = startSeg ? startSeg.startMin : sessionStartMin(first);
-    if (leadEnd - workS >= 45) {
-      segs.push({ day, kind: 'gap', fromLoc: {}, toLoc: sessionLocation(first),
-        startMin: workS, endMin: leadEnd, travelMin: 0, freeMin: leadEnd - workS,
-        fromSessionId: null, toSessionId: first.id, anchorBaseId: null, cacheKey: '' });
+    // --- end: last physical stop → base ---
+    const last = stops[stops.length - 1];
+    const lastLoc = sessionLocation(last);
+    const lastKey = locTravelKey(lastLoc);
+    // The last stop may say where the day ends (travel.after).
+    const endPt = resolveTravelPoint(sessionTravelOverride(last, 'after'), day) || base;
+    const baseKeyEnd = endPt.addr || endPt.suburb;
+    if (!endPt.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
+      const travel = travelMinutes(lastKey, baseKeyEnd);
+      if (travel > 0) {
+        const at = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(last), travelMin: travel, offsetMin: offsetOf(last, 'after') });
+        segs.push({
+          day, kind: 'end',
+          fromLoc: locOf(lastLoc),
+          toLoc:   { suburb: endPt.suburb, label: endPt.label, region: endPt.region, address: endPt.addr || null, addr: endPt.addr || null },
+          startMin: at.startMin, endMin: at.endMin,
+          travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+          fromSessionId: last.id, toSessionId: null,
+          ownerSessionId: last.id, ownerSide: 'after',
+          anchorBaseId: endPt.baseId || calendarWeekLocations()[day] || 'office',
+          overridden: !!sessionTravelOverride(last, 'after'),
+          cacheKey: routeKey(lastKey, baseKeyEnd, 'driving')
+        });
+      }
     }
   }
 
-  // --- between consecutive pairs ---
-  for (let i = 0; i < sessions.length - 1; i++) {
-    const curr = sessions[i], next = sessions[i + 1];
-    const gapStart = sessionEndMin(curr);
-    const gapEnd   = sessionStartMin(next);
-    const gapMin   = gapEnd - gapStart;
-    if (gapMin <= 0) continue;
-
-    const from = sessionLocation(curr);
-    const to   = sessionLocation(next);
-    const fromKey = locTravelKey(from);
-    const toKey   = locTravelKey(to);
-    const travel  = travelMinutes(fromKey, toKey);
-
-    // Lunch block inside this gap? Don't emit — lunch is its own block.
-    const lunchIn = sessions.some(x => x.type === 'lunch' && sessionStartMin(x) >= gapStart && sessionEndMin(x) <= gapEnd);
-    if (lunchIn) continue;
-
-    const freeAfterTravel = Math.max(0, gapMin - travel);
-    const kind = (gapMin >= 45 && freeAfterTravel >= 25) ? 'gap' : 'between';
-
-    // Same-location + tight gap → skip (nothing interesting to render).
-    if (kind === 'between' && travel === 0 && gapMin < 45) continue;
-
-    segs.push({
-      day, kind,
-      fromLoc: from, toLoc: to,
-      startMin: gapStart, endMin: gapEnd,
-      travelMin: travel, freeMin: freeAfterTravel,
-      fromSessionId: curr.id, toSessionId: next.id,
-      anchorBaseId: null,
-      cacheKey: routeKey(fromKey || '', toKey || '', 'driving')
-    });
-  }
-
-  // --- end: last session → base ---
-  const last = sessions[sessions.length - 1];
-  const lastLoc = sessionLocation(last);
-  const lastKey = locTravelKey(lastLoc);
-  // The last session may say where the day ends (travel.after).
-  const endPt = resolveTravelPoint(sessionTravelOverride(last, 'after'), day) || base;
-  const baseKeyEnd = endPt.addr || endPt.suburb;
-  if (!endPt.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
-    const travel = travelMinutes(lastKey, baseKeyEnd);
-    if (travel > 0) {
-      const startMin = sessionEndMin(last);
-      const endMin   = startMin + travel;
-      segs.push({
-        day, kind: 'end',
-        fromLoc: { suburb: lastLoc.suburb, label: lastLoc.label, region: lastLoc.region, address: lastLoc.address || null },
-        toLoc:   { suburb: endPt.suburb,   label: endPt.label,   region: endPt.region,   address: endPt.addr || null },
-        startMin, endMin,
-        travelMin: travel, freeMin: 0,
-        fromSessionId: last.id, toSessionId: null,
-        anchorBaseId: endPt.baseId || calendarWeekLocations()[day] || 'office',
-        overridden: !!sessionTravelOverride(last, 'after'),
-        cacheKey: routeKey(lastKey, baseKeyEnd, 'driving')
-      });
+  // --- free windows (Snapshot report, idle-slot suggestions) ---
+  // Time not covered by any event or travel leg: before the day's first
+  // commitment, between consecutive commitments, after the last.
+  const legs = segs.slice();
+  const busy = sessions.map(s => [sessionStartMin(s), sessionEndMin(s), s])
+    .concat(legs.map(l => [l.startMin, l.endMin, null]))
+    .sort((x, y) => x[0] - y[0]);
+  const last0 = sessions[sessions.length - 1];
+  let cursor = workS, prevSession = null;
+  busy.forEach(([st, en, s]) => {
+    if (st - cursor >= 45) {
+      segs.push({ day, kind: 'gap', fromLoc: prevSession ? sessionLocation(prevSession) : {}, toLoc: s ? sessionLocation(s) : {},
+        startMin: cursor, endMin: st, travelMin: 0, freeMin: st - cursor,
+        fromSessionId: prevSession ? prevSession.id : null, toSessionId: s ? s.id : null, anchorBaseId: null, cacheKey: '' });
     }
-  }
-
-  // --- trailing free window: last session (after return travel) → working-day end ---
-  {
-    const endSeg = segs.find(x => x.kind === 'end');
-    const tailStart = endSeg ? endSeg.endMin : sessionEndMin(last);
-    if (workE - tailStart >= 45) {
-      segs.push({ day, kind: 'gap', fromLoc: sessionLocation(last), toLoc: {},
-        startMin: tailStart, endMin: workE, travelMin: 0, freeMin: workE - tailStart,
-        fromSessionId: last.id, toSessionId: null, anchorBaseId: null, cacheKey: '' });
-    }
+    if (en > cursor) cursor = en;
+    if (s) prevSession = s;
+  });
+  if (workE - cursor >= 45) {
+    segs.push({ day, kind: 'gap', fromLoc: sessionLocation(last0), toLoc: {},
+      startMin: cursor, endMin: workE, travelMin: 0, freeMin: workE - cursor,
+      fromSessionId: last0.id, toSessionId: null, anchorBaseId: null, cacheKey: '' });
   }
 
   DAY_SEGMENTS.set(day, segs);
@@ -1250,6 +1278,7 @@ function refreshDayOverlays(day) {
   clearDayOverlays(day);
   const segs = computeDayTravelSegments(day);
   segs.forEach(seg => renderSegmentOverlay(col, seg));
+  decorateTravelBadges(day, segs);
   // Clearing the column also removed Smart Booking's proposed travel: put it
   // back (from cache — no new routing call) while the panel is open.
   if (typeof _scheduleBspRepaint === 'function') _scheduleBspRepaint();
@@ -1270,16 +1299,8 @@ function renderSegmentOverlay(col, seg) {
     // FREE-TIME/GAP OVERLAY REMOVED (2026-08-09, Antony's directive): the
     // green hatched "Free window / Idle gap" bands and cards made the calendar
     // look crowded. Gap SEGMENTS are still computed — the Snapshot report and
-    // idle-slot suggestion engine read them from DAY_SEGMENTS.
-    // The DRIVE inside a wide gap is still a leg, though: without this the
-    // travel between two sessions vanished as soon as the gap grew past 45
-    // minutes (a stop added later in the day "deleted" the return leg,
-    // 7 Sep 2026). Paint it arriving at the next session.
-    if (seg.fromSessionId && seg.toSessionId && seg.travelMin > 0) {
-      renderSegmentOverlay(col, Object.assign({}, seg, {
-        kind: 'between', startMin: Math.max(seg.startMin, seg.endMin - seg.travelMin), endMin: seg.endMin, freeMin: 0,
-      }));
-    }
+    // idle-slot suggestion engine read them from DAY_SEGMENTS. Travel legs are
+    // their own segments now, so a gap never draws a drive.
     return;
   }
   // Travel kinds: 'start' | 'between' | 'end'
@@ -1292,24 +1313,29 @@ function renderSegmentOverlay(col, seg) {
     if (seg.endMin <= seg.startMin) return;
   }
   const el = document.createElement('div');
-  el.className = 'travel-overlay ' + seg.kind;
+  el.className = 'travel-overlay ' + seg.kind + (seg.moved ? ' moved' : '') + (seg.tight ? ' tight' : '');
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
   // Floor for readability, but NEVER cross the slot boundary — a sub-15-min
   // leg renders as a thin strip inside its own gap instead of overrunning
   // the neighbouring session tile.
   const segSlotPx = (seg.endMin - seg.startMin) / 60 * HOUR_PX;
   el.style.height = Math.min(Math.max(12, segSlotPx - 4), Math.max(4, segSlotPx - 2)) + 'px';
-  const tight = seg.kind === 'between' && (seg.endMin - seg.startMin) < seg.travelMin + 5;
-  if (tight) el.style.borderLeftColor = '#9c3322';
+  if (seg.tight) el.style.borderLeftColor = '#9c3322';
+  const overlaps = (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
+  if (overlaps) el.classList.add('overlaps');
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End' : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
-    <span class="t-label">${seg.travelMin} min · ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to}</span>`;
+    <span class="t-label">${seg.travelMin} min · ${_tpEsc(seg.fromLoc.suburb || from)} → ${_tpEsc(seg.toLoc.suburb || to)}</span>`;
   const kindLabel = seg.kind === 'start' ? 'Morning drive from' :
                     seg.kind === 'end'   ? 'Evening drive to'    :
                                            'Travel';
-  el.title = `${kindLabel} ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to} ≈ ${seg.travelMin} min. Click for travel details.`;
+  const owner = seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
+  const canMove = !!(owner && owner.dbId);
+  el.title = `${kindLabel} ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to} ≈ ${seg.travelMin} min.` +
+    (seg.moved ? ' Moved by you.' : '') + (seg.tight ? ' Tight — overlaps the appointment.' : '') +
+    (canMove ? ' Drag to change when you travel. Click for travel details.' : ' Click for travel details.');
   el.dataset.segJson = JSON.stringify({
     kind: seg.kind, travelMin: seg.travelMin, startMin: seg.startMin, endMin: seg.endMin,
     fromSuburb: seg.fromLoc.suburb || from, toSuburb: seg.toLoc.suburb || to,
@@ -1318,11 +1344,153 @@ function renderSegmentOverlay(col, seg) {
   });
   el.dataset.fromSession = seg.fromSessionId || '';
   el.dataset.toSession   = seg.toSessionId   || '';
+  el.dataset.ownerSession = seg.ownerSessionId || '';
+  el.dataset.ownerSide    = seg.ownerSide || '';
   el.onclick = (ev) => {
     ev.stopPropagation();
+    if (el.__dragged) { el.__dragged = false; return; } // the end of a drag is not a click
     openTravelPanel(seg);
   };
+  if (canMove) attachTravelLegDrag(el, seg);
   col.appendChild(el);
+}
+
+/* ---------- Travel badge on each event (4 Oct 2026) ----------
+   Travel is an optional function of an event, not a booking type. A small
+   badge on the tile says which of three states the event is in:
+     on    travel is linked to it (click: the leg's details)
+     here  it has an address but no drive (same place as the stop before)
+     add   no address — the therapist stays where they were; click to give
+           it an address so travel is routed to it */
+const TRAVEL_BADGE_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17h14l-1.5-6.5A2 2 0 0 0 15.6 9H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>';
+function travelBadgeState(s, segs) {
+  const legs = (segs || []).filter(x => x.kind !== 'gap' && (x.ownerSessionId === s.id || x.fromSessionId === s.id || x.toSessionId === s.id));
+  if (legs.length) {
+    const into = legs.find(x => x.toSessionId === s.id) || legs[0];
+    return { state: 'on', leg: into, text: 'Travel linked: ' + legs.map(x => x.travelMin + ' min ' + (x.toSessionId === s.id ? 'from ' + (x.fromLoc.suburb || x.fromLoc.label || 'previous stop') : 'to ' + (x.toLoc.suburb || x.toLoc.label || 'next stop'))).join(', ') + '. Click for details.' };
+  }
+  if (isPhysicalStop(s)) return { state: 'here', text: 'At ' + (sessionLocation(s).address || sessionLocation(s).suburb) + ' — no drive needed (same place as before).' };
+  return { state: 'add', text: 'No address — travel treats you as staying where you were.' + (s.dbId ? ' Click to add an address and route travel here.' : '') };
+}
+function decorateTravelBadges(day, segs) {
+  sessionsForDay(day).forEach(s => {
+    const el = s.element;
+    if (!el || !el.isConnected) return;
+    const old = el.querySelector('.travel-badge'); if (old) old.remove();
+    if (isTravelBlock(s) || s.type === 'leave' || s.cancelled) return;
+    const st = travelBadgeState(s, segs);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'travel-badge tb-' + st.state;
+    b.innerHTML = TRAVEL_BADGE_SVG;
+    b.title = st.text;
+    b.setAttribute('aria-label', st.text);
+    // The tile drags and opens on its own events: the badge keeps its clicks.
+    ['pointerdown', 'mousedown', 'touchstart'].forEach(t => b.addEventListener(t, e => e.stopPropagation()));
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation(); e.preventDefault();
+      if (st.state === 'on' && st.leg) { openTravelPanel(st.leg); return; }
+      if (st.state === 'add' && s.dbId) {
+        const ask = typeof portalPrompt === 'function' ? portalPrompt : (m, d) => Promise.resolve(window.prompt(m, d));
+        const addr = await ask('Where is this? An address moves you there for travel; leave it empty to stay where you were.', '');
+        if (addr && String(addr).trim()) saveSessionAddress(s.id, String(addr).trim());
+      }
+    });
+    el.appendChild(b);
+  });
+}
+
+/* ---------- Movable travel (4 Oct 2026) ----------
+   A leg's TIME is the therapist's; its association (owner appointment,
+   client, origin, destination, duration) is computed and never touched. A
+   drag stores minutes from the owner's start (arrival) or end (leg home) on
+   the owner (custom_metadata.travel.beforeOffsetMin / afterOffsetMin), so
+   the leg moves with its appointment, survives reloads, and is never
+   duplicated — there is still exactly one leg per owner and side. */
+const TRAVEL_DRAG_STEP_MIN = 5;
+function travelLegAnchorMin(seg) {
+  const owner = seg && seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
+  if (!owner) return null;
+  return seg.ownerSide === 'after' ? sessionEndMin(owner) : sessionStartMin(owner);
+}
+/* Save a leg's time. offsetMin null = back to the calculated time. */
+async function setTravelTiming(sessionId, side, offsetMin) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
+  const key = side === 'after' ? 'afterOffsetMin' : 'beforeOffsetMin';
+  const prev = Object.assign({}, s.travel || {});
+  const next = Object.assign({}, prev);
+  if (offsetMin == null) delete next[key]; else next[key] = Math.round(offsetMin);
+  s.travel = next;                                   // optimistic: no snap-back while saving
+  const hadFocus = document.activeElement && document.activeElement.dataset &&
+    document.activeElement.dataset.ownerSession === String(sessionId) && document.activeElement.dataset.ownerSide === side;
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  if (hadFocus) {                                    // keyboard moves keep their place
+    const again = document.querySelector('.travel-overlay[data-owner-session="' + String(sessionId).replace(/"/g, '') + '"][data-owner-side="' + side + '"]');
+    if (again) again.focus();
+  }
+  try {
+    const r = await fetch('/api/events/' + encodeURIComponent(s.dbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: offsetMin == null ? null : Math.round(offsetMin) }),
+    });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    return true;
+  } catch (e) {
+    s.travel = prev;
+    if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+    showToast('Could not move travel', e.message);
+    return false;
+  }
+}
+function _commitLegMove(seg, newStartMin) {
+  const anchor = travelLegAnchorMin(seg);
+  if (anchor == null) return;
+  const auto = placeTravelLeg({ kind: seg.kind, anchorMin: anchor, travelMin: seg.travelMin,
+    floorMin: seg.kind === 'between' && seg.fromSessionId && window.SESSIONS[seg.fromSessionId] ? sessionEndMin(window.SESSIONS[seg.fromSessionId]) : null });
+  // Dropped back on the calculated time: forget the manual time.
+  const offset = newStartMin === auto.startMin ? null : newStartMin - anchor;
+  setTravelTiming(seg.ownerSessionId, seg.ownerSide, offset);
+}
+function attachTravelLegDrag(el, seg) {
+  el.classList.add('movable');
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', el.title + ' Arrow keys move it by ' + TRAVEL_DRAG_STEP_MIN + ' minutes.');
+  let drag = null;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();                             // not the column's create-drag
+    drag = { y: e.clientY, top: parseFloat(el.style.top) || 0, moved: false, id: e.pointerId };
+    try { el.setPointerCapture(e.pointerId); } catch (_) { /* jsdom */ }
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dy) < 4) return;
+    drag.moved = true;
+    el.classList.add('dragging');
+    const stepPx = TRAVEL_DRAG_STEP_MIN / 60 * HOUR_PX;
+    el.style.top = (drag.top + Math.round(dy / stepPx) * stepPx) + 'px';
+  });
+  const end = (e) => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    el.classList.remove('dragging');
+    try { el.releasePointerCapture(d.id); } catch (_) { /* jsdom */ }
+    if (!d.moved) return;
+    el.__dragged = true;
+    const stepPx = TRAVEL_DRAG_STEP_MIN / 60 * HOUR_PX;
+    const steps = Math.round((e.clientY - d.y) / stepPx);
+    if (steps) _commitLegMove(seg, seg.startMin + steps * TRAVEL_DRAG_STEP_MIN);
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', () => { if (drag) { el.style.top = drag.top + 'px'; el.classList.remove('dragging'); drag = null; } });
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    _commitLegMove(seg, seg.startMin + (e.key === 'ArrowUp' ? -1 : 1) * TRAVEL_DRAG_STEP_MIN);
+  });
 }
 
 function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, travel) {
@@ -1440,7 +1608,7 @@ function _renderTravelPanel(seg) {
   var depT = _tpFmtTime(depH, depM);
   var arrT = _tpFmtTime(arrH, arrM);
   var allotted = seg.endMin - seg.startMin;
-  var tight    = allotted < seg.travelMin - 5;
+  var tight    = seg.tight != null ? !!seg.tight : allotted < seg.travelMin - 5;
 
   var html = '';
 
@@ -1460,8 +1628,22 @@ function _renderTravelPanel(seg) {
   if (tight) {
     html += '<div class="tp-warn-block">';
     html += '<strong>Travel time may be insufficient</strong>';
-    html += 'Only ' + allotted + ' minutes is blocked, but travel is estimated at ' + seg.travelMin + ' minutes. Consider allowing ' + (seg.travelMin + 5) + ' minutes or more.';
+    html += seg.kind === 'end'
+      ? 'This drive starts before the appointment it follows has finished.'
+      : 'The ' + seg.travelMin + '-minute drive overlaps the appointment it leads to or the one before it. Move the leg, or the appointment.';
     html += '</div>';
+  }
+
+  // What the leg belongs to, and whose time it keeps. The association is
+  // computed from the day; only the time can be moved (drag on the calendar).
+  var owner = seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
+  if (owner) {
+    html += '<div class="tp-section-title">Linked to</div>';
+    html += '<div class="tp-linked"><strong>' + _tpEsc(owner.patient || owner.title || 'Appointment') + '</strong> · ' +
+      (seg.ownerSide === 'after' ? 'travel after this appointment' : 'travel to this appointment') + '</div>';
+    html += '<div class="tp-timing">' + (seg.moved
+      ? 'You set this time. <button type="button" class="tp-plan-reset" data-timing="reset">Use calculated time</button>'
+      : (owner.dbId ? 'Calculated time — drag the block on the calendar to travel at another time.' : 'Calculated time.')) + '</div>';
   }
 
   // Before / After — the session's own answer to where the day starts or ends.
@@ -1545,6 +1727,15 @@ function _renderTravelPanel(seg) {
   body.innerHTML = html;
   _wireTravelPlan(body, seg);
   _wireRouteAddressEdits(body, seg);
+  var timingReset = body.querySelector('[data-timing="reset"]');
+  if (timingReset) timingReset.addEventListener('click', function () {
+    setTravelTiming(seg.ownerSessionId, seg.ownerSide, null).then(function (ok) {
+      if (!ok) return;
+      var o = window.SESSIONS && window.SESSIONS[seg.ownerSessionId];
+      var again = o ? computeDayTravelSegments(o.day).find(function (x) { return x.ownerSessionId === seg.ownerSessionId && x.ownerSide === seg.ownerSide; }) : null;
+      if (again) _renderTravelPanel(again); else closeTravelPanel();
+    });
+  });
 }
 
 function _tpFmtTime(h, m) {
@@ -1661,6 +1852,6 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
     } catch (e) { showToast('Address kept locally', e.message); }
   }
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
-  showToast('Client location updated', fromPlaces ? 'Pinned from Google Maps. Travel recalculated.' : 'Travel recalculated.');
+  showToast(s.patient ? 'Client location updated' : 'Location updated', fromPlaces ? 'Pinned from Google Maps. Travel recalculated.' : 'Travel recalculated.');
   return true;
 }

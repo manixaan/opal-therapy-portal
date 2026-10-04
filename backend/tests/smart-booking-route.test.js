@@ -409,6 +409,7 @@ describe('client location selector', () => {
     const env = await withPatient();
     expect(env.$('bsp-loc-select').hidden).toBe(false);
     expect(options(env)).toEqual([
+      'No address — I stay where I am',
       'Home — 12 Example Street, Willetton WA 6155',
       'School — Example Primary School, Willetton WA 6155',
       'Previously used — 45 Example Avenue, Como WA 6152',
@@ -416,6 +417,34 @@ describe('client location selector', () => {
     ]);
     // The Splose address is selected by default and fills the existing field.
     expect(env.$('bsp-location').value).toBe('12 Example Street, Willetton WA 6155');
+  });
+
+  // Address is optional for every booking (4 Oct 2026). "No address" means
+  // the therapist stays where they were, and is the default where the client's
+  // address would be a guess — a telehealth or an MDT/MDU.
+  const TELE = "BOOKING_LEAVES.tele = { cat: 'client', label: 'Telehealth Therapy Session', noDefaultAddress: true };";
+  test('a telehealth defaults to No address — never the client\'s address on file', async () => {
+    const env = makeEnv({ api: { 'GET /api/client-locations/501': [200, LIST] } });
+    env.ev(TELE + " BOOKING_STATE.serviceType = 'tele';");
+    env.ev('document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.ev('BOOKING_STATE.selectedPatient = ' + JSON.stringify(PAT) + '; renderRightContext();');
+    await flush();
+    expect(env.$('bsp-loc-select').value).toBe('__none');
+    expect(env.$('bsp-location').value).toBe('');
+  });
+
+  test('switching type re-picks the default until the therapist chooses; their choice then stays', async () => {
+    const env = await withPatient();
+    expect(env.$('bsp-location').value).toBe('12 Example Street, Willetton WA 6155');   // therapy: Splose address
+    env.ev(TELE + " BOOKING_STATE.serviceType = 'tele'; selectBookingCat('client');");
+    expect(env.$('bsp-loc-select').value).toBe('__none');
+    env.ev("BOOKING_STATE.serviceType = 'svc-1'; selectBookingCat('client');");
+    expect(env.$('bsp-location').value).toBe('12 Example Street, Willetton WA 6155');
+    const sel = env.$('bsp-loc-select');
+    sel.value = '__none'; sel.dispatchEvent(new env.win.Event('change'));                // the therapist's choice
+    expect(env.$('bsp-location').value).toBe('');
+    env.ev("BOOKING_STATE.serviceType = 'svc-1'; selectBookingCat('client');");
+    expect(env.$('bsp-loc-select').value).toBe('__none');
   });
 
   test('picking a saved location fills the field with its id for the booking', async () => {
@@ -431,7 +460,7 @@ describe('client location selector', () => {
     const env = makeEnv({ api: { 'GET /api/client-locations/501': [502, { error: 'x' }] } });
     env.ev('document.getElementById("booking-side-panel").classList.add("open"); BOOKING_STATE.selectedPatient = ' + JSON.stringify(PAT) + '; renderRightContext();');
     await flush();
-    expect(options(env)[0]).toBe('Home — ' + PAT.address);
+    expect(options(env)[1]).toBe('Home — ' + PAT.address);
     expect(env.$('bsp-loc-meta').textContent).toMatch(/unavailable/);
   });
 
@@ -617,9 +646,13 @@ describe('after Create appointment — What would you like to do next?', () => {
 describe('static wiring in the shell', () => {
   test('confirmBooking hands the saved booking to the continuation and Unsure carries no address', () => {
     const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('/* ---------- Reset wizard'));
-    expect(cb).toMatch(/const _outlookLocation = \(isClientSession && !_unsure\) \? \(_typedLoc \|\| patient\?\.address \|\| ''\) : '';/);
+    // Location is optional and never filled from the client's file behind the user.
+    expect(cb).toMatch(/const _outlookLocation = _unsure \? '' : _typedLoc;/);
+    expect(cb).not.toMatch(/patient\?\.address \|\| ''/);
     expect(cb).toMatch(/onBookingCreated\(\{\s+dbId: newDbId/);
-    expect(cb).toMatch(/locationUnknown: _unsure && !_outlookLocation/);
+    // No address → no place: never a stop at the client's suburb.
+    expect(cb).toMatch(/locationUnknown: !_outlookLocation/);
+    expect(cb).toMatch(/suburb: _outlookLocation \? \(patient\?\.suburb \|\| ''\) : ''/);
   });
 
   test('opening the panel no longer pops the work-location chooser; booking still asks before saving', () => {
