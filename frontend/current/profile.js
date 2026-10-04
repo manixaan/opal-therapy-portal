@@ -1587,11 +1587,12 @@ async function loadWorkSchedule() {
     // Populate WORK_BASES from backend (only if data exists)
     if (travelBases && typeof travelBases === 'object') {
       if (travelBases.office) {
-        Object.assign(WORK_BASES.office, travelBases.office);
-        // The office is "coming soon" (no office yet): show any saved value
-        // greyed out, keep the field disabled, and leave the hint as is.
+        // The office is "coming soon" (no office yet): it has no address. A
+        // saved one is the old built-in default (100 Burrendah Blvd) written
+        // back by an earlier save — drop it, and the next save clears it.
+        Object.assign(WORK_BASES.office, travelBases.office, { addr: '', suburb: '', lat: undefined, lng: undefined });
         var addrEl = document.getElementById('wb-office-addr');
-        if (addrEl && travelBases.office.addr) addrEl.value = travelBases.office.addr;
+        if (addrEl) addrEl.value = '';
         if (typeof wireBaseAddressAutocomplete === 'function') wireBaseAddressAutocomplete();
       }
       if (Array.isArray(travelBases.homes) && travelBases.homes.length) {

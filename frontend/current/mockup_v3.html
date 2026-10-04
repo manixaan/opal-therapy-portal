@@ -156,7 +156,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=5" defer></script>
+<script src="/profile.js?v=6" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -15543,7 +15543,9 @@ function titleBase(s) {
      dropdown (`LOCATIONS`) and in WORK_LOCATION[weekKey][day].
 */
 const WORK_BASES = {
-  office: { id: 'office', label: 'Perth metro office', addr: '100 Burrendah Blvd, Willetton WA 6155', suburb: 'Willetton', region: 'central', icon: '', color: '#8b80c8' },
+  // No office yet ("coming soon"): no address, so nothing routes from it or
+  // falls back to it (4 Oct 2026 — a Willetton address used to be filled in).
+  office: { id: 'office', label: 'Perth metro office', addr: '', suburb: '', region: 'central', icon: '', color: '#8b80c8' },
   homes:  [
     // An empty row to fill in — no sample suburb, so it anchors no travel
     // until the therapist gives it an address (27 Sep 2026).
@@ -15654,7 +15656,7 @@ function renderHomeBases() {
   const rows = (WORK_BASES.homes || []).map(h => {
     const addrPlaceholder = h.kind === 'remote'
       ? 'Remote — no physical address required'
-      : 'e.g. 12 Example St, Riverton WA 6148';
+      : 'Start typing your home address…';
     const hint = h.kind === 'remote'
       ? 'Remote · no travel cost'
       : (h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing');
@@ -22644,9 +22646,10 @@ function getSetupPrompts() {
   var s = window.APP_SETTINGS || {};
   var role = (window.APP_USER && window.APP_USER.role) || 'therapist';
 
-  // Check base location (heuristic: office addr field empty)
-  var officeEl = document.getElementById('wb-office-addr');
-  if (officeEl && (!officeEl.value || officeEl.value.trim() === '')) {
+  // Check base location: a home base with an address (the office is coming
+  // soon and never has one, so it cannot be the signal).
+  var hasBase = (typeof WORK_BASES !== 'undefined') && (WORK_BASES.homes || []).some(function (h) { return h && (h.kind === 'remote' || (h.addr || '').trim()); });
+  if (!hasBase) {
     prompts.push({ icon: '\u{1F4CD}', text: 'Add your base work location so travel time and kilometres can be calculated.', tourId: 'complete-profile', label: 'Set up now' });
   }
 

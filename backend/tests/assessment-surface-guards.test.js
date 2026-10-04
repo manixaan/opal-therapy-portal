@@ -698,7 +698,7 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 5],
+      ['profile.js', 6],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -859,6 +859,12 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL.slice(SHELL.indexOf('host.innerHTML = WL_DAYS.map') - 400, SHELL.indexOf('host.innerHTML = WL_DAYS.map'))).toMatch(/rebuildLocationCatalogue\(\)/);
     expect(editor).toMatch(/LOCATIONS/);
     expect(SHELL).toMatch(/id="wb-office-addr"[^>]*disabled/);
+    // No built-in office address, and a saved one (the old default) is dropped on load.
+    expect(SHELL).not.toContain('100 Burrendah Blvd, Willetton WA 6155');
+    expect(SHELL).toMatch(/office: \{ id: 'office', label: 'Perth metro office', addr: '', suburb: ''/);
+    expect(fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8')).toMatch(/Object\.assign\(WORK_BASES\.office, travelBases\.office, \{ addr: '', suburb: ''/);
+    // The home address field shows no sample suburb.
+    expect(SHELL).not.toContain('e.g. 12 Example St, Riverton WA 6148');
   });
 
   test('an empty week shows a plain grid — no first-time overlay card (owner\'s call, 7 Sep 2026)', () => {
