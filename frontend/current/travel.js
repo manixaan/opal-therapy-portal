@@ -814,6 +814,7 @@ function planNextStop(input) {
     if (out.clampedFromMin == null) {
       out.conflicts = overlapping(start);
       out.startMin = start; out.endMin = start + dur; out.fits = start + dur <= dayEnd;
+      placeProposalTravel(out, prevEnd, busy);
       return out;
     }
   } else {
@@ -829,6 +830,17 @@ function planNextStop(input) {
   }
   out.startMin = start; out.endMin = start + dur;
   out.fits = start + dur <= dayEnd && !overlapping(start).length;
+  placeProposalTravel(out, prevEnd, busy);
+  return out;
+}
+/* The proposed drive sits against the proposed appointment (arrive, buffer,
+   start) in the latest free slot after the previous stop — the same rule as
+   the calendar's legs (latestFreeSlot). */
+function placeProposalTravel(out, prevEnd, busy) {
+  if (!out.travelMin) { out.travelStartMin = out.travelEndMin = prevEnd; return out; }
+  const slot = latestFreeSlot(out.startMin - out.bufferMin, prevEnd, out.travelMin, busy);
+  const st = slot ? slot.startMin : prevEnd;
+  out.travelStartMin = st; out.travelEndMin = st + out.travelMin;
   return out;
 }
 
@@ -1107,13 +1119,42 @@ async function applyTravelChainAfterBooking(newDbId, ctx) {
   } catch (e) { /* best effort — the default is the same base most days */ }
 }
 
+/* PURE — free-slot search for a travel leg of `len` minutes (4 Oct 2026).
+   A leg sits as CLOSE to its appointment as it can: a 10-minute drive into a
+   12:00 session after an 11:30 one is 11:50–12:00, not the whole half hour.
+   `busy` is [{ startMin, endMin }] — other events the leg must not cover (a
+   telehealth taken in the gap). Returns the slot, or null if none fits. */
+function latestFreeSlot(endBy, floorMin, len, busy) {
+  let end = endBy;
+  for (let guard = 0; guard < 100; guard++) {
+    const start = end - len;
+    if (floorMin != null && start < floorMin) return null;
+    const hit = (busy || []).filter(b => b.startMin < end && b.endMin > start);
+    if (!hit.length) return { startMin: start, endMin: end };
+    end = Math.min.apply(null, hit.map(b => b.startMin));
+  }
+  return null;
+}
+function earliestFreeSlot(startAt, len, busy, ceilMin) {
+  let start = startAt;
+  for (let guard = 0; guard < 100; guard++) {
+    if (ceilMin != null && start + len > ceilMin) return null;
+    const hit = (busy || []).filter(b => b.startMin < start + len && b.endMin > start);
+    if (!hit.length) return { startMin: start, endMin: start + len };
+    start = Math.max.apply(null, hit.map(b => b.endMin));
+  }
+  return null;
+}
+
 /* PURE — when a travel leg sits on the calendar. The leg itself (who, from
    where, to where, how long) is computed; only its time is the therapist's.
-     arrival legs ('start', 'between'): auto = arrive as the next stop starts,
-       never before the previous physical stop ends (floorMin);
-       offsetMin is minutes from the next stop's START.
-     the leg home ('end'): auto = leave as the last physical stop ends;
-       offsetMin is minutes from its END.
+     arrival legs ('start', 'between'): auto = arrive as the next stop starts
+       — the latest free slot before it, never before the previous physical
+       stop ends (floorMin); offsetMin is minutes from the next stop's START.
+     the leg home ('end'): auto = leave as the last physical stop ends — the
+       earliest free slot after it; offsetMin is minutes from its END.
+   `busy` are the other events the automatic time steps around (a telehealth
+   in the gap); when nothing fits the leg hugs its appointment and is tight.
    A dragged leg keeps its offset — it moves with its appointment and never
    snaps back to the automatic time. */
 function placeTravelLeg(input) {
@@ -1121,18 +1162,24 @@ function placeTravelLeg(input) {
   const travel = Math.max(0, Math.round(Number(i.travelMin) || 0));
   const anchor = Number(i.anchorMin) || 0;
   const manual = i.offsetMin != null && Number.isFinite(Number(i.offsetMin));
+  const busy = i.busy || [];
   let start, tight = false;
   if (i.kind === 'end') {
-    start = manual ? anchor + Number(i.offsetMin) : anchor;
+    if (manual) start = anchor + Number(i.offsetMin);
+    else { const slot = earliestFreeSlot(anchor, travel, busy, 24 * 60); start = slot ? slot.startMin : anchor; }
     tight = start < anchor;                       // leaving before the session ends
-  } else {
-    if (manual) {
-      start = anchor + Number(i.offsetMin);
-    } else {
-      start = anchor - travel;
-      if (i.floorMin != null && start < i.floorMin) { start = i.floorMin; }
-    }
+  } else if (manual) {
+    start = anchor + Number(i.offsetMin);
     tight = start + travel > anchor || (i.floorMin != null && start < i.floorMin);
+  } else {
+    const slot = latestFreeSlot(anchor, i.floorMin, travel, busy);
+    if (slot) start = slot.startMin;
+    else {
+      // No free slot that long: hug the appointment, flagged.
+      start = anchor - travel;
+      if (i.floorMin != null && start < i.floorMin) start = i.floorMin;
+      tight = true;
+    }
   }
   return { startMin: start, endMin: start + travel, travelMin: travel, moved: manual, tight };
 }
@@ -1162,6 +1209,9 @@ function computeDayTravelSegments(day) {
   // no address (telehealth, a remote MDT, emails…) leaves them where they
   // were, so travel runs between the physical stops either side of it.
   const stops = sessions.filter(isPhysicalStop);
+  // What an automatic leg steps around: every other event on the day.
+  const busyFor = (...skip) => sessions.filter(x => skip.indexOf(x) < 0)
+    .map(x => ({ startMin: sessionStartMin(x), endMin: sessionEndMin(x) }));
 
   if (stops.length) {
     // --- start: base → first physical stop ---
@@ -1174,13 +1224,14 @@ function computeDayTravelSegments(day) {
     if (!startPt.remote && baseKey && firstKey && baseKey !== firstKey) {
       const travel = travelMinutes(baseKey, firstKey);
       if (travel > 0) {
-        const at = placeTravelLeg({ kind: 'start', anchorMin: sessionStartMin(first), travelMin: travel, offsetMin: offsetOf(first, 'before') });
+        const at = placeTravelLeg({ kind: 'start', anchorMin: sessionStartMin(first), travelMin: travel, offsetMin: offsetOf(first, 'before'), busy: busyFor(first) });
         segs.push({
           day, kind: 'start',
           fromLoc: { suburb: startPt.suburb, label: startPt.label, region: startPt.region, address: startPt.addr || null, addr: startPt.addr || null },
           toLoc:   locOf(firstLoc),
           startMin: Math.max(0, at.startMin), endMin: at.endMin,
           travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+          autoStartMin: at.moved ? placeTravelLeg({ kind: 'start', anchorMin: sessionStartMin(first), travelMin: travel, busy: busyFor(first) }).startMin : at.startMin,
           fromSessionId: null, toSessionId: first.id,
           ownerSessionId: first.id, ownerSide: 'before',
           anchorBaseId: startPt.baseId || calendarWeekLocations()[day] || 'office',
@@ -1198,12 +1249,13 @@ function computeDayTravelSegments(day) {
       const travel  = travelMinutes(fromKey, toKey);
       if (travel <= 0) continue;                    // same place — no drive
       const at = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: sessionEndMin(curr),
-                                  travelMin: travel, offsetMin: offsetOf(next, 'before') });
+                                  travelMin: travel, offsetMin: offsetOf(next, 'before'), busy: busyFor(curr, next) });
       segs.push({
         day, kind: 'between',
         fromLoc: locOf(from), toLoc: locOf(to),
         startMin: at.startMin, endMin: at.endMin,
         travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+        autoStartMin: at.moved ? placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: sessionEndMin(curr), travelMin: travel, busy: busyFor(curr, next) }).startMin : at.startMin,
         fromSessionId: curr.id, toSessionId: next.id,
         ownerSessionId: next.id, ownerSide: 'before',
         anchorBaseId: null,
@@ -1221,13 +1273,14 @@ function computeDayTravelSegments(day) {
     if (!endPt.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
       const travel = travelMinutes(lastKey, baseKeyEnd);
       if (travel > 0) {
-        const at = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(last), travelMin: travel, offsetMin: offsetOf(last, 'after') });
+        const at = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(last), travelMin: travel, offsetMin: offsetOf(last, 'after'), busy: busyFor(last) });
         segs.push({
           day, kind: 'end',
           fromLoc: locOf(lastLoc),
           toLoc:   { suburb: endPt.suburb, label: endPt.label, region: endPt.region, address: endPt.addr || null, addr: endPt.addr || null },
           startMin: at.startMin, endMin: at.endMin,
           travelMin: travel, freeMin: 0, moved: at.moved, tight: at.tight,
+          autoStartMin: at.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(last), travelMin: travel, busy: busyFor(last) }).startMin : at.startMin,
           fromSessionId: last.id, toSessionId: null,
           ownerSessionId: last.id, ownerSide: 'after',
           anchorBaseId: endPt.baseId || calendarWeekLocations()[day] || 'office',
@@ -1446,10 +1499,8 @@ async function setTravelTiming(sessionId, side, offsetMin) {
 function _commitLegMove(seg, newStartMin) {
   const anchor = travelLegAnchorMin(seg);
   if (anchor == null) return;
-  const auto = placeTravelLeg({ kind: seg.kind, anchorMin: anchor, travelMin: seg.travelMin,
-    floorMin: seg.kind === 'between' && seg.fromSessionId && window.SESSIONS[seg.fromSessionId] ? sessionEndMin(window.SESSIONS[seg.fromSessionId]) : null });
   // Dropped back on the calculated time: forget the manual time.
-  const offset = newStartMin === auto.startMin ? null : newStartMin - anchor;
+  const offset = newStartMin === seg.autoStartMin ? null : newStartMin - anchor;
   setTravelTiming(seg.ownerSessionId, seg.ownerSide, offset);
 }
 function attachTravelLegDrag(el, seg) {

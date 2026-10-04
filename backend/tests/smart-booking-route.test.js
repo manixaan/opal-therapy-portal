@@ -218,18 +218,22 @@ describe('planNextStop — the pure earliest-feasible-start rule', () => {
   test.each([[25, 630], [15, 615], [8, 615], [35, 645], [0, 600]])('%i min of travel from 10:00 → first slot at minute %i', (travel, want) => {
     const p = plan({ travelMin: travel });
     expect(p.startMin).toBe(want);
-    expect(p.travelStartMin).toBe(600);
-    expect(p.travelEndMin).toBe(600 + travel); // the travel block shows the real duration
+    // The drive sits against the appointment it leads to (4 Oct 2026), and the
+    // block shows the real duration, not the whole gap.
+    expect(p.travelEndMin).toBe(want);
+    expect(p.travelStartMin).toBe(want - travel);
   });
 
   test('route minutes, buffer and the booking grid are kept apart', () => {
     const p = plan({ travelMin: 21, bufferMin: 5 });
-    expect([p.travelMin, p.bufferMin, p.earliestStartMin, p.travelEndMin]).toEqual([21, 5, 630, 621]);
+    expect([p.travelMin, p.bufferMin, p.earliestStartMin, p.travelEndMin]).toEqual([21, 5, 630, 625]); // arrive, 5 min buffer, start
   });
 
   test('a confirmed appointment in the way moves the proposal to the next slot that fits, duration kept', () => {
     const p = plan({ travelMin: 20, busy: [{ id: 'X', startMin: 630, endMin: 660, label: 'Existing' }] });
     expect([p.startMin, p.endMin, p.durationMin]).toEqual([660, 720, 60]);
+    // The drive never covers the appointment in the way: it goes before it.
+    expect([p.travelStartMin, p.travelEndMin]).toEqual([610, 630]);
     expect(p.movedForConflicts.map((b) => b.id)).toEqual(['X']);
   });
 
@@ -262,7 +266,7 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     expect([call.origin, call.destination]).toEqual([A_ADDR, CV_ADDR]);
     expect(call.departureTime).toBe(new Date('2026-10-05T10:00:00+08:00').toISOString()); // leaves when A ends
     const leg = legs(env)[0];
-    expect(leg.style.top).toBe(env.ev('tToY(10, 0)') + 'px');
+    expect(leg.style.top).toBe(env.ev('tToY(10, 5)') + 'px');   // 10:05–10:30, arriving as B starts
     expect(leg.textContent).toMatch(/25 min/);
     expect(status(env).textContent).toMatch(/25 min drive from Ada Client/);
     expect(env.ev('__calls.preview[__calls.preview.length - 1]')).toMatchObject({ startMin: 630, durationMin: 60 });

@@ -184,6 +184,44 @@ describe('movable travel', () => {
     expect([hhmm(mid.startMin), hhmm(mid.endMin), mid.moved, mid.ownerSessionId]).toEqual(['10:30', '11:00', true, b.id]);
   });
 
+  test('11:30 → 12:00 with a 10-minute drive: the leg is 11:50–12:00, not the whole gap', () => {
+    const c = load();
+    add(c, { at: '10:30', to: '11:30', s: { address: OSBORNE, patient: 'A' } });
+    const b = add(c, { at: '12:00', to: '13:00', s: { address: SCHOOL, patient: 'B' } });
+    MIN['Osborne Park|Scarborough'] = 10;
+    try {
+      const mid = legs(c).find((x) => x.kind === 'between');
+      expect([hhmm(mid.startMin), hhmm(mid.endMin), mid.travelMin, mid.toSessionId]).toEqual(['11:50', '12:00', 10, b.id]);
+      const end = legs(c).find((x) => x.kind === 'end');
+      expect(hhmm(end.startMin)).toBe('13:00');                                     // home right after the last session
+    } finally { MIN['Osborne Park|Scarborough'] = 15; }
+  });
+
+  test('an automatic leg steps around an event in the gap — the closest free slot', () => {
+    const c = load();
+    add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '11:40', to: '12:00', s: { patient: 'Telehealth' } });            // no address, in the gap
+    add(c, { at: '12:00', to: '13:00', s: { address: SCHOOL, patient: 'B' } });
+    const mid = legs(c).find((x) => x.kind === 'between');
+    expect([hhmm(mid.startMin), hhmm(mid.endMin), mid.tight]).toEqual(['11:25', '11:40', false]);
+  });
+
+  test('telehealth straight after the last visit: the drive home follows it on its own', () => {
+    const c = load();
+    const s = add(c, { at: '11:00', to: '12:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '12:00', to: '12:30', s: { patient: 'Telehealth' } });
+    const end = legs(c).find((x) => x.kind === 'end');
+    expect([hhmm(end.startMin), hhmm(end.endMin), end.moved, end.fromSessionId]).toEqual(['12:30', '12:55', false, s.id]);
+  });
+
+  test('no free slot long enough: the leg hugs its appointment and is flagged tight', () => {
+    const c = load();
+    add(c, { at: '10:00', to: '11:45', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });  // 15 min gap, 30 min drive
+    const mid = legs(c).find((x) => x.kind === 'between');
+    expect([hhmm(mid.startMin), mid.tight]).toEqual(['11:45', true]);
+  });
+
   test('placeTravelLeg: calculated arrival, the floor, and a manual time', () => {
     const c = load();
     expect(c.placeTravelLeg({ kind: 'between', anchorMin: 720, floorMin: 600, travelMin: 30 })).toMatchObject({ startMin: 690, endMin: 720, moved: false, tight: false });
