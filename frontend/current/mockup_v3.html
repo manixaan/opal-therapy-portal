@@ -14958,7 +14958,8 @@ function bdApplyEdit(id) {
     return;
   }
 
-  // warn/blocker → keep the existing safety-review modal so conflicts surface.
+  // blocker → the review explains why it can't move; a warn moves at once
+  // (openMoveImpact) with a quiet note.
   closeBlockDetail();
   openMoveImpact(id, s.day, startMin, dur, impact);
 }
@@ -15422,6 +15423,20 @@ var pendingMove = null;  // holds {id, day, startMin, duration, impact}
 function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   const s = SESSIONS[id];
   pendingMove = { id, day: newDay, startMin: newStartMin, duration: durationMin, impact };
+
+  // No confirmation for a move that can happen (5 Oct 2026): it is applied at
+  // once and any concern (out of hours, tight travel) is a quiet note. Only a
+  // move that cannot happen — an overlap, too little travel time — still opens
+  // the review below.
+  if (impact.verdict !== 'blocker') {
+    const notes = (impact.impacts || []).filter(i => i.sev === 'warn').map(i => i.ttl);
+    commitMove();
+    if (notes.length) showToast('Moved', notes.join(' · '));
+    else if (!window.SploseSync) showToast('Moved on the calendar');
+    pendingMove = null;
+    drag = null;
+    return;
+  }
 
   const newEnd = newStartMin + durationMin;
   document.getElementById('im-what').textContent = s.patient ? `${TYPE_LABEL[s.type]} · ${s.patient}` : (TYPE_LABEL[s.type] || 'Session');

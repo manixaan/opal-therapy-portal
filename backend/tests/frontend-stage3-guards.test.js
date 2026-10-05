@@ -967,6 +967,26 @@ describe('grouped booking-type picker', () => {
     expect(TRAVEL).not.toContain('firstClientLeaf');
   });
 
+  test('a move that can happen applies at once — only a blocked move opens the review', () => {
+    const src = HTML.slice(HTML.indexOf('function openMoveImpact('), HTML.indexOf('function closeImpactModal()'));
+    const run = (impact) => {
+      const calls = { commit: 0, toasts: [], modal: false };
+      const doc = { getElementById: () => ({ style: {}, classList: { add: () => { calls.modal = true; } }, set textContent(v) {}, set innerHTML(v) {}, set className(v) {} }) };
+      const fn = new Function('SESSIONS', 'commitMove', 'showToast', 'document', 'window', 'TYPE_LABEL', 'DAY_LABEL', 'fmtTime', 'fmtMin',
+        'var pendingMove, drag;' + src + '; return openMoveImpact;');
+      const open = fn({ s1: { day: 'thu', startH: 20, startM: 0, endH: 20, endM: 19, type: 'therapy' } },
+        () => { calls.commit++; }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '');
+      open('s1', 'thu', 1200, 30, impact);
+      return calls;
+    };
+    const warn = run({ verdict: 'warn', impacts: [{ sev: 'warn', ttl: 'Outside working hours', sub: '…' }] });
+    expect([warn.commit, warn.modal]).toEqual([1, false]);
+    expect(warn.toasts[0]).toEqual(['Moved', 'Outside working hours']);
+    expect(run({ verdict: 'ok', impacts: [] })).toMatchObject({ commit: 1, modal: false });
+    const blocked = run({ verdict: 'blocker', impacts: [{ sev: 'blocker', ttl: 'Overlaps 8:00pm', sub: '…' }] });
+    expect([blocked.commit, blocked.modal]).toEqual([0, true]);
+  });
+
   test('the proposed block shows the client picked now, not the first one it drew', () => {
     expect(HTML).toContain('function refreshProposedClientLabel()');
     // A card click and "No client" both relabel the proposal.
