@@ -1596,7 +1596,19 @@ async function loadWorkSchedule() {
         if (typeof wireBaseAddressAutocomplete === 'function') wireBaseAddressAutocomplete();
       }
       if (Array.isArray(travelBases.homes) && travelBases.homes.length) {
-        WORK_BASES.homes = travelBases.homes;
+        // The old built-in sample home ("Home (Riverton)": suburb Riverton, no
+        // street address) was saved into profiles before it was removed, and
+        // a suburb alone still anchored travel at Riverton. Only that exact
+        // sample is reset — to an empty "Home" — and the next save stores it.
+        WORK_BASES.homes = travelBases.homes.map(function (h) {
+          if (h && !String(h.addr || '').trim() && /^riverton$/i.test(String(h.suburb || '').trim())) {
+            return Object.assign({}, h, {
+              label: /^home \(riverton\)$/i.test(String(h.label || '').trim()) ? 'Home' : h.label,
+              suburb: '', region: 'central', lat: undefined, lng: undefined,
+            });
+          }
+          return h;
+        });
       }
     }
 

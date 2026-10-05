@@ -698,7 +698,7 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 6],
+      ['profile.js', 7],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -863,6 +863,12 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).not.toContain('100 Burrendah Blvd, Willetton WA 6155');
     expect(SHELL).toMatch(/office: \{ id: 'office', label: 'Perth metro office', addr: '', suburb: ''/);
     expect(fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8')).toMatch(/Object\.assign\(WORK_BASES\.office, travelBases\.office, \{ addr: '', suburb: ''/);
+    // The old sample home saved into profiles ("Home (Riverton)", suburb only) is reset on load.
+    const prof = fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8');
+    const resetSample = new Function('h', prof.slice(prof.indexOf('WORK_BASES.homes = travelBases.homes.map(function (h) {') + 'WORK_BASES.homes = travelBases.homes.map(function (h) {'.length, prof.indexOf('        });\n      }', prof.indexOf('travelBases.homes.map'))));
+    expect(resetSample({ id: 'home-1', label: 'Home (Riverton)', kind: 'local', addr: '', suburb: 'Riverton', region: 'south' })).toMatchObject({ label: 'Home', suburb: '', region: 'central' });
+    expect(resetSample({ id: 'home-2', label: 'Mum', kind: 'local', addr: '3 Close St, Riverton WA 6148', suburb: 'Riverton' })).toMatchObject({ label: 'Mum', suburb: 'Riverton' });
+    expect(resetSample({ id: 'home-3', label: 'Home', kind: 'local', addr: '', suburb: 'Como' })).toMatchObject({ suburb: 'Como' });
     // The home address field shows no sample suburb.
     expect(SHELL).not.toContain('e.g. 12 Example St, Riverton WA 6148');
   });
