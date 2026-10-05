@@ -1598,17 +1598,24 @@ async function loadWorkSchedule() {
       if (Array.isArray(travelBases.homes) && travelBases.homes.length) {
         // The old built-in sample home ("Home (Riverton)": suburb Riverton, no
         // street address) was saved into profiles before it was removed, and
-        // a suburb alone still anchored travel at Riverton. Only that exact
-        // sample is reset — to an empty "Home" — and the next save stores it.
+        // a suburb alone still anchored travel at Riverton. Reset on load:
+        //   • the sample name "Home (Riverton)" → "Home", whatever address the
+        //     base has since been given (it never named the real home);
+        //   • a Riverton suburb with no street address → no suburb.
+        // A changed base is saved straight away so it does not come back.
+        var resetSample = false;
         WORK_BASES.homes = travelBases.homes.map(function (h) {
-          if (h && !String(h.addr || '').trim() && /^riverton$/i.test(String(h.suburb || '').trim())) {
-            return Object.assign({}, h, {
-              label: /^home \(riverton\)$/i.test(String(h.label || '').trim()) ? 'Home' : h.label,
-              suburb: '', region: 'central', lat: undefined, lng: undefined,
-            });
+          if (!h) return h;
+          var out = h;
+          if (/^home \(riverton\)$/i.test(String(h.label || '').trim())) {
+            out = Object.assign({}, out, { label: 'Home' }); resetSample = true;
           }
-          return h;
+          if (!String(out.addr || '').trim() && /^riverton$/i.test(String(out.suburb || '').trim())) {
+            out = Object.assign({}, out, { suburb: '', region: 'central', lat: undefined, lng: undefined }); resetSample = true;
+          }
+          return out;
         });
+        if (resetSample && typeof debouncedSaveWorkSchedule === 'function') setTimeout(debouncedSaveWorkSchedule, 0);
       }
     }
 
