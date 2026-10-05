@@ -121,6 +121,7 @@ describe('travel runs between physical stops', () => {
 
     delete c.SESSIONS[m.id].address;                  // the remote MDT
     delete c.SESSIONS[m.id].__loc;
+    c.SESSIONS[a.id].travel = { next: 'direct' };     // a 2 h gap would otherwise go home (tested below)
     between = legs(c).filter((x) => x.kind === 'between');
     expect(between.map((x) => [x.fromSessionId, x.toSessionId])).toEqual([[a.id, b.id]]);
     expect(between[0].travelMin).toBe(30);
@@ -132,7 +133,7 @@ describe('travel runs between physical stops', () => {
     add(c, { at: '10:00', to: '10:30', s: { type: 'admin', title: 'Emails' } });
     add(c, { at: '10:30', to: '11:00', s: { type: 'lunch', title: 'Lunch' } });
     add(c, { at: '11:00', to: '11:30', s: { type: 'travel', title: 'Travel to Joondalup', address: JOONDALUP } });
-    const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });
+    const b = add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B' } });   // 90 min: too short to go home
     const between = legs(c).filter((x) => x.kind === 'between');
     expect(between).toHaveLength(1);
     expect([between[0].fromSessionId, between[0].toSessionId]).toEqual([a.id, b.id]);
@@ -143,6 +144,60 @@ describe('travel runs between physical stops', () => {
     add(c, { at: '09:00', to: '10:00', s: { patient: 'Telehealth client' } });
     add(c, { at: '10:00', to: '11:00', s: { type: 'admin', title: 'Case Noting' } });
     expect(legs(c)).toHaveLength(0);
+  });
+});
+
+describe('between two sessions: straight on, or home in between', () => {
+  // Home is Willetton: Osborne Park ↔ home 25 min, Joondalup ↔ home 40 min.
+  test('enough time to go home (drive + 30 min + drive) → two legs: home, then from home', () => {
+    const c = load();
+    const a = add(c, { at: '19:45', to: '20:45', s: { address: OSBORNE, patient: 'A' } });
+    const b = add(c, { at: '22:15', to: '23:15', s: { address: SCHOOL, patient: 'B' } });
+    // 90-minute gap ≥ 25 home + 30 there + 22 out (Scarborough)
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
+    expect([L[0].fromSessionId, L[0].toLoc.suburb, hhmm(L[0].startMin), hhmm(L[0].endMin)]).toEqual([a.id, 'Willetton', '20:45', '21:10']);
+    expect([L[1].toSessionId, L[1].fromLoc.suburb, hhmm(L[1].startMin), hhmm(L[1].endMin)]).toEqual([b.id, 'Willetton', '21:53', '22:15']);
+    expect(L.every((x) => x.auto && x.plan === 'auto')).toBe(true);
+  });
+
+  test('not enough time to go home → one direct leg', () => {
+    const c = load();
+    add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });   // 60 min < 25 + 30 + 40
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L).toHaveLength(1);
+    expect([L[0].via, L[0].homeAvailable]).toEqual([null, true]);
+  });
+
+  test('the session\'s choice wins: "direct" keeps a long gap direct, "home" goes home anyway', () => {
+    const c = load();
+    const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { next: 'direct' } } });
+    add(c, { at: '14:00', to: '15:00', s: { address: JOONDALUP, patient: 'B' } });
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
+    c.SESSIONS[a.id].travel = { next: 'home' };
+    c.SESSIONS[a.id].endH = 11; c.SESSIONS[a.id].endM = 45;                        // now only 135 min… still home, by choice
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => [x.via, x.plan, x.auto])).toEqual([['home-return', 'home', false], ['home-out', 'home', false]]);
+  });
+
+  test('no home base for the day → always direct', () => {
+    const c = load();
+    vm.runInContext('calendarWeekLocations = function () { return {}; };', c);
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '15:00', to: '16:00', s: { address: JOONDALUP, patient: 'B' } });
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => [x.via, x.homeAvailable])).toEqual([[null, false]]);
+  });
+
+  test('saving the choice PATCHes travel.next on the earlier session and resets its moved leg', async () => {
+    const c = load();
+    const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { afterOffsetMin: 15 } } });
+    expect(await c.setBetweenTravel(a.id, 'home')).toBe(true);
+    expect(JSON.parse(c.fetch.mock.calls[0][1].body)).toEqual({ next: 'home', afterOffsetMin: null });
+    expect(c.SESSIONS[a.id].travel).toEqual({ next: 'home' });
+    await c.setBetweenTravel(a.id, null);
+    expect(JSON.parse(c.fetch.mock.calls[1][1].body)).toEqual({ next: null, afterOffsetMin: null });
   });
 });
 
@@ -178,7 +233,7 @@ describe('movable travel', () => {
 
   test('an arrival leg moves by its offset from the appointment start', () => {
     const c = load();
-    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { next: 'direct' } } });
     const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B', travel: { beforeOffsetMin: -90 } } });
     const mid = legs(c).find((x) => x.kind === 'between');
     expect([hhmm(mid.startMin), hhmm(mid.endMin), mid.moved, mid.ownerSessionId]).toEqual(['10:30', '11:00', true, b.id]);

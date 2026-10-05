@@ -211,6 +211,52 @@ describe('15-minute snapping — one grid for every calendar gesture', () => {
   });
 });
 
+describe('Smart Booking: straight on from the last client, or home in between', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek' }] };
+  const routes = { [A_ADDR + '|' + CV_ADDR]: 25, [HOME_ADDR + '|' + CV_ADDR]: 20 };
+  function laterBooking(env, at) {
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0,
+      address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' }`);
+    env.ev(`document.getElementById('booking-side-panel').classList.add('open'); bspSelectDay('mon');
+      document.getElementById('bsp-start').value = '${at}';`);
+  }
+
+  test('a long gap after the last client: the proposal is routed from home', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '14:00');
+    await chooseLocation(env, CV_ADDR);
+    const call = env.routeCalls().pop().body;
+    expect([call.origin, call.destination]).toEqual([HOME_ADDR, CV_ADDR]);
+    expect(status(env).textContent).toMatch(/Home after Ada Client/);
+    expect(status(env).textContent).toMatch(/20 min drive from Home/);
+    expect(status(env).querySelector('[data-route="direct"]')).not.toBeNull();
+  });
+
+  test('"Go direct instead" routes from the client, and Create keeps that choice on the earlier session', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '14:00');
+    await chooseLocation(env, CV_ADDR);
+    status(env).querySelector('[data-route="direct"]').click();
+    await flush();
+    const call = env.routeCalls().pop().body;
+    expect([call.origin, call.destination]).toEqual([A_ADDR, CV_ADDR]);
+    expect(status(env).textContent).toMatch(/25 min drive from Ada Client/);
+    expect(status(env).querySelector('[data-route="home"]')).not.toBeNull();
+    await env.ev('bspCommitBetweenChoice()');
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
+    expect(patch.body).toEqual({ next: 'direct', afterOffsetMin: null });
+    expect(env.ev('BOOKING_ROUTE.viaMode')).toBe('auto');
+  });
+
+  test('no time to go home: straight on, with the option to go home anyway', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:30');
+    await chooseLocation(env, CV_ADDR);
+    expect(env.routeCalls().pop().body.origin).toBe(A_ADDR);
+    expect(status(env).querySelector('[data-route="home"]')).not.toBeNull();
+  });
+});
+
 describe('planNextStop — the pure earliest-feasible-start rule', () => {
   const env = makeEnv();
   const plan = (o) => env.win.planNextStop(Object.assign({ prevEndMin: 600, durationMin: 60, busy: [] }, o));

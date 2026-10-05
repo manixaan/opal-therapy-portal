@@ -144,11 +144,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=23" defer></script>
+<script src="/travel.js?v=24" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=3" defer></script>
+<script src="/booking-route.js?v=4" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12979,6 +12979,9 @@ async function confirmBooking() {
           const _ca = BOOKING_STATE.chainAfter; BOOKING_STATE.chainAfter = null;
           travelChainInherit(oResult.dbId, _ca);
         }
+        // "Go direct" / "Go home in between" chosen in the route line is kept
+        // on the previous stop, so the calendar shows the trip as booked.
+        if (typeof bspCommitBetweenChoice === 'function') bspCommitBetweenChoice();
         console.log('✅ Outlook event created:', outlookId);
       } else {
         outlookNote = `Outlook: ${oResult.error || 'write failed — check Outlook connection'}`;

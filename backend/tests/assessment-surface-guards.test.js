@@ -708,10 +708,10 @@ describe('changed assets are cache-busted', () => {
       // shows where the drive will go until an address is typed.
       // 19: route-aware Smart Booking — routed preview with loading/error
       // states, the earliest feasible start, departure-time routing.
-      ['travel.js', 23],
+      ['travel.js', 24],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
-      ['booking-route.js', 3], ['booking-route.css', 1],
+      ['booking-route.js', 4], ['booking-route.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

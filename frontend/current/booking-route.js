@@ -782,7 +782,7 @@
     wrapGlobal('openBookingPanel', function () { setTimeout(function () { LOC.clientId = '__reset'; onPatientMaybeChanged(); refreshWorkLocationNotice(); applyUnsure(); }, 40); });
     wrapGlobal('closeBookingPanel', function () {
       var rs = routeState();
-      if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; var b = bookingState(); if (b) b.travelFrom = null; }
+      if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.viaMode = 'auto'; var b = bookingState(); if (b) b.travelFrom = null; }
       if (fn('setBspRouteStatus')) global.setBspRouteStatus('hidden');
       var n = $('bsp-wl-notice'); if (n) n.hidden = true;
     });

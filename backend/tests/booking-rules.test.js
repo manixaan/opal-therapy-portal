@@ -206,6 +206,22 @@ describe('PATCH /api/events/:dbId/travel — a moved leg', () => {
     expect((await request(app()).patch('/api/events/e1/travel').send({ afterOffsetMin: 30 })).status).toBe(403);
   });
 
+  test('the gap choice (direct / home / automatic) is stored on its own; nonsense and read-only are refused', async () => {
+    as('therapist');
+    db.pool.query.mockResolvedValue({ rows: [{ id: 'e1', custom_metadata: {} }] });
+    await request(app()).patch('/api/events/e1/travel').send({ next: 'home', afterOffsetMin: null });
+    let [, params] = db.pool.query.mock.calls.find(([t]) => /UPDATE events/.test(t));
+    expect(JSON.parse(params[2])).toEqual({ next: 'home' });
+    expect(params[3]).toEqual(['afterOffsetMin', 'next']);
+    db.pool.query.mockClear();
+    await request(app()).patch('/api/events/e1/travel').send({ next: null });
+    [, params] = db.pool.query.mock.calls.find(([t]) => /UPDATE events/.test(t));
+    expect([JSON.parse(params[2]), params[3]]).toEqual([{}, ['next']]);
+    expect((await request(app()).patch('/api/events/e1/travel').send({ next: 'teleport' })).status).toBe(400);
+    as('read_only');
+    expect((await request(app()).patch('/api/events/e1/travel').send({ next: 'home' })).status).toBe(403);
+  });
+
   test('the existing before/after body still replaces both answers', async () => {
     as('therapist');
     db.pool.query.mockResolvedValue({ rows: [{ id: 'e1', custom_metadata: {} }] });
