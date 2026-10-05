@@ -741,17 +741,37 @@
     var old = document.getElementById('inv-cal-billing');
     if (old) old.remove();
     host.appendChild(box);
-    post('/events/links', { eventIds: [s.dbId] }).then(function (r) {
+    // The default option names what the completion rule does — load it once.
+    var settingsReady = state.settings ? Promise.resolve() : get('/settings').then(function (r) { state.settings = r; }).catch(function () { /* generic wording */ });
+    Promise.all([post('/events/links', { eventIds: [s.dbId] }), settingsReady]).then(function (both) {
+      var r = both[0];
       var l = (r.links || {})[s.dbId] || { invoices: [] };
       var seen = {};
       var invs = (l.invoices || []).filter(function (i) { if (seen[i.invoiceId]) return false; seen[i.invoiceId] = 1; return true; });
       box.innerHTML = '<b>Invoicing</b> ' + (invs.length
         ? invs.map(function (i) { return '<button type="button" class="inv-link" data-inv="open-from-cal" data-id="' + esc(i.invoiceId) + '">Invoiced ' + esc(i.invoiceNumber) + '</button> ' + pill(i.status); }).join(' ')
         : '<span class="inv-dim">Not invoiced yet</span>') +
-        '<div class="row2"><label class="inv-dim" for="inv-att-sel">Billing mark</label><select id="inv-att-sel" data-event="' + esc(s.dbId) + '">' +
-        opt('', 'Default (per completion rule)', l.attendance) + opt('COMPLETED', 'Completed', l.attendance) + opt('DID_NOT_ATTEND', 'Did not attend', l.attendance) + opt('CANCELLED', 'Cancelled', l.attendance) + opt('NOT_BILLABLE', 'Not billable', l.attendance) + '</select></div>';
+        '<div class="row2"><label class="inv-dim" for="inv-att-sel">Bill this session</label><select id="inv-att-sel" data-event="' + esc(s.dbId) + '" title="' + esc(autoHelp()) + '">' +
+        opt('', autoLabel(), l.attendance) + opt('COMPLETED', 'Completed — bill it', l.attendance) + opt('DID_NOT_ATTEND', 'Did not attend', l.attendance) + opt('CANCELLED', 'Cancelled', l.attendance) + opt('NOT_BILLABLE', 'Not billable', l.attendance) + '</select></div>' +
+        '<div class="inv-dim inv-att-help">' + esc(autoHelp()) + '</div>';
     }).catch(function () { box.remove(); });
   };
+
+  /* The default billing mark follows Invoicing › Settings › Completion rule —
+     say what that means for this session instead of naming the setting. */
+  function completionRule() { return state.settings && state.settings.settings ? state.settings.settings.completionRule : null; }
+  function autoLabel() {
+    var rule = completionRule();
+    if (rule === 'EXPLICIT_ONLY') return 'Automatic — only once marked Completed';
+    if (rule === 'PAST_CONFIRMED') return 'Automatic — bill once it has happened';
+    return 'Automatic (completion rule)';
+  }
+  function autoHelp() {
+    var rule = completionRule();
+    if (rule === 'EXPLICIT_ONLY') return 'Automatic: this session is billed only after you mark it Completed. Choose another option to override it.';
+    if (rule === 'PAST_CONFIRMED') return 'Automatic: billed once the session time has passed. Choose another option to override it (e.g. Did not attend).';
+    return 'Automatic follows the completion rule in Invoicing › Settings. Choose another option to override it for this session.';
+  }
 
   // ── Actions (delegated) ──────────────────────────────────────────────────
   function openInvoice(id) {

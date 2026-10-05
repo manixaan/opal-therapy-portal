@@ -728,7 +728,7 @@ describe('changed assets are cache-busted', () => {
       // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
       ['finance.js', 1], ['finance.css', 1],
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
-      ['invoicing.js', 1], ['invoicing.css', 1],
+      ['invoicing.js', 2], ['invoicing.css', 2],
       ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
