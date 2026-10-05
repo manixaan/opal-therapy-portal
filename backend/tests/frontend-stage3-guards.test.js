@@ -843,7 +843,7 @@ describe('master scheduler phase 1', () => {
 
   test('scheduler assets are linked and the root container exists', () => {
     expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p9" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p9" defer></script>');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p10" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -954,11 +954,35 @@ describe('grouped booking-type picker', () => {
     // Create needs a booking type — never a silent "therapy" default.
     expect(HTML).toContain('if (!cat || !currentBookingLeaf()) {');
     // A fresh panel is for your own calendar, at 9:00 for an hour, no day picked.
-    expect(HTML).toMatch(/if \(!opts\.keepState\) \{\s+const _me = window\.APP_USER && window\.APP_USER\.id;\s+_bspSelectedTherapist = /);
+    // No "Booking for" picker: your own calendar, unless the Scheduling
+    // Assistant handed over a therapist (shown read-only).
+    expect(HTML).toMatch(/if \(!opts\.keepState\) \{\s+_bspHandoffTherapistId = opts\.forTherapistId \|\| null;\s+_bspSelectedTherapist = null;/);
+    const strip = HTML.slice(HTML.indexOf('function renderBspTherapistStrip() {'), HTML.indexOf('function selectBspTherapist('));
+    expect(strip).toContain("if (!_bspSelectedTherapist) { strip.style.display = 'none';");
+    expect(strip).not.toContain('bsp-t-chip');
+    expect(strip).not.toContain('<select');
     expect(HTML).toMatch(/No slot clicked — a fresh form[\s\S]{0,200}startEl\.value = '09:00'[\s\S]{0,200}\.bsp-day-chip\.active/);
     // Add-a-stop and Book Another pick no booking type for the therapist.
     const TRAVEL = require('fs').readFileSync(require('path').join(__dirname, '../../frontend/current/travel.js'), 'utf8');
     expect(TRAVEL).not.toContain('firstClientLeaf');
+  });
+
+  test('the proposed block shows the client picked now, not the first one it drew', () => {
+    expect(HTML).toContain('function refreshProposedClientLabel()');
+    // A card click and "No client" both relabel the proposal.
+    expect((HTML.match(/refreshProposedClientLabel\(\);/g) || []).length).toBeGreaterThanOrEqual(2);
+    const label = HTML.slice(HTML.indexOf('function _proposedClientName()'), HTML.indexOf('function renderCalendarPreviewBlocks('));
+    const fn = new Function('getSelectedPatient', 'calProposedLabel', 'document', label + '; return { name: _proposedClientName, refresh: refreshProposedClientLabel };');
+    let picked = { first: 'Noah', last: 'Mathew' };
+    const block = { dataset: { startMin: '1020', durationMin: '60' }, innerHTML: '' };
+    const api = fn(() => picked, (st, dur, who) => st + '/' + dur + '/' + who, { querySelectorAll: () => [block] });
+    api.refresh();
+    expect(block.innerHTML).toBe('1020/60/Noah Mathew');
+    picked = { first: 'Tiffany', last: 'Marchese' };
+    api.refresh();
+    expect(block.innerHTML).toBe('1020/60/Tiffany Marchese');
+    // Only the booking panel's own client list counts as "selected".
+    expect(HTML).toContain("document.querySelector('#patient-list .patient-card.selected')");
   });
 
   test('direct services map to Splose services without showing billing codes', () => {
@@ -1071,7 +1095,7 @@ describe('master scheduler phase 3 finder', () => {
   test('view-calendar and schedule actions integrate with existing surfaces', () => {
     expect(SCHED_JS).toContain('sm-cand');       // candidate cards drive the matrix selection
     expect(SCHED_JS).toContain('jumpToMinute');  // picking a result scrolls + flashes the row
-    expect(SCHED_JS).toContain('selectBspTherapist');
+    expect(SCHED_JS).toContain('openBookingPanel(tid ? { forTherapistId: tid } : {})'); // hands the therapist to the panel
     expect(SCHED_JS).toContain('sch-req-slot'); // requested slot emphasised on the time scale
   });
 

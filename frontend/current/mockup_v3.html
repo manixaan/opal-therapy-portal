@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
-<script src="/scheduler.js?v=p9" defer></script>
+<script src="/scheduler.js?v=p10" defer></script>
 <script>
 /* Development-only load profiler. On localhost, records long main-thread
    tasks from the first byte (sampling the thread where the browser cannot
@@ -9678,6 +9678,7 @@ function renderPatients() {
         })
         .catch(err => console.warn('Case fetch error:', err.message));
       if (typeof renderRightContext === 'function') renderRightContext();
+      if (typeof refreshProposedClientLabel === 'function') refreshProposedClientLabel();
     });
     list.appendChild(card);
   });
@@ -9984,7 +9985,7 @@ window.addEventListener('DOMContentLoaded', () => setTimeout(loadOutlookCategori
 
 function getSelectedPatient() {
   // Primary: DOM card selection (set by clicking a patient card in step 1)
-  const el = document.querySelector('.patient-card.selected');
+  const el = document.querySelector('#patient-list .patient-card.selected');
   if (el) {
     const found = PATIENTS.find(p => String(p.id) === String(el.dataset.id));
     if (found) return found;
@@ -12467,6 +12468,7 @@ function clearBookingClient() {
   BOOKING_STATE.selectedPatient = null;
   BOOKING_STATE.selectedCaseId = null;
   if (typeof renderRightContext === 'function') renderRightContext();
+  if (typeof refreshProposedClientLabel === 'function') refreshProposedClientLabel();
 }
 
 function selectBookingCat(cat) {
@@ -21206,6 +21208,7 @@ let _bspPrefill = null; // { day, date, startH, startM, endH, endM }
 // Therapist selection (owner/admin only)
 let _bspTherapists        = [];   // array of { id, userId, displayName, colour, sploseUserId }
 let _bspSelectedTherapist = null; // currently selected therapist object
+let _bspHandoffTherapistId = null; // therapist profile id handed over by the Scheduling Assistant
 
 function initBookingPanel() {
   // Move .booking-grid from #view-book into the panel body
@@ -21232,14 +21235,15 @@ function openBookingPanel(opts = {}) {
   _bspOpen = true;
   _bspDirty = false;
 
-  // A fresh booking is for your own calendar — the last "Booking for" choice
-  // is not remembered (keepState re-opens keep it).
+  // No "Booking for" picker (5 Oct 2026): a booking goes on your own
+  // calendar. Only the Scheduling Assistant hands one to another therapist
+  // (opts.forTherapistId) — shown read-only. keepState re-opens keep theirs.
   if (!opts.keepState) {
-    const _me = window.APP_USER && window.APP_USER.id;
-    _bspSelectedTherapist = (_bspTherapists || []).find(t => String(t.userId) === String(_me)) || null;
+    _bspHandoffTherapistId = opts.forTherapistId || null;
+    _bspSelectedTherapist = null;
   }
-  // Load therapist selector for owner/admin (cached after first load)
-  loadBspTherapists();
+  if (_bspHandoffTherapistId) loadBspTherapists();
+  else renderBspTherapistStrip();
 
   // Apply pre-fill if a calendar slot was clicked/dragged
   if (opts.date !== undefined || opts.startH !== undefined) {
@@ -21316,7 +21320,7 @@ async function loadBspTherapists() {
   if (!u?.canViewMasterCalendar) return; // only owner/admin
 
   // Use cached list if already loaded
-  if (_bspTherapists.length) { renderBspTherapistStrip(); return; }
+  if (_bspTherapists.length) { _bspResolveHandoff(); renderBspTherapistStrip(); return; }
 
   try {
     const r = await fetch('/api/therapists', { credentials: 'include' });
@@ -21330,11 +21334,7 @@ async function loadBspTherapists() {
       sploseUserId: p.splose_user_id || null,
     }));
 
-    // Default to your own calendar; else the first therapist.
-    if (_bspTherapists.length && !_bspSelectedTherapist) {
-      const _me = window.APP_USER && window.APP_USER.id;
-      _bspSelectedTherapist = _bspTherapists.find(t => String(t.userId) === String(_me)) || _bspTherapists[0];
-    }
+    _bspResolveHandoff();
     renderBspTherapistStrip();
   } catch (_) { /* non-fatal */ }
 }
@@ -21344,38 +21344,21 @@ async function loadBspTherapists() {
    the booking UI only lists real, active therapist profiles. */
 var BSP_TEST_NAME_RE = /dry.?run|\bqa\b|test|smoke|seed|synthetic|demo/i;
 
+/* The therapist the Scheduling Assistant handed over, or nobody (= you). */
+function _bspResolveHandoff() {
+  if (!_bspHandoffTherapistId) return;
+  _bspSelectedTherapist = _bspTherapists.find(t => String(t.id) === String(_bspHandoffTherapistId)
+    && !BSP_TEST_NAME_RE.test(t.displayName || '')) || null;
+}
+
+/* No picker: hidden for your own bookings; a read-only line when the
+   Scheduling Assistant booked for another therapist. */
 function renderBspTherapistStrip() {
   const strip = document.getElementById('bsp-therapist-strip');
   if (!strip) return;
-  const list = _bspTherapists.filter(t =>
-    t.isActive !== false && !BSP_TEST_NAME_RE.test(t.displayName || ''));
-  if (!list.length) { strip.style.display = 'none'; _bspSelectedTherapist = _bspSelectedTherapist || null; return; }
-  if (_bspSelectedTherapist && BSP_TEST_NAME_RE.test(_bspSelectedTherapist.displayName || '')) {
-    _bspSelectedTherapist = list[0];
-  }
-  if (list.length === 1) {
-    // Context already determines the therapist — concise read-only line
-    _bspSelectedTherapist = list[0];
-    strip.innerHTML = '<span class="bsp-t-label">Booking for:</span><span style="font-weight:600;">' +
-      escapeHtml(list[0].displayName) + '</span>';
-    strip.style.display = 'flex';
-    return;
-  }
-  let html = '<span class="bsp-t-label">Booking for:</span>';
-  if (list.length <= 5) {
-    list.forEach(t => {
-      const sel = (_bspSelectedTherapist?.id === t.id);
-      html += `<button class="bsp-t-chip${sel ? ' selected' : ''}" onclick="selectBspTherapist('${t.id}')">
-        <span class="bsp-t-dot" style="background:${t.colour}"></span>
-        ${escapeHtml(t.displayName)}
-      </button>`;
-    });
-  } else {
-    html += '<select class="rh-input" style="max-width:220px;" onchange="selectBspTherapist(this.value)">' +
-      list.map(t => `<option value="${t.id}"${_bspSelectedTherapist?.id === t.id ? ' selected' : ''}>${escapeHtml(t.displayName)}</option>`).join('') +
-      '</select>';
-  }
-  strip.innerHTML = html;
+  if (!_bspSelectedTherapist) { strip.style.display = 'none'; strip.innerHTML = ''; return; }
+  strip.innerHTML = '<span class="bsp-t-label">Booking for:</span><span style="font-weight:600;">' +
+    escapeHtml(_bspSelectedTherapist.displayName) + '</span>';
   strip.style.display = 'flex';
 }
 
@@ -21448,6 +21431,20 @@ function clearPreviewBlocks() {
   _previewBlocks.length = 0;
 }
 
+/* The client the proposal is for — the one picked in the booking panel. */
+function _proposedClientName() {
+  const p = (typeof getSelectedPatient === 'function' && getSelectedPatient()) || null;
+  return p ? `${p.first} ${p.last}` : '';
+}
+/* Picking (or clearing) the client relabels the proposed block at once. It
+   used to keep the name it was first drawn with (5 Oct 2026). */
+function refreshProposedClientLabel() {
+  document.querySelectorAll('.cal-preview-block').forEach(el => {
+    const st = Number(el.dataset.startMin), dur = Number(el.dataset.durationMin);
+    if (Number.isFinite(st) && Number.isFinite(dur)) el.innerHTML = calProposedLabel(st, dur, _proposedClientName());
+  });
+}
+
 function renderCalendarPreviewBlocks(slots) {
   clearPreviewBlocks();
   if (!slots || !slots.length) return;
@@ -21468,8 +21465,9 @@ function renderCalendarPreviewBlocks(slots) {
     el.style.top    = tToY(slot.startH, slot.startM || 0) + 'px';
     const prevSlotPx = slot.durationMin / 60 * HOUR_PX;
     el.style.height = Math.min(Math.max(18, prevSlotPx - 4), Math.max(4, prevSlotPx - 2)) + 'px';
-    const _who = (typeof getSelectedPatient === 'function' && getSelectedPatient()) || null;
-    el.innerHTML = calProposedLabel(slot.startMin, slot.durationMin, _who ? `${_who.first} ${_who.last}` : '');
+    el.dataset.startMin = slot.startMin;
+    el.dataset.durationMin = slot.durationMin;
+    el.innerHTML = calProposedLabel(slot.startMin, slot.durationMin, _proposedClientName());
     el.title = `Proposed: ${fmtT(slot.startH, slot.startM||0)} – ${fmtT(endH, endM)}${idx === 0 ? '' : ' (alternative)'} — not saved until you press Create appointment`;
 
     el.addEventListener('click', () => {

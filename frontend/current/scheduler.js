@@ -891,11 +891,11 @@
     if (el) el.innerHTML = summaryText();
   }
 
+  // Hand the chosen therapist to the booking panel (shown read-only there —
+  // the panel has no picker). Selecting first and then opening lost it: a
+  // fresh panel starts on your own calendar.
   function openBooking(tid) {
-    if (tid && typeof global.selectBspTherapist === 'function') {
-      try { global.selectBspTherapist(tid); } catch (e) { /* booking panel optional */ }
-    }
-    if (typeof global.openBookingPanel === 'function') global.openBookingPanel();
+    if (typeof global.openBookingPanel === 'function') global.openBookingPanel(tid ? { forTherapistId: tid } : {});
   }
 
   // ── The matrix ────────────────────────────────────────────────────────────
