@@ -1115,9 +1115,13 @@
   });
 
   // ── Boot ─────────────────────────────────────────────────────────────────
+  var lastBoot = 0;
   function boot() {
     var view = document.getElementById('view-invoicing');
     if (!view || !view.classList.contains('active')) return;
+    // A tab click and the view observer can both fire for one switch.
+    if (Date.now() - lastBoot < 400) return;
+    lastBoot = Date.now();
     renderShell();
     loadOverview();
     if (!view.dataset.booted) { view.dataset.booted = '1'; go(state.section, { keepIds: true }); }
@@ -1132,6 +1136,16 @@
     if (tries++ < 60) setTimeout(waitForUser, 500);
   })();
   window.addEventListener('hashchange', function () { setTimeout(boot, 80); });
+  // Boot whenever the view becomes visible, however it got there — a reload
+  // on #invoicing (the route is restored after sign-in, past the load-time
+  // boot), Back/Forward (history.replaceState fires no hashchange), or any
+  // programmatic switchTab. Without this the tab sat on "Loading invoicing…".
+  (function watchView() {
+    var view = document.getElementById('view-invoicing');
+    if (!view || typeof MutationObserver !== 'function') return;
+    new MutationObserver(function () { if (view.classList.contains('active')) setTimeout(boot, 30); })
+      .observe(view, { attributes: true, attributeFilter: ['class'] });
+  })();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 300); });
   else setTimeout(boot, 300);
 
