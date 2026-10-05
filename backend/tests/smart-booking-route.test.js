@@ -602,6 +602,17 @@ describe('after Create appointment — What would you like to do next?', () => {
     expect(appointmentWrites(env)).toHaveLength(0);
   });
 
+  test('Book Another Client carries only the route — no booking type or client is pre-selected', async () => {
+    const env = booked({ week: { mon: 'home-1' }, homes: [{ id: 'home-1', addr: HOME_ADDR }] });
+    env.ev("window.__leafCalls = 0; var __sbl = selectBookingLeaf; selectBookingLeaf = function (id) { __leafCalls++; return __sbl(id); }; BOOKING_STATE.selectedPatient = null;");
+    dialog(env).querySelector('[data-next="another"]').click();
+    await flush(100);
+    expect(env.ev('__leafCalls')).toBe(0);                 // the last booking's type is not re-picked
+    expect(env.ev('BOOKING_STATE.category')).toBe('client'); // the client list is shown to choose from
+    expect(env.ev('BOOKING_STATE.selectedPatient')).toBeNull();
+    expect(env.ev('BOOKING_STATE.travelFrom.dbId')).toBe('db-A');
+  });
+
   test('Go Somewhere Else: a remembered destination is routed and saved as the leg — no appointment', async () => {
     const FSH = 'Fiona Stanley Hospital, 11 Robin Warren Dr, Murdoch WA 6150';
     const env = booked({ routes: { [A_ADDR + '|' + FSH]: 18 }, api: {

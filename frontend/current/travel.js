@@ -679,14 +679,9 @@ function addStopAfterSession(sessionId, patientId) {
   // openBookingPanel resets the wizard; select the client and stamp the context afterwards.
   setTimeout(() => {
     if (typeof BOOKING_STATE !== 'undefined') BOOKING_STATE.travelFrom = ctx;
-    if (typeof selectBookingLeaf === 'function' && typeof BOOKING_LEAVES !== 'undefined') {
-      const cur = BOOKING_STATE.serviceType && BOOKING_LEAVES[BOOKING_STATE.serviceType];
-      if (!cur || cur.cat !== 'client') {
-        const firstClientLeaf = (BOOKING_LEAVES.therapy && BOOKING_LEAVES.therapy.serviceId) ? 'therapy'
-          : Object.keys(BOOKING_LEAVES).find(k => BOOKING_LEAVES[k].cat === 'client' && BOOKING_LEAVES[k].serviceId);
-        if (firstClientLeaf) selectBookingLeaf(firstClientLeaf);
-      }
-    }
+    // The client is the one just picked; the booking type is the therapist's
+    // choice — none is pre-selected. Show the client list with them chosen.
+    if (typeof selectBookingCat === 'function') selectBookingCat('client');
     const card = document.querySelector('.patient-card[data-patient-id="' + String(p.id).replace(/"/g, '') + '"]');
     if (card) card.click();
     const strip = document.getElementById('bsp-prefill-strip'), text = document.getElementById('bsp-prefill-text');

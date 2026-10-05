@@ -144,11 +144,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=22" defer></script>
+<script src="/travel.js?v=23" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=2" defer></script>
+<script src="/booking-route.js?v=3" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -12502,7 +12502,7 @@ function selectBookingCat(cat) {
   if (rule === 'none' && cat !== 'client') clearBookingClient();
   const ruleBox = document.getElementById('bk-client-rule');
   if (ruleBox) {
-    const show = cat !== 'client' || rule === 'required';
+    const show = !!cat && (cat !== 'client' || rule === 'required');
     ruleBox.hidden = !show;
     ruleBox.classList.toggle('required', rule === 'required');
     const txt = document.getElementById('bk-client-rule-text');
@@ -12577,8 +12577,8 @@ async function createBookingNow() {
   if (BOOKING_STATE.submitting) return;
   const cat = BOOKING_STATE.category;
 
-  if (!cat) {
-    showToast('Select a booking type', 'Choose a booking category to continue.', 'warn');
+  if (!cat || !currentBookingLeaf()) {
+    showToast('Select a booking type', 'Choose what you are booking to continue.', 'warn');
     return;
   }
 
@@ -13073,8 +13073,17 @@ function resetWizard() {
   ['custom-name', 'custom-notes', 'email-title', 'email-notes', 'admin-notes', 'bulk-noting-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  // Reset booking category to 'client'
-  selectBookingCat('client');
+  // A new booking remembers nothing (5 Oct 2026): no client (the stored one
+  // used to come back through getSelectedPatient's fallback), no case, no
+  // travel chain, no location, and no booking type picked — the therapist
+  // chooses the type first.
+  BOOKING_STATE.selectedPatient = null;
+  BOOKING_STATE.selectedCaseId = null;
+  BOOKING_STATE.chainAfter = null;
+  const _loc = document.getElementById('bsp-location');
+  if (_loc) { _loc.value = ''; ['placeId', 'lat', 'lng', 'locId', 'locSource'].forEach(k => { delete _loc.dataset[k]; }); }
+  const _uns = document.getElementById('bsp-location-unsure'); if (_uns) _uns.checked = false;
+  selectBookingCat(null);
 
   // Clear patient + session-type selections, rewind to step 1
   document.querySelectorAll('.patient-card').forEach(x => x.classList.remove('selected'));
@@ -21223,6 +21232,12 @@ function openBookingPanel(opts = {}) {
   _bspOpen = true;
   _bspDirty = false;
 
+  // A fresh booking is for your own calendar — the last "Booking for" choice
+  // is not remembered (keepState re-opens keep it).
+  if (!opts.keepState) {
+    const _me = window.APP_USER && window.APP_USER.id;
+    _bspSelectedTherapist = (_bspTherapists || []).find(t => String(t.userId) === String(_me)) || null;
+  }
   // Load therapist selector for owner/admin (cached after first load)
   loadBspTherapists();
 
@@ -21315,9 +21330,10 @@ async function loadBspTherapists() {
       sploseUserId: p.splose_user_id || null,
     }));
 
-    // Auto-select the first (and for v1, only) therapist
+    // Default to your own calendar; else the first therapist.
     if (_bspTherapists.length && !_bspSelectedTherapist) {
-      _bspSelectedTherapist = _bspTherapists[0];
+      const _me = window.APP_USER && window.APP_USER.id;
+      _bspSelectedTherapist = _bspTherapists.find(t => String(t.userId) === String(_me)) || _bspTherapists[0];
     }
     renderBspTherapistStrip();
   } catch (_) { /* non-fatal */ }
@@ -21647,10 +21663,12 @@ function _bspApplyTimingPrefill(opts) {
     // Apply prefill to timing fields after panel opens
     if (opts && (opts.startH !== undefined || opts.day)) {
       setTimeout(() => _bspApplyTimingPrefill(opts), 20);
-    } else {
-      // No prefill — apply category default duration
-      const cat = document.querySelector('.booking-cat-chip.active')?.dataset.cat || 'client';
-      bspSetDur(BSP_CAT_DEFAULTS[cat] || 60, true);
+    } else if (!(opts && opts.keepState)) {
+      // No slot clicked — a fresh form: 9:00, an hour, no day picked. The
+      // last booking's day and time are not remembered.
+      const startEl = document.getElementById('bsp-start'); if (startEl) startEl.value = '09:00';
+      document.querySelectorAll('.bsp-day-chip.active').forEach(c => c.classList.remove('active'));
+      bspSetDur(60, true);
       _bspRecomputeEnd();
     }
   };

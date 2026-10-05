@@ -586,7 +586,10 @@
       var b = bookingState();
       if (b) b.travelFrom = ctx;
       if (rs) rs.context = ctx;
-      if (info.serviceLeaf && typeof BOOKING_LEAVES !== 'undefined' && BOOKING_LEAVES[info.serviceLeaf] && fn('selectBookingLeaf')) global.selectBookingLeaf(info.serviceLeaf);
+      // Only the route carries over (travelling from the last client). The
+      // client and booking type are chosen afresh — nothing from the last
+      // booking is pre-selected (5 Oct 2026); the client list is shown.
+      if (fn('selectBookingCat')) global.selectBookingCat('client');
       var text = $('bsp-prefill-text'), strip = $('bsp-prefill-strip');
       if (text && strip) { strip.style.display = 'flex'; text.textContent = 'After ' + ctx.label + ' · finishes ' + fmt(info.endMin) + ' — pick the next client'; }
       if (fn('bspTravelPreview')) global.bspTravelPreview();

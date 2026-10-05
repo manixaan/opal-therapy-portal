@@ -941,6 +941,26 @@ describe('grouped booking-type picker', () => {
     expect(HTML).toMatch(/function resetWizard\(\) \{[\s\S]{0,600}BOOKING_STATE\.serviceType = null;[\s\S]{0,600}'custom-name'/);
   });
 
+  test('a new booking remembers nothing from the last one', () => {
+    const start = HTML.indexOf('function resetWizard() {');
+    const body = HTML.slice(start, HTML.indexOf('\n}\n', start));
+    // No client (the stored one came back through getSelectedPatient's fallback),
+    // no case, no travel chain, no location, and no booking type pre-picked.
+    for (const s of ['BOOKING_STATE.selectedPatient = null;', 'BOOKING_STATE.selectedCaseId = null;',
+      'BOOKING_STATE.chainAfter = null;', "_loc.value = ''", '_uns.checked = false', 'selectBookingCat(null);']) {
+      expect(body).toContain(s);
+    }
+    expect(body).not.toContain("selectBookingCat('client')");
+    // Create needs a booking type — never a silent "therapy" default.
+    expect(HTML).toContain('if (!cat || !currentBookingLeaf()) {');
+    // A fresh panel is for your own calendar, at 9:00 for an hour, no day picked.
+    expect(HTML).toMatch(/if \(!opts\.keepState\) \{\s+const _me = window\.APP_USER && window\.APP_USER\.id;\s+_bspSelectedTherapist = /);
+    expect(HTML).toMatch(/No slot clicked — a fresh form[\s\S]{0,200}startEl\.value = '09:00'[\s\S]{0,200}\.bsp-day-chip\.active/);
+    // Add-a-stop and Book Another pick no booking type for the therapist.
+    const TRAVEL = require('fs').readFileSync(require('path').join(__dirname, '../../frontend/current/travel.js'), 'utf8');
+    expect(TRAVEL).not.toContain('firstClientLeaf');
+  });
+
   test('direct services map to Splose services without showing billing codes', () => {
     expect(HTML).toContain('function directLeafForService(title)');
     expect(HTML).toContain('refreshDirectServiceAvailability()');
