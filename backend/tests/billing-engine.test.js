@@ -331,6 +331,20 @@ describe('day route mirrors the calendar\'s travel rules', () => {
     expect(DR.buildDayLegs({ user, date: '2026-09-25', sessions: [a, far] }).legs.map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
   });
 
+  // 5 Oct 2026 — the therapist's choice on the calendar wins over the gap.
+  test('travel.next: "direct" never bills a trip home; "home" always does', () => {
+    const mins = { '1 A St, Willetton|5 Base Rd, Canning Vale WA': 12, '5 Base Rd, Canning Vale WA|2 B St, Riverton': 10 };
+    const minutesFor = (o, d) => mins[o + '|' + d] ?? 15;
+    const withNext = (next, endIso) => ({ ...ev('a', '1 A St, Willetton', 1), end_time: endIso, custom_metadata: { travel: { next } } });
+    const far = { ...ev('b', '2 B St, Riverton', 5), start_time: '2026-09-25T05:00:00Z' };
+    const near = { ...ev('b', '2 B St, Riverton', 2), start_time: '2026-09-25T02:45:00Z' };
+    const kinds = (sessions, mf) => DR.buildDayLegs({ user, date: '2026-09-25', sessions, minutesFor: mf }).legs.map(l => l.kind);
+    expect(kinds([withNext('direct', '2026-09-25T02:00:00Z'), far], minutesFor)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+    expect(kinds([withNext('home', '2026-09-25T02:00:00Z'), near], minutesFor)).toEqual(['OUTBOUND', 'RETURN', 'OUTBOUND', 'RETURN']);
+    // "home" stands even without route facts — the legs are routed later.
+    expect(kinds([withNext('home', '2026-09-25T02:00:00Z'), near])).toEqual(['OUTBOUND', 'RETURN', 'OUTBOUND', 'RETURN']);
+  });
+
   test('a manual pin beats the Outlook location', () => {
     expect(DR.eventAddress({ location: 'Outlook text', manual_location: { address: '9 Pin St' } })).toBe('9 Pin St');
   });

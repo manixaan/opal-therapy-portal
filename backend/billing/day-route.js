@@ -15,7 +15,8 @@
  *   • end leg (RETURN): to the last session's `travel.after` point, else base.
  *   • a gap long enough to drive back to the base, stay TRAVEL_HOME_MIN_STAY
  *     minutes and drive out again is a trip home (Return + Start legs), not a
- *     drive between clients — travel.js `midDayViaBase`, same rule (30 Sep 2026).
+ *     drive between clients — travel.js `betweenTravelPlan`, same rule. The
+ *     session's choice on the calendar (travel.next 'direct' | 'home') wins.
  * Differences, deliberate for billing: only billable in-person sessions form
  * the route (a telehealth or DNA session is not a stop), and a between leg is
  * kept whenever the two addresses differ even if the gap is tight — the drive
@@ -108,10 +109,19 @@ function candidatePairs({ user, date, sessions }) {
   return pairs;
 }
 
-/** { toBase, fromBase } when the gap allows a trip home; null otherwise. */
-function viaBase(base, from, to, gapMin, minutesFor) {
-  if (!minutesFor || !base || base.remote || !base.address || !(gapMin > 0)) return null;
+/**
+ * { toBase, fromBase } when the session goes home before the next one; null
+ * for a direct drive. The session's own choice wins (custom_metadata.travel.
+ * next — 'direct' | 'home', set on the calendar), else the gap decides.
+ */
+function viaBase(base, from, to, gapMin, minutesFor, choice) {
+  if (choice === 'direct') return null;
+  if (!base || base.remote || !base.address) return null;
   if (canonAddr(base.address) === canonAddr(from) || canonAddr(base.address) === canonAddr(to)) return null;
+  if (choice === 'home') {
+    return { toBase: minutesFor ? minutesFor(from, base.address) : null, fromBase: minutesFor ? minutesFor(base.address, to) : null };
+  }
+  if (!minutesFor || !(gapMin > 0)) return null;
   const toBase = minutesFor(from, base.address);
   const fromBase = minutesFor(base.address, to);
   if (toBase == null || fromBase == null) return null; // cannot decide → chain, as without facts
@@ -147,7 +157,7 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     const from = eventAddress(a), to = eventAddress(b);
     if (!from || !to) continue;
     const gapMin = Math.round((new Date(b.start_time) - new Date(a.end_time)) / 60000);
-    const home = viaBase(base, from, to, gapMin, minutesFor);
+    const home = viaBase(base, from, to, gapMin, minutesFor, meta(a).next);
     if (home) {
       legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
         origin: from, destination: base.address, destinationLabel: base.label });
