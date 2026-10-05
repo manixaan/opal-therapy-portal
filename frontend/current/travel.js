@@ -568,7 +568,8 @@ function describeTravelPoint(spec, day) {
 async function setTravelOverride(sessionId, side, spec) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
   if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
-  const next = Object.assign({}, s.travel || {});
+  const prev = Object.assign({}, s.travel || {});
+  const next = Object.assign({}, prev);
   if (spec) next[side] = spec; else delete next[side];
   try {
     const r = await fetch('/api/events/' + encodeURIComponent(s.dbId) + '/travel', {
@@ -579,7 +580,74 @@ async function setTravelOverride(sessionId, side, spec) {
   } catch (e) { showToast('Could not save travel plan', e.message); return false; }
   s.travel = next;
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  registerTravelUndo(s, prev, side === 'before' ? 'Where travel starts' : 'Where travel ends');
   return true;
+}
+
+/* ---------- Cmd+Z for travel (6 Oct 2026) ----------
+   Every travel click — a leg dragged or nudged, a where-from / where-to
+   answer, go direct / go home — is one undo step (OpalUndo merges whatever
+   the same click also changed). The inverse writes the event's whole
+   previous travel plan back in one PATCH: the route replaces exactly the
+   fields it is sent, so it does not matter which one the click moved. */
+function registerTravelUndo(s, prev, label) {
+  if (!window.OpalUndo || !s || !s.dbId) return;
+  const dbId = s.dbId, id = s.id;
+  const was = Object.assign({}, prev || {});
+  window.OpalUndo.register({ group: 'calendar', label: label, undo: async () => {
+    const r = await fetch('/api/events/' + encodeURIComponent(dbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        before: was.before || null, after: was.after || null, next: was.next || null,
+        beforeOffsetMin: was.beforeOffsetMin == null ? null : was.beforeOffsetMin,
+        afterOffsetMin:  was.afterOffsetMin  == null ? null : was.afterOffsetMin,
+      }),
+    });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    // A calendar reload re-keys tiles, so find the block by its saved id.
+    const cur = _sessionByDbId(dbId) || (window.SESSIONS && window.SESSIONS[id]);
+    if (cur) { cur.travel = was; if (typeof refreshDayOverlays === 'function') refreshDayOverlays(cur.day); }
+  } });
+}
+
+/* An address save's undo puts the previous address back the same way it was
+   saved. A block that had no address cannot be blanked from here (the
+   location route needs one), so that undo says so instead of skipping. */
+function captureSessionAddress(s) {
+  if (!s) return null;
+  return { id: s.id, dbId: s.dbId || null, sploseId: s.sploseId || null, address: s.address || '',
+           lat: s.lat || null, lng: s.lng || null, location: s.location, addressSource: s.addressSource,
+           locationObj: s.locationObj };
+}
+function registerSessionAddressUndo(s, was) {
+  if (!window.OpalUndo || !s || !was) return;
+  window.OpalUndo.register({ group: 'calendar', label: 'Location change — ' + (s.patient || s.title || 'session'), undo: async () => {
+    if (!was.address) throw new Error('it had no address before');
+    const cur = (was.dbId && _sessionByDbId(was.dbId)) || (window.SESSIONS && window.SESSIONS[was.id]);
+    if (!cur) throw new Error('that block is no longer on the calendar');
+    if (cur.dbId) {
+      const r = await fetch('/api/outlook/events/' + encodeURIComponent(cur.dbId) + '/location', {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: was.address, lat: was.lat, lng: was.lng }),
+      });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    }
+    const replaced = cur.address;
+    cur.address = was.address; cur.lat = was.lat; cur.lng = was.lng;
+    cur.location = was.location; cur.addressSource = was.addressSource; cur.locationObj = was.locationObj;
+    delete cur.__loc;
+    invalidateRouteCacheFor(replaced); invalidateRouteCacheFor(was.address);
+    try {
+      const key = cur.sploseId ? 'manual_addr_splose_' + cur.sploseId : (cur.dbId ? 'manual_addr_db_' + cur.dbId : null);
+      if (key) localStorage.setItem(key, JSON.stringify({ formattedAddress: was.address, lat: was.lat, lng: was.lng, savedAt: new Date().toISOString() }));
+    } catch (e) { /* storage unavailable */ }
+    if (cur.element) {
+      const ok = (typeof isValidRoutingLocation === 'function' ? isValidRoutingLocation(was.address) : true) || !!(was.lat && was.lng);
+      cur.element.classList.toggle('has-addr', ok);
+      cur.element.classList.toggle('missing-addr', !ok && (typeof sessionNeedsFullAddress === 'function' ? sessionNeedsFullAddress(cur) : false));
+    }
+    if (typeof refreshDayOverlays === 'function') refreshDayOverlays(cur.day);
+  } });
 }
 
 /* Ask once for the day's base when a booking lands on a day that has none
@@ -1265,6 +1333,7 @@ async function setBetweenTravel(sessionId, mode) {
       body: JSON.stringify({ next: mode || null, afterOffsetMin: null }),
     });
     if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    registerTravelUndo(s, prev, mode === 'direct' ? 'Go straight on' : mode === 'home' ? 'Home in between' : 'Travel between sessions');
     return true;
   } catch (e) {
     s.travel = prev;
@@ -1671,6 +1740,7 @@ async function setTravelTiming(sessionId, side, offsetMin) {
       body: JSON.stringify({ [key]: offsetMin == null ? null : Math.round(offsetMin) }),
     });
     if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    registerTravelUndo(s, prev, 'Travel leg moved');
     return true;
   } catch (e) {
     s.travel = prev;
@@ -2089,6 +2159,7 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
   newAddr = String(newAddr || '').trim(); if (!newAddr) return false;
   lat = parseFloat(lat) || null; lng = parseFloat(lng) || null;
   var fromPlaces = !!(lat && lng);
+  var addrBefore = captureSessionAddress(s);
   var oldAddr = s.address;
   s.address = newAddr; s.lat = lat; s.lng = lng; s.addressSource = 'manual';
   s.location = newAddr;
@@ -2116,6 +2187,7 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
     } catch (e) { showToast('Address kept locally', e.message); }
   }
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  registerSessionAddressUndo(s, addrBefore);
   showToast(s.patient ? 'Client location updated' : 'Location updated', fromPlaces ? 'Pinned from Google Maps. Travel recalculated.' : 'Travel recalculated.');
   return true;
 }

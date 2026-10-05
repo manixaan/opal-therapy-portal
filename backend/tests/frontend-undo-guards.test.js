@@ -70,6 +70,31 @@ describe('reversible flows are wired into the stack', () => {
     // survives a calendar reload by finding the block by its dbId
     expect(commit).toContain('Object.values(SESSIONS).find(x => x && x.dbId === dbId)');
   });
+  test('one click = one step: same-group entries from one gesture merge; an undo replay registers nothing', () => {
+    expect(HTML).toContain("document.addEventListener('pointerdown', function () { gesture++; }, true);");
+    expect(HTML).toContain('if (replaying) return null;');
+    expect(HTML).toContain('top.group === entry.group && top.gesture === gesture');
+    expect(HTML).toContain('for (var i = e.steps.length - 1; i >= 0; i--) await e.steps[i]();');
+  });
+  test('every calendar entry joins the calendar group (booking, delete, move, quick-add)', () => {
+    const cal = HTML.match(/OpalUndo\.register\(\{\s*group: 'calendar',/g) || [];
+    expect(cal.length).toBeGreaterThanOrEqual(4);
+    expect(HTML).toContain('label: `Session added — ${title}`');
+    // a move replay must not re-run the travel hand-over it is undoing
+    expect(HTML).toContain("if (!__calMoveUndoReplaying && typeof travelChainAfterMove === 'function')");
+  });
+  test('travel clicks register: leg drag/nudge, where-from/where-to, go direct/home, address saves', () => {
+    const TRAVEL = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'frontend', 'current', 'travel.js'), 'utf8');
+    expect(TRAVEL).toContain('function registerTravelUndo(s, prev, label)');
+    expect(TRAVEL).toContain("registerTravelUndo(s, prev, 'Travel leg moved');");
+    expect(TRAVEL).toContain("registerTravelUndo(s, prev, side === 'before'");
+    expect(TRAVEL).toContain("registerTravelUndo(s, prev, mode === 'direct'");
+    expect(TRAVEL).toContain('registerSessionAddressUndo(s, addrBefore);');
+    expect(HTML).toContain('registerSessionAddressUndo(s, addrBefore);');
+    // the inverse restores the whole previous plan in one PATCH
+    expect(TRAVEL).toContain('before: was.before || null, after: was.after || null, next: was.next || null,');
+  });
   test('To-Do flows: create, complete, and delete each register (delete shares one restore with the toast button)', () => {
     expect(REPORTS).toContain("label: 'Task created'");
     expect(REPORTS).toContain("label: 'Task completed'");

@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=25" defer></script>
+<script src="/travel.js?v=26" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -11211,6 +11211,21 @@ async function saveQuickAdd() {
   const col = document.getElementById('day-' + day);
   if (!col) { showToast('Day column not found'); return; }
   const id = addSession(col, sessionOpts);
+  // Cmd+Z: a quick-added block lives only on this page, so its undo is
+  // simply taking the tile off again.
+  if (window.OpalUndo) {
+    OpalUndo.register({
+      group: 'calendar',
+      label: `Session added — ${title}`,
+      undo: async () => {
+        const s = SESSIONS[id];
+        if (!s) throw new Error('that block is no longer on the calendar');
+        const sDay = s.day;
+        __removeSessionTile(id);
+        if (typeof refreshDayOverlays === 'function') refreshDayOverlays(sDay);
+      },
+    });
+  }
 
   // Soft refresh of travel overlays so chips populate against the new block
   if (typeof refreshAllOverlays === 'function') {
@@ -12718,6 +12733,7 @@ function renderConfirmSummary() {
 function __registerBookingUndo(dbId, title) {
   if (!dbId || !window.OpalUndo) return;
   OpalUndo.register({
+    group: 'calendar',
     label: title ? `Booking created — ${title}` : 'Booking created',
     undo: async () => {
       const dr = await fetch(`/api/outlook/events/${dbId}`, { method: 'DELETE', credentials: 'include' });
@@ -14247,6 +14263,7 @@ async function performDeleteEvent(id, cascadeIds) {
     if (window.OpalUndo) {
       const restoreTravelIds = (json.travelBlockIds || []).slice();
       OpalUndo.register({
+        group: 'calendar',
         label: 'Event deleted',
         undo: async () => {
           const rr = await fetch(`/api/outlook/events/${dbId}/restore`, {
@@ -14575,6 +14592,8 @@ function bdSaveAddress(id) {
   // the hidden input (which attachPlacesAutocomplete keeps in sync).
   const newAddr = input.value.trim();
   if (!newAddr) return;
+  // Cmd+Z: remember the address this save replaces (travel.js registers the undo).
+  const addrBefore = typeof captureSessionAddress === 'function' ? captureSessionAddress(s) : null;
 
   const lat = parseFloat(input.dataset.lat) || null;
   const lng = parseFloat(input.dataset.lng) || null;
@@ -14697,6 +14716,7 @@ function bdSaveAddress(id) {
   // included) to Outlook as travel events, keyed "[object Object]", so each
   // reload pushed them again and the imported copies sat beside the legs.
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  if (addrBefore && typeof registerSessionAddressUndo === 'function') registerSessionAddressUndo(s, addrBefore);
 }
 
 // ─── Outlook travel-block helpers ───────────────────────────────────────────
@@ -15551,7 +15571,8 @@ function commitMove() {
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(newDay);
   if (typeof refreshDayOverlays === 'function' && origDay && origDay !== newDay) refreshDayOverlays(origDay);
   // Chain: moved to the end of a day → take over where that day was going to end.
-  if (typeof travelChainAfterMove === 'function') setTimeout(() => travelChainAfterMove(id), 0);
+  // (An undo replay skips it: the travel the move changed is put back by the same undo step.)
+  if (!__calMoveUndoReplaying && typeof travelChainAfterMove === 'function') setTimeout(() => travelChainAfterMove(id), 0);
   if (!__calMoveUndoReplaying) __registerMoveUndo(id, s, before);
 }
 
@@ -15567,6 +15588,7 @@ function __registerMoveUndo(id, s, before) {
   const resized = durMin(s) !== before.duration;
   const what = s.patient || TYPE_LABEL[s.type] || 'Session';
   OpalUndo.register({
+    group: 'calendar',
     label: `${resized ? 'Time change' : 'Move'} — ${what}`,
     undo: async () => {
       // A calendar reload rebuilds SESSIONS, so find the block by its stable dbId.
@@ -23444,10 +23466,34 @@ window.OpalUndo = (function () {
   var MAX_ENTRIES = 20;
   var TTL_MS = 10 * 60 * 1000; // entries expire after 10 minutes
   var busy = false;            // one undo in flight at a time
+  var replaying = false;       // an inverse is running — what it changes is not a new step
+
+  // One click = one undo step. Every pointerdown / keydown starts a new
+  // gesture; entries that share a `group` and register during the same
+  // gesture (a calendar move and the travel hand-over it causes, a booking
+  // and the go-direct choice saved with it) merge into one entry whose
+  // inverses run newest-first.
+  var gesture = 0;
+  document.addEventListener('pointerdown', function () { gesture++; }, true);
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.key || '').toLowerCase() === 'z' && (ev.metaKey || ev.ctrlKey)) return;
+    gesture++;
+  }, true);
 
   function register(entry) {
     if (!entry || typeof entry.undo !== 'function') return null;
-    var e = { label: String(entry.label || 'last action'), undo: entry.undo, ts: Date.now() };
+    if (replaying) return null;
+    var top = stack[stack.length - 1];
+    if (entry.group && top && top.group === entry.group && top.gesture === gesture
+        && Date.now() - top.ts <= TTL_MS) {
+      top.steps.push(entry.undo);
+      return top;
+    }
+    var e = { label: String(entry.label || 'last action'), group: entry.group || null, gesture: gesture,
+              steps: [entry.undo], ts: Date.now() };
+    e.undo = async function () {
+      for (var i = e.steps.length - 1; i >= 0; i--) await e.steps[i]();
+    };
     stack.push(e);
     if (stack.length > MAX_ENTRIES) stack.shift();
     return e;
@@ -23485,7 +23531,8 @@ window.OpalUndo = (function () {
         var e = stack.pop();
         if (Date.now() - e.ts > TTL_MS) continue; // expired — drop silently, try the next
         try {
-          await e.undo();
+          replaying = true;
+          try { await e.undo(); } finally { replaying = false; }
           if (typeof showToast === 'function') showToast('Undone — ' + e.label);
         } catch (err) {
           console.warn('OpalUndo: undo failed —', e.label, err);
