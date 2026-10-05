@@ -1451,6 +1451,7 @@ function refreshDayOverlays(day) {
   const segs = computeDayTravelSegments(day);
   segs.forEach(seg => renderSegmentOverlay(col, seg));
   decorateTravelBadges(day, segs);
+  scheduleTravelOutlookSync(day, segs);
   // Clearing the column also removed Smart Booking's proposed travel: put it
   // back (from cache — no new routing call) while the panel is open.
   if (typeof _scheduleBspRepaint === 'function') _scheduleBspRepaint();
@@ -1526,6 +1527,68 @@ function renderSegmentOverlay(col, seg) {
   };
   if (canMove) attachTravelLegDrag(el, seg);
   col.appendChild(el);
+}
+
+/* ---------- Travel legs mirrored to Outlook (5 Oct 2026) ----------
+   After a day's legs are drawn, the same set goes to PUT /api/travel/
+   outlook-sync, which makes Outlook match: one 'Travel' event per leg,
+   moved or removed as the legs change — never duplicated (each leg is keyed
+   "<appointment id>|before|after", migration 073). The server refuses a day
+   unless this view holds exactly the user's own events, so another
+   therapist's calendar or a stale view can never delete anything. Nothing
+   goes to Splose. Debounced per day; an unchanged set is not resent. */
+const TRAVEL_OUTLOOK_SYNC = { timers: {}, sent: {}, delayMs: 1500 };
+function _perthStamp(dateStr, min) {
+  const m = Math.max(0, Math.min(24 * 60 - 1, Math.round(min)));
+  return dateStr + 'T' + _hhmm(m) + ':00+08:00';
+}
+/* PURE-ish — the request for a day, or null when there is nothing to say. */
+function travelOutlookPayload(day, segs) {
+  const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
+  if (!date || !window.SESSIONS) return null;
+  const seen = sessionsForDay(day).map(s => s.dbId).filter(Boolean).map(String);
+  const legs = [];
+  (segs || []).forEach(seg => {
+    if (seg.kind === 'gap' || !seg.ownerSessionId || !(seg.travelMin > 0)) return;
+    const owner = window.SESSIONS[seg.ownerSessionId];
+    if (!owner || !owner.dbId) return;
+    const from = seg.fromLoc.suburb || seg.fromLoc.label || 'previous stop';
+    const to = seg.toLoc.suburb || seg.toLoc.label || 'next stop';
+    const what = seg.via === 'home-return' || (seg.kind === 'end') ? 'Travel home' : seg.via === 'home-out' || seg.kind === 'start' ? 'Travel from home' : 'Travel';
+    const start = Math.max(0, seg.startMin), end = Math.min(24 * 60 - 1, seg.endMin);
+    if (end <= start) return;
+    legs.push({
+      key: String(owner.dbId) + '|' + seg.ownerSide,
+      start: _perthStamp(date, start), end: _perthStamp(date, end),
+      title: what + ' · ' + seg.travelMin + ' min · ' + from + ' → ' + to,
+      location: seg.toLoc.address || seg.toLoc.addr || seg.toLoc.suburb || '',
+    });
+  });
+  return { date, legs, seenEventIds: seen };
+}
+function scheduleTravelOutlookSync(day, segs) {
+  if (typeof fetch !== 'function') return;
+  clearTimeout(TRAVEL_OUTLOOK_SYNC.timers[day]);
+  TRAVEL_OUTLOOK_SYNC.timers[day] = setTimeout(() => runTravelOutlookSync(day, segs), TRAVEL_OUTLOOK_SYNC.delayMs);
+}
+async function runTravelOutlookSync(day, segs) {
+  const payload = travelOutlookPayload(day, segs);
+  if (!payload) return null;
+  // Past days are history: the server leaves them alone, so don't ask.
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
+  if (payload.date < today) return null;
+  const sig = JSON.stringify(payload);
+  if (TRAVEL_OUTLOOK_SYNC.sent[payload.date] === sig) return null;
+  try {
+    const r = await fetch('/api/travel/outlook-sync', {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    const j = await r.json().catch(() => ({}));
+    // A refusal (not your day, stale view, Outlook off) is final for this
+    // exact set — don't hammer; a changed set is tried again.
+    if (r.ok || r.status === 403 || r.status === 409) TRAVEL_OUTLOOK_SYNC.sent[payload.date] = sig;
+    return { status: r.status, body: j };
+  } catch (e) { return null; }
 }
 
 /* ---------- Travel badge on each event (4 Oct 2026) ----------

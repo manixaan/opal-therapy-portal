@@ -310,6 +310,28 @@ describe('movable travel', () => {
   });
 });
 
+describe('travel legs mirrored to Outlook', () => {
+  test('the day\'s legs are sent keyed by their appointment, with the day\'s own event ids', () => {
+    const c = load();
+    vm.runInContext("DAY_DATES = { mon: '2030-03-04' };", c);
+    const a = add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '11:00', to: '11:30', s: { patient: 'Telehealth' } });
+    const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });
+    add(c, { at: '13:00', to: '13:30', s: { patient: 'No db row', dbId: null } });
+    const p = c.travelOutlookPayload('mon', c.computeDayTravelSegments('mon'));
+    expect(p.date).toBe('2030-03-04');
+    expect(p.seenEventIds).toEqual(['db-' + a.id, 'db-S' + (Number(a.id.slice(1)) + 1), 'db-' + b.id]);
+    expect(p.legs.map((l) => l.key)).toEqual(['db-' + a.id + '|before', 'db-' + b.id + '|before', 'db-' + b.id + '|after']);
+    const mid = p.legs[1];
+    expect([mid.start, mid.end]).toEqual(['2030-03-04T11:30:00+08:00', '2030-03-04T12:00:00+08:00']);
+    expect(mid.title).toBe('Travel · 30 min · Osborne Park → Joondalup');
+    expect(p.legs[0].title).toMatch(/^Travel from home/);
+    expect(p.legs[2].title).toMatch(/^Travel home/);
+    // No client names in what reaches Outlook.
+    expect(JSON.stringify(p.legs)).not.toMatch(/"A"|Telehealth|patient/);
+  });
+});
+
 describe('travel badge on each event', () => {
   test('linked, no drive needed, or no address', () => {
     const c = load();

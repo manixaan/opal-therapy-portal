@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=24" defer></script>
+<script src="/travel.js?v=25" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -17816,7 +17816,10 @@ async function loadOutlookEventsToCalendar() {
     const data = await response.json();
     console.log(`✅ Loaded ${data.events.length} events from backend`);
 
-    window.__outlookEventsCache = data.events || [];
+    // Travel legs mirrored to Outlook (travel-outlook-sync.js) come back in the
+    // event feed; the calendar already draws them as travel legs, so a mirror
+    // row is never a second tile.
+    window.__outlookEventsCache = (data.events || []).filter(e => !(e && e.custom_metadata && e.custom_metadata.travelLegKey));
 
     if (window.__outlookEventsCache.length === 0) {
       console.log('📭 No events to display yet — run an Outlook sync first.');

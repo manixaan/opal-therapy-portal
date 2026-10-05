@@ -3142,3 +3142,4 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
 
 module.exports = router;
 module.exports.cleanTravelSpec = cleanTravelSpec;
+module.exports.getValidAccessToken = getValidAccessToken;
