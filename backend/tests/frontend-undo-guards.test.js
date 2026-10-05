@@ -58,6 +58,18 @@ describe('reversible flows are wired into the stack', () => {
     expect(HTML).toContain('function __registerBookingUndo(');
     expect(HTML).toContain('__registerBookingUndo(oResult.dbId');
   });
+  test('calendar drag / resize / time edit: one committed move = one undo step, replayed through the persisting wrapper', () => {
+    const commit = HTML.slice(HTML.indexOf('function commitMove()'), HTML.indexOf('function titleBase('));
+    expect(commit).toContain('const before = { day: s.day, startMin: sessionStartMin(s), duration: durMin(s) };');
+    expect(commit).toContain('if (!__calMoveUndoReplaying) __registerMoveUndo(id, s, before);');
+    // the inverse goes through window.commitMove so splose-sync PATCHes the old time
+    expect(commit).toContain('try { window.commitMove(); }');
+    // the replay must not push a fresh entry, or Cmd+Z would ping-pong
+    expect(commit).toContain('__calMoveUndoReplaying = true;');
+    expect(commit).toContain('finally { __calMoveUndoReplaying = false;');
+    // survives a calendar reload by finding the block by its dbId
+    expect(commit).toContain('Object.values(SESSIONS).find(x => x && x.dbId === dbId)');
+  });
   test('To-Do flows: create, complete, and delete each register (delete shares one restore with the toast button)', () => {
     expect(REPORTS).toContain("label: 'Task created'");
     expect(REPORTS).toContain("label: 'Task completed'");

@@ -15261,6 +15261,7 @@ function commitMove() {
   const { id, day: newDay, startMin, duration } = pendingMove;
   const s = SESSIONS[id];
   const origDay = s.day;
+  const before = { day: s.day, startMin: sessionStartMin(s), duration: durMin(s) };
   const sh = Math.floor(startMin / 60), sm = startMin % 60;
   const eh = Math.floor((startMin + duration) / 60), em = (startMin + duration) % 60;
   s.startH = sh; s.startM = sm; s.endH = eh; s.endM = em;
@@ -15284,6 +15285,34 @@ function commitMove() {
   if (typeof refreshDayOverlays === 'function' && origDay && origDay !== newDay) refreshDayOverlays(origDay);
   // Chain: moved to the end of a day → take over where that day was going to end.
   if (typeof travelChainAfterMove === 'function') setTimeout(() => travelChainAfterMove(id), 0);
+  if (!__calMoveUndoReplaying) __registerMoveUndo(id, s, before);
+}
+
+// Cmd+Z for the calendar: every committed drag, edge-resize or time edit is one
+// undo step whose inverse is the same move back to where the block was. The
+// replay goes through window.commitMove, so the splose-sync wrapper PATCHes the
+// old time exactly as it saved the new one — and the replay itself registers
+// nothing, so each Cmd+Z takes back exactly one click.
+let __calMoveUndoReplaying = false;
+function __registerMoveUndo(id, s, before) {
+  if (!window.OpalUndo) return;
+  const dbId = s.dbId || null;
+  const resized = durMin(s) !== before.duration;
+  const what = s.patient || TYPE_LABEL[s.type] || 'Session';
+  OpalUndo.register({
+    label: `${resized ? 'Time change' : 'Move'} — ${what}`,
+    undo: async () => {
+      // A calendar reload rebuilds SESSIONS, so find the block by its stable dbId.
+      const cur = (dbId && Object.values(SESSIONS).find(x => x && x.dbId === dbId)) || SESSIONS[id];
+      if (!cur || !cur.element) throw new Error('that block is no longer on the calendar');
+      const prevPending = pendingMove, prevDrag = drag;
+      pendingMove = { id: cur.id || id, day: before.day, startMin: before.startMin, duration: before.duration, impact: { verdict: 'ok', impacts: [] } };
+      drag = null;
+      __calMoveUndoReplaying = true;
+      try { window.commitMove(); }
+      finally { __calMoveUndoReplaying = false; pendingMove = prevPending; drag = prevDrag; }
+    },
+  });
 }
 
 function titleBase(s) {
