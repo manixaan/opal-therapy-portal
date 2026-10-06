@@ -1082,3 +1082,34 @@ describe('travel follows a dragged session (6 Oct 2026)', () => {
     expect(commit).toMatch(/endTravelPreview\(false\)/);
   });
 });
+
+describe('a move that leaves no time for the travel is blocked, like an overlap (6 Oct 2026)', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  function day(env, next) {
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 8, startM: 0, endH: 9, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A', travel: ${next ? `{ next: '${next}' }` : '{}'} };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 15, endH: 11, endM: 15, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ed Client', dbId: 'db-B' };`);
+  }
+
+  test('via home chosen, and the move leaves too little time to go home and back out: blocked, with the way out named', () => {
+    const env = makeEnv(HOME);
+    day(env, 'home');
+    const legs = env.ev("travelConflictsForMove('A', 'mon', 8 * 60 + 55, 60)");   // ends 9:55, Ed at 10:15
+    expect(legs.length).toBeGreaterThan(0);
+    expect(legs[0].ttl).toMatch(/^Not enough time for travel: \d+ min /);
+    expect(legs.map((l) => l.sub).join(' ')).toMatch(/Switch the gap to Direct/);
+    // nothing about the session itself changed
+    expect(env.ev('[SESSIONS.A.startH, SESSIONS.A.endH]')).toEqual([8, 9]);
+  });
+
+  test('the same move with the gap on Direct (or the suggestion) fits — no block', () => {
+    const env = makeEnv(HOME);
+    day(env, null);
+    expect(env.ev("travelConflictsForMove('A', 'mon', 8 * 60 + 55, 60)")).toEqual([]);
+  });
+
+  test('evaluateMove turns those legs into blockers', () => {
+    const ev = SHELL.slice(SHELL.indexOf('function evaluateMove('), SHELL.indexOf('// 4. Day intensity alternation'));
+    expect(ev).toMatch(/const legs = travelConflictsForMove\(id, newDay, newStartMin, durationMin\);/);
+    expect(ev).toMatch(/legs\.forEach\(l => impacts\.push\(\{ sev: 'blocker', ttl: l\.ttl, sub: l\.sub \}\)\);\s+verdict = 'blocker';/);
+  });
+});

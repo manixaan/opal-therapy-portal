@@ -304,6 +304,37 @@ function previewTravelForMove(id, day, startMin, durationMin) {
     Object.assign(s, real);
   }
 }
+/* PURE-ish — the travel legs touching a session that would not fit if it
+   moved to (day, startMin, durationMin): each { ttl, sub }. Same engine the
+   calendar draws with, so "via home", a saved place and moved legs count.
+   The session's real times are put straight back. */
+function travelConflictsForMove(id, day, startMin, durationMin) {
+  const s = window.SESSIONS && window.SESSIONS[id];
+  if (!s) return [];
+  const real = { day: s.day, startH: s.startH, startM: s.startM, endH: s.endH, endM: s.endM };
+  const endMin = startMin + durationMin;
+  let segs;
+  try {
+    Object.assign(s, { day, startH: Math.floor(startMin / 60), startM: startMin % 60, endH: Math.floor(endMin / 60), endM: endMin % 60 });
+    segs = computeDayTravelSegments(day);
+  } finally {
+    Object.assign(s, real);
+    computeDayTravelSegments(day);           // the store holds the real day again
+    if (real.day !== day) computeDayTravelSegments(real.day);
+  }
+  const fmt = (m) => _tpFmtTime(Math.floor(m / 60), m % 60);
+  return segs.filter(x => x.kind !== 'gap' && x.tight &&
+      [x.ownerSessionId, x.fromSessionId, x.toSessionId, x.gapFromSessionId, x.gapToSessionId].indexOf(id) >= 0)
+    .map(x => {
+      const from = x.fromLoc.label || x.fromLoc.suburb || 'the previous stop', to = x.toLoc.label || x.toLoc.suburb || 'the next stop';
+      const viaHome = x.via === 'home-return' || x.via === 'home-out';
+      return {
+        ttl: 'Not enough time for travel: ' + x.travelMin + ' min ' + from + ' → ' + to,
+        sub: (viaHome ? 'This gap goes home in between, which does not fit any more. Switch the gap to Direct ⇄ on the calendar, or ' : 'The drive does not fit — ') +
+             'move the session so the leg (' + fmt(x.startMin) + '–' + fmt(x.endMin) + ') clears the appointments either side.',
+      };
+    });
+}
 function endTravelPreview(redraw) {
   const days = Array.from(TRAVEL_DRAG.days);
   TRAVEL_DRAG.active = false; TRAVEL_DRAG.days.clear();

@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=35" defer></script>
+<script src="/travel.js?v=36" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -15431,6 +15431,18 @@ function evaluateMove(id, newDay, newStartMin, durationMin) {
           sub: `Gap is ${gap} min — fits. Add as billable Support-Activity when confirming.`
         });
       }
+    }
+  }
+
+  // 3b. The day's actual travel plan (6 Oct 2026). The check above measures a
+  //     straight drive between neighbours; the calendar draws the real plan —
+  //     home in between, a saved place, a moved leg. Any leg into or out of the
+  //     moved session that no longer fits blocks the move, like an overlap.
+  if (typeof travelConflictsForMove === 'function') {
+    const legs = travelConflictsForMove(id, newDay, newStartMin, durationMin);
+    if (legs.length) {
+      legs.forEach(l => impacts.push({ sev: 'blocker', ttl: l.ttl, sub: l.sub }));
+      verdict = 'blocker';
     }
   }
 
