@@ -698,7 +698,7 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 8],
+      ['profile.js', 9],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -708,7 +708,7 @@ describe('changed assets are cache-busted', () => {
       // shows where the drive will go until an address is typed.
       // 19: route-aware Smart Booking — routed preview with loading/error
       // states, the earliest feasible start, departure-time routing.
-      ['travel.js', 27],
+      ['travel.js', 28],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       ['booking-route.js', 4], ['booking-route.css', 1],
@@ -723,7 +723,9 @@ describe('changed assets are cache-busted', () => {
       // rendering every option blank.
       // 5 (js): the alert dialog knows the 'unlinked' kind (portal-only booking).
       // 6 (js): the queue count refreshes with every calendar reload, not on the 60 s poll.
-      ['splose-sync.js', 6], ['splose-sync.css', 1],
+      // 7 (js): no sync popups — no idle nudge, no tab-leave prompt, no page-close
+      // warning; the server's auto-sync writes the queue, Sync Splose stays manual.
+      ['splose-sync.js', 7], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the

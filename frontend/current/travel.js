@@ -655,7 +655,12 @@ function registerSessionAddressUndo(s, was) {
 /* The booking gate: resolves the day's base key once one is set, or null —
    and a null means do NOT book. A day with no real base (blank, or the
    "coming soon" office) must be given one first, here or in My Profile. */
-function ensureDayBase(day) {
+function ensureDayBase(day, afterLoad) {
+  // "Not set" is only true once the saved week has arrived (6 Oct 2026).
+  if (!afterLoad && typeof window.workScheduleReady === 'function' &&
+      !(window.workScheduleLoaded && window.workScheduleLoaded())) {
+    return window.workScheduleReady().then(() => ensureDayBase(day, true));
+  }
   try {
     const wk = calendarWeekLocations();
     if (!wk) return Promise.resolve(null);
@@ -1910,6 +1915,63 @@ function applyLeaveShading() {
       if (!on && tag) tag.remove();
     }
   });
+  renderDayLocationPickers();
+}
+
+/* ---------- Where am I working? — on each day of the calendar (6 Oct 2026) ----------
+   A small picker under each weekday's name: the SAME week My Profile › Work
+   locations edits (WORK_LOCATION, keyed by the calendar's week), so a change
+   in either place shows in the other and both save the same way. My Profile
+   stays the place for bulk set-up (whole week, next week, last month). One
+   change = one Cmd+Z step. Disabled until the saved week has loaded, so it
+   never shows "Not set" for a day that is set. */
+function renderDayLocationPickers() {
+  if (typeof WL_DAYS === 'undefined' || typeof LOCATIONS === 'undefined') return;
+  const loaded = !window.workScheduleLoaded || window.workScheduleLoaded();
+  if (typeof rebuildLocationCatalogue === 'function') rebuildLocationCatalogue();
+  const wk = loaded ? calendarWeekLocations() : {};
+  WL_DAYS.forEach(d => {
+    const head = document.querySelector('.cal-head[data-day="' + d + '"]');
+    if (!head) return;
+    let sel = head.querySelector('select.day-loc');
+    if (!sel) {
+      sel = document.createElement('select');
+      sel.className = 'day-loc';
+      // The header itself opens Day View; the picker is not that click.
+      ['pointerdown', 'mousedown', 'click'].forEach(t => sel.addEventListener(t, e => e.stopPropagation()));
+      sel.addEventListener('change', () => setDayWorkLocation(d, sel.value));
+      head.appendChild(sel);
+    }
+    const key = wk[d] || '';
+    const dayName = (typeof WL_DAY_LABEL !== 'undefined' && WL_DAY_LABEL[d]) || d;
+    sel.innerHTML = (loaded ? '<option value="">Not set</option>' : '<option value="">Loading…</option>') +
+      Object.keys(LOCATIONS).filter(k => k !== 'unset').map(k => {
+        const v = LOCATIONS[k];
+        return '<option value="' + _tpEsc(k) + '"' + (k === key ? ' selected' : '') +
+          (v.comingSoon && k !== key ? ' disabled' : '') + '>' + _tpEsc(v.label || k) + '</option>';
+      }).join('');
+    sel.value = key;
+    sel.disabled = !loaded;
+    sel.classList.toggle('unset', loaded && !key);
+    const loc = key ? LOCATIONS[key] : null;
+    sel.style.borderLeftColor = loc && loc.color ? loc.color : '';
+    sel.title = 'Where you are working on ' + dayName + ' — the same setting as My Profile › Work locations';
+    sel.setAttribute('aria-label', 'Work location, ' + dayName);
+  });
+}
+function setDayWorkLocation(day, key, fromUndo, weekObj) {
+  // The undo carries the week it changed, even if the calendar moved on since.
+  const wk = weekObj || calendarWeekLocations();
+  const prev = wk[day] || '';
+  if ((key || '') === prev) return;
+  if (key) wk[day] = key; else delete wk[day];
+  if (!fromUndo && window.OpalUndo) {
+    const dayName = (typeof WL_DAY_LABEL !== 'undefined' && WL_DAY_LABEL[day]) || day;
+    window.OpalUndo.register({ group: 'calendar', label: 'Work location — ' + dayName, undo: async () => setDayWorkLocation(day, prev, true, wk) });
+  }
+  if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
+  if (typeof debouncedSaveWorkSchedule === 'function') debouncedSaveWorkSchedule();
+  refreshAllOverlays();   // redraws legs and these pickers
 }
 
 function previewAllTravel() {

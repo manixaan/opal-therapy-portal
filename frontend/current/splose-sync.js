@@ -9,8 +9,8 @@
      • draws the review panel: every queued change, a service/case/reason
        chooser where one is needed, Publish, and live progress
      • marks unsynced tiles on the calendar grid
-     • asks before the user leaves the Calendar tab with unsynced changes,
-       and warns on page close
+     • never prompts about waiting changes: the server's auto-sync writes
+       them, and Sync Splose stays the manual way (6 Oct 2026)
      • makes a drag / resize / time-edit real: the existing commitMove only
        repainted the tile — this persists the new time (PATCH), which the
        backend queues for Splose
@@ -30,8 +30,6 @@
     writeEnabled: false,
     autoSync: false,        // server writes the queue itself after a quiet period
     watching: false,
-    pendingSince: 0,        // when the queue last went from empty to non-empty
-    nudgeTimer: null, lastNudgeAt: 0,
     pending: [],            // rows from /api/splose-sync/pending
     pendingByEvent: {},     // eventId → row
     services: null, reasons: null, cases: {},
@@ -94,38 +92,14 @@
       renderButton();
       decorateTiles();
       if (S.panelOpen) renderPanel();
-      trackNudge();
     }).catch(function () {});
   }
 
-  // ── Idle nudge ────────────────────────────────────────────────────────────
-  // Changes waiting a full minute without Sync Splose being pressed get one
-  // reminder, then another every five minutes while they are still waiting.
-  var NUDGE_AFTER_MS = 60 * 1000, NUDGE_REPEAT_MS = 5 * 60 * 1000;
-  function unsyncedCount() {
-    return S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
-  }
-  function trackNudge() {
-    var n = unsyncedCount();
-    if (!n) { S.pendingSince = 0; S.lastNudgeAt = 0; if (S.nudgeTimer) { clearTimeout(S.nudgeTimer); S.nudgeTimer = null; } return; }
-    if (!S.pendingSince) S.pendingSince = Date.now();
-    if (S.nudgeTimer) return;
-    var since = Math.max(S.pendingSince, S.lastNudgeAt);
-    var wait = Math.max(0, since + (S.lastNudgeAt ? NUDGE_REPEAT_MS : NUDGE_AFTER_MS) - Date.now());
-    S.nudgeTimer = setTimeout(function () { S.nudgeTimer = null; showNudge(); }, wait);
-  }
-  function showNudge() {
-    var n = unsyncedCount();
-    if (!n || S.publishing || S.panelOpen || leaving || doc.hidden) { trackNudge(); return; }
-    S.lastNudgeAt = Date.now();
-    leaving = true;
-    confirmDialog('You have ' + n + ' unsynced calendar change' + (n === 1 ? '' : 's') + '. Please sync ' + (n === 1 ? 'it' : 'them') + ' to Splose.', { title: 'Unsynced changes', ok: 'Sync now', cancel: 'Later' })
-      .then(function (yes) {
-        leaving = false;
-        if (yes) { if (!isCalendarActive() && typeof global.switchTab === 'function') global.switchTab('calendar'); openPanel(); }
-        trackNudge();
-      });
-  }
+  // ── No sync popups (6 Oct 2026, owner's call) ─────────────────────────────
+  // Waiting changes are written by the server's auto-sync after a quiet
+  // period; anything it cannot write alone (a new booking without a service,
+  // a failed row) waits under Sync Splose. Nothing prompts — no idle nudge, no
+  // "Sync Splose?" on leaving the calendar, no browser "Leave site?".
 
   function refreshStatus() {
     if (!canUse()) return Promise.resolve(null);
@@ -483,38 +457,6 @@
     return false;
   }
 
-  // ── Leaving with unsynced changes ─────────────────────────────────────────
-
-  var leaving = false;
-  function installTabGuard() {
-    if (global.__sploseSyncTabGuard) return;
-    global.__sploseSyncTabGuard = true;
-    var orig = global.switchTab;
-    if (typeof orig !== 'function') return;
-    global.switchTab = function (name) {
-      var args = arguments;
-      var self = this;
-      // Every waiting change prompts on leaving the calendar (owner's call,
-      // 7 Sep 2026), even ones auto-sync would write shortly.
-      var n = unsyncedCount();
-      if (!leaving && canUse() && isCalendarActive() && name !== 'calendar' && n > 0 && !S.publishing) {
-        leaving = true;
-        confirmDialog('You have ' + n + ' change' + (n === 1 ? '' : 's') + ' on the calendar that ' + (n === 1 ? 'has' : 'have') + ' not been written to Splose yet. Write ' + (n === 1 ? 'it' : 'them') + ' now?', { title: 'Sync Splose?', ok: 'Review and write', cancel: 'Later' })
-          .then(function (yes) {
-            leaving = false;
-            if (yes) { openPanel(); return; }
-            orig.apply(self, args);
-          });
-        return;
-      }
-      return orig.apply(self, args);
-    };
-    global.addEventListener('beforeunload', function (e) {
-      var n = unsyncedCount();
-      if (canUse() && n > 0) { e.preventDefault(); e.returnValue = ''; }
-    });
-  }
-
   // ── Instant count ─────────────────────────────────────────────────────────
   // Every booking, cancellation or Splose-side answer ends by reloading the
   // calendar. Refresh the queue right after, so the Sync Splose count and the
@@ -676,7 +618,6 @@
     fetchJson('/api/splose/sync-status').then(function (r) {
       S.enabled = !!(r.ok && r.json.draftSyncEnabled === true);
       if (!S.enabled) return;
-      installTabGuard();
       installMovePersist();
       installReloadHook();
       ensureButton();

@@ -1549,6 +1549,9 @@ function _wlShowSaved() {
 }
 
 async function saveWorkSchedule() {
+  // Never save before the stored week has arrived: the page's copy is still
+  // empty then, and saving it would wipe the clinician's locations.
+  if (!_wsLoaded) { workScheduleReady().then(function (ok) { if (ok) debouncedSaveWorkSchedule(); }); return; }
   try {
     var payload = {
       workLocationSchedule: typeof WORK_LOCATION !== 'undefined' ? WORK_LOCATION : null,
@@ -1570,6 +1573,23 @@ function debouncedSaveWorkSchedule() {
   clearTimeout(_wlSaveTimer);
   _wlSaveTimer = setTimeout(saveWorkSchedule, 900);
 }
+
+/* The saved week is the CALENDAR's too (6 Oct 2026): it used to load only
+   with My Profile, so a fresh page asked "Where are you working on Monday?"
+   for a day that was already set. It now loads as soon as the user is known,
+   and the calendar waits for it (workScheduleReady) before saying "not set". */
+var _wsLoaded = false, _wsPromise = null;
+function workScheduleReady() {
+  if (_wsLoaded) return Promise.resolve(true);
+  if (!_wsPromise) _wsPromise = loadWorkSchedule().then(function () { _wsPromise = null; return _wsLoaded; });
+  return _wsPromise;
+}
+window.workScheduleReady  = workScheduleReady;
+window.workScheduleLoaded = function () { return _wsLoaded; };
+(function bootWorkSchedule(tries) {
+  if (window.APP_USER) { workScheduleReady(); return; }
+  if (tries < 200) setTimeout(function () { bootWorkSchedule(tries + 1); }, 150);
+})(0);
 
 async function loadWorkSchedule() {
   try {
@@ -1619,6 +1639,7 @@ async function loadWorkSchedule() {
       }
     }
 
+    _wsLoaded = true;
     // Re-render with real data
     if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
     if (typeof renderHomeBases          === 'function') renderHomeBases();

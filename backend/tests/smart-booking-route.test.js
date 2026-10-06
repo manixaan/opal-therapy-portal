@@ -795,3 +795,84 @@ describe('static wiring in the shell', () => {
     expect(BOOKING_ROUTE).not.toMatch(/fetch\(['"]https?:/); // only the portal's own API
   });
 });
+
+describe('Where am I working? — the calendar day picker and the saved week (6 Oct 2026)', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  function withHeads(env, loaded) {
+    env.ev(`var WL_DAYS = ['mon','tue']; var WL_DAY_LABEL = { mon: 'Mon', tue: 'Tue' };
+      var __saves = 0; function debouncedSaveWorkSchedule() { __saves++; }
+      var __undo = []; window.OpalUndo = { register: function (e) { __undo.push(e); return e; } };
+      var __loaded = ${loaded ? 'true' : 'false'};
+      window.workScheduleLoaded = function () { return __loaded; };
+      function rebuildLocationCatalogue() {
+        LOCATIONS = { office: { label: 'Office (coming soon)', comingSoon: true } };
+        WORK_BASES.homes.forEach(function (h) { LOCATIONS[h.id] = { label: h.label, color: '#9a5f0e' }; });
+        LOCATIONS.leave = { label: 'On leave' };
+      }
+      ['mon','tue'].forEach(function (d) { var h = document.createElement('div'); h.className = 'cal-head'; h.dataset.day = d; document.body.appendChild(h); });`);
+  }
+  const pick = (env, d) => env.win.document.querySelector('.cal-head[data-day="' + d + '"] select.day-loc');
+
+  test('each weekday shows the saved location; an unset day says so', () => {
+    const env = makeEnv(HOME);
+    withHeads(env, true);
+    env.ev('renderDayLocationPickers()');
+    expect(pick(env, 'mon').value).toBe('home-1');
+    expect(pick(env, 'mon').disabled).toBe(false);
+    expect(pick(env, 'tue').value).toBe('');
+    expect(pick(env, 'tue').classList.contains('unset')).toBe(true);
+    // the coming-soon office cannot be chosen
+    expect(pick(env, 'tue').querySelector('option[value="office"]').disabled).toBe(true);
+  });
+
+  test('before the saved week arrives the picker waits — it never claims "Not set"', () => {
+    const env = makeEnv(HOME);
+    withHeads(env, false);
+    env.ev('renderDayLocationPickers()');
+    expect(pick(env, 'mon').disabled).toBe(true);
+    expect(pick(env, 'mon').options[0].textContent).toBe('Loading…');
+  });
+
+  test('a change writes the same week My Profile edits, saves it, and is one Cmd+Z step', async () => {
+    const env = makeEnv(HOME);
+    withHeads(env, true);
+    env.ev('renderDayLocationPickers()');
+    pick(env, 'tue').value = 'home-1';
+    pick(env, 'tue').dispatchEvent(new env.win.Event('change'));
+    expect(env.ev('__week.tue')).toBe('home-1');
+    expect(env.ev('__saves')).toBe(1);
+    expect(env.ev('__undo.length')).toBe(1);
+    await env.ev('__undo[0].undo()');
+    expect(env.ev('__week.tue')).toBeUndefined();
+    expect(pick(env, 'tue').value).toBe('');
+  });
+
+  test('"Where are you working?" waits for the saved week instead of asking about a day that is set', async () => {
+    const env = makeEnv({ homes: HOME.homes });
+    withHeads(env, false);
+    env.ev(`window.workScheduleReady = function () { __week.mon = 'home-1'; __loaded = true; return Promise.resolve(true); };`);
+    const key = await env.ev("ensureDayBase('mon')");
+    expect(key).toBe('home-1');
+  });
+
+  test('the page never saves its empty week over the stored one before it has loaded', () => {
+    const prof = fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8');
+    const save = prof.slice(prof.indexOf('async function saveWorkSchedule()'), prof.indexOf('function debouncedSaveWorkSchedule'));
+    expect(save).toContain('if (!_wsLoaded) { workScheduleReady()');
+    expect(prof).toMatch(/\(function bootWorkSchedule\(tries\)/);
+  });
+});
+
+describe('Splose sync never pops up (6 Oct 2026)', () => {
+  const SYNC = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+  test('no idle nudge, no tab-leave prompt, no page-close warning', () => {
+    expect(SYNC).not.toMatch(/Unsynced changes/);
+    expect(SYNC).not.toMatch(/title: 'Sync Splose\?'/);
+    expect(SYNC).not.toMatch(/addEventListener\('beforeunload'/);
+    expect(SYNC).not.toMatch(/installTabGuard/);
+  });
+  test('the Sync Splose button and the server\'s auto-sync status stay', () => {
+    expect(SYNC).toMatch(/function ensureButton\(/);
+    expect(SYNC).toMatch(/S\.autoSync = r\.json\.autoSyncEnabled === true;/);
+  });
+});
