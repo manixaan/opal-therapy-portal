@@ -1959,16 +1959,22 @@ function renderDayLocationPickers() {
   WL_DAYS.forEach(d => {
     const head = document.querySelector('.cal-head[data-day="' + d + '"]');
     if (!head) return;
-    let sel = head.querySelector('select.day-loc');
-    if (!sel) {
-      sel = document.createElement('select');
+    let wrap = head.querySelector('.day-loc-wrap');
+    if (!wrap) {
+      wrap = document.createElement('label');
+      wrap.className = 'day-loc-wrap';
+      wrap.innerHTML = '<span class="day-loc-dot"></span><span class="day-loc-text"></span><svg class="day-loc-caret" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      const sel = document.createElement('select');
       sel.className = 'day-loc';
       // The header itself opens Day View; the picker is not that click.
-      ['pointerdown', 'mousedown', 'click'].forEach(t => sel.addEventListener(t, e => e.stopPropagation()));
+      ['pointerdown', 'mousedown', 'click'].forEach(t => wrap.addEventListener(t, e => e.stopPropagation()));
       sel.addEventListener('change', () => setDayWorkLocation(d, sel.value));
-      head.appendChild(sel);
+      wrap.appendChild(sel);
+      head.appendChild(wrap);
     }
+    const sel = wrap.querySelector('select.day-loc');
     const key = wk[d] || '';
+    const loc = key ? LOCATIONS[key] : null;
     const dayName = (typeof WL_DAY_LABEL !== 'undefined' && WL_DAY_LABEL[d]) || d;
     sel.innerHTML = (loaded ? '<option value="">Not set</option>' : '<option value="">Loading…</option>') +
       Object.keys(LOCATIONS).filter(k => k !== 'unset').map(k => {
@@ -1978,10 +1984,11 @@ function renderDayLocationPickers() {
       }).join('');
     sel.value = key;
     sel.disabled = !loaded;
-    sel.classList.toggle('unset', loaded && !key);
-    const loc = key ? LOCATIONS[key] : null;
-    sel.style.borderLeftColor = loc && loc.color ? loc.color : '';
-    sel.title = 'Where you are working on ' + dayName + ' — the same setting as My Profile › Work locations';
+    wrap.querySelector('.day-loc-text').textContent = !loaded ? 'Loading…' : loc ? (loc.label || key) : 'Set location';
+    wrap.querySelector('.day-loc-dot').style.background = loc && loc.color ? loc.color : '';
+    wrap.classList.toggle('unset', loaded && !key);
+    wrap.classList.toggle('loading', !loaded);
+    wrap.title = 'Where you are working on ' + dayName + ' — the same setting as My Profile › Work locations';
     sel.setAttribute('aria-label', 'Work location, ' + dayName);
   });
 }

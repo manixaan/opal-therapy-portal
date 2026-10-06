@@ -846,7 +846,9 @@ describe('Where am I working? — the calendar day picker and the saved week (6 
     expect(pick(env, 'mon').value).toBe('home-1');
     expect(pick(env, 'mon').disabled).toBe(false);
     expect(pick(env, 'tue').value).toBe('');
-    expect(pick(env, 'tue').classList.contains('unset')).toBe(true);
+    expect(pick(env, 'tue').closest('.day-loc-wrap').classList.contains('unset')).toBe(true);
+    expect(pick(env, 'tue').closest('.day-loc-wrap').querySelector('.day-loc-text').textContent).toBe('Set location');
+    expect(pick(env, 'mon').closest('.day-loc-wrap').querySelector('.day-loc-text').textContent).toBe('Home');
     // the coming-soon office cannot be chosen
     expect(pick(env, 'tue').querySelector('option[value="office"]').disabled).toBe(true);
   });
