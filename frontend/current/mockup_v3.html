@@ -3734,15 +3734,21 @@ window.opIcon = function (name, size) {
   .cal-ctx-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
   /* Precision move (startPreciseMove): the session being nudged, and the key hint under it. */
   .session.precise-moving { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 7; box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+  /* The hint is a card in the app's own colours (like the right-click menu)
+     beside the session — never over it or under it, where the legs are. */
   .precise-hint {
-    position: fixed; z-index: 9999; pointer-events: none;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 360px;
-    background: var(--ink); color: var(--panel); border-radius: 8px; padding: 6px 10px;
-    font-size: 12px; line-height: 1.4; box-shadow: 0 6px 18px rgba(0,0,0,.22);
+    position: fixed; z-index: 9999; pointer-events: none; width: 196px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 10px; padding: 8px 10px;
+    font-size: 12px; line-height: 1.35; box-shadow: 0 6px 20px rgba(0,0,0,.10);
   }
-  .precise-hint .ph-delta { opacity: .8; }
-  .precise-hint .ph-keys { flex-basis: 100%; opacity: .75; font-size: 11px; }
-  .precise-hint kbd { font: inherit; font-size: 10.5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .9; }
+  .precise-hint .ph-time { display: flex; align-items: baseline; gap: 6px; font-weight: 600; font-size: 13px; }
+  .precise-hint .ph-delta { font-weight: 600; font-size: 11px; color: var(--accent-deep, var(--accent)); }
+  .precise-hint .ph-keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 6px; margin-top: 6px; color: var(--ink-soft, var(--muted)); font-size: 11px; align-items: center; }
+  .precise-hint kbd {
+    font: inherit; font-size: 10px; font-weight: 600; min-width: 16px; text-align: center; padding: 0 4px;
+    color: var(--ink); background: var(--panel-soft); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+  }
 
   /* ─── Booking category chips (Step 1) ─── */
   .booking-cat-chips {
@@ -14248,12 +14254,17 @@ function renderPreciseMove() {
   if (!p) return;
   p.el.style.top = ((p.startMin - START_H * 60) / 60 * HOUR_PX) + 'px';
   const delta = p.startMin - p.orig;
-  p.hint.innerHTML = `<strong>${fmtMin(p.startMin)}–${fmtMin(p.startMin + p.dur)}</strong>` +
-    (delta ? ` <span class="ph-delta">${delta > 0 ? '+' : '−'}${Math.abs(delta)} min</span>` : '') +
-    `<span class="ph-keys"><kbd>↑</kbd><kbd>↓</kbd> 1 min · <kbd>Shift</kbd> 5 min · <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel</span>`;
-  const r = p.el.getBoundingClientRect();
-  p.hint.style.left = Math.max(8, Math.min(window.innerWidth - p.hint.offsetWidth - 8, r.left)) + 'px';
-  p.hint.style.top  = (r.bottom + 6 + p.hint.offsetHeight > window.innerHeight ? r.top - p.hint.offsetHeight - 6 : r.bottom + 6) + 'px';
+  p.hint.innerHTML = `<div class="ph-time">${fmtMin(p.startMin)}–${fmtMin(p.startMin + p.dur)}` +
+    (delta ? `<span class="ph-delta">${delta > 0 ? '+' : '−'}${Math.abs(delta)} min</span>` : '') + `</div>` +
+    `<div class="ph-keys"><span><kbd>↑</kbd> <kbd>↓</kbd></span><span>1 min</span>` +
+    `<span><kbd>Shift</kbd></span><span>5 min</span><span><kbd>Enter</kbd></span><span>save</span>` +
+    `<span><kbd>Esc</kbd></span><span>cancel</span></div>`;
+  // Beside the session — right of its column, or left when there is no room —
+  // so it never covers the session or the travel legs above and below it.
+  const r = p.el.getBoundingClientRect(), w = p.hint.offsetWidth, h = p.hint.offsetHeight, gap = 10;
+  const left = r.right + gap + w <= window.innerWidth - 8 ? r.right + gap : Math.max(8, r.left - gap - w);
+  p.hint.style.left = left + 'px';
+  p.hint.style.top  = Math.max(8, Math.min(window.innerHeight - h - 8, r.top)) + 'px';
   if (typeof previewTravelForMove === 'function') previewTravelForMove(p.id, p.s.day, p.startMin, p.dur);
 }
 function endPreciseMove(keep) {
