@@ -3,20 +3,20 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed this window (commits since 2026-10-03 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-03); the audited commit (`aacf8e6`) is still unchanged. This is the fifth consecutive reconfirmation night on this exact code; tonight is the weekly Sunday deep run (complete `npm test` + `npm run test:integration`).
+- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
-- Induction Playground: backend/induction-assistant-routes.js; induction-assistant.js/.css; induction-assistant.test.js / .itest.js
-- Portal Inductions: backend/learning-routes.js, learning-content.js, onboarding-induction.js; induction.js, induction-modules.js, induction.css; migrations 051, 067
-- Splose Inductions: no separate route file — implemented as a generated content group inside learning-routes.js (group 'splose', ~line 684-741) plus a task reference in onboarding-induction.js (code 'splose_access')
+- Induction Playground: backend/induction-assistant-routes.js, backend/learning-routes.js, learning-content.js, backend/walkthrough-routes.js/-content.js/-catalogue.js/-anchors.js; frontend/current/induction-assistant.js/.css, resourcehub.js (the owner's 'Assign Learning' editor)
+- Portal Inductions: frontend/current/induction.js (catalogue group 'portal'), induction-modules.js; backend/learning-routes.js builds 'The interactive portal induction' by filtering modules where group !== 'splose'
+- Splose Inductions: frontend/current/induction-modules.js (group 'splose' — screenshot-led lessons from 'the Opal Splose Interactive Training Package'); backend/learning-routes.js builds a separate 'Splose Induction' workflow with a server-scored 10-question knowledge check
 
 ## Guard check
-induction-assistant-routes.js: requireAuth + requireRole(owner) — guarded. learning-routes.js: requireAuth globally + requireRole(owner) on admin/workflow/assign routes (including the Splose workflow endpoints, same router); /api/learning/my* self-service routes requireAuth only, intentionally (own learning only). No gaps.
+induction-assistant-routes.js: requireAuth + requireRole('owner') — guarded; AI gateway registration confirmed (induction_assistant policy, classification INTERNAL, clinical data explicitly excluded). learning-routes.js / walkthrough-routes.js: requireAuth globally + requireRole('owner') on every build/admin route; /api/learning/my/* self-service routes requireAuth only, intentionally (any employee may take their own induction). No gaps.
 
-## Tests and results
-Unit (6 suites, all pass): induction-registry, induction-assistant, learning-content, learning-admin-routes, assign-learning-guards, learning-routes — reconfirmed tonight inside the full `npm test` deep run, 223/223, identical to the last four nights.
-Integration (4 files, all pass): induction-assistant.itest.js, onboarding-induction.itest.js, learning.itest.js, learning-admin.itest.js — reconfirmed tonight inside the full `npm run test:integration` deep run, 65/65, identical.
+## Tests run tonight
+- unit: `induction-assistant.test.js, induction-registry.test.js, learning-routes.test.js, learning-content.test.js, learning-admin-routes.test.js, assign-learning-guards.test.js` — 223/223 pass
+- integration: `induction-assistant.itest.js, learning.itest.js, learning-admin.itest.js` — 144/144 pass (figure shared with Interactive Assessments above)
 
 ## Open tasks (from the tracker)
 - Induction Playground — build, todo
@@ -24,4 +24,4 @@ Integration (4 files, all pass): induction-assistant.itest.js, onboarding-induct
 - Splose Inductions — build, todo
 
 ## Compare with the tracker
-The tracker marks all three tasks todo and the feature as "idea" stage, but all three now have located, guarded, tested code — including Splose Inductions, which the previous audit wrongly reported as having none. Recommend the team re-verify stage/task status for this card.
+The tracker marks all three tasks todo and the feature as "idea" stage, but all three have located, guarded, tested code, and e2e/tests/tutorials.spec.js exercises real induction content (asserting the Splose induction card renders as its own group below the portal's). Recommend the team re-verify stage/task status for this card. Nuance worth tracking separately: the owner's visual *builder* UI itself (as opposed to the induction content it produces) still has no dedicated e2e of its own — tutorials.spec.js proves the player/dashboard, not the authoring flow.

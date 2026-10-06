@@ -1,4 +1,4 @@
-/opal-feature
+/opal-critical
 
 ## Idea
 Xero Integration Works
@@ -22,12 +22,15 @@ Xero Integration Works
 (not yet written in the tracker)
 
 ## Where it lives today
-backend/accounting-routes.js, backend/finance-routes.js, backend/onboarding-payroll-routes.js (route files) backend/accounting-db.js, accounting-exceptions.js, finance-db.js, finance-flags.js (data access) backend/xero-api.js, xero-sync.js, xero-payroll-api.js, xero-payroll-sync.js, xero-payroll-mapping.js, xero-payroll-connection.js, xero-payroll-db.js, onboarding-payroll.js (Xero integration logic — real OAuth2, not a stub) Migrations 004, 006, 051, 062 Frontend: ACCOUNTING TAB (mockup_v3.html:5298) + FINANCE TAB (mockup_v3.html:5384), finance.js/finance.css
+- backend/accounting-routes.js, backend/finance-routes.js, backend/onboarding-payroll-routes.js (route files)
+- backend/accounting-db.js, accounting-exceptions.js, finance-db.js, finance-flags.js (data access)
+- backend/xero-api.js, xero-sync.js, xero-payroll-api.js, xero-payroll-sync.js, xero-payroll-mapping.js, xero-payroll-connection.js, xero-payroll-db.js, onboarding-payroll.js (real OAuth2, not a stub)
+- Frontend: ACCOUNTING TAB (mockup_v3.html:5298) + FINANCE TAB (mockup_v3.html:5384), frontend/current/finance.js
 
 ## Start here
-Connect a Xero sandbox account (owner credentials) and click through the Finance tab to confirm the dashboard renders real income/expense/tax figures, and that the Accounting tab's reconciliation flow works against live data. No new code is obviously needed — this is a verification task, following the pattern in docs/qa/BROWSER_QA_RESULTS.md item H.
+Open backend/finance-routes.js, backend/finance-db.js and frontend/current/finance.js (the owner-only Finance tab). Every route already has requireAuth + requireRole('owner') and 77 unit + 39 integration tests pass. What's missing: a real connected Xero sandbox account to confirm the dashboard and payroll sync against live figures (the tracker's own next_action already asks for this), plus browser-level proof the Finance tab renders.
 
 ## Done means
-A new row in docs/qa/BROWSER_QA_RESULTS.md confirming the Finance and Accounting tabs render correctly against a connected Xero sandbox account, reaching "proven".
+A confirmed live Xero sandbox connection and a passing e2e/BROWSER_QA_RESULTS.md entry for the Finance tab; the evidence label moves to `proven`.
 
 Tracker: 3d5da727-ee76-4195-8954-2a6486844d77

@@ -1,17 +1,19 @@
-# Nightly audit — feature folders
+# Nightly audit feature folders — index
 
-One line per folder: stage · evidence label · addressed this window · link.
+One row per tracker idea. Rewritten nightly by the audit; last updated 2026-10-06 (sixth consecutive reconfirmation night — see docs/qa/nightly/2026-10-06.md). See each folder's STATUS.md for full detail and START.md for a starter prompt.
 
-- [Xero Integration Works](xero-integration-works/START.md) — stage idea · needs-refinement · addressed this window: no — [status](xero-integration-works/STATUS.md)
-- [Update Opal Docs Register](update-opal-docs-register/START.md) — stage idea · untouched · addressed this window: no — [status](update-opal-docs-register/STATUS.md)
-- [Report Templates](report-templates/START.md) — stage idea · tab-unproven · addressed this window: no — [status](report-templates/STATUS.md)
-- [Professional Development](professional-development/START.md) — stage idea · tab-unproven · addressed this window: no — [status](professional-development/STATUS.md)
-- [Portal - Splose - Outlook | Integration Works](portal-splose-outlook-integration-works/START.md) — stage idea · needs-refinement · addressed this window: no — [status](portal-splose-outlook-integration-works/STATUS.md)
-- [Portal Onboarding Workflow](portal-onboarding-workflow/START.md) — stage idea · needs-refinement · addressed this window: no — [status](portal-onboarding-workflow/STATUS.md)
-- [Password Master Document](password-master-document/START.md) — stage idea · untouched · addressed this window: no — [status](password-master-document/STATUS.md)
-- [Opa Mobile Companion](opa-mobile-companion/START.md) — stage idea · needs-refinement · addressed this window: no — [status](opa-mobile-companion/STATUS.md)
-- [Interactive Assessments](interactive-assessments/START.md) — stage idea · tab-unproven · addressed this window: no — [status](interactive-assessments/STATUS.md)
-- [Inductions](inductions/START.md) — stage idea · proven · addressed this window: no — [status](inductions/STATUS.md)
-- [Employee Personal Page (My Profile Tab)](employee-personal-page-my-profile-tab/START.md) — stage idea · needs-refinement · addressed this window: no — [status](employee-personal-page-my-profile-tab/STATUS.md)
-- [Clinical resources](clinical-resources/START.md) — stage idea · proven · addressed this window: no — [status](clinical-resources/STATUS.md)
-- [Automated Reminders](automated-reminders/START.md) — stage idea · untouched · addressed this window: no — [status](automated-reminders/STATUS.md)
+| Folder | Stage | Evidence label | START.md |
+|---|---|---|---|
+| `xero-integration-works/` | idea | needs-refinement | [xero-integration-works/START.md](xero-integration-works/START.md) |
+| `update-opal-docs-register/` | idea | untouched | [update-opal-docs-register/START.md](update-opal-docs-register/START.md) |
+| `report-templates/` | idea | tab-unproven | [report-templates/START.md](report-templates/START.md) |
+| `professional-development/` | idea | tab-unproven | [professional-development/START.md](professional-development/START.md) |
+| `portal-splose-outlook-integration-works/` | idea | needs-refinement | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+| `portal-onboarding-workflow/` | idea | needs-refinement | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
+| `password-master-document/` | idea | untouched | [password-master-document/START.md](password-master-document/START.md) |
+| `opa-mobile-companion/` | idea | needs-refinement | [opa-mobile-companion/START.md](opa-mobile-companion/START.md) |
+| `interactive-assessments/` | idea | tab-unproven | [interactive-assessments/START.md](interactive-assessments/START.md) |
+| `inductions/` | idea | proven | [inductions/START.md](inductions/START.md) |
+| `employee-personal-page-my-profile-tab/` | idea | needs-refinement | [employee-personal-page-my-profile-tab/START.md](employee-personal-page-my-profile-tab/START.md) |
+| `clinical-resources/` | idea | proven | [clinical-resources/START.md](clinical-resources/START.md) |
+| `automated-reminders/` | idea | untouched | [automated-reminders/START.md](automated-reminders/START.md) |

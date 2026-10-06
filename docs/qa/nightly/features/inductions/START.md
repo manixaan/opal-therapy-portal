@@ -1,3 +1,3 @@
-This feature is **proven**.
+This feature is proven.
 
-Unit (6 suites, all pass): induction-registry, induction-assistant, learning-content, learning-admin-routes, assign-learning-guards, learning-routes — 223/223.
+Evidence: see docs/qa/nightly/features/inductions/STATUS.md for tonight's (2026-10-06) tests and guard check — unchanged across six consecutive nights.

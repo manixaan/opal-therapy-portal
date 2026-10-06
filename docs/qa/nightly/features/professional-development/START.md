@@ -22,12 +22,14 @@ Professional Development
 (not yet written in the tracker)
 
 ## Where it lives today
-backend/resource-hub-r2-routes.js — pd_events CRUD, filter by topic/mode/cost/CPD hours, past-event rollover, admin endpoints, Home-page preview query frontend/current/resourcehub.js — renderPd/renderPdCard/renderPdDetail/renderPdForm, Home preview card, admin form, CPD-hours filter, route #resources/pd[/eventId] frontend/current/resourcehub.css — .rh2-pd* styles frontend/current/navigation.js — route encode/decode for #resources/pd
+- backend/resource-hub-r2-routes.js — pd_events CRUD, filter by topic/mode/cost/CPD hours, past-event rollover, admin endpoints, Home-page preview query
+- frontend/current/resourcehub.js — renderPd/renderPdCard/renderPdDetail/renderPdForm, Home preview card, admin form, CPD-hours filter, route #resources/pd[/eventId]
+- frontend/current/navigation.js — route encode/decode for #resources/pd
 
 ## Start here
-Manually click through #resources/pd as a therapist and as an owner (create/edit a PD event, confirm the Home-page preview and CPD-hours filter work), then add a row to docs/qa/BROWSER_QA_RESULTS.md. No code change is obviously needed — this is a verification + tracker-hygiene task.
+Open backend/resource-hub-r2-routes.js (pd_events) and frontend/current/resourcehub.js (renderPd*). The PD events catalogue — admin authoring, Home preview, CPD-hours filter — is built and passes 46/46 tests tonight. Add a browser/e2e check proving the tab renders, and ask the team to confirm this is what the tracker's blank "Professional Development" card means.
 
 ## Done means
-A docs/qa/BROWSER_QA_RESULTS.md row confirming #resources/pd renders and works end to end, reaching "proven".
+A passing e2e spec or BROWSER_QA_RESULTS.md entry for the PD tab, and tracker confirmation of the match; the evidence label moves to `proven`.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb

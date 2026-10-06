@@ -1,4 +1,4 @@
-/opal-critical
+/opal-feature
 
 ## Idea
 Portal Onboarding Workflow
@@ -22,12 +22,15 @@ Portal Onboarding Workflow
 (not yet written in the tracker)
 
 ## Where it lives today
-All 11 onboarding-*-routes.js files (employee, workflow, journey, pack, returns, payroll, defaults, package-docs, assignment, library, onboarding-routes.js itself) plus ~37 supporting modules frontend/current/onboarding.js; ONBOARDING TAB banner at mockup_v3.html:4162 backend/onboarding-policies/ does NOT exist (no such directory) Stage mapping (from file-header comments): Stage 1 = onboarding-journey-routes.js. Stage 2 = onboarding-pack-routes.js, onboarding-returns-routes.js, onboarding-defaults-routes.js, onboarding-package-docs-routes.js. Stage 3 = onboarding-payroll-routes.js, onboarding-assignment-routes.js.
+- Stage 1: backend/onboarding-offer-letter.js, onboarding-offer-docx.js, onboarding-offer-pdf.js, onboarding-offer-template.js, onboarding-offer-email.js, onboarding-journey-routes.js, onboarding-defaults-routes.js, backend/graph-mail.js (real Microsoft Graph integration)
+- Stage 2: backend/onboarding-pack-routes.js, onboarding-pack.js, onboarding-pack-db.js, onboarding-pack-email.js, backend/onboarding-contract-docx.js (the dynamic employee contract — fills OPAL_COE_* content controls from the SAME Stage-1 offer terms)
+- Stage 3: backend/onboarding-induction.js, backend/onboarding-journey.js (projectInduction(), STAGE3_STATUSES), backend/onboarding-journey-routes.js
+- Frontend: ONBOARDING TAB (mockup_v3.html:4162), frontend/current/onboarding-journey.js (all three stage panels, including the 'Edit onboarding' default-categories screen)
 
 ## Start here
-Add SharePoint storage for Stage 2 onboarding documents in backend/onboarding-pack-db.js / backend/onboarding-library-routes.js, following the Graph-auth pattern already used in backend/outlook-oauth.js. Confirm the fixed-vs-dynamic contract field question with the practice owner first — backend/onboarding-contract-docx.js may already answer it. This is CRITICAL-level work (employee documents, a new external integration).
+Open backend/onboarding-contract-docx.js and backend/onboarding-pack-routes.js to see the Stage 2 pack flow that already works. The gap is SharePoint: there is no Graph /sites//drives/ call anywhere in the backend. Decide which SharePoint site/library documents should land in, add an upload step to the pack-finalise path (mirror the real Graph calls already in backend/graph-mail.js), and add an integration test asserting the upload fires with the right document and site.
 
 ## Done means
-An integration test in tests/integration/onboarding-pack.itest.js (or a new file) proving a Stage 2 document round-trips through SharePoint, reaching "proven" for Stage 2 specifically. Separately: install @tesseract.js-data/eng in the audit sandbox so onboarding-document-reader.test.js can give a trustworthy signal on future nights.
+A new passing integration test proving the SharePoint upload happens on Stage 2 pack finalisation; the evidence label moves to `proven`.
 
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21

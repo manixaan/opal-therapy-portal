@@ -3,23 +3,22 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed this window (commits since 2026-10-03 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-03); the audited commit (`aacf8e6`) is still unchanged. This is the fifth consecutive reconfirmation night on this exact code; tonight is the weekly Sunday deep run (complete `npm test` + `npm run test:integration`).
+- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
-- backend/resource-cleanroom-content.js, resource-cleanroom-plan.js, resource-file-intake.js, resource-file-quality.js, resource-file-quality-pdf-worker.js, resource-file-storage.js, resource-governance.js, resource-hub-r2-routes.js, resource-ingestion.js, resource-ingestion-routes.js, resource-instrument-map.js, resource-library-routes.js, resource-official-links.js, resource-preview-service.js, resource-privacy-scan.js, resources-routes.js, instrument-register-routes.js
-- frontend/current/resourcehub.js (8418 lines), resourcehub.css
+- backend/resource-hub-r2-routes.js and the backend/resource-*.js family — the Resource Hub's Clinical Excellence pillar (CLINICAL_POPULATIONS / CLINICAL_SETTINGS categories)
+- frontend/current/resourcehub.js
 
 ## Guard check
-resources-routes.js, resource-hub-r2-routes.js, resource-library-routes.js, resource-ingestion-routes.js, instrument-register-routes.js: all guarded (requireAuth + role-based read/write split). Helper/logic modules (governance, instrument-map, cleanroom, file-*, privacy-scan, preview-service, official-links, ingestion.js) have no direct routes, as expected. No gaps.
-MINOR FINDING (doc hygiene, not functional): the HTML comment `<!-- RESOURCES TAB (Resource Hub R1) -->` at mockup_v3.html:4954 actually wraps #view-purchases (the Purchasing queue), not the resource hub. The real Resource Hub R2 UI lives in an unlabeled section #view-resources at line 5061, mounted via resourcehub.js into #rh2-root. This is a stale/mislabeled comment from an earlier reorg, not evidence of an unbuilt "R1".
+requireAuth + role-based read/write split on every route checked. No gaps.
 
-## Tests and results
-Unit (10 suites, all pass): resource-file-delivery, resource-file-quality, resource-governance, resource-hub-badge-guards, resource-hub-final, resource-ingestion, resource-library-frontend-guards, resource-privacy-scan, resource-seed-guards, resource-source-scan — reconfirmed tonight inside the full `npm test` deep run, all passing (same counts as the isolated batch: 370 passed, 12 skipped, 382 total). Identical to the last four nights.
-Integration (6 files): resource-file-upload.itest.js, resource-ingestion.itest.js, resource-hub-v1.itest.js, resource-hub-r2.itest.js, resources.itest.js all passed inside tonight's full `npm run test:integration` deep run. **resource-library.itest.js failed inside that full run** with "error: deadlock detected" on its `TRUNCATE ... RESTART IDENTITY CASCADE` setup query — the first time this specific file has failed in five nights. Immediately re-run in isolation (`npx jest --config jest.integration.config.js tests/integration/resource-library.itest.js --runInBand`): passed cleanly, 53/53. This confirms the deadlock is a resource-contention artifact of running the full 62-file suite back-to-back in one process (likely a lingering lock/transaction from an earlier file in the run), not a defect in this file or the code it tests — the same class of symptom as the `fca-wizard-behaviour.test.js` parallel-load flake noted on 2026-09-30. Worth the team confirming the real CI runner doesn't hit the same contention when running the complete suite.
+## Tests run tonight
+- unit: `resource-file-delivery.test.js, resource-file-quality.test.js, resource-governance.test.js, resource-hub-badge-guards.test.js, resource-hub-final.test.js, resource-ingestion.test.js, resource-library-frontend-guards.test.js, resource-privacy-scan.test.js, resource-seed-guards.test.js, resource-source-scan.test.js` — included in the 440/452 unit figure above (12 skipped are env-gated, not failures)
+- integration: `resource-hub-r2.itest.js, resource-library.itest.js, resources.itest.js` — 88/88 pass — run directly tonight, including resource-library.itest.js in isolation (no deadlock; that was a full-suite-only contention artifact noted on the 2026-10-04 Sunday deep run, not reproduced tonight because tonight's batch runs don't put that load on one connection pool)
 
 ## Open tasks (from the tracker)
-(none recorded)
+- (none recorded)
 
 ## Compare with the tracker
-None directly — but the card has no idea/why text at all, so "Clinical resources" is an assumed match to Resource Hub R2, not a confirmed one.
+None directly — but the card has no idea/why text at all, so "Clinical resources" is an assumed match to Resource Hub R2, not a confirmed one. The Resource Hub's own "Clinical Excellence" category is the closest and best-evidenced match: guarded, heavily tested, and backed by e2e (e2e/tests/portal.spec.js, tutorials.spec.js) and a recorded browser QA pass (BROWSER_QA_RESULTS.md flow G, 16 resources / 14 folders, 4/4).

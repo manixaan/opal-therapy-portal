@@ -3,22 +3,21 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed this window (commits since 2026-10-03 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-03); the audited commit (`aacf8e6`) is still unchanged. This is the fifth consecutive reconfirmation night on this exact code; tonight is the weekly Sunday deep run (complete `npm test` + `npm run test:integration`).
+- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
-- All 11 onboarding-*-routes.js files (employee, workflow, journey, pack, returns, payroll, defaults, package-docs, assignment, library, onboarding-routes.js itself) plus ~37 supporting modules
-- frontend/current/onboarding.js; ONBOARDING TAB banner at mockup_v3.html:4162
-- backend/onboarding-policies/ does NOT exist (no such directory)
-- Stage mapping (from file-header comments): Stage 1 = onboarding-journey-routes.js. Stage 2 = onboarding-pack-routes.js, onboarding-returns-routes.js, onboarding-defaults-routes.js, onboarding-package-docs-routes.js. Stage 3 = onboarding-payroll-routes.js, onboarding-assignment-routes.js.
+- Stage 1: backend/onboarding-offer-letter.js, onboarding-offer-docx.js, onboarding-offer-pdf.js, onboarding-offer-template.js, onboarding-offer-email.js, onboarding-journey-routes.js, onboarding-defaults-routes.js, backend/graph-mail.js (real Microsoft Graph integration)
+- Stage 2: backend/onboarding-pack-routes.js, onboarding-pack.js, onboarding-pack-db.js, onboarding-pack-email.js, backend/onboarding-contract-docx.js (the dynamic employee contract — fills OPAL_COE_* content controls from the SAME Stage-1 offer terms)
+- Stage 3: backend/onboarding-induction.js, backend/onboarding-journey.js (projectInduction(), STAGE3_STATUSES), backend/onboarding-journey-routes.js
+- Frontend: ONBOARDING TAB (mockup_v3.html:4162), frontend/current/onboarding-journey.js (all three stage panels, including the 'Edit onboarding' default-categories screen)
 
 ## Guard check
-All 11 route files guarded. onboarding-employee-routes.js: requireAuth on /api/onboarding/me; the public /api/onboarding-invite/* routes are deliberately outside requireAuth by design (documented IDOR mitigation — no user-id parameter). The rest: requireAuth + per-route requirePermission('onboarding.*'). permissions.js defines 11 independent delegated onboarding.* permissions in 3 bundles — solid design, no gaps.
+All 11 onboarding-*-routes.js files guarded. The public /api/onboarding-invite/* routes are deliberately outside requireAuth by design (no user-id parameter, documented IDOR mitigation). Everything else: requireAuth + per-route requirePermission('onboarding.view' | 'onboarding.assign' | 'onboarding.manage_packages'). No gaps.
 
-## Tests and results
-23 unit test files reconfirmed tonight inside the full `npm test` deep run (144 files, one process): 22 pass; 1 fails — onboarding-document-reader.test.js (14/15 pass, 1 failure: "Cannot find module '@tesseract.js-data/eng/package.json'"). Re-confirmed again tonight via `ls node_modules/@tesseract.js-data` (no such directory): this is a MISSING OCR LANGUAGE-DATA NPM PACKAGE in this sandbox (an environment/dependency gap this audit is barred from fixing via npm install), not an application code defect. Fifth consecutive night with the identical single failure.
-Integration: onboarding-defaults.itest.js, onboarding-journey.itest.js, onboarding-pack.itest.js, onboarding-workflow.itest.js, onboarding.itest.js — reconfirmed tonight inside the full `npm run test:integration` deep run (62 files, one process), 160/160 pass, identical to the last four nights.
-Browser QA: docs/qa/BROWSER_QA_RESULTS.md item C (Onboarding/profile chain, 7/7) directly exercises this.
+## Tests run tonight
+- unit: `onboarding-offer-docx.test.js, onboarding-offer-pdf.test.js, onboarding-offer-template.test.js, onboarding-journey.test.js, onboarding-journey-frontend-guards.test.js, onboarding-contract-docx.test.js, onboarding-pack.test.js` — 111/111 pass
+- integration: `onboarding-journey.itest.js, onboarding-defaults.itest.js, onboarding-pack.itest.js, onboarding-induction.itest.js` — 34/34 pass
 
 ## Open tasks (from the tracker)
 - Stage 1 — build, todo
@@ -26,4 +25,4 @@ Browser QA: docs/qa/BROWSER_QA_RESULTS.md item C (Onboarding/profile chain, 7/7)
 - stage 3 — build, todo
 
 ## Compare with the tracker
-Tracker shows all three stages todo, but Stage 1 and Stage 3 are clearly built and well-tested. Stage 2 genuinely has an open gap (SharePoint storage), so "todo" is accurate there specifically — the tracker isn't wrong about Stage 2, just imprecise about treating all three stages the same way.
+Tracker shows all three stages todo, but Stage 1 and Stage 3 are clearly built and well-tested. Stage 2 genuinely has an open gap: the dynamic employee contract the team asked for is fully delivered, but storing finished documents in SharePoint (the other half of the same task) is not — the only "sharepoint" hit anywhere in the repo is a CSP domain allowance in server.js, not a document-storage integration. "todo" is accurate for Stage 2 specifically; it's imprecise to treat all three stages the same way.

@@ -22,12 +22,14 @@ Report Templates
 (not yet written in the tracker)
 
 ## Where it lives today
-FCA: backend/fca-routes.js, backend/fca/ (client-search, data-layers, docx-engine, document-id, manifest, preview-pagination, resolve-scalars, template-map, templates/) Progress Letter: backend/letter-routes.js (reuses backend/fca/ helpers, no dedicated subdir) Client Agreement Form: NO dedicated route file exists — served via backend/templates-routes.js + backend/templates/service-agreement-map.js, catalogue.js, compose.js, appendices.js, and docx assets in backend/service-agreements/templates/ Frontend: FCA wizard #fca-root, Progress Letter via letter.js — both overlays, not standalone tabs; no distinct "Client Agreement Form" UI found in mockup_v3.html
+- FCA: backend/fca-routes.js, backend/fca/ (client-search, data-layers, docx-engine, document-id, manifest, preview-pagination, resolve-scalars, template-map, templates/)
+- Progress Letter: backend/letter-routes.js (reuses backend/fca/ helpers, no dedicated subdir; code's own name is 'Progress Note Letter')
+- Client Agreement Form: no dedicated route file — served via backend/templates-routes.js + backend/templates/service-agreement-map.js, catalogue.js, compose.js, appendices.js and docx assets in backend/service-agreements/templates/ (code's own name is 'Service Agreement')
 
 ## Start here
-Before writing code: confirm with the card's author whether "Client Agreement Form" means the existing Service Agreement template (backend/templates/catalogue.js, id 'service_agreement') or something new. Then add an E2E spec or a docs/qa/BROWSER_QA_RESULTS.md entry proving the FCA wizard and Progress Letter actually render and produce a document end to end, following e2e/tests/portal.spec.js's pattern.
+Open backend/fca-routes.js, backend/letter-routes.js and backend/templates-routes.js, and the existing tests (fca-docx-engine.test.js etc.). All three document flows (FCA, Progress Letter, Client Agreement Form) are built, guarded and pass every test. Add one e2e spec or a docs/qa/BROWSER_QA_RESULTS.md entry per flow proving it renders in a browser, and resolve with the team whether "Client Agreement Form" is meant to be the existing Service Agreement template or something new.
 
 ## Done means
-A docs/qa/BROWSER_QA_RESULTS.md row (or E2E spec) confirming FCA and Progress Letter render and generate documents, plus a tracker answer on Client Agreement Form's scope.
+A passing e2e spec or BROWSER_QA_RESULTS.md entry for each of the three flows; the evidence label moves to `proven`.
 
 Tracker: 91ae30e7-9cda-4198-956f-8b9cdf043003

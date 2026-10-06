@@ -19,15 +19,15 @@ Update Opal Docs Register
 (not yet written in the tracker)
 
 ## Decisions
-(none recorded)
+(not yet written in the tracker)
 
 ## Where it lives today
-Nothing — and nothing should. This is an Excel register + SharePoint organising task. Checked backend/instrument-register-routes.js (a different domain — clinical instrument register), backend/register-routes.js (user signup, unrelated), backend/onboarding-package-docs-routes.js (closest conceptual match, a document-pack composer, not an Excel register), and docs/resource-hub/INGESTION_REGISTER.md (resource rights tracking, unrelated). No xlsx/exceljs/Excel-export code exists anywhere in the repo.
+nothing yet
 
 ## Start here
-No engineering task applies. Update the Excel register and SharePoint links directly, outside the portal.
+This is not a Claude Code task. The tracker's own task description frames it as an organising job on an existing Excel document register and SharePoint. There is nothing to locate, edit or test in this repository for it.
 
 ## Done means
-There is no test for this — it is done when the register and SharePoint links are updated. Evidence label stays `untouched` by design, not `proven`: nothing in this codebase will ever "prove" an external spreadsheet.
+There is no code-evidence label for this card to reach — it is done when a person confirms the register and SharePoint links are complete.
 
 Tracker: 45c66127-e21b-47c5-be70-6c9c61952126

@@ -19,15 +19,15 @@ Owner/Admin
 All login details will be contained in one area accessed by relevant parties.
 
 ## Decisions
-(none recorded)
+(not yet written in the tracker)
 
 ## Where it lives today
-Nothing — and nothing should. This describes an external OneDrive document, not a portal feature. The only codebase references near this idea are the portal's own password reset/create flows (reset-password.html, create-password.html, forgot-password.html) and Azure Key Vault entries in deploy scripts, both unrelated to a shared login-details vault.
+nothing yet
 
 ## Start here
-No engineering task applies. Create and share the OneDrive document directly, outside the portal.
+This is not a Claude Code task. It is a OneDrive document holding every portal's login details for the Owner/Admin to reference. Create the document on OneDrive and share it with the relevant parties.
 
 ## Done means
-There is no test for this — it is done when the OneDrive document exists and is shared with the relevant parties. Evidence label stays `untouched` by design, not `proven`: nothing in this codebase will ever "prove" an external document.
+There is no code-evidence label for this card to reach — it is done when a person confirms the OneDrive document exists and is shared with the right people.
 
 Tracker: f1e01029-71d9-46fa-acc1-1c955cd86da2
