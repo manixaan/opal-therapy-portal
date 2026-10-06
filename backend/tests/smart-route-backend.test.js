@@ -140,3 +140,54 @@ describe('GET /api/profile/work-schedule/:userId — another clinician, read-onl
     expect((await request(app('../profile-routes')).get('/api/profile/work-schedule/not-a-uuid')).status).toBe(400);
   });
 });
+
+describe('the old "Home (Riverton)" sample never leaves or enters the server', () => {
+  const SAMPLE = { office: { id: 'office' }, homes: [
+    { id: 'home-1', label: 'Home (Riverton)', kind: 'local', addr: '', suburb: 'Riverton', lat: -32.03, lng: 115.89 },
+    { id: 'home-2', label: 'Mum\'s', kind: 'local', addr: '7 Example Rd, Riverton WA 6148', suburb: 'Riverton' },
+  ] };
+
+  test('reads: the caller\'s own bases and another clinician\'s come back as plain "Home", no sample suburb', async () => {
+    as('owner');
+    for (const url of ['/api/profile/work-schedule', '/api/profile/work-schedule/' + OTHER]) {
+      db.pool.query.mockResolvedValueOnce({ rows: [{ work_location_schedule: null, default_work_location: SAMPLE }] });
+      const r = await request(app('../profile-routes')).get(url);
+      expect(r.status).toBe(200);
+      expect(r.body.travelBases.homes[0]).toEqual({ id: 'home-1', label: 'Home', kind: 'local', addr: '', suburb: '', region: 'central' });
+      // a real street address in Riverton is the clinician's own and stays
+      expect(r.body.travelBases.homes[1]).toEqual(SAMPLE.homes[1]);
+      expect(JSON.stringify(r.body)).not.toMatch(/Home \(Riverton\)/);
+    }
+  });
+
+  test('the caller\'s own read heals the stored copy once; a clean profile is not rewritten', async () => {
+    as('therapist');
+    db.pool.query.mockResolvedValueOnce({ rows: [{ work_location_schedule: null, default_work_location: SAMPLE }] });
+    await request(app('../profile-routes')).get('/api/profile/work-schedule');
+    const [sqlText, params] = db.pool.query.mock.calls[1];
+    expect(sqlText).toMatch(/UPDATE users SET default_work_location = \$1::jsonb WHERE id = \$2/);
+    expect(params[1]).toBe(ME);
+    expect(params[0]).not.toMatch(/Home \(Riverton\)/);
+    jest.clearAllMocks();
+    db.pool.query.mockResolvedValueOnce({ rows: [{ work_location_schedule: null, default_work_location: { homes: [SAMPLE.homes[1]] } }] });
+    await request(app('../profile-routes')).get('/api/profile/work-schedule');
+    expect(db.pool.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('saves: a stale browser cannot write the sample back', async () => {
+    as('therapist');
+    const r = await request(app('../profile-routes')).put('/api/profile/work-schedule').send({ travelBases: SAMPLE });
+    expect(r.status).toBe(200);
+    const [, params] = db.pool.query.mock.calls[db.pool.query.mock.calls.length - 1];
+    const saved = JSON.parse(params[1]);
+    expect(saved.homes[0].label).toBe('Home');
+    expect(saved.homes[0].suburb).toBe('');
+    expect(params[1]).not.toMatch(/Home \(Riverton\)/);
+  });
+
+  test('an unauthenticated caller gets nothing', async () => {
+    expect((await request(app('../profile-routes')).get('/api/profile/work-schedule')).status).toBe(401);
+    expect((await request(app('../profile-routes')).put('/api/profile/work-schedule').send({ travelBases: SAMPLE })).status).toBe(401);
+    expect(db.pool.query).not.toHaveBeenCalled();
+  });
+});

@@ -1072,6 +1072,30 @@ router.post('/api/profile/credentials/:id/scan', requireAuth, async (req, res) =
 //  existing JSONB columns on the users table.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/* The old built-in sample home — "Home (Riverton)", suburb Riverton, no street
+   address — was saved into profiles before it was removed (6 Oct 2026: it is
+   a test tag, never the clinician's real home). Every read and every save
+   goes through here, so no screen can show it and no stale browser can write
+   it back: the sample name becomes "Home", and a Riverton suburb with no
+   street address is dropped (it anchored travel at Riverton). A real
+   address in Riverton is kept. Same rule as profile.js loadWorkSchedule. */
+const SAMPLE_HOME_LABEL = /^\s*home\s*\(\s*riverton\s*\)\s*$/i;
+function cleanTravelBases(bases) {
+  if (!bases || typeof bases !== 'object' || !Array.isArray(bases.homes)) return bases;
+  return Object.assign({}, bases, {
+    homes: bases.homes.map((h) => {
+      if (!h || typeof h !== 'object') return h;
+      let out = h;
+      if (SAMPLE_HOME_LABEL.test(String(h.label || ''))) out = Object.assign({}, out, { label: 'Home' });
+      if (!String(out.addr || '').trim() && /^\s*riverton\s*$/i.test(String(out.suburb || ''))) {
+        out = Object.assign({}, out, { suburb: '', region: 'central' });
+        delete out.lat; delete out.lng;
+      }
+      return out;
+    }),
+  });
+}
+
 /**
  * GET /api/profile/work-schedule
  * Returns the caller's persisted work_location_schedule and default_work_location
@@ -1085,9 +1109,15 @@ router.get('/api/profile/work-schedule', requireAuth, async (req, res) => {
       [req.user.id]
     );
     const row = rows[0] || {};
+    const bases = cleanTravelBases(row.default_work_location || null);
+    // Heal the stored copy once, so the sample is gone from the data too.
+    if (bases && JSON.stringify(bases) !== JSON.stringify(row.default_work_location)) {
+      await db.pool.query(`UPDATE users SET default_work_location = $1::jsonb WHERE id = $2`,
+        [JSON.stringify(bases), req.user.id]).catch(() => {});
+    }
     res.json({
       workLocationSchedule: row.work_location_schedule || null,
-      travelBases:          row.default_work_location  || null,
+      travelBases:          bases,
     });
   } catch (err) {
     console.error('GET work-schedule error:', err);
@@ -1118,7 +1148,7 @@ router.get('/api/profile/work-schedule/:userId', requireAuth, requirePermission(
     if (!rows.length) return res.status(404).json({ error: 'Clinician not found' });
     res.json({
       workLocationSchedule: rows[0].work_location_schedule || null,
-      travelBases:          rows[0].default_work_location  || null,
+      travelBases:          cleanTravelBases(rows[0].default_work_location || null),
     });
   } catch (err) {
     console.error('GET clinician work-schedule error:', err.message);
@@ -1142,7 +1172,7 @@ router.put('/api/profile/work-schedule', requireAuth, async (req, res) => {
         WHERE id = $3`,
       [
         workLocationSchedule != null ? JSON.stringify(workLocationSchedule) : null,
-        travelBases          != null ? JSON.stringify(travelBases)          : null,
+        travelBases          != null ? JSON.stringify(cleanTravelBases(travelBases)) : null,
         req.user.id,
       ]
     );
@@ -1268,3 +1298,4 @@ router.get('/api/profile/setup-status', requireAuth, async (req, res) => {
 module.exports = router;
 
 module.exports.validateUpload = validateUpload;
+module.exports.cleanTravelBases = cleanTravelBases;
