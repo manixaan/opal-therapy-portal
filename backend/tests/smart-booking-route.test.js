@@ -315,6 +315,32 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     expect(TRAVEL).toContain("Travel from ' + stopAt(gapFrom) + ' to ' + stopAt(gapTo)");
   });
 
+  test('too early for the drive: it says when the client CAN be seen, and one click moves the proposal there', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:15');                         // 25 min drive after a 10:00 finish
+    env.ev("BOOKING_STATE.selectedPatient = { id: 'p1', first: 'Sean', last: 'Hickey' }");
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).textContent).toMatch(/Not enough time to get here from Ada Client/);
+    expect(status(env).textContent).toMatch(/Earliest you can see Sean Hickey: 10:30 AM \(direct\)/);
+    status(env).querySelector('[data-route="earliest"]').click();
+    await flush();
+    expect(start(env)).toBe('10:30');
+    expect(status(env).textContent).not.toMatch(/Not enough time/);
+  });
+
+  test('the suggested time follows the switch: via home is later than direct', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:15');
+    await chooseLocation(env, CV_ADDR);
+    const direct = env.ev('BOOKING_ROUTE.suggestedStartMin');
+    status(env).querySelector('[data-route="home"]').click();
+    await flush();
+    expect(status(env).textContent).toMatch(/\(via home\)/);
+    expect(env.ev('BOOKING_ROUTE.suggestedStartMin')).toBeGreaterThan(direct);
+    expect(status(env).querySelector('[data-route="earliest"]').textContent)
+      .toBe('Move to ' + env.ev('fmtTime(Math.floor(BOOKING_ROUTE.suggestedStartMin / 60), BOOKING_ROUTE.suggestedStartMin % 60)'));
+  });
+
   test('no time to go home: straight on, with the option to go home anyway', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '10:30');

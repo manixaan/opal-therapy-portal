@@ -915,7 +915,7 @@ function placeProposalTravel(out, prevEnd, busy) {
 /* The live state of the route preview. `context` is the previous CONFIRMED
    stop when continuing a route ("Book another client"); manualStart is set
    when the clinician types a start or drags the proposed block. */
-var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null };
+var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null, suggestedStartMin: null };
 
 function _sessionByDbId(dbId) {
   if (!dbId || !window.SESSIONS) return null;
@@ -1165,11 +1165,28 @@ function runBspRoutePreview(opts) {
   if (clamp) { kind = 'warn'; notes.push(fmt(clamp.from) + ' is earlier than the drive allows — moved to ' + fmt(clamp.to) + '.'); }
   if (plan.movedForConflicts.length) notes.push('Moved to ' + fmt(plan.startMin) + ': ' + plan.movedForConflicts.map(b => esc(b.label)).join(', ') + ' is already booked then.');
   if (plan.conflicts.length) { kind = 'warn'; notes.push('Overlaps ' + plan.conflicts.map(b => esc(b.label)).join(', ') + '.'); }
-  if (!pred.explicit && tight) { kind = 'warn'; notes.push('Not enough time to get here from ' + fromName + '.'); }
+  if (!pred.explicit && tight) {
+    // Too early for the drive (6 Oct 2026): say when it CAN start — the first
+    // free slot after the drive, for the way chosen above. Flipping Direct ⇄
+    // Via home re-runs this, so the suggested time follows the switch.
+    kind = 'warn';
+    const best = planNextStop({ prevEndMin: pred.endMin, travelMin: route.durationMin, bufferMin: routeBufferMin(), durationMin: dur,
+      desiredStartMin: null, busy, dayEndMin: (typeof END_H !== 'undefined' ? END_H : 24) * 60 });
+    BOOKING_ROUTE.suggestedStartMin = best.fits ? best.startMin : null;
+    notes.push('Not enough time to get here from ' + fromName + '.' + (best.fits
+      ? ' Earliest you can see ' + esc(_bspClientName()) + ': <strong>' + fmt(best.startMin) + '</strong>' +
+        (homePlan.available ? ' (' + (homePlan.home ? 'via home' : 'direct') + ')' : '') + '. ' +
+        '<button type="button" class="bsp-route-btn" data-route="earliest">Move to ' + fmt(best.startMin) + '</button>'
+      : ' There is no free time left on this day after the drive.'));
+  }
   if (!plan.fits) { kind = 'warn'; notes.push('No free slot left on this day after the drive.'); }
   setBspRouteStatus(kind, parts.join(' · ') + switchBtn + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : ''));
 }
 
+function _bspClientName() {
+  const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
+  return (p && ([p.first, p.last].filter(Boolean).join(' ') || p.name)) || 'this client';
+}
 /* Hide the previous stop's legs the proposal replaces. Via home, its drive
    home (the day's end leg, or the return of a via-home gap) stays. */
 function _bspReplaceLegsOf(predS, viaHome) {
@@ -1235,6 +1252,15 @@ document.addEventListener('click', e => {
   if (b.dataset.route === 'retry') { BOOKING_ROUTE.manualTiming = false; runBspRoutePreview({ fresh: true }); }
   if (b.dataset.route === 'manual') { BOOKING_ROUTE.manualTiming = true; runBspRoutePreview(); }
   if (b.dataset.route === 'direct' || b.dataset.route === 'home') { BOOKING_ROUTE.viaMode = b.dataset.route; runBspRoutePreview(); }
+  if (b.dataset.route === 'earliest' && BOOKING_ROUTE.suggestedStartMin != null) {
+    // Same path as typing the time: the panel, the proposal and the end follow.
+    const el = document.getElementById('bsp-start');
+    if (el) {
+      el.value = _hhmm(BOOKING_ROUTE.suggestedStartMin);
+      if (typeof window.bspOnStartChange === 'function') window.bspOnStartChange();
+      else el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
 });
 
 // Hook the panel: every timing / location change re-runs the preview.
