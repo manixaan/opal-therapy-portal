@@ -910,7 +910,7 @@ function placeProposalTravel(out, prevEnd, busy) {
 /* The live state of the route preview. `context` is the previous CONFIRMED
    stop when continuing a route ("Book another client"); manualStart is set
    when the clinician types a start or drags the proposed block. */
-var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null };
+var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null };
 
 function _sessionByDbId(dbId) {
   if (!dbId || !window.SESSIONS) return null;
@@ -1024,9 +1024,10 @@ function runBspRoutePreview(opts) {
   const col = document.getElementById('day-' + day);
   const esc = _tpEsc;
   let fromName = esc(pred.label) + (pred.suburb ? ' (' + esc(pred.suburb) + ')' : '');
-  // The leg leaving the previous stop (home, or the next session) is what this
-  // booking replaces: hide it while the proposal is on screen.
-  if (pred.s && pred.s.id) document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
+  // The previous stop's own legs stay exactly as they are until this
+  // proposal's travel is drawn (6 Oct 2026): nothing disappears while the
+  // location is missing, unsure, or still being routed.
+  const predS = pred.s;
   const legTop = pred.endMin;
   const placeholder = (text) => { if (col) _previewLeg(col, legTop, legTop, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>'); };
 
@@ -1056,14 +1057,15 @@ function runBspRoutePreview(opts) {
   if (homePlan.home) {
     // The drive home after the last stop stays on the calendar; the proposal
     // starts from home once the therapist is back there.
-    if (pred.s && pred.s.id) document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"].suppressed').forEach(el => el.classList.remove('suppressed'));
     pred = Object.assign({}, pred, { fromKey: homePlan.baseKey, suburb: homePlan.base.suburb || '', label: homePlan.base.label || 'Home',
                                      endMin: pred.endMin + (homePlan.toBase || 0), viaHome: true });
     fromName = esc(pred.label) + (pred.suburb ? ' (' + esc(pred.suburb) + ')' : '');
   }
+  // The same two-way switch as on the calendar's legs: it names what the
+  // proposal does now; a click flips it.
   const switchBtn = !homePlan.available ? ''
-    : homePlan.home ? ' <button type="button" class="bsp-route-btn" data-route="direct">Go direct instead</button>'
-    : ' <button type="button" class="bsp-route-btn" data-route="home">Go home in between</button>';
+    : homePlan.home ? ' <button type="button" class="bsp-route-btn bsp-route-switch" data-route="direct" title="Going home in between. Click to go direct instead.">Via home ⇄</button>'
+    : ' <button type="button" class="bsp-route-btn bsp-route-switch" data-route="home" title="Going direct. Click to go home in between instead.">Direct ⇄</button>';
   if (BOOKING_ROUTE.manualTiming) {
     setBspRouteStatus('warn', 'Manual timing — travel from ' + fromName + ' is not calculated. <button type="button" class="bsp-route-btn" data-route="retry">Calculate travel</button>');
     return;
@@ -1122,9 +1124,11 @@ function runBspRoutePreview(opts) {
   }
   if (typeof renderCalendarPreviewBlocks === 'function' && pred.explicit) {
     renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(shownStart / 60), startM: shownStart % 60, startMin: shownStart, durationMin: dur, score: 100 }]);
-    // renderCalendarPreviewBlocks clears the travel preview — re-suppress.
-    if (pred.s && pred.s.id) document.querySelectorAll('.travel-overlay[data-from-session="' + pred.s.id + '"]:not(.preview)').forEach(el => el.classList.add('suppressed'));
   }
+  // Now the proposal's own travel replaces the previous stop's way out —
+  // except its drive home when going via home, which still happens.
+  _bspReplaceLegsOf(predS, homePlan.home);
+  BOOKING_ROUTE.shownMode = homePlan.available ? (homePlan.home ? 'home' : 'direct') : null;
 
   const toSub = addrSuburb(toKey) || 'next stop';
   const fmt = (m) => (typeof fmtTime === 'function') ? fmtTime(Math.floor(m / 60), m % 60) : _hhmm(m);
@@ -1138,6 +1142,9 @@ function runBspRoutePreview(opts) {
   } else if (col) {
     _previewLeg(col, legTop, legTop, '', '<span class="t-ico">Travel</span><span class="t-label">no drive · same place</span>');
   }
+  // The drive home is never deleted, only moved: if the proposal becomes the
+  // day's last stop, the day now ends with a drive home from it.
+  if (col) _bspPreviewHomeAfter(col, day, predS, toKey, shownStart + dur);
 
   const parts = [];
   if (pred.viaHome) parts.push('Home after ' + prevName + ' (' + (homePlan.toBase || 0) + ' min)');
@@ -1156,6 +1163,34 @@ function runBspRoutePreview(opts) {
   if (!pred.explicit && tight) { kind = 'warn'; notes.push('Not enough time to get here from ' + fromName + '.'); }
   if (!plan.fits) { kind = 'warn'; notes.push('No free slot left on this day after the drive.'); }
   setBspRouteStatus(kind, parts.join(' · ') + switchBtn + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : ''));
+}
+
+/* Hide the previous stop's legs the proposal replaces. Via home, its drive
+   home (the day's end leg, or the return of a via-home gap) stays. */
+function _bspReplaceLegsOf(predS, viaHome) {
+  if (!predS || !predS.id) return;
+  document.querySelectorAll('.travel-overlay[data-from-session="' + String(predS.id).replace(/"/g, '') + '"]:not(.preview)').forEach(el => {
+    const homeLeg = el.classList.contains('end') || el.dataset.via === 'home-return';
+    if (!(viaHome && homeLeg)) el.classList.add('suppressed');
+  });
+}
+/* The day's drive home, moved to after the proposal when it is the last
+   stop. Where the day ends is what the previous stop said (the new session
+   inherits it on Create), else the day's base. A cached route or the table
+   estimate — a preview never spends a Routes call; Create routes it for real. */
+function _bspPreviewHomeAfter(col, day, predS, toKey, endMin) {
+  const later = sessionsForDay(day).some(x => x !== predS && !isTravelBlock(x) && isPhysicalStop(x) && sessionEndMin(x) > endMin);
+  if (later) return;
+  const endPt = resolveTravelPoint(predS ? sessionTravelOverride(predS, 'after') : null, day) || dayAnchorBase(day);
+  const endKey = endPt && !endPt.remote && !endPt.unset ? (endPt.addr || endPt.suburb) : null;
+  if (!endKey || canonAddr(endKey) === canonAddr(toKey)) return;
+  const cached = ROUTE_CACHE.get(routeKey(toKey, endKey, 'driving'));
+  const min = isFresh(cached) ? cached.durationMin : estimateTravelMinFromTable(toKey, endKey);
+  if (!(min > 0)) return;
+  const from = addrSuburb(toKey) || 'this stop', to = endPt.suburb || endPt.label || 'Home';
+  _previewLeg(col, endMin, endMin + min, 'home-after',
+    '<span class="t-ico">Home</span><span class="t-label">' + min + ' min · ' + _tpEsc(from) + ' → ' + _tpEsc(to) + '</span>',
+    'Drive home after this appointment ≈ ' + min + ' min');
 }
 
 /* For the proposal: go home between the last stop and it? { mode, available,
@@ -1178,9 +1213,12 @@ function _bspHomePlan(day, pred, toKey, startMin) {
 /* After Create: an explicit "go direct" / "go home" becomes the previous
    stop's choice for the gap, so the calendar keeps showing what was booked. */
 function bspCommitBetweenChoice() {
-  const mode = BOOKING_ROUTE.viaMode;
+  // What the preview SHOWED is what gets kept — the clinician's pick, or the
+  // suggestion they saw — so the calendar never redraws the gap differently.
+  const mode = BOOKING_ROUTE.viaMode !== 'auto' ? BOOKING_ROUTE.viaMode : BOOKING_ROUTE.shownMode;
   const id = BOOKING_ROUTE.lastPredId;
   BOOKING_ROUTE.viaMode = 'auto';
+  BOOKING_ROUTE.shownMode = null;
   if ((mode === 'direct' || mode === 'home') && id) return setBetweenTravel(id, mode);
   return null;
 }
@@ -1294,16 +1332,18 @@ function placeTravelLeg(input) {
 }
 
 /* Between two physical stops: drive straight to the next client, or go home
-   in between (5 Oct 2026)? The session's own choice wins (travel.next =
-   'direct' | 'home'); otherwise AUTOMATIC — home whenever the drive home, a
-   stay of TRAVEL_HOME_MIN_STAY minutes and the drive out all fit in the gap.
-   The same rule bills travel (backend/billing/day-route.js viaBase), so the
-   calendar shows what is invoiced. Returns { mode, auto, home|null, toBase,
-   fromBase, homeAvailable }. */
+   in between (5 Oct 2026)? Exactly those two options (6 Oct 2026): `mode`
+   is always 'direct' or 'home'. The session's own choice wins (travel.next);
+   with none, the SUGGESTION is home whenever the drive home, a stay of
+   TRAVEL_HOME_MIN_STAY minutes and the drive out all fit in the gap
+   (`auto` = true marks it as the suggestion, not a third option). The same
+   rule bills travel (backend/billing/day-route.js viaBase), so the calendar
+   shows what is invoiced. Returns { mode, auto, home|null, toBase, fromBase,
+   homeAvailable }. */
 const TRAVEL_HOME_MIN_STAY = 30;
 function betweenTravelPlan(curr, next, base) {
   const choice = curr && curr.travel && (curr.travel.next === 'direct' || curr.travel.next === 'home') ? curr.travel.next : null;
-  const out = { mode: choice || 'auto', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false };
+  const out = { mode: 'direct', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false };
   const fromKey = locTravelKey(sessionLocation(curr)), toKey = locTravelKey(sessionLocation(next));
   const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
   if (!fromKey || !toKey || !baseKey) return out;
@@ -1313,7 +1353,7 @@ function betweenTravelPlan(curr, next, base) {
   if (!(toBase > 0) || !(fromBase > 0)) return out;
   const gap = sessionStartMin(next) - sessionEndMin(curr);
   const goHome = choice === 'home' || (!choice && gap >= toBase + fromBase + TRAVEL_HOME_MIN_STAY);
-  if (goHome) Object.assign(out, { home: Object.assign({}, base, { baseId: base.baseId || null }), toBase, fromBase });
+  if (goHome) Object.assign(out, { mode: 'home', home: Object.assign({}, base, { baseId: base.baseId || null }), toBase, fromBase });
   return out;
 }
 /* Save the choice for the gap after this session. mode: 'direct' | 'home' | null (automatic). */
@@ -1589,6 +1629,26 @@ function renderSegmentOverlay(col, seg) {
   el.dataset.toSession   = seg.toSessionId   || '';
   el.dataset.ownerSession = seg.ownerSessionId || '';
   el.dataset.ownerSide    = seg.ownerSide || '';
+  el.dataset.via          = seg.via || '';
+  // The one travel switch (6 Oct 2026): between two clients there are exactly
+  // two ways to go, and the leg says which one it is. A click flips it (one
+  // Cmd+Z flips it back). It sits on the direct leg, or on the drive home of
+  // a via-home gap — one switch per gap.
+  const gapFrom = seg.kind === 'between' && seg.via !== 'home-out' && seg.gapFromSessionId && window.SESSIONS
+    ? window.SESSIONS[seg.gapFromSessionId] : null;
+  if (gapFrom && gapFrom.dbId && (seg.via === 'home-return' || seg.homeAvailable)) {
+    const viaHome = seg.via === 'home-return';
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 't-switch';
+    sw.textContent = (viaHome ? 'Via home' : 'Direct') + ' ⇄';
+    sw.title = viaHome ? 'Going home in between. Click to go direct to the next client instead.'
+                       : 'Going direct to the next client. Click to go home in between instead.';
+    sw.setAttribute('aria-label', sw.title);
+    sw.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a leg drag, not a create-drag
+    sw.addEventListener('click', (e) => { e.stopPropagation(); setBetweenTravel(gapFrom.id, viaHome ? 'direct' : 'home'); });
+    el.appendChild(sw);
+  }
   el.onclick = (ev) => {
     ev.stopPropagation();
     if (el.__dragged) { el.__dragged = false; return; } // the end of a drag is not a click
@@ -1945,14 +2005,16 @@ function _renderTravelPanel(seg) {
     var plan = betweenTravelPlan(gapFrom, gapTo, dayAnchorBase(seg.day));
     var goingHome = !!plan.home;
     var why = !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
-      : plan.auto ? (goingHome ? 'Automatic: there is time to go home (' + plan.toBase + ' min home, ' + TRAVEL_HOME_MIN_STAY + ' min there, ' + plan.fromBase + ' min out).'
-                               : 'Automatic: not enough time to go home in between, so it is a direct drive.')
-      : (goingHome ? 'You chose to go home in between.' : 'You chose to go straight to the next client.');
-    html += '<div class="tp-section-title">Between ' + _tpEsc(_stopName(gapFrom) || 'this session') + ' and ' + _tpEsc(_stopName(gapTo) || 'the next') + '</div>';
+      : plan.auto ? (goingHome ? 'Suggested: there is time to go home (' + plan.toBase + ' min home, ' + TRAVEL_HOME_MIN_STAY + ' min there, ' + plan.fromBase + ' min out).'
+                               : 'Suggested: not enough time to go home in between.')
+      : 'Your choice.';
+    // The two appointments either side of the gap, by time: the same client
+    // twice in a day read as "Noah Mathew and Noah Mathew".
+    var stopAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || 'session')); };
+    html += '<div class="tp-section-title">Travel from ' + stopAt(gapFrom) + ' to ' + stopAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
       '<button type="button" class="tp-plan-opt' + (plan.mode === 'direct' ? ' on' : '') + '" data-mode="direct">Go direct to next client</button>' +
       (plan.homeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'home' ? ' on' : '') + '" data-mode="home">Go home in between</button>' : '') +
-      '<button type="button" class="tp-plan-opt' + (plan.mode === 'auto' ? ' on' : '') + '" data-mode="">Automatic</button>' +
       '</div><div class="tp-plan-hint">' + _tpEsc(why) + '</div>';
   }
 

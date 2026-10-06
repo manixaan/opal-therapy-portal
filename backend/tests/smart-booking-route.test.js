@@ -248,6 +248,73 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     expect(env.ev('BOOKING_ROUTE.viaMode')).toBe('auto');
   });
 
+  // The day's drive home is never deleted, only moved (6 Oct 2026).
+  const realLeg = (env, sel) => env.win.document.querySelector('#day-mon .travel-overlay' + sel + ':not(.preview)');
+  const homeAfter = (env) => env.win.document.querySelector('#day-mon .travel-overlay.preview.home-after');
+
+  test('before a location is chosen, the drive home after the last client stays on the calendar', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:30');
+    env.ev("refreshDayOverlays('mon')");
+    env.ev('runBspRoutePreview()');
+    await flush();
+    expect(realLeg(env, '.end')).not.toBeNull();
+    expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(false);
+    expect(homeAfter(env)).toBeNull();
+  });
+
+  test('direct: the drive home moves to after the proposed session', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:30');
+    env.ev("refreshDayOverlays('mon')");
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).querySelector('.bsp-route-switch').textContent).toBe('Direct ⇄');
+    expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(true);
+    expect(homeAfter(env)).not.toBeNull();
+    expect(homeAfter(env).style.top).toBe(env.ev('tToY(11, 30)') + 'px');   // 10:30 + 60 min
+  });
+
+  test('via home: the drive home after the earlier client stays, and the day still ends with one', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '14:00');
+    env.ev("refreshDayOverlays('mon')");
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).querySelector('.bsp-route-switch').textContent).toBe('Via home ⇄');
+    expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(false);
+    expect(homeAfter(env)).not.toBeNull();
+  });
+
+  test('Create keeps what the preview showed, even when it was only the suggestion', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '14:00');
+    await chooseLocation(env, CV_ADDR);
+    await env.ev('bspCommitBetweenChoice()');
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
+    expect(patch.body).toEqual({ next: 'home', afterOffsetMin: null });
+  });
+
+  test('the calendar leg between two clients is the switch: Direct ⇄ flips to Via home ⇄', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0,
+      address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 30, endH: 11, endM: 30,
+      address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    env.ev("refreshDayOverlays('mon')");
+    const sw = () => env.win.document.querySelector('#day-mon .travel-overlay .t-switch');
+    expect(sw().textContent).toBe('Direct ⇄');
+    sw().click();
+    await flush();
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
+    expect(patch.body).toEqual({ next: 'home', afterOffsetMin: null });
+    expect(sw().textContent).toBe('Via home ⇄');
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay .t-switch')).toHaveLength(1);   // one switch per gap
+  });
+
+  test('the travel panel offers exactly two options — no "Automatic"', () => {
+    expect(TRAVEL).not.toContain('>Automatic</button>');
+    expect(TRAVEL).toContain("Travel from ' + stopAt(gapFrom) + ' to ' + stopAt(gapTo)");
+  });
+
   test('no time to go home: straight on, with the option to go home anyway', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '10:30');

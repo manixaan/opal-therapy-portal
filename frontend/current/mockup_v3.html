@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=26" defer></script>
+<script src="/travel.js?v=27" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -3182,6 +3182,16 @@ window.opIcon = function (name, size) {
   .travel-overlay.movable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .travel-overlay.moved .t-ico::after { content: ' · moved'; font-weight: 500; }
   .travel-overlay.tight { border-left-color: #9c3322; }
+  /* The one travel switch (travel.js renderSegmentOverlay, 6 Oct 2026): a leg
+     between two clients shows what it does — Direct or Via home — and a
+     click flips it. currentColor keeps it in the leg's own colour, day or night. */
+  .travel-overlay .t-switch {
+    margin-left: auto; flex-shrink: 0; font: inherit; font-size: 9.5px; font-weight: 700; line-height: 1.2;
+    color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 999px;
+    padding: 0 6px; cursor: pointer; white-space: nowrap;
+  }
+  .travel-overlay .t-switch:hover { background: rgba(255,255,255,.35); }
+  .travel-overlay .t-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   /* A leg that overlaps an appointment (a telehealth taken before driving
      home) sits as a strip on the right, above the tile, so it can be grabbed. */
   .travel-overlay.overlaps { left: auto; right: 2px; width: 40%; z-index: 3; }
@@ -4041,6 +4051,9 @@ window.opIcon = function (name, size) {
 .travel-overlay.preview { outline: 1.5px dashed rgba(61,108,174,.7); pointer-events: none; z-index: 4; }
 .travel-overlay.preview.placeholder { background: repeating-linear-gradient(135deg, rgba(61,108,174,.10) 0 6px, transparent 6px 12px); color: #3d6cae; }
 .travel-overlay.suppressed { display: none !important; }
+/* The day's drive home, moved after a proposed last stop (travel.js _bspPreviewHomeAfter). */
+.travel-overlay.preview.home-after { border-left-color: #8b80c8; color: #6d63a8;
+  background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
 </style>
 </head>
 <body>

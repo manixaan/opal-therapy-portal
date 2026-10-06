@@ -158,7 +158,7 @@ describe('between two sessions: straight on, or home in between', () => {
     expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
     expect([L[0].fromSessionId, L[0].toLoc.suburb, hhmm(L[0].startMin), hhmm(L[0].endMin)]).toEqual([a.id, 'Willetton', '20:45', '21:10']);
     expect([L[1].toSessionId, L[1].fromLoc.suburb, hhmm(L[1].startMin), hhmm(L[1].endMin)]).toEqual([b.id, 'Willetton', '21:53', '22:15']);
-    expect(L.every((x) => x.auto && x.plan === 'auto')).toBe(true);
+    expect(L.every((x) => x.auto && x.plan === 'home')).toBe(true);   // the suggestion is one of the two options
   });
 
   test('not enough time to go home → one direct leg', () => {
