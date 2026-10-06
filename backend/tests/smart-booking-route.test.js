@@ -814,6 +814,42 @@ describe('after Create appointment — What would you like to do next?', () => {
     expect(appointmentWrites(env)).toHaveLength(0);
   });
 
+  test('Go Somewhere Else with an appointment later that day: the place becomes the way there, replacing an earlier Direct', async () => {
+    const SUP = 'Mobility Supplies, 5 Supply Rd, Bibra Lake WA 6163';
+    const env = booked({ routes: { [A_ADDR + '|' + SUP]: 14 }, api: {
+      'GET /api/travel-destinations': [200, { destinations: [] }],
+      'POST /api/travel-destinations': (b) => [201, { duplicate: false, destination: { id: 'd-3', label: b.label, address: b.address } }],
+    } });
+    env.ev(`SESSIONS.A.travel = { next: 'direct' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    dialog(env).querySelector('[data-next="elsewhere"]').click();
+    await flush();
+    const places = env.ev('__calls.places');
+    const ac = places[places.length - 1];
+    ac.el.value = SUP;
+    ac.cb(SUP, '-32.09', '115.82', 'ChIJsup');
+    dialog(env).querySelector('#br-else-name').value = 'Supplier';
+    dialog(env).querySelector('[data-br-act="else-go"]').click();
+    await flush();
+    const p = patches(env);
+    expect(p[0].body.after).toMatchObject({ address: SUP, purpose: 'elsewhere' });
+    expect(p[1].body).toEqual({ next: null, afterOffsetMin: null });     // the Direct choice is cleared
+    const L = env.ev("computeDayTravelSegments('mon')").filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['place-in', 'place-out']);
+    expect(L[0].toLoc.label).toBe('Supplier');
+  });
+
+  test('Return Home with an appointment later that day means home in between', async () => {
+    const HOMEB = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek' }] };
+    const env = booked(Object.assign({ routes: { [A_ADDR + '|' + HOME_ADDR]: 18 } }, HOMEB));
+    env.ev(`SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    dialog(env).querySelector('[data-next="home"]').click();
+    await flush();
+    const p = patches(env);
+    expect(p[0].body.after).toMatchObject({ kind: 'base', id: 'home-1', purpose: 'home' });
+    expect(p[1].body).toEqual({ next: 'home', afterOffsetMin: null });
+  });
+
   test('a booking that did not save offers no continuation', async () => {
     const env = makeEnv();
     env.ev('onBookingCreated(' + JSON.stringify(Object.assign({}, INFO, { dbId: null })) + ')');

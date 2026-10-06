@@ -1390,8 +1390,28 @@ function placeTravelLeg(input) {
 const TRAVEL_HOME_MIN_STAY = 30;
 function betweenTravelPlan(curr, next, base) {
   const choice = curr && curr.travel && (curr.travel.next === 'direct' || curr.travel.next === 'home') ? curr.travel.next : null;
-  const out = { mode: 'direct', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false };
+  const out = { mode: 'direct', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false,
+                place: null, toPlace: 0, fromPlace: 0, placeAvailable: false };
   const fromKey = locTravelKey(sessionLocation(curr)), toKey = locTravelKey(sessionLocation(next));
+  // "Go Somewhere Else" (6 Oct 2026): the place saved as this session's
+  // "after" is where the therapist goes next — between two sessions too, not
+  // only at the end of the day. It is the way unless Direct / Home has been
+  // chosen since (Go Somewhere Else clears that choice when it is saved).
+  const placeSpec = curr ? sessionTravelOverride(curr, 'after') : null;
+  const place = placeSpec && placeSpec.purpose === 'elsewhere' ? resolveTravelPoint(placeSpec, curr.day) : null;
+  const placeKey = place ? (place.addr || place.suburb) : null;
+  if (place && fromKey && toKey && placeKey) {
+    const toPlace = canonAddr(placeKey) === canonAddr(fromKey) ? 0 : travelMinutes(fromKey, placeKey);
+    const fromPlace = canonAddr(placeKey) === canonAddr(toKey) ? 0 : travelMinutes(placeKey, toKey);
+    out.placeAvailable = true;
+    if (!choice) {
+      Object.assign(out, { mode: 'elsewhere', auto: false, place: Object.assign({}, place), toPlace, fromPlace });
+      // Home stays offered as the other way, so the switch can still flip.
+      const bk = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
+      out.homeAvailable = !!(bk && canonAddr(bk) !== canonAddr(fromKey) && canonAddr(bk) !== canonAddr(toKey));
+      return out;
+    }
+  }
   const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
   if (!fromKey || !toKey || !baseKey) return out;
   if (canonAddr(baseKey) === canonAddr(fromKey) || canonAddr(baseKey) === canonAddr(toKey)) return out;
@@ -1495,25 +1515,29 @@ function computeDayTravelSegments(day) {
       const from = sessionLocation(curr), to = sessionLocation(next);
       const fromKey = locTravelKey(from), toKey = locTravelKey(to);
       const plan = betweenTravelPlan(curr, next, base);
-      if (plan.home) {
-        const hb = plan.home, homeLoc = { suburb: hb.suburb, label: hb.label, region: hb.region, address: hb.addr || null, addr: hb.addr || null };
-        const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: plan.toBase, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
-        const retAuto = ret.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: plan.toBase, busy: busyFor(curr, next) }).startMin : ret.startMin;
-        segs.push({
-          day, kind: 'between', via: 'home-return', plan: plan.mode, auto: plan.auto,
+      if (plan.home || plan.place) {
+        // Two legs through a stop: home (via 'home-return' / 'home-out') or
+        // the place saved with Go Somewhere Else ('place-in' / 'place-out').
+        const atPlace = !plan.home;
+        const hb = plan.home || plan.place, homeLoc = { suburb: hb.suburb, label: hb.label, region: hb.region, address: hb.addr || null, addr: hb.addr || null };
+        const toMin = atPlace ? plan.toPlace : plan.toBase, fromMin = atPlace ? plan.fromPlace : plan.fromBase;
+        const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: toMin, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
+        const retAuto = ret.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: toMin, busy: busyFor(curr, next) }).startMin : ret.startMin;
+        if (toMin > 0) segs.push({
+          day, kind: 'between', via: atPlace ? 'place-in' : 'home-return', plan: plan.mode, auto: plan.auto, homeAvailable: plan.homeAvailable,
           fromLoc: locOf(from), toLoc: homeLoc,
-          startMin: ret.startMin, endMin: ret.endMin, travelMin: plan.toBase, freeMin: 0,
+          startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0,
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next), autoStartMin: retAuto,
           fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
           ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null,
           cacheKey: routeKey(fromKey, hb.addr || hb.suburb, 'driving')
         });
-        const out = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: ret.endMin, travelMin: plan.fromBase, offsetMin: offsetOf(next, 'before'), busy: busyFor(curr, next) });
-        const outAuto = out.moved ? placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: ret.endMin, travelMin: plan.fromBase, busy: busyFor(curr, next) }).startMin : out.startMin;
-        segs.push({
-          day, kind: 'between', via: 'home-out', plan: plan.mode, auto: plan.auto,
+        const out = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: ret.endMin, travelMin: fromMin, offsetMin: offsetOf(next, 'before'), busy: busyFor(curr, next) });
+        const outAuto = out.moved ? placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: ret.endMin, travelMin: fromMin, busy: busyFor(curr, next) }).startMin : out.startMin;
+        if (fromMin > 0) segs.push({
+          day, kind: 'between', via: atPlace ? 'place-out' : 'home-out', plan: plan.mode, auto: plan.auto,
           fromLoc: homeLoc, toLoc: locOf(to),
-          startMin: out.startMin, endMin: out.endMin, travelMin: plan.fromBase, freeMin: 0,
+          startMin: out.startMin, endMin: out.endMin, travelMin: fromMin, freeMin: 0,
           moved: out.moved, tight: out.tight, autoStartMin: outAuto,
           fromSessionId: null, toSessionId: next.id, gapFromSessionId: curr.id, gapToSessionId: next.id,
           ownerSessionId: next.id, ownerSide: 'before', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null,
@@ -1653,7 +1677,8 @@ function renderSegmentOverlay(col, seg) {
   const overlaps = (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
   if (overlaps) el.classList.add('overlaps');
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End'
-    : seg.via === 'home-return' ? 'Home' : seg.via === 'home-out' ? 'From home' : 'Travel';
+    : seg.via === 'home-return' ? 'Home' : seg.via === 'home-out' ? 'From home'
+    : seg.via === 'place-in' ? 'To ' + (seg.toLoc.label || 'stop') : seg.via === 'place-out' ? 'From ' + (seg.fromLoc.label || 'stop') : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
@@ -1681,15 +1706,17 @@ function renderSegmentOverlay(col, seg) {
   // two ways to go, and the leg says which one it is. A click flips it (one
   // Cmd+Z flips it back). It sits on the direct leg, or on the drive home of
   // a via-home gap — one switch per gap.
-  const gapFrom = seg.kind === 'between' && seg.via !== 'home-out' && seg.gapFromSessionId && window.SESSIONS
+  const gapFrom = seg.kind === 'between' && seg.via !== 'home-out' && seg.via !== 'place-out' && seg.gapFromSessionId && window.SESSIONS
     ? window.SESSIONS[seg.gapFromSessionId] : null;
-  if (gapFrom && gapFrom.dbId && (seg.via === 'home-return' || seg.homeAvailable)) {
-    const viaHome = seg.via === 'home-return';
+  if (gapFrom && gapFrom.dbId && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
+    // Via home or via a saved place flips to Direct; Direct flips to home.
+    const viaHome = seg.via === 'home-return' || seg.via === 'place-in';
+    const viaName = seg.via === 'place-in' ? 'Via ' + (seg.toLoc.label || 'stop') : 'Via home';
     const sw = document.createElement('button');
     sw.type = 'button';
     sw.className = 't-switch';
-    sw.textContent = (viaHome ? 'Via home' : 'Direct') + ' ⇄';
-    sw.title = viaHome ? 'Going home in between. Click to go direct to the next client instead.'
+    sw.textContent = (viaHome ? viaName : 'Direct') + ' ⇄';
+    sw.title = viaHome ? 'Going ' + (seg.via === 'place-in' ? 'to ' + (seg.toLoc.label || 'the stop') : 'home') + ' in between. Click to go direct to the next client instead.'
                        : 'Going direct to the next client. Click to go home in between instead.';
     sw.setAttribute('aria-label', sw.title);
     sw.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a leg drag, not a create-drag
@@ -1730,7 +1757,8 @@ function travelOutlookPayload(day, segs) {
     if (!owner || !owner.dbId) return;
     const from = seg.fromLoc.suburb || seg.fromLoc.label || 'previous stop';
     const to = seg.toLoc.suburb || seg.toLoc.label || 'next stop';
-    const what = seg.via === 'home-return' || (seg.kind === 'end') ? 'Travel home' : seg.via === 'home-out' || seg.kind === 'start' ? 'Travel from home' : 'Travel';
+    const what = seg.via === 'place-in' ? 'Travel to ' + to : seg.via === 'place-out' ? 'Travel from ' + from
+      : seg.via === 'home-return' || (seg.kind === 'end') ? 'Travel home' : seg.via === 'home-out' || seg.kind === 'start' ? 'Travel from home' : 'Travel';
     const start = Math.max(0, seg.startMin), end = Math.min(24 * 60 - 1, seg.endMin);
     if (end <= start) return;
     legs.push({
@@ -2115,7 +2143,9 @@ function _renderTravelPanel(seg) {
   if (gapFrom && gapTo) {
     var plan = betweenTravelPlan(gapFrom, gapTo, dayAnchorBase(seg.day));
     var goingHome = !!plan.home;
-    var why = !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
+    var placeName = plan.placeAvailable ? (resolveTravelPoint(sessionTravelOverride(gapFrom, 'after'), seg.day) || {}).label || 'the saved place' : '';
+    var why = plan.mode === 'elsewhere' ? 'Going to ' + placeName + ' in between (chosen with Go Somewhere Else).'
+      : !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
       : plan.auto ? (goingHome ? 'Suggested: there is time to go home (' + plan.toBase + ' min home, ' + TRAVEL_HOME_MIN_STAY + ' min there, ' + plan.fromBase + ' min out).'
                                : 'Suggested: not enough time to go home in between.')
       : 'Your choice.';
@@ -2126,6 +2156,9 @@ function _renderTravelPanel(seg) {
     html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
       '<button type="button" class="tp-plan-opt' + (plan.mode === 'direct' ? ' on' : '') + '" data-mode="direct">Go direct to next client</button>' +
       (plan.homeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'home' ? ' on' : '') + '" data-mode="home">Go home in between</button>' : '') +
+      // A saved Go Somewhere Else place is its own way; choosing it clears the
+      // Direct / Home choice so the place applies again.
+      (plan.placeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'elsewhere' ? ' on' : '') + '" data-mode="">Go to ' + _tpEsc(placeName) + ' in between</button>' : '') +
       '</div><div class="tp-plan-hint">' + _tpEsc(why) + '</div>';
   }
 

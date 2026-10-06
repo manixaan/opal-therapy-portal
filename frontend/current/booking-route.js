@@ -531,11 +531,19 @@
     var s = sessionFor(info);
     if (!s) { ui.busy(false); ui.msg('The appointment is still saving — try again in a moment.', 'warn'); return false; }
     var ok = await global.setTravelOverride(s.id, 'after', spec);
+    // With another appointment later that day (6 Oct 2026) the answer is the
+    // way to it as well: Return Home = home in between; Go Somewhere Else =
+    // via that place, so any earlier Direct / Home choice is cleared.
+    var later = laterSessionsOnDay(info);
+    if (ok && later.length && fn('setBetweenTravel')) {
+      var cur = sessionFor(info) || s;
+      if (spec.purpose === 'home') ok = await global.setBetweenTravel(cur.id, 'home');
+      else if (spec.purpose === 'elsewhere' && cur.travel && cur.travel.next) ok = await global.setBetweenTravel(cur.id, null);
+    }
     ui.busy(false);
     if (!ok) { ui.msg('Couldn’t save the travel leg. The appointment itself is booked.', 'error'); return false; }
     closeNext();
-    var later = laterSessionsOnDay(info);
-    toast(doneText, later.length ? 'Another appointment follows later that day — the calendar draws the drive from the day’s last session.' : '');
+    toast(doneText, later.length ? 'The calendar routes the drive there before the next appointment.' : '');
     return true;
   }
 

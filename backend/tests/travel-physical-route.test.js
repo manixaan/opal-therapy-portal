@@ -349,3 +349,42 @@ describe('travel badge on each event', () => {
     expect(c.travelBadgeState(c.SESSIONS.X, segs2).state).toBe('here');
   });
 });
+
+describe('Go Somewhere Else between two sessions (6 Oct 2026)', () => {
+  // A at Osborne Park, then a school visit saved as A's "after", then B in Joondalup.
+  const placeAfter = { kind: 'address', address: SCHOOL, suburb: 'Scarborough', label: 'School', purpose: 'elsewhere' };
+
+  test('the saved place is the way: two legs, A → School → B — not home, not direct', () => {
+    const c = load();
+    const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: placeAfter } } });
+    const b = add(c, { at: '14:00', to: '15:00', s: { address: JOONDALUP, patient: 'B' } });   // long gap: would suggest home
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['place-in', 'place-out']);
+    expect(L.map((x) => x.plan)).toEqual(['elsewhere', 'elsewhere']);
+    expect([L[0].fromSessionId, L[0].toLoc.label, L[0].travelMin]).toEqual([a.id, 'School', 15]);
+    expect([L[1].toSessionId, L[1].fromLoc.label, L[1].travelMin]).toEqual([b.id, 'School', 20]);
+    expect(hhmm(L[0].startMin)).toBe('10:00');                       // leaves as A ends
+    expect(hhmm(L[1].endMin)).toBe('14:00');                         // arrives as B starts
+    // the day still ends at home from B — the place is not the day's end
+    expect(legs(c).find((x) => x.kind === 'end').fromSessionId).toBe(b.id);
+  });
+
+  test('Direct or Home chosen afterwards wins; the place is still offered to switch back', () => {
+    const c = load();
+    const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: placeAfter, next: 'direct' } } });
+    add(c, { at: '14:00', to: '15:00', s: { address: JOONDALUP, patient: 'B' } });
+    let L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual([null]);
+    expect(c.betweenTravelPlan(c.SESSIONS[a.id], c.SESSIONS[Object.keys(c.SESSIONS)[1]], c.dayAnchorBase('mon')).placeAvailable).toBe(true);
+    c.SESSIONS[a.id].travel = { after: placeAfter, next: 'home' };
+    L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
+  });
+
+  test('a "Return Home" after (purpose home) is not a place — the home/direct rule decides', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: { kind: 'base', id: 'home-1', purpose: 'home' } } } });
+    add(c, { at: '11:00', to: '12:00', s: { address: JOONDALUP, patient: 'B' } });             // too short for home
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
+  });
+});
