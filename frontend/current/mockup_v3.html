@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=34" defer></script>
+<script src="/travel.js?v=35" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -3227,6 +3227,9 @@ window.opIcon = function (name, size) {
   }
   .travel-overlay .t-switch:hover { background: rgba(255,255,255,.35); }
   .travel-overlay .t-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Legs redrawn while a session is dragged (travel.js previewTravelForMove):
+     they follow the session and never catch the pointer mid-drag. */
+  .travel-overlay.drag-preview { pointer-events: none; }
   /* Same place, no drive — a slim marker that only carries the switch. */
   .travel-overlay.stay { height: 18px !important; background: transparent; border-left-style: dashed; opacity: .85; }
   /* A leg that overlaps an appointment (a telehealth taken before driving
@@ -15088,6 +15091,7 @@ function onBlockPointerCancel() {
     if (drag.el) { drag.el.classList.remove('dragging'); }
     drag = null;
   }
+  if (typeof endTravelPreview === 'function') endTravelPreview(true);
 }
 
 function onBlockPointerMove(e) {
@@ -15136,8 +15140,11 @@ function onBlockPointerMove(e) {
   drag.ghost.querySelector('.ghost-label').textContent =
     `${DAY_LABEL[day]} · ${fmtTime(sh, sm)}–${fmtTime(eh, em)}`;
 
+  // The travel around it follows, redrawn only when the snapped slot changes.
+  const slotChanged = day !== drag.currentDay || snappedStart !== drag.currentStartMin;
   drag.currentDay = day;
   drag.currentStartMin = snappedStart;
+  if (slotChanged && typeof previewTravelForMove === 'function') previewTravelForMove(drag.id, day, snappedStart, drag.durationMin);
 }
 
 function pointerOverColumn(x) {
@@ -15182,6 +15189,7 @@ function onBlockPointerUp(e) {
 }
 
 function revertDragVisuals() {
+  if (typeof endTravelPreview === 'function') endTravelPreview(true);   // the real legs come back
   if (!drag) return;
   drag.el.classList.remove('dragging');
   // put element back into original column if it was moved
@@ -15267,9 +15275,11 @@ function onBlockResizeMove(e) {
   resize.tip.style.left = (r.right + 8) + 'px';
   resize.tip.style.top  = (resize.edge === 'top' ? r.top : r.bottom - 20) + 'px';
 
-  // Stash pending new values
+  // Stash pending new values; the travel around it follows the new edges.
+  const edgesChanged = newStart !== resize.newStart || newDur !== resize.newDur;
   resize.newStart = newStart;
   resize.newDur   = newDur;
+  if (edgesChanged && typeof previewTravelForMove === 'function') previewTravelForMove(resize.id, resize.s.day, newStart, newDur);
 }
 
 function onBlockResizeEnd(e) {
@@ -15291,6 +15301,7 @@ function onBlockResizeEnd(e) {
     el.style.top    = tToY(s.startH, s.startM || 0) + 'px';
     el.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
     resize = null;
+    if (typeof endTravelPreview === 'function') endTravelPreview(true);
     openBlockDetail(id);
     return;
   }
@@ -15598,6 +15609,7 @@ function addTravelAndConfirm() {
 
 function commitMove() {
   if (!pendingMove) return;
+  if (typeof endTravelPreview === 'function') endTravelPreview(false);   // the redraw below is the real one
   const { id, day: newDay, startMin, duration } = pendingMove;
   const s = SESSIONS[id];
   const origDay = s.day;

@@ -266,7 +266,49 @@ let _overlayRefreshTimer = null;
 function scheduleOverlayRefresh() {
   if (typeof refreshAllOverlays !== 'function') return;
   clearTimeout(_overlayRefreshTimer);
-  _overlayRefreshTimer = setTimeout(() => { _overlayRefreshTimer = null; refreshAllOverlays(); }, 250);
+  _overlayRefreshTimer = setTimeout(() => {
+    _overlayRefreshTimer = null;
+    // Mid-drag the legs show the dragged position; a route answer waits
+    // for the drag to end (endTravelPreview runs it once).
+    if (TRAVEL_DRAG.active) { TRAVEL_DRAG.pendingRefresh = true; return; }
+    refreshAllOverlays();
+  }, 250);
+}
+
+/* ---------- Travel follows a dragged session (6 Oct 2026) ----------
+   While a session is dragged or resized, the day's legs are redrawn as if
+   it were already at the snapped position — its own legs travel with it and
+   the neighbours' legs change the way they will on drop. Drawing only: the
+   session's real times are put straight back, nothing is saved, nothing is
+   mirrored to Outlook. Drop commits as before (commitMove redraws for real);
+   a cancelled or unchanged drag puts the real legs back (endTravelPreview). */
+const TRAVEL_DRAG = { active: false, days: new Set(), pendingRefresh: false };
+function _drawDayLegsOnly(day) {
+  const col = document.getElementById('day-' + day);
+  if (!col) return;
+  clearDayOverlays(day);
+  computeDayTravelSegments(day).forEach(seg => renderSegmentOverlay(col, seg));
+  col.querySelectorAll('.travel-overlay').forEach(el => el.classList.add('drag-preview'));
+}
+function previewTravelForMove(id, day, startMin, durationMin) {
+  const s = window.SESSIONS && window.SESSIONS[id];
+  if (!s) return;
+  const real = { day: s.day, startH: s.startH, startM: s.startM, endH: s.endH, endM: s.endM };
+  const endMin = startMin + durationMin;
+  TRAVEL_DRAG.active = true;
+  TRAVEL_DRAG.days.add(real.day); TRAVEL_DRAG.days.add(day);
+  try {
+    Object.assign(s, { day, startH: Math.floor(startMin / 60), startM: startMin % 60, endH: Math.floor(endMin / 60), endM: endMin % 60 });
+    TRAVEL_DRAG.days.forEach(_drawDayLegsOnly);   // a day it left goes back to its real legs too
+  } finally {
+    Object.assign(s, real);
+  }
+}
+function endTravelPreview(redraw) {
+  const days = Array.from(TRAVEL_DRAG.days);
+  TRAVEL_DRAG.active = false; TRAVEL_DRAG.days.clear();
+  if (redraw) days.forEach(d => refreshDayOverlays(d));
+  if (TRAVEL_DRAG.pendingRefresh) { TRAVEL_DRAG.pendingRefresh = false; scheduleOverlayRefresh(); }
 }
 
 /* Public facade — every caller (impact evaluator, gap-option scorer,

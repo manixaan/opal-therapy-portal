@@ -1039,3 +1039,46 @@ describe('same place twice in a day: the choice stays visible (6 Oct 2026)', () 
     expect(env.win.document.querySelector('#day-mon .travel-overlay .t-switch').textContent).toBe('Via home ⇄');
   });
 });
+
+describe('travel follows a dragged session (6 Oct 2026)', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  const leg = (env, sel) => env.win.document.querySelector('#day-mon .travel-overlay' + sel);
+  function day(env) {
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 12, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    env.ev("refreshDayOverlays('mon')");
+  }
+
+  test('while dragged, the session\'s own legs move with it — and its real times are untouched', () => {
+    const env = makeEnv(HOME);
+    day(env);
+    const before = parseFloat(leg(env, '.end').style.top);
+    env.ev("previewTravelForMove('B', 'mon', 13 * 60, 60)");          // drag B from 11:00 to 13:00
+    expect(parseFloat(leg(env, '.end').style.top)).toBeCloseTo(before + 2 * env.ev('HOUR_PX'), 0);   // the drive home follows
+    expect(leg(env, '.end').classList.contains('drag-preview')).toBe(true);
+    expect(env.ev('[SESSIONS.B.startH, SESSIONS.B.endH]')).toEqual([11, 12]);
+  });
+
+  test('a drag never mirrors to Outlook; a cancel puts the real legs back', async () => {
+    const env = makeEnv(HOME);
+    day(env);
+    const real = parseFloat(leg(env, '.end').style.top);
+    await flush(2600);                                                   // the real day's own redraw + sync go first
+    const syncsBefore = env.log.filter((c) => c.url === '/api/travel/outlook-sync').length;
+    env.ev("previewTravelForMove('B', 'mon', 14 * 60, 60)");
+    await flush(1700);                                                   // past the Outlook sync debounce
+    expect(env.log.filter((c) => c.url === '/api/travel/outlook-sync').length).toBe(syncsBefore);
+    env.ev('endTravelPreview(true)');
+    expect(parseFloat(leg(env, '.end').style.top)).toBeCloseTo(real, 0);
+    expect(leg(env, '.end').classList.contains('drag-preview')).toBe(false);
+  });
+
+  test('the shell wires it: drag and resize preview on a slot change, revert and commit end it', () => {
+    expect(SHELL).toMatch(/if \(slotChanged && typeof previewTravelForMove === 'function'\) previewTravelForMove\(drag\.id, day, snappedStart, drag\.durationMin\);/);
+    expect(SHELL).toMatch(/if \(edgesChanged && typeof previewTravelForMove === 'function'\) previewTravelForMove\(resize\.id, resize\.s\.day, newStart, newDur\);/);
+    const revert = SHELL.slice(SHELL.indexOf('function revertDragVisuals()'), SHELL.indexOf('function revertDragVisuals()') + 200);
+    expect(revert).toMatch(/endTravelPreview\(true\)/);
+    const commit = SHELL.slice(SHELL.indexOf('function commitMove()'), SHELL.indexOf('function commitMove()') + 300);
+    expect(commit).toMatch(/endTravelPreview\(false\)/);
+  });
+});
