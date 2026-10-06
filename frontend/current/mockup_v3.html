@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=32" defer></script>
+<script src="/travel.js?v=34" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -3227,6 +3227,8 @@ window.opIcon = function (name, size) {
   }
   .travel-overlay .t-switch:hover { background: rgba(255,255,255,.35); }
   .travel-overlay .t-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Same place, no drive — a slim marker that only carries the switch. */
+  .travel-overlay.stay { height: 18px !important; background: transparent; border-left-style: dashed; opacity: .85; }
   /* A leg that overlaps an appointment (a telehealth taken before driving
      home) sits as a strip on the right, above the tile, so it can be grabbed. */
   .travel-overlay.overlaps { left: auto; right: 2px; width: 40%; z-index: 3; }
@@ -14270,6 +14272,8 @@ async function performDeleteEvent(id, cascadeIds) {
   const dbId = s.dbId;
   // Chain: a last session's "after" passes back to the one that becomes last.
   const gapClose = (typeof travelGapClosingFor === 'function') ? travelGapClosingFor(id) : null;
+  // The stops either side, read before the tile goes: their travel is re-planned after.
+  const replan = (typeof travelNeighboursOf === 'function') ? travelNeighboursOf(id) : null;
 
   // Optimistic: pull the event tile and its travel-block tiles off the canvas
   const cols = new Set();
@@ -14328,11 +14332,12 @@ async function performDeleteEvent(id, cascadeIds) {
       });
     }
 
-    if (gapClose && typeof setTravelOverride === 'function') setTravelOverride(gapClose.sessionId, 'after', gapClose.spec);
+    if (gapClose && typeof setTravelOverride === 'function') await setTravelOverride(gapClose.sessionId, 'after', gapClose.spec);
 
     const n = json.travelBlocksDeleted || 0;
     showToast((n ? `Event deleted (with ${n} travel block${n === 1 ? '' : 's'})` : 'Event deleted') + ' (Cmd+Z to undo)');
     console.log(`🗑️ Event deleted: ${id} (Outlook removed: ${json.deletedFromOutlook}, travel blocks: ${n})`);
+    if (replan && typeof travelReplanAfterDelete === 'function') travelReplanAfterDelete(replan);
   } catch (err) {
     console.error('Delete event error:', err);
     showToast('Could not delete — check your connection and try again.', true);

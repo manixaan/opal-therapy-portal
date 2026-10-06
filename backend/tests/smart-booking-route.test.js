@@ -965,3 +965,77 @@ describe('Splose sync never pops up (6 Oct 2026)', () => {
     expect(SYNC).toMatch(/S\.autoSync = r\.json\.autoSyncEnabled === true;/);
   });
 });
+
+describe('deleting a session re-plans the travel either side (6 Oct 2026)', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  const popup = (env) => env.win.document.querySelector('.pd-backdrop .pd-dialog');
+  const travelPatches = (env, db) => env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/' + db + '/travel');
+  function day(env) {
+    // Noah 7:45 (chose Direct to Sean), Sean 9:30, Noah again 16:00 at the same address.
+    env.ev(`SESSIONS.N1 = { id: 'N1', day: 'mon', type: 'therapy', startH: 7, startM: 45, endH: 8, endM: 45, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N1', travel: { next: 'direct' } };
+      SESSIONS.S  = { id: 'S',  day: 'mon', type: 'therapy', startH: 9, startM: 30, endH: 10, endM: 30, address: ${JSON.stringify(CV_ADDR)}, patient: 'Sean Hickey', dbId: 'db-S' };
+      SESSIONS.N2 = { id: 'N2', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N2' };`);
+  }
+
+  test('the stale Direct is cleared and the new gap is asked about — Via home is the suggestion for a long gap', async () => {
+    const env = makeEnv(HOME);
+    day(env);
+    env.ev("var __ctx = travelNeighboursOf('S'); delete SESSIONS.S; var __done = travelReplanAfterDelete(__ctx);");
+    await flush();
+    expect(travelPatches(env, 'db-N1')[0].body).toEqual({ next: null, afterOffsetMin: null });
+    expect(popup(env).textContent).toMatch(/Travel after removing Sean Hickey/);
+    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45am and Noah Mathew 4:00pm are now back to back/);
+    const opts = Array.from(popup(env).querySelectorAll('.tc-opt')).map((b) => b.textContent);
+    expect(opts[0]).toMatch(/^Go direct to Noah Mathew · same place, no drive$/);
+    expect(opts[1]).toMatch(/^Go home in between · \d+ min home, \d+ min out \(suggested\)$/);
+    popup(env).querySelector('[data-key="home"]').click();
+    expect(await env.ev('__done')).toBe('home');
+    expect(travelPatches(env, 'db-N1').pop().body).toEqual({ next: 'home', afterOffsetMin: null });
+    const L = env.ev("computeDayTravelSegments('mon')").filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
+  });
+
+  test('a session that now ends the day: keep the drive home, or change where the day ends', async () => {
+    const env = makeEnv(HOME);
+    day(env);
+    env.ev("delete SESSIONS.N2; var __opened = null; openTravelPanel = function (seg) { __opened = seg.kind; };");
+    env.ev("var __ctx = travelNeighboursOf('S'); delete SESSIONS.S; var __done = travelReplanAfterDelete(__ctx);");
+    await flush();
+    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45am is now the last stop on Monday\. The day ends with the drive to Home/);
+    popup(env).querySelector('[data-key="change"]').click();
+    expect(await env.ev('__done')).toBe('change');
+    expect(env.ev('__opened')).toBe('end');
+  });
+
+  test('deleting a telehealth (no address) changes no travel and asks nothing', () => {
+    const env = makeEnv(HOME);
+    day(env);
+    env.ev("SESSIONS.T = { id: 'T', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 11, endM: 30, patient: 'Tele Client', dbId: 'db-T' };");
+    expect(env.ev("travelNeighboursOf('T')")).toBeNull();
+  });
+
+  test('the shell reads the neighbours before the tile goes and re-plans after the delete succeeds', () => {
+    const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('/* ---------- Detail drawer'));
+    expect(del.indexOf('travelNeighboursOf(id)')).toBeLessThan(del.indexOf('__removeSessionTile(id, cols)'));
+    expect(del.indexOf('travelReplanAfterDelete(replan)')).toBeGreaterThan(del.indexOf("if (!r.ok) {"));
+  });
+});
+
+describe('same place twice in a day: the choice stays visible (6 Oct 2026)', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  test('a "Direct" between two sessions at one address draws a slim Same place marker with the switch', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.N1 = { id: 'N1', day: 'mon', type: 'therapy', startH: 7, startM: 45, endH: 8, endM: 45, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N1', travel: { next: 'direct' } };
+      SESSIONS.N2 = { id: 'N2', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N2' };`);
+    env.ev("refreshDayOverlays('mon')");
+    const stay = env.win.document.querySelector('#day-mon .travel-overlay.stay');
+    expect(stay.textContent).toMatch(/Same place/);
+    expect(stay.querySelector('.t-switch').textContent).toBe('Direct ⇄');
+    // it is not a drive: not mirrored to Outlook, not a badge's "travel linked"
+    expect(env.ev("travelOutlookPayload('mon', computeDayTravelSegments('mon')).legs.some(function (l) { return / 0 min /.test(l.title); })")).toBe(false);
+    expect(env.ev("travelBadgeState(SESSIONS.N1, computeDayTravelSegments('mon')).text")).not.toMatch(/\b0 min\b/);
+    stay.querySelector('.t-switch').click();
+    await flush();
+    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-switch').textContent).toBe('Via home ⇄');
+  });
+});

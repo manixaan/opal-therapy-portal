@@ -731,6 +731,63 @@ function travelChooser(title, message, options) {
   });
 }
 
+/* ---------- After a delete: re-plan the travel either side (6 Oct 2026) ----------
+   Deleting a stop joins the stops either side into one new gap. What the
+   earlier one had chosen for its way onward (Direct / Home, a moved return
+   leg) belonged to the gap to the deleted stop, so it is cleared — it once
+   left "direct" pointing at a same-address session later that day, which drew
+   no travel at all. Then one small popup puts the plan back in place:
+     both neighbours → Direct or Via home (or the earlier one's saved place)
+     only the earlier → it now ends the day: keep the drive, or change it
+     only the later  → it now starts the day: keep the drive, or change it
+   The clearing joins the delete's own Cmd+Z step; the choice is its own. */
+function travelNeighboursOf(id) {
+  const s = window.SESSIONS && window.SESSIONS[id];
+  if (!s || isTravelBlock(s) || !isPhysicalStop(s)) return null;
+  const stops = sessionsForDay(s.day).filter(x => x !== s && !isTravelBlock(x) && isPhysicalStop(x));
+  const start = sessionStartMin(s);
+  const before = stops.filter(x => sessionStartMin(x) < start);
+  const after = stops.filter(x => sessionStartMin(x) >= start);
+  return { day: s.day, label: _stopName(s) || s.title || 'the deleted session',
+           prevId: before.length ? before[before.length - 1].id : null, nextId: after.length ? after[0].id : null };
+}
+async function travelReplanAfterDelete(ctx) {
+  if (!ctx || !window.SESSIONS) return null;
+  const prev = ctx.prevId ? window.SESSIONS[ctx.prevId] : null;
+  const next = ctx.nextId ? window.SESSIONS[ctx.nextId] : null;
+  if (!prev && !next) return null;
+  // 1. Forget what belonged to the old gaps.
+  if (prev && prev.dbId && prev.travel && (prev.travel.next || prev.travel.afterOffsetMin != null)) await setBetweenTravel(prev.id, null);
+  if (next && next.dbId && next.travel && next.travel.beforeOffsetMin != null) await setTravelTiming(next.id, 'before', null);
+  // 2. Ask for the new plan.
+  const at = (x) => _stopName(x) + ' ' + _tpFmtTime(x.startH, x.startM || 0);
+  const dayName = ({ mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' })[ctx.day] || ctx.day;
+  const title = 'Travel after removing ' + ctx.label;
+  if (prev && next && prev.dbId) {
+    const plan = betweenTravelPlan(prev, next, dayAnchorBase(ctx.day));
+    const fromKey = locTravelKey(sessionLocation(prev)), toKey = locTravelKey(sessionLocation(next));
+    const direct = fromKey && toKey && canonAddr(fromKey) !== canonAddr(toKey) ? travelMinutes(fromKey, toKey) : 0;
+    const base = dayAnchorBase(ctx.day), baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
+    const tag = (mode) => plan.mode === mode ? ' (suggested)' : '';
+    const opts = [{ key: 'direct', label: 'Go direct to ' + _stopName(next) + (direct ? ' · ' + direct + ' min' : ' · same place, no drive') + tag('direct') }];
+    if (plan.homeAvailable && baseKey) opts.push({ key: 'home', label: 'Go home in between · ' + travelMinutes(fromKey, baseKey) + ' min home, ' + travelMinutes(baseKey, toKey) + ' min out' + tag('home') });
+    if (plan.placeAvailable) opts.push({ key: 'place', label: 'Go to ' + ((resolveTravelPoint(sessionTravelOverride(prev, 'after'), ctx.day) || {}).label || 'the saved place') + ' in between' + tag('elsewhere') });
+    const key = await travelChooser(title, at(prev) + ' and ' + at(next) + ' are now back to back. How do you travel between them?', opts);
+    if (key === 'direct' || key === 'home') await setBetweenTravel(prev.id, key);
+    return key;
+  }
+  const lone = prev || next, side = prev ? 'end' : 'start';
+  const seg = computeDayTravelSegments(ctx.day).find(x => x.kind === side && (side === 'end' ? x.fromSessionId === lone.id : x.toSessionId === lone.id));
+  if (!seg) return null;   // no drive to keep or change (no base, or the same place)
+  const where = side === 'end' ? (seg.toLoc.label || seg.toLoc.suburb || 'home') : (seg.fromLoc.label || seg.fromLoc.suburb || 'home');
+  const key = await travelChooser(title,
+    side === 'end' ? at(lone) + ' is now the last stop on ' + dayName + '. The day ends with the drive to ' + where + ' (' + seg.travelMin + ' min).'
+                   : at(lone) + ' is now the first stop on ' + dayName + '. The day starts with the drive from ' + where + ' (' + seg.travelMin + ' min).',
+    [{ key: 'keep', label: 'Keep that' }, { key: 'change', label: side === 'end' ? 'Change where the day ends →' : 'Change where the day starts →' }]);
+  if (key === 'change') openTravelPanel(seg);
+  return key;
+}
+
 /* "Add a stop": open Smart Booking for a client straight after a session, at
    the earliest start the travel allows, carrying the travelling-from context. */
 function addStopAfterSession(sessionId, patientId) {
@@ -1546,7 +1603,19 @@ function computeDayTravelSegments(day) {
         continue;
       }
       const travel  = travelMinutes(fromKey, toKey);
-      if (travel <= 0) continue;                    // same place — no drive
+      if (travel <= 0) {
+        // Same place — no drive. Still a choice when home is possible (a
+        // morning and an afternoon at one client's), so a slim marker carries
+        // the Direct ⇄ switch; it has no time to move and nothing to mirror.
+        if (plan.homeAvailable) segs.push({
+          day, kind: 'between', via: 'stay', plan: plan.mode, auto: plan.auto, homeAvailable: true,
+          fromLoc: locOf(from), toLoc: locOf(to), startMin: sessionEndMin(curr), endMin: sessionEndMin(curr),
+          travelMin: 0, freeMin: 0, moved: false, tight: false, autoStartMin: sessionEndMin(curr),
+          fromSessionId: curr.id, toSessionId: next.id, gapFromSessionId: curr.id, gapToSessionId: next.id,
+          ownerSessionId: null, ownerSide: null, anchorBaseId: null, cacheKey: ''
+        });
+        continue;
+      }
       const at = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: sessionEndMin(curr),
                                   travelMin: travel, offsetMin: offsetOf(next, 'before'), busy: busyFor(curr, next) });
       segs.push({
@@ -1681,8 +1750,11 @@ function renderSegmentOverlay(col, seg) {
     : seg.via === 'place-in' ? 'To ' + (seg.toLoc.label || 'stop') : seg.via === 'place-out' ? 'From ' + (seg.fromLoc.label || 'stop') : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
-  el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
+  el.innerHTML = seg.via === 'stay'
+    ? `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Same place</span><span class="t-label">no drive</span>`
+    : `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
     <span class="t-label">${seg.travelMin} min · ${_tpEsc(seg.fromLoc.suburb || from)} → ${_tpEsc(seg.toLoc.suburb || to)}</span>`;
+  if (seg.via === 'stay') el.classList.add('stay');
   const kindLabel = seg.kind === 'start' ? 'Morning drive from' :
                     seg.kind === 'end'   ? 'Evening drive to'    :
                                            'Travel';
@@ -1804,7 +1876,7 @@ async function runTravelOutlookSync(day, segs) {
            it an address so travel is routed to it */
 const TRAVEL_BADGE_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17h14l-1.5-6.5A2 2 0 0 0 15.6 9H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>';
 function travelBadgeState(s, segs) {
-  const legs = (segs || []).filter(x => x.kind !== 'gap' && (x.ownerSessionId === s.id || x.fromSessionId === s.id || x.toSessionId === s.id));
+  const legs = (segs || []).filter(x => x.kind !== 'gap' && x.via !== 'stay' && (x.ownerSessionId === s.id || x.fromSessionId === s.id || x.toSessionId === s.id));
   if (legs.length) {
     const into = legs.find(x => x.toSessionId === s.id) || legs[0];
     return { state: 'on', leg: into, text: 'Travel linked: ' + legs.map(x => x.travelMin + ' min ' + (x.toSessionId === s.id ? 'from ' + (x.fromLoc.suburb || x.fromLoc.label || 'previous stop') : 'to ' + (x.toLoc.suburb || x.toLoc.label || 'next stop'))).join(', ') + '. Click for details.' };
