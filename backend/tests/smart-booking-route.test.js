@@ -1113,3 +1113,24 @@ describe('a move that leaves no time for the travel is blocked, like an overlap 
     expect(ev).toMatch(/legs\.forEach\(l => impacts\.push\(\{ sev: 'blocker', ttl: l\.ttl, sub: l\.sub \}\)\);\s+verdict = 'blocker';/);
   });
 });
+
+describe('precision move — right-click, ↑/↓ by the minute, Enter to lock (6 Oct 2026)', () => {
+  const fnBody = (name) => SHELL.slice(SHELL.indexOf('function ' + name + '('), SHELL.indexOf('\n}', SHELL.indexOf('function ' + name + '(')));
+  test('the right-click menu offers it for movable, live sessions only', () => {
+    expect(fnBody('showCalContextMenu')).toMatch(/MOVABLE_TYPES\.has\(s\.type\) && !s\.cancelled \? `<div class="cal-ctx-menu-item" onclick="startPreciseMove\('\$\{id\}'\)">/);
+  });
+  test('↑/↓ step one minute, Shift five, inside the calendar window; the travel follows', () => {
+    const start = fnBody('startPreciseMove');
+    expect(start).toMatch(/const step = \(e\.shiftKey \? 5 : 1\) \* \(e\.key === 'ArrowUp' \? -1 : 1\);/);
+    expect(start).toMatch(/Math\.max\(lo, Math\.min\(hi, precise\.startMin \+ step\)\)/);
+    expect(fnBody('renderPreciseMove')).toMatch(/previewTravelForMove\(p\.id, p\.s\.day, p\.startMin, p\.dur\)/);
+  });
+  test('Enter goes through the same checks as a drop; Esc or a click elsewhere puts it back', () => {
+    const finish = fnBody('finishPreciseMove');
+    expect(finish).toMatch(/const impact = evaluateMove\(p\.id, p\.s\.day, p\.startMin, p\.dur\);\s+openMoveImpact\(/);
+    expect(fnBody('startPreciseMove')).toMatch(/e\.key === 'Escape'[\s\S]*endPreciseMove\(false\)/);
+    expect(fnBody('startPreciseMove')).toMatch(/precise\.onDown = \(e\) => \{ if \(precise && !precise\.el\.contains\(e\.target\)\) endPreciseMove\(false\); \};/);
+    const end = fnBody('endPreciseMove');
+    expect(end).toMatch(/if \(!keep\) \{[\s\S]*endTravelPreview\(true\)/);
+  });
+});

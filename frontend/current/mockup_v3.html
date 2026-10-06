@@ -3732,6 +3732,17 @@ window.opIcon = function (name, size) {
   .cal-ctx-menu-item:hover { background: var(--accent-soft); color: var(--accent-deep); }
   .cal-ctx-menu-item .ctx-icon { font-size: 15px; }
   .cal-ctx-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+  /* Precision move (startPreciseMove): the session being nudged, and the key hint under it. */
+  .session.precise-moving { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 7; box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+  .precise-hint {
+    position: fixed; z-index: 9999; pointer-events: none;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 360px;
+    background: var(--ink); color: var(--panel); border-radius: 8px; padding: 6px 10px;
+    font-size: 12px; line-height: 1.4; box-shadow: 0 6px 18px rgba(0,0,0,.22);
+  }
+  .precise-hint .ph-delta { opacity: .8; }
+  .precise-hint .ph-keys { flex-basis: 100%; opacity: .75; font-size: 11px; }
+  .precise-hint kbd { font: inherit; font-size: 10.5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .9; }
 
   /* ─── Booking category chips (Step 1) ─── */
   .booking-cat-chips {
@@ -14159,6 +14170,9 @@ function showCalContextMenu(x, y, id) {
     <div class="cal-ctx-menu-item" onclick="closeCalContextMenu(); openBlockDetail('${id}')">
       <span class="ctx-icon">${opIcon('edit', 13)}</span> Open details
     </div>
+    ${MOVABLE_TYPES.has(s.type) && !s.cancelled ? `<div class="cal-ctx-menu-item" onclick="startPreciseMove('${id}')">
+      <span class="ctx-icon">${opIcon('clock', 13)}</span> Precision move
+    </div>` : ''}
     <div class="cal-ctx-menu-sep"></div>
     <div class="cal-ctx-menu-item" style="color:var(--danger,#c2412e);"
          onclick="ctxDeleteEvent('${id}')">
@@ -14186,6 +14200,83 @@ function closeCalContextMenu() {
 function ctxDeleteEvent(id) {
   closeCalContextMenu();
   deleteEventFlow(id);
+}
+
+/* ---------- Precision move (6 Oct 2026) ----------
+   Right-click › Precision move: ↑ / ↓ move the session a minute at a time
+   (Shift: five), so a gap can be closed to the minute; the travel legs
+   follow live (previewTravelForMove). Enter locks it in through the same
+   path as a drag — evaluateMove → openMoveImpact, so an overlap or a leg
+   that no longer fits still blocks — and Esc, or a click elsewhere, puts it
+   back. One Enter is one Cmd+Z step (commitMove registers it). */
+let precise = null;   // { id, s, el, orig, startMin, dur, hint, onKey, onDown }
+function startPreciseMove(id) {
+  closeCalContextMenu();
+  endPreciseMove(false);
+  const s = SESSIONS[id];
+  if (!s || !s.element || !MOVABLE_TYPES.has(s.type) || s.cancelled) return;
+  const hint = document.createElement('div');
+  hint.className = 'precise-hint';
+  hint.setAttribute('role', 'status');
+  hint.setAttribute('aria-live', 'polite');
+  document.body.appendChild(hint);
+  precise = { id, s, el: s.element, orig: sessionStartMin(s), startMin: sessionStartMin(s), dur: durMin(s), hint };
+  s.element.classList.add('precise-moving');
+  precise.onKey = (e) => {
+    if (!precise) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+      const step = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowUp' ? -1 : 1);
+      const lo = START_H * 60, hi = END_H * 60 - precise.dur;
+      precise.startMin = Math.max(lo, Math.min(hi, precise.startMin + step));
+      renderPreciseMove();
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); e.stopPropagation();
+      finishPreciseMove();
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      endPreciseMove(false);
+    }
+  };
+  precise.onDown = (e) => { if (precise && !precise.el.contains(e.target)) endPreciseMove(false); };
+  document.addEventListener('keydown', precise.onKey, true);
+  document.addEventListener('pointerdown', precise.onDown, true);
+  renderPreciseMove();
+}
+function renderPreciseMove() {
+  const p = precise;
+  if (!p) return;
+  p.el.style.top = ((p.startMin - START_H * 60) / 60 * HOUR_PX) + 'px';
+  const delta = p.startMin - p.orig;
+  p.hint.innerHTML = `<strong>${fmtMin(p.startMin)}–${fmtMin(p.startMin + p.dur)}</strong>` +
+    (delta ? ` <span class="ph-delta">${delta > 0 ? '+' : '−'}${Math.abs(delta)} min</span>` : '') +
+    `<span class="ph-keys"><kbd>↑</kbd><kbd>↓</kbd> 1 min · <kbd>Shift</kbd> 5 min · <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel</span>`;
+  const r = p.el.getBoundingClientRect();
+  p.hint.style.left = Math.max(8, Math.min(window.innerWidth - p.hint.offsetWidth - 8, r.left)) + 'px';
+  p.hint.style.top  = (r.bottom + 6 + p.hint.offsetHeight > window.innerHeight ? r.top - p.hint.offsetHeight - 6 : r.bottom + 6) + 'px';
+  if (typeof previewTravelForMove === 'function') previewTravelForMove(p.id, p.s.day, p.startMin, p.dur);
+}
+function endPreciseMove(keep) {
+  const p = precise;
+  if (!p) return;
+  precise = null;
+  document.removeEventListener('keydown', p.onKey, true);
+  document.removeEventListener('pointerdown', p.onDown, true);
+  p.hint.remove();
+  p.el.classList.remove('precise-moving');
+  if (!keep) {
+    p.el.style.top = tToY(p.s.startH, p.s.startM || 0) + 'px';
+    if (typeof endTravelPreview === 'function') endTravelPreview(true);
+  }
+}
+function finishPreciseMove() {
+  const p = precise;
+  if (!p) return;
+  if (p.startMin === p.orig) { endPreciseMove(false); return; }
+  endPreciseMove(true);
+  // Same as a dropped drag: commits at once, or opens the blocker review.
+  const impact = evaluateMove(p.id, p.s.day, p.startMin, p.dur);
+  openMoveImpact(p.id, p.s.day, p.startMin, p.dur, impact);
 }
 
 /* ── Shared delete flow: styled confirmation + travel-block cascade ─────────
