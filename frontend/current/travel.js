@@ -1029,20 +1029,23 @@ function runBspRoutePreview(opts) {
   const col = document.getElementById('day-' + day);
   const esc = _tpEsc;
   let fromName = esc(pred.label) + (pred.suburb ? ' (' + esc(pred.suburb) + ')' : '');
-  // The previous stop's own legs stay exactly as they are until this
-  // proposal's travel is drawn (6 Oct 2026): nothing disappears while the
-  // location is missing, unsure, or still being routed.
+  // The previous stop's own legs stay exactly as they are until the new
+  // client's location is known (6 Oct 2026). A placeholder never sits on
+  // top of them: until then it waits below the previous stop's own legs.
   const predS = pred.s;
-  const legTop = pred.endMin;
+  let legTop = pred.endMin;
   const placeholder = (text) => { if (col) _previewLeg(col, legTop, legTop, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>'); };
+  const ownLegsEnd = _bspPredLegsEnd(day, predS);
 
   if (_bspUnsure()) {
+    if (ownLegsEnd != null) legTop = Math.max(legTop, ownLegsEnd);
     placeholder('location not set');
     setBspRouteStatus('warn', '<strong>Smart Travel is off for this booking.</strong> Travel from ' + fromName + ' is calculated once the location is set on the calendar.');
     return;
   }
   const toKey = _bspTargetAddress();
   if (!pred.fromKey) {
+    if (ownLegsEnd != null) legTop = Math.max(legTop, ownLegsEnd);
     placeholder('previous stop has no address');
     setBspRouteStatus('warn', 'The previous stop has no address, so travel cannot be calculated. Set it on that appointment.');
     return;
@@ -1066,6 +1069,12 @@ function runBspRoutePreview(opts) {
                                      endMin: pred.endMin + (homePlan.toBase || 0), viaHome: true });
     fromName = esc(pred.label) + (pred.suburb ? ' (' + esc(pred.suburb) + ')' : '');
   }
+  // From here the way is known, so the calendar shows it at once — even
+  // while the route is still being calculated:
+  //   Via home  the drive home stays fixed; the new travel starts after it.
+  //   Direct    the drive home goes; the new travel takes its place.
+  _bspReplaceLegsOf(predS, homePlan.home);
+  legTop = homePlan.home ? Math.max(pred.endMin, ownLegsEnd != null ? ownLegsEnd : pred.endMin) : legTop;
   // The same two-way switch as on the calendar's legs: it names what the
   // proposal does now; a click flips it.
   const switchBtn = !homePlan.available ? ''
@@ -1186,6 +1195,13 @@ function runBspRoutePreview(opts) {
 function _bspClientName() {
   const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
   return (p && ([p.first, p.last].filter(Boolean).join(' ') || p.name)) || 'this client';
+}
+/* Where the previous stop's own legs end (its drive home / onward), or null. */
+function _bspPredLegsEnd(day, predS) {
+  if (!predS || !predS.id || typeof DAY_SEGMENTS === 'undefined') return null;
+  const segs = DAY_SEGMENTS.get(day) || [];
+  const ends = segs.filter(x => x.kind !== 'gap' && x.fromSessionId === predS.id).map(x => x.endMin);
+  return ends.length ? Math.max.apply(null, ends) : null;
 }
 /* Hide the previous stop's legs the proposal replaces. Via home, its drive
    home (the day's end leg, or the return of a via-home gap) stays. */

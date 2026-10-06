@@ -284,6 +284,31 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     expect(homeAfter(env)).not.toBeNull();
   });
 
+  // The split moment while the route is still being calculated (6 Oct 2026).
+  const calculating = (env, at) => {
+    laterBooking(env, at);
+    env.ev("refreshDayOverlays('mon')");
+    env.$('bsp-location').value = CV_ADDR;              // chosen, not yet routed
+    env.ev('runBspRoutePreview({ cachedOnly: true })');
+    return env.win.document.querySelector('#day-mon .travel-overlay.preview.placeholder');
+  };
+
+  test('while calculating, via home: the drive home stays put and the new travel waits below it', () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    const ph = calculating(env, '14:00');
+    const home = realLeg(env, '.end');
+    expect(home.classList.contains('suppressed')).toBe(false);
+    expect(ph).not.toBeNull();
+    expect(parseFloat(ph.style.top)).toBeGreaterThanOrEqual(parseFloat(home.style.top) + parseFloat(home.style.height));
+  });
+
+  test('while calculating, direct: the drive home goes at once and the new travel takes its place', () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    const ph = calculating(env, '10:30');
+    expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(true);
+    expect(ph.style.top).toBe(env.ev('tToY(10, 0)') + 'px');   // where the drive home began
+  });
+
   test('Create keeps what the preview showed, even when it was only the suggestion', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '14:00');
