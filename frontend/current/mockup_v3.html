@@ -144,7 +144,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=36" defer></script>
+<script src="/travel.js?v=37" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
@@ -3734,6 +3734,8 @@ window.opIcon = function (name, size) {
   .cal-ctx-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
   /* Precision move (startPreciseMove): the session being nudged, and the key hint under it. */
   .session.precise-moving { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 7; box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+  /* Shift+click multi-select (toggleCalSelection). */
+  .session.multi-selected { outline: 2px solid var(--accent); outline-offset: 1px; box-shadow: 0 0 0 4px var(--accent-soft); z-index: 6; }
   /* The hint is a card in the app's own colours (like the right-click menu)
      beside the session — never over it or under it, where the legs are. */
   .precise-hint {
@@ -14169,6 +14171,7 @@ function showCalContextMenu(x, y, id) {
   if (!s) return;
 
   const label = s.patient || s.title || 'Event';
+  pruneCalSelection();
   const menu  = document.createElement('div');
   menu.className  = 'cal-ctx-menu';
   menu.id         = 'cal-ctx-menu-active';
@@ -14177,7 +14180,7 @@ function showCalContextMenu(x, y, id) {
       <span class="ctx-icon">${opIcon('edit', 13)}</span> Open details
     </div>
     ${MOVABLE_TYPES.has(s.type) && !s.cancelled ? `<div class="cal-ctx-menu-item" onclick="startPreciseMove('${id}')">
-      <span class="ctx-icon">${opIcon('clock', 13)}</span> Precision move
+      <span class="ctx-icon">${opIcon('clock', 13)}</span> Precision move${CAL_SELECTION.has(id) && CAL_SELECTION.size > 1 ? ` (${CAL_SELECTION.size} sessions)` : ''}
     </div>` : ''}
     <div class="cal-ctx-menu-sep"></div>
     <div class="cal-ctx-menu-item" style="color:var(--danger,#c2412e);"
@@ -14208,33 +14211,116 @@ function ctxDeleteEvent(id) {
   deleteEventFlow(id);
 }
 
+/* ---------- Multi-select (6 Oct 2026) ----------
+   Shift+click a session to add it to the selection (Shift+click again takes
+   it out); a plain click on another session, or Esc, clears it. A selection
+   moves together: drag any selected session, or right-click › Precision move. */
+const CAL_SELECTION = new Set();
+/* A calendar reload rebuilds the tiles without the highlight: whatever is no
+   longer visibly selected is no longer selected. */
+function pruneCalSelection() {
+  CAL_SELECTION.forEach(id => {
+    const x = SESSIONS[id];
+    if (!x || !x.element || !x.element.isConnected || !x.element.classList.contains('multi-selected')) CAL_SELECTION.delete(id);
+  });
+}
+function toggleCalSelection(id) {
+  pruneCalSelection();
+  const s = SESSIONS[id];
+  if (!s || !s.element || !MOVABLE_TYPES.has(s.type) || s.cancelled) return;
+  if (CAL_SELECTION.has(id)) CAL_SELECTION.delete(id); else CAL_SELECTION.add(id);
+  s.element.classList.toggle('multi-selected', CAL_SELECTION.has(id));
+  if (CAL_SELECTION.size === 2 && !toggleCalSelection._told) {
+    toggleCalSelection._told = true;
+    showToast('2 selected', 'Drag one to move them together, or right-click › Precision move. Esc clears.');
+  }
+}
+function clearCalSelection() {
+  CAL_SELECTION.forEach(id => { const s = SESSIONS[id]; if (s && s.element) s.element.classList.remove('multi-selected'); });
+  CAL_SELECTION.clear();
+}
+/* The selection a gesture on `id` moves: the whole selection when `id` is in
+   it (and still on screen), otherwise just `id`. */
+function calMoveSet(id) {
+  pruneCalSelection();
+  const ids = CAL_SELECTION.has(id) ? Array.from(CAL_SELECTION) : [id];
+  return ids.filter(x => SESSIONS[x] && SESSIONS[x].element && SESSIONS[x].element.isConnected);
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && CAL_SELECTION.size && !precise) clearCalSelection(); });
+
+/* Move several sessions as one: checked with the WHOLE group already in its
+   new place (so two sessions moving together never "overlap" each other's
+   old slots), then committed in an order that never collides — later ones
+   first when moving later. Any blocker stops the lot and opens the review
+   for the session it names; nothing moves. All commits land in one gesture,
+   so one Cmd+Z takes the whole group back. A single move keeps the usual
+   path (evaluateMove → openMoveImpact). onBlocked() puts the visuals back. */
+function commitGroupMove(moves, onBlocked) {
+  moves = (moves || []).filter(m => { const x = SESSIONS[m.id]; return x && (m.day !== x.day || m.startMin !== sessionStartMin(x)); });
+  if (!moves.length) { if (onBlocked) onBlocked(); return; }
+  if (moves.length === 1) {
+    const m = moves[0];
+    openMoveImpact(m.id, m.day, m.startMin, m.dur, evaluateMove(m.id, m.day, m.startMin, m.dur));
+    return;
+  }
+  const real = moves.map(m => { const x = SESSIONS[m.id]; return [x, { day: x.day, startH: x.startH, startM: x.startM, endH: x.endH, endM: x.endM }]; });
+  let blocked = null;
+  try {
+    moves.forEach(m => { const e = m.startMin + m.dur; Object.assign(SESSIONS[m.id], { day: m.day, startH: Math.floor(m.startMin / 60), startM: m.startMin % 60, endH: Math.floor(e / 60), endM: e % 60 }); });
+    for (const m of moves) {
+      const impact = evaluateMove(m.id, m.day, m.startMin, m.dur);
+      if (impact.verdict === 'blocker') { blocked = { m, impact }; break; }
+    }
+  } finally {
+    real.forEach(([x, r]) => Object.assign(x, r));
+  }
+  if (blocked) {
+    if (onBlocked) onBlocked();
+    const b = blocked.m;
+    showToast('Nothing moved', 'One of the ' + moves.length + ' selected sessions cannot go there — see why.');
+    openMoveImpact(b.id, b.day, b.startMin, b.dur, blocked.impact);
+    return;
+  }
+  const later = moves.reduce((n, m) => n + (m.startMin - sessionStartMin(SESSIONS[m.id])), 0) > 0;
+  moves.slice().sort((a, b) => (later ? -1 : 1) * ((a.startMin - b.startMin) || 0)).forEach(m => {
+    pendingMove = { id: m.id, day: m.day, startMin: m.startMin, duration: m.dur, impact: { verdict: 'ok', impacts: [] } };
+    window.commitMove();
+    pendingMove = null;
+  });
+  showToast('Moved ' + moves.length + ' sessions');
+}
+
 /* ---------- Precision move (6 Oct 2026) ----------
-   Right-click › Precision move: ↑ / ↓ move the session a minute at a time
-   (Shift: five), so a gap can be closed to the minute; the travel legs
-   follow live (previewTravelForMove). Enter locks it in through the same
-   path as a drag — evaluateMove → openMoveImpact, so an overlap or a leg
-   that no longer fits still blocks — and Esc, or a click elsewhere, puts it
-   back. One Enter is one Cmd+Z step (commitMove registers it). */
-let precise = null;   // { id, s, el, orig, startMin, dur, hint, onKey, onDown }
+   Right-click › Precision move: ↑ / ↓ move the session — or the whole
+   selection — a minute at a time (Shift: five), so a gap can be closed to the
+   minute; the travel legs follow live. Enter locks it in through the same
+   checks as a drop (commitGroupMove) — an overlap or a leg that no longer
+   fits still blocks — and Esc, or a click elsewhere, puts it back. One Enter
+   is one Cmd+Z step. */
+let precise = null;   // { items: [{ id, s, el, orig, dur }], delta, hint, onKey, onDown }
 function startPreciseMove(id) {
   closeCalContextMenu();
   endPreciseMove(false);
-  const s = SESSIONS[id];
-  if (!s || !s.element || !MOVABLE_TYPES.has(s.type) || s.cancelled) return;
+  const items = calMoveSet(id).map(x => SESSIONS[x])
+    .filter(x => MOVABLE_TYPES.has(x.type) && !x.cancelled)
+    .map(x => ({ id: x.id, s: x, el: x.element, orig: sessionStartMin(x), dur: durMin(x) }));
+  if (!items.length) return;
   const hint = document.createElement('div');
   hint.className = 'precise-hint';
   hint.setAttribute('role', 'status');
   hint.setAttribute('aria-live', 'polite');
   document.body.appendChild(hint);
-  precise = { id, s, el: s.element, orig: sessionStartMin(s), startMin: sessionStartMin(s), dur: durMin(s), hint };
-  s.element.classList.add('precise-moving');
+  precise = { items, anchor: items.find(i => i.id === id) || items[0], delta: 0, hint };
+  items.forEach(i => i.el.classList.add('precise-moving'));
   precise.onKey = (e) => {
     if (!precise) return;
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault(); e.stopPropagation();
       const step = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowUp' ? -1 : 1);
-      const lo = START_H * 60, hi = END_H * 60 - precise.dur;
-      precise.startMin = Math.max(lo, Math.min(hi, precise.startMin + step));
+      // Every session stays inside the calendar window.
+      const lo = Math.max.apply(null, precise.items.map(i => START_H * 60 - i.orig));
+      const hi = Math.min.apply(null, precise.items.map(i => END_H * 60 - i.dur - i.orig));
+      precise.delta = Math.max(lo, Math.min(hi, precise.delta + step));
       renderPreciseMove();
     } else if (e.key === 'Enter') {
       e.preventDefault(); e.stopPropagation();
@@ -14244,7 +14330,7 @@ function startPreciseMove(id) {
       endPreciseMove(false);
     }
   };
-  precise.onDown = (e) => { if (precise && !precise.el.contains(e.target)) endPreciseMove(false); };
+  precise.onDown = (e) => { if (precise && !precise.items.some(i => i.el.contains(e.target))) endPreciseMove(false); };
   document.addEventListener('keydown', precise.onKey, true);
   document.addEventListener('pointerdown', precise.onDown, true);
   renderPreciseMove();
@@ -14252,20 +14338,21 @@ function startPreciseMove(id) {
 function renderPreciseMove() {
   const p = precise;
   if (!p) return;
-  p.el.style.top = ((p.startMin - START_H * 60) / 60 * HOUR_PX) + 'px';
-  const delta = p.startMin - p.orig;
-  p.hint.innerHTML = `<div class="ph-time">${fmtMin(p.startMin)}–${fmtMin(p.startMin + p.dur)}` +
-    (delta ? `<span class="ph-delta">${delta > 0 ? '+' : '−'}${Math.abs(delta)} min</span>` : '') + `</div>` +
+  p.items.forEach(i => { i.el.style.top = ((i.orig + p.delta - START_H * 60) / 60 * HOUR_PX) + 'px'; });
+  const a = p.anchor, start = a.orig + p.delta;
+  const head = p.items.length > 1 ? `${p.items.length} sessions` : `${fmtMin(start)}–${fmtMin(start + a.dur)}`;
+  p.hint.innerHTML = `<div class="ph-time">${head}` +
+    (p.delta ? `<span class="ph-delta">${p.delta > 0 ? '+' : '−'}${Math.abs(p.delta)} min</span>` : '') + `</div>` +
     `<div class="ph-keys"><span><kbd>↑</kbd> <kbd>↓</kbd></span><span>1 min</span>` +
     `<span><kbd>Shift</kbd></span><span>5 min</span><span><kbd>Enter</kbd></span><span>save</span>` +
     `<span><kbd>Esc</kbd></span><span>cancel</span></div>`;
   // Beside the session — right of its column, or left when there is no room —
   // so it never covers the session or the travel legs above and below it.
-  const r = p.el.getBoundingClientRect(), w = p.hint.offsetWidth, h = p.hint.offsetHeight, gap = 10;
+  const r = a.el.getBoundingClientRect(), w = p.hint.offsetWidth, h = p.hint.offsetHeight, gap = 10;
   const left = r.right + gap + w <= window.innerWidth - 8 ? r.right + gap : Math.max(8, r.left - gap - w);
   p.hint.style.left = left + 'px';
   p.hint.style.top  = Math.max(8, Math.min(window.innerHeight - h - 8, r.top)) + 'px';
-  if (typeof previewTravelForMove === 'function') previewTravelForMove(p.id, p.s.day, p.startMin, p.dur);
+  if (typeof previewTravelForMoves === 'function') previewTravelForMoves(p.items.map(i => ({ id: i.id, day: i.s.day, startMin: i.orig + p.delta, dur: i.dur })));
 }
 function endPreciseMove(keep) {
   const p = precise;
@@ -14274,20 +14361,23 @@ function endPreciseMove(keep) {
   document.removeEventListener('keydown', p.onKey, true);
   document.removeEventListener('pointerdown', p.onDown, true);
   p.hint.remove();
-  p.el.classList.remove('precise-moving');
+  p.items.forEach(i => i.el.classList.remove('precise-moving'));
   if (!keep) {
-    p.el.style.top = tToY(p.s.startH, p.s.startM || 0) + 'px';
+    p.items.forEach(i => { i.el.style.top = tToY(i.s.startH, i.s.startM || 0) + 'px'; });
     if (typeof endTravelPreview === 'function') endTravelPreview(true);
   }
 }
 function finishPreciseMove() {
   const p = precise;
   if (!p) return;
-  if (p.startMin === p.orig) { endPreciseMove(false); return; }
+  if (!p.delta) { endPreciseMove(false); return; }
+  const moves = p.items.map(i => ({ id: i.id, day: i.s.day, startMin: i.orig + p.delta, dur: i.dur }));
   endPreciseMove(true);
   // Same as a dropped drag: commits at once, or opens the blocker review.
-  const impact = evaluateMove(p.id, p.s.day, p.startMin, p.dur);
-  openMoveImpact(p.id, p.s.day, p.startMin, p.dur, impact);
+  commitGroupMove(moves, () => {
+    p.items.forEach(i => { i.el.style.top = tToY(i.s.startH, i.s.startM || 0) + 'px'; });
+    if (typeof endTravelPreview === 'function') endTravelPreview(true);
+  });
 }
 
 /* ── Shared delete flow: styled confirmation + travel-block cascade ─────────
@@ -15157,6 +15247,11 @@ function onBlockPointerDown(e, id) {
   if (e.button !== 0) return;
   const s = SESSIONS[id];
   if (!s) return;
+  // Shift+click builds a selection (no drag, no details); a plain press on a
+  // session outside the selection starts over.
+  if (e.shiftKey) { e.preventDefault(); toggleCalSelection(id); return; }
+  pruneCalSelection();
+  if (!CAL_SELECTION.has(id)) clearCalSelection();
   const draggable = MOVABLE_TYPES.has(s.type) && !s.cancelled;
 
   // Capture the pointer's offset inside the block at grab time — this stays constant
@@ -15175,7 +15270,14 @@ function onBlockPointerDown(e, id) {
     currentDay: s.day,
     currentStartMin: sessionStartMin(s),
     moved: false, draggable,
-    pointerId: e.pointerId
+    pointerId: e.pointerId,
+    // The rest of the selection, moved by the same minutes and days.
+    group: draggable && CAL_SELECTION.has(id) && CAL_SELECTION.size > 1
+      ? calMoveSet(id).filter(g => g !== id && MOVABLE_TYPES.has(SESSIONS[g].type) && !SESSIONS[g].cancelled).map(g => {
+          const x = SESSIONS[g];
+          return { id: g, s: x, el: x.element, origDay: x.day, origCol: x.col, origStartMin: sessionStartMin(x), dur: durMin(x), day: x.day, startMin: sessionStartMin(x) };
+        })
+      : null
   };
   try { s.element.setPointerCapture(e.pointerId); } catch (_) {}
   window.addEventListener('pointermove', onBlockPointerMove);
@@ -15191,6 +15293,7 @@ function onBlockPointerCancel() {
   if (drag) {
     if (drag.ghost) drag.ghost.remove();
     if (drag.el) { drag.el.classList.remove('dragging'); }
+    _dragRevertGroup(drag);
     drag = null;
   }
   if (typeof endTravelPreview === 'function') endTravelPreview(true);
@@ -15246,7 +15349,40 @@ function onBlockPointerMove(e) {
   const slotChanged = day !== drag.currentDay || snappedStart !== drag.currentStartMin;
   drag.currentDay = day;
   drag.currentStartMin = snappedStart;
-  if (slotChanged && typeof previewTravelForMove === 'function') previewTravelForMove(drag.id, day, snappedStart, drag.durationMin);
+  if (slotChanged && drag.group) {
+    _dragCarryGroup(drag, day, snappedStart);
+    if (typeof previewTravelForMoves === 'function') previewTravelForMoves(_dragGroupMoves(drag));
+  } else if (slotChanged && typeof previewTravelForMove === 'function') previewTravelForMove(drag.id, day, snappedStart, drag.durationMin);
+}
+
+/* A group drag: every other selected session shifts by the same minutes and
+   days as the one under the pointer (a day that does not exist on screen
+   keeps it on its own day; times stay inside the calendar window). */
+const _CAL_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+function _dragCarryGroup(d, day, startMin) {
+  const dMin = startMin - d.origStartMin;
+  const dDay = _CAL_DAYS.indexOf(day) - _CAL_DAYS.indexOf(d.origDay);
+  d.group.forEach(m => {
+    const nd = _CAL_DAYS[_CAL_DAYS.indexOf(m.origDay) + dDay];
+    const col = nd && document.getElementById('day-' + nd);
+    m.day = col ? nd : m.origDay;
+    m.startMin = Math.max(START_H * 60, Math.min(END_H * 60 - m.dur, m.origStartMin + dMin));
+    const target = col || m.origCol;
+    if (target && m.el.parentElement !== target) target.appendChild(m.el);
+    m.el.style.top = ((m.startMin - START_H * 60) / 60 * HOUR_PX) + 'px';
+    m.el.classList.add('dragging');
+  });
+}
+function _dragGroupMoves(d) {
+  return [{ id: d.id, day: d.currentDay, startMin: d.currentStartMin, dur: d.durationMin }]
+    .concat(d.group.map(m => ({ id: m.id, day: m.day, startMin: m.startMin, dur: m.dur })));
+}
+function _dragRevertGroup(d) {
+  (d.group || []).forEach(m => {
+    if (m.origCol && m.el.parentElement !== m.origCol) m.origCol.appendChild(m.el);
+    m.el.style.top = tToY(m.s.startH, m.s.startM || 0) + 'px';
+    m.el.classList.remove('dragging');
+  });
 }
 
 function pointerOverColumn(x) {
@@ -15279,8 +15415,22 @@ function onBlockPointerUp(e) {
     drag.currentDay === drag.origDay &&
     drag.currentStartMin === drag.origStartMin;
   if (sameSpot) {
+    _dragRevertGroup(drag);
     revertDragVisuals();
     drag = null;
+    return;
+  }
+  if (drag.group) {
+    const d = drag;
+    if (d.ghost && d.ghost.parentElement) d.ghost.parentElement.removeChild(d.ghost);
+    drag = null;
+    commitGroupMove(_dragGroupMoves(d), () => {
+      _dragRevertGroup(d);
+      if (d.origCol && d.el.parentElement !== d.origCol) d.origCol.appendChild(d.el);
+      d.el.style.top = tToY(d.s.startH, d.s.startM || 0) + 'px';
+      d.el.classList.remove('dragging');
+      if (typeof endTravelPreview === 'function') endTravelPreview(true);
+    });
     return;
   }
   // Snap the block to the ghost (grid-aligned) position while the modal is open

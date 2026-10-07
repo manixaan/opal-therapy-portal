@@ -1122,15 +1122,47 @@ describe('precision move — right-click, ↑/↓ by the minute, Enter to lock (
   test('↑/↓ step one minute, Shift five, inside the calendar window; the travel follows', () => {
     const start = fnBody('startPreciseMove');
     expect(start).toMatch(/const step = \(e\.shiftKey \? 5 : 1\) \* \(e\.key === 'ArrowUp' \? -1 : 1\);/);
-    expect(start).toMatch(/Math\.max\(lo, Math\.min\(hi, precise\.startMin \+ step\)\)/);
-    expect(fnBody('renderPreciseMove')).toMatch(/previewTravelForMove\(p\.id, p\.s\.day, p\.startMin, p\.dur\)/);
+    // one shared offset, clamped so EVERY session stays inside the window
+    expect(start).toMatch(/precise\.delta = Math\.max\(lo, Math\.min\(hi, precise\.delta \+ step\)\);/);
+    expect(start).toMatch(/precise\.items\.map\(i => START_H \* 60 - i\.orig\)/);
+    expect(fnBody('renderPreciseMove')).toMatch(/previewTravelForMoves\(p\.items\.map\(i => \(\{ id: i\.id, day: i\.s\.day, startMin: i\.orig \+ p\.delta, dur: i\.dur \}\)\)\)/);
   });
   test('Enter goes through the same checks as a drop; Esc or a click elsewhere puts it back', () => {
     const finish = fnBody('finishPreciseMove');
-    expect(finish).toMatch(/const impact = evaluateMove\(p\.id, p\.s\.day, p\.startMin, p\.dur\);\s+openMoveImpact\(/);
+    expect(finish).toMatch(/commitGroupMove\(moves, \(\) => \{/);
+    // a single session keeps the usual path inside commitGroupMove
+    expect(fnBody('commitGroupMove')).toMatch(/if \(moves\.length === 1\) \{\s+const m = moves\[0\];\s+openMoveImpact\(m\.id, m\.day, m\.startMin, m\.dur, evaluateMove\(m\.id, m\.day, m\.startMin, m\.dur\)\);/);
     expect(fnBody('startPreciseMove')).toMatch(/e\.key === 'Escape'[\s\S]*endPreciseMove\(false\)/);
-    expect(fnBody('startPreciseMove')).toMatch(/precise\.onDown = \(e\) => \{ if \(precise && !precise\.el\.contains\(e\.target\)\) endPreciseMove\(false\); \};/);
+    expect(fnBody('startPreciseMove')).toMatch(/precise\.onDown = \(e\) => \{ if \(precise && !precise\.items\.some\(i => i\.el\.contains\(e\.target\)\)\) endPreciseMove\(false\); \};/);
     const end = fnBody('endPreciseMove');
     expect(end).toMatch(/if \(!keep\) \{[\s\S]*endTravelPreview\(true\)/);
+  });
+});
+
+describe('Shift+click multi-select — move a selection together (6 Oct 2026)', () => {
+  const fnBody = (name) => SHELL.slice(SHELL.indexOf('function ' + name + '('), SHELL.indexOf('\n}', SHELL.indexOf('function ' + name + '(')));
+  test('Shift+click toggles a session into the selection — no drag, no details; a plain press elsewhere starts over', () => {
+    const down = fnBody('onBlockPointerDown');
+    expect(down).toMatch(/if \(e\.shiftKey\) \{ e\.preventDefault\(\); toggleCalSelection\(id\); return; \}/);
+    expect(down).toMatch(/if \(!CAL_SELECTION\.has\(id\)\) clearCalSelection\(\);/);
+    expect(fnBody('toggleCalSelection')).toMatch(/MOVABLE_TYPES\.has\(s\.type\)/);
+  });
+  test('a reload never leaves an invisible selection behind', () => {
+    expect(fnBody('pruneCalSelection')).toMatch(/!x\.element\.classList\.contains\('multi-selected'\)\) CAL_SELECTION\.delete\(id\)/);
+  });
+  test('right-click names the selection; precision move and drag both carry it', () => {
+    expect(fnBody('showCalContextMenu')).toMatch(/Precision move\$\{CAL_SELECTION\.has\(id\) && CAL_SELECTION\.size > 1 \? ` \(\$\{CAL_SELECTION\.size\} sessions\)` : ''\}/);
+    expect(fnBody('startPreciseMove')).toMatch(/calMoveSet\(id\)/);
+    expect(fnBody('onBlockPointerDown')).toMatch(/group: draggable && CAL_SELECTION\.has\(id\) && CAL_SELECTION\.size > 1/);
+    expect(SHELL).toMatch(/if \(slotChanged && drag\.group\) \{\s+_dragCarryGroup\(drag, day, snappedStart\);/);
+  });
+  test('a group is checked with every member already in place; one blocker moves nothing; commits never collide', () => {
+    const c = fnBody('commitGroupMove');
+    // all members placed before any evaluateMove, and put back after
+    expect(c.indexOf('moves.forEach(m => { const e = m.startMin + m.dur; Object.assign(SESSIONS[m.id]')).toBeLessThan(c.indexOf('const impact = evaluateMove(m.id'));
+    expect(c).toMatch(/finally \{\s+real\.forEach\(\(\[x, r\]\) => Object\.assign\(x, r\)\);/);
+    expect(c).toMatch(/if \(blocked\) \{\s+if \(onBlocked\) onBlocked\(\);[\s\S]*openMoveImpact\(b\.id/);
+    expect(c).toMatch(/sort\(\(a, b\) => \(later \? -1 : 1\)/);
+    expect(c).toMatch(/window\.commitMove\(\);/);
   });
 });

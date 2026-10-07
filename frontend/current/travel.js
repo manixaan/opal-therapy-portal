@@ -291,17 +291,25 @@ function _drawDayLegsOnly(day) {
   col.querySelectorAll('.travel-overlay').forEach(el => el.classList.add('drag-preview'));
 }
 function previewTravelForMove(id, day, startMin, durationMin) {
-  const s = window.SESSIONS && window.SESSIONS[id];
-  if (!s) return;
-  const real = { day: s.day, startH: s.startH, startM: s.startM, endH: s.endH, endM: s.endM };
-  const endMin = startMin + durationMin;
+  previewTravelForMoves([{ id, day, startMin, dur: durationMin }]);
+}
+/* Several sessions at once — a multi-selection moving together. */
+function previewTravelForMoves(moves) {
+  const S = window.SESSIONS || {};
+  const real = [];
   TRAVEL_DRAG.active = true;
-  TRAVEL_DRAG.days.add(real.day); TRAVEL_DRAG.days.add(day);
   try {
-    Object.assign(s, { day, startH: Math.floor(startMin / 60), startM: startMin % 60, endH: Math.floor(endMin / 60), endM: endMin % 60 });
+    (moves || []).forEach(m => {
+      const s = S[m.id];
+      if (!s) return;
+      real.push([s, { day: s.day, startH: s.startH, startM: s.startM, endH: s.endH, endM: s.endM }]);
+      TRAVEL_DRAG.days.add(s.day); TRAVEL_DRAG.days.add(m.day);
+      const endMin = m.startMin + m.dur;
+      Object.assign(s, { day: m.day, startH: Math.floor(m.startMin / 60), startM: m.startMin % 60, endH: Math.floor(endMin / 60), endM: endMin % 60 });
+    });
     TRAVEL_DRAG.days.forEach(_drawDayLegsOnly);   // a day it left goes back to its real legs too
   } finally {
-    Object.assign(s, real);
+    real.forEach(([s, r]) => Object.assign(s, r));
   }
 }
 /* PURE-ish — the travel legs touching a session that would not fit if it
