@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -17,11 +17,11 @@ All routes guarded. accounting-routes.js / finance-routes.js: const ownerOnly = 
 
 ## Tests run tonight
 - unit: `finance-routes.test.js, finance-flags.test.js, xero-payroll-api.test.js, xero-payroll-mapping.test.js, xero-payroll-sync.test.js, onboarding-payroll.test.js` — 77/77 pass
-- integration: `finance-routes.itest.js, accounting-routes.itest.js, accounting-phase2.itest.js, onboarding-payroll-xero.itest.js` — 39/39 pass
+- integration: `finance-routes.itest.js, accounting-routes.itest.js, accounting-phase2.itest.js, onboarding-payroll-xero.itest.js` — 39/39 pass tonight
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — build, todo
 - Payroll Automation — build, todo
 
 ## Compare with the tracker
-Tracker stage is "idea" with both tasks todo, but the code is a real, guarded, heavily-tested OAuth2 integration. The concrete open item — unchanged across six nights — is that neither sub-feature has ever been exercised against a real connected Xero sandbox account, which is exactly what the tracker's own next_action already says.
+Tracker stage is "idea" with both tasks todo, but the code is a real, guarded, heavily-tested OAuth2 integration. The concrete open item — unchanged across seven nights — is that neither sub-feature has ever been exercised against a real connected Xero sandbox account, which is exactly what the tracker's own next_action already says.

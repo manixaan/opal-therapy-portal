@@ -1,6 +1,6 @@
 # Nightly audit feature folders — index
 
-One row per tracker idea. Rewritten nightly by the audit; last updated 2026-10-06 (sixth consecutive reconfirmation night — see docs/qa/nightly/2026-10-06.md). See each folder's STATUS.md for full detail and START.md for a starter prompt.
+One row per tracker idea. Rewritten nightly by the audit; last updated 2026-10-07 (seventh consecutive reconfirmation night — see docs/qa/nightly/2026-10-07.md). See each folder's STATUS.md for full detail and START.md for a starter prompt.
 
 | Folder | Stage | Evidence label | START.md |
 |---|---|---|---|

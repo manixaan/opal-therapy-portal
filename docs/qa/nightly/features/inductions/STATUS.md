@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -15,8 +15,8 @@
 induction-assistant-routes.js: requireAuth + requireRole('owner') — guarded; AI gateway registration confirmed (induction_assistant policy, classification INTERNAL, clinical data explicitly excluded). learning-routes.js / walkthrough-routes.js: requireAuth globally + requireRole('owner') on every build/admin route; /api/learning/my/* self-service routes requireAuth only, intentionally (any employee may take their own induction). No gaps.
 
 ## Tests run tonight
-- unit: `induction-assistant.test.js, induction-registry.test.js, learning-routes.test.js, learning-content.test.js, learning-admin-routes.test.js, assign-learning-guards.test.js` — 223/223 pass
-- integration: `induction-assistant.itest.js, learning.itest.js, learning-admin.itest.js` — 144/144 pass (figure shared with Interactive Assessments above)
+- unit: `induction-assistant.test.js, induction-registry.test.js, learning-routes.test.js, learning-content.test.js, learning-admin-routes.test.js, assign-learning-guards.test.js` — run in isolation tonight as this exact set: 223/223 pass
+- integration: `induction-assistant.itest.js, learning.itest.js, learning-admin.itest.js` — 209/209 pass tonight (run together with walkthrough-authoring/catalogue/evidence and tutorial-progress; all green)
 
 ## Open tasks (from the tracker)
 - Induction Playground — build, todo

@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -14,8 +14,8 @@
 requireAuth + role-based read/write split on every route checked. No gaps.
 
 ## Tests run tonight
-- unit: `resource-file-delivery.test.js, resource-file-quality.test.js, resource-governance.test.js, resource-hub-badge-guards.test.js, resource-hub-final.test.js, resource-ingestion.test.js, resource-library-frontend-guards.test.js, resource-privacy-scan.test.js, resource-seed-guards.test.js, resource-source-scan.test.js` — included in the 440/452 unit figure above (12 skipped are env-gated, not failures)
-- integration: `resource-hub-r2.itest.js, resource-library.itest.js, resources.itest.js` — 88/88 pass — run directly tonight, including resource-library.itest.js in isolation (no deadlock; that was a full-suite-only contention artifact noted on the 2026-10-04 Sunday deep run, not reproduced tonight because tonight's batch runs don't put that load on one connection pool)
+- unit: `resource-file-delivery.test.js, resource-file-quality.test.js, resource-governance.test.js, resource-hub-badge-guards.test.js, resource-hub-final.test.js, resource-ingestion.test.js, resource-library-frontend-guards.test.js, resource-privacy-scan.test.js, resource-seed-guards.test.js, resource-source-scan.test.js` — run in isolation tonight: 370/382 pass, 12 skipped (env-gated, not failures)
+- integration: `resource-hub-r2.itest.js, resource-library.itest.js, resources.itest.js` — 88/88 pass — run directly tonight as this exact trio, including resource-library.itest.js alongside the others (no deadlock; the contention artifact noted on the 2026-10-04 Sunday deep run was not reproduced tonight)
 
 ## Open tasks (from the tracker)
 - (none recorded)

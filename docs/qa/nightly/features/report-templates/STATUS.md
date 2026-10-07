@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -16,7 +16,7 @@ fca-routes.js: requireAuth + requireClinicalRead/requireClinicalWrite on every r
 
 ## Tests run tonight
 - unit: `fca-docx-engine, fca-frontend-helpers, fca-preview-lifecycle, fca-preview-pages, fca-resolve-scalars, fca-wizard-behaviour, letter-docx-engine, letter-frontend-helpers, letter-template-map, templates-appendices, templates-export-boundary, templates-frontend-guards, templates-routes, templates-service-agreement-map` — 569/569 pass
-- integration: `fca-reports.itest.js, progress-note-letters.itest.js, templates.itest.js` — 126/126 pass (combined with the mobile-companion integration batch below)
+- integration: `fca-reports.itest.js, progress-note-letters.itest.js, templates.itest.js` — 126/126 pass tonight (run together with case-note-client-link.itest.js and case-note-deidentification.itest.js; all green)
 
 ## Open tasks (from the tracker)
 - FCA — build, todo

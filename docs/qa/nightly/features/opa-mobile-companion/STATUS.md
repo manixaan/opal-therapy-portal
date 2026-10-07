@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -15,8 +15,8 @@
 mobile-routes.js: requireAuth, self-scoped-by-design (every query filtered by req.user.id, 404 on anything not owned — spot-checked /today, /appointments/:id, voice-notes CRUD). case-note-routes.js: requireAuth on both mount points, same ownership pattern, documented in its own header. AI gateway registration confirmed: clinical_note_generation is a registered ai-policy.js entry (classification CLINICAL, de-identification required, human review required on every output). No gaps.
 
 ## Tests run tonight
-- unit: `mobile-routes.test.js, case-note-routes.test.js` — 105/105 pass
-- integration: `case-note-client-link.itest.js, case-note-deidentification.itest.js` — included in the 126/126 integration figure under Report Templates above
+- unit: `mobile-routes.test.js, case-note-routes.test.js` — run in isolation tonight: 105/105 pass
+- integration: `case-note-client-link.itest.js, case-note-deidentification.itest.js` — 126/126 pass tonight (run together with the FCA/letters/templates integration batch; all green)
 
 ## Open tasks (from the tracker)
 - Case Noting — build, todo (tracker checklist: confirm pilot behaviour, test dictation end to end, test AI summary against the clinical pathway, decide "good enough" with Ann, test save-to-portal, fix and re-test, get Ann's sign-off — every item still unchecked)

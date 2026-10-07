@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -12,10 +12,10 @@
 - frontend/current/navigation.js — route encode/decode for #resources/pd
 
 ## Guard check
-Guarded consistently with the rest of resource-hub-r2-routes.js's requireAuth + role-based read/write split. Route round-tripping, nav entry, Home preview copy, CPD-hours visual tier and admin form fields all verified directly in the shipped files tonight.
+Guarded consistently with the rest of resource-hub-r2-routes.js's requireAuth + role-based read/write split. Route round-tripping, nav entry, Home preview copy, CPD-hours visual tier and admin form fields all re-verified directly in the shipped files tonight.
 
 ## Tests run tonight
-- unit: `pd-catalogue-guards.test.js` — 46/46 pass — run directly tonight, independently confirmed
+- unit: `pd-catalogue-guards.test.js` — run directly tonight, independently confirmed: 46/46 pass
 
 ## Open tasks (from the tracker)
 - (no tasks recorded in the tracker — the card has a title only)

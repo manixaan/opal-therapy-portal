@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed this window (commits since 2026-10-04 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-04); the audited commit (`aacf8e68`) is still unchanged. This is the sixth consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
 - Created (any located code at all): **yes**
 
 ## Located files
@@ -15,7 +15,7 @@ snapshot-routes.js: requireAuth as a single choke point; every handler scopes it
 
 ## Tests run tonight
 - unit: `no test file exercises /api/settings reportPreferences or the report-panel computation directly (confirmed again tonight)` — none
-- integration: `not run tonight (snapshot.itest.js, which covers personal reminders/tasks rather than the report panel, was not in tonight's targeted batches)` — n/a
+- integration: `snapshot.itest.js` was run directly tonight — 6/6 pass — but it exercises `snapshot-routes.js` (the personal reminders/tasks self-scoped feature reused by mobile), not the Daily & Weekly report panel the tracker's "Therapist Snapshot" sub-task actually names. The report panel itself still has no test at any level.
 
 ## Open tasks (from the tracker)
 - Automated Client Appt Reminders — build, todo
