@@ -18,18 +18,21 @@ Opa Mobile Companion
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(not yet written in the tracker)
+(No decisions recorded in the tracker.)
 
 ## Where it lives today
-- Case Noting: backend/case-note-routes.js (/api/mobile/case-note-drafts + legacy /api/mobile/ai/case-note), backend/clinical-note-provider.js (AI transmission layer), backend/case-note-style.js, backend/ai/deidentify.js, docs/mobile/CASE_NOTE_AI_PRIVACY.md
-- Calendar View: backend/mobile-routes.js (/api/mobile/today, /calendar, /appointments/:id, /travel), backend/maps-routes.js
-- No mobile client code lives in this repository — the on-device pilot the tracker's checklist describes lives in a separate mobile app project not checked into this repo.
+- `backend/mobile-routes.js` (`/api/mobile/*`), `backend/case-note-routes.js` (case-note drafts + AI pathway)
+- Desktop reuse: `frontend/current/casenotes.js` under the CASE NOTES tab
 
 ## Start here
-The backend (case-note-routes.js, mobile-routes.js) is built, self-scoped, AI-governed where relevant, and passes 105/105 tests. What's open is the tracker's own checklist for the Case Noting pilot — walk the device through each unchecked item (dictation accuracy, AI summary against the clinical pathway, save-to-portal correctness) and get Ann's sign-off. This is a human testing task, not a code change.
+This is not a build task — the tracker's own checklist for the Case Noting pilot is still fully open (every
+item unchecked). Walk the Case Noting pilot through that checklist end to end (dictate → draft → AI pathway →
+review) and get the named reviewer's sign-off. The backend (`npx jest tests/mobile-routes.test.js
+tests/case-note-routes.test.js`) is already green — no code change is expected unless the walkthrough surfaces a
+real defect.
 
 ## Done means
-Every item on the tracker's Case Noting checklist ticked and Ann's sign-off recorded; the evidence label moves to `proven`.
+Every item on the tracker's Case Noting checklist is checked, with sign-off recorded, and the existing test
+suites still pass. Evidence label moves from needs-refinement to proven once that human checklist is closed.
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613

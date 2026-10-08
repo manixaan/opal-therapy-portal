@@ -1,19 +1,22 @@
-# Nightly audit feature folders — index
+# Feature folders — index
 
-One row per tracker idea. Rewritten nightly by the audit; last updated 2026-10-07 (seventh consecutive reconfirmation night — see docs/qa/nightly/2026-10-07.md). See each folder's STATUS.md for full detail and START.md for a starter prompt.
+One line per tracker idea. "Addressed" = commits since the last audit (2026-10-07) touched its located files.
+Updated nightly; see `../README.md` for how this works.
 
-| Folder | Stage | Evidence label | START.md |
-|---|---|---|---|
-| `xero-integration-works/` | idea | needs-refinement | [xero-integration-works/START.md](xero-integration-works/START.md) |
-| `update-opal-docs-register/` | idea | untouched | [update-opal-docs-register/START.md](update-opal-docs-register/START.md) |
-| `report-templates/` | idea | tab-unproven | [report-templates/START.md](report-templates/START.md) |
-| `professional-development/` | idea | tab-unproven | [professional-development/START.md](professional-development/START.md) |
-| `portal-splose-outlook-integration-works/` | idea | needs-refinement | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
-| `portal-onboarding-workflow/` | idea | needs-refinement | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
-| `password-master-document/` | idea | untouched | [password-master-document/START.md](password-master-document/START.md) |
-| `opa-mobile-companion/` | idea | needs-refinement | [opa-mobile-companion/START.md](opa-mobile-companion/START.md) |
-| `interactive-assessments/` | idea | tab-unproven | [interactive-assessments/START.md](interactive-assessments/START.md) |
-| `inductions/` | idea | proven | [inductions/START.md](inductions/START.md) |
-| `employee-personal-page-my-profile-tab/` | idea | needs-refinement | [employee-personal-page-my-profile-tab/START.md](employee-personal-page-my-profile-tab/START.md) |
-| `clinical-resources/` | idea | proven | [clinical-resources/START.md](clinical-resources/START.md) |
-| `automated-reminders/` | idea | untouched | [automated-reminders/START.md](automated-reminders/START.md) |
+| Feature | Tracker stage | Evidence label | Addressed this window | START.md |
+|---|---|---|---|---|
+| Xero Integration Works | idea | needs-refinement | no | [xero-integration-works/START.md](xero-integration-works/START.md) |
+| Update Opal Docs Register | idea | untouched | no | [update-opal-docs-register/START.md](update-opal-docs-register/START.md) |
+| Report Templates | idea | tab-unproven | no | [report-templates/START.md](report-templates/START.md) |
+| Professional Development | idea | tab-unproven | no | [professional-development/START.md](professional-development/START.md) |
+| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | no | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+| Portal Onboarding Workflow | idea | needs-refinement | no | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
+| Password Master Document | idea | untouched | no | [password-master-document/START.md](password-master-document/START.md) |
+| Opa Mobile Companion | idea | needs-refinement | no | [opa-mobile-companion/START.md](opa-mobile-companion/START.md) |
+| Interactive Assessments | idea | tab-unproven | no | [interactive-assessments/START.md](interactive-assessments/START.md) |
+| Inductions | idea | proven | no | [inductions/START.md](inductions/START.md) |
+| Employee Personal Page (My Profile Tab) | idea | needs-refinement | no | [employee-personal-page-my-profile-tab/START.md](employee-personal-page-my-profile-tab/START.md) |
+| Clinical resources | idea | proven | no | [clinical-resources/START.md](clinical-resources/START.md) |
+| Automated Reminders | idea | untouched | no | [automated-reminders/START.md](automated-reminders/START.md) |
+
+Counts: proven 2 · built-untested 0 · needs-refinement 5 · broken 0 · untouched 3 · tab-unproven 3.

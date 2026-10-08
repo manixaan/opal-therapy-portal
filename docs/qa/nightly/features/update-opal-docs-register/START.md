@@ -18,16 +18,19 @@ Update Opal Docs Register
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(not yet written in the tracker)
+(No decisions recorded in the tracker.)
 
 ## Where it lives today
-nothing yet
+Nothing yet — this is explicitly an organising job, not a coding job (the tracker's own task description: reuse
+the existing Excel register and SharePoint, not a new build).
 
 ## Start here
-This is not a Claude Code task. The tracker's own task description frames it as an organising job on an existing Excel document register and SharePoint. There is nothing to locate, edit or test in this repository for it.
+There is no Claude Code session to run here. The task is to update the practice's own Excel documentation
+register and SharePoint links directly — list every document type the business needs, whether it exists, and
+where it lives. No file in this repository is the register.
 
 ## Done means
-There is no code-evidence label for this card to reach — it is done when a person confirms the register and SharePoint links are complete.
+No test applies. "Done" is a person confirming the Excel register and SharePoint links are current — nothing to
+re-check in this repo.
 
 Tracker: 45c66127-e21b-47c5-be70-6c9c61952126

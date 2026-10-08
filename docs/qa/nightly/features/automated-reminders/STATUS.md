@@ -3,23 +3,38 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
-- Created (any located code at all): **yes**
+- Addressed this window: no — nothing in the codebase matches the feature's core ask (client-facing reminders).
+- Created (any located code at all): **no** (for the feature as described; see note below)
 
 ## Located files
-- Automated Client Appt Reminders: NONE FOUND. Only tangential: checkCaseNoteReminders in app-routes.js (an internal therapist notification about missing case notes — not a client-facing appointment reminder). Grepped again tonight for twilio/sms/client-confirmation patterns across backend/*.js — no hit.
-- Therapist Snapshot: the Daily & Weekly Snapshot report panel (frontend/current/mockup_v3.html #report-modal, openReportPanel — billable-progress bars, weekly utilisation digest) computed client-side from calendar/booking data already loaded; backend/app-routes.js GET /api/settings (reportPreferences: dailyBillableTargetHours, weeklyBillableTargetHours). Also backend/snapshot-routes.js (personal reminders/tasks, a different self-scoped feature reused by mobile, not the report panel itself).
+None for "Automated Client Appt Reminders" — searched (case-insensitive) for "appt reminder", "appointment
+reminder", "confirm appointment/session/booking", "session reminder", "24-hour/24hr reminder", "sms", "twilio",
+"appt confirm", "client reminder" across backend, frontend and e2e. All matches found are unrelated (CPD/leave
+reminders, credential-expiry reminders, personal snapshot task reminders — none are client-facing).
+
+Separately, **not this feature but bundled under the same tracker card**: `backend/snapshot-routes.js`
+implements "Therapist Snapshot" — personal reminders + daily task list, self-scoped by `user_id`. This is a
+different, already-built backend that happens to share the word "reminder"; it does not prove the client-facing
+appointment-reminder feature the tracker idea names.
 
 ## Guard check
-snapshot-routes.js: requireAuth as a single choke point; every handler scopes its query to user_id = req.user.id. GET /api/settings: requireAuth, self-scoped to the caller's own settings. No gaps in what exists; nothing exists for the reminders half.
+Not applicable to the core feature (no code located). For the bundled Snapshot backend: `snapshot-routes.js:31`:
+`router.use('/api/snapshot', requireAuth);` — self-scoped by design (header documents "every read and write
+filters WHERE user_id = req.user.id"), not broken.
 
 ## Tests run tonight
-- unit: `no test file exercises /api/settings reportPreferences or the report-panel computation directly (confirmed again tonight)` — none
-- integration: `snapshot.itest.js` was run directly tonight — 6/6 pass — but it exercises `snapshot-routes.js` (the personal reminders/tasks self-scoped feature reused by mobile), not the Daily & Weekly report panel the tracker's "Therapist Snapshot" sub-task actually names. The report panel itself still has no test at any level.
+- Core feature: none apply (no code).
+- Bundled Snapshot backend: `tests/integration/snapshot.itest.js` — 6/6 pass. This proves `snapshot-routes.js`,
+  not the client-facing reminder feature or the "Therapist Snapshot" report panel (`frontend/current/reports.js`)
+  that the tracker's second task actually asks about — no unit test and no e2e test exists for that report panel
+  or its weekly-utilisation-index computation.
 
 ## Open tasks (from the tracker)
 - Automated Client Appt Reminders — build, todo
 - Therapist Snapshot — build, todo
 
 ## Compare with the tracker
-None — matches the tracker's own claude_update: the client-facing 24-hour reminder is entirely unbuilt (keeping the feature at `untouched` as a whole), while the bundled Therapist Snapshot sub-task is separately built and guarded but has no test at any level or browser proof of its own.
+None new. Client-facing appointment reminders have no code at all. The "Therapist Snapshot" task (reviewing the
+existing report panel, focusing on weekly utilisation index and daily sessions) is a different, already-built
+surface that remains untested at the report-panel level — `snapshot.itest.js` tests a same-named but unrelated
+backend file.

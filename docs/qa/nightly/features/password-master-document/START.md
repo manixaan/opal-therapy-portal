@@ -18,16 +18,18 @@ Owner/Admin
 ## Outcome
 All login details will be contained in one area accessed by relevant parties.
 
-## Decisions
-(not yet written in the tracker)
+(No decisions recorded in the tracker.)
 
 ## Where it lives today
-nothing yet
+Nothing yet — this is explicitly an external OneDrive document, not portal code.
 
 ## Start here
-This is not a Claude Code task. It is a OneDrive document holding every portal's login details for the Owner/Admin to reference. Create the document on OneDrive and share it with the relevant parties.
+There is no Claude Code session to run here. The task is to create the OneDrive master password document
+directly, scoped to Owner/Admin access, following whatever access-control OneDrive itself offers. No file in
+this repository is or should become this document.
 
 ## Done means
-There is no code-evidence label for this card to reach — it is done when a person confirms the OneDrive document exists and is shared with the right people.
+No test applies. "Done" is a person confirming the OneDrive document exists and is accessible to the right
+people — nothing to re-check in this repo.
 
 Tracker: f1e01029-71d9-46fa-acc1-1c955cd86da2

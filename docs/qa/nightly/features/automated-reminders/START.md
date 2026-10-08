@@ -1,7 +1,7 @@
-/opal-fast-change
+/opal-feature
 
 ## Idea
-Automated Reminders
+24Hr Automatic Client Appt Reminders
 
 ## Why
 (not yet written in the tracker)
@@ -18,17 +18,24 @@ Automated Reminders
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(not yet written in the tracker)
+(No decisions recorded in the tracker.)
 
 ## Where it lives today
-- Automated Client Appt Reminders: NONE FOUND. Only tangential: checkCaseNoteReminders in app-routes.js (an internal therapist notification about missing case notes — not a client-facing appointment reminder). Grepped again tonight for twilio/sms/client-confirmation patterns across backend/*.js — no hit.
-- Therapist Snapshot: the Daily & Weekly Snapshot report panel (frontend/current/mockup_v3.html #report-modal, openReportPanel — billable-progress bars, weekly utilisation digest) computed client-side from calendar/booking data already loaded; backend/app-routes.js GET /api/settings (reportPreferences: dailyBillableTargetHours, weeklyBillableTargetHours). Also backend/snapshot-routes.js (personal reminders/tasks, a different self-scoped feature reused by mobile, not the report panel itself).
+Nothing yet for the client-facing reminder. The bundled "Therapist Snapshot" report panel exists as
+`frontend/current/reports.js` (rendered from the `#report-overlay`/`#report-modal` markup in `mockup_v3.html`),
+separate from `backend/snapshot-routes.js` (a same-named but unrelated personal-reminders backend).
 
 ## Start here
-Two separate pieces of work. (1) Therapist Snapshot (smaller): the report panel in frontend/current/mockup_v3.html (#report-modal) and backend/app-routes.js's GET /api/settings already work; add a browser/e2e check. (2) Automated Client Appt Reminders (new build): nothing exists yet — confirm with the team how reminders should be sent (SMS vs email, which provider) before building; the editable-interval requirement suggests reusing the /api/settings pattern.
+Two separate pieces of work are bundled under this one card. For the client reminder: decide SMS vs email and a
+provider before building anything — this needs a human decision, not code, first. For "Therapist Snapshot": test
+the report panel directly (`frontend/current/reports.js`'s billable %/travel/idle-gap computation and weekly
+utilisation index), not `backend/snapshot-routes.js`, which proves a different feature. Start by reading
+`frontend/current/reports.js` and adding a frontend-logic test following the pattern in
+`backend/tests/frontend-stage3-guards.test.js`.
 
 ## Done means
-Therapist Snapshot: a passing e2e spec or BROWSER_QA_RESULTS.md entry. Appt Reminders: a located, guarded, tested route sending a real reminder. Either moves that half off its current label; the feature stays `untouched` overall until the reminders half exists.
+A provider decision is made and a reminder-sending integration test exists for the client-facing feature; a
+dedicated test exists for the Therapist Snapshot report panel's utilisation-index calculation. Evidence label
+moves from untouched toward needs-refinement once either piece has real code and a test.
 
 Tracker: 398a0b36-a12f-4190-83e4-b3a8932b3b46

@@ -18,18 +18,24 @@ Professional Development
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(not yet written in the tracker)
+(No decisions recorded in the tracker.)
 
 ## Where it lives today
-- backend/resource-hub-r2-routes.js — pd_events CRUD, filter by topic/mode/cost/CPD hours, past-event rollover, admin endpoints, Home-page preview query
-- frontend/current/resourcehub.js — renderPd/renderPdCard/renderPdDetail/renderPdForm, Home preview card, admin form, CPD-hours filter, route #resources/pd[/eventId]
-- frontend/current/navigation.js — route encode/decode for #resources/pd
+- `backend/resource-hub-r2-routes.js` (`/api/rh2/pd*`, `/api/rh2/cpd*`), `backend/profile-routes.js`
+  (`/api/profile/cpd*`)
+- Frontend: PD sub-view in the Resources tab (`frontend/current/resourcehub.js`), personal CPD log in the
+  Profile tab (`frontend/current/profile.js`)
 
 ## Start here
-Open backend/resource-hub-r2-routes.js (pd_events) and frontend/current/resourcehub.js (renderPd*). The PD events catalogue — admin authoring, Home preview, CPD-hours filter — is built and passes 46/46 tests tonight. Add a browser/e2e check proving the tab renders, and ask the team to confirm this is what the tracker's blank "Professional Development" card means.
+This card has no description and no tasks in the tracker, yet the code is fully built and tested. Confirm with
+the team whether this card means the Resource Hub's PD events catalogue + CPD log (the only plausible match), then
+either close the card out or write a proper idea/why/who for it. The one open gap is browser proof: add a
+`docs/qa/BROWSER_QA_RESULTS.md` entry or an e2e scenario for `#resources/pd` and the Profile tab's CPD section,
+following the Resource Hub's existing flow G pattern.
 
 ## Done means
-A passing e2e spec or BROWSER_QA_RESULTS.md entry for the PD tab, and tracker confirmation of the match; the evidence label moves to `proven`.
+A browser/e2e check exists for the PD events catalogue and/or the CPD log, and
+`npx jest tests/pd-catalogue-guards.test.js` plus the matching integration test still pass. Evidence label moves
+from tab-unproven to proven once that proof lands.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb

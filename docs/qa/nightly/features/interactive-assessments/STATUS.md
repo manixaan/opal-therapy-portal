@@ -3,24 +3,34 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window: **no** — zero commits since 2026-10-07 touching `backend/` or `frontend/current/`.
+  Eighth consecutive reconfirmation night.
 - Created (any located code at all): **yes**
 
 ## Located files
-- backend/assessments-routes.js, assessments/{availability,definitions,share}.js
-- backend/fca-routes.js, fca/ (as above)
-- backend/whodas-routes.js, whodas/ (build-instrument-data, completed-pdf, extract-templates, field-maps/, instrument.js, scoring.js, template-registry.js, templates/)
-- Frontend: single mount point #assessment-root; no dedicated "Review" tab markup exists
+- `backend/whodas-routes.js` — WHODAS 2.0 (36-item), feature-gated on `ENABLE_WHODAS_ASSESSMENT`
+- `backend/assessments-routes.js` — the assessment framework (catalogue, per-client history, share prep);
+  deliberately not feature-gated; confirms WHODAS 2.0 is the only implemented instrument today
+- `backend/fca-routes.js`, `backend/letter-routes.js` (shared machinery, see Report Templates)
+- `backend/whodas/`, `backend/fca/`, `backend/assessments/` — supporting modules
+- Frontend: no tab banner — a dedicated full-page surface (`#assessment/record/:id`), rendered by
+  `frontend/current/assessment.js`, loading `whodas.js`/`fca.js`/`letter.js` as instrument modules
 
 ## Guard check
-assessments-routes.js: requireAuth + requireCatalogue/requireClinicalRead/requireClinicalWrite. fca-routes.js and whodas-routes.js: requireAuth + requireClinicalRead/Write on every route. No gaps — this is clinical data and was checked carefully.
+`assessments-routes.js:62`: `router.use('/api/assessments', requireAuth);` + per-route
+`requireCatalogue`/`requireClinicalRead`/`requireClinicalWrite`. `whodas-routes.js`: feature-flag gate, then
+`requireAuth` + local `requireClinicalRead`/`requireClinicalWrite` on all 16 routes. No gaps found.
 
 ## Tests run tonight
-- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — 481/481 pass
-- integration: `assessments.itest.js, whodas.itest.js` — 209/209 pass tonight (combined with the inductions/learning/walkthrough integration batch; all green)
+- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js,
+  whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — 481/481 pass
+- integration: `assessments.itest.js, whodas.itest.js` — 81/81 pass
 
 ## Open tasks (from the tracker)
-- Assessment Review — build, todo
+- Assessment Review — build, todo (the tracker's own description: a human curation job — Ann reviewing which
+  assessments to keep/remove — not a coding task)
 
 ## Compare with the tracker
-None — "Assessment Review" as a distinct second-party review/sign-off workflow genuinely has no code; this is Ann's human curation job (sort pending assessments into keep/remove), not a coding task. The tracker is accurate that this specific task is untouched; it just doesn't separately flag that the surrounding FCA/WHODAS system (WHODAS 2.0 especially) is already mature and heavily tested, just never browser-proven. `docs/qa/BROWSER_QA_RESULTS.md` is still dated 2026-08-01 (confirmed again tonight) and `e2e/tests/` still only has `portal.spec.js` and `tutorials.spec.js` — no assessment spec exists.
+None new. "Assessment Review" is Ann's human curation task, not code. WHODAS 2.0 and the assessment framework
+are heavily tested but have never been proven in a browser — `docs/qa/BROWSER_QA_RESULTS.md` (dated 2026-08-01)
+has no assessment/WHODAS/FCA flow, and no e2e spec names any of them.

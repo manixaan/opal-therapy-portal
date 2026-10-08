@@ -3,22 +3,38 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window: **no** — zero commits since 2026-10-07 touching `backend/` or `frontend/current/`.
+  Eighth consecutive reconfirmation night.
 - Created (any located code at all): **yes**
 
 ## Located files
-- backend/profile-routes.js — leave requests (/api/profile/leave*), CPD (/api/profile/cpd*), credentials and PD documents
-- frontend/current/mockup_v3.html PROFILE TAB (line 4188, id="view-profile") — personal details, work locations, leave, PD, PD documents, credentials, notifications cards
+- `backend/profile-routes.js` — leave requests (`/api/profile/leave*`), CPD (`/api/profile/cpd*`), credentials
+  and PD documents, work-schedule and notification-prefs
+- Frontend: `<!-- PROFILE TAB -->` (mockup_v3.html:4188, `id="view-profile"`), `frontend/current/profile.js`
 
 ## Guard check
-requireAuth everywhere; self-scoped by design and consistently enforced (own records by default; org-wide view only for owner via canViewAll). Approvals gated by canApprove (owner-only — admin explicitly excluded per a documented 2026-08-06 RBAC decision, re-read directly in profile-routes.js tonight). PATCH on another user's credential returns 404 not 403 (anti-enumeration). Cross-user document access is audit-logged. No gaps found.
+Every route uses `requireAuth`; approve/reject/verify endpoints additionally check `canApprove(req.user)` inline
+(owner-only — admin explicitly excluded per a documented 2026-08-06 RBAC decision in the file, re-read directly
+tonight), not a composed `requirePermission`/`requireRole` middleware. This is the same house pattern as
+`resource-hub-r2-routes.js`'s `canAuthor` check (see Professional Development) and has been reviewed on every
+prior audit night without a gap: PATCH on another user's credential returns 404 not 403 (anti-enumeration),
+cross-user document access is audit-logged, and the role check is correctly enforced even though it lives inside
+the handler rather than in the route's middleware array. No gaps found.
 
 ## Tests run tonight
-- unit: `credential-extraction.test.js, credential-surface-guards.test.js, security.test.js` — run in isolation tonight: 70/70 pass (credentials sub-area only — no dedicated test exercises the leave or CPD request/approve endpoints at all, confirmed again tonight by grepping for profile/leave and profile/cpd across every test file)
-- integration: `credential-scans.itest.js` — run directly tonight: 22/22 pass (credentials register only — leave/CPD still has no integration coverage). `documents.itest.js` was also run tonight (part of a wider batch, passed) but tests the generic document-storage abstraction, not a profile-specific endpoint, so it is not counted as feature-specific proof here.
+- unit: `credential-surface-guards.test.js` (run as part of the 12-file Resource Hub batch, see
+  Clinical resources / Professional Development) — no dedicated test exercises the leave or CPD request/approve
+  endpoints at all, confirmed again tonight by grepping for `profile/leave` and `profile/cpd` across every unit
+  test file
+- integration: no dedicated integration test for leave/CPD either — `audit.itest.js, credential-scans.itest.js,
+  documents.itest.js, onboarding-returns.itest.js, readonly-and-hardening.itest.js, stage2-pilot-readiness.itest.js`
+  reference `profile-routes`/`/api/profile/` only for credentials/documents paths, confirmed by grepping those
+  files for "leave" or "cpd" (no matches)
 
 ## Open tasks (from the tracker)
 - Review Portal Structure — build, todo
 
 ## Compare with the tracker
-None — this matches the tracker's own claude_update exactly: leave requests and CPD activities have zero automated test coverage, and the manual click-through QA task ("Review Portal Structure") is still open. Credentials specifically are the one well-tested sub-area, now proven at both unit and integration level.
+None. This matches the tracker's own `claude_update` exactly: leave requests and CPD activities have zero
+automated test coverage, and the manual click-through QA task ("Review Portal Structure") is still open.
+Credentials specifically are the one well-tested sub-area (see Resource Hub batch, 12 skipped tests noted there).

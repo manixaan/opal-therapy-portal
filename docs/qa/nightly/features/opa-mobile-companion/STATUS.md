@@ -3,24 +3,36 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed this window (commits since 2026-10-06 touching its located files): **no** — zero commits have landed on `develop` under backend/ or frontend/current/ since the last audit (2026-10-06); the audited commit (`aacf8e68`) is still unchanged. This is the seventh consecutive reconfirmation night on this exact code. Tonight is not Sunday UTC, so targeted batches were run (not the complete suites) — see each section below for exactly what ran tonight.
+- Addressed this window: **no** — zero commits since 2026-10-07 touching `backend/` or `frontend/current/`.
+  Eighth consecutive reconfirmation night.
 - Created (any located code at all): **yes**
 
 ## Located files
-- Case Noting: backend/case-note-routes.js (/api/mobile/case-note-drafts + legacy /api/mobile/ai/case-note), backend/clinical-note-provider.js (AI transmission layer), backend/case-note-style.js, backend/ai/deidentify.js, docs/mobile/CASE_NOTE_AI_PRIVACY.md
-- Calendar View: backend/mobile-routes.js (/api/mobile/today, /calendar, /appointments/:id, /travel), backend/maps-routes.js
-- No mobile client code lives in this repository — the on-device pilot the tracker's checklist describes lives in a separate mobile app project not checked into this repo.
+- `backend/mobile-routes.js` — own-day aggregates + voice-note drafts (`/api/mobile/*`), including
+  `GET /api/mobile/calendar` for Calendar View
+- `backend/case-note-routes.js` — Case Noting pilot (`/api/mobile/case-note-drafts/*`,
+  `/api/mobile/ai/case-note/*`), fail-closed clinical AI pathway via `backend/clinical-note-provider.js`
+- Desktop thin-client reuse: `frontend/current/casenotes.js`/`casenotes-compose.js` (CASE NOTES tab) call the
+  same `/api/mobile/*` endpoints the phone app uses — the phone app itself is not in this repo.
+- Note: `backend/calendar-routes.js` is a separate, portal-wide master-calendar subsystem, not this feature's
+  Calendar View — do not conflate the two.
 
 ## Guard check
-mobile-routes.js: requireAuth, self-scoped-by-design (every query filtered by req.user.id, 404 on anything not owned — spot-checked /today, /appointments/:id, voice-notes CRUD). case-note-routes.js: requireAuth on both mount points, same ownership pattern, documented in its own header. AI gateway registration confirmed: clinical_note_generation is a registered ai-policy.js entry (classification CLINICAL, de-identification required, human review required on every output). No gaps.
+`mobile-routes.js:40`: `router.use('/api/mobile', requireAuth);` — header documents the self-scoped exception
+("every endpoint returns the CALLER'S OWN day only... anything not owned by the caller answers 404"); noted as
+self-scoped by design, not broken. `case-note-routes.js`: same self-scoped pattern plus `aiRateLimit` on the
+AI-calling routes. No gaps found.
 
 ## Tests run tonight
-- unit: `mobile-routes.test.js, case-note-routes.test.js` — run in isolation tonight: 105/105 pass
-- integration: `case-note-client-link.itest.js, case-note-deidentification.itest.js` — 126/126 pass tonight (run together with the FCA/letters/templates integration batch; all green)
+- unit: `mobile-routes.test.js, case-note-routes.test.js, casenotes-compose.test.js, casenotes-helpers.test.js` —
+  143/143 pass
+- integration: `case-note-client-link.itest.js, case-note-deidentification.itest.js` — 6/6 pass
 
 ## Open tasks (from the tracker)
-- Case Noting — build, todo (tracker checklist: confirm pilot behaviour, test dictation end to end, test AI summary against the clinical pathway, decide "good enough" with Ann, test save-to-portal, fix and re-test, get Ann's sign-off — every item still unchecked)
+- Case Noting — build, todo
 - Calendar View — build, todo
 
 ## Compare with the tracker
-None — the tracker's own claude_update already frames this accurately: the backend pilot is built, guarded and well tested, but the human sign-off checklist for the Case Noting pilot (ending in "Get Ann's sign-off") is still entirely open. That checklist, not the code, is what keeps this at needs-refinement rather than proven.
+None new. The tracker's own `claude_update` already says the backend is built, self-scoped and well tested, and
+the open item is the tracker's own Case Noting checklist, every item still unchecked, ending in a named person's
+sign-off — a human task, not a code gap.
