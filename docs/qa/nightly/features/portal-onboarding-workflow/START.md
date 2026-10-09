@@ -1,41 +1,47 @@
-/opal-critical
+/opal-feature
 
-## Idea
+# Portal Onboarding Workflow
+
+**Idea**
+
 Portal Onboarding Workflow
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/onboarding-journey-routes.js` (Stage 1), `backend/onboarding-pack-routes.js` (Stage 2),
-  `backend/onboarding-induction.js` (Stage 3), `backend/onboarding-defaults-routes.js` ("Edit Onboarding" tab)
-- Frontend: ONBOARDING TAB in `mockup_v3.html`, `frontend/current/onboarding-journey.js`
+
+- 11 route files under `backend/onboarding-*-routes.js` (plus the legacy `onboarding-routes.js`), all guarded with `requireAuth` at minimum; 10 of 11 add `requireRole`/`requirePermission` on top for sensitive actions.
+- SharePoint document storage (the rest of Stage 2): **confirmed not started** — the only `sharepoint` hit anywhere in `backend/` is a CSP allowlist domain in `server.js`, no implementation code exists.
+- Frontend: `ONBOARDING TAB` banner (`mockup_v3.html:4162`), `frontend/current/onboarding.js`.
 
 ## Start here
-Add SharePoint document storage to Stage 2's pack-finalise step in `backend/onboarding-pack-routes.js` /
-`backend/onboarding-pack-db.js`. Confirm which SharePoint site/library documents should land in with the practice
-owner before building — there is no existing Graph/SharePoint client in this repo to copy from, only a CSP
-allowlist entry for Office Online embedding. Stage 1 and Stage 3 need no further build work; this is purely the
-Stage 2 SharePoint half.
+
+Add SharePoint document storage to Stage 2's pack-finalise step. Start in `backend/onboarding-pack.js` / `backend/onboarding-pack-routes.js` where the finished pack is currently only written locally — follow the existing OneDrive/Graph pattern in `backend/graph-identity.js` for auth, and check `.claude/rules/backend-api.md` before adding the new write path. Separately: this sandbox's one failing onboarding test needs the `@tesseract.js-data/eng` package actually present in `node_modules` to re-verify (not a code change).
 
 ## Done means
-Finished Stage 2 onboarding documents land in both the agreed SharePoint location and the portal's own storage,
-with a new or extended integration test in `tests/integration/onboarding-pack.itest.js` exercising the
-SharePoint write path, and `npx jest --config jest.integration.config.js tests/integration/onboarding-pack.itest.js
---runInBand` passing. Evidence label moves from needs-refinement to proven once this lands and is verified.
+
+A passing integration test that confirms a finished onboarding pack lands in SharePoint — label would move toward `proven` once Stage 2 fully closes.
 
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21

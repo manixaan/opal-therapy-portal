@@ -1,36 +1,43 @@
-/opal-fast-change
+# Update Opal Docs Register
 
-## Idea
+**Idea**
+
 Update Opal Docs Register
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-Nothing yet — this is explicitly an organising job, not a coding job (the tracker's own task description: reuse
-the existing Excel register and SharePoint, not a new build).
+
+nothing yet
 
 ## Start here
-There is no Claude Code session to run here. The task is to update the practice's own Excel documentation
-register and SharePoint links directly — list every document type the business needs, whether it exists, and
-where it lives. No file in this repository is the register.
+
+Not a coding task. Update the Excel document register and its SharePoint links directly — no Claude Code session is needed.
 
 ## Done means
-No test applies. "Done" is a person confirming the Excel register and SharePoint links are current — nothing to
-re-check in this repo.
+
+The Excel register is up to date and the SharePoint links resolve. There is no test for this — it is not code.
 
 Tracker: 45c66127-e21b-47c5-be70-6c9c61952126

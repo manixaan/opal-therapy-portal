@@ -1,38 +1,45 @@
 /opal-feature
 
-## Idea
+# Interactive Assessments
+
+**Idea**
+
 Interactive Assessments
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/whodas-routes.js`, `backend/assessments-routes.js`
-- Frontend: the dedicated `#assessment/record/:id` page, `frontend/current/assessment.js` + `whodas.js`
+
+- `backend/fca-routes.js`, `backend/whodas-routes.js`, `backend/assessments-routes.js` — all guarded with `requireAuth` on their router.
 
 ## Start here
-Add an e2e spec (`e2e/tests/assessment.spec.js`, following `e2e/tests/portal.spec.js`'s pattern) that completes
-one WHODAS 2.0 flow end to end, and add a row to `docs/qa/BROWSER_QA_RESULTS.md`. e2e only runs under
-`/opal-release` — write the spec, don't run the full e2e suite yourself. "Assessment Review" (sorting which
-instruments to keep) is a separate human curation task for Ann, not something to build.
+
+Add a Playwright spec (pattern: `e2e/tests/portal.spec.js`) that logs in as a therapist, opens a WHODAS 2.0 assessment for a client, completes one question, and asserts the score renders. That single flow is enough to prove the tab works end to end.
 
 ## Done means
-A new e2e spec exercises the WHODAS 2.0 flow and a browser QA row exists for it. Existing suites
-(`npx jest tests/whodas-scoring.test.js tests/assessment-catalogue.test.js`) stay green. Evidence label moves
-from tab-unproven to proven once that browser/e2e proof lands.
+
+A passing e2e spec for the WHODAS (or FCA) flow — label would move to `proven`.
 
 Tracker: f0210ee7-ed35-4228-a28c-d5d4c83da371

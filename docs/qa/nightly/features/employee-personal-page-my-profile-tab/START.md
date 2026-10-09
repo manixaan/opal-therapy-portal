@@ -1,39 +1,46 @@
 /opal-feature
 
-## Idea
+# Employee Personal Page (My Profile Tab)
+
+**Idea**
+
 Employee Personal Page (My Profile Tab)
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/profile-routes.js` (`/api/profile/leave*`, `/api/profile/cpd*`, `/api/profile/credentials*`)
-- Frontend: PROFILE TAB in `mockup_v3.html`, `frontend/current/profile.js`
+
+- `backend/profile-routes.js` — every route guarded with `requireAuth`; the leave/CPD approve-reject routes add an inline `canApprove()` check (owner/admin only).
+- Frontend: `PROFILE TAB` banner (`mockup_v3.html:4188`), `frontend/current/profile.js`.
 
 ## Start here
-Add `backend/tests/profile-routes.test.js` covering a leave-request round trip (submit → owner approves →
-employee sees updated status) and a CPD activity submission requiring owner approval, following
-`backend/tests/credential-surface-guards.test.js`'s pattern for mocking the DB layer. Credentials are already
-proven at both unit and integration level — use that as the template. Separately, the tracker's own "Review
-Portal Structure" manual click-through task is still open and needs a human to walk every button in the tab.
+
+Open `backend/tests/credential-extraction.test.js` as the pattern and write an equivalent round-trip test for `backend/profile-routes.js`'s leave endpoints (`POST /api/profile/leave`, then `PATCH /api/profile/leave/:id/approve` as an owner, then `PATCH .../reject`). Do the same for `/api/profile/cpd*`. That closes the biggest gap here.
 
 ## Done means
-`backend/tests/profile-routes.test.js` exists and passes, covering at least one leave-approval and one
-CPD-approval round trip, and `npx jest tests/profile-routes.test.js` is green. Evidence label moves from
-needs-refinement to proven once that test lands and the manual structure review is also closed out.
+
+A passing leave-request and CPD-approval round-trip test in a new `tests/profile-routes.test.js` (or `tests/integration/profile.itest.js`) — label would move toward `proven` once the manual review task also closes.
 
 Tracker: 83bb9988-52ba-4f8c-85ba-7b65aca189b2

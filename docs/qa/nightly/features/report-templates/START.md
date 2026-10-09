@@ -1,40 +1,48 @@
-/opal-fast-change
+/opal-feature
 
-## Idea
+# Report Templates
+
+**Idea**
+
 Report Templates
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/fca-routes.js`, `backend/letter-routes.js`, `backend/templates-routes.js` +
-  `backend/templates/service-agreement-map.js`
-- Frontend: hidden Resource Hub entry points in `mockup_v3.html`, rendered by `fca.js`/`letter.js`/`templates.js`
+
+- FCA: `backend/fca-routes.js` (covered under Interactive Assessments).
+- Progress Letter: `backend/letter-routes.js` — `requireAuth` on `/api/letters` (line 166). Note: `file` reports this source file as non-ASCII ("data"); `node --check` still passes cleanly — unusual encoding, not a defect.
+- `backend/templates-routes.js` — `requireAuth` on `/api/templates` (line 113).
+- Client Agreement Form: **no distinct route or file found.** `backend/service-agreements/` contains only a `templates/` subfolder, nothing is mounted under that name in `server.js`. `tests/templates-service-agreement-map.test.js` exercises this mapping from inside `templates-routes.js` instead, which matches the tracker's own suspicion that this card is just the existing Service Agreement template.
 
 ## Start here
-Before building anything, confirm with the team whether "Client Agreement Form" means the existing Service
-Agreement template (`backend/templates-routes.js`, `backend/templates/service-agreement-map.js`) or something new
-— there is no code under the literal name "Client Agreement Form" anywhere in the repo. FCA and Progress Letter
-are already built and tested; the only concrete next step for them is browser/e2e proof, not more backend work.
+
+Confirm with the team whether "Client Agreement Form" means the existing Service Agreement template (`backend/service-agreements/templates/`) — if so, close that task as a duplicate. Then add one Playwright check per template (pattern: `e2e/tests/portal.spec.js`) that generates an FCA report and a Progress Letter and asserts the download succeeds.
 
 ## Done means
-Team confirms the Client Agreement Form mapping, and a browser check or e2e spec is added proving the FCA/Letter
-builder pages render and generate a document. Existing suites
-(`npx jest tests/fca-docx-engine.test.js tests/letter-docx-engine.test.js tests/templates-routes.test.js`) should
-keep passing. Evidence label should move from tab-unproven to proven once that browser/e2e proof lands.
+
+A passing e2e spec covering at least the FCA and Progress Letter generation flows.
 
 Tracker: 91ae30e7-9cda-4198-956f-8b9cdf043003

@@ -1,28 +1,28 @@
 # Password Master Document
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: `idea`
+- Tracker environment: `none`
 - Evidence label: **untouched**
-- Addressed this window: no — nothing in the codebase matches this feature.
-- Created (any located code at all): **no**
+- Addressed since the last audit (2026-10-08): no
+- Created (any located code at all): no
 
-## Located files
-None. Searched for "password manager", "credentials vault", "master document", "master doc", "onedrive" across
-`backend/`, `frontend/current/`, `docs/`. The only hits are unrelated: `onboarding-frontend-guards.test.js:345`
-tests that the onboarding login/signup form uses `autocomplete` tokens a *browser's own* password manager
-understands (not a portal feature), and `backend/setup/r2-content/core.js` has prose content recommending staff
-use a personal password manager (seed content for the Resource Hub's security-policy guide, not a feature).
+## Located
 
-## Guard check
-Not applicable — no code located.
+Nothing. Searched for OneDrive/password-master-document code across `backend/` and `frontend/current/` — no match beyond unrelated generic Microsoft Graph code (`backend/graph-identity.js`) and a vendoring note.
 
-## Tests run tonight
-None apply.
+## Tests
+
+N/A — there is nothing to test.
 
 ## Open tasks (from the tracker)
-(no tasks recorded in the tracker — the card has a title only)
 
-## Compare with the tracker
-None. The tracker's own `idea`/`why`/`outcome` text already frames this as an external OneDrive document
-("A master doc that exists on onedrive with all accounts login details") — matches the evidence exactly: there
-is no password-manager/credentials-vault feature in the portal's code.
+No tasks recorded against this card.
+
+## Commits since the last audit that touched it
+
+None — no commits have landed on `develop` under `backend/` or `frontend/current/` since the last audit (2026-10-08). Code audited tonight is the same commit (`aacf8e6`) as the last several nights.
+
+## Disagreement with the tracker
+
+None.
+

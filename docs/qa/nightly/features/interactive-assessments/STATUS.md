@@ -1,36 +1,30 @@
 # Interactive Assessments
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: `idea`
+- Tracker environment: `none`
 - Evidence label: **tab-unproven**
-- Addressed this window: **no** — zero commits since 2026-10-07 touching `backend/` or `frontend/current/`.
-  Eighth consecutive reconfirmation night.
-- Created (any located code at all): **yes**
+- Addressed since the last audit (2026-10-08): no
+- Created (any located code at all): yes
 
-## Located files
-- `backend/whodas-routes.js` — WHODAS 2.0 (36-item), feature-gated on `ENABLE_WHODAS_ASSESSMENT`
-- `backend/assessments-routes.js` — the assessment framework (catalogue, per-client history, share prep);
-  deliberately not feature-gated; confirms WHODAS 2.0 is the only implemented instrument today
-- `backend/fca-routes.js`, `backend/letter-routes.js` (shared machinery, see Report Templates)
-- `backend/whodas/`, `backend/fca/`, `backend/assessments/` — supporting modules
-- Frontend: no tab banner — a dedicated full-page surface (`#assessment/record/:id`), rendered by
-  `frontend/current/assessment.js`, loading `whodas.js`/`fca.js`/`letter.js` as instrument modules
+## Located
 
-## Guard check
-`assessments-routes.js:62`: `router.use('/api/assessments', requireAuth);` + per-route
-`requireCatalogue`/`requireClinicalRead`/`requireClinicalWrite`. `whodas-routes.js`: feature-flag gate, then
-`requireAuth` + local `requireClinicalRead`/`requireClinicalWrite` on all 16 routes. No gaps found.
+- `backend/fca-routes.js`, `backend/whodas-routes.js`, `backend/assessments-routes.js` — all guarded with `requireAuth` on their router.
 
-## Tests run tonight
-- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js,
-  whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — 481/481 pass
-- integration: `assessments.itest.js, whodas.itest.js` — 81/81 pass
+## Tests
+
+- Unit (12 files, shared with the FCA/Letter half of Report Templates): **738/738 pass.**
+- Integration (3 files): **122/122 pass.**
+- e2e / browser QA: none — no mention of `whodas` or `fca` anywhere in `e2e/tests/` or `docs/qa/BROWSER_QA_RESULTS.md`.
 
 ## Open tasks (from the tracker)
-- Assessment Review — build, todo (the tracker's own description: a human curation job — Ann reviewing which
-  assessments to keep/remove — not a coding task)
 
-## Compare with the tracker
-None new. "Assessment Review" is Ann's human curation task, not code. WHODAS 2.0 and the assessment framework
-are heavily tested but have never been proven in a browser — `docs/qa/BROWSER_QA_RESULTS.md` (dated 2026-08-01)
-has no assessment/WHODAS/FCA flow, and no e2e spec names any of them.
+Tracker task "Assessment Review" is `todo`, but per the card's own context this is a human curation job, not a coding task — it doesn't block the evidence label.
+
+## Commits since the last audit that touched it
+
+None — no commits have landed on `develop` under `backend/` or `frontend/current/` since the last audit (2026-10-08). Code audited tonight is the same commit (`aacf8e6`) as the last several nights.
+
+## Disagreement with the tracker
+
+None.
+

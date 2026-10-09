@@ -1,50 +1,33 @@
 # Portal - Splose - Outlook | Integration Works
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: `idea`
+- Tracker environment: `none`
 - Evidence label: **needs-refinement**
-- Addressed this window: **no** — zero commits since 2026-10-07 touching `backend/` or `frontend/current/`.
-  Eighth consecutive reconfirmation night.
-- Created (any located code at all): **yes**
+- Addressed since the last audit (2026-10-08): no
+- Created (any located code at all): yes
 
-## Located files
-- `backend/calendar-routes.js`, `backend/splose-link-routes.js`, `backend/splose-sync-routes.js`,
-  `backend/travel-routes.js`, `backend/routes.js` (`GET /api/outlook/categories`, line ~1463)
-- `backend/outlook-oauth.js` (OAuth helper, no routes of its own)
-- `backend/routes-outlook-integration.js` — defines Outlook routes with its own local `requireAuth`, but is
-  **not required anywhere in server.js or any other backend file** — orphaned/dead code, not reachable in
-  production. Worth flagging for cleanup, not a guard risk since it is unreachable.
-- `backend/splose-api.js`, `splose-draft-sync.js`, `splose-poller.js`, `splose-credentials.js`,
-  `splose-caseload.js`, `calendar-permissions.js`, `travel-cascade.js`, `travel-feasibility.js`
-- Frontend: `<!-- BOOK TAB -->` (mockup_v3.html:4464), `<!-- CALENDAR TAB -->` (mockup_v3.html:4711/4712, Smart
-  Booking), `<!-- TRAVEL & FLIGHTS TAB -->` (mockup_v3.html:5725 — Add Flight/Add Manual Travel are "Coming soon"
-  stubs), `<!-- TRAVEL LOGBOOK TAB -->` (mockup_v3.html:5762)
+## Located
 
-## Guard check
-`calendar-routes.js`: every route guarded (`requireAuth` + `requireRole`/`requireMasterCalendarAccess`).
-`splose-sync-routes.js`: `router.use('/api/splose-sync', requireAuth, denyReadOnly, requireDraftSync)`.
-`splose-link-routes.js`: self-link routes explicitly documented self-scoped by email match; admin-link and
-connection routes are `requireRole('owner')`. `travel-routes.js`: `requireAuth, denyReadOnly` throughout.
-**Re-confirmed directly tonight**: `backend/routes.js`'s `GET /api/outlook/categories` wraps its body in a
-blanket `catch` that returns HTTP 500 for every error, including the ordinary case of a user with no Outlook
-connection (`Error('Outlook not connected')` thrown from `getValidAccessToken`) — it should return 409 or an
-empty list instead. This is guard-adjacent (the route is still correctly behind `requireAuth`), not a guard gap,
-but it is a real, still-open defect, also independently confirmed in `docs/qa/BROWSER_QA_RESULTS.md` (the
-"Medium" `GET /api/outlook/categories 500` finding).
+- "Multi Calendar Rules" doesn't map to one distinct module — the closest match is `backend/calendar-routes.js` (master calendar / per-therapist access, each route individually guarded with `requireAuth` plus `requireRole`/`requireMasterCalendarAccess`), `backend/calendar-permissions.js` (role-based calendar visibility rules), the Outlook sync pipeline (`backend/outlook-oauth.js` + sync functions in `backend/routes.js`), and `backend/splose-sync-routes.js` (`requireAuth`+`denyReadOnly`+`requireDraftSync`).
+- `backend/splose-link-routes.js` — `requireAuth`, plus `requireRole('owner')` on the admin/connection routes.
+- Noted in passing: `backend/routes-outlook-integration.js` defines its own local `requireAuth` and is never `require()`'d anywhere in `server.js` or elsewhere — it's dead code, not a live guard gap (it never runs), but worth deleting.
 
-## Tests run tonight
-- unit: `outlook-delta-preserve.test.js, outlook-mirror.test.js, splose-link-routes.test.js,
-  splose-api-queue.test.js, splose-credentials.test.js, splose-draft-sync.test.js, splose-poller.test.js,
-  sync.test.js, sync-status-route.test.js, permissions.test.js, security.test.js` — 159/159 pass across both
-  runs tonight (the first 7 files overlap with permissions/security/sync tests also relevant to other features)
-- integration: `event-delete-cascade.itest.js, event-travel-plan.itest.js, oauth-callback.itest.js,
-  outlook-claim.itest.js, rbac-hardening.itest.js, splose-draft-sync.itest.js, travel-overrides.itest.js` —
-  58/58 pass
+## Tests
+
+- Unit (7 files): **110/110 pass.**
+- Integration (5 files): **50/50 pass.**
+- e2e: `e2e/tests/portal.spec.js` — Splose 403 boundaries, write-blocked, Outlook not-connected state. Browser QA rows D (Outlook state, 4/4) and F (Splose boundaries, 4/4) pass.
+- **Confirmed real, reproducible, currently unfixed bug** (not caught by any test — grepped `outlook/categories` across `tests/` and `tests/integration/`, zero matches): `GET /api/outlook/categories` in `backend/routes.js:1463` calls `getValidAccessToken()`, which throws a plain `Error('Outlook not connected')` for a disconnected user (`routes.js:151-153`); the route's catch block (`routes.js:1473-1476`) turns *any* error into a flat `500` instead of distinguishing "not connected." Independently documented in `docs/qa/BROWSER_QA_RESULTS.md` (2026-08-01, Medium severity) and reproduced again tonight by reading the code path directly.
 
 ## Open tasks (from the tracker)
-- Multi Calendar Rules — build, todo
 
-## Compare with the tracker
-None new. The tracker's own `claude_update` already names the open `/api/outlook/categories` bug accurately. The
-travel-cascade/draft-sync/two-way-match workflow is otherwise built, guarded and well tested, with real e2e
-(`e2e/tests/portal.spec.js` — Splose/Outlook guard tests) and a recorded browser QA pass (flows D, E, F).
+Tracker task "Multi Calendar Rules" is `todo`.
+
+## Commits since the last audit that touched it
+
+None — no commits have landed on `develop` under `backend/` or `frontend/current/` since the last audit (2026-10-08). Code audited tonight is the same commit (`aacf8e6`) as the last several nights.
+
+## Disagreement with the tracker
+
+None.
+

@@ -1,38 +1,46 @@
-/opal-feature
+/opal-critical
 
-## Idea
+# Opa Mobile Companion
+
+**Idea**
+
 Opa Mobile Companion
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/mobile-routes.js` (`/api/mobile/*`), `backend/case-note-routes.js` (case-note drafts + AI pathway)
-- Desktop reuse: `frontend/current/casenotes.js` under the CASE NOTES tab
+
+- `backend/mobile-routes.js` — `requireAuth` only; header comment documents strict `user_id`/own-profile scoping (self-scoped by design, same pattern as `snapshot-routes.js`).
+- `backend/case-note-routes.js` — `requireAuth` on `/api/mobile/case-note-drafts` and `/api/mobile/ai/case-note`.
 
 ## Start here
-This is not a build task — the tracker's own checklist for the Case Noting pilot is still fully open (every
-item unchecked). Walk the Case Noting pilot through that checklist end to end (dictate → draft → AI pathway →
-review) and get the named reviewer's sign-off. The backend (`npx jest tests/mobile-routes.test.js
-tests/case-note-routes.test.js`) is already green — no code change is expected unless the walkthrough surfaces a
-real defect.
+
+This is the Case Noting pilot's own checklist in the tracker, not a code task — walk through it on the test device (dictation → AI summary → save) and tick items as they're confirmed. Because the dictation pipeline touches clinical content and an AI gateway call, treat any code fix that comes out of that walkthrough as CRITICAL level: read `.claude/rules/ai-gateway.md` first.
 
 ## Done means
-Every item on the tracker's Case Noting checklist is checked, with sign-off recorded, and the existing test
-suites still pass. Evidence label moves from needs-refinement to proven once that human checklist is closed.
+
+The tracker's own "Case Noting" checklist reaching sign-off — code evidence is already solid (105 unit + 6 integration tests passing).
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613

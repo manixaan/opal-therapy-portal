@@ -1,41 +1,45 @@
 /opal-feature
 
-## Idea
+# Professional Development
+
+**Idea**
+
 Professional Development
 
-## Why
+**Why**
+
 (not yet written in the tracker)
 
-## Who uses it
+**Who uses it**
+
 (not yet written in the tracker)
 
-## What they see
+**What they see**
+
 (not yet written in the tracker)
 
-## What should happen
+**What should happen**
+
 (not yet written in the tracker)
 
-## Outcome
+**Outcome**
+
 (not yet written in the tracker)
 
-(No decisions recorded in the tracker.)
+**Decision**
+
+(not yet written in the tracker)
 
 ## Where it lives today
-- `backend/resource-hub-r2-routes.js` (`/api/rh2/pd*`, `/api/rh2/cpd*`), `backend/profile-routes.js`
-  (`/api/profile/cpd*`)
-- Frontend: PD sub-view in the Resources tab (`frontend/current/resourcehub.js`), personal CPD log in the
-  Profile tab (`frontend/current/profile.js`)
+
+- No description or tasks on this card. Best match: the PD events catalogue — `backend/migrations/029_pd_catalogue.sql` + `backend/resource-hub-r2-routes.js` (same guard as Clinical Resources: `requireAuth` + admin-denied 403).
 
 ## Start here
-This card has no description and no tasks in the tracker, yet the code is fully built and tested. Confirm with
-the team whether this card means the Resource Hub's PD events catalogue + CPD log (the only plausible match), then
-either close the card out or write a proper idea/why/who for it. The one open gap is browser proof: add a
-`docs/qa/BROWSER_QA_RESULTS.md` entry or an e2e scenario for `#resources/pd` and the Profile tab's CPD section,
-following the Resource Hub's existing flow G pattern.
+
+Confirm with the team that this card means the Resource Hub's PD events catalogue (`resource-hub-r2-routes.js`). If so, extend `e2e/tests/portal.spec.js`'s Resource Hub flow (around line 116) to also open the PD category and assert at least one event renders.
 
 ## Done means
-A browser/e2e check exists for the PD events catalogue and/or the CPD log, and
-`npx jest tests/pd-catalogue-guards.test.js` plus the matching integration test still pass. Evidence label moves
-from tab-unproven to proven once that proof lands.
+
+An e2e assertion that the PD events catalogue renders in the Resource Hub — label would move to `proven`.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb
