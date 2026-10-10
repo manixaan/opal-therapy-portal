@@ -327,13 +327,53 @@
     }
   })();
 
+  // ── ?next= is honoured only for this origin (10 Oct 2026) ─────────────────
+  // It went straight to location.replace, so ?next=javascript:… ran script on
+  // the portal origin and ?next=//host left the site. Returns the absolute
+  // same-origin href, never just the path: '/.//evil.com' normalises to the
+  // path '//evil.com', which a second navigation reads as protocol-relative.
+  function safeNext(raw) {
+    try {
+      const u = new URL(raw || '/', window.location.origin);
+      if (u.origin !== window.location.origin) return '/';
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return '/';
+      if (u.pathname === '/login' || u.pathname === '/login.html') return '/';
+      return u.href;
+    } catch (_) { return '/'; }
+  }
+
+  // ── Loop breaker (10 Oct 2026) ─────────────────────────────────────────────
+  // A shell that sends a signed-in user here, and this page sending them
+  // straight back, reloaded each other in a / ↔ /login loop. Auto-redirect to
+  // the same target at most once per AUTO_REDIRECT_WINDOW_MS; after that the
+  // login page stays up with a link through. The form's own redirect after a
+  // real sign-in is a user action and is never counted.
+  const AUTO_REDIRECT_KEY = 'login_auto_redirect';
+  const AUTO_REDIRECT_WINDOW_MS = 5000;
+  function autoRedirectAllowed(target, now) {
+    try {
+      const prev = JSON.parse(sessionStorage.getItem(AUTO_REDIRECT_KEY) || 'null');
+      if (prev && prev.to === target && now - prev.at >= 0 && now - prev.at < AUTO_REDIRECT_WINDOW_MS) return false;
+      sessionStorage.setItem(AUTO_REDIRECT_KEY, JSON.stringify({ to: target, at: now }));
+    } catch (_) { /* storage unavailable — nothing to count with, so allow */ }
+    return true;
+  }
+
   // ── If already authenticated, skip the login screen ────────────────────────
   (async function checkExistingSession() {
     try {
       const r = await fetch('/api/auth/me', { credentials: 'include' });
       if (r.ok) {
-        const redirect = new URLSearchParams(window.location.search).get('next') || '/';
-        window.location.replace(redirect);
+        const target = safeNext(new URLSearchParams(window.location.search).get('next'));
+        if (autoRedirectAllowed(target, Date.now())) { window.location.replace(target); return; }
+        console.warn('[login] Signed in, but the portal sent this session back here within 5 s — not redirecting again.');
+        showInfo('You are already signed in, but the portal did not finish loading. ');
+        const a = document.createElement('a');
+        a.href = target;
+        a.textContent = 'Try the portal again';
+        a.style.color = 'inherit';
+        a.style.fontWeight = '600';
+        document.getElementById('info-box').appendChild(a);
       }
     } catch (_) {}
   })();
@@ -376,8 +416,7 @@
         // Successful login — tell the shell to open the Today snapshot,
         // then redirect to main app
         try { sessionStorage.setItem('snapshot_just_signed_in', '1'); } catch (_) {}
-        const redirect = new URLSearchParams(window.location.search).get('next') || '/';
-        window.location.replace(redirect);
+        window.location.replace(safeNext(new URLSearchParams(window.location.search).get('next')));
         return;
       }
 
