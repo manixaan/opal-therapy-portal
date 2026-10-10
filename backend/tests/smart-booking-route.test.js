@@ -972,6 +972,71 @@ describe('Splose sync never pops up (6 Oct 2026)', () => {
   });
 });
 
+// 10 Oct 2026: decorateTiles rewrote every pending chip's text on each pass. A
+// same-text textContent write still replaces the text node, which re-fired the
+// #cal-grid observer that calls decorateTiles — a permanent ~8 Hz loop. The real
+// module boots here against a scripted fetch and one pending tile.
+describe('Splose tile chips settle — decorating never re-triggers itself', () => {
+  const SYNC = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+  const GRID = `<!doctype html><body>
+    <section id="view-calendar"><div class="cal-topbar"></div></section>
+    <div id="cal-grid"><div class="cal-col" id="day-mon"><div class="session" id="tile-1"></div></div></div>
+  </body>`;
+  const open = [];
+  afterEach(() => { while (open.length) open.pop().close(); });   // stops the module's polls
+
+  async function boot(row) {
+    const dom = new JSDOM(GRID, { runScripts: 'outside-only', url: 'http://localhost/' });
+    const win = dom.window;
+    open.push(win);
+    const state = { row };
+    const reply = (json) => ({ ok: true, status: 200, json: async () => json });
+    win.fetch = async (url) => {
+      if (url === '/api/splose/sync-status') return reply({ draftSyncEnabled: true });
+      if (url === '/api/splose-sync/pending') return reply({ changes: [state.row] });
+      if (url === '/api/splose-sync/alerts') return reply({ alerts: [] });
+      return reply({});
+    };
+    win.eval(`var APP_USER = { id: 'me', role: 'therapist' };
+      var SESSIONS = { s1: { id: 's1', dbId: 'db-1', element: document.getElementById('tile-1') } };`);
+    win.eval(SYNC);
+    await flush(400);   // boot → first decorate → chip appended → one more pass
+    return { win, state, chip: () => win.document.querySelector('#tile-1 .splose-chip') };
+  }
+  function watch(win) {
+    const recs = [];
+    new win.MutationObserver((list) => recs.push(...list)).observe(win.document.getElementById('cal-grid'),
+      { childList: true, subtree: true, attributes: true, characterData: true });
+    return recs;
+  }
+
+  test('once the chip is drawn, the grid goes quiet — no further mutations of any kind', async () => {
+    const env = await boot({ eventId: 'db-1', status: 'pending', action: 'update' });
+    expect(env.chip().textContent).toBe('↑');
+    const recs = watch(env.win);
+    await flush(500);   // four debounce windows: the old code rewrote the chip in each
+    expect(recs).toHaveLength(0);
+  });
+
+  test('a second pass over the same queue writes nothing; a status change still updates the chip', async () => {
+    const env = await boot({ eventId: 'db-1', status: 'pending', action: 'update' });
+    const recs = watch(env.win);
+    await env.win.SploseSync.refresh();
+    await flush(300);
+    expect(recs).toHaveLength(0);
+
+    env.state.row = { eventId: 'db-1', status: 'failed', action: 'update', error: 'rate limited' };
+    await env.win.SploseSync.refresh();
+    expect(env.chip().textContent).toBe('!');
+    expect(env.chip().title).toBe('Splose sync failed: rate limited');
+    expect(env.chip().classList.contains('failed')).toBe(true);
+    await flush(300);
+    const settled = recs.length;
+    await flush(400);
+    expect(recs.length).toBe(settled);
+  });
+});
+
 describe('deleting a session re-plans the travel either side (6 Oct 2026)', () => {
   const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
   const popup = (env) => env.win.document.querySelector('.pd-backdrop .pd-dialog');

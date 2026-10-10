@@ -199,10 +199,16 @@
       }
       if (chip) {
         if (!row) { chip.remove(); return; }
-        chip.textContent = row.status === 'failed' ? '!' : '↑';
-        chip.title = row.status === 'failed' ? ('Splose sync failed: ' + (row.error || ''))
+        // Write only on change (10 Oct 2026). A same-text textContent write
+        // still replaces the text node, a childList mutation in #cal-grid, and
+        // the grid observer in boot() answers every one with another pass here:
+        // a permanent ~8 Hz redecorate loop while any tile had a pending row.
+        var glyph = row.status === 'failed' ? '!' : '↑';
+        if (chip.textContent !== glyph) chip.textContent = glyph;
+        var tip = row.status === 'failed' ? ('Splose sync failed: ' + (row.error || ''))
           : (S.autoSync && !needsReview(row)) ? ('Writing to Splose shortly — ' + row.action)
           : ('Not yet in Splose — ' + row.action);
+        if (chip.title !== tip) chip.title = tip;
         chip.classList.toggle('failed', row.status === 'failed');
       }
     });

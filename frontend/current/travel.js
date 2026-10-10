@@ -535,15 +535,20 @@ function stripSuburb(s) {
    calendar meant a base edit or a day change showed up on the wrong week, or
    not at all, until the two cursors happened to agree (7 Sep 2026). */
 function calendarWeekLocations() {
+  const key = calendarWeekKey();
+  if (key && typeof WORK_LOCATION !== 'undefined') return WORK_LOCATION[key] || (WORK_LOCATION[key] = {});
+  return {};
+}
+/* The WORK_LOCATION key of that week; the profile editor's week when the
+   calendar has not set one yet (wlThisWeek's key). */
+function calendarWeekKey() {
   try {
     const mon = window.__currentWeekMonday;
-    if (mon && typeof weekKeyFor === 'function' && typeof WORK_LOCATION !== 'undefined') {
-      const local = new Date(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate());
-      const key = weekKeyFor(local);
-      return WORK_LOCATION[key] || (WORK_LOCATION[key] = {});
+    if (mon && typeof weekKeyFor === 'function') {
+      return weekKeyFor(new Date(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate()));
     }
   } catch (e) { /* fall through */ }
-  return (typeof wlThisWeek === 'function') ? wlThisWeek() : {};
+  return (typeof wlCurrentKey === 'function') ? wlCurrentKey() : null;
 }
 function dayAnchorBase(day) {
   const weekObj = calendarWeekLocations();
@@ -2189,15 +2194,21 @@ function renderDayLocationPickers() {
     sel.setAttribute('aria-label', 'Work location, ' + dayName);
   });
 }
-function setDayWorkLocation(day, key, fromUndo, weekObj) {
-  // The undo carries the week it changed, even if the calendar moved on since.
-  const wk = weekObj || calendarWeekLocations();
+function setDayWorkLocation(day, key, fromUndo, weekKey) {
+  // The undo carries the week it changed, even if the calendar moved on since —
+  // by KEY, looked up again when it runs. My Profile's loadWorkSchedule swaps in
+  // freshly parsed week objects, so a held object could be detached by then and
+  // Cmd+Z changed nothing while saying "Undone" (10 Oct 2026).
+  const wkKey = weekKey || calendarWeekKey();
+  const wk = (weekKey && typeof WORK_LOCATION !== 'undefined')
+    ? (WORK_LOCATION[weekKey] || (WORK_LOCATION[weekKey] = {}))
+    : calendarWeekLocations();
   const prev = wk[day] || '';
   if ((key || '') === prev) return;
   if (key) wk[day] = key; else delete wk[day];
   if (!fromUndo && window.OpalUndo) {
     const dayName = (typeof WL_DAY_LABEL !== 'undefined' && WL_DAY_LABEL[day]) || day;
-    window.OpalUndo.register({ group: 'calendar', label: 'Work location — ' + dayName, undo: async () => setDayWorkLocation(day, prev, true, wk) });
+    window.OpalUndo.register({ group: 'calendar', label: 'Work location — ' + dayName, undo: async () => setDayWorkLocation(day, prev, true, wkKey) });
   }
   if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
   if (typeof debouncedSaveWorkSchedule === 'function') debouncedSaveWorkSchedule();
