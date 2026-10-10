@@ -680,7 +680,8 @@ describe('changed assets are cache-busted', () => {
       // 8: '#onboarding/record/<id>' — the journey record carries an id.
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
       // 12: the Finance tab joined KNOWN_TABS.
-      ['navigation.js', 12],
+      // 13: the Invoicing tab joined KNOWN_TABS.
+      ['navigation.js', 13],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -726,6 +727,8 @@ describe('changed assets are cache-busted', () => {
       ['opa.js', 3],
       // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
       ['finance.js', 1], ['finance.css', 1],
+      // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
+      ['invoicing.js', 3], ['invoicing.css', 2],
       ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
