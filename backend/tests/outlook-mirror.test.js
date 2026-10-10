@@ -10,9 +10,14 @@
  *      - local change is saved FIRST and persists when the Graph PATCH fails
  *        (graceful degradation: sync_log 'failed' + sync_status 'pending')
  *      - Graph success marks sync_status 'synced' and logs success
- *      - staged-rollout flag off ⇒ 403 feature_disabled and NO local write
+ *      - staged-rollout flag off ⇒ the portal edit is saved (local-first) and
+ *        an Outlook-linked row is held sync_status 'pending' in that same
+ *        write, so a later delta cannot snap it back; Outlook is not called
+ *   1b. Routing address (PATCH /api/outlook/events/:dbId/location):
+ *      - ownership is checked BEFORE the write; a non-owner gets 404, no write
  *   2. App → Outlook delete propagation (DELETE /api/outlook/events/:dbId):
  *      - Graph failure is non-fatal; the local soft-delete always happens
+ *      - delete and restore use only the calendar owner's own token
  *   3. Splose calendar decoupling flag surface:
  *      - GET /api/splose/sync-status reports calendarSyncEnabled=false unless
  *        ENABLE_SPLOSE_CALENDAR_SYNC is exactly 'true' (fail-closed)
@@ -170,6 +175,11 @@ describe('PATCH /api/outlook/events/:dbId — app → Outlook update propagation
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, savedToDb: true, savedToOutlook: false, outlookStatus: 'disabled' });
     expect(db.updateEvent).toHaveBeenCalledTimes(1);
+    // 10 Oct 2026: the one local write also holds the Outlook-linked row as
+    // 'pending' — a 'synced' row let the next delta put Outlook's old time back.
+    expect(db.updateEvent).toHaveBeenCalledWith(DB_ID, expect.objectContaining({
+      title: patchBody.title, startTime: patchBody.startTime, lastModifiedBy: 'app', syncStatus: 'pending',
+    }));
     expect(outlookApi.updateOutlookEvent).not.toHaveBeenCalled();
   });
 
@@ -181,7 +191,43 @@ describe('PATCH /api/outlook/events/:dbId — app → Outlook update propagation
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, savedToDb: true, savedToOutlook: false, outlookStatus: 'not_linked' });
     expect(db.updateEvent).toHaveBeenCalledTimes(1);
+    // Nothing to mirror, so nothing is left waiting for Outlook.
+    expect(db.updateEvent.mock.calls[0][1].syncStatus).toBeUndefined();
     expect(outlookApi.updateOutlookEvent).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  1b. Routing address — ownership before the write (10 Oct 2026)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PATCH /api/outlook/events/:dbId/location — ownership before the write', () => {
+  test("someone else's event: 404 and the address is NOT written", async () => {
+    // The ownership SELECT (id + caller's user_id) finds nothing.
+    db.pool.query.mockImplementation(() => Promise.resolve({ rows: [], rowCount: 0 }));
+
+    const res = await request(buildApp())
+      .patch(`/api/outlook/events/${DB_ID}/location`).send({ location: '1 Elsewhere Rd, Joondalup' });
+
+    expect(res.status).toBe(404);
+    const ownership = db.pool.query.mock.calls.find(([sql]) => /SELECT outlook_id FROM events WHERE id = \$1 AND user_id = \$2/.test(sql));
+    expect(ownership[1]).toEqual([DB_ID, USER_ID]);
+    expect(db.updateEventManualLocation).not.toHaveBeenCalled();
+    expect(outlookApi.updateOutlookEvent).not.toHaveBeenCalled();
+  });
+
+  test('own event: ownership checked first, then the address saved and mirrored', async () => {
+    primePoolQuery({ outlookId: OL_ID });
+
+    const res = await request(buildApp())
+      .patch(`/api/outlook/events/${DB_ID}/location`).send({ location: '12 Example St, Willetton' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, savedToDb: true, savedToOutlook: true });
+    expect(db.updateEventManualLocation).toHaveBeenCalledWith(DB_ID, expect.objectContaining({ address: '12 Example St, Willetton' }));
+    const selectIdx = db.pool.query.mock.calls.findIndex(([sql]) => /SELECT outlook_id/.test(sql));
+    expect(db.pool.query.mock.invocationCallOrder[selectIdx])
+      .toBeLessThan(db.updateEventManualLocation.mock.invocationCallOrder[0]);
   });
 });
 
@@ -197,7 +243,7 @@ describe('DELETE /api/outlook/events/:dbId — app → Outlook delete propagatio
     const res = await request(buildApp()).delete(`/api/outlook/events/${DB_ID}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, deletedFromOutlook: true });
+    expect(res.body).toMatchObject({ ok: true, deletedFromOutlook: true, outlookStatus: 'deleted' });
     expect(outlookApi.deleteOutlookEvent).toHaveBeenCalledWith('valid-token', OL_ID);
 
     const softDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = TRUE/.test(sql));
@@ -212,12 +258,44 @@ describe('DELETE /api/outlook/events/:dbId — app → Outlook delete propagatio
     const res = await request(buildApp()).delete(`/api/outlook/events/${DB_ID}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, deletedFromOutlook: false });
+    expect(res.body).toMatchObject({ ok: true, deletedFromOutlook: false, outlookStatus: 'failed' });
 
     const softDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = TRUE/.test(sql));
     expect(softDelete).toBeDefined();
   });
+
+  // 10 Oct 2026: no org-member fallback. Another person's token can only miss
+  // (404) or act on their mailbox; the create path already refuses it.
+  test("caller without an Outlook token: no other person's token is borrowed, local soft-delete still happens", async () => {
+    primeOtherConnectedUser({ outlookId: OL_ID });
+
+    const res = await request(buildApp()).delete(`/api/outlook/events/${DB_ID}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, deleted: 1, deletedFromOutlook: false, outlookStatus: 'not_connected' });
+    expect(db.pool.query.mock.calls.find(([sql]) => /access_token IS NOT NULL/.test(sql))).toBeUndefined();
+    expect(db.getUser).not.toHaveBeenCalledWith(OTHER_ID);
+    expect(outlookApi.deleteOutlookEvent).not.toHaveBeenCalled();
+    const softDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = TRUE/.test(sql));
+    expect(softDelete[1]).toEqual([DB_ID, USER_ID]);
+  });
 });
+
+const OTHER_ID = 'user-mirror-other-002';
+/** The caller has no Outlook token; an older org member does (the old fallback's pick). */
+function primeOtherConnectedUser({ outlookId = OL_ID, restoreRow = null } = {}) {
+  db.getUser.mockImplementation(async (id) => (id === OTHER_ID
+    ? { ...ACTIVE_USER, id: OTHER_ID, email: 'other@test.invalid', access_token: 'other-token' }
+    : { ...ACTIVE_USER, access_token: null, refresh_token: null }));
+  db.pool.query.mockImplementation((sql) => {
+    if (/access_token IS NOT NULL/.test(sql)) return Promise.resolve({ rows: [{ id: OTHER_ID }], rowCount: 1 });
+    if (restoreRow && /categories, is_deleted/.test(sql)) return Promise.resolve({ rows: [restoreRow], rowCount: 1 });
+    if (!restoreRow && /SELECT outlook_id/.test(sql)) {
+      return Promise.resolve({ rows: [{ outlook_id: outlookId, title: 'Client Appointment — Test Patient' }], rowCount: 1 });
+    }
+    return Promise.resolve({ rows: [], rowCount: 0 });
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  2b. DELETE cascade — travel blocks go with their event (2026-08-09)
@@ -357,7 +435,7 @@ describe('POST /api/outlook/events/:dbId/restore — soft-delete undo', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       ok: true, restored: 1, travelBlocksRestored: 0,
-      outlookRecreated: 0, outlookPending: 0,
+      outlookRecreated: 0, outlookPending: 0, outlookStatus: 'not_linked',
     });
 
     const unDelete = db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql));
@@ -415,7 +493,7 @@ describe('POST /api/outlook/events/:dbId/restore — soft-delete undo', () => {
       .post(`/api/outlook/events/${DB_ID}/restore`).send({ travelBlockIds: [TB_ID] });
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, outlookRecreated: 2, outlookPending: 0 });
+    expect(res.body).toMatchObject({ ok: true, outlookRecreated: 2, outlookPending: 0, outlookStatus: 'synced' });
     expect(outlookApi.createOutlookEvent).toHaveBeenCalledTimes(2);
 
     const idStores = db.pool.query.mock.calls.filter(([sql]) => /SET outlook_id = \$1/.test(sql));
@@ -450,6 +528,29 @@ describe('POST /api/outlook/events/:dbId/restore — soft-delete undo', () => {
     expect(syncLogs).toHaveLength(1);
     expect(syncLogs[0][0]).toContain("'failed'");
     expect(syncLogs[0][1]).toEqual([DB_ID, 'Graph 503']);
+    expect(res.body.outlookStatus).toBe('failed');
+  });
+
+  // 10 Oct 2026: never re-create in another person's mailbox — their delta
+  // sync would import it as a duplicate appointment on their calendar.
+  test("caller without an Outlook token: nothing is created with another person's token; rows stay pending", async () => {
+    primeOtherConnectedUser({ restoreRow: {
+      id: DB_ID, outlook_id: OL_ID, title: 'Client Appointment — Test Patient',
+      start_time: '2026-08-10T02:00:00Z', end_time: '2026-08-10T03:00:00Z',
+      location: '12 Example St, Willetton', categories: ['Client Appointments'], is_deleted: true,
+    } });
+
+    const res = await request(buildApp())
+      .post(`/api/outlook/events/${DB_ID}/restore`).send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, restored: 1, outlookRecreated: 0, outlookPending: 1, outlookStatus: 'not_connected' });
+    expect(db.pool.query.mock.calls.find(([sql]) => /access_token IS NOT NULL/.test(sql))).toBeUndefined();
+    expect(db.getUser).not.toHaveBeenCalledWith(OTHER_ID);
+    expect(outlookApi.createOutlookEvent).not.toHaveBeenCalled();
+    expect(db.pool.query.mock.calls.find(([sql]) => /SET is_deleted = FALSE/.test(sql))).toBeDefined();
+    const pending = db.pool.query.mock.calls.find(([sql]) => /SET sync_status = 'pending'/.test(sql));
+    expect(pending[1]).toEqual([DB_ID, USER_ID]);
   });
 
   test("cross-user (or unknown) event: 404 and nothing is touched", async () => {

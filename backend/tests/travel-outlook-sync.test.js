@@ -80,6 +80,39 @@ describe('planSync', () => {
   });
 });
 
+// 10 Oct 2026: the calendar's view of a day also holds the user's own all-day
+// chips (and any cancelled row); those used to make every such day 409
+// not_own_day, so its legs never reached Outlook. They may be seen now, but
+// they never own a leg, and anyone else's event is still refused.
+describe('syncDay — which events the calendar view may hold', () => {
+  const ALLDAY = 'cccccccc-3333-4333-8333-333333333333';
+  const CANCELLED = 'dddddddd-4444-4444-8444-444444444444';
+  const THEIRS = 'eeeeeeee-5555-4555-8555-555555555555';
+  const day = (seenEventIds, legs = []) => S.syncDay({
+    // The day query: A and B are drawn tiles; the all-day and cancelled rows
+    // are the user's own but not drawn. No mirror rows exist yet.
+    pool: { query: jest.fn(async (sql) => (/AS drawn/.test(sql)
+      ? { rows: [{ id: A, drawn: true }, { id: B, drawn: true }, { id: ALLDAY, drawn: false }, { id: CANCELLED, drawn: false }] }
+      : { rows: [] })) },
+    outlook: {}, getAccessToken: async () => 'tok',
+  }, 'user-1', { date: '2026-10-06', seenEventIds, legs }, NOW);
+
+  test("the user's own all-day and cancelled rows in the view are accepted, not required", async () => {
+    expect((await day([A, B, ALLDAY, CANCELLED])).status).toBe(200);
+    expect((await day([A, B])).status).toBe(200);
+  });
+
+  test('a drawn event missing from the view is still stale; a foreign id is still refused', async () => {
+    expect((await day([A, ALLDAY])).body.code).toBe('stale_view');
+    expect((await day([A, B, ALLDAY, THEIRS])).body.code).toBe('not_own_day');
+  });
+
+  test('an all-day event cannot own a travel leg', async () => {
+    const r = await day([A, B, ALLDAY], [leg(ALLDAY + '|after', '2026-10-06T12:00:00+08:00', '2026-10-06T12:20:00+08:00')]);
+    expect([r.status, r.body.code]).toEqual([409, 'not_own_leg']);
+  });
+});
+
 test('Outlook gets Perth wall-clock times', () => {
   expect(S.perthIso(new Date('2026-10-06T04:05:00Z'))).toBe('2026-10-06T12:05:00+08:00');
   expect(S.perthDate(new Date('2026-10-05T17:30:00Z'))).toBe('2026-10-06');

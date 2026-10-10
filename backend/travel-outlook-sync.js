@@ -18,9 +18,10 @@
  * can never produce a second Outlook event.
  *
  * Fail-closed:
- *   • a day is synced only when the portal saw exactly the user's own events
- *     for it (seenEventIds) — a stale view, or someone else's calendar, is
- *     refused rather than deleting legs it did not know about;
+ *   • a day is synced only when the portal saw every one of the user's own
+ *     timed events for it, and nobody else's (seenEventIds) — a stale view,
+ *     or someone else's calendar, is refused rather than deleting legs it did
+ *     not know about;
  *   • every leg owner must be the user's own live event;
  *   • past days are left alone; staging/production need the flag set.
  *
@@ -112,6 +113,32 @@ function perthIso(d) {
 }
 
 /**
+ * Link a mirror row to the Outlook event just created for it (10 Oct 2026).
+ * The delta sync can import that same event in the gap before the link — an
+ * 'outlook' row with no travelLegKey, drawn as a second travel tile, whose
+ * outlook_id blocks this link (events_user_outlook_unique). Release that twin
+ * (soft-delete + drop its outlook_id) and link, in one transaction: the same
+ * release as database.js updateEventOutlookId.
+ */
+async function linkCreated(pool, userId, rowId, outlookId, sql, params) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE events SET outlook_id = NULL, is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW()
+        WHERE user_id = $1 AND outlook_id = $2 AND id <> $3 AND created_by_source = 'outlook'`,
+      [userId, outlookId, rowId]);
+    await client.query(sql, params);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Make Outlook match the day's legs. deps: { pool, outlook: { createOutlookEvent,
  * updateOutlookEvent, deleteOutlookEvent }, getAccessToken: () => Promise<token> }.
  * Returns { status, body }.
@@ -126,20 +153,25 @@ async function syncDay(deps, userId, body, now = new Date()) {
 
 async function syncValidated({ pool, outlook, getAccessToken }, userId, v) {
   const { date, legs, seen } = v;
-  // The user's own events on this date that the calendar draws (not travel
-  // mirrors, not cancelled, not all-day) — the portal must have seen all of
-  // them, and nothing else, or its leg set is not this user's day.
+  // The user's own live events on this date (not travel mirrors). `drawn` =
+  // the ones the calendar draws as timed tiles (not cancelled, not all-day):
+  // the portal must have seen every one of them, or its leg set is not this
+  // user's day, and only those can own a leg. The view may also hold the
+  // user's own all-day chips or cancelled rows (10 Oct 2026 — any day with an
+  // all-day event was refused as not_own_day, so its legs never reached
+  // Outlook); anyone else's event is still refused.
   const own = await pool.query(
-    `SELECT id FROM events
+    `SELECT id, (LOWER(COALESCE(status, '')) <> 'cancelled'
+                 AND end_time - start_time < interval '23 hours') AS drawn
+       FROM events
       WHERE user_id = $1 AND COALESCE(is_deleted, FALSE) = FALSE
-        AND LOWER(COALESCE(status, '')) <> 'cancelled'
         AND NOT (COALESCE(custom_metadata, '{}'::jsonb) ? 'travelLegKey')   -- NULL metadata is an ordinary event
-        AND ((start_time AT TIME ZONE 'UTC') AT TIME ZONE '${TZ}')::date = $2::date
-        AND end_time - start_time < interval '23 hours'`,
+        AND ((start_time AT TIME ZONE 'UTC') AT TIME ZONE '${TZ}')::date = $2::date`,
     [userId, date]);
-  const ownIds = new Set(own.rows.map(r => String(r.id).toLowerCase()));
+  const knownIds = new Set(own.rows.map(r => String(r.id).toLowerCase()));
+  const ownIds = new Set(own.rows.filter(r => r.drawn === true).map(r => String(r.id).toLowerCase()));
   for (const id of ownIds) if (!seen.has(id)) return { status: 409, body: { error: 'The calendar view is out of date for this day — reload and try again', code: 'stale_view' } };
-  for (const id of seen) if (!ownIds.has(id)) return { status: 409, body: { error: 'Travel can only be synced from your own calendar', code: 'not_own_day' } };
+  for (const id of seen) if (!knownIds.has(id)) return { status: 409, body: { error: 'Travel can only be synced from your own calendar', code: 'not_own_day' } };
   for (const leg of legs) if (!ownIds.has(leg.ownerEventId)) return { status: 409, body: { error: 'A travel leg belongs to an appointment that is not yours', code: 'not_own_leg' } };
 
   const keys = legs.map(l => l.key);
@@ -176,19 +208,31 @@ async function syncValidated({ pool, outlook, getAccessToken }, userId, v) {
       if (e.code === '23505') continue; // another sync holds this key — it will write Outlook
       throw e;
     }
+    let r;
     try {
-      const r = await outlook.createOutlookEvent(token, { title: leg.title, startTime: perthIso(leg.start), endTime: perthIso(leg.end),
+      r = await outlook.createOutlookEvent(token, { title: leg.title, startTime: perthIso(leg.start), endTime: perthIso(leg.end),
         location: leg.location, categories: ['Travel'], appEventId: rowId, sploseId: null });
-      await pool.query(`UPDATE events SET outlook_id = $2, sync_status = 'synced', last_synced_to_outlook = NOW() WHERE id = $1`, [rowId, r.outlookId]);
-      out.created++;
     } catch (e) {
       // Nothing reached Outlook: give the key back so the next sync retries.
       await pool.query(`DELETE FROM events WHERE id = $1 AND outlook_id IS NULL`, [rowId]).catch(() => {});
       if (e.code === 'FEATURE_DISABLED') throw e;
       out.failed++;
+      continue;
+    }
+    try {
+      await linkCreated(pool, userId, rowId, r.outlookId,
+        `UPDATE events SET outlook_id = $2, sync_status = 'synced', last_synced_to_outlook = NOW() WHERE id = $1`, [rowId, r.outlookId]);
+      out.created++;
+    } catch (e) {
+      // The Outlook event exists but is not linked: take it back out of
+      // Outlook as well, or the retry would leave it orphaned beside a new one.
+      await outlook.deleteOutlookEvent(token, r.outlookId).catch(() => {});
+      await pool.query(`DELETE FROM events WHERE id = $1 AND outlook_id IS NULL`, [rowId]).catch(() => {});
+      out.failed++;
     }
   }
   for (const { row, leg } of plan.update) {
+    let created = null;
     try {
       if (row.outlookId) {
         await outlook.updateOutlookEvent(token, row.outlookId, { title: leg.title, startTime: perthIso(leg.start), endTime: perthIso(leg.end),
@@ -196,16 +240,18 @@ async function syncValidated({ pool, outlook, getAccessToken }, userId, v) {
       } else {
         const r = await outlook.createOutlookEvent(token, { title: leg.title, startTime: perthIso(leg.start), endTime: perthIso(leg.end),
           location: leg.location, categories: ['Travel'], appEventId: row.id, sploseId: null });
-        row.outlookId = r.outlookId;
+        created = row.outlookId = r.outlookId;
       }
-      await pool.query(
-        `UPDATE events SET title = $2, start_time = $3, end_time = $4, location = $5, related_event_id = $6, outlook_id = $7,
+      const sql = `UPDATE events SET title = $2, start_time = $3, end_time = $4, location = $5, related_event_id = $6, outlook_id = $7,
                 sync_status = 'synced', last_modified_by = 'app', last_synced_to_outlook = NOW(), updated_at = NOW()
-          WHERE id = $1`,
-        [row.id, leg.title, leg.start.toISOString(), leg.end.toISOString(), leg.location || null, leg.ownerEventId, row.outlookId]);
+          WHERE id = $1`;
+      const params = [row.id, leg.title, leg.start.toISOString(), leg.end.toISOString(), leg.location || null, leg.ownerEventId, row.outlookId];
+      if (created) await linkCreated(pool, userId, row.id, created, sql, params);
+      else await pool.query(sql, params);
       out.updated++;
     } catch (e) {
       if (e.code === 'FEATURE_DISABLED') throw e;
+      if (created) await outlook.deleteOutlookEvent(token, created).catch(() => {});
       out.failed++;
     }
   }

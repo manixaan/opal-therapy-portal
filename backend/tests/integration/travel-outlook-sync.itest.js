@@ -100,6 +100,43 @@ test('a view missing one of the day\'s events, or holding someone else\'s, is re
   expect((await mirrors()).filter((x) => !x.is_deleted)).toHaveLength(1);
 });
 
+// 10 Oct 2026: a day with an all-day event (drawn as a chip, sent in the view)
+// was refused as not_own_day, so none of its legs reached Outlook.
+test("the day's own all-day and cancelled rows may be in the view; neither owns a leg", async () => {
+  const o = stubOutlook();
+  const { rows: [allDay] } = await db.pool.query(
+    `INSERT INTO events (user_id, title, start_time, end_time, event_type) VALUES ($1, 'Annual leave', $2, $3, 'leave') RETURNING id`,
+    [user.id, '2030-03-03T16:00:00Z', '2030-03-04T16:00:00Z']);   // 4 Mar, midnight to midnight Perth
+  const { rows: [cancelled] } = await db.pool.query(
+    `INSERT INTO events (user_id, title, start_time, end_time, event_type, status) VALUES ($1, 'Cancelled visit', $2, $3, 'therapy', 'cancelled') RETURNING id`,
+    [user.id, `${DATE}T07:00:00Z`, `${DATE}T08:00:00Z`]);
+  const seenEventIds = [...appts, allDay.id, cancelled.id];
+  const r = await sync.syncDay(deps(o), user.id, { date: DATE, seenEventIds, legs: [leg(appts[0], 'after', '11:00', '11:20')] }, NOW);
+  expect([r.status, r.body.created]).toEqual([200, 1]);
+  const owned = await sync.syncDay(deps(o), user.id, { date: DATE, seenEventIds, legs: [leg(allDay.id, 'before', '07:00', '07:20')] }, NOW);
+  expect([owned.status, owned.body.code]).toEqual([409, 'not_own_leg']);
+  expect(o.calls.create).toHaveLength(1);
+});
+
+// 10 Oct 2026: the delta sync can import the new Outlook event before its
+// mirror row is linked. That twin is released, not left as a second tile.
+test('a delta import that lands between the Outlook create and the link is absorbed', async () => {
+  const o = stubOutlook();
+  const create = o.createOutlookEvent;
+  o.createOutlookEvent = async (tok, e) => {
+    const r = await create(tok, e);
+    await db.upsertOutlookEvent(user.id, { outlookId: r.outlookId, title: e.title, startTime: e.startTime, endTime: e.endTime, categories: ['Travel'] });
+    return r;
+  };
+  const r = await sync.syncDay(deps(o), user.id, { date: DATE, seenEventIds: appts, legs: [leg(appts[0], 'after', '11:00', '11:20')] }, NOW);
+  expect(r.body).toMatchObject({ created: 1, failed: 0 });
+  expect((await mirrors()).map((x) => [x.key, x.outlook_id, x.is_deleted])).toEqual([[appts[0] + '|after', 'out-1', false]]);
+  const { rows: twins } = await db.pool.query(
+    `SELECT outlook_id, is_deleted FROM events WHERE user_id = $1 AND created_by_source = 'outlook'`, [user.id]);
+  expect(twins).toEqual([{ outlook_id: null, is_deleted: true }]);
+  expect(o.calls.remove).toHaveLength(0);
+});
+
 test('past days are left alone; a failed Outlook write leaves no claimed key behind', async () => {
   const o = stubOutlook();
   const past = await sync.syncDay(deps(o), user.id, { date: DATE, seenEventIds: appts, legs: [leg(appts[0], 'after', '11:00', '11:20')] }, new Date('2030-03-05T00:00:00Z'));

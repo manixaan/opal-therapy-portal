@@ -2563,15 +2563,17 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
       return res.status(400).json({ error: 'location is required' });
     }
 
-    // Persist to local DB first (sets is_manual_location_override = TRUE)
-    await db.updateEventManualLocation(dbId, { address: location, lat: lat || null, lng: lng || null });
-
-    // Look up the Outlook event ID
+    // Ownership BEFORE the write (10 Oct 2026): the address used to be saved
+    // first, so a 404 for someone else's event came after their row already
+    // carried the new address and the override that stops Outlook repairing it.
     const ev = await db.pool.query(
       'SELECT outlook_id FROM events WHERE id = $1 AND user_id = $2',
       [dbId, req.session.userId]
     );
     if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
+
+    // Persist to local DB (sets is_manual_location_override = TRUE)
+    await db.updateEventManualLocation(dbId, { address: location, lat: lat || null, lng: lng || null });
 
     const outlookId = ev.rows[0].outlook_id;
     if (!outlookId) {
@@ -2660,7 +2662,13 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     const mirrorToOutlook = !!outlookId && flags.isOutlookWriteEnabled();
 
     // 1. Persist the local change FIRST — it must survive an Outlook failure.
-    await db.updateEvent(dbId, { title, startTime, endTime, location, lastModifiedBy: 'app' });
+    //    An Outlook-linked row that will not be mirrored now (write-back off)
+    //    is held 'pending' in the same write (10 Oct 2026): a 'synced' row lets
+    //    the next delta upsert put Outlook's older times back over the move.
+    await db.updateEvent(dbId, {
+      title, startTime, endTime, location, lastModifiedBy: 'app',
+      syncStatus: (outlookId && !mirrorToOutlook) ? 'pending' : undefined,
+    });
 
     // Draft-and-publish (058): a time change on a Splose-linked (or Splose-
     // queued) appointment is queued for the next "Sync Splose".
@@ -2823,25 +2831,20 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
 
     // ── Best-effort Graph deletes (event + cascaded travel blocks) ──────────
     let deletedFromOutlook = false;
+    // What happened to the main event's Outlook copy: not_linked | not_connected
+    // | deleted | disabled | failed.
+    let outlookStatus = outlookId ? 'not_connected' : 'not_linked';
     const outlookTargets = [
       ...(outlookId ? [{ outlookId, title, isMain: true }] : []),
       ...cascade.filter((b) => b.outlook_id).map((b) => ({ outlookId: b.outlook_id, title: b.title, isMain: false })),
     ];
     if (outlookTargets.length) {
+      // Only the calendar owner's own token (10 Oct 2026), as the create path:
+      // the rows live in their mailbox, and another person's token can only
+      // miss (404) or act on that person's calendar instead.
       let accessToken = null;
       try {
-        const targetUser = await db.getUser(req.session.userId);
-        accessToken = await getValidAccessToken(targetUser).catch(async () => {
-          // Caller has no token — try org fallback (same as write path)
-          const orgId = targetUser?.organisation_id;
-          const fb = await db.pool.query(
-            `SELECT id FROM users WHERE access_token IS NOT NULL AND access_token != ''
-               AND is_active = true AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
-             ORDER BY created_at LIMIT 1`, [orgId]
-          );
-          if (!fb.rows.length) throw new Error('No connected Outlook account');
-          return getValidAccessToken(await db.getUser(fb.rows[0].id));
-        });
+        accessToken = await getValidAccessToken(await db.getUser(req.session.userId));
       } catch (tokenErr) {
         console.warn(`⚠️ Outlook delete skipped (non-fatal): ${tokenErr.message}`);
       }
@@ -2849,13 +2852,14 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
         for (const target of outlookTargets) {
           try {
             await outlookApi.deleteOutlookEvent(accessToken, target.outlookId);
-            if (target.isMain) deletedFromOutlook = true;
+            if (target.isMain) { deletedFromOutlook = true; outlookStatus = 'deleted'; }
             console.log(`🗑️ Deleted from Outlook: ${target.outlookId} — "${target.title}"`);
           } catch (outlookErr) {
             // Treat ALL Outlook errors as non-fatal for delete — the event may
             // already be gone (ErrorItemNotFound / 404) or the token may be
             // temporarily invalid. Always proceed with the local soft-delete
             // so the UI stays consistent.
+            if (target.isMain) outlookStatus = outlookErr.code === 'FEATURE_DISABLED' ? 'disabled' : 'failed';
             console.warn(`⚠️ Outlook delete skipped (non-fatal): ${outlookErr.message}`);
           }
         }
@@ -2886,7 +2890,7 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     }).catch(() => {});
 
     res.json({
-      ok: true, deletedFromOutlook, title,
+      ok: true, deletedFromOutlook, outlookStatus, title,
       deleted: 1,
       travelBlocksDeleted: travelBlockIds.length,
       travelBlockIds, travelBlockTitles,
@@ -2969,24 +2973,20 @@ router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) =
       ...travelRows.filter((r) => r.outlook_id).map((r) => ({ ...r, dbRowId: r.id })),
     ];
     let outlookRecreated = 0, outlookPending = 0;
+    // not_linked | not_connected | synced | disabled | failed
+    let outlookStatus = graphTargets.length ? 'not_connected' : 'not_linked';
     if (graphTargets.length) {
+      // Only the calendar owner's own token (10 Oct 2026), as the create path:
+      // createOutlookEvent writes to whoever owns the token, and a copy in
+      // another person's mailbox comes back through their delta sync as a
+      // duplicate appointment on their calendar. No token → rows stay pending.
       let accessToken = null;
       try {
-        const targetUser = await db.getUser(req.session.userId);
-        accessToken = await getValidAccessToken(targetUser).catch(async () => {
-          // Caller has no token — try org fallback (same as the delete path)
-          const orgId = targetUser?.organisation_id;
-          const fb = await db.pool.query(
-            `SELECT id FROM users WHERE access_token IS NOT NULL AND access_token != ''
-               AND is_active = true AND (organisation_id IS NOT DISTINCT FROM $1 OR $1 IS NULL)
-             ORDER BY created_at LIMIT 1`, [orgId]
-          );
-          if (!fb.rows.length) throw new Error('No connected Outlook account');
-          return getValidAccessToken(await db.getUser(fb.rows[0].id));
-        });
+        accessToken = await getValidAccessToken(await db.getUser(req.session.userId));
       } catch (tokenErr) {
         console.warn(`⚠️ Outlook restore skipped (non-fatal): ${tokenErr.message}`);
       }
+      let disabled = false;
       for (const target of graphTargets) {
         let recreated = false;
         if (accessToken) {
@@ -3013,6 +3013,7 @@ router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) =
             recreated = true;
             console.log(`♻️ Restored to Outlook: ${created.outlookId} — "${target.title}"`);
           } catch (graphErr) {
+            if (graphErr.code === 'FEATURE_DISABLED') disabled = true;
             console.warn(`⚠️ Outlook re-create failed (non-fatal): ${graphErr.message}`);
             await db.pool.query(
               `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'created', 'app', 'outlook', 'failed', $2)`,
@@ -3029,6 +3030,7 @@ router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) =
           ).catch(() => {});
         }
       }
+      if (accessToken) outlookStatus = !outlookPending ? 'synced' : (disabled ? 'disabled' : 'failed');
     }
 
     // Audit (identifiers + counts only — established pattern)
@@ -3044,7 +3046,7 @@ router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) =
     res.json({
       ok: true, restored: 1, title: ev.rows[0].title,
       travelBlocksRestored: travelBlockIds.length, travelBlockIds,
-      outlookRecreated, outlookPending,
+      outlookRecreated, outlookPending, outlookStatus,
     });
   } catch (err) {
     console.error('Outlook restore error:', err.response?.data || err.message);

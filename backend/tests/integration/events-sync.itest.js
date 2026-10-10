@@ -209,3 +209,64 @@ describe('window reconciliation & dedup', () => {
     expect(removed).toEqual([]);
   });
 });
+
+// 10 Oct 2026: a portal booking is saved first and linked to its Outlook event
+// only after Graph answers. A delta tick in that gap imports the same event as
+// an 'outlook' row; its outlook_id used to block the link (23505), leaving the
+// booking twice on the calendar and reported as an Outlook failure.
+describe('updateEventOutlookId — linking after a racing delta import', () => {
+  const appRow = (u) => db.createEvent(u.id, {
+    title: 'Portal booking', startTime: '2026-08-13T01:00:00Z', endTime: '2026-08-13T02:00:00Z',
+    eventType: 'therapy',
+  });
+
+  test("the delta's twin is released and the app row takes the outlook_id", async () => {
+    const u = await seedUser();
+    const a = await appRow(u);
+    const twin = await db.upsertOutlookEvent(u.id, {
+      outlookId: OL('race'), title: 'Portal booking',
+      startTime: '2026-08-13T01:00:00Z', endTime: '2026-08-13T02:00:00Z',
+    });
+    expect(twin.created_by_source).toBe('outlook');
+
+    const linked = await db.updateEventOutlookId(a.id, OL('race'));
+    expect(linked).toMatchObject({ id: a.id, outlook_id: OL('race'), sync_status: 'synced' });
+
+    const { rows: [t] } = await db.pool.query('SELECT outlook_id, is_deleted FROM events WHERE id = $1', [twin.id]);
+    expect(t).toEqual({ outlook_id: null, is_deleted: true });
+    // The next delta for that event now updates the app row, not a new one.
+    await db.upsertOutlookEvent(u.id, {
+      outlookId: OL('race'), title: 'Portal booking',
+      startTime: '2026-08-13T01:00:00Z', endTime: '2026-08-13T02:00:00Z',
+    });
+    const { rows: live } = await db.pool.query(
+      'SELECT id FROM events WHERE user_id = $1 AND COALESCE(is_deleted, FALSE) = FALSE', [u.id]);
+    expect(live.map((r) => r.id)).toEqual([a.id]);
+  });
+
+  test('another app booking holding the id is never released — the link still fails, nothing changes', async () => {
+    const u = await seedUser();
+    const a = await appRow(u);
+    const other = await appRow(u);
+    await db.updateEventOutlookId(other.id, OL('taken'));
+
+    await expect(db.updateEventOutlookId(a.id, OL('taken'))).rejects.toMatchObject({ code: '23505' });
+    const { rows } = await db.pool.query(
+      'SELECT id, outlook_id, is_deleted FROM events WHERE user_id = $1 ORDER BY id', [u.id]);
+    expect(rows.find((r) => r.id === other.id)).toMatchObject({ outlook_id: OL('taken'), is_deleted: false });
+    expect(rows.find((r) => r.id === a.id).outlook_id).toBeNull();
+  });
+
+  test("another user's row with the same outlook_id is untouched", async () => {
+    const u = await seedUser();
+    const v = await seedUser();
+    const theirs = await db.upsertOutlookEvent(v.id, {
+      outlookId: OL('per-user'), title: 'Theirs',
+      startTime: '2026-08-13T01:00:00Z', endTime: '2026-08-13T02:00:00Z',
+    });
+    const a = await appRow(u);
+    await db.updateEventOutlookId(a.id, OL('per-user'));
+    const { rows: [t] } = await db.pool.query('SELECT outlook_id, is_deleted FROM events WHERE id = $1', [theirs.id]);
+    expect(t).toEqual({ outlook_id: OL('per-user'), is_deleted: false });
+  });
+});
