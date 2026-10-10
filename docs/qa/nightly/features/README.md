@@ -1,6 +1,6 @@
 # Feature folders — index
 
-One line per tracker idea. "Addressed" = commits since the last audit (2026-10-08) touched its
+One line per tracker idea. "Addressed" = commits since the last audit (2026-10-09) touched its
 located files. Updated nightly; see `../README.md` for how this works.
 
 | Feature | Tracker stage | Evidence label | Addressed this window | START.md |
@@ -21,9 +21,7 @@ located files. Updated nightly; see `../README.md` for how this works.
 
 Counts: proven 2 · built-untested 0 · needs-refinement 5 · broken 0 · untouched 2 · tab-unproven 4.
 
-**Changed from 2026-10-08:** Automated Reminders moved from `untouched` to `tab-unproven`. The
-last eight nights' notes called `backend/snapshot-routes.js` "a same-named, unrelated
-personal-reminders backend, not the report panel" — re-reading `frontend/current/reports.js`
-tonight (`snapLoad()`, line ~431) shows the report panel's reminders/tasks widget calls
-`/api/snapshot/reminders` and `/api/snapshot/tasks` directly, i.e. it is that backend. See
-`automated-reminders/STATUS.md` for the full correction.
+**Changed from 2026-10-09:** nothing — every evidence label holds. Zero commits have landed on
+`develop` under `backend/` or `frontend/current/` since 2026-10-09, and tonight's re-verification
+(including a direct re-read of the `GET /api/outlook/categories` bug, the Onboarding Stage 2
+SharePoint gap, and the My Profile leave/CPD test gap) confirmed every label from last night.
