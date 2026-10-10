@@ -1536,6 +1536,10 @@ window.loadProfileView = function() {
 
 var _wlSaveTimer = null;
 var _wlSaveIndicatorTimer = null;
+// Every edit bumps _wlEditSeq; a PUT that lands records the edit it carried.
+// While they differ, the page holds an edit the server may not have yet, and
+// loadWorkSchedule must not put the server's older copy over it (10 Oct 2026).
+var _wlEditSeq = 0, _wlSavedSeq = 0;
 
 function _wlShowSaved() {
   var lbl = document.getElementById('wl-week-label');
@@ -1552,6 +1556,7 @@ async function saveWorkSchedule() {
   // Never save before the stored week has arrived: the page's copy is still
   // empty then, and saving it would wipe the clinician's locations.
   if (!_wsLoaded) { workScheduleReady().then(function (ok) { if (ok) debouncedSaveWorkSchedule(); }); return; }
+  var seq = _wlEditSeq;
   try {
     var payload = {
       workLocationSchedule: typeof WORK_LOCATION !== 'undefined' ? WORK_LOCATION : null,
@@ -1563,13 +1568,14 @@ async function saveWorkSchedule() {
       credentials: 'include',
       body: JSON.stringify(payload),
     });
-    if (r.ok) _wlShowSaved();
+    if (r.ok) { if (seq > _wlSavedSeq) _wlSavedSeq = seq; _wlShowSaved(); }
   } catch (e) {
     console.warn('Work schedule save failed:', e.message);
   }
 }
 
 function debouncedSaveWorkSchedule() {
+  _wlEditSeq++;
   clearTimeout(_wlSaveTimer);
   _wlSaveTimer = setTimeout(saveWorkSchedule, 900);
 }
@@ -1592,6 +1598,7 @@ window.workScheduleLoaded = function () { return _wsLoaded; };
 })(0);
 
 async function loadWorkSchedule() {
+  var seqAtSend = _wlEditSeq;
   try {
     var r = await fetch('/api/profile/work-schedule', { credentials: 'include' });
     if (!r.ok) return;
@@ -1599,13 +1606,30 @@ async function loadWorkSchedule() {
     var workLocationSchedule = data.workLocationSchedule;
     var travelBases = data.travelBases;
 
-    // Populate WORK_LOCATION from backend
-    if (workLocationSchedule && typeof workLocationSchedule === 'object') {
-      Object.assign(WORK_LOCATION, workLocationSchedule);
+    // A reload (every My Profile visit) used to put the server's copy over an
+    // edit still waiting on its debounced PUT, which then saved the old week
+    // (10 Oct 2026). It now skips while the page holds an edit the server may
+    // not have: one not yet saved, or one made after this GET went out. The
+    // first load always applies — until then the page's copy is empty.
+    var pageIsNewer = _wsLoaded && (_wlEditSeq !== _wlSavedSeq || _wlEditSeq !== seqAtSend);
+
+    // Populate WORK_LOCATION from backend. Each week is refilled IN PLACE,
+    // never swapped for the parsed copy, so code holding a week (ensureDayBase
+    // across its open chooser) keeps writing to the live one.
+    if (!pageIsNewer && workLocationSchedule && typeof workLocationSchedule === 'object') {
+      Object.keys(workLocationSchedule).forEach(function (k) {
+        var cur = WORK_LOCATION[k], next = workLocationSchedule[k];
+        if (cur && typeof cur === 'object' && next && typeof next === 'object') {
+          Object.keys(cur).forEach(function (d) { delete cur[d]; });
+          Object.assign(cur, next);
+        } else {
+          WORK_LOCATION[k] = next;
+        }
+      });
     }
 
     // Populate WORK_BASES from backend (only if data exists)
-    if (travelBases && typeof travelBases === 'object') {
+    if (!pageIsNewer && travelBases && typeof travelBases === 'object') {
       if (travelBases.office) {
         // The office is "coming soon" (no office yet): it has no address. A
         // saved one is the old built-in default (100 Burrendah Blvd) written

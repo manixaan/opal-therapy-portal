@@ -137,7 +137,8 @@ describe('work-location undo survives a schedule reload', () => {
     ctx.refreshAllOverlays = noop;   // the DOM redraw is not under test
     return { c: ctx, undo };
   }
-  // What loadWorkSchedule does with the GET response.
+  // A reload that swaps in fresh week objects — what loadWorkSchedule did
+  // before it refilled weeks in place. The undo must not depend on either.
   const reloadFromServer = (c) => Object.assign(c.WORK_LOCATION, JSON.parse(JSON.stringify(c.WORK_LOCATION)));
 
   test('Cmd+Z after My Profile reloaded the schedule still reverts the day and saves', async () => {
@@ -178,6 +179,85 @@ describe('work-location undo survives a schedule reload', () => {
     const { c } = loadWeek();
     expect(c.calendarWeekKey()).toBe('2026-10-5');
     expect(c.calendarWeekLocations()).toBe(c.WORK_LOCATION['2026-10-5']);
+  });
+});
+
+// 10 Oct 2026, the same finding's other half: opening My Profile within the
+// 900 ms save debounce (or while the PUT was in flight) let the GET put the
+// server's older week over a fresh header pick, and the pending PUT then saved
+// that old week. profile.js's work-schedule section runs here in a vm with a
+// scripted fetch and hand-fired timers.
+describe('a schedule reload never overwrites an edit the server may not have', () => {
+  const PROF = fs.readFileSync(path.join(__dirname, '../../frontend/current/profile.js'), 'utf8');
+  const SECTION = PROF.slice(PROF.indexOf('var _wlSaveTimer = null;'), PROF.indexOf('// ── Notification preferences persistence'));
+  const tick = () => new Promise((r) => setImmediate(r));
+
+  async function boot(server) {
+    const calls = [];
+    const timers = new Map();
+    let timerId = 0;
+    const ctx = {
+      console, Promise, Object, Array, JSON,
+      document: { getElementById: () => null },
+      APP_USER: { id: 'me' },
+      WORK_LOCATION: {},
+      WORK_BASES: { office: { id: 'office', addr: '', suburb: '' }, homes: [] },
+      setTimeout: (fn) => { timers.set(++timerId, fn); return timerId; },
+      clearTimeout: (id) => { timers.delete(id); },
+      fetch: (url, opts) => new Promise((resolve) => calls.push({ method: (opts && opts.method) || 'GET', body: opts && opts.body, resolve })),
+    };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(SECTION, ctx);   // bootWorkSchedule sends the first GET
+    const env = {
+      c: ctx, calls,
+      reply: async (call, json) => { call.resolve({ ok: true, json: async () => json }); await tick(); },
+      fireTimers: async () => { const due = [...timers.values()]; timers.clear(); due.forEach((f) => f()); await tick(); },
+      last: (method) => calls.filter((x) => x.method === method).pop(),
+    };
+    await env.reply(env.last('GET'), { workLocationSchedule: server, travelBases: null });
+    expect(ctx.workScheduleLoaded()).toBe(true);
+    return env;
+  }
+
+  test('My Profile opened before the debounced PUT: the pick stays and is what gets saved', async () => {
+    const env = await boot({ wk: { mon: 'home-1' } });
+    env.c.WORK_LOCATION.wk.tue = 'home-2';             // a header pick…
+    env.c.debouncedSaveWorkSchedule();                 // …900 ms from its PUT
+    env.c.loadWorkSchedule();                          // My Profile opens
+    await env.reply(env.last('GET'), { workLocationSchedule: { wk: { mon: 'home-1' } }, travelBases: null });
+    expect(env.c.WORK_LOCATION.wk).toEqual({ mon: 'home-1', tue: 'home-2' });
+
+    await env.fireTimers();
+    const put = env.last('PUT');
+    expect(JSON.parse(put.body).workLocationSchedule.wk).toEqual({ mon: 'home-1', tue: 'home-2' });
+    await env.reply(put, {});
+
+    // Saved: later reloads apply again (a change from the other laptop shows).
+    env.c.loadWorkSchedule();
+    await env.reply(env.last('GET'), { workLocationSchedule: { wk: { mon: 'home-1', tue: 'home-2', wed: 'home-1' } }, travelBases: null });
+    expect(env.c.WORK_LOCATION.wk.wed).toBe('home-1');
+  });
+
+  test('a GET sent before an edit is ignored even when the edit saves first', async () => {
+    const env = await boot({ wk: { mon: 'home-1' } });
+    env.c.loadWorkSchedule();
+    const staleGet = env.last('GET');
+    env.c.WORK_LOCATION.wk.mon = 'home-2';
+    env.c.debouncedSaveWorkSchedule();
+    await env.fireTimers();
+    await env.reply(env.last('PUT'), {});
+    await env.reply(staleGet, { workLocationSchedule: { wk: { mon: 'home-1' } }, travelBases: null });
+    expect(env.c.WORK_LOCATION.wk.mon).toBe('home-2');
+  });
+
+  test('a reload refills each week in place, so a held week stays live', async () => {
+    const env = await boot({ wk: { mon: 'home-1', tue: 'home-1' } });
+    const held = env.c.WORK_LOCATION.wk;
+    env.c.loadWorkSchedule();
+    await env.reply(env.last('GET'), { workLocationSchedule: { wk: { mon: 'home-2' } }, travelBases: null });
+    expect(env.c.WORK_LOCATION.wk).toBe(held);
+    expect(held).toEqual({ mon: 'home-2' });
   });
 });
 // The mid-day trip home is betweenTravelPlan's rule (travel-physical-route.test.js).
