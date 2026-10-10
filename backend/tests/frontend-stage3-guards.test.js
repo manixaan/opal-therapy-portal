@@ -134,6 +134,8 @@ describe('browser QA fixes', () => {
   test('role-based nav gating is applied with retry (no silent no-op)', () => {
     expect(HTML).toContain('function applyRoleGatingWhenReady(attempt)');
     expect(HTML).toContain('applyNavRoleVisibility(window.APP_USER.role)');
+    // no cap while the shell is still parsing (10 Oct 2026, slow networks)
+    expect(HTML).toContain("if (document.readyState === 'loading' || (attempt || 0) < 40) setTimeout(function () { applyRoleGatingWhenReady(");
     // the old unguarded single-shot call must be gone
     expect(HTML).not.toContain("if (typeof initMasterCalendarAccess === 'function') initMasterCalendarAccess();\n");
   });
@@ -512,6 +514,7 @@ describe('calendar workspace redesign', () => {
 
   test('settings load at boot with a parse-order retry (no silent no-op)', () => {
     expect(HTML).toContain('function loadSettingsWhenReady(attempt)');
+    expect(HTML).toContain("if (document.readyState === 'loading' || (attempt || 0) < 40) setTimeout(function () { loadSettingsWhenReady(");
     // the old unguarded single-shot call must be gone
     expect(HTML).not.toContain("if (typeof loadUserSettings === 'function') loadUserSettings();\n");
   });
@@ -2644,5 +2647,281 @@ describe('in-app Back/Forward navigation module', () => {
     expect(nav.encodeRoute(nav.decodeRoute('#letter/step-3'))).toBe('#letter/step-3');
     // Garbage is safe.
     expect(nav.encodeRoute(nav.decodeRoute('#wibble'))).toBe('#calendar');
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHELL BOOT (10 Oct 2026) — a signed-in user is never bounced to /login
+   initAuth used to run the whole post-sign-in bootstrap in one try whose
+   catch went to /login. login.html saw the live session and sent the user
+   straight back, so any boot-time error became a / ↔ /login reload loop (the
+   calendar-standalone merge's SyntaxError set it off via loadProfileView).
+   These run the real initAuth / loadUserSettings / applyUserSettings /
+   navigation.js source in a vm with stubbed browser globals.
+   ═══════════════════════════════════════════════════════════════════════════ */
+describe('shell boot: auth phase, boot phase, settings and the cloak', () => {
+  const vm = require('vm');
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
+  const sliceBetween = (src, from, to) => {
+    const a = src.indexOf(from);
+    const b = src.indexOf(to, a);
+    expect(a).toBeGreaterThan(-1);
+    expect(b).toBeGreaterThan(a);
+    return src.slice(a, b);
+  };
+
+  const INIT_AUTH = sliceBetween(HTML, '(async function initAuth()', '/* ── Logout helper');
+  const OWNER = { id: 'u-1', name: 'Olive Owner', role: 'owner', permissions: [] };
+  const okMe = (body) => ({ ok: true, status: 200, json: async () => body });
+
+  function runInitAuth({ me = okMe(OWNER), fetchError = null, readyState = 'complete', globals = {} } = {}) {
+    const timers = [];
+    const errors = [];
+    const replace = jest.fn();
+    const store = new Map();
+    const sandbox = Object.assign({
+      console: { log() {}, warn() {}, error: (...a) => errors.push(a.map(String).join(' ')) },
+      fetch: () => (fetchError ? Promise.reject(fetchError) : Promise.resolve(me)),
+      location: { pathname: '/', replace },
+      document: {
+        readyState,
+        body: { classList: { add() {} } },
+        getElementById: () => null,
+        addEventListener() {},
+      },
+      sessionStorage: {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+      },
+      setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearTimeout() {},
+      applyReadOnlyGuards() {},
+    }, globals);
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(INIT_AUTH, sandbox, { filename: 'mockup_v3.html initAuth' });
+    const tick = (rounds) => {
+      for (let i = 0; i < rounds && timers.length; i++) timers.splice(0).forEach((t) => t.fn());
+    };
+    return { sandbox, timers, errors, replace, tick };
+  }
+
+  test('a boot-step error after sign-in is logged and never sends the user to /login', async () => {
+    const initMasterCalendarAccess = jest.fn();
+    const loadUserSettings = jest.fn();
+    const t = runInitAuth({ globals: {
+      // The exact historical trigger: profile.js calling a shell function the
+      // dead inline script never defined.
+      loadProfileView: () => { throw new ReferenceError('loadSetupStatusCard is not defined'); },
+      initMasterCalendarAccess, loadUserSettings,
+    } });
+    await flush();
+    expect(t.replace).not.toHaveBeenCalled();
+    expect(t.errors.join('\n')).toContain('Shell boot step failed (profile preload)');
+    // ...and the steps after it still ran: role gating is not skipped.
+    expect(initMasterCalendarAccess).toHaveBeenCalledTimes(1);
+    expect(loadUserSettings).toHaveBeenCalledTimes(1);
+    expect(t.sandbox.APP_USER).toEqual(OWNER);
+    expect(typeof t.sandbox.currentUserCan).toBe('function');
+  });
+
+  test('role gating throwing does not skip settings, and still does not navigate', async () => {
+    const loadUserSettings = jest.fn();
+    const t = runInitAuth({ globals: {
+      initMasterCalendarAccess: () => { throw new TypeError('boom'); },
+      loadUserSettings,
+    } });
+    await flush();
+    expect(t.replace).not.toHaveBeenCalled();
+    expect(t.errors.join('\n')).toContain('Shell boot step failed (role gating)');
+    expect(loadUserSettings).toHaveBeenCalledTimes(1);
+  });
+
+  test('a real auth failure still goes to /login', async () => {
+    const t401 = runInitAuth({ me: { ok: false, status: 401, json: async () => ({}) } });
+    await flush();
+    expect(t401.replace).toHaveBeenCalledWith('/login?next=%2F');
+    const tNet = runInitAuth({ fetchError: new TypeError('Failed to fetch') });
+    await flush();
+    expect(tNet.replace).toHaveBeenCalledWith('/login');
+  });
+
+  test('a 200 with no readable user does not bounce (login.html would send it straight back)', async () => {
+    const initMasterCalendarAccess = jest.fn();
+    const t = runInitAuth({
+      me: { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } },
+      globals: { initMasterCalendarAccess },
+    });
+    await flush();
+    expect(t.replace).not.toHaveBeenCalled();
+    expect(t.sandbox.APP_USER).toBeNull();
+    expect(initMasterCalendarAccess).not.toHaveBeenCalled();
+  });
+
+  test('nothing after APP_USER is set can navigate', () => {
+    const boot = INIT_AUTH.slice(INIT_AUTH.indexOf('// ── Boot phase'));
+    expect(boot.length).toBeGreaterThan(1000);
+    expect(boot).not.toMatch(/location\.(replace|assign|href)|location\s*=/);
+    expect(HTML).not.toContain("console.error('Auth check error:', err);\n    window.location.replace('/login');\n  }\n})();");
+  });
+
+  test('the gating and settings pollers outlast a slow parse, and still cap once parsed', async () => {
+    const t = runInitAuth({ readyState: 'loading' });
+    await flush();
+    // 60 polls (6 s) with the shell still parsing: well past the old 40 cap.
+    t.tick(60);
+    expect(t.timers.length).toBe(3);
+    t.sandbox.initMasterCalendarAccess = jest.fn();
+    t.sandbox.loadUserSettings = jest.fn();
+    t.tick(1);
+    expect(t.sandbox.initMasterCalendarAccess).toHaveBeenCalledTimes(1);
+    expect(t.sandbox.loadUserSettings).toHaveBeenCalledTimes(1);
+    // Parsed: the remaining poller (reports.js snapshot) stops at its cap.
+    t.sandbox.document.readyState = 'complete';
+    t.tick(50);
+    expect(t.timers.length).toBe(0);
+
+    const parsed = runInitAuth({ readyState: 'complete' });
+    await flush();
+    parsed.tick(45);
+    expect(parsed.timers.length).toBe(0);
+  });
+
+  test('profile.js no longer calls the shell card unguarded', () => {
+    expect(PROFILE).toContain("if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();");
+    expect(PROFILE).not.toMatch(/function loadProfileView\(\) \{\n  loadSetupStatusCard\(\);/);
+  });
+
+  // ── applyUserSettings: the removed showGaps (finding 19) ───────────────
+  const APPLY_SETTINGS = sliceBetween(HTML, 'function applyUserSettings(s, os) {', '// Apply at boot if APP_SETTINGS already loaded');
+
+  test('applyUserSettings runs to the end — no reference to the removed showGaps', () => {
+    expect(APPLY_SETTINGS).not.toMatch(/\bshowGaps\b/);
+    const debug = jest.fn();
+    const setCalendarMode = jest.fn();
+    const calView = { classList: { contains: (c) => c === 'active' } };
+    const sandbox = {
+      console: { debug },
+      document: { querySelectorAll: () => [], getElementById: (id) => (id === 'view-calendar' ? calView : null) },
+      requestAnimationFrame() {},
+      setCalendarMode,
+    };
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(APPLY_SETTINGS, sandbox, { filename: 'mockup_v3.html applyUserSettings' });
+    // It threw a ReferenceError here, so a successful save reported
+    // 'Could not save' and every boot logged '[Settings] Load failed'.
+    expect(() => sandbox.applyUserSettings({ timeFormat: '12', calendarDefaultView: 'day' }, {})).not.toThrow();
+    expect(setCalendarMode).toHaveBeenCalledWith('day');
+    expect(debug).toHaveBeenCalledWith('[Settings] Applied:', expect.any(Object));
+  });
+
+  // ── loadUserSettings: one settled signal, success or failure ───────────
+  const LOAD_SETTINGS = sliceBetween(HTML, 'async function loadUserSettings() {', '// ── Save user settings');
+
+  function settingsSandbox(fetchImpl) {
+    const order = [];
+    const sandbox = {
+      console: { warn: () => order.push('warn') },
+      fetch: fetchImpl,
+      document: { getElementById: () => null },
+      Event: function Event(type) { this.type = type; },
+      dispatchEvent: (ev) => order.push('event:' + ev.type),
+      _setv() {}, _setb() {},
+      applyUserSettings: () => order.push('apply'),
+      checkIntegrationStatuses: () => order.push('integrations'),
+      applySettingsRoleVisibility() {},
+    };
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(LOAD_SETTINGS, sandbox, { filename: 'mockup_v3.html loadUserSettings' });
+    return { sandbox, order };
+  }
+
+  test('the first settings load fires opal:settings-settled once — after applying, on success', async () => {
+    const s = settingsSandbox(async () => ({ ok: true, json: async () => ({ settings: { calendarDefaultView: 'day' }, orgSettings: {} }) }));
+    await s.sandbox.loadUserSettings();
+    expect(s.order).toEqual(['apply', 'event:opal:settings-settled', 'integrations']);
+    expect(s.sandbox.__settingsSettled).toBe(true);
+    // The Settings tab reloads settings; that is not a second boot signal.
+    await s.sandbox.loadUserSettings();
+    expect(s.order.filter((x) => x.startsWith('event:'))).toHaveLength(1);
+  });
+
+  test('...and on failure too, so the cloak never waits on a dead request', async () => {
+    const s = settingsSandbox(async () => { throw new TypeError('Failed to fetch'); });
+    await s.sandbox.loadUserSettings();
+    expect(s.order).toEqual(['warn', 'event:opal:settings-settled', 'integrations']);
+  });
+
+  // ── navigation.js: a no-hash landing waits (bounded) for settings ─────
+  const NAV_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'current', 'navigation.js'), 'utf8');
+
+  function bootNav({ hash = '', settled = false, ready = true } = {}) {
+    const timers = [];
+    const listeners = {};
+    const hist = { pushState: jest.fn(), replaceState: jest.fn(), back: jest.fn() };
+    const g = {
+      console: { log() {}, warn() {}, error() {} },
+      document: {
+        querySelector: (sel) => (sel === '.tab.active[data-tab]' ? { dataset: { tab: 'calendar' } } : null),
+        querySelectorAll: () => [],
+      },
+      history: hist,
+      location: { hash },
+      setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
+      APP_USER: ready ? { role: 'owner' } : null,
+      NAV_ALLOWED_TABS: ready ? ['calendar', 'profile', 'settings'] : null,
+      switchTab() {},
+      setCalendarMode(m) { g.__calendarMode = m; },
+      __calendarMode: 'week',
+      __settingsSettled: settled,
+      revealShell: jest.fn(),
+    };
+    g.window = g;
+    vm.createContext(g);
+    vm.runInContext(NAV_SRC, g, { filename: 'navigation.js' });
+    const fire = (type) => (listeners[type] || []).splice(0).forEach((fn) => fn({ type }));
+    const runTimers = (pred) => timers.splice(0).forEach((t) => { if (!pred || pred(t)) t.fn(); });
+    return { g, hist, timers, fire, runTimers };
+  }
+
+  test('no hash: the cloak stays until settings settle, then the saved view is recorded with replaceState', () => {
+    const n = bootNav();
+    expect(n.g.revealShell).not.toHaveBeenCalled();
+    expect(n.timers.some((t) => t.ms === 1500)).toBe(true);
+    // The settings load applies the saved default under the cloak...
+    n.g.setCalendarMode('day');
+    expect(n.hist.pushState).not.toHaveBeenCalled();
+    expect(n.hist.replaceState).not.toHaveBeenCalled();
+    // ...then settles: reveal once, canonical URL is the real mode, no push.
+    n.fire('opal:settings-settled');
+    expect(n.g.revealShell).toHaveBeenCalledTimes(1);
+    expect(n.hist.replaceState).toHaveBeenCalledWith({ opalNav: '#calendar/day' }, '', '#calendar/day');
+    expect(n.hist.pushState).not.toHaveBeenCalled();
+    n.runTimers((t) => t.ms === 1500);   // the bound firing late is a no-op
+    expect(n.g.revealShell).toHaveBeenCalledTimes(1);
+  });
+
+  test('no hash: the wait is bounded — no signal still reveals after 1.5 s', () => {
+    const n = bootNav();
+    expect(n.g.revealShell).not.toHaveBeenCalled();
+    n.runTimers((t) => t.ms === 1500);
+    expect(n.g.revealShell).toHaveBeenCalledTimes(1);
+  });
+
+  test('no wait when settings already settled, or when the URL carries a hash', () => {
+    expect(bootNav({ settled: true }).g.revealShell).toHaveBeenCalledTimes(1);
+    const withHash = bootNav({ hash: '#calendar/week' });
+    expect(withHash.g.revealShell).toHaveBeenCalledTimes(1);
+    expect(withHash.timers.some((t) => t.ms === 1500)).toBe(false);
+  });
+
+  test('the 6 s never-ready fallback reveals at once, without a further settings wait', () => {
+    const n = bootNav({ ready: false });
+    for (let i = 0; i < 61; i++) n.runTimers((t) => t.ms === 100);
+    expect(n.g.revealShell).toHaveBeenCalledTimes(1);
   });
 });

@@ -1738,7 +1738,9 @@ function pfBackToDashboard() {
 function scrollToProfile(id) { pfOpenArea(id); }
 
 function loadProfileView() {
-  loadSetupStatusCard();
+  // Guarded (10 Oct 2026): the card lives in the shell's main inline script,
+  // and when that script failed to parse this bare call threw inside initAuth.
+  if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();
   const u = window.APP_USER;
   if (!u) return; // auth not yet resolved
 

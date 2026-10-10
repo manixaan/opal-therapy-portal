@@ -439,6 +439,7 @@
     inNav: 0,        // >0 while a hooked navigation function is running
     lastBackAt: 0,   // throttle for history.back() (anti double-fire)
     booted: false,   // deep-link restore has run
+    bootPending: false, // a no-hash landing is waiting for settings to settle
     rhView: null,    // Resource Hub sub-view (RH2 exports no state object)
     rhId: null,
     obView: null,    // Onboarding sub-view (same reason as rhView)
@@ -1266,7 +1267,46 @@
            isFn(global.switchTab);
   }
 
-  function bootRestore() {
+  /* A fresh landing with no hash (every sign-in lands on '/') takes the
+     user's saved calendar default view from /api/settings, which resolves
+     after role gating. Revealing first showed Week and then jumped to the
+     saved view on screen, so that landing waits under the cloak for the
+     first settings load to settle (10 Oct 2026). Bounded: the shell is never
+     held hidden on settings' account for longer than this, and the head's
+     7 s fallback still stands. A hash route sets its own view, so it never
+     waits. */
+  var SETTINGS_WAIT_MS = 1500;
+
+  function hasInitialHash() {
+    return !!INITIAL_HASH.replace(/^#+/, '').replace(/\/+/g, '');
+  }
+
+  /** Run fn once, when mockup_v3.html's first settings load settles or after ms. */
+  function whenSettingsSettled(ms, fn) {
+    var done = false;
+    function go() { if (done) return; done = true; fn(); }
+    if (global.__settingsSettled) { go(); return; }
+    try { global.addEventListener('opal:settings-settled', go, { once: true }); } catch (e) {}
+    global.setTimeout(go, ms);
+  }
+
+  function bootRestore(noWait) {
+    if (NAV.booted || NAV.bootPending) return;
+    if (!noWait && !hasInitialHash()) {
+      // NAV.booted stays false while waiting, so a late setCalendarMode from
+      // the settings load writes no history; the canonical route is recorded
+      // once, with replaceState, when the wait ends.
+      NAV.bootPending = true;
+      whenSettingsSettled(SETTINGS_WAIT_MS, function () {
+        NAV.bootPending = false;
+        bootSettle();
+      });
+      return;
+    }
+    bootSettle();
+  }
+
+  function bootSettle() {
     if (NAV.booted) return;
     NAV.booted = true;
     try { bootRestoreRoute(); }
@@ -1279,7 +1319,7 @@
 
   function bootRestoreRoute() {
     var raw = INITIAL_HASH;
-    var hasHash = !!raw.replace(/^#+/, '').replace(/\/+/g, '');
+    var hasHash = hasInitialHash();
 
     if (!hasHash) {
       // No hash: the app's default behaviour is untouched. Record where it
@@ -1305,7 +1345,7 @@
       global.setTimeout(function () { waitForApp((attempt || 0) + 1); }, 100);
       return;
     }
-    bootRestore();   // ~6s — settle anyway rather than never routing at all
+    bootRestore(true);   // ~6s — settle anyway (no further settings wait) rather than never routing at all
   }
 
   /* ── Wiring ──────────────────────────────────────────────────────────── */
