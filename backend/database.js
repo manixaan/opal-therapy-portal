@@ -1259,20 +1259,49 @@ async function updateEventManualLocation(eventId, locationData) {
   return result.rows[0] || null;
 }
 
+// Release the copy the Outlook delta imported for a Graph event the app has
+// just created, before the app row is linked to it (10 Oct 2026). Between
+// createOutlookEvent returning and the link, a delta tick can insert that same
+// event as an 'outlook' row; its outlook_id then blocks the link
+// (events_user_outlook_unique) and the booking shows twice. The twin is
+// soft-deleted AND loses its outlook_id — a tombstone that kept it would still
+// hold the unique key. Only created_by_source = 'outlook' rows: never another
+// app booking. $1 outlook id, $2 the app row being linked (its user is the
+// unique key's scope). travel-outlook-sync.js runs the same release.
+const RELEASE_OUTLOOK_TWIN_SQL = `
+  UPDATE events
+     SET outlook_id = NULL, is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+   WHERE user_id = (SELECT user_id FROM events WHERE id = $2)
+     AND outlook_id = $1 AND id <> $2 AND created_by_source = 'outlook'`;
+
 // Store the Outlook event ID returned after a successful write-back.
 // Subsequent Outlook syncs will match on this ID and update rather than duplicate.
+// The release and the link are one transaction: both happen or neither does.
 async function updateEventOutlookId(eventId, outlookId) {
-  const result = await pool.query(`
-    UPDATE events
-    SET outlook_id     = $1,
-        sync_status    = 'synced',
-        write_error    = NULL,
-        last_write_attempt_at = CURRENT_TIMESTAMP,
-        updated_at     = CURRENT_TIMESTAMP
-    WHERE id = $2
-    RETURNING *
-  `, [outlookId, eventId]);
-  return result.rows[0] || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Two statements, not a data-modifying CTE: the release must land before
+    // the link is checked against the unique constraint.
+    await client.query(RELEASE_OUTLOOK_TWIN_SQL, [outlookId, eventId]);
+    const result = await client.query(`
+      UPDATE events
+      SET outlook_id     = $1,
+          sync_status    = 'synced',
+          write_error    = NULL,
+          last_write_attempt_at = CURRENT_TIMESTAMP,
+          updated_at     = CURRENT_TIMESTAMP
+      WHERE id = $2
+      RETURNING *
+    `, [outlookId, eventId]);
+    await client.query('COMMIT');
+    return result.rows[0] || null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Record a failed write-back attempt so the UI can surface an error state.
