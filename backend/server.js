@@ -554,6 +554,11 @@ app.use('/', appRoutes);
 const mapsRoutes = require('./maps-routes');
 app.use('/', mapsRoutes);
 
+// Smart Booking locations — a client's known service locations and a
+// clinician's remembered non-client destinations (migration 072)
+app.use('/', require('./client-location-routes'));
+app.use('/', require('./travel-sync-routes'));   // travel legs mirrored to Outlook (073)
+
 // Resource Hub (governed clinical resource repository; backend-enforced RBAC)
 app.use('/', require('./resources-routes'));
 

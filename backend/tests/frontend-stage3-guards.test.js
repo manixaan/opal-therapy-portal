@@ -566,8 +566,14 @@ describe('calendar drag-selection coordinate fix', () => {
     expect(HTML).toContain('function calMinutesToY(minutesOfDay)');
     const fn = HTML.slice(HTML.indexOf('function calYToMinutes'), HTML.indexOf('function calYToMinutes') + 400);
     expect(fn).toContain('/ HOUR_PX) * 60 + START_H * 60');
-    expect(fn).toContain('SLOT_SNAP_MIN) * SLOT_SNAP_MIN');
+    expect(fn).toContain('calSnapMin(raw)');
     expect(fn).toContain('Math.min(END_H * 60'); // clamped to the visible range
+    // One 15-minute grid for every gesture: create, move, resize (2 Oct 2026).
+    expect(HTML).toContain('return Math.round(minutes / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;');
+    expect(HTML).toContain('Math.min(END_H * 60 - drag.durationMin, calSnapMin(rawMinutes))');
+    expect(HTML).toContain('let target = calSnapMin(resize.origStartMin + dMin);');
+    expect(HTML).toContain('let targetEnd = calSnapMin(resize.origStartMin + resize.origDurMin + dMin);');
+    expect(HTML).not.toMatch(/Math\.round\([^)]*\/ ?(15|SNAP)\) \* (15|SNAP)/);
   });
 
   test('pointer paths and the ghost block all consume the shared helpers', () => {
@@ -840,7 +846,7 @@ describe('master scheduler phase 1', () => {
 
   test('scheduler assets are linked and the root container exists', () => {
     expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p9" />');
-    expect(HTML).toContain('<script src="/scheduler.js?v=p9" defer></script>');
+    expect(HTML).toContain('<script src="/scheduler.js?v=p10" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
 
@@ -891,17 +897,152 @@ describe('grouped booking-type picker', () => {
   test('billable + non-billable sections with collapsible groups', () => {
     expect(HTML).toContain('class="bk-section-label">Billable<');
     expect(HTML).toContain('>Non-billable<');
-    for (const g of ['Direct services', 'Requested reports', 'Non-face-to-face', 'Provider travel']) {
+    for (const g of ['Direct services', 'Requested reports', 'Non-face-to-face']) {
       expect(HTML).toContain('<summary>' + g + '</summary>');
     }
-    for (const leaf of ['Therapy session', 'Assessment session', 'Initial assessment consultation',
-      'FCA', 'AT report', 'Progress report', 'Case noting', 'Resource preparation',
-      'Telehealth', 'Professional development', 'Supervision', 'Lunch']) {
+    // Provider travel is not a booking type (4 Oct 2026): travel comes from
+    // the day's physical appointments and is moved on the calendar.
+    expect(HTML).not.toContain('<summary>Provider travel</summary>');
+    for (const leaf of ['Assessment Session', 'Assessment Session – Early Intervention Under 9',
+      'Initial Assessment / Consultation', 'Initial Assessment / Consultation – Early Intervention Under 9',
+      'MDT Meeting', 'MDU Meeting', 'Telehealth Therapy Session', 'Telehealth Therapy Session – Early Intervention Under 9',
+      'Therapy Session', 'Therapy Session – Early Intervention Under 9',
+      'Functional Capacity Assessment (FCA)', 'Assistive Technology (AT)', 'Progress Report', 'Support Letter',
+      'Case Noting', 'Resource Preparation', 'Emails', 'Phone Calls',
+      'Professional development', 'Supervision', 'Lunch']) {
       expect(HTML).toContain('>' + leaf + '</button>');
     }
-    expect(HTML).toContain('Bill up to 30 minutes each way');
     expect(HTML).toContain('function selectBookingLeaf');
     expect(HTML).toContain('selectBookingCat(leaf.cat)'); // rides the existing category plumbing
+  });
+
+  test('client rules: required for direct services and reports, optional for non-face-to-face', () => {
+    const start = HTML.indexOf('var BOOKING_LEAVES = {');
+    const leaves = HTML.slice(start, HTML.indexOf('\n};', start));
+    const rule = (id) => (leaves.match(new RegExp("'" + id + "':\\s*\\{[^}]*client: '(\\w+)'")) || [])[1];
+    for (const id of ['assessment', 'assessment-ei', 'initial', 'initial-ei', 'mdt', 'mdu', 'telehealth', 'telehealth-ei', 'therapy', 'therapy-ei',
+      'fca', 'at-report', 'progress-report', 'support-letter']) expect(rule(id)).toBe('required');
+    for (const id of ['case-noting', 'resource-prep', 'emails', 'phone-calls']) expect(rule(id)).toBe('optional');
+    for (const id of ['pd', 'supervision', 'lunch']) expect(rule(id)).toBe('none');
+    // Each non-face-to-face leaf names itself — none rides the case-noting form.
+    expect(leaves).toContain("'resource-prep':   { cat: 'custom'");
+    expect(leaves).toContain("'case-noting':     { cat: 'custom'");
+    // The panel enforces it before anything is sent; the server checks again.
+    expect(HTML).toContain("if (rule === 'required' && !bookingClientFor())");
+    expect(HTML).toContain('id="bk-client-none"');
+  });
+
+  test('one click, one booking', () => {
+    const start = HTML.indexOf('async function createBookingNow()');
+    const body = HTML.slice(start, HTML.indexOf('/* ---------- Step 4', start));
+    expect(body).toContain('if (BOOKING_STATE.submitting) return;');
+    expect(body).toContain('BOOKING_STATE.requestId = newBookingRequestId();');
+    expect(body).toMatch(/if \(btn\) btn\.disabled = true;\s+try \{\s+await confirmBooking\(\);/);
+    // Both save paths send the request id the server dedupes on.
+    expect((HTML.match(/requestId: BOOKING_STATE\.requestId/g) || []).length).toBe(2);
+    // A new booking starts clean — no title or type from the last one.
+    expect(HTML).toMatch(/function resetWizard\(\) \{[\s\S]{0,600}BOOKING_STATE\.serviceType = null;[\s\S]{0,600}'custom-name'/);
+  });
+
+  test('a new booking remembers nothing from the last one', () => {
+    const start = HTML.indexOf('function resetWizard() {');
+    const body = HTML.slice(start, HTML.indexOf('\n}\n', start));
+    // No client (the stored one came back through getSelectedPatient's fallback),
+    // no case, no travel chain, no location, and no booking type pre-picked.
+    for (const s of ['BOOKING_STATE.selectedPatient = null;', 'BOOKING_STATE.selectedCaseId = null;',
+      'BOOKING_STATE.chainAfter = null;', "_loc.value = ''", '_uns.checked = false', 'selectBookingCat(null);']) {
+      expect(body).toContain(s);
+    }
+    expect(body).not.toContain("selectBookingCat('client')");
+    // Create needs a booking type — never a silent "therapy" default.
+    expect(HTML).toContain('if (!cat || !currentBookingLeaf()) {');
+    // A fresh panel is for your own calendar, at 9:00 for an hour, no day picked.
+    // No "Booking for" picker: your own calendar, unless the Scheduling
+    // Assistant handed over a therapist (shown read-only).
+    expect(HTML).toMatch(/if \(!opts\.keepState\) \{\s+_bspHandoffTherapistId = opts\.forTherapistId \|\| null;\s+_bspSelectedTherapist = null;/);
+    const strip = HTML.slice(HTML.indexOf('function renderBspTherapistStrip() {'), HTML.indexOf('function selectBspTherapist('));
+    expect(strip).toContain("if (!_bspSelectedTherapist) { strip.style.display = 'none';");
+    expect(strip).not.toContain('bsp-t-chip');
+    expect(strip).not.toContain('<select');
+    expect(HTML).toMatch(/No slot clicked — a fresh form[\s\S]{0,200}startEl\.value = '09:00'[\s\S]{0,200}\.bsp-day-chip\.active/);
+    // Add-a-stop and Book Another pick no booking type for the therapist.
+    const TRAVEL = require('fs').readFileSync(require('path').join(__dirname, '../../frontend/current/travel.js'), 'utf8');
+    expect(TRAVEL).not.toContain('firstClientLeaf');
+  });
+
+  test('a move that can happen applies at once — only a blocked move opens the review', () => {
+    const src = HTML.slice(HTML.indexOf('function openMoveImpact('), HTML.indexOf('function closeImpactModal()'));
+    const run = (impact) => {
+      const calls = { commit: 0, toasts: [], modal: false };
+      const doc = { getElementById: () => ({ style: {}, classList: { add: () => { calls.modal = true; } }, set textContent(v) {}, set innerHTML(v) {}, set className(v) {} }) };
+      const fn = new Function('SESSIONS', 'commitMove', 'showToast', 'document', 'window', 'TYPE_LABEL', 'DAY_LABEL', 'fmtTime', 'fmtMin',
+        'var pendingMove, drag;' + src + '; return openMoveImpact;');
+      const open = fn({ s1: { day: 'thu', startH: 20, startM: 0, endH: 20, endM: 19, type: 'therapy' } },
+        () => { calls.commit++; }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '');
+      open('s1', 'thu', 1200, 30, impact);
+      return calls;
+    };
+    const warn = run({ verdict: 'warn', impacts: [{ sev: 'warn', ttl: 'Outside working hours', sub: '…' }] });
+    expect([warn.commit, warn.modal]).toEqual([1, false]);
+    expect(warn.toasts[0]).toEqual(['Moved', 'Outside working hours']);
+    expect(run({ verdict: 'ok', impacts: [] })).toMatchObject({ commit: 1, modal: false });
+    const blocked = run({ verdict: 'blocker', impacts: [{ sev: 'blocker', ttl: 'Overlaps 8:00pm', sub: '…' }] });
+    expect([blocked.commit, blocked.modal]).toEqual([0, true]);
+  });
+
+  test('the proposed block shows the client picked now, not the first one it drew', () => {
+    expect(HTML).toContain('function refreshProposedClientLabel()');
+    // A card click and "No client" both relabel the proposal.
+    expect((HTML.match(/refreshProposedClientLabel\(\);/g) || []).length).toBeGreaterThanOrEqual(2);
+    const label = HTML.slice(HTML.indexOf('function _proposedClientName()'), HTML.indexOf('function renderCalendarPreviewBlocks('));
+    const fn = new Function('getSelectedPatient', 'calProposedLabel', 'document', label + '; return { name: _proposedClientName, refresh: refreshProposedClientLabel };');
+    let picked = { first: 'Noah', last: 'Mathew' };
+    const block = { dataset: { startMin: '1020', durationMin: '60' }, innerHTML: '' };
+    const api = fn(() => picked, (st, dur, who) => st + '/' + dur + '/' + who, { querySelectorAll: () => [block] });
+    api.refresh();
+    expect(block.innerHTML).toBe('1020/60/Noah Mathew');
+    picked = { first: 'Tiffany', last: 'Marchese' };
+    api.refresh();
+    expect(block.innerHTML).toBe('1020/60/Tiffany Marchese');
+    // Only the booking panel's own client list counts as "selected".
+    expect(HTML).toContain("document.querySelector('#patient-list .patient-card.selected')");
+  });
+
+  test('direct services map to Splose services without showing billing codes', () => {
+    expect(HTML).toContain('function directLeafForService(title)');
+    expect(HTML).toContain('refreshDirectServiceAvailability()');
+    // Live Splose names never become button labels.
+    const start = HTML.indexOf('async function loadSploseServices()');
+    const body = HTML.slice(start, HTML.indexOf('function refreshDirectServiceAvailability', start));
+    expect(body).not.toContain('box.innerHTML');
+    // Splose names map to the right leaf; Early Intervention never lands on the plain one.
+    const fnSrc = HTML.slice(HTML.indexOf('function directLeafForService(title)'), HTML.indexOf('/* Fill each direct-service leaf'));
+    const directLeafForService = new Function(fnSrc + '; return directLeafForService;')();
+    expect(directLeafForService('Therapy Session (Early Intervention - Under 9) (Occupational Therapy)')).toBe('therapy-ei');
+    expect(directLeafForService('Therapy Session (Occupational Therapy)')).toBe('therapy');
+    expect(directLeafForService('Telehealth Therapy Session (Under 9)')).toBe('telehealth-ei');
+    expect(directLeafForService('Telehealth Session')).toBe('telehealth');
+    expect(directLeafForService('Initial Assessment / Consultation')).toBe('initial');
+    expect(directLeafForService('Initial Assessment - Early Intervention')).toBe('initial-ei');
+    expect(directLeafForService('Assessment Session')).toBe('assessment');
+    expect(directLeafForService('MDT Meeting')).toBe('mdt');
+    expect(directLeafForService('MDU Meeting')).toBe('mdu');
+    expect(directLeafForService('Provider Travel')).toBeNull();
+  });
+
+  test('a non-client booking is classified by its leaf and shows once', () => {
+    const start = HTML.indexOf('async function confirmBooking()');
+    const body = HTML.slice(start, HTML.indexOf('// ── Client session path', start));
+    // Resource preparation is a support activity, not Admin / Case noting.
+    expect(body).toContain("'resource-prep': ['Report Writing', 'report']");
+    expect(body).toContain('categories: [outlookCategory]');
+    expect(body).toContain('type: tileType');
+    expect(body).not.toContain("type: 'admin'");
+    // The optimistic tile carries the saved row and the Outlook stamp, so the
+    // reload's __clearOutlookTiles sweep replaces it instead of duplicating it.
+    expect(body).toContain('dbId: newDbId, outlookId');
+    expect(body).toContain('SESSIONS[_optId].outlookSynced = true');
+    expect(body).toContain("dataset.outlookTile = '1'");
   });
 });
 
@@ -977,7 +1118,7 @@ describe('master scheduler phase 3 finder', () => {
   test('view-calendar and schedule actions integrate with existing surfaces', () => {
     expect(SCHED_JS).toContain('sm-cand');       // candidate cards drive the matrix selection
     expect(SCHED_JS).toContain('jumpToMinute');  // picking a result scrolls + flashes the row
-    expect(SCHED_JS).toContain('selectBspTherapist');
+    expect(SCHED_JS).toContain('openBookingPanel(tid ? { forTherapistId: tid } : {})'); // hands the therapist to the panel
     expect(SCHED_JS).toContain('sch-req-slot'); // requested slot emphasised on the time scale
   });
 
@@ -1181,7 +1322,7 @@ describe('free-time gap overlay removed', () => {
   });
 
   test('travel-leg indicators still render on the calendar', () => {
-    expect(TRAVEL).toContain("el.className = 'travel-overlay ' + seg.kind;");
+    expect(TRAVEL).toContain("el.className = 'travel-overlay ' + seg.kind + (seg.moved ? ' moved' : '') + (seg.tight ? ' tight' : '');");
     expect(TRAVEL).toContain('function renderSegmentOverlay');
     expect(TRAVEL).toContain('openTravelPanel(seg)');
     // the shell still loads the module that draws them, ahead of reports.js

@@ -699,7 +699,7 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 5],
+      ['profile.js', 9],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -707,7 +707,12 @@ describe('changed assets are cache-busted', () => {
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
       // shows where the drive will go until an address is typed.
-      ['travel.js', 18],
+      // 19: route-aware Smart Booking — routed preview with loading/error
+      // states, the earliest feasible start, departure-time routing.
+      ['travel.js', 37],
+      // 1: booking-route.js/.css are new — client location selector, the
+      // work-location notice and the "What next?" continuation.
+      ['booking-route.js', 5], ['booking-route.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -719,7 +724,9 @@ describe('changed assets are cache-busted', () => {
       // rendering every option blank.
       // 5 (js): the alert dialog knows the 'unlinked' kind (portal-only booking).
       // 6 (js): the queue count refreshes with every calendar reload, not on the 60 s poll.
-      ['splose-sync.js', 6], ['splose-sync.css', 1],
+      // 7 (js): no sync popups — no idle nudge, no tab-leave prompt, no page-close
+      // warning; the server's auto-sync writes the queue, Sync Splose stays manual.
+      ['splose-sync.js', 7], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
@@ -857,6 +864,24 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL.slice(SHELL.indexOf('host.innerHTML = WL_DAYS.map') - 400, SHELL.indexOf('host.innerHTML = WL_DAYS.map'))).toMatch(/rebuildLocationCatalogue\(\)/);
     expect(editor).toMatch(/LOCATIONS/);
     expect(SHELL).toMatch(/id="wb-office-addr"[^>]*disabled/);
+    // No built-in office address, and a saved one (the old default) is dropped on load.
+    expect(SHELL).not.toContain('100 Burrendah Blvd, Willetton WA 6155');
+    expect(SHELL).toMatch(/office: \{ id: 'office', label: 'Perth metro office', addr: '', suburb: ''/);
+    expect(fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8')).toMatch(/Object\.assign\(WORK_BASES\.office, travelBases\.office, \{ addr: '', suburb: ''/);
+    // The old sample home saved into profiles is reset on load: the sample
+    // NAME goes whatever address the base now has; a Riverton suburb with no
+    // street address goes too; a real base is untouched; a reset is saved.
+    const prof = fs.readFileSync(path.join(FRONTEND, 'profile.js'), 'utf8');
+    const open = 'WORK_BASES.homes = travelBases.homes.map(function (h) {';
+    const body = prof.slice(prof.indexOf(open) + open.length, prof.indexOf('\n        });\n        if (resetSample', prof.indexOf(open)));
+    const resetSample = new Function('h', 'var resetSample = false;' + body);
+    expect(resetSample({ id: 'home-1', label: 'Home (Riverton)', kind: 'local', addr: '', suburb: 'Riverton', region: 'south' })).toMatchObject({ label: 'Home', suburb: '', region: 'central' });
+    expect(resetSample({ id: 'home-1', label: 'Home (Riverton)', kind: 'local', addr: '11 Example Ave, Willetton WA 6155', suburb: 'Willetton' })).toMatchObject({ label: 'Home', addr: '11 Example Ave, Willetton WA 6155', suburb: 'Willetton' });
+    expect(resetSample({ id: 'home-2', label: 'Mum', kind: 'local', addr: '3 Close St, Riverton WA 6148', suburb: 'Riverton' })).toMatchObject({ label: 'Mum', suburb: 'Riverton' });
+    expect(resetSample({ id: 'home-3', label: 'Home', kind: 'local', addr: '', suburb: 'Como' })).toMatchObject({ suburb: 'Como' });
+    expect(prof).toContain('if (resetSample && typeof debouncedSaveWorkSchedule === \'function\') setTimeout(debouncedSaveWorkSchedule, 0);');
+    // The home address field shows no sample suburb.
+    expect(SHELL).not.toContain('e.g. 12 Example St, Riverton WA 6148');
   });
 
   test('an empty week shows a plain grid — no first-time overlay card (owner\'s call, 7 Sep 2026)', () => {
@@ -888,10 +913,15 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // The engine never reads the profile editor's week cursor directly.
     expect(travel).not.toMatch(/wlThisWeek\(\)\[day\]/);
     expect(travel).toMatch(/function dayAnchorBase\(day\) \{\s+const weekObj = calendarWeekLocations\(\);/);
-    // Smart Booking: a client session needs a location unless Unsure is ticked.
+    // Location is optional for every booking (4 Oct 2026): nothing blocks a
+    // client session without one, and none is filled in behind the user.
     expect(SHELL).toMatch(/id="bsp-location-unsure"/);
-    expect(SHELL).toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
-    expect(travel).toMatch(/kind: 'between', startMin: Math\.max\(seg\.startMin, seg\.endMin - seg\.travelMin\)/);
+    expect(SHELL).not.toMatch(/if \(isClientSession && !_outlookLocation && !_unsure\)/);
+    expect(SHELL).toMatch(/const _outlookLocation = _unsure \? '' : _typedLoc;/);
+    // Legs are placed by placeTravelLeg — arriving as the next stop starts,
+    // never before the previous physical stop ends — and can be moved.
+    expect(travel).toMatch(/function placeTravelLeg\(/);
+    expect(travel).toMatch(/floorMin: sessionEndMin\(curr\)/);
     expect(travel).toMatch(/classList\.add\('suppressed'\)/);
     expect(travel).toMatch(/preview placeholder/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
@@ -901,7 +931,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // After a booking the grid reloads from the server, so the saved row is shown
     // even though the week jump re-renders from the stale cache.
-    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 14000);
+    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 20000);
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);

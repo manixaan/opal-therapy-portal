@@ -1549,6 +1549,9 @@ function _wlShowSaved() {
 }
 
 async function saveWorkSchedule() {
+  // Never save before the stored week has arrived: the page's copy is still
+  // empty then, and saving it would wipe the clinician's locations.
+  if (!_wsLoaded) { workScheduleReady().then(function (ok) { if (ok) debouncedSaveWorkSchedule(); }); return; }
   try {
     var payload = {
       workLocationSchedule: typeof WORK_LOCATION !== 'undefined' ? WORK_LOCATION : null,
@@ -1571,6 +1574,23 @@ function debouncedSaveWorkSchedule() {
   _wlSaveTimer = setTimeout(saveWorkSchedule, 900);
 }
 
+/* The saved week is the CALENDAR's too (6 Oct 2026): it used to load only
+   with My Profile, so a fresh page asked "Where are you working on Monday?"
+   for a day that was already set. It now loads as soon as the user is known,
+   and the calendar waits for it (workScheduleReady) before saying "not set". */
+var _wsLoaded = false, _wsPromise = null;
+function workScheduleReady() {
+  if (_wsLoaded) return Promise.resolve(true);
+  if (!_wsPromise) _wsPromise = loadWorkSchedule().then(function () { _wsPromise = null; return _wsLoaded; });
+  return _wsPromise;
+}
+window.workScheduleReady  = workScheduleReady;
+window.workScheduleLoaded = function () { return _wsLoaded; };
+(function bootWorkSchedule(tries) {
+  if (window.APP_USER) { workScheduleReady(); return; }
+  if (tries < 200) setTimeout(function () { bootWorkSchedule(tries + 1); }, 150);
+})(0);
+
 async function loadWorkSchedule() {
   try {
     var r = await fetch('/api/profile/work-schedule', { credentials: 'include' });
@@ -1587,18 +1607,39 @@ async function loadWorkSchedule() {
     // Populate WORK_BASES from backend (only if data exists)
     if (travelBases && typeof travelBases === 'object') {
       if (travelBases.office) {
-        Object.assign(WORK_BASES.office, travelBases.office);
-        // The office is "coming soon" (no office yet): show any saved value
-        // greyed out, keep the field disabled, and leave the hint as is.
+        // The office is "coming soon" (no office yet): it has no address. A
+        // saved one is the old built-in default (100 Burrendah Blvd) written
+        // back by an earlier save — drop it, and the next save clears it.
+        Object.assign(WORK_BASES.office, travelBases.office, { addr: '', suburb: '', lat: undefined, lng: undefined });
         var addrEl = document.getElementById('wb-office-addr');
-        if (addrEl && travelBases.office.addr) addrEl.value = travelBases.office.addr;
+        if (addrEl) addrEl.value = '';
         if (typeof wireBaseAddressAutocomplete === 'function') wireBaseAddressAutocomplete();
       }
       if (Array.isArray(travelBases.homes) && travelBases.homes.length) {
-        WORK_BASES.homes = travelBases.homes;
+        // The old built-in sample home ("Home (Riverton)": suburb Riverton, no
+        // street address) was saved into profiles before it was removed, and
+        // a suburb alone still anchored travel at Riverton. Reset on load:
+        //   • the sample name "Home (Riverton)" → "Home", whatever address the
+        //     base has since been given (it never named the real home);
+        //   • a Riverton suburb with no street address → no suburb.
+        // A changed base is saved straight away so it does not come back.
+        var resetSample = false;
+        WORK_BASES.homes = travelBases.homes.map(function (h) {
+          if (!h) return h;
+          var out = h;
+          if (/^home \(riverton\)$/i.test(String(h.label || '').trim())) {
+            out = Object.assign({}, out, { label: 'Home' }); resetSample = true;
+          }
+          if (!String(out.addr || '').trim() && /^riverton$/i.test(String(out.suburb || '').trim())) {
+            out = Object.assign({}, out, { suburb: '', region: 'central', lat: undefined, lng: undefined }); resetSample = true;
+          }
+          return out;
+        });
+        if (resetSample && typeof debouncedSaveWorkSchedule === 'function') setTimeout(debouncedSaveWorkSchedule, 0);
       }
     }
 
+    _wsLoaded = true;
     // Re-render with real data
     if (typeof renderWorkLocationEditor === 'function') renderWorkLocationEditor();
     if (typeof renderHomeBases          === 'function') renderHomeBases();

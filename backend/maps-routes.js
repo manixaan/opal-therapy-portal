@@ -56,6 +56,18 @@ function sanitiseSessionToken(val) {
   return typeof val === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(val) ? val : '';
 }
 
+// Smart Booking routes a leg at the time it will be driven. Google rejects a
+// departure time in the past, so only a valid future one (within 90 days) is
+// forwarded; anything else routes as "now", as before.
+function futureDepartureTime(val) {
+  if (typeof val !== 'string' || val.length > 40) return null;
+  const t = Date.parse(val);
+  if (!Number.isFinite(t)) return null;
+  const now = Date.now();
+  if (t <= now + 60 * 1000 || t > now + 90 * 24 * 3600 * 1000) return null;
+  return new Date(t).toISOString();
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 /**
@@ -89,6 +101,7 @@ router.post('/api/maps/routes', requireAuth, async (req, res) => {
   }
 
   const travelMode = mode.toUpperCase() === 'WALKING' ? 'WALK' : 'DRIVE';
+  const departureTime = futureDepartureTime(req.body?.departureTime);
 
   try {
     const resp = await axios.post(
@@ -98,6 +111,7 @@ router.post('/api/maps/routes', requireAuth, async (req, res) => {
         destination:       { address: destination },
         travelMode,
         routingPreference: 'TRAFFIC_AWARE',
+        ...(departureTime ? { departureTime } : {}),
       },
       {
         headers: {
@@ -251,3 +265,4 @@ router.get('/api/maps/geocode', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.futureDepartureTime = futureDepartureTime;

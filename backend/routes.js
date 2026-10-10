@@ -23,6 +23,7 @@ const flagsDraft = () => require('./feature-flags');
 const { getPermissions, requireAuth, requireRole, requirePermission, hasPermission } = require('./permissions');
 const { classifyEventType } = require('./sync-utils');
 const { collectCascadeTravelBlocks } = require('./travel-cascade');
+const bookingRules = require('./booking-rules');
 
 /**
  * Staged-rollout guard (Phase 10): outlook-oauth/splose-api write functions
@@ -2283,10 +2284,33 @@ router.get('/api/splose/dormant-cases', requireAuth, requireSploseOwner, async (
  * that user's Outlook calendar using their stored access token instead of the
  * caller's. Ignored (silently falls back to caller) for non-owner/admin callers.
  */
+// One booking per click (booking-rules.js): repeats of a requestId get the first answer.
+const BOOKING_REQUESTS = bookingRules.createIdempotencyStore();
 router.post('/api/outlook/events', requireAuth, async (req, res) => {
   try {
     const { dbEventId, title, startTime, endTime, location, categories,
             sploseId, targetTherapistUserId } = req.body;
+
+    // Client rules are the server's as well as the panel's: a direct service or
+    // a requested report without a client is refused before anything is written.
+    const checked = bookingRules.validateBooking(req.body);
+    if (!checked.ok) return res.status(400).json({ error: checked.error });
+    const booking = checked.booking;
+
+    const requestId = bookingRules.cleanRequestId(req.body.requestId);
+    if (requestId) {
+      const key = req.session.userId + ':' + requestId;
+      let claim = BOOKING_REQUESTS.claim(key);
+      if (!claim.fresh) {
+        const first = await claim.wait;
+        if (first) return res.status(first.status).json(Object.assign({}, first.body, { duplicate: true }));
+        claim = BOOKING_REQUESTS.claim(key); // the first attempt failed — this one may try
+      }
+      if (claim.fresh) {
+        const json = res.json.bind(res);
+        res.json = (body) => { claim.settle(res.statusCode, body); return json(body); };
+      }
+    }
 
     // Resolve whose Outlook calendar to write to
     let targetUser;
@@ -2376,6 +2400,16 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       console.warn('⚠️  Local DB save failed (non-fatal):', dbErr.message);
     }
 
+    // The booking type and its client (if any) stay on the event. A report or
+    // non-face-to-face client lives here, NOT in client_id: client_id marks a
+    // Splose appointment, and the reconciler would offer to publish it.
+    if (localDbId && booking) {
+      await db.pool.query(
+        `UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('booking', $2::jsonb) WHERE id = $1`,
+        [localDbId, JSON.stringify(booking)]
+      ).catch(e => console.warn('⚠️  Booking type not stored (non-fatal):', e.message));
+    }
+
     // Draft-and-publish (058): a client booking that names its Splose client
     // is queued for "Sync Splose" — nothing is written to Splose here.
     let sploseQueued = null;
@@ -2422,12 +2456,32 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
  * Splose or Outlook. Body: { before: spec|null, after: spec|null } where spec
  * is { kind:'base', id } or { kind:'address', address, suburb?, label? }.
  */
+// Optional route facts a Smart Booking leg carries with its destination
+// (Return Home / Go Somewhere Else): the routed minutes and metres, where the
+// destination was picked (purpose), and its Google place. All optional; bad
+// values are dropped, never stored.
+function cleanTravelFacts(v, out) {
+  const num = (x, max) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= max ? Math.round(x) : null);
+  const travelMin = num(v.travelMin, 24 * 60);
+  if (travelMin !== null) out.travelMin = travelMin;
+  const distanceMeters = num(v.distanceMeters, 2000000);
+  if (distanceMeters !== null) out.distanceMeters = distanceMeters;
+  if (v.purpose === 'home' || v.purpose === 'elsewhere') out.purpose = v.purpose;
+  if (typeof v.placeId === 'string' && /^[A-Za-z0-9_-]{1,300}$/.test(v.placeId)) out.placeId = v.placeId;
+  if (typeof v.destinationId === 'string' && /^[0-9a-f-]{36}$/i.test(v.destinationId)) out.destinationId = v.destinationId;
+  const lat = Number(v.lat), lng = Number(v.lng);
+  if (v.lat != null && v.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    out.lat = lat; out.lng = lng;
+  }
+  if (typeof v.routedAt === 'string' && Number.isFinite(Date.parse(v.routedAt))) out.routedAt = new Date(Date.parse(v.routedAt)).toISOString();
+  return out;
+}
 function cleanTravelSpec(v) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v !== 'object') return undefined;
   if (v.kind === 'base') {
     if (typeof v.id !== 'string' || !v.id || v.id.length > 64) return undefined;
-    return { kind: 'base', id: v.id };
+    return cleanTravelFacts(v, { kind: 'base', id: v.id });
   }
   if (v.kind === 'address') {
     const address = typeof v.address === 'string' ? v.address.trim().slice(0, 200) : '';
@@ -2435,30 +2489,55 @@ function cleanTravelSpec(v) {
     const out = { kind: 'address', address };
     if (typeof v.suburb === 'string' && v.suburb.trim()) out.suburb = v.suburb.trim().slice(0, 80);
     if (typeof v.label  === 'string' && v.label.trim())  out.label  = v.label.trim().slice(0, 80);
-    return out;
+    return cleanTravelFacts(v, out);
   }
   return undefined;
+}
+/* A travel leg the therapist dragged: minutes from where the system placed it
+   (arrival legs: from the event's start; the leg home: from its end). The
+   leg itself — who, from where, to where, how long — is still computed. */
+function cleanTravelOffset(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v !== 'number' || !Number.isInteger(v) || Math.abs(v) > 12 * 60) return undefined;
+  return v;
 }
 router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
   try {
     if (req.user.role === 'read_only' || req.user.role === 'pre_employee') {
       return res.status(403).json({ error: 'Your account cannot change bookings' });
     }
-    const before = cleanTravelSpec(req.body ? req.body.before : null);
-    const after  = cleanTravelSpec(req.body ? req.body.after  : null);
+    // Only the fields the body names change: a leg's moved time
+    // (beforeOffsetMin / afterOffsetMin) survives a where-from/where-to edit
+    // and vice versa.
+    const body = req.body || {};
+    const before = 'before' in body ? cleanTravelSpec(body.before) : null;
+    const after  = 'after'  in body ? cleanTravelSpec(body.after)  : null;
     if (before === undefined || after === undefined) {
       return res.status(400).json({ error: 'before/after must be null, { kind: "base", id } or { kind: "address", address }' });
     }
-    const travel = {};
-    if (before) travel.before = before;
-    if (after)  travel.after  = after;
+    const beforeOffset = 'beforeOffsetMin' in body ? cleanTravelOffset(body.beforeOffsetMin) : null;
+    const afterOffset  = 'afterOffsetMin'  in body ? cleanTravelOffset(body.afterOffsetMin)  : null;
+    if (beforeOffset === undefined || afterOffset === undefined) {
+      return res.status(400).json({ error: 'beforeOffsetMin/afterOffsetMin must be null or whole minutes within ±12 hours' });
+    }
+    // What happens between this session and the next: go straight there, or
+    // home in between. null = automatic (home when there is time).
+    const next = 'next' in body ? (body.next === null ? null : (body.next === 'direct' || body.next === 'home' ? body.next : undefined)) : null;
+    if (next === undefined) return res.status(400).json({ error: 'next must be null, "direct" or "home"' });
+    const travel = {}, replaced = [];
+    if ('before' in body) { replaced.push('before'); if (before) travel.before = before; }
+    if ('after'  in body) { replaced.push('after');  if (after)  travel.after  = after; }
+    if ('beforeOffsetMin' in body) { replaced.push('beforeOffsetMin'); if (beforeOffset !== null) travel.beforeOffsetMin = beforeOffset; }
+    if ('afterOffsetMin'  in body) { replaced.push('afterOffsetMin');  if (afterOffset  !== null) travel.afterOffsetMin  = afterOffset; }
+    if ('next' in body) { replaced.push('next'); if (next) travel.next = next; }
     const r = await db.pool.query(
       `UPDATE events
-          SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('travel', $3::jsonb),
+          SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('travel',
+                (COALESCE(custom_metadata->'travel', '{}'::jsonb) - $4::text[]) || $3::jsonb),
               updated_at = NOW()
         WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)
         RETURNING id, custom_metadata`,
-      [req.params.dbId, req.session.userId, JSON.stringify(travel)]
+      [req.params.dbId, req.session.userId, JSON.stringify(travel), replaced]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Event not found' });
     res.json({ ok: true, travel: (r.rows[0].custom_metadata || {}).travel || {} });
@@ -3062,3 +3141,5 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.cleanTravelSpec = cleanTravelSpec;
+module.exports.getValidAccessToken = getValidAccessToken;

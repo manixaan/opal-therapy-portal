@@ -1,0 +1,120 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BOOKING ROUTE — route-aware Smart Booking (booking-route.js, travel.js)
+   Compact additions to the existing WHEN & WHERE card and a small
+   "What next?" dialog on the shared dialog.css look. Theme tokens only, so
+   night mode follows (theme.css redefines every token used here).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Work location required — inline, never a popup */
+.bsp-wl-notice {
+  margin: 0 0 12px; padding: 9px 11px;
+  border: 1px solid var(--border); border-left: 3px solid var(--warn-ink, #7a4e0b);
+  border-radius: 8px; background: var(--warn-soft, #faf0da);
+  font-size: 12px; line-height: 1.45; color: var(--ink);
+}
+.bsp-wl-notice[hidden] { display: none; }
+.bsp-wl-title { font-weight: 700; color: var(--warn-ink, #7a4e0b); margin-bottom: 2px; }
+.bsp-wl-text { color: var(--ink-soft); }
+.bsp-wl-btn {
+  margin-top: 7px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600;
+  border-radius: 7px; border: 1px solid var(--warn-ink, #7a4e0b);
+  background: var(--panel); color: var(--warn-ink, #7a4e0b); cursor: pointer;
+}
+.bsp-wl-btn:hover { background: var(--panel-soft); }
+.bsp-wl-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+
+/* Client location selector over the existing field */
+.bsp-loc-select {
+  width: 100%; padding: 8px 10px; box-sizing: border-box;
+  font: inherit; font-size: 13px; color: var(--ink);
+  border: 1.5px solid var(--border); border-radius: 8px;
+  background-color: var(--panel-soft); cursor: pointer;
+}
+.bsp-loc-select:focus { outline: none; border-color: var(--info); background-color: var(--panel); }
+.bsp-loc-select[hidden], .bsp-loc-field input[hidden] { display: none; }
+.bsp-loc-select + input[type="text"]:not([hidden]) { margin-top: 6px; }
+.bsp-loc-meta { margin-top: 5px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.4; overflow-wrap: anywhere; }
+.bsp-loc-meta[hidden] { display: none; }
+.bsp-loc-meta.warn { color: var(--warn-ink, #7a4e0b); }
+.bsp-loc-meta.muted { color: var(--muted); }
+.bsp-loc-add { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+.bsp-loc-add[hidden] { display: none; }
+.bsp-loc-add-lbl { font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-right: 2px; }
+.bsp-loc-chip {
+  padding: 3px 8px; font: inherit; font-size: 11px; font-weight: 600;
+  border: 1.5px solid var(--border); border-radius: 6px;
+  background: var(--panel-soft); color: var(--ink-faint, var(--ink-soft)); cursor: pointer;
+}
+.bsp-loc-chip:hover { border-color: var(--info); color: var(--info); }
+.bsp-loc-chip.on { background: var(--info); border-color: var(--info); color: #fff; }
+.bsp-loc-chip:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+.bsp-loc-field.is-unsure .bsp-loc-select, .bsp-loc-field.is-unsure input[type="text"] { opacity: .55; }
+
+/* Route line: travel from the previous stop */
+.bsp-route-status {
+  margin-top: 9px; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel-soft);
+  font-size: 12px; line-height: 1.45; color: var(--ink-soft);
+}
+.bsp-route-status[hidden] { display: none; }
+.bsp-route-status strong { color: var(--ink); }
+.bsp-route-status.ok { border-left: 3px solid var(--accent, #0f766e); }
+.bsp-route-status.loading { border-left: 3px solid var(--info); }
+.bsp-route-status.warn { border-left: 3px solid var(--warn-ink, #7a4e0b); background: var(--warn-soft, #faf0da); }
+.bsp-route-status.error { border-left: 3px solid var(--danger, #c2412e); background: var(--danger-soft, #fbe9e6); }
+.bsp-route-status.error strong { color: var(--danger-ink, #9c3322); }
+.bsp-route-note { margin-top: 3px; color: var(--ink); }
+.bsp-route-btn {
+  margin: 4px 4px 0 0; padding: 3px 9px; font: inherit; font-size: 11.5px; font-weight: 600;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.bsp-route-btn:hover { background: var(--border-soft, #f0ece6); }
+.bsp-route-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+.bsp-route-spin {
+  display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px;
+  border: 2px solid var(--border); border-top-color: var(--info); border-radius: 50%;
+  animation: bsp-spin .8s linear infinite;
+}
+@keyframes bsp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bsp-route-spin { animation: none; } }
+
+/* Proposed travel on the calendar: compact; a tight leg reads red */
+.travel-overlay.preview .t-ico { font-size: 10px; font-weight: 600; opacity: .7; }
+.travel-overlay.preview.tight { border-left-color: var(--danger, #9c3322); }
+
+/* "What would you like to do next?" */
+.br-next { width: 420px; max-width: calc(100vw - 32px); }
+.br-sub { font-size: 13px; color: var(--ink-soft); }
+.br-choices { display: grid; gap: 8px; margin: 4px 0 6px; }
+.br-choices[hidden], .br-elsewhere[hidden], .br-msg[hidden] { display: none; }
+.br-choice, .br-else-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 10px 12px; text-align: left; font: inherit; cursor: pointer;
+  border: 1.5px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--ink);
+  transition: border-color .15s, background .15s;
+}
+.br-choice strong { font-size: 14px; }
+.br-choice span, .br-else-item span { font-size: 12px; color: var(--ink-soft); }
+.br-choice:hover, .br-else-item:hover { border-color: var(--info); background: var(--info-soft); }
+.br-choice:focus-visible, .br-else-item:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+.br-choice:disabled, .br-else-item:disabled { opacity: .55; cursor: default; }
+.br-msg { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-soft); font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
+.br-msg.warn { background: var(--warn-soft, #faf0da); color: var(--ink); }
+.br-msg.error { background: var(--danger-soft, #fbe9e6); color: var(--ink); }
+.br-msg .pd-btn { margin: 6px 6px 0 0; padding: 5px 10px; font-size: 12.5px; }
+.br-else-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.br-else-list { display: grid; gap: 6px; max-height: 210px; overflow-y: auto; }
+.br-else-item { padding: 8px 10px; }
+.br-else-item strong { font-size: 13px; }
+.br-else-item em { font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--info); }
+.br-else-empty { font-size: 12.5px; color: var(--muted); padding: 4px 0; }
+.br-else-field { display: block; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--ink-soft); position: relative; }
+.br-else-field input {
+  display: block; width: 100%; margin-top: 4px; box-sizing: border-box;
+  padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 400;
+  border: 1.5px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink);
+}
+.br-else-field input:focus { outline: none; border-color: var(--info); }
+.br-else-field .pac-panel { z-index: 5; }
+.br-else-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.br-else-actions .pd-btn:disabled, .br-msg .pd-btn:disabled { opacity: .45; cursor: default; }
