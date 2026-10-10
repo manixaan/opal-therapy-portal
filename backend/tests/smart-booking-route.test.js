@@ -666,6 +666,52 @@ describe('client location selector', () => {
     expect(options(env).filter((t) => /^School/.test(t))).toHaveLength(1);
     expect(env.$('bsp-loc-meta').textContent).toMatch(/Already saved as School/);
   });
+
+  // Re-picking a time on the live grid while the panel is open is a keepState
+  // open. The open hook used to force a location reset anyway, so a chosen
+  // second address, "No address" or a typed one became the client's first
+  // address — and was booked and routed there (10 Oct 2026).
+  describe('a keepState re-open keeps the chosen location', () => {
+    const repick = (env, keepState) => env.ev(`openBookingPanel({ day: 'mon', startH: 11, startM: 0, endH: 12, endM: 0${keepState === undefined ? '' : ', keepState: ' + keepState} })`);
+    const choose = (env, value) => { const sel = env.$('bsp-loc-select'); sel.value = value; sel.dispatchEvent(new env.win.Event('change')); };
+
+    test('a second saved address', async () => {
+      const env = await withPatient();
+      choose(env, '1');
+      repick(env, true);
+      await flush(120);
+      expect(env.$('bsp-loc-select').value).toBe('1');
+      expect(env.$('bsp-location').value).toBe('Example Primary School, Willetton WA 6155');
+      expect(env.$('bsp-location').dataset.locId).toBe('loc-school');
+    });
+
+    test('No address — I stay where I am', async () => {
+      const env = await withPatient();
+      choose(env, '__none');
+      repick(env, true);
+      await flush(120);
+      expect(env.$('bsp-loc-select').value).toBe('__none');
+      expect(env.$('bsp-location').value).toBe('');
+    });
+
+    test('a typed "Add another" address', async () => {
+      const env = await withPatient();
+      choose(env, '__add');
+      env.$('bsp-location').value = '7 Typed Way, Bentley WA 6102';
+      repick(env, true);
+      await flush(120);
+      expect(env.$('bsp-loc-select').value).toBe('__add');
+      expect(env.$('bsp-location').value).toBe('7 Typed Way, Bentley WA 6102');
+    });
+
+    test('a fresh open still starts from the client\'s default', async () => {
+      const env = await withPatient();
+      choose(env, '1');
+      repick(env, false);
+      await flush(120);
+      expect(env.$('bsp-location').value).toBe('12 Example Street, Willetton WA 6155');
+    });
+  });
 });
 
 describe('work location before Smart Scheduling', () => {
@@ -870,7 +916,8 @@ describe('static wiring in the shell', () => {
     // Location is optional and never filled from the client's file behind the user.
     expect(cb).toMatch(/const _outlookLocation = _unsure \? '' : _typedLoc;/);
     expect(cb).not.toMatch(/patient\?\.address \|\| ''/);
-    expect(cb).toMatch(/onBookingCreated\(\{\s+dbId: newDbId/);
+    // …only for a row on the viewer's own calendar (10 Oct 2026).
+    expect(cb).toMatch(/onBookingCreated\(\{\s+dbId: _bookedFor \? null : newDbId/);
     // No address → no place: never a stop at the client's suburb.
     expect(cb).toMatch(/locationUnknown: !_outlookLocation/);
     expect(cb).toMatch(/suburb: _outlookLocation \? \(patient\?\.suburb \|\| ''\) : ''/);

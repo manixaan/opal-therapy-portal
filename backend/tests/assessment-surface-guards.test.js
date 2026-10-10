@@ -939,8 +939,12 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
-    // Marked Outlook-synced only when Outlook took it — the calendar works without Outlook (29 Sep 2026).
-    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = !!outlookId;/);
+    // The client tile is a saved row whether or not Outlook took it, so the
+    // reload sweep drops its registry entry with its tile — `!!outlookId` left
+    // a detached copy in SESSIONS (phantom legs, undo, report) (10 Oct 2026).
+    const cp = SHELL.slice(SHELL.indexOf('// ── Client session path'), SHELL.indexOf('/* ---------- Reset wizard'));
+    expect(cp).toContain('SESSIONS[_optId].outlookSynced = true;');
+    expect(SHELL).not.toMatch(/outlookSynced = !!outlookId/);
     // A booking the portal refused is never drawn as if it were saved.
     expect(cb).toMatch(/showToast\('Appointment not saved'/);
     expect(SHELL).toMatch(/manual_addr_db_' \+ event\.id/);

@@ -586,7 +586,12 @@ describe('calendar drag-selection coordinate fix', () => {
     // and re-picking a time keeps the form (30 Sep 2026: a drag hit the backdrop,
     // closed the panel and wiped the blue preview).
     expect(HTML).toContain('body.bsp-open #cal-grid { position: relative; z-index: 1091; }');
-    expect(HTML).toContain("if (_bspOpen && opts.startH !== undefined && opts.keepState === undefined) opts = Object.assign({}, opts, { keepState: true });");
+    // The grid callers say so themselves (10 Oct 2026): keepState injected on a
+    // copy inside openBookingPanel was invisible to booking-route.js's open
+    // hook, which then reset the chosen address to the client's first one.
+    expect(HTML).toContain('openBookingPanel({ day: pending.day, date, startH, startM, endH: startH + 1, endM: startM, keepState: _bspOpen });');
+    expect(HTML).toContain('openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM, keepState: _bspOpen });');
+    expect(HTML).not.toMatch(/opts = Object\.assign\(\{\}, opts, \{ keepState: true \}\)/);
     expect(HTML).toContain("document.body.classList.remove('bsp-open');");
     expect(HTML).toContain('const yPos = calMinutesToY(startMinutes);');
     expect(HTML).toContain('const hover = calYToMinutes(col, pointerClientY);');
@@ -2923,5 +2928,82 @@ describe('shell boot: auth phase, boot phase, settings and the cloak', () => {
     const n = bootNav({ ready: false });
     for (let i = 0; i < 61; i++) n.runTimers((t) => t.ms === 100);
     expect(n.g.revealShell).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Smart Booking review fixes (10 Oct 2026) ─────────────────────────────────
+describe('Smart Booking review fixes (10 Oct 2026)', () => {
+  const { JSDOM } = require('jsdom');
+  const fnSrc = (head) => {
+    const at = HTML.indexOf(head);
+    expect(at).toBeGreaterThan(-1);
+    return HTML.slice(at, HTML.indexOf('\n}\n', at) + 2);
+  };
+
+  // Two global showToast declarations: the later (msg, isError) one won, so a
+  // two-line success ("X added" / "Saved in the portal calendar") rendered as
+  // a red error and its subtitle — or a refused booking's reason — vanished.
+  test('showToast is declared once and takes both calling shapes', () => {
+    expect(HTML.match(/function showToast\(/g)).toHaveLength(1);
+    const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    w.eval(fnSrc('function showToast('));
+    const RED = 'rgb(194, 65, 46)';
+    const show = (...args) => {
+      w.showToast(...args);
+      const t = w.document.getElementById('admin-toast');
+      const sub = t.querySelector('div');
+      return { text: t.childNodes[0].textContent, sub: sub ? sub.textContent : '', red: t.style.background === RED, z: t.style.zIndex };
+    };
+    try {
+      expect(show('Ann Smith added', 'Saved in the portal calendar'))
+        .toEqual({ text: 'Ann Smith added', sub: 'Saved in the portal calendar', red: false, z: '99999' });
+      expect(show('Appointment not saved', 'Overlaps another booking', 'warn'))
+        .toMatchObject({ sub: 'Overlaps another booking', red: true });
+      expect(show('Error', 'Could not remove document.', 'error')).toMatchObject({ red: true });
+      expect(show('Employees', 'Loaded', 'info')).toMatchObject({ sub: 'Loaded', red: false });
+      // The boolean shape (onboarding, interview, undo, suspend…) is unchanged:
+      // never a "true" subtitle.
+      expect(show('Could not undo', true)).toEqual({ text: 'Could not undo', sub: '', red: true, z: '99999' });
+      expect(show('Saved', false)).toMatchObject({ sub: '', red: false });
+      expect(show('Welcome', '', 'info')).toMatchObject({ sub: '', red: false });
+      // A later toast never keeps the previous one's second line.
+      show('First', 'a second line');
+      expect(show('Second')).toMatchObject({ text: 'Second', sub: '' });
+    } finally { w.close(); }
+  });
+
+  // A client tile was stamped data-outlook-tile but marked outlookSynced only
+  // when Outlook took it; the reload sweep removed the tile and kept the entry,
+  // leaving a detached copy for travel legs, move-undo and the day report.
+  test('the reload sweep drops a stamped tile and its registry entry together', () => {
+    const dom = new JSDOM('<!doctype html><body><div id="day-tue"></div></body>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    try {
+      w.eval('var SESSIONS = {}; var DAY_DATA = { tue: { sessions: [1] } }; var __ALL_DAYS = ["tue"];' + fnSrc('function __clearOutlookTiles() {'));
+      w.eval(`
+        const col = document.getElementById('day-tue');
+        const tile = (stamp) => { const el = document.createElement('div'); if (stamp) el.dataset.outlookTile = '1'; col.appendChild(el); return el; };
+        SESSIONS.opt  = { type: 'therapy', outlookSynced: false, dbId: 9, element: tile(true) };  // the old client-path state
+        SESSIONS.sync = { type: 'therapy', outlookSynced: true, dbId: 8, element: tile(true) };
+        SESSIONS.local = { type: 'therapy', element: tile(false) };                               // not a saved row: untouched
+        __clearOutlookTiles();`);
+      expect(Object.keys(w.SESSIONS)).toEqual(['local']);
+      expect(w.document.querySelectorAll('#day-tue > div')).toHaveLength(1);
+    } finally { w.close(); }
+  });
+
+  // The live grid (z 1091) lets a tile be dragged while the booking panel is
+  // open; a blocked drop's review (inline z 89 / 90) opened hidden beneath it.
+  test('a blocked-move review opens above the open booking panel', () => {
+    const z = (re) => { const m = HTML.match(re); expect(m).not.toBeNull(); return Number(m[1]); };
+    const grid = z(/body\.bsp-open #cal-grid \{ position: relative; z-index: (\d+); \}/);
+    const panel = z(/#booking-side-panel \{[^}]*?z-index: (\d+);/);
+    const back = z(/body\.bsp-open #impact-backdrop \{ z-index: (\d+) !important; \}/); // the inline z-index needs !important
+    const modal = z(/body\.bsp-open #impact-modal\s+\{ z-index: (\d+); \}/);
+    expect(HTML).toContain('<div class="modal-backdrop" id="impact-backdrop" style="z-index:89;"></div>');
+    expect(back).toBeGreaterThan(Math.max(grid, panel));
+    expect(modal).toBeGreaterThan(back);
+    expect(modal).toBeLessThan(9700); // portal dialogs (dialog.css) still sit above it
   });
 });

@@ -787,7 +787,13 @@
       refreshWorkLocationNotice();
       if (fn('bspTravelPreview')) global.bspTravelPreview();
     });
-    wrapGlobal('openBookingPanel', function () { setTimeout(function () { LOC.clientId = '__reset'; onPatientMaybeChanged(); refreshWorkLocationNotice(); applyUnsure(); }, 40); });
+    // A keepState open (a re-pick on the grid while the panel is open, or the
+    // navigation restore) keeps the client's chosen location: skip only the
+    // forced reset — the day's notice and Unsure still refresh (10 Oct 2026).
+    wrapGlobal('openBookingPanel', function (o) {
+      var keep = !!(o && o.keepState);
+      setTimeout(function () { if (!keep) LOC.clientId = '__reset'; onPatientMaybeChanged(); refreshWorkLocationNotice(); applyUnsure(); }, 40);
+    });
     wrapGlobal('closeBookingPanel', function () {
       var rs = routeState();
       if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.viaMode = 'auto'; var b = bookingState(); if (b) b.travelFrom = null; }
