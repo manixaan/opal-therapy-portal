@@ -681,7 +681,8 @@ describe('changed assets are cache-busted', () => {
       // 9: '#onboarding/defaults/<packageId>' — Edit onboarding carries a package id.
       // 12: the Finance tab joined KNOWN_TABS.
       // 13: the Invoicing tab joined KNOWN_TABS.
-      ['navigation.js', 13],
+      // 14: bootRestore lifts the boot cloak once the start screen is settled.
+      ['navigation.js', 14],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.

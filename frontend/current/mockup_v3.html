@@ -15,6 +15,19 @@
 <!-- Day / night theme. theme.js is deliberately NOT deferred: it stamps
      data-theme on <html> before first paint so night mode never flashes white. -->
 <script src="/theme.js?v=2"></script>
+<!-- Boot cloak: until the signed-in role has trimmed the tab bar and the
+     starting screen is restored (navigation.js bootRestore), the raw markup
+     — every tab, Smart Booking open — must not flash. Hidden, not removed,
+     so layout and scripts run as normal; a timeout always lifts it. -->
+<style>html.shell-booting nav.tabs, html.shell-booting .view { visibility: hidden; }</style>
+<script>
+(function () {
+  var html = document.documentElement;
+  html.classList.add('shell-booting');
+  window.revealShell = function () { html.classList.remove('shell-booting'); };
+  setTimeout(window.revealShell, 7000);
+})();
+</script>
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
 <link rel="stylesheet" href="/scheduler.css?v=p9" />
@@ -164,7 +177,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=9" defer></script>
-<script src="/navigation.js?v=13" defer></script>
+<script src="/navigation.js?v=14" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */

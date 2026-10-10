@@ -1269,7 +1269,15 @@
   function bootRestore() {
     if (NAV.booted) return;
     NAV.booted = true;
+    try { bootRestoreRoute(); }
+    finally {
+      // The tab bar and starting screen are settled: lift the boot cloak
+      // (mockup_v3.html) so the raw default layout never flashes first.
+      if (isFn(global.revealShell)) global.revealShell();
+    }
+  }
 
+  function bootRestoreRoute() {
     var raw = INITIAL_HASH;
     var hasHash = !!raw.replace(/^#+/, '').replace(/\/+/g, '');
 

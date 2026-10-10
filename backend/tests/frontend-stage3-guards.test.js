@@ -2479,6 +2479,17 @@ describe('in-app Back/Forward navigation module', () => {
     expect(NAV_JS).toContain("typeof global.history.pushState !== 'function') return;");
   });
 
+  // No flash of the raw shell (every tab, Smart Booking open) on load: the
+  // shell starts cloaked and only the settled boot route reveals it — with a
+  // timeout so the page can never stay hidden.
+  test('the boot cloak is lifted after the start screen is restored, always', () => {
+    const SHELL = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'current', 'mockup_v3.html'), 'utf8');
+    expect(SHELL).toContain('html.shell-booting nav.tabs, html.shell-booting .view { visibility: hidden; }');
+    expect(SHELL).toContain("html.classList.add('shell-booting');");
+    expect(SHELL).toContain('setTimeout(window.revealShell, 7000);');
+    expect(NAV_JS).toMatch(/try \{ bootRestoreRoute\(\); \}\n    finally \{[\s\S]{0,200}global\.revealShell\(\);/);
+  });
+
   // ── ANTI-TRAP ─────────────────────────────────────────────────────────────
   test('the user is never trapped on the page', () => {
     // onbeforeunload would let the app veto leaving — never acceptable here.
