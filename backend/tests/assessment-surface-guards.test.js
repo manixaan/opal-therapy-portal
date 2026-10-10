@@ -927,7 +927,7 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(travel).toMatch(/preview placeholder/);
     // A click books the slot it is in (30 Sep 2026); a fresh booking starts with an empty address.
     expect(SHELL).toMatch(/const startMinutes = calYToMinutes\(col, e\.clientY, 'floor'\);/);
-    expect(SHELL).toMatch(/const _loc = document\.getElementById\('bsp-location'\);\n  if \(_loc\) _loc\.value = '';/);
+    expect(SHELL).toMatch(/const _loc = document\.getElementById\('bsp-location'\);\n  if \(_loc\) \{ _loc\.value = '';/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);

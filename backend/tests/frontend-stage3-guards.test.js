@@ -2479,6 +2479,22 @@ describe('in-app Back/Forward navigation module', () => {
     expect(NAV_JS).toContain("typeof global.history.pushState !== 'function') return;");
   });
 
+  // Every inline <script> in the shell must parse. One SyntaxError (10 Oct
+  // 2026: a merge declared `const _loc` twice in resetWizard) kills the whole
+  // main script and leaves the page stuck on its raw default layout.
+  test('every inline script in the shell parses', () => {
+    const vm = require('vm');
+    const SHELL = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'current', 'mockup_v3.html'), 'utf8');
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m, n = 0;
+    while ((m = re.exec(SHELL))) {
+      const line = SHELL.slice(0, m.index).split('\n').length;
+      expect(() => new vm.Script(m[1], { filename: 'mockup_v3.html inline@' + line })).not.toThrow();
+      n++;
+    }
+    expect(n).toBeGreaterThan(5);
+  });
+
   // No flash of the raw shell (every tab, Smart Booking open) on load: the
   // shell starts cloaked and only the settled boot route reveals it — with a
   // timeout so the page can never stay hidden.
