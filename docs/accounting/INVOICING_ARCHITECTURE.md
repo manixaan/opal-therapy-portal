@@ -5,7 +5,7 @@ practitioner's travel into NDIS invoice drafts, then finalises, sends and
 records payments against them. Rural trips add shared operating costs.
 
 ```
-Calendar events ─► eligibility ─► billing profile (payer, NDIS no., MMM)
+Calendar events ─► eligibility ─► session MMM zone + billing profile (payer, NDIS no.)
       │                                   │
       ▼                                   ▼
  practitioner-day route ─► route facts   rate card on the service date
@@ -49,9 +49,9 @@ applied once.
    - SKIP: deleted, cancelled, marked DNA / not billable, not yet delivered, or awaiting completion.
    - ISSUE: no client, no service type, invalid duration, or an in-person session with no location.
    - BILLABLE.
-3. Stub profiles are created. MMM is classified (this may geocode once per address).
+3. Stub profiles are created. Each session gets its MMM zone (`invoice-generation.js#sessionZone`, see "Session MMM zone" below). Only telehealth falls back to the client profile, so only those profiles are classified (this may geocode).
 4. The client checks run:
-   - A missing MMM, or no rate on the service date, **blocks** the event.
+   - A session with no zone (SESSION_MMM_UNRESOLVED / SESSION_MMM_REVIEW), or no rate on the service date, **blocks** the event.
    - A missing payer or NDIS number is a **recipient issue**. The draft is still calculated but has status NEEDS_ATTENTION and no recipient.
 5. The practitioner-day routes are built and their route facts resolved.
 
@@ -75,7 +75,7 @@ once the profile is fixed.
 ## Session calculation
 
 `quantity = actual minutes ÷ 60` (4 dp, no invented rounding).
-`unit = rate card session hourly rate for the client's MMM on the service date`.
+`unit = rate card session hourly rate for the session's MMM zone on the service date`.
 `amount = quantity × unit`, half-up to the cent. The amount is priced from the
 printed quantity, so quantity × unit always reconciles on the face of the
 invoice. Example: 30 min at MM7 = 0.5000 × $290.99 = $145.50.
@@ -104,7 +104,33 @@ The whole day is held back, with a TRAVEL_DAY_DEFERRED warning, while any sessio
 
 `travel_billing_allocations` stores, per session: day totals, share, cap, claimable minutes, rates, amounts and every leg with its inclusion reason. The invoice's "How calculated" view reads this.
 
-## MMM classification (`billing/mmm-classification.js`, `billing/mmm-geometry.js`)
+## Session MMM zone (`billing/mmm-locality.js`, `billing/session-mmm-store.js`, migration 074)
+
+The NDIS price limit follows the MMM zone of **where the session is delivered**,
+so the zone comes from the session's own address, not the client's home:
+
+1. A zone set by hand for this session (`calendar_event_mmm`) wins. It is set either in the
+   Smart Booking panel (source BOOKING), stored only when it differs from what the address
+   says and dropped when the session's address changes, or by the owner in the calendar
+   billing box (source OWNER, `PUT /api/invoicing/events/:id/mmm`, reason required, audited).
+2. Otherwise the session address goes through the built-in WA table
+   `billing/data/mmm2023-wa-localities.json`. This is the Department of Health "SAL 2021 –
+   POA 2021 – MMM 2023" correspondence (data.gov.au), rebuilt with
+   `node scripts/build-mmm-locality-table.js mmm23_sal21_poa21.xlsx`. It needs no geocoding,
+   no network and no per-environment import.
+3. A telehealth session has no address, so it uses the client profile's zone (below).
+
+The lookup fails closed. A zone is used only when the address names a WA suburb lying
+wholly in one zone, or, with no suburb, a postcode whose suburbs all share one zone.
+Otherwise the session is queued:
+- SESSION_MMM_REVIEW: 44 WA suburbs straddle a boundary (e.g. Baldivis MM1/MM2), the postcode contradicts the suburb, or the postcode spans zones.
+- SESSION_MMM_UNRESOLVED: nothing in the address is recognisable.
+
+The panel's auto-fill calls `POST /api/mmm-zone/lookup` (sign-in only, reference data, nothing stored).
+
+## Client-profile MMM classification (`billing/mmm-classification.js`, `billing/mmm-geometry.js`)
+
+Used for telehealth sessions and trips only.
 
 ```
 service address ─► geocode (once) ─► point-in-polygon against the active
@@ -258,7 +284,7 @@ The logo is `backend/assets/opal-therapy-logo.png`, the same file other Opal PDF
 ## Configuration still required per environment
 
 1. Apply migration 071. Deploy order: code → migrate → restart.
-2. Import the MMM 2023 dataset (command above). Until then, clients need manual zones.
+2. Apply migration 074. Session zones need nothing else. The MMM 2023 boundary dataset (command above) is only needed for telehealth / trip client zones; until it is imported, those clients need manual zones.
 3. `GOOGLE_MAPS_API_KEY`, which is already used by the calendar. Without it, travel legs raise TRAVEL_ROUTE_FAILED until they are entered manually.
 4. In Billing settings, set the ABN, payment details, the next invoice number and the return-travel policy.
 5. SMTP (`EMAIL_*`) for "Email invoice". Otherwise use "Mark sent".

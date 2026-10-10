@@ -29,13 +29,27 @@ const Settings = require('./billing/billing-settings');
 const RC = require('./billing/rate-cards');
 const BP = require('./billing/billing-profiles');
 const MMM = require('./billing/mmm-classification');
+const SessionMmm = require('./billing/session-mmm-store');
 const RF = require('./billing/route-facts');
+const DR = require('./billing/day-route');
 const Issues = require('./billing/billing-issues');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
 const guard = [requireAuth, requirePermission('manage_billing')];
 router.use('/api/invoicing', ...guard);
+
+/**
+ * MMM zone for a session address — the Smart Booking panel's auto-fill.
+ * Any signed-in user may book, so this is requireAuth only: it reads the
+ * built-in public MMM 2023 table, touches no database row and returns no
+ * client data. POST so the address never sits in a URL or access log.
+ */
+router.post('/api/mmm-zone/lookup', requireAuth, (req, res) => {
+  const address = typeof (req.body || {}).address === 'string' ? req.body.address.slice(0, 500) : '';
+  const d = SessionMmm.describe({ address, telehealth: false });
+  res.json({ zone: d.effectiveZone, ...d.lookup });
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -239,26 +253,39 @@ router.post('/api/invoicing/events/links', safe(async (req, res) => {
   const ids = Array.isArray((req.body || {}).eventIds) ? req.body.eventIds.filter(id => UUID_RE.test(String(id))).slice(0, 500) : [];
   if (!ids.length) return res.json({ links: {} });
   const { rows } = await pool.query(
-    `SELECT e.id AS event_id, ceb.attendance,
+    `SELECT e.id AS event_id, ceb.attendance, e.location, e.manual_location, e.is_teams_meeting, e.event_type,
+            cem.mmm_zone AS mmm_set_zone, cem.source AS mmm_set_source, cem.reason AS mmm_set_reason,
             (SELECT json_agg(json_build_object('invoiceId', i.id, 'invoiceNumber', i.invoice_number, 'status', i.status,
                                                'component', l.component, 'lineStatus', l.line_status) ORDER BY i.created_at)
                FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
               WHERE l.calendar_event_id = e.id AND l.line_status IN ('ACTIVE','REMOVED')) AS invoices
        FROM events e JOIN users u ON u.id = e.user_id
        LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
+       LEFT JOIN calendar_event_mmm cem ON cem.event_id = e.id
       WHERE e.id = ANY($1::uuid[]) AND u.organisation_id = $2`, [ids, orgId(req)]);
   const links = {};
-  for (const r of rows) if (r.invoices || r.attendance) links[r.event_id] = { attendance: r.attendance, invoices: r.invoices || [] };
+  for (const r of rows) {
+    if (r.invoices || r.attendance) links[r.event_id] = { attendance: r.attendance, invoices: r.invoices || [] };
+  }
+  // The session's MMM zone is only described for a single event (the block-detail panel), not for badge batches.
+  if (ids.length === 1 && rows[0]) {
+    const r = rows[0];
+    links[r.event_id] = links[r.event_id] || { attendance: null, invoices: [] };
+    links[r.event_id].mmm = mmmFor(r);
+  }
   res.json({ links });
 }));
 
 router.get('/api/invoicing/events/:eventId', uuidParam('eventId'), safe(async (req, res) => {
   const { rows: [ev] } = await pool.query(
     `SELECT e.id, e.title, e.start_time, e.end_time, e.client_id, e.client_name, e.location, e.manual_location, e.status,
-            e.event_type, e.is_deleted, u.name AS practitioner_name, ceb.attendance, ceb.reason AS attendance_reason
+            e.event_type, e.is_deleted, e.is_teams_meeting, u.name AS practitioner_name, ceb.attendance, ceb.reason AS attendance_reason,
+            cem.mmm_zone AS mmm_set_zone, cem.source AS mmm_set_source, cem.reason AS mmm_set_reason
        FROM events e JOIN users u ON u.id = e.user_id LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
+       LEFT JOIN calendar_event_mmm cem ON cem.event_id = e.id
       WHERE e.id = $1 AND u.organisation_id = $2`, [req.params.eventId, orgId(req)]);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
+  ev.mmm = mmmFor(ev);
   const { rows: lines } = await pool.query(
     `SELECT l.id, l.component, l.line_status, l.amount, l.description, i.id AS invoice_id, i.invoice_number, i.status
        FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.calendar_event_id = $1 ORDER BY l.created_at`, [ev.id]);
@@ -289,6 +316,32 @@ router.put('/api/invoicing/events/:eventId/attendance', uuidParam('eventId'), sa
       entityId: ev.id, before: before || null, after: { attendance: attendance || null }, reason });
   });
   res.json({ ok: true });
+}));
+
+function mmmFor(r) {
+  return SessionMmm.describe({ setZone: r.mmm_set_zone, setSource: r.mmm_set_source, setReason: r.mmm_set_reason,
+    address: DR.eventAddress(r), telehealth: !!r.is_teams_meeting || r.event_type === 'teams_meeting' });
+}
+
+/** Owner sets (1–7, reason required) or clears (null) the MMM zone one session is billed at. */
+router.put('/api/invoicing/events/:eventId/mmm', uuidParam('eventId'), safe(async (req, res) => {
+  const body = req.body || {};
+  const zone = body.zone == null || body.zone === '' ? null : SessionMmm.validZone(body.zone);
+  if (body.zone != null && body.zone !== '' && zone == null) return res.status(400).json({ error: 'Zone must be MM1–MM7' });
+  const reason = String(body.reason || '').trim().slice(0, 1000);
+  if (zone != null && reason.length < 3) return res.status(400).json({ error: 'A reason is required to set a session\'s MMM zone' });
+  const { rows: [ev] } = await pool.query(
+    `SELECT e.id FROM events e JOIN users u ON u.id = e.user_id WHERE e.id = $1 AND u.organisation_id = $2`, [req.params.eventId, orgId(req)]);
+  if (!ev) return res.status(404).json({ error: 'Event not found' });
+  await Life.withTx(pool, async tx => {
+    await SessionMmm.setOwnerZone(tx, { orgId: orgId(req), eventId: ev.id, zone, reason: reason || null, userId: req.user.id });
+    // Drafts holding this session are recalculated on the next run; finalised ones are flagged like any source change.
+    await tx.query(`SELECT billing_flag_event_change_for($1, $2)`, [ev.id, zone == null ? 'MMM zone cleared' : `MMM zone set to MM${zone}`]);
+  });
+  const { rows: [r] } = await pool.query(
+    `SELECT e.location, e.manual_location, e.is_teams_meeting, e.event_type, cem.mmm_zone AS mmm_set_zone, cem.source AS mmm_set_source,
+            cem.reason AS mmm_set_reason FROM events e LEFT JOIN calendar_event_mmm cem ON cem.event_id = e.id WHERE e.id = $1`, [ev.id]);
+  res.json({ ok: true, mmm: mmmFor(r) });
 }));
 
 // ── Needs attention ───────────────────────────────────────────────────────

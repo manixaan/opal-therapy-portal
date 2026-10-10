@@ -30,6 +30,7 @@ const S = require('./session-billing');
 const RC = require('./rate-cards');
 const BP = require('./billing-profiles');
 const MMM = require('./mmm-classification');
+const Loc = require('./mmm-locality');
 const T = require('./travel-billing');
 const DR = require('./day-route');
 const RF = require('./route-facts');
@@ -69,11 +70,12 @@ async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, client
             to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date,
             COALESCE(tp.display_name, u.name) AS practitioner_name,
             u.work_location_schedule, u.default_work_location,
-            ceb.attendance
+            ceb.attendance, cem.mmm_zone AS mmm_set_zone, cem.source AS mmm_set_source
        FROM events e
        JOIN users u ON u.id = e.user_id
        LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
        LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
+       LEFT JOIN calendar_event_mmm cem ON cem.event_id = e.id
       WHERE ${where.join(' AND ')}
       ORDER BY e.user_id, e.start_time`, params);
   return rows;
@@ -110,14 +112,18 @@ async function prepare(q, orgId, opts) {
     }
   }
 
-  // 2. Profiles (stub on first sight), MMM classification (may geocode)
+  // 2. Profiles (stub on first sight). Only a telehealth session with no zone set
+  //    falls back to the client's own address, so only those profiles are classified (may geocode).
   const clientNames = new Map();
+  const profileZoneClients = new Set();
   for (const { ev, res } of evaluated) {
-    if (res.state !== 'SKIP' && ev.client_id && !clientNames.has(ev.client_id)) clientNames.set(ev.client_id, ev.client_name);
+    if (res.state === 'SKIP' || !ev.client_id) continue;
+    if (!clientNames.has(ev.client_id)) clientNames.set(ev.client_id, ev.client_name);
+    if (res.telehealth && ev.mmm_set_zone == null) profileZoneClients.add(ev.client_id);
   }
   await BP.ensureStubProfiles(q, orgId, [...clientNames].map(([clientId, clientName]) => ({ clientId, clientName })));
   const profiles = await BP.getProfilesByClient(q, orgId, [...clientNames.keys()]);
-  for (const [cid, p] of profiles) profiles.set(cid, await MMM.ensureClassified(q, p));
+  for (const cid of profileZoneClients) if (profiles.has(cid)) profiles.set(cid, await MMM.ensureClassified(q, profiles.get(cid)));
   const cards = await RC.loadRateCards(q, orgId);
 
   // 3. Client-level checks + pricing per event
@@ -127,12 +133,22 @@ async function prepare(q, orgId, opts) {
     const p = ev.client_id ? profiles.get(ev.client_id) : null;
     const entry = { ev, res, profile: p, blocked: res.state === 'ISSUE', recipientIssues: [] };
     if (p) {
-      const mmm = MMM.effectiveMmm(p);
+      // An event already blocked (no location, no client…) is not zoned — its own issue says why.
+      const zone = res.state === 'ISSUE' ? { mmm: null } : sessionZone(ev, res, p);
+      const mmm = zone.mmm;
       entry.mmm = mmm;
-      if (mmm == null) {
+      entry.mmmSnapshot = zone.snapshot || null;
+      if (res.state === 'ISSUE') {
         entry.blocked = true;
-        const type = !p.service_address ? 'CLIENT_ADDRESS_MISSING' : (p.mmm_zone && p.mmm_confidence === 'REVIEW' ? 'MMM_REVIEW' : 'MMM_UNRESOLVED');
-        issues.raise(type, { clientId: ev.client_id, message: issueMessage(type, ev, p), fixTarget: { kind: 'client', clientId: ev.client_id } });
+      } else if (mmm == null) {
+        entry.blocked = true;
+        if (zone.issue) {
+          issues.raise(zone.issue, { eventId: ev.id, clientId: ev.client_id, practitionerId: ev.user_id, serviceDate: ev.local_date,
+            message: sessionZoneMessage(zone, ev, p), fixTarget: { kind: 'event', eventId: ev.id, date: ev.local_date } });
+        } else {
+          const type = !p.service_address ? 'CLIENT_ADDRESS_MISSING' : (p.mmm_zone && p.mmm_confidence === 'REVIEW' ? 'MMM_REVIEW' : 'MMM_UNRESOLVED');
+          issues.raise(type, { clientId: ev.client_id, message: issueMessage(type, ev, p), fixTarget: { kind: 'client', clientId: ev.client_id } });
+        }
       } else {
         entry.rate = RC.resolveRule(cards, { serviceDate: ev.local_date, mmm, discipline: 'OT' });
         if (!entry.rate) {
@@ -218,6 +234,39 @@ async function prepare(q, orgId, opts) {
   }
 
   return { settings, tz, now, sessions, issues, summary, profiles, dayPlans };
+}
+
+/**
+ * The MMM zone a session is priced at — where it is delivered:
+ *   1. a zone set by hand for this session (Smart Booking or the owner), else
+ *   2. the WA MMM 2023 locality table on the session's address, else
+ *   3. telehealth only: the client's own zone from their billing profile.
+ * In person with no confident lookup → a SESSION_MMM_* issue; nothing is guessed.
+ */
+function sessionZone(ev, res, profile) {
+  if (ev.mmm_set_zone != null) {
+    const zone = Number(ev.mmm_set_zone);
+    return { mmm: zone, snapshot: { zone, source: ev.mmm_set_source === 'OWNER' ? 'set by owner' : 'set at booking' } };
+  }
+  if (!res.telehealth) {
+    const address = DR.eventAddress(ev);
+    const r = Loc.lookupAddress(address);
+    if (r.confident) {
+      return { mmm: r.zone, snapshot: { zone: r.zone, source: 'session address', locality: r.locality, postcode: r.postcode,
+        matchedBy: r.matchedBy, datasetVersion: r.datasetVersion } };
+    }
+    return { mmm: null, lookup: r, issue: r.zones.length ? 'SESSION_MMM_REVIEW' : 'SESSION_MMM_UNRESOLVED' };
+  }
+  const mmm = MMM.effectiveMmm(profile);
+  return { mmm, snapshot: mmm == null ? null : { ...MMM.mmmSnapshot(profile), source: 'client profile (telehealth)' } };
+}
+
+function sessionZoneMessage(zone, ev, p) {
+  const who = (p && p.participant_name) || ev.client_name || 'Client';
+  const r = zone.lookup;
+  const where = r.locality ? `${r.locality}${r.postcode ? ` ${r.postcode}` : ''}` : (r.postcode || DR.eventAddress(ev) || 'no address');
+  const zones = r.zones.length ? ` (could be ${r.zones.map(z => `MM${z}`).join(' or ')})` : '';
+  return `${who}'s session on ${S.displayDate(ev.local_date)} at ${where}: no MMM zone — ${Loc.reasonText(r.reason)}${zones}. Set the session's zone.`;
 }
 
 function issueMessage(type, ev, p, mmm) {
@@ -419,7 +468,7 @@ async function runInvoicing(opts) {
       const ev = s.ev;
       clientRecipient.set(ev.client_id, { profile: s.profile, payer: s.payer, recipientIssues: s.recipientIssues });
       const planned = [S.buildSessionLine({ serviceDate: ev.local_date, minutes: s.res.minutes, rate: s.rate, mmm: s.mmm,
-        sessionLabel: settings.sessionDescription, telehealth: s.res.telehealth, mmmSnapshot: MMM.mmmSnapshot(s.profile) })];
+        sessionLabel: settings.sessionDescription, telehealth: s.res.telehealth, mmmSnapshot: s.mmmSnapshot })];
       if (s.travel) {
         planned.push(...S.buildTravelLines({ serviceDate: ev.local_date, allocation: s.travel.allocation, rate: s.rate,
           practitionerName: ev.practitioner_name, legs: s.travel.legs }));
@@ -546,4 +595,4 @@ async function runInvoicing(opts) {
   }
 }
 
-module.exports = { runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, ymd, validRange };
+module.exports = { runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, sessionZone, ymd, validRange };

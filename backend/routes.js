@@ -2379,6 +2379,14 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
         [localDbId, String(req.body.splose.patientId), req.body.splose.patientName || null]).catch(() => {});
     }
 
+    // MMM zone picked in the Smart Booking panel — kept only when it is a real
+    // choice (differs from what the session address says). Billing only.
+    if (!dbEventId && req.body.mmmZone != null) {
+      await require('./billing/session-mmm-store').recordBookingZone(db.pool, {
+        eventId: localDbId, zone: req.body.mmmZone, address: location || '', userId: req.session.userId,
+      }).catch(e => console.warn('⚠️  Session MMM zone not stored (non-fatal):', e.message));
+    }
+
     // 2. Draft-and-publish (058): a client booking that names its Splose client
     //    is queued for "Sync Splose" — nothing is written to Splose here.
     let sploseQueued = null;
@@ -2574,6 +2582,9 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
 
     // Persist to local DB (sets is_manual_location_override = TRUE)
     await db.updateEventManualLocation(dbId, { address: location, lat: lat || null, lng: lng || null });
+    // A zone picked at booking was for the old address; billing re-reads the new one.
+    await require('./billing/session-mmm-store').clearBookingZone(db.pool, { eventId: dbId, userId: req.session.userId })
+      .catch(e => console.warn('⚠️  Session MMM zone not cleared (non-fatal):', e.message));
 
     const outlookId = ev.rows[0].outlook_id;
     if (!outlookId) {

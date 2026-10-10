@@ -16,6 +16,8 @@ const ISSUE_TYPES = Object.freeze({
   CLIENT_ADDRESS_MISSING:    { severity: 'BLOCKING', label: 'Client address missing' },
   MMM_UNRESOLVED:            { severity: 'BLOCKING', label: 'MMM cannot be resolved' },
   MMM_REVIEW:                { severity: 'BLOCKING', label: 'MMM needs confirmation' },
+  SESSION_MMM_UNRESOLVED:    { severity: 'BLOCKING', label: 'Session MMM zone unknown' },
+  SESSION_MMM_REVIEW:        { severity: 'BLOCKING', label: 'Session MMM zone needs confirmation' },
   EVENT_NO_CLIENT:           { severity: 'BLOCKING', label: 'Event has no client' },
   EVENT_NO_LOCATION:         { severity: 'BLOCKING', label: 'Event has no location' },
   EVENT_NO_SERVICE_TYPE:     { severity: 'BLOCKING', label: 'Event has no service type' },

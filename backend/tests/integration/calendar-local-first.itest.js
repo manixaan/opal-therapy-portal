@@ -131,4 +131,31 @@ describe('POST /api/outlook/events — local-first', () => {
       if (prev === undefined) delete process.env.ENABLE_SPLOSE_DRAFT_SYNC; else process.env.ENABLE_SPLOSE_DRAFT_SYNC = prev;
     }
   });
+
+  test('the Smart Booking MMM zone is kept only when it differs from the address, and an address change drops it', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await agentFor(app, 'therapist', org.id);
+    const mmmRow = async id => (await db.pool.query(`SELECT mmm_zone, source FROM calendar_event_mmm WHERE event_id = $1`, [id])).rows[0];
+
+    // Willetton is MM1: sending the zone the address already says stores nothing.
+    const same = await agent.post('/api/outlook/events').send({ ...booking, mmmZone: 1 });
+    expect(same.status).toBe(201);
+    expect(await mmmRow(same.body.dbId)).toBeUndefined();
+
+    // Baldivis straddles MM1/MM2: the clinician's choice is the session's zone.
+    const picked = await agent.post('/api/outlook/events').send({ ...booking, location: '1 Main St, Baldivis WA 6171', mmmZone: 2 });
+    expect(picked.status).toBe(201);
+    expect(await mmmRow(picked.body.dbId)).toEqual({ mmm_zone: 2, source: 'BOOKING' });
+
+    // A junk zone is ignored, never stored.
+    const junk = await agent.post('/api/outlook/events').send({ ...booking, location: '1 Main St, Baldivis WA 6171', mmmZone: 'MM9' });
+    expect(junk.status).toBe(201);
+    expect(await mmmRow(junk.body.dbId)).toBeUndefined();
+
+    // The address changes → the booking-time zone no longer applies.
+    const moved = await agent.patch(`/api/outlook/events/${picked.body.dbId}/location`).send({ location: '5 Broome St, Broome WA 6725' });
+    expect(moved.status).toBe(200);
+    expect(await mmmRow(picked.body.dbId)).toBeUndefined();
+  });
 });

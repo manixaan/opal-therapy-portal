@@ -809,5 +809,65 @@
       }).observe(cal, { attributes: true, attributeFilter: ['class'] });
     }
   }
+  /* ─────────── MMM zone — where the session happens (10 Oct 2026) ───────────
+     The NDIS price limit follows the Modified Monash zone of the session's
+     address. The server looks the address up in its built-in MMM 2023 table
+     (POST /api/mmm-zone/lookup — no client data, nothing saved) and the panel
+     shows the zone under the address; the clinician can change it. The value
+     goes with Create appointment and the server keeps it only when it differs
+     from what the address says. Watched by polling the address value, because
+     the selector, Places and the draft restore all set it programmatically. */
+  var MMM = { addr: null, seq: 0, picked: false, lookup: null };
+  function mmmVisible() {
+    var input = $('bsp-location'), unsure = $('bsp-location-unsure');
+    return !!(input && panelOpen() && selectedPatient() && input.value.trim() && !(unsure && unsure.checked));
+  }
+  function renderMmm() {
+    var box = $('bsp-mmm'), sel = $('bsp-mmm-zone'), note = $('bsp-mmm-note');
+    if (!box || !sel || !note) return;
+    var lk = MMM.lookup;
+    if (!mmmVisible() || !lk) { box.hidden = true; return; }
+    var cur = MMM.picked ? sel.value : (lk.confident ? String(lk.zone) : '');
+    sel.innerHTML = (lk.confident ? '' : '<option value="">Choose zone…</option>') +
+      [1, 2, 3, 4, 5, 6, 7].map(function (z) { return '<option value="' + z + '"' + (String(z) === cur ? ' selected' : '') + '>MM' + z + '</option>'; }).join('');
+    var where = lk.locality ? lk.locality + (lk.postcode ? ' ' + lk.postcode : '') : (lk.postcode || '');
+    var text, warn = false;
+    if (MMM.picked && cur && (!lk.confident || cur !== String(lk.zone))) {
+      text = 'Changed by you' + (lk.confident ? ' — the address says MM' + lk.zone : '') + '.';
+    } else if (lk.confident) {
+      text = 'From ' + (where || 'the address') + ' · NDIS MMM 2023';
+    } else {
+      warn = true;
+      text = (lk.reason ? lk.reason.charAt(0).toUpperCase() + lk.reason.slice(1) : 'Address not recognised') +
+        (lk.zones && lk.zones.length ? ' (MM' + lk.zones.join(' or MM') + ')' : '') + '. Choose a zone, or invoicing will ask for one.';
+    }
+    note.textContent = text;
+    note.classList.toggle('warn', warn);
+    box.hidden = false;
+  }
+  function checkMmm() {
+    var input = $('bsp-location');
+    var addr = mmmVisible() ? input.value.trim() : '';
+    if (addr === MMM.addr) return;
+    MMM.addr = addr; MMM.picked = false; MMM.lookup = null;
+    if (!addr) { renderMmm(); return; }
+    var seq = ++MMM.seq;
+    postJson('/api/mmm-zone/lookup', { address: addr }).then(function (r) {
+      if (seq !== MMM.seq) return;
+      MMM.lookup = r; renderMmm();
+    }).catch(function () { if (seq === MMM.seq) { MMM.lookup = { confident: false, reason: 'the zone lookup is unavailable', zones: [] }; renderMmm(); } });
+  }
+  /** The zone to send with Create appointment, or null (nothing chosen). */
+  BR.mmmZoneForSave = function (address) {
+    var sel = $('bsp-mmm-zone');
+    if (!sel || !MMM.lookup || String(address || '').trim() !== MMM.addr) return null;
+    var z = parseInt(sel.value, 10);
+    return z >= 1 && z <= 7 ? z : null;
+  };
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'bsp-mmm-zone') { MMM.picked = true; renderMmm(); }
+  });
+  setInterval(checkMmm, 600);
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })(window);

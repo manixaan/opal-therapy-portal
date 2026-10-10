@@ -105,7 +105,7 @@ async function event(user, { clientId, clientName, date, start = '09:00', minute
   const { rows: [e] } = await db.pool.query(
     `INSERT INTO events (user_id, title, start_time, end_time, location, event_type, status, client_id, client_name, organisation_id, is_teams_meeting)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-    [user.id, `${clientName || 'Session'}`, startIso, endIso, location ?? `${clientName} home`, extra.eventType || 'therapy',
+    [user.id, `${clientName || 'Session'}`, startIso, endIso, location ?? `${clientName} home, Perth WA 6000`, extra.eventType || 'therapy',
       extra.status || 'confirmed', clientId, clientName, user.organisation_id, !!extra.teams]);
   return e.id;
 }
@@ -188,16 +188,16 @@ describe('normal invoicing', () => {
     const d = day(0);
     const pr = await practitioner(org.id, 'Ann Mary Mathew', 'Base Rd, Canning Vale', [d]);
     for (const [id, name] of [['c1', 'Trevor Sampi'], ['c2', 'Rosemary Carey'], ['c3', 'Dorothy Cox']]) await profile(agent, id, planManaged(name, 1));
-    route('Base Rd, Canning Vale', 'A home', 30, 20);
-    route('A home', 'B home', 20, 12);
-    route('B home', 'C home', 24, 9.2);
-    route('C home', 'Base Rd, Canning Vale', 40, 30);
+    route('Base Rd, Canning Vale', 'A home, Perth WA 6000', 30, 20);
+    route('A home, Perth WA 6000', 'B home, Perth WA 6000', 20, 12);
+    route('B home, Perth WA 6000', 'C home, Perth WA 6000', 24, 9.2);
+    route('C home, Perth WA 6000', 'Base Rd, Canning Vale', 40, 30);
     // Base is 30 min from each client: a 60-minute gap is too short to go home (30 + 30 + 30), so the day chains.
-    route('A home', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'B home', 30, 22);
-    route('B home', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'C home', 30, 22);
-    await event(pr, { clientId: 'c1', clientName: 'Trevor Sampi', date: d, start: '09:00', location: 'A home' });
-    await event(pr, { clientId: 'c2', clientName: 'Rosemary Carey', date: d, start: '11:00', location: 'B home' });
-    await event(pr, { clientId: 'c3', clientName: 'Dorothy Cox', date: d, start: '13:00', location: 'C home' });
+    route('A home, Perth WA 6000', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'B home, Perth WA 6000', 30, 22);
+    route('B home, Perth WA 6000', 'Base Rd, Canning Vale', 30, 22); route('Base Rd, Canning Vale', 'C home, Perth WA 6000', 30, 22);
+    await event(pr, { clientId: 'c1', clientName: 'Trevor Sampi', date: d, start: '09:00', location: 'A home, Perth WA 6000' });
+    await event(pr, { clientId: 'c2', clientName: 'Rosemary Carey', date: d, start: '11:00', location: 'B home, Perth WA 6000' });
+    await event(pr, { clientId: 'c3', clientName: 'Dorothy Cox', date: d, start: '13:00', location: 'C home, Perth WA 6000' });
 
     const s = await run(agent, day(0), day(4));
     expect(s).toMatchObject({ invoicesCreated: 3, sessionsIncluded: 3, travelAllocations: 3, itemsNeedAttention: 0 });
@@ -227,13 +227,13 @@ describe('normal invoicing', () => {
     const { agent } = await login(app, 'owner', org.id);
     await agent.put('/api/invoicing/settings').send({ returnTravelPayable: true });
     const d = day(1);
-    const pr = await practitioner(org.id, 'P', 'Base', [d]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [d]);
     await profile(agent, 'm1', planManaged('Morning Client', 1));
     await profile(agent, 'a1', planManaged('Afternoon Client', 1));
-    route('Base', 'M home', 15, 10); route('M home', 'Base', 15, 10);
-    route('Base', 'A home', 20, 14); route('A home', 'Base', 20, 14); route('M home', 'A home', 25, 18);
-    await event(pr, { clientId: 'm1', clientName: 'Morning Client', date: d, start: '09:00', location: 'M home' });
-    await event(pr, { clientId: 'a1', clientName: 'Afternoon Client', date: d, start: '14:00', location: 'A home' }); // 4 h gap
+    route('Base, Perth WA 6000', 'M home, Perth WA 6000', 15, 10); route('M home, Perth WA 6000', 'Base, Perth WA 6000', 15, 10);
+    route('Base, Perth WA 6000', 'A home, Perth WA 6000', 20, 14); route('A home, Perth WA 6000', 'Base, Perth WA 6000', 20, 14); route('M home, Perth WA 6000', 'A home, Perth WA 6000', 25, 18);
+    await event(pr, { clientId: 'm1', clientName: 'Morning Client', date: d, start: '09:00', location: 'M home, Perth WA 6000' });
+    await event(pr, { clientId: 'a1', clientName: 'Afternoon Client', date: d, start: '14:00', location: 'A home, Perth WA 6000' }); // 4 h gap
     await run(agent, d, d);
     const kinds = [];
     for (const inv of await invoices(agent)) {
@@ -249,9 +249,9 @@ describe('normal invoicing', () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'Ann Mary', 'Base', [day(0), day(2), day(4)]);
+    const pr = await practitioner(org.id, 'Ann Mary', 'Base, Perth WA 6000', [day(0), day(2), day(4)]);
     await profile(agent, 'cA', planManaged('Client A', 1));
-    for (const n of [0, 2, 4]) await event(pr, { clientId: 'cA', clientName: 'Client A', date: day(n), location: 'A home' });
+    for (const n of [0, 2, 4]) await event(pr, { clientId: 'cA', clientName: 'Client A', date: day(n), location: 'A home, Perth WA 6000' });
 
     const first = await run(agent, day(0), day(4));
     expect(first).toMatchObject({ invoicesCreated: 1, sessionsIncluded: 3 });
@@ -292,10 +292,10 @@ describe('normal invoicing', () => {
     await profile(agent, 'z4', planManaged('Zone Four', 4));
     await profile(agent, 'z6', planManaged('Zone Six', 6));
     await profile(agent, 'z7', planManaged('Zone Seven', 7));
-    route('Base4', 'z4 home', 75, 90); route('Base6', 'z6 home', 150, 180); route('Base7', 'z7 home', 200, 240);
-    await event(pr4, { clientId: 'z4', clientName: 'Zone Four', date: day(1), location: 'z4 home' });
-    await event(pr6, { clientId: 'z6', clientName: 'Zone Six', date: day(1), location: 'z6 home' });
-    await event(pr7, { clientId: 'z7', clientName: 'Zone Seven', date: day(1), location: 'z7 home' });
+    route('Base4', 'z4 home, Collie WA 6225', 75, 90); route('Base6', 'z6 home, Ajana WA 6532', 150, 180); route('Base7', 'z7 home, Babbage Island WA 6701', 200, 240);
+    await event(pr4, { clientId: 'z4', clientName: 'Zone Four', date: day(1), location: 'z4 home, Collie WA 6225' });
+    await event(pr6, { clientId: 'z6', clientName: 'Zone Six', date: day(1), location: 'z6 home, Ajana WA 6532' });
+    await event(pr7, { clientId: 'z7', clientName: 'Zone Seven', date: day(1), location: 'z7 home, Babbage Island WA 6701' });
     await run(agent, day(0), day(4));
     const got = {};
     for (const inv of await invoices(agent)) {
@@ -316,10 +316,10 @@ describe('normal invoicing', () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
     await profile(agent, 'c', planManaged('Client', 1));
-    route('Base', 'c home', 10, 5); route('c home', 'Base', 12, 6);
-    await event(pr, { clientId: 'c', clientName: 'Client', date: day(0), location: 'c home' });
+    route('Base, Perth WA 6000', 'c home, Perth WA 6000', 10, 5); route('c home, Perth WA 6000', 'Base, Perth WA 6000', 12, 6);
+    await event(pr, { clientId: 'c', clientName: 'Client', date: day(0), location: 'c home, Perth WA 6000' });
     await run(agent, day(0), day(0));
     let [inv] = await invoices(agent);
     let lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
@@ -336,7 +336,7 @@ describe('normal invoicing', () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
     await profile(agent, 'np', { participantName: 'No Payer', ndisNumber: '430000000', managementType: 'PLAN_MANAGED', serviceAddress: 'x, Zone MM1' });
     await event(pr, { clientId: 'np', clientName: 'No Payer', date: day(0) });
     const s = await run(agent, day(0), day(0));
@@ -365,14 +365,14 @@ describe('normal invoicing', () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0), day(1)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0), day(1)]);
     await profile(agent, 'nomm', { ...planManaged('Nowhere', 1), serviceAddress: 'an address the geocoder cannot place' });
     await profile(agent, 'ok', planManaged('Fine', 1));
-    await event(pr, { clientId: 'nomm', clientName: 'Nowhere', date: day(0) });
-    await event(pr, { clientId: 'ok', clientName: 'Fine', date: day(1), location: 'NOWHERE street' });
+    await event(pr, { clientId: 'nomm', clientName: 'Nowhere', date: day(0), location: 'somewhere unrecognisable' });
+    await event(pr, { clientId: 'ok', clientName: 'Fine', date: day(1), location: 'NOWHERE street, Perth WA 6000' });
     await run(agent, day(0), day(1));
     const types = (await agent.get('/api/invoicing/issues')).body.issues.map(i => i.issue_type);
-    expect(types).toEqual(expect.arrayContaining(['MMM_UNRESOLVED', 'TRAVEL_ROUTE_FAILED']));
+    expect(types).toEqual(expect.arrayContaining(['SESSION_MMM_UNRESOLVED', 'TRAVEL_ROUTE_FAILED']));
     const list = await invoices(agent);
     expect(list.map(i => i.client_id)).toEqual(['ok']);
     const d = await detail(agent, list[0].id);
@@ -384,10 +384,10 @@ describe('normal invoicing', () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0), day(3)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0), day(3)]);
     await profile(agent, 'k', planManaged('Kay', 1));
-    await event(pr, { clientId: 'k', clientName: 'Kay', date: day(0), location: 'Base' });
-    await event(pr, { clientId: 'k', clientName: 'Kay', date: day(3), location: 'Base' });
+    await event(pr, { clientId: 'k', clientName: 'Kay', date: day(0), location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 'k', clientName: 'Kay', date: day(3), location: 'Base, Perth WA 6000' });
     const cards = (await agent.get('/api/invoicing/rate-cards')).body.rateCards;
     const A = cards[0];
     const B = { ...A, name: 'Price rise', effectiveFrom: day(2), rules: A.rules.map(r => ({ ...r, sessionHourlyRate: r.mmmMin === 1 ? '200.00' : r.sessionHourlyRate })) };
@@ -412,11 +412,11 @@ describe('normal invoicing', () => {
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
     await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0), day(1)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0), day(1)]);
     await profile(agent, 'd', planManaged('Draft Client', 1));
     await profile(agent, 'f', planManaged('Final Client', 1));
-    const eDraft = await event(pr, { clientId: 'd', clientName: 'Draft Client', date: day(0), location: 'Base', minutes: 60 });
-    const eFinal = await event(pr, { clientId: 'f', clientName: 'Final Client', date: day(1), location: 'Base', minutes: 60 });
+    const eDraft = await event(pr, { clientId: 'd', clientName: 'Draft Client', date: day(0), location: 'Base, Perth WA 6000', minutes: 60 });
+    const eFinal = await event(pr, { clientId: 'f', clientName: 'Final Client', date: day(1), location: 'Base, Perth WA 6000', minutes: 60 });
     await run(agent, day(0), day(1));
     const list = await invoices(agent);
     const draft = list.find(i => i.client_id === 'd');
@@ -448,9 +448,9 @@ describe('lifecycle: edit, PDF, finalise, pay, void & reissue, calendar link', (
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'Ann Mary', 'Base', [day(0)]);
+    const pr = await practitioner(org.id, 'Ann Mary', 'Base, Perth WA 6000', [day(0)]);
     await profile(agent, 't', planManaged('Trevor Sampi', 1, '24 Seven Plan Management'));
-    const ev = await event(pr, { clientId: 't', clientName: 'Trevor Sampi', date: day(0), location: 'Base', minutes: 30 });
+    const ev = await event(pr, { clientId: 't', clientName: 'Trevor Sampi', date: day(0), location: 'Base, Perth WA 6000', minutes: 30 });
     await run(agent, day(0), day(0));
     const [inv] = await invoices(agent);
     let d = await detail(agent, inv.id);
@@ -507,9 +507,9 @@ describe('lifecycle: edit, PDF, finalise, pay, void & reissue, calendar link', (
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
     await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
     await profile(agent, 'r', planManaged('Reissue Client', 1));
-    await event(pr, { clientId: 'r', clientName: 'Reissue Client', date: day(0), location: 'Base' });
+    await event(pr, { clientId: 'r', clientName: 'Reissue Client', date: day(0), location: 'Base, Perth WA 6000' });
     await run(agent, day(0), day(0));
     const [inv] = await invoices(agent);
     await agent.post(`/api/invoicing/invoices/${inv.id}/finalise`);
@@ -528,10 +528,10 @@ describe('lifecycle: edit, PDF, finalise, pay, void & reissue, calendar link', (
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
-    const pr = await practitioner(org.id, 'P', 'Base', [day(0), day(1)]);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0), day(1)]);
     await profile(agent, 'm', planManaged('Marked', 1));
-    const e1 = await event(pr, { clientId: 'm', clientName: 'Marked', date: day(0), location: 'Base' });
-    await event(pr, { clientId: 'm', clientName: 'Marked', date: day(1), location: 'Base' });
+    const e1 = await event(pr, { clientId: 'm', clientName: 'Marked', date: day(0), location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 'm', clientName: 'Marked', date: day(1), location: 'Base, Perth WA 6000' });
     await run(agent, day(0), day(1));
     expect((await agent.put(`/api/invoicing/events/${e1}/attendance`).send({ attendance: 'DID_NOT_ATTEND', reason: 'No-show' })).status).toBe(200);
     const [inv] = await invoices(agent);
@@ -553,10 +553,10 @@ describe('J — rural trip', () => {
     for (let i = 0; i < 15; i++) {
       const id = `k${String(i).padStart(2, '0')}`;
       await profile(agent, id, planManaged(`Kimberley Client ${i}`, 7));
-      await event(pr, { clientId: id, clientName: `Kimberley Client ${i}`, date: day(i % 10), start: `${String(8 + (i % 3) * 2).padStart(2, '0')}:00`, location: `${id} community` });
+      await event(pr, { clientId: id, clientName: `Kimberley Client ${i}`, date: day(i % 10), start: `${String(8 + (i % 3) * 2).padStart(2, '0')}:00`, location: `${id} community, Kununurra WA 6743` });
     }
     // Client 0 is seen twice — still one invoice and one share.
-    await event(pr, { clientId: 'k00', clientName: 'Kimberley Client 0', date: day(11), location: 'k00 community' });
+    await event(pr, { clientId: 'k00', clientName: 'Kimberley Client 0', date: day(11), location: 'k00 community, Kununurra WA 6743' });
 
     const t = await agent.post('/api/invoicing/trips').send({ name: 'East Kimberley – October 2026', destination: 'Kununurra', startDate: start, endDate: end, practitionerIds: [pr.id] });
     expect(t.status).toBe(201);
@@ -631,5 +631,110 @@ describe('client billing profile + MMM', () => {
     expect(audit.map(a => a.action)).toContain('billing_profile.mmm_override');
     // The audit trail is append-only at the database level.
     await expect(db.pool.query(`UPDATE billing_audit_events SET action = 'x'`)).rejects.toThrow(/append-only/);
+  });
+});
+
+describe('session MMM zone — where the session is delivered (migration 074)', () => {
+  test('the session address sets the zone, not the client home: a Perth client seen in Kununurra bills MM7', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'kx', planManaged('Kim Away', 1)); // home is MM1
+    await event(pr, { clientId: 'kx', clientName: 'Kim Away', date: day(0), location: 'Community Hall, Kununurra WA 6743' });
+    const summary = await run(agent, day(0), day(0));
+    expect(summary.sessionsIncluded).toBe(1);
+    const [inv] = await invoices(agent);
+    const [sess] = byComp((await detail(agent, inv.id)).lines, 'SESSION');
+    expect(sess).toMatchObject({ unit_price: '290.99', mmm_zone: 7 });
+    expect(sess.calculation.mmmSource).toMatchObject({ zone: 7, source: 'session address', locality: 'Kununurra', postcode: '6743', datasetVersion: 'MMM2023' });
+  });
+
+  test('a suburb straddling a zone boundary is queued, then billed at the zone the owner sets (reason required, audited)', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'bd', planManaged('Bal Divis', 1));
+    const ev = await event(pr, { clientId: 'bd', clientName: 'Bal Divis', date: day(0), location: '1 Main St, Baldivis WA 6171' });
+    const first = await run(agent, day(0), day(0));
+    expect(first.sessionsIncluded).toBe(0);
+    const issue = (await agent.get('/api/invoicing/issues')).body.issues.find(i => i.issue_type === 'SESSION_MMM_REVIEW');
+    expect(issue).toBeTruthy();
+    expect(issue.message).toMatch(/Baldivis 6171.*MM1 or MM2/);
+    expect(await invoices(agent)).toHaveLength(0);
+
+    // The calendar box describes it: no automatic zone, two candidates.
+    const links = (await agent.post('/api/invoicing/events/links').send({ eventIds: [ev] })).body.links[ev];
+    expect(links.mmm).toMatchObject({ setZone: null, effectiveZone: null, lookup: { confident: false, zones: [1, 2], suggestedZone: 1 } });
+
+    expect((await agent.put(`/api/invoicing/events/${ev}/mmm`).send({ zone: 1 })).status).toBe(400);
+    expect((await agent.put(`/api/invoicing/events/${ev}/mmm`).send({ zone: 9, reason: 'nope' })).status).toBe(400);
+    const set = await agent.put(`/api/invoicing/events/${ev}/mmm`).send({ zone: 1, reason: 'Session at the MM1 end of Baldivis' });
+    expect(set.status).toBe(200);
+    expect(set.body.mmm).toMatchObject({ setZone: 1, setSource: 'OWNER', effectiveZone: 1 });
+
+    const second = await run(agent, day(0), day(0));
+    expect(second.sessionsIncluded).toBe(1);
+    const [inv] = await invoices(agent);
+    const [sess] = byComp((await detail(agent, inv.id)).lines, 'SESSION');
+    expect(sess).toMatchObject({ mmm_zone: 1, unit_price: '193.99' });
+    expect(sess.calculation.mmmSource).toMatchObject({ zone: 1, source: 'set by owner' });
+    const open = (await agent.get('/api/invoicing/issues')).body.issues.filter(i => i.issue_type === 'SESSION_MMM_REVIEW');
+    expect(open).toHaveLength(0);
+    const audit = (await agent.get(`/api/invoicing/audit?entityType=calendar_event&entityId=${ev}`)).body.events;
+    expect(audit.map(a => a.action)).toContain('event.mmm_set');
+
+    // Clearing goes back to the lookup (and so back to the queue).
+    await agent.put(`/api/invoicing/events/${ev}/mmm`).send({ zone: null });
+    expect((await db.pool.query(`SELECT 1 FROM calendar_event_mmm WHERE event_id = $1`, [ev])).rows).toHaveLength(0);
+  });
+
+  test('telehealth has no session address: it uses the client billing-profile zone', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'th', planManaged('Tele Health', 6));
+    await event(pr, { clientId: 'th', clientName: 'Tele Health', date: day(0), location: 'Microsoft Teams Meeting', extra: { teams: true } });
+    expect((await run(agent, day(0), day(0))).sessionsIncluded).toBe(1);
+    const [inv] = await invoices(agent);
+    const [sess] = byComp((await detail(agent, inv.id)).lines, 'SESSION');
+    expect(sess).toMatchObject({ mmm_zone: 6, unit_price: '271.59' });
+    expect(sess.calculation.mmmSource.source).toBe('client profile (telehealth)');
+  });
+
+  test('setting a session zone needs manage_billing; the address lookup needs only a sign-in', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { user: owner } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    const ev = await event(pr, { clientId: 'g', clientName: 'Guard', date: day(0), location: 'Perth WA 6000' });
+    const { agent: therapist } = await login(app, 'therapist', org.id);
+    expect((await therapist.put(`/api/invoicing/events/${ev}/mmm`).send({ zone: 7, reason: 'want more' })).status).toBe(403);
+    expect((await request(app).post('/api/mmm-zone/lookup').send({ address: 'Broome WA 6725' })).status).toBe(401);
+    const lk = await therapist.post('/api/mmm-zone/lookup').send({ address: '2 Short St, Broome WA 6725' });
+    expect(lk.status).toBe(200);
+    expect(lk.body).toMatchObject({ zone: 6, confident: true, locality: 'Broome', postcode: '6725' });
+    expect(owner.id).toBeTruthy();
+  });
+
+  test('a zone picked at booking is kept only when it differs from the address, and leaves with an address change', async () => {
+    const SessionMmm = require('../../billing/session-mmm-store');
+    const org = await seedOrganisation();
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    const ev = await event(pr, { clientId: 'b', clientName: 'Booked', date: day(0), location: '13 Lecania St, Seville Grove WA 6112' });
+    expect(await SessionMmm.recordBookingZone(db.pool, { eventId: ev, zone: 1, address: '13 Lecania St, Seville Grove WA 6112', userId: pr.id })).toBeNull();
+    expect((await db.pool.query(`SELECT 1 FROM calendar_event_mmm WHERE event_id = $1`, [ev])).rows).toHaveLength(0);
+    expect(await SessionMmm.recordBookingZone(db.pool, { eventId: ev, zone: 2, address: '13 Lecania St, Seville Grove WA 6112', userId: pr.id })).toBe(2);
+    const { rows: [row] } = await db.pool.query(`SELECT mmm_zone, source, reason FROM calendar_event_mmm WHERE event_id = $1`, [ev]);
+    expect(row).toMatchObject({ mmm_zone: 2, source: 'BOOKING', reason: 'Changed at booking from MM1' });
+    expect(await SessionMmm.clearBookingZone(db.pool, { eventId: ev, userId: pr.id })).toBe(true);
+    // An owner's zone is not a booking choice: an address change leaves it alone.
+    await db.pool.query(`INSERT INTO calendar_event_mmm (event_id, organisation_id, mmm_zone, source, reason) VALUES ($1,$2,3,'OWNER','r')`, [ev, org.id]);
+    expect(await SessionMmm.clearBookingZone(db.pool, { eventId: ev, userId: pr.id })).toBe(false);
+    expect(await SessionMmm.recordBookingZone(db.pool, { eventId: ev, zone: 5, address: 'x', userId: pr.id })).toBeNull();
+    const { rows: [kept] } = await db.pool.query(`SELECT mmm_zone, source FROM calendar_event_mmm WHERE event_id = $1`, [ev]);
+    expect(kept).toMatchObject({ mmm_zone: 3, source: 'OWNER' }); // a booking never overwrites the owner
   });
 });

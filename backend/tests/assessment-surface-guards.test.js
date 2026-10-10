@@ -719,7 +719,8 @@ describe('changed assets are cache-busted', () => {
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
-      ['booking-route.js', 6], ['booking-route.css', 1],
+      // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
+      ['booking-route.js', 7], ['booking-route.css', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -743,7 +744,8 @@ describe('changed assets are cache-busted', () => {
       // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
       ['finance.js', 1], ['finance.css', 1],
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
-      ['invoicing.js', 3], ['invoicing.css', 2],
+      // 4 (js): the session's MMM zone selector in the calendar billing box.
+      ['invoicing.js', 4], ['invoicing.css', 2],
       ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the

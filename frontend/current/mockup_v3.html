@@ -102,7 +102,7 @@
 <link rel="stylesheet" href="/onboarding-journey.css?v=42" />
 <link rel="stylesheet" href="/employees.css?v=1" />
 <link rel="stylesheet" href="/people.css?v=2" />
-<link rel="stylesheet" href="/booking-route.css?v=1" />
+<link rel="stylesheet" href="/booking-route.css?v=2" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=3" />
 <script src="/resourcehub.js?v=r53" defer></script>
@@ -116,7 +116,7 @@
 <script src="/docpreview.js?v=6" defer></script>
 <script src="/opa.js?v=3" defer></script>
 <script src="/finance.js?v=1" defer></script>
-<script src="/invoicing.js?v=3" defer></script>
+<script src="/invoicing.js?v=4" defer></script>
 <script src="/induction-assistant.js?v=3" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=3" defer></script>
@@ -163,7 +163,7 @@
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=6" defer></script>
+<script src="/booking-route.js?v=7" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -4791,6 +4791,13 @@ window.opIcon = function (name, size) {
             <div class="bsp-loc-add" id="bsp-loc-add" hidden></div>
             <div class="bsp-loc-meta" id="bsp-loc-meta" hidden></div>
             <label class="bsp-loc-unsure"><input type="checkbox" id="bsp-location-unsure"> Unsure — I'll set it on the calendar later</label>
+            <!-- NDIS MMM zone of where the session happens — filled from the address
+                 (built-in MMM 2023 table), changeable. Billing only (booking-route.js). -->
+            <div class="bsp-mmm" id="bsp-mmm" hidden>
+              <label class="bsp-field-label" for="bsp-mmm-zone">MMM zone</label>
+              <select id="bsp-mmm-zone" aria-describedby="bsp-mmm-note"></select>
+              <span class="bsp-mmm-note" id="bsp-mmm-note"></span>
+            </div>
             <!-- Route-aware travel from the previous stop (travel.js runBspRoutePreview) -->
             <div class="bsp-route-status" id="bsp-route-status" hidden></div>
           </div>
@@ -13074,6 +13081,8 @@ async function confirmBooking() {
     const _outlookLocation = _unsure ? '' : _typedLoc;
     const _locEl = document.getElementById('bsp-location');
     const _locMeta = (_locEl && _outlookLocation) ? { placeId: _locEl.dataset.placeId || '', locId: _locEl.dataset.locId || '' } : { placeId: '', locId: '' };
+    // NDIS MMM zone shown under the address (booking-route.js); the server keeps it only if it differs from the address.
+    const _mmmZone = (isClientSession && _outlookLocation && window.BookingRoute && BookingRoute.mmmZoneForSave) ? BookingRoute.mmmZoneForSave(_outlookLocation) : null;
     let outlookId   = null;
     let newDbId     = null; // the saved row, so the optimistic tile is editable at once
     let outlookNote = '';
@@ -13092,6 +13101,7 @@ async function confirmBooking() {
           // Booking type + client: the server enforces the client rule and stores both.
           ...(BOOKING_LEAVES[BOOKING_STATE.serviceType] ? { booking: { kind: BOOKING_STATE.serviceType, clientId: patient?.id != null ? String(patient.id) : null, clientName: _patName || null } } : {}),
           ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
+          ...(_mmmZone ? { mmmZone: _mmmZone } : {}),
           // Draft-and-publish (058): a client session names its Splose client
           // so the backend can queue the appointment for "Sync Splose".
           ...((isClientSession && patient?.id) ? { splose: {

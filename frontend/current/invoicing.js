@@ -753,9 +753,31 @@
         : '<span class="inv-dim">Not invoiced yet</span>') +
         '<div class="row2"><label class="inv-dim" for="inv-att-sel">Bill this session</label><select id="inv-att-sel" data-event="' + esc(s.dbId) + '" title="' + esc(autoHelp()) + '">' +
         opt('', autoLabel(), l.attendance) + opt('COMPLETED', 'Completed — bill it', l.attendance) + opt('DID_NOT_ATTEND', 'Did not attend', l.attendance) + opt('CANCELLED', 'Cancelled', l.attendance) + opt('NOT_BILLABLE', 'Not billable', l.attendance) + '</select></div>' +
-        '<div class="inv-dim inv-att-help">' + esc(autoHelp()) + '</div>';
+        '<div class="inv-dim inv-att-help">' + esc(autoHelp()) + '</div>' + mmmRow(s.dbId, l.mmm);
     }).catch(function () { box.remove(); });
   };
+
+  /* The MMM zone this session is billed at: where it is delivered (its address
+     through the built-in MMM 2023 table), unless a zone was set by hand. */
+  function mmmAutoLabel(m) {
+    if (m.telehealth) return 'Automatic — client\'s zone (telehealth)';
+    var lk = m.lookup || {};
+    if (lk.confident) return 'Automatic — MM' + lk.zone + (lk.locality ? ' (' + lk.locality + ')' : lk.postcode ? ' (' + lk.postcode + ')' : '');
+    return 'Automatic — no zone, set one';
+  }
+  function mmmRow(eventId, m) {
+    if (!m) return '';
+    var sel = m.setZone != null ? String(m.setZone) : '';
+    var lk = m.lookup || {};
+    var help = m.setZone != null
+      ? (m.setSource === 'BOOKING' ? 'Set at booking' : 'Set by owner') + (m.setReason ? ' — ' + m.setReason : '') + '.'
+      : (m.telehealth ? 'Telehealth uses the client\'s billing-profile zone.'
+        : lk.confident ? 'From the session address.'
+        : 'Not billed until a zone is set: ' + (lk.reason || 'address not recognised') + (lk.zones && lk.zones.length ? ' (MM' + lk.zones.join(' or MM') + ')' : '') + '.');
+    return '<div class="row2"><label class="inv-dim" for="inv-mmm-sel">MMM zone</label><select id="inv-mmm-sel" data-event="' + esc(eventId) + '">' +
+      opt('', mmmAutoLabel(m), sel) + [1, 2, 3, 4, 5, 6, 7].map(function (z) { return opt(String(z), 'MM' + z, sel); }).join('') + '</select></div>' +
+      '<div class="inv-dim inv-att-help" id="inv-mmm-help">' + esc(help) + '</div>';
+  }
 
   /* The default billing mark follows Invoicing › Settings › Completion rule —
      say what that means for this session instead of naming the setting. */
@@ -1090,6 +1112,20 @@
     if (t.id === 'inv-att-sel') {
       put('/events/' + t.dataset.event + '/attendance', { attendance: t.value || null, reason: 'Set from the calendar' })
         .then(function () { toast('Billing mark saved', 'Linked drafts are flagged for regeneration'); })
+        .catch(function (err) { toast(err.message); });
+      return;
+    }
+    if (t.id === 'inv-mmm-sel') {
+      put('/events/' + t.dataset.event + '/mmm', { zone: t.value || null, reason: 'Set from the calendar' })
+        .then(function (r) {
+          toast('MMM zone saved', 'Run invoicing again to reprice this session');
+          var row = t.closest('.row2');
+          if (row && r.mmm) {
+            var help = document.getElementById('inv-mmm-help');
+            if (help) help.remove();
+            row.outerHTML = mmmRow(t.dataset.event, r.mmm);
+          }
+        })
         .catch(function (err) { toast(err.message); });
       return;
     }
