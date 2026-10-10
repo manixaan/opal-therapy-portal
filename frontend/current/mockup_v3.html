@@ -11456,10 +11456,15 @@ const SLOT_SNAP_MIN = 15;  // selection snaps to 15-minute slots
    ghost block, the booking panel and the saved event can never disagree.
    (The previous code hardcoded 60px/hour here after the grid moved to
    48px/hour — a 7:00 PM selection painted at the 11:45 PM position.) */
-function calYToMinutes(col, clientY) {
+// mode 'floor' = the slot the pointer is IN (a click / press). Rounding to the
+// nearest slot booked the NEXT slot for any click in a slot's lower half
+// (30 Sep 2026: "clicking a blank cell jumps"). Drag ends still round.
+function calYToMinutes(col, clientY, mode) {
   const y = clientY - col.getBoundingClientRect().top;
   const raw = (y / HOUR_PX) * 60 + START_H * 60;
-  const snapped = calSnapMin(raw);
+  const snapped = mode === 'floor'
+    ? Math.floor(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN  // a click books the slot it is in
+    : calSnapMin(raw);
   return Math.max(START_H * 60, Math.min(END_H * 60, snapped));
 }
 function calMinutesToY(minutesOfDay) {
@@ -11486,7 +11491,7 @@ function _calColPointerDown(e) {
       e.target.closest('.travel-overlay')) return;
 
   const col = e.currentTarget;
-  const startMinutes = calYToMinutes(col, e.clientY);
+  const startMinutes = calYToMinutes(col, e.clientY, 'floor');
 
   _calDragPending = {
     col,
@@ -12852,7 +12857,7 @@ async function confirmBooking() {
       const ask = (typeof portalConfirm === 'function') ? portalConfirm : (m) => Promise.resolve(window.confirm(m));
       if (!(await ask('This day is marked On leave in My Profile. Add it anyway?', { title: 'On leave', ok: 'Add anyway', cancel: 'Cancel' }))) return;
     }
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding to Outlook…'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
     // The client, by the type's rule (required for a report, optional for
@@ -12881,9 +12886,12 @@ async function confirmBooking() {
     const [outlookCategory, tileType] = LEAF_KIND[BOOKING_STATE.serviceType] || ['Admin', 'admin'];
 
     try {
-      // Write to Outlook
+      // Save to the portal calendar (Outlook is mirrored server-side when
+      // connected). A failed save shows an error — no tile is drawn for an
+      // event that was never stored.
       let outlookId = null;
       let newDbId   = null;
+      let saveErr = null;
       try {
         const oResp = await fetch('/api/outlook/events', {
           method: 'POST',
@@ -12896,18 +12904,22 @@ async function confirmBooking() {
             ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
           }),
         });
-        const oResult = await oResp.json();
+        const oResult = await oResp.json().catch(() => ({}));
         if (oResp.ok) {
-          outlookId = oResult.outlookId;
+          outlookId = oResult.outlookId || null;
           newDbId   = oResult.dbId || null;
           __registerBookingUndo(oResult.dbId, outlookTitle);
           if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
-          console.log('✅ Outlook event created:', outlookId);
         } else {
-          console.warn('⚠️ Outlook write failed (non-fatal):', oResult.error);
+          saveErr = oResult.error || ('HTTP ' + oResp.status);
         }
       } catch (oErr) {
-        console.warn('⚠️ Outlook write skipped (non-fatal):', oErr.message);
+        saveErr = oErr.message || 'network error';
+      }
+      if (saveErr) {
+        showToast('Event not saved', saveErr, 'warn');
+        resetBtn();
+        return;
       }
 
       // Add to local calendar canvas
@@ -12940,7 +12952,7 @@ async function confirmBooking() {
       if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
       if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
       if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
-      showToast(`${outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
+      showToast(`${outlookTitle} added`, outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar');
 
       // Note: no manual delta sync needed — the backend POST /api/outlook/events
       // already writes to the local DB synchronously, so the event survives Cmd+R
@@ -13083,16 +13095,27 @@ async function confirmBooking() {
         if (typeof bspCommitBetweenChoice === 'function') bspCommitBetweenChoice();
         console.log('✅ Outlook event created:', outlookId);
       } else {
-        outlookNote = `Outlook: ${oResult.error || 'write failed — check Outlook connection'}`;
-        console.warn('⚠️ Outlook write failed:', oResult.error);
+        // The portal refused the booking itself — nothing was saved, so no tile.
+        showToast('Appointment not saved', oResult.error || ('HTTP ' + oResp.status), 'warn');
+        resetBtn();
+        return;
       }
     } catch (oErr) {
-      outlookNote = 'Outlook not connected — event not added to calendar';
-      console.warn('⚠️ Outlook write skipped:', oErr.message);
+      showToast('Appointment not saved', oErr.message || 'network error', 'warn');
+      resetBtn();
+      return;
     }
 
+    // Booked onto another person's calendar? Then it is not on the grid being
+    // viewed: draw nothing here (a tile would vanish on reload and leave its
+    // travel legs behind) and say whose calendar it went to.
+    const _meId = window.APP_USER && window.APP_USER.id;
+    const _bookedFor = (_outlookTherapistUserId && _meId && _outlookTherapistUserId !== _meId && _bspSelectedTherapist)
+      ? (_bspSelectedTherapist.displayName || 'the selected therapist') : null;
+    if (typeof clearBspTravelPreview === 'function') clearBspTravelPreview();
+
     // Add to local calendar canvas
-    const col = document.getElementById('day-' + slot.day);
+    const col = _bookedFor ? null : document.getElementById('day-' + slot.day);
     if (col) {
       const sub = patient ? `${patient.first} ${patient.last}` : (TYPE_LABEL[type] || '');
       // The optimistic tile is the SAVED appointment: it carries the row id
@@ -13117,7 +13140,7 @@ async function confirmBooking() {
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
       });
       if (_optId && SESSIONS[_optId]) {
-        SESSIONS[_optId].outlookSynced = true;
+        SESSIONS[_optId].outlookSynced = !!outlookId;
         if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
       }
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
@@ -13136,7 +13159,9 @@ async function confirmBooking() {
     // above re-renders from the cached list, which does not have it yet.
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
-    showToast(`${_outlookTitle} added${outlookId ? ' — synced to Outlook' : ' (Outlook not connected)'}`);
+    showToast(_bookedFor ? `${_outlookTitle} added to ${_bookedFor}'s calendar` : `${_outlookTitle} added`,
+      _bookedFor ? 'Open All therapists (Master view) to see it' : (outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar'));
+    if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 150);
     // Route-aware continuation (booking-route.js): "What would you like to do
     // next?" — Return Home / Book Another Client / Go Somewhere Else. Only a
     // SAVED appointment (newDbId) can be the previous stop of a route.
@@ -13209,6 +13234,13 @@ function resetWizard() {
   if (lead) lead.textContent = 'Pick a patient first.';
   const summary = document.getElementById('confirm-summary');
   if (summary) summary.innerHTML = '<h4>Appointment summary</h4>';
+  // A fresh booking starts with no address: the previous booking's address
+  // used to stay in the box, so the next session was routed (and could be
+  // saved) to the wrong place (30 Sep 2026).
+  const _loc = document.getElementById('bsp-location');
+  if (_loc) _loc.value = '';
+  const _uns = document.getElementById('bsp-location-unsure');
+  if (_uns) _uns.checked = false;
   if (typeof renderRightContext === 'function') renderRightContext();
 }
 
@@ -21241,6 +21273,10 @@ window.showQuickAdd = function(...args) {
   transition: opacity 0.28s ease;
 }
 #booking-panel-backdrop.open { opacity: 1; pointer-events: auto; }
+/* While the panel is open the week grid stays live above the backdrop, so a
+   click or drag on the calendar picks a new time instead of hitting the
+   backdrop (which closed the panel and wiped the preview — 30 Sep 2026). */
+body.bsp-open #cal-grid { position: relative; z-index: 1091; }
 
 /* ── Slide-over panel ── */
 #booking-side-panel {
@@ -21636,6 +21672,9 @@ function initBookingPanel() {
 }
 
 function openBookingPanel(opts = {}) {
+  // Re-picking a time on the calendar while the panel is already open updates
+  // the time and keeps what was filled in (client, address, notes).
+  if (_bspOpen && opts.startH !== undefined && opts.keepState === undefined) opts = Object.assign({}, opts, { keepState: true });
   // Ensure we stay on the calendar tab
   if (typeof switchTab === 'function') {
     const tabCalendar = document.querySelector('.tab[data-tab="calendar"]');
@@ -21647,6 +21686,7 @@ function openBookingPanel(opts = {}) {
 
   document.getElementById('booking-side-panel').classList.add('open');
   document.getElementById('booking-panel-backdrop').classList.add('open');
+  document.body.classList.add('bsp-open');
   _bspOpen = true;
   _bspDirty = false;
 
@@ -21682,6 +21722,7 @@ function closeBookingPanel(confirmIfDirty = false) {
   // Confirmation dialog removed — clicking outside or pressing Escape always closes immediately
   document.getElementById('booking-side-panel').classList.remove('open');
   document.getElementById('booking-panel-backdrop').classList.remove('open');
+  document.body.classList.remove('bsp-open');
   _bspOpen = false;
   _bspDirty = false;
   _bspPrefill = null;

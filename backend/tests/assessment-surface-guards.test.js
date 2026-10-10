@@ -924,6 +924,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(travel).toMatch(/floorMin: sessionEndMin\(curr\)/);
     expect(travel).toMatch(/classList\.add\('suppressed'\)/);
     expect(travel).toMatch(/preview placeholder/);
+    // A click books the slot it is in (30 Sep 2026); a fresh booking starts with an empty address.
+    expect(SHELL).toMatch(/const startMinutes = calYToMinutes\(col, e\.clientY, 'floor'\);/);
+    expect(SHELL).toMatch(/const _loc = document\.getElementById\('bsp-location'\);\n  if \(_loc\) _loc\.value = '';/);
     expect(SHELL).toMatch(/\.travel-overlay\.suppressed \{ display: none !important; \}/);
     // Leave days: shaded column + header tag on every week render; booking asks first.
     expect(SHELL).toMatch(/\.cal-col\.on-leave \{/);
@@ -935,7 +938,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);
-    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = true;/);
+    // Marked Outlook-synced only when Outlook took it — the calendar works without Outlook (29 Sep 2026).
+    expect(SHELL).toMatch(/SESSIONS\[_optId\]\.outlookSynced = !!outlookId;/);
+    // A booking the portal refused is never drawn as if it were saved.
+    expect(cb).toMatch(/showToast\('Appointment not saved'/);
     expect(SHELL).toMatch(/manual_addr_db_' \+ event\.id/);
     // Deleting a tile redraws the legs around where it was.
     const del = SHELL.slice(SHELL.indexOf('async function performDeleteEvent('), SHELL.indexOf('async function performDeleteEvent(') + 6000);

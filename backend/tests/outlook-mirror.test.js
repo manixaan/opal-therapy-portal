@@ -158,25 +158,29 @@ describe('PATCH /api/outlook/events/:dbId — app → Outlook update propagation
     expect(syncLogCalls[0][1]).toEqual([DB_ID, 'Graph 503']);
   });
 
-  test('staged-rollout flag off: 403 feature_disabled and NO local write (mirror never diverges silently)', async () => {
+  // LOCAL-FIRST (29 Sep 2026): the portal calendar works without Outlook. With
+  // write-back off, or on a portal-only row, the edit is saved and Outlook is
+  // simply not touched.
+  test('staged-rollout flag off: the portal edit is saved, Outlook is not called', async () => {
     process.env.ENABLE_OUTLOOK_WRITE = 'false';
     primePoolQuery({ outlookId: OL_ID });
 
     const res = await request(buildApp()).patch(`/api/outlook/events/${DB_ID}`).send(patchBody);
 
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('feature_disabled');
-    expect(db.updateEvent).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, savedToDb: true, savedToOutlook: false, outlookStatus: 'disabled' });
+    expect(db.updateEvent).toHaveBeenCalledTimes(1);
     expect(outlookApi.updateOutlookEvent).not.toHaveBeenCalled();
   });
 
-  test('row without an outlook_id is rejected with 400 (unchanged semantics)', async () => {
+  test('row without an outlook_id (portal-only event) is edited locally, Outlook untouched', async () => {
     primePoolQuery({ outlookId: null });
 
     const res = await request(buildApp()).patch(`/api/outlook/events/${DB_ID}`).send(patchBody);
 
-    expect(res.status).toBe(400);
-    expect(db.updateEvent).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, savedToDb: true, savedToOutlook: false, outlookStatus: 'not_linked' });
+    expect(db.updateEvent).toHaveBeenCalledTimes(1);
     expect(outlookApi.updateOutlookEvent).not.toHaveBeenCalled();
   });
 });

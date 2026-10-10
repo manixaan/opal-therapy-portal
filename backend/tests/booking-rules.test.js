@@ -12,6 +12,7 @@ jest.mock('../database', () => ({
   logAuditEvent: jest.fn().mockResolvedValue(null),
   getUser: jest.fn(),
   upsertOutlookEvent: jest.fn(),
+  createEvent: jest.fn(),
   updateEventOutlookId: jest.fn(),
   updateEventWriteError: jest.fn(),
 }));
@@ -52,6 +53,9 @@ beforeEach(() => {
   let n = 0;
   outlook.createOutlookEvent.mockImplementation(async () => ({ outlookId: 'out-' + (++n) }));
   db.upsertOutlookEvent.mockImplementation(async (u, e) => ({ id: 'row-' + e.outlookId }));
+  // Local-first: the portal row is written before any Outlook mirror.
+  let m = 0;
+  db.createEvent.mockImplementation(async () => ({ id: 'row-' + (++m) }));
 });
 
 describe('validateBooking — the client rule per group', () => {
@@ -168,7 +172,9 @@ describe('POST /api/outlook/events', () => {
   test('a failed attempt can be retried with the same requestId', async () => {
     as('therapist');
     const a = app();
-    outlook.createOutlookEvent.mockRejectedValueOnce(new Error('graph down'));
+    // Local-first: an Outlook failure still saves the booking; only a failed
+    // portal save is a failed attempt.
+    db.createEvent.mockRejectedValueOnce(new Error('db down'));
     const body = { title: 'Phone Calls', ...SLOT, booking: { kind: 'phone-calls' }, requestId: 'req-bbbbbbbb-0001' };
     expect((await request(a).post('/api/outlook/events').send(body)).status).toBe(500);
     expect((await request(a).post('/api/outlook/events').send(body)).status).toBe(201);
