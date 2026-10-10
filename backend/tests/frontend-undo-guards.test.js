@@ -58,6 +58,46 @@ describe('reversible flows are wired into the stack', () => {
     expect(HTML).toContain('function __registerBookingUndo(');
     expect(HTML).toContain('__registerBookingUndo(oResult.dbId');
   });
+  // A Scheduling Assistant hand-off saves the row under the other therapist.
+  // DELETE /api/outlook/events/:id and PATCH /api/events/:id/travel only match
+  // the signed-in user's rows, so Cmd+Z threw 'Event not found' and the travel
+  // follow-ups 404'd — and their answers came from the viewer's own day
+  // (10 Oct 2026).
+  describe('a booking handed to another therapist', () => {
+    const cp = HTML.slice(HTML.indexOf('// ── Client session path'), HTML.indexOf('/* ---------- Reset wizard'));
+    const declSrc = cp.slice(cp.indexOf('const _meId = '), cp.indexOf('const _patName'));
+    const gateSrc = cp.slice(cp.indexOf('if (_bookedFor) {'), cp.indexOf("console.log('✅ Outlook event created:'"));
+    const bookedFor = (meId, targetUserId) => new Function('window', '_outlookTherapistUserId', '_bspSelectedTherapist',
+      declSrc + '; return _bookedFor;')({ APP_USER: { id: meId } }, targetUserId, { displayName: 'Ann Smith', userId: targetUserId });
+    const followUps = (forOther) => {
+      const calls = [];
+      const STATE = { travelFrom: { dbId: 'db-prev' }, chainAfter: { kind: 'home' } };
+      new Function('_bookedFor', 'oResult', '_outlookTitle', 'BOOKING_STATE', '__registerBookingUndo',
+        'applyTravelChainAfterBooking', 'travelChainInherit', 'bspCommitBetweenChoice', gateSrc)(
+        forOther ? 'Ann Smith' : null, { dbId: 42 }, 'Client Appointment — Ada Client', STATE,
+        (id) => calls.push('undo:' + id), (id) => calls.push('chain:' + id), (id) => calls.push('inherit:' + id),
+        () => calls.push('between'));
+      return { calls, STATE };
+    };
+
+    test('is worked out before the save, once, by id whatever its type', () => {
+      expect(cp.indexOf('const _bookedFor =')).toBeGreaterThan(-1);
+      expect(cp.indexOf('const _bookedFor =')).toBeLessThan(cp.indexOf("fetch('/api/outlook/events'"));
+      expect(cp.match(/const _bookedFor =/g)).toHaveLength(1);
+      expect(bookedFor(7, 8)).toBe('Ann Smith');
+      expect(bookedFor(7, '7')).toBeNull();   // your own calendar, id as a string
+      expect(bookedFor(7, null)).toBeNull();
+    });
+    test('registers no undo and writes no travel; its own booking still does', () => {
+      const other = followUps(true);
+      expect(other.calls).toEqual([]);
+      expect(other.STATE).toEqual({ travelFrom: null, chainAfter: null });
+      expect(followUps(false).calls).toEqual(['undo:42', 'chain:42', 'between']);
+    });
+    test('offers no "What next?" continuation for a row that is not on this grid', () => {
+      expect(cp).toContain('dbId: _bookedFor ? null : newDbId');
+    });
+  });
   test('calendar drag / resize / time edit: one committed move = one undo step, replayed through the persisting wrapper', () => {
     const commit = HTML.slice(HTML.indexOf('function commitMove()'), HTML.indexOf('function titleBase('));
     expect(commit).toContain('const before = { day: s.day, startMin: sessionStartMin(s), duration: durMin(s) };');

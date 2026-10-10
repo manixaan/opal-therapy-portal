@@ -3007,23 +3007,6 @@ window.opIcon = function (name, size) {
   }
   .check-row input[type=checkbox] { width: 14px; height: 14px; }
 
-  /* Toast */
-  .toast {
-    position: fixed; bottom: 24px; right: 24px;
-    background: #241f1a; color: white;
-    padding: 12px 18px; border-radius: 10px;
-    font-size: 13px; line-height: 1.4;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-    z-index: 100;
-    display: flex; align-items: flex-start; gap: 10px;
-    opacity: 0; transform: translateY(10px); pointer-events: none;
-    transition: opacity 200ms ease, transform 200ms ease;
-    max-width: 420px;
-  }
-  .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
-  .toast .toast-icon { color: #3d8f5f; font-weight: 700; font-size: 16px; line-height: 1; margin-top: 1px; }
-  .toast .toast-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
-
   /* Footnote / status bar */
   .footnote {
     margin: 16px 18px 24px;
@@ -7781,15 +7764,6 @@ window.opIcon = function (name, size) {
   </div>
 </div>
 
-<!-- ============ Toast ============ -->
-<div class="toast" id="toast">
-  <span class="toast-icon">●</span>
-  <div>
-    <div id="toast-text">Saved.</div>
-    <div class="toast-sub" id="toast-sub"></div>
-  </div>
-</div>
-
 <!-- ============ Booking confirmation modal ============ -->
 <div class="modal-backdrop" id="modal-booked">
   <div class="modal">
@@ -11347,18 +11321,10 @@ function addPhoneRow() {
   container.insertBefore(row, btn);
 }
 
-/* ---------- Toast ---------- */
-let _toastTimer = null;
-function showToast(msg, sub) {
-  const t  = document.getElementById('toast');
-  const tx = document.getElementById('toast-text');
-  const ts = document.getElementById('toast-sub');
-  tx.textContent = msg || '';
-  ts.textContent = sub || '';
-  t.classList.add('show');
-  if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
-}
+/* ---------- Toast ----------
+   showToast(msg, isErrorOrSub, kind) is declared once, in the admin script
+   block further down (#admin-toast, above every panel and modal). A second
+   (msg, sub) copy here was always overridden by it (10 Oct 2026). */
 
 /* ---------- Add Event to Calendar ---------- */
 const CALENDAR_EVENTS = [];
@@ -11551,12 +11517,14 @@ function _calColPointerUp(e) {
     // Finish drag — open Smart Booking panel
     handleDragEnd(e);
   } else {
-    // Plain click — open Smart Booking panel with pre-filled time
+    // Plain click — open Smart Booking panel with pre-filled time. With the
+    // panel already open it is a re-pick: keep the form (client, address,
+    // notes). Passed explicitly so the open hooks see it too (10 Oct 2026).
     const startH = Math.floor(pending.startMinutes / 60);
     const startM = pending.startMinutes % 60;
     const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[pending.day] : null;
     if (typeof openBookingPanel === 'function') {
-      openBookingPanel({ day: pending.day, date, startH, startM, endH: startH + 1, endM: startM });
+      openBookingPanel({ day: pending.day, date, startH, startM, endH: startH + 1, endM: startM, keepState: _bspOpen });
     }
   }
 }
@@ -11691,7 +11659,8 @@ function handleDragEnd(event) {
   if (dragState.block && dragState.block.parentElement) dragState.block.remove();
   dragState.block = null;
   if (typeof openBookingPanel === 'function') {
-    openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM });
+    // A drag while the panel is open re-picks the time and keeps the form.
+    openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM, keepState: _bspOpen });
   }
 }
 
@@ -13041,6 +13010,12 @@ async function confirmBooking() {
       report: 'Report Writing', admin: 'Admin', cpd: 'PD',
     };
     const _outlookTherapistUserId = _bspSelectedTherapist?.userId || null;
+    // Booked onto another person's calendar (a Scheduling Assistant hand-off)?
+    // Worked out before the save: the row is theirs, so the follow-ups below
+    // that act on the viewer's own rows and day must not run for it.
+    const _meId = window.APP_USER && window.APP_USER.id;
+    const _bookedFor = (_outlookTherapistUserId && _meId && String(_outlookTherapistUserId) !== String(_meId) && _bspSelectedTherapist)
+      ? (_bspSelectedTherapist.displayName || 'the selected therapist') : null;
     const _patName      = patient ? `${patient.first} ${patient.last}` : '';
     const _outlookTitle = (isClientSession && _patName)
       ? `Client Appointment — ${_patName}`
@@ -13092,20 +13067,27 @@ async function confirmBooking() {
         outlookId   = oResult.outlookId;
         newDbId     = oResult.dbId || null;
         outlookNote = 'Added to Outlook calendar ✓';
-        __registerBookingUndo(oResult.dbId, _outlookTitle);
         if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
-        // Booked as a stop after another session: the new session inherits
-        // where the day was going to end (travel.js).
-        if (BOOKING_STATE.travelFrom && typeof applyTravelChainAfterBooking === 'function') {
-          const _tf = BOOKING_STATE.travelFrom; BOOKING_STATE.travelFrom = null;
-          applyTravelChainAfterBooking(oResult.dbId, _tf);
-        } else if (BOOKING_STATE.chainAfter && typeof travelChainInherit === 'function') {
-          const _ca = BOOKING_STATE.chainAfter; BOOKING_STATE.chainAfter = null;
-          travelChainInherit(oResult.dbId, _ca);
+        if (_bookedFor) {
+          // Another therapist's row: the undo DELETE and the travel PATCHes
+          // only match the signed-in user's rows (they would 404), and the
+          // travel answers were worked out from the viewer's own day (10 Oct 2026).
+          BOOKING_STATE.travelFrom = null; BOOKING_STATE.chainAfter = null;
+        } else {
+          __registerBookingUndo(oResult.dbId, _outlookTitle);
+          // Booked as a stop after another session: the new session inherits
+          // where the day was going to end (travel.js).
+          if (BOOKING_STATE.travelFrom && typeof applyTravelChainAfterBooking === 'function') {
+            const _tf = BOOKING_STATE.travelFrom; BOOKING_STATE.travelFrom = null;
+            applyTravelChainAfterBooking(oResult.dbId, _tf);
+          } else if (BOOKING_STATE.chainAfter && typeof travelChainInherit === 'function') {
+            const _ca = BOOKING_STATE.chainAfter; BOOKING_STATE.chainAfter = null;
+            travelChainInherit(oResult.dbId, _ca);
+          }
+          // "Go direct" / "Go home in between" chosen in the route line is kept
+          // on the previous stop, so the calendar shows the trip as booked.
+          if (typeof bspCommitBetweenChoice === 'function') bspCommitBetweenChoice();
         }
-        // "Go direct" / "Go home in between" chosen in the route line is kept
-        // on the previous stop, so the calendar shows the trip as booked.
-        if (typeof bspCommitBetweenChoice === 'function') bspCommitBetweenChoice();
         console.log('✅ Outlook event created:', outlookId);
       } else {
         // The portal refused the booking itself — nothing was saved, so no tile.
@@ -13122,9 +13104,6 @@ async function confirmBooking() {
     // Booked onto another person's calendar? Then it is not on the grid being
     // viewed: draw nothing here (a tile would vanish on reload and leave its
     // travel legs behind) and say whose calendar it went to.
-    const _meId = window.APP_USER && window.APP_USER.id;
-    const _bookedFor = (_outlookTherapistUserId && _meId && _outlookTherapistUserId !== _meId && _bspSelectedTherapist)
-      ? (_bspSelectedTherapist.displayName || 'the selected therapist') : null;
     if (typeof clearBspTravelPreview === 'function') clearBspTravelPreview();
 
     // Add to local calendar canvas
@@ -13153,7 +13132,10 @@ async function confirmBooking() {
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
       });
       if (_optId && SESSIONS[_optId]) {
-        SESSIONS[_optId].outlookSynced = !!outlookId;
+        // A saved row whether or not Outlook took it: the reload sweep must
+        // drop this entry along with its tile, or a detached copy stays in
+        // SESSIONS for travel, undo and the day report (10 Oct 2026).
+        SESSIONS[_optId].outlookSynced = true;
         if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
       }
       if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
@@ -13177,10 +13159,12 @@ async function confirmBooking() {
     if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 150);
     // Route-aware continuation (booking-route.js): "What would you like to do
     // next?" — Return Home / Book Another Client / Go Somewhere Else. Only a
-    // SAVED appointment (newDbId) can be the previous stop of a route.
+    // SAVED appointment (newDbId) can be the previous stop of a route — and
+    // only one on the viewer's own calendar: another therapist's row has no
+    // tile here and its travel cannot be written by this user.
     if (isClientSession && typeof onBookingCreated === 'function') {
       onBookingCreated({
-        dbId: newDbId, day: slot.day,
+        dbId: _bookedFor ? null : newDbId, day: slot.day,
         startMin: slot.startH * 60 + slot.startM, endMin, durationMin: dur,
         location: _outlookLocation || '', unsure: _unsure && !_outlookLocation,
         placeId: _locMeta.placeId, locId: _locMeta.locId,
@@ -17380,7 +17364,10 @@ const __DAY_LABEL_BY_KEY = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fr
 function __clearOutlookTiles() {
   Object.keys(SESSIONS).forEach(id => {
     const s = SESSIONS[id];
-    if (s && (s.outlookSynced || s.type === 'outlook')) {
+    // A stamped tile is swept from the grid below, so its registry entry goes
+    // too — an entry must never outlive its tile (10 Oct 2026).
+    const stamped = !!(s && s.element && s.element.dataset && s.element.dataset.outlookTile);
+    if (s && (s.outlookSynced || s.type === 'outlook' || stamped)) {
       if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
       delete SESSIONS[id];
     }
@@ -21283,6 +21270,12 @@ window.showQuickAdd = function(...args) {
    click or drag on the calendar picks a new time instead of hitting the
    backdrop (which closed the panel and wiped the preview — 30 Sep 2026). */
 body.bsp-open #cal-grid { position: relative; z-index: 1091; }
+/* A tile dragged on that live grid can raise the "can't move" review; it must
+   sit above the raised grid and the panel, or it opens hidden and the tile is
+   stuck where it was dropped. !important: the backdrop's z-index is inline
+   (10 Oct 2026). */
+body.bsp-open #impact-backdrop { z-index: 1200 !important; }
+body.bsp-open #impact-modal    { z-index: 1201; }
 
 /* ── Slide-over panel ── */
 #booking-side-panel {
@@ -21678,9 +21671,11 @@ function initBookingPanel() {
 }
 
 function openBookingPanel(opts = {}) {
-  // Re-picking a time on the calendar while the panel is already open updates
-  // the time and keeps what was filled in (client, address, notes).
-  if (_bspOpen && opts.startH !== undefined && opts.keepState === undefined) opts = Object.assign({}, opts, { keepState: true });
+  // Re-picking a time on the calendar while the panel is already open keeps
+  // what was filled in: the grid callers pass keepState themselves. It is not
+  // injected here any more (10 Oct 2026) — a copy made inside this function was
+  // invisible to booking-route.js's open hook, which then reset the address,
+  // and programmatic openers (Book another, book next) expect a fresh form.
   // Ensure we stay on the calendar tab
   if (typeof switchTab === 'function') {
     const tabCalendar = document.querySelector('.tab[data-tab="calendar"]');
@@ -23830,19 +23825,35 @@ async function submitSuspend() {
 }
 
 // ── Toast helper (simple in-app notification) ─────────────────
-function showToast(msg, isError) {
+// The app's one showToast (10 Oct 2026). Two calling shapes grew up around
+// it and both must work:
+//   showToast(msg, isError)          a boolean: red when true, no second line
+//   showToast(title, sub, kind)      a string: a second line; kind 'warn' or
+//                                    'error' makes it red
+// A calendar copy taking (msg, sub) used to be declared earlier in the page;
+// this one always won, so every two-line success showed as a red error with
+// its subtitle (and a refused booking's reason) dropped.
+function showToast(msg, isErrorOrSub, kind) {
+  var sub = typeof isErrorOrSub === 'string' ? isErrorOrSub : '';
+  var isError = kind === 'warn' || kind === 'error' || (typeof isErrorOrSub !== 'string' && !!isErrorOrSub);
   var toast = document.getElementById('admin-toast');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'admin-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;max-width:calc(100vw - 32px);';
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
+  if (sub) {
+    var line = document.createElement('div');
+    line.style.cssText = 'font-size:12px;font-weight:400;opacity:.85;margin-top:3px;';
+    line.textContent = sub;
+    toast.appendChild(line);
+  }
   toast.style.background = isError ? '#c2412e' : '#241f1a';
   toast.style.opacity    = '1';
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(function() { toast.style.opacity = '0'; }, 3000);
+  toast._timer = setTimeout(function() { toast.style.opacity = '0'; }, sub ? 4500 : 3000);
 }
 
 // ── Global undo — Cmd+Z / Ctrl+Z (2026-08-09) ─────────────────

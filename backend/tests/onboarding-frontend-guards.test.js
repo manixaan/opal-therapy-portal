@@ -174,8 +174,9 @@ describe('the module follows house conventions', () => {
   });
 
   test('showToast is called with the two-argument signature', () => {
-    // window.showToast is (msg, isError). A third argument, or a subtitle in
-    // the second slot, renders a red error toast for a success message.
+    // This module uses the boolean shape of window.showToast(msg, isError);
+    // the shell's one showToast also takes (title, sub, kind) since
+    // 10 Oct 2026, but these calls stay on the (msg, !!isError) form.
     const calls = [...MODULE.matchAll(/showToast\(([^)]*)\)/g)].map((m) => m[1]);
     for (const args of calls) {
       expect(args.split(',').length).toBeLessThanOrEqual(2);
