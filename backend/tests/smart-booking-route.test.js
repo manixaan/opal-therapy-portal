@@ -179,13 +179,19 @@ describe('15-minute snapping — one grid for every calendar gesture', () => {
   vm.createContext(ctx);
   vm.runInContext(grab(/const SLOT_SNAP_MIN = 15;/), ctx);
   vm.runInContext(grab(/function calSnapMin\(minutes\) \{[\s\S]*?\n\}/), ctx);
-  vm.runInContext(grab(/function calYToMinutes\(col, clientY\) \{[\s\S]*?\n\}/), ctx);
+  vm.runInContext(grab(/function calYToMinutes\(col, clientY, mode\) \{[\s\S]*?\n\}/), ctx);
   const col = { getBoundingClientRect: () => ({ top: 0 }) };
   const at = (h, m) => ((h * 60 + m) / 60) * 72;
 
   test.each([[10, 2, 600], [10, 8, 615], [10, 22, 615], [10, 24, 630]])('create: %i:%i snaps to minute %i', (h, m, want) => {
     expect(ctx.calYToMinutes(col, at(h, m))).toBe(want);
     expect(ctx.calSnapMin(h * 60 + m)).toBe(want);
+  });
+
+  // A single click books the slot it is in (30 Sep 2026); drags and the end of a drag still round.
+  test('a click floors to the slot clicked', () => {
+    expect(ctx.calYToMinutes(col, at(10, 8), 'floor')).toBe(600);
+    expect(ctx.calYToMinutes(col, at(10, 22), 'floor')).toBe(615);
   });
 
   test('move and resize go through the same snap, and drag-to-create ignores proposed blocks', () => {
