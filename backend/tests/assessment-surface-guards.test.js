@@ -682,7 +682,8 @@ describe('changed assets are cache-busted', () => {
       // 12: the Finance tab joined KNOWN_TABS.
       // 13: the Invoicing tab joined KNOWN_TABS.
       // 14: bootRestore lifts the boot cloak once the start screen is settled.
-      ['navigation.js', 14],
+      // 15: the no-hash landing waits (bounded) for settings before lifting the cloak.
+      ['navigation.js', 15],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
@@ -700,7 +701,8 @@ describe('changed assets are cache-busted', () => {
       // introduces the file has to name a version it can bump later.
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
-      ['profile.js', 9],
+      // 10: setup card guarded; an unsaved work-location edit survives a schedule reload.
+      ['profile.js', 10],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -710,10 +712,12 @@ describe('changed assets are cache-busted', () => {
       // shows where the drive will go until an address is typed.
       // 19: route-aware Smart Booking — routed preview with loading/error
       // states, the earliest feasible start, departure-time routing.
-      ['travel.js', 37],
+      // 38: failure toasts pass 'warn'; the work-location undo resolves its week by key (10 Oct 2026).
+      ['travel.js', 38],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
-      ['booking-route.js', 5], ['booking-route.css', 1],
+      // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
+      ['booking-route.js', 6], ['booking-route.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -727,7 +731,8 @@ describe('changed assets are cache-busted', () => {
       // 6 (js): the queue count refreshes with every calendar reload, not on the 60 s poll.
       // 7 (js): no sync popups — no idle nudge, no tab-leave prompt, no page-close
       // warning; the server's auto-sync writes the queue, Sync Splose stays manual.
-      ['splose-sync.js', 7], ['splose-sync.css', 1],
+      // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
+      ['splose-sync.js', 8], ['splose-sync.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the

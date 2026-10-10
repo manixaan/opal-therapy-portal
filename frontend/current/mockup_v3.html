@@ -159,25 +159,25 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=37" defer></script>
+<script src="/travel.js?v=38" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=5" defer></script>
+<script src="/booking-route.js?v=6" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=7" defer></script>
+<script src="/splose-sync.js?v=8" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=9" defer></script>
+<script src="/profile.js?v=10" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=9" defer></script>
-<script src="/navigation.js?v=14" defer></script>
+<script src="/navigation.js?v=15" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -9067,7 +9067,7 @@ async function acctRenderExceptions(refresh) {
 }
 async function acctExceptionAction(id, action) {
   var r = await acctPost('/exceptions/' + id + '/' + action, {});
-  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Exception ' + action + 'd' : 'Failed', r.json.error || '');
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Exception ' + action + 'd' : 'Failed', r.json.error || '', r.status === 200 ? '' : 'warn');
   acctRenderExceptions();
 }
 
@@ -9100,14 +9100,14 @@ async function acctRefreshContactSuggestions(btn) {
   var r = await acctPost('/contacts/refresh-suggestions', {});
   btn.disabled = false; btn.textContent = 'Refresh suggestions';
   if (typeof showToast === 'function') showToast(r.status === 200 ? 'Suggestions refreshed' : 'Refresh failed',
-    r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''));
+    r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''), r.status === 200 ? '' : 'warn');
   acctRenderContacts();
 }
 async function acctManualMap(id, suggestedXeroId) {
   var xeroId = await portalPrompt('Xero ContactID to map to this Splose client:', suggestedXeroId || '');
   if (!xeroId) return;
   var r = await acctPost('/contacts/' + id + '/map', { xeroContactId: xeroId.trim() });
-  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Mapping saved' : 'Mapping failed', r.json.error || '');
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Mapping saved' : 'Mapping failed', r.json.error || '', r.status === 200 ? '' : 'warn');
   acctRenderContacts();
 }
 
@@ -9165,14 +9165,14 @@ async function acctConnectXero(btn) {
     throw new Error(d.error || 'Xero not configured');
   } catch (err) {
     btn.disabled = false; btn.textContent = 'Connect Xero';
-    if (typeof showToast === 'function') showToast('Could not start Xero connection', String(err.message || err));
+    if (typeof showToast === 'function') showToast('Could not start Xero connection', String(err.message || err), 'warn');
   }
 }
 async function acctSyncXero(btn) {
   btn.disabled = true; btn.textContent = 'Syncing…';
   var r = await acctPost('/xero/sync', {});
   btn.disabled = false; btn.textContent = 'Sync now';
-  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Xero sync complete' : 'Sync failed', r.status === 200 ? 'Finance data refreshed' : (r.json.error || ''));
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Xero sync complete' : 'Sync failed', r.status === 200 ? 'Finance data refreshed' : (r.json.error || ''), r.status === 200 ? '' : 'warn');
   acctRenderOverview();
 }
 async function acctDisconnectXero(btn) {
@@ -9228,7 +9228,7 @@ async function acctRenderCandidates() {
 }
 async function acctReviewCandidate(id, status) {
   var r = await acctPost('/candidates/' + id + '/review', { status: status });
-  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidate updated' : 'Update failed', r.json.error || '');
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidate updated' : 'Update failed', r.json.error || '', r.status === 200 ? '' : 'warn');
   acctRenderCandidates();
 }
 async function acctCreateDraft(id, btn) {
@@ -9245,7 +9245,7 @@ async function acctGenerateCandidates(btn) {
   var end = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
   var r = await acctPost('/candidates/generate', { startDate: start, endDate: end });
   btn.disabled = false; btn.textContent = 'Generate from Splose (next 30 days)';
-  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidates generated' : 'Generation failed', r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''));
+  if (typeof showToast === 'function') showToast(r.status === 200 ? 'Candidates generated' : 'Generation failed', r.status === 200 ? JSON.stringify(r.json.summary || {}) : (r.json.error || ''), r.status === 200 ? '' : 'warn');
   acctRenderCandidates();
 }
 
@@ -9321,7 +9321,7 @@ window.connectOutlookFromSettings = async function (btn) {
     throw new Error(data.error || 'No authUrl in response');
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = 'Connect Outlook'; }
-    if (typeof showToast === 'function') showToast('Could not start Outlook sign-in', String(err.message || err));
+    if (typeof showToast === 'function') showToast('Could not start Outlook sign-in', String(err.message || err), 'warn');
     else portalAlert('Could not start Outlook sign-in: ' + (err.message || err));
   }
 };
@@ -12194,7 +12194,7 @@ function findIdleSlots(allSorted, minsNeeded) {
 // venue (optional): the top-scored venue option from cnBuildVenueOptions()
 function scheduleCaseNoting(day, slot, clientNames, venue) {
   const col = document.querySelector(`.cal-col[data-day="${day}"]`);
-  if (!col) { showToast('Error', 'Calendar column not found for ' + day); return null; }
+  if (!col) { showToast('Error', 'Calendar column not found for ' + day, 'warn'); return null; }
   const venueNote = venue ? ` · ${venue.icon} ${venue.name}` : '';
   const id = addSession(col, {
     day, type: 'admin',
@@ -13586,7 +13586,7 @@ function scheduleTitleRecovery() {
     if (unresolved) {
       if (typeof showToast === 'function') {
         showToast('Event title could not be synced from Outlook',
-          'An event has no subject after a refresh. Try refreshing Outlook sync from Settings if this looks wrong.');
+          'An event has no subject after a refresh. Try refreshing Outlook sync from Settings if this looks wrong.', 'warn');
       }
       console.warn('[title-recovery] untitled Outlook events after bounded retry:', unresolved);
       if (typeof renderCurrentWeek === 'function') renderCurrentWeek(); // relabel as 'Untitled event'
@@ -14353,7 +14353,7 @@ function commitGroupMove(moves, onBlocked) {
   if (blocked) {
     if (onBlocked) onBlocked();
     const b = blocked.m;
-    showToast('Nothing moved', 'One of the ' + moves.length + ' selected sessions cannot go there — see why.');
+    showToast('Nothing moved', 'One of the ' + moves.length + ' selected sessions cannot go there — see why.', 'warn');
     openMoveImpact(b.id, b.day, b.startMin, b.dur, blocked.impact);
     return;
   }
@@ -23652,7 +23652,7 @@ async function disconnectOutlookFromSettings(btn) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     showToast('Outlook disconnected', 'Reconnect any time from this screen.');
   } catch (e) {
-    showToast('Disconnect failed', 'Please try again.');
+    showToast('Disconnect failed', 'Please try again.', 'warn');
   }
   if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
   checkIntegrationStatuses();
@@ -23715,7 +23715,7 @@ async function linkSplosePractitioner(btn) {
     showToast('Splose practitioner linked', 'You are now ' + (d.linked && d.linked.fullName || name) + ' in Splose.');
     if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
     if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();
-  } catch (e) { showToast('Could not link', String(e.message || e)); }
+  } catch (e) { showToast('Could not link', String(e.message || e), 'warn'); }
   if (btn) { btn.disabled = false; }
   loadSplosePractitionerLink();
 }
@@ -23729,7 +23729,7 @@ async function unlinkSplosePractitioner(btn) {
     showToast('Splose practitioner disconnected', 'Choose a new one when you are ready.');
     if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
     if (typeof loadSetupStatusCard === 'function') loadSetupStatusCard();
-  } catch (e) { showToast('Could not disconnect', String(e.message || e)); }
+  } catch (e) { showToast('Could not disconnect', String(e.message || e), 'warn'); }
   if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
   loadSplosePractitionerLink();
 }
@@ -23778,7 +23778,7 @@ async function connectSploseKey(btn) {
     if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
     showToast('Splose connected', d.practitioners + ' practitioner' + (d.practitioners === 1 ? '' : 's') + ' found' + (d.names && d.names.length ? ' (' + d.names.join(', ') + '\u2026)' : '') + '. Everyone should now check their own practitioner link.');
     if (typeof bootstrapSploseConfig === 'function') bootstrapSploseConfig();
-  } catch (e) { showToast('Could not connect Splose', String(e.message || e)); }
+  } catch (e) { showToast('Could not connect Splose', String(e.message || e), 'warn'); }
   if (btn) { btn.disabled = false; }
   loadSploseConnection(); loadSplosePractitionerLink();
 }
@@ -23790,7 +23790,7 @@ async function disconnectSploseKey(btn) {
     var r = await fetch('/api/splose/connection', { method: 'DELETE', credentials: 'include' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     showToast('Splose disconnected', 'Connect a new key when the practice is ready.');
-  } catch (e) { showToast('Could not disconnect', String(e.message || e)); }
+  } catch (e) { showToast('Could not disconnect', String(e.message || e), 'warn'); }
   if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
   loadSploseConnection(); loadSplosePractitionerLink();
 }

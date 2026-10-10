@@ -388,7 +388,8 @@ describe('the shell actually loads and gates the module', () => {
   test('the tab starts hidden and is revealed only by the permission filter', () => {
     const tab = SHELL.slice(SHELL.indexOf('data-tab="interviews"'), SHELL.indexOf('data-tab="settings"'));
     expect(tab).toContain('style="display:none;"');
-    expect(SHELL).toContain("var PERMISSION_TABS = { interviews: 'interviews.access' };");
+    // Invoicing joined the permission-gated tabs with the invoicing merge (manage_billing).
+    expect(SHELL).toContain("var PERMISSION_TABS = { interviews: 'interviews.access', invoicing: 'manage_billing' };");
     expect(SHELL).toMatch(/return allowed\.filter\(tabPermissionHeld\);/);
   });
 

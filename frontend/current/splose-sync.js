@@ -526,7 +526,13 @@
               return;
             }
             var tail = S.autoSync ? 'Splose will follow shortly.' : 'Sync Splose when the week is right.';
-            toast(r.json.savedToOutlook ? 'Moved — Outlook updated. ' + tail : 'Moved — saved. Outlook will catch up; ' + tail);
+            // Say what actually happened to Outlook (10 Oct 2026): with write-back
+            // off, or on a portal-only row, nothing will "catch up".
+            var os = r.json.outlookStatus;
+            toast(r.json.savedToOutlook ? 'Moved — Outlook updated. ' + tail
+              : os === 'disabled' ? 'Moved — saved in the portal (Outlook write-back is off). ' + tail
+              : os === 'not_linked' ? 'Moved — saved. ' + tail
+              : 'Moved — saved. Outlook will catch up; ' + tail);
             refreshPending();
           });
       } catch (e) { /* the visual move already happened; nothing else to undo */ }

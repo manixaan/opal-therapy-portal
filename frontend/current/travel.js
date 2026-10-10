@@ -653,7 +653,7 @@ function describeTravelPoint(spec, day) {
 /* Persist an answer on the event and redraw. side: 'before' | 'after'. spec null = back to default. */
 async function setTravelOverride(sessionId, side, spec) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
-  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.', 'warn'); return false; }
   const prev = Object.assign({}, s.travel || {});
   const next = Object.assign({}, prev);
   if (spec) next[side] = spec; else delete next[side];
@@ -662,8 +662,8 @@ async function setTravelOverride(sessionId, side, spec) {
       method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ before: next.before || null, after: next.after || null }),
     });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('Could not save travel plan', j.error || ('HTTP ' + r.status)); return false; }
-  } catch (e) { showToast('Could not save travel plan', e.message); return false; }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); showToast('Could not save travel plan', j.error || ('HTTP ' + r.status), 'warn'); return false; }
+  } catch (e) { showToast('Could not save travel plan', e.message, 'warn'); return false; }
   s.travel = next;
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
   registerTravelUndo(s, prev, side === 'before' ? 'Where travel starts' : 'Where travel ends');
@@ -1569,7 +1569,7 @@ function betweenTravelPlan(curr, next, base) {
 /* Save the choice for the gap after this session. mode: 'direct' | 'home' | null (automatic). */
 async function setBetweenTravel(sessionId, mode) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
-  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.', 'warn'); return false; }
   const prev = Object.assign({}, s.travel || {});
   const next = Object.assign({}, prev);
   if (mode) next.next = mode; else delete next.next;
@@ -1588,7 +1588,7 @@ async function setBetweenTravel(sessionId, mode) {
   } catch (e) {
     s.travel = prev;
     if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
-    showToast('Could not change the travel plan', e.message);
+    showToast('Could not change the travel plan', e.message, 'warn');
     return false;
   }
 }
@@ -2014,7 +2014,7 @@ function travelLegAnchorMin(seg) {
 /* Save a leg's time. offsetMin null = back to the calculated time. */
 async function setTravelTiming(sessionId, side, offsetMin) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
-  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.'); return false; }
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.', 'warn'); return false; }
   const key = side === 'after' ? 'afterOffsetMin' : 'beforeOffsetMin';
   const prev = Object.assign({}, s.travel || {});
   const next = Object.assign({}, prev);
@@ -2038,7 +2038,7 @@ async function setTravelTiming(sessionId, side, offsetMin) {
   } catch (e) {
     s.travel = prev;
     if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
-    showToast('Could not move travel', e.message);
+    showToast('Could not move travel', e.message, 'warn');
     return false;
   }
 }
@@ -2525,7 +2525,7 @@ function _wireRouteAddressEdits(body, seg) {
 async function saveSessionAddress(sessionId, newAddr, lat, lng) {
   var s = window.SESSIONS && window.SESSIONS[sessionId];
   if (!s) return false;
-  if (!s.dbId) { showToast('Not saved yet', 'This appointment has not finished saving. Try again in a moment.'); return false; }
+  if (!s.dbId) { showToast('Not saved yet', 'This appointment has not finished saving. Try again in a moment.', 'warn'); return false; }
   newAddr = String(newAddr || '').trim(); if (!newAddr) return false;
   lat = parseFloat(lat) || null; lng = parseFloat(lng) || null;
   var fromPlaces = !!(lat && lng);
@@ -2553,7 +2553,7 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
         method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ location: newAddr, lat: lat, lng: lng }),
       });
-      if (!r.ok) { var j = await r.json().catch(function () { return {}; }); showToast('Address kept locally', j.error || 'Could not write it to the appointment.'); }
+      if (!r.ok) { var j = await r.json().catch(function () { return {}; }); showToast('Address kept locally', j.error || 'Could not write it to the appointment.', 'warn'); }
     } catch (e) { showToast('Address kept locally', e.message); }
   }
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
