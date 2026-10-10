@@ -69,8 +69,10 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  function toast(title, msg) {
-    if (typeof global.showToast === 'function') global.showToast(title, msg);
+  // kind 'warn' keeps a failure red now that a string second argument is a
+  // subtitle (10 Oct 2026 — the one showToast takes (title, sub, kind)).
+  function toast(title, msg, kind) {
+    if (typeof global.showToast === 'function') global.showToast(title, msg, kind);
   }
 
   function fmtDateTime(v) {
@@ -162,7 +164,7 @@
     var r = await api(API + '/clients?q=' + encodeURIComponent(q || ''));
     S.clientsLoading = false;
     if (r.ok) { S.clients = r.clients || []; }
-    else { S.clients = []; toast('Clients unavailable', r.error); }
+    else { S.clients = []; toast('Clients unavailable', r.error, 'warn'); }
     renderClientResults();
   }
 
@@ -895,7 +897,7 @@
 
     if (!r.ok) {
       setSaveState('Not saved');
-      toast('Could not update sections', r.error);
+      toast('Could not update sections', r.error, 'warn');
       seedSections();       // fall back to the last server state
       mountSections();
       return;
@@ -953,7 +955,7 @@
     if (!r.ok) {
       S.saveErr = r.error;
       setSaveState('Not saved');
-      toast('Could not save', r.error);
+      toast('Could not save', r.error, 'warn');
       return;
     }
     S.saveErr = '';
@@ -1216,18 +1218,18 @@
     attachPdf: async function (input) {
       var file = input && input.files && input.files[0];
       if (!file || !S.docu) return;
-      if (file.size > 15 * 1024 * 1024) { toast('Too large', 'Attach a PDF under 15 MB.'); input.value = ''; return; }
+      if (file.size > 15 * 1024 * 1024) { toast('Too large', 'Attach a PDF under 15 MB.', 'warn'); input.value = ''; return; }
       S.appendixBusy = true;
       mountAppendices();
       var fileData;
       try { fileData = await fileToBase64(file); }
-      catch (_) { S.appendixBusy = false; mountAppendices(); toast('Could not read the file', ''); return; }
+      catch (_) { S.appendixBusy = false; mountAppendices(); toast('Could not read the file', '', 'warn'); return; }
       var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices', {
         method: 'POST',
         body: { kind: 'pdf', fileName: file.name, title: file.name.replace(/\.pdf$/i, ''), fileData: fileData },
       });
       S.appendixBusy = false;
-      if (!r.ok) { mountAppendices(); toast('Could not attach', r.error); return; }
+      if (!r.ok) { mountAppendices(); toast('Could not attach', r.error, 'warn'); return; }
       applyAppendixResult(r);
       setSaveState('Saved');
     },
@@ -1238,7 +1240,7 @@
       var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices', {
         method: 'POST', body: { kind: 'whodas', assessmentId: pick.value },
       });
-      if (!r.ok) { toast('Could not attach', r.error); return; }
+      if (!r.ok) { toast('Could not attach', r.error, 'warn'); return; }
       applyAppendixResult(r);
       setSaveState('Saved');
     },
@@ -1248,7 +1250,7 @@
       var r = await api(API + '/documents/' + encodeURIComponent(S.docu.id) + '/appendices/' + encodeURIComponent(id), {
         method: 'DELETE',
       });
-      if (!r.ok) { toast('Could not remove', r.error); return; }
+      if (!r.ok) { toast('Could not remove', r.error, 'warn'); return; }
       applyAppendixResult(r);
       setSaveState('Saved');
     },
@@ -1304,7 +1306,7 @@
       var body = { templateId: S.creating.templateId, title: title };
       if (S.creating.clientId) body.clientId = S.creating.clientId;
       var r = await api(API + '/documents', { method: 'POST', body: body });
-      if (!r.ok) { toast('Could not create', r.error); return; }
+      if (!r.ok) { toast('Could not create', r.error, 'warn'); return; }
       S.creating = null;
       S.docu = r.document;
       S.values = {};
@@ -1319,7 +1321,7 @@
 
     open: async function (id) {
       var r = await api(API + '/documents/' + encodeURIComponent(id));
-      if (!r.ok) { toast('Could not open', r.error); return; }
+      if (!r.ok) { toast('Could not open', r.error, 'warn'); return; }
       S.docu = r.document;
       S.values = {};
       // Seed the model from the answers already stored, so a save never blanks
@@ -1477,7 +1479,7 @@
     remove: async function (id) {
       if (!await portalConfirm('Delete this document? The template itself is not affected.', { danger: true })) return;
       var r = await api(API + '/documents/' + encodeURIComponent(id), { method: 'DELETE' });
-      if (!r.ok) { toast('Could not delete', r.error); return; }
+      if (!r.ok) { toast('Could not delete', r.error, 'warn'); return; }
       loadDocuments();
     },
 
@@ -1511,7 +1513,7 @@
         if (!res.ok) {
           var msg = 'The download could not be prepared.';
           try { var j = await res.json(); if (j && j.message) msg = j.message; } catch (_) {}
-          toast('Download failed', msg);
+          toast('Download failed', msg, 'warn');
           return;
         }
         var blob = await res.blob();

@@ -212,9 +212,10 @@ describe('upsertOutlookEvent — an existing row is never wiped by a partial pay
     await db.upsertOutlookEvent(USER_ID, { outlookId: OL_ID, title: 'Session' });
     const [sql, params] = writeCall();
     // The timing columns keep their COALESCE (absent = preserve), now inside a
-    // CASE that also shields an unpushed app-side move from an older echo.
-    expect(sql).toMatch(/start_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN start_time ELSE COALESCE\(\$2,\s*start_time\) END/);
-    expect(sql).toMatch(/end_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN end_time\s+ELSE COALESCE\(\$3,\s*end_time\)\s+END/);
+    // CASE that also shields an unpushed app-side move from an older echo —
+    // but not from an Outlook change made after the portal edit ($13).
+    expect(sql).toMatch(/start_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND \(\$13::timestamptz IS NULL OR \(\$13::timestamptz AT TIME ZONE 'UTC'\) <= last_modified_at\) THEN start_time ELSE COALESCE\(\$2,\s*start_time\) END/);
+    expect(sql).toMatch(/end_time\s*=\s*CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND \(\$13::timestamptz IS NULL OR \(\$13::timestamptz AT TIME ZONE 'UTC'\) <= last_modified_at\) THEN end_time\s+ELSE COALESCE\(\$3,\s*end_time\)\s+END/);
     expect(params[UPD.start]).toBeUndefined();
     expect(params[UPD.end]).toBeUndefined();
   });

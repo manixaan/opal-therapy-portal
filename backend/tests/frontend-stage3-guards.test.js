@@ -3007,3 +3007,21 @@ describe('Smart Booking review fixes (10 Oct 2026)', () => {
     expect(modal).toBeLessThan(9700); // portal dialogs (dialog.css) still sit above it
   });
 });
+
+// ── Failure toasts keep their red (10 Oct 2026) ──────────────────────────────
+// The one showToast reads a string second argument as a subtitle, so a
+// failure is red only when it says so (kind 'warn'/'error'). The module
+// wrappers must forward that kind, and their failure calls must pass it.
+describe('failure toasts pass their kind through the module wrappers', () => {
+  const FE = path.join(__dirname, '..', '..', 'frontend', 'current');
+  for (const file of ['resourcehub.js', 'templates.js']) {
+    test(file + ': the wrapper forwards kind and every failure call passes \'warn\'', () => {
+      const src = fs.readFileSync(path.join(FE, file), 'utf8');
+      expect(src).toContain('function toast(title, msg, kind) {');
+      expect(src).toContain('global.showToast(title, msg, kind);');
+      const failures = src.split('\n').filter((l) => /[^.\w]toast\('(?:Could not|Not |Check failed|Download failed|Preview rebuild failed|Missing|Too large|Clients unavailable)/.test(l));
+      expect(failures.length).toBeGreaterThan(5);
+      failures.forEach((l) => expect(l).toMatch(/'warn'\);/));
+    });
+  }
+});

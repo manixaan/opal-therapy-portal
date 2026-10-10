@@ -105,7 +105,7 @@
 <link rel="stylesheet" href="/booking-route.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=3" />
-<script src="/resourcehub.js?v=r52" defer></script>
+<script src="/resourcehub.js?v=r53" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
 <script src="/induction-modules.js?v=4" defer></script>
@@ -130,7 +130,7 @@
 <script src="/letter.js?v=2" defer></script>
 <!-- Resource Hub → Templates. Loaded after docx-preview: the live preview
      renders the composed document with it, exactly as the FCA wizard does. -->
-<script src="/templates.js?v=7" defer></script>
+<script src="/templates.js?v=8" defer></script>
 <!-- WHODAS 2.0 assessment. Renders nothing unless the server reports the
      feature enabled (ENABLE_WHODAS_ASSESSMENT) — /api/whodas/* 404s otherwise. -->
 <script src="/whodas.js?v=5" defer></script>
@@ -171,7 +171,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=10" defer></script>
+<script src="/profile.js?v=11" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -9236,7 +9236,7 @@ async function acctCreateDraft(id, btn) {
   btn.disabled = true;
   var r = await acctPost('/candidates/' + id + '/create-draft-invoice', {});
   if (typeof showToast === 'function') showToast(r.status === 201 ? 'Draft created in Xero' : 'Draft creation blocked',
-    r.status === 201 ? (r.json.invoiceNumber || '') : (r.json.error || ''));
+    r.status === 201 ? (r.json.invoiceNumber || '') : (r.json.error || ''), r.status === 201 ? '' : 'warn');
   acctRenderCandidates();
 }
 async function acctGenerateCandidates(btn) {
@@ -9374,7 +9374,7 @@ function applyReadOnlyGuards() {
   // 2. JS: intercept write-action entry points that are built dynamically.
   //    Wrapped on load (functions are declared later in this file).
   const explain = () => {
-    if (typeof showToast === 'function') showToast('Read-only account', 'This action is not available for read-only access');
+    if (typeof showToast === 'function') showToast('Read-only account', 'This action is not available for read-only access', 'warn');
     else portalAlert('Read-only account — this action is not available.');
   };
   const wrapWrites = () => {
@@ -10682,7 +10682,7 @@ function daysUntilExpiry(dateStr) {
 // PHASE 1-6: Main scheduling algorithm
 function runAutoFitAlgorithm() {
   if (selectedClients.length === 0) {
-    showToast('No clients selected', 'Pick at least one client to schedule.');
+    showToast('No clients selected', 'Pick at least one client to schedule.', 'warn');
     return;
   }
 
@@ -10931,7 +10931,7 @@ async function sendToSplose() {
     if (missing.length > 0) {
       // NO fake success (audit P0): incomplete booking data does nothing —
       // say so plainly instead of claiming it was recorded.
-      showToast('Booking not sent', 'Missing details: ' + missing.join(', ') + '. Complete every step — or book directly in Splose during the read-only pilot.');
+      showToast('Booking not sent', 'Missing details: ' + missing.join(', ') + '. Complete every step — or book directly in Splose during the read-only pilot.', 'warn');
       return;
     }
 
@@ -11295,7 +11295,7 @@ async function saveQuickAdd() {
       const m = address.match(/([A-Za-z][A-Za-z \-]+)\s+WA\s+\d{4}/);
       suburb = m ? `${m[1].trim()} ${(address.match(/WA\s+(\d{4})/) || [])[1] || ''}`.trim() : custom;
     } catch (err) {
-      showToast('Address not found', String(err && err.message || err));
+      showToast('Address not found', String(err && err.message || err), 'warn');
       return;
     }
   }
@@ -15276,7 +15276,8 @@ function bdApplyEdit(id) {
   if (sessionNeedsFullAddress(s) && !isFullLocation(s.address)) {
     showToast(
       'Full address required',
-      'Please enter a full address for this appointment so travel time can be calculated.'
+      'Please enter a full address for this appointment so travel time can be calculated.',
+      'warn'
     );
     return;
   }
@@ -17010,7 +17011,7 @@ async function completeOutlookSync() {
           var rd = await ra.json();
           if (rd.authUrl) { window.location.href = rd.authUrl; return; }
         } catch (e2) {}
-        showToast('Outlook session expired', 'Reconnect from Settings → Integrations.');
+        showToast('Outlook session expired', 'Reconnect from Settings → Integrations.', 'warn');
         return;
       }
     }

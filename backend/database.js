@@ -1026,12 +1026,17 @@ async function upsertOutlookEvent(userId, eventData) {
           -- authoritative and overwrites. Graph never reports a legitimately
           -- NULL subject/start/end for a live event, so nothing real is lost.
           title                    = COALESCE($1, title),
-          -- An app-side move whose Outlook write failed is still waiting to
-          -- be pushed (last_modified_by = 'app', sync_status = 'pending').
-          -- The delta feed then carries Outlook's OLDER copy; letting it win
-          -- would silently snap the appointment back to where it was.
-          start_time               = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN start_time ELSE COALESCE($2, start_time) END,
-          end_time                 = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN end_time   ELSE COALESCE($3, end_time)   END,
+          -- An app-side move whose Outlook write failed (or was never sent:
+          -- write-back off) is still waiting to be pushed (last_modified_by =
+          -- 'app', sync_status = 'pending'). The delta feed then carries
+          -- Outlook's OLDER copy; letting it win would silently snap the
+          -- appointment back to where it was. A change made in Outlook AFTER
+          -- the portal edit ($13 newer than last_modified_at) is not stale:
+          -- it wins and releases the pin (10 Oct 2026 — with write-back off
+          -- the pin otherwise never cleared and dropped every later move the
+          -- organiser made in Outlook).
+          start_time               = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND ($13::timestamptz IS NULL OR ($13::timestamptz AT TIME ZONE 'UTC') <= last_modified_at) THEN start_time ELSE COALESCE($2, start_time) END,
+          end_time                 = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND ($13::timestamptz IS NULL OR ($13::timestamptz AT TIME ZONE 'UTC') <= last_modified_at) THEN end_time   ELSE COALESCE($3, end_time)   END,
           -- Preserve manual location override: if the user has manually set the
           -- routing address in the app, don't overwrite it with whatever Outlook
           -- has stored (Outlook typically only has suburb-level location).
@@ -1042,8 +1047,8 @@ async function upsertOutlookEvent(userId, eventData) {
           -- (Integration-test finding: the previous NULLIF/COALESCE form was
           --  inverted and stamped app-created rows back to 'outlook'.)
           source                   = CASE WHEN created_by_source = 'app' THEN 'app' ELSE 'outlook' END,
-          sync_status              = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
-          last_modified_by         = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' THEN 'app' ELSE 'outlook' END,
+          sync_status              = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND ($13::timestamptz IS NULL OR ($13::timestamptz AT TIME ZONE 'UTC') <= last_modified_at) THEN 'pending' ELSE 'synced' END,
+          last_modified_by         = CASE WHEN last_modified_by = 'app' AND sync_status = 'pending' AND ($13::timestamptz IS NULL OR ($13::timestamptz AT TIME ZONE 'UTC') <= last_modified_at) THEN 'app' ELSE 'outlook' END,
           is_deleted               = FALSE,
           deleted_at               = NULL,
           outlook_ical_uid         = COALESCE($6, outlook_ical_uid),
@@ -1059,7 +1064,8 @@ async function upsertOutlookEvent(userId, eventData) {
       WHERE id = $9
       RETURNING *
     `, [titleParam, startTime, endTime, locationParam, cats, iCalUId, changeKey, lastModifiedAt,
-        existing.rows[0].id, therapistProfileId, organisationId, createdBySource]);
+        existing.rows[0].id, therapistProfileId, organisationId, createdBySource,
+        lastModifiedAt || null]);
     return result.rows[0];
   } else {
     const result = await pool.query(`

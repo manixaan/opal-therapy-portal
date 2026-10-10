@@ -150,8 +150,10 @@
     }
   }
 
-  function toast(title, msg) {
-    if (typeof global.showToast === 'function') global.showToast(title, msg);
+  // kind 'warn' keeps a failure red now that a string second argument is a
+  // subtitle (10 Oct 2026 — the one showToast takes (title, sub, kind)).
+  function toast(title, msg, kind) {
+    if (typeof global.showToast === 'function') global.showToast(title, msg, kind);
   }
 
   // ── Safe markdown-ish renderer ────────────────────────────────────────────
@@ -2314,7 +2316,7 @@
     for (var i = 0; i < files.length; i++) if (files[i].id === fileId) f = files[i];
     if (!f || !f.regenerateUrl) return;
     var d = await api(f.regenerateUrl, { method: 'POST' });
-    if (!d.ok) { toast('Preview rebuild failed', d.error || ''); return; }
+    if (!d.ok) { toast('Preview rebuild failed', d.error || '', 'warn'); return; }
     toast('Preview rebuilt', (d.results || []).map(function (r) { return r.kind + ': ' + r.outcome; }).join(', '));
     if (S.detail && S.detail.id) loadDetailFiles(S.detail.id);
   }
@@ -2611,7 +2613,7 @@
     us.favourited = on; // optimistic; reverted on failure
     render();
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/favourite', { method: on ? 'POST' : 'DELETE' });
-    if (!d.ok) { us.favourited = !on; render(); toast('Could not update', d.error || 'Please try again.'); return; }
+    if (!d.ok) { us.favourited = !on; render(); toast('Could not update', d.error || 'Please try again.', 'warn'); return; }
     registerToggleUndo(on ? 'Favourite added' : 'Favourite removed', id, 'favourite', on, 'favourited');
   }
 
@@ -2623,7 +2625,7 @@
     us.completed = on; // optimistic; reverted on failure
     render();
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/complete', { method: on ? 'POST' : 'DELETE' });
-    if (!d.ok) { us.completed = !on; render(); toast('Could not update', d.error || 'Please try again.'); return; }
+    if (!d.ok) { us.completed = !on; render(); toast('Could not update', d.error || 'Please try again.', 'warn'); return; }
     registerToggleUndo(on ? 'Marked complete' : 'Marked incomplete', id, 'complete', on, 'completed');
   }
 
@@ -2638,7 +2640,7 @@
       // client never infers acknowledgement state.
       await openDetail(st.id, st.backView);
     } else {
-      toast('Could not acknowledge', d.error || 'Please try again.');
+      toast('Could not acknowledge', d.error || 'Please try again.', 'warn');
       render();
     }
   }
@@ -2651,7 +2653,7 @@
       method: 'POST', body: { kind: st.fbKind, comment: comment.trim() || undefined },
     });
     if (d.ok) { st.fbDone = true; render(); }
-    else toast('Could not send feedback', d.error || 'Please try again.');
+    else toast('Could not send feedback', d.error || 'Please try again.', 'warn');
   }
 
   function toggleVersions() { S.detail.showVersions = !S.detail.showVersions; render(); }
@@ -2676,14 +2678,14 @@
     var answers = [];
     for (var i = 0; i < qs.length; i++) {
       var checked = doc.querySelector('input[name="rh2-q' + i + '"]:checked');
-      if (!checked) { toast('Not finished', 'Answer every question before submitting.'); return; }
+      if (!checked) { toast('Not finished', 'Answer every question before submitting.', 'warn'); return; }
       answers.push(Number(checked.value));
     }
     var d = await api('/api/rh2/resources/' + encodeURIComponent(st.id) + '/quiz-attempt', {
       method: 'POST', body: { answers: answers },
     });
     if (d.ok) { st.quizResult = { score: pick(d, 'score'), total: pick(d, 'total'), passed: !!pick(d, 'passed') }; render(); }
-    else toast('Could not submit', d.error || 'Please try again.');
+    else toast('Could not submit', d.error || 'Please try again.', 'warn');
   }
   function quizRetry() { S.detail.quizResult = null; render(); }
 
@@ -2841,10 +2843,10 @@
       interactiveHours: Number(val('rh2-cpd-int') || 0),
       reflection: val('rh2-cpd-reflection').trim() || undefined,
     };
-    if (!body.activityDate || !body.activity) { toast('Missing details', 'A date and activity are required.'); return; }
+    if (!body.activityDate || !body.activity) { toast('Missing details', 'A date and activity are required.', 'warn'); return; }
     var d = await api('/api/rh2/cpd', { method: 'POST', body: body });
     if (d.ok) { S.learning.cpdOpen = false; toast('CPD entry added', 'Your CPD record has been updated.'); loadLearning(); }
-    else toast('Could not save', d.error || 'Please try again.');
+    else toast('Could not save', d.error || 'Please try again.', 'warn');
   }
 
   // ── ADMIN ─────────────────────────────────────────────────────────────────
@@ -3873,7 +3875,7 @@
     if (rights) body.rightsStatus = rights;
 
     var d = await api('/api/rh2/admin/source-review/' + encodeURIComponent(id), { method: 'POST', body: body });
-    if (!d.ok) { toast('Not recorded', d.error || 'Please try again.'); return; }
+    if (!d.ok) { toast('Not recorded', d.error || 'Please try again.', 'warn'); return; }
     toast('Recorded', d.note || 'Decision recorded.');
     loadSourceReview();
     loadClinicalVocabulary();
@@ -4207,7 +4209,7 @@
       body.externalUrl = val('rh2-form-srcurl').trim() || undefined;
       body.sourceEffectiveDate = val('rh2-form-srcdate') || undefined;
     }
-    if (!body.title) { toast('Missing title', 'A title is required.'); return; }
+    if (!body.title) { toast('Missing title', 'A title is required.', 'warn'); return; }
     if (editing && pick(r, 'status') === 'approved') {
       var kindEl = doc.querySelector('input[name="rh2-form-kind"]:checked');
       body.changeKind = kindEl ? kindEl.value : 'minor';
@@ -4216,7 +4218,7 @@
     var d = editing
       ? await api('/api/rh2/resources/' + encodeURIComponent(pick(r, 'id')), { method: 'PATCH', body: body })
       : await api('/api/rh2/resources', { method: 'POST', body: body });
-    if (!d.ok) { toast('Could not save', d.error || 'Please try again.'); return; }
+    if (!d.ok) { toast('Could not save', d.error || 'Please try again.', 'warn'); return; }
     var id = pick(r, 'id') || pick(d.resource || d, 'id');
     if (then === 'submit' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/submit', { method: 'POST' });
     if (then === 'approve' && id) await api('/api/rh2/resources/' + encodeURIComponent(id) + '/approve', { method: 'POST' });
@@ -4251,7 +4253,7 @@
 
   async function adminAction(id, action) {
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
-    if (!d.ok) { toast('Could not ' + action, d.error || 'Please try again.'); return; }
+    if (!d.ok) { toast('Could not ' + action, d.error || 'Please try again.', 'warn'); return; }
     toast('Done', action === 'approve' ? 'Resource approved. It remains unpublished.' : action === 'submit' ? 'Submitted for review.' : 'Archived.');
     loadAdminContent();
   }
@@ -4281,12 +4283,12 @@
   async function sourcesCheck() {
     toast('Checking sources', 'This can take a moment.');
     var d = await api('/api/rh2/sources/check-now', { method: 'POST' });
-    if (!d.ok) toast('Check failed', d.error || 'Please try again.');
+    if (!d.ok) toast('Check failed', d.error || 'Please try again.', 'warn');
     loadAdminSources();
   }
   async function sourceVerify(id) {
     var d = await api('/api/rh2/sources/' + encodeURIComponent(id) + '/verify', { method: 'POST' });
-    if (!d.ok) toast('Could not verify', d.error || 'Please try again.');
+    if (!d.ok) toast('Could not verify', d.error || 'Please try again.', 'warn');
     else toast('Verified', 'Source marked as verified today.');
     loadAdminSources();
   }
@@ -4367,11 +4369,11 @@
       registrationUrl: val('rh2-pd-url').trim() || undefined,
       description: val('rh2-pd-desc').trim() || undefined,
     };
-    if (!body.title) { toast('Missing title', 'A title is required.'); return; }
+    if (!body.title) { toast('Missing title', 'A title is required.', 'warn'); return; }
     var d = pick(e, 'id')
       ? await api('/api/rh2/pd/' + encodeURIComponent(pick(e, 'id')), { method: 'PATCH', body: body })
       : await api('/api/rh2/pd', { method: 'POST', body: body });
-    if (!d.ok) { toast('Could not save', d.error || 'Please try again.'); return; }
+    if (!d.ok) { toast('Could not save', d.error || 'Please try again.', 'warn'); return; }
     S.admin.pdEditing = null;
     toast('Saved', 'PD event saved.');
     loadAdminPd();
@@ -4422,12 +4424,12 @@
       return;
     }
     var d = await api('/api/rh2/quick-links', { method: 'POST', body: { label: label, url: url } });
-    if (!d.ok) { toast('Could not save', d.error || 'Please try again.'); return; }
+    if (!d.ok) { toast('Could not save', d.error || 'Please try again.', 'warn'); return; }
     loadAdminLinks();
   }
   async function qlToggle(id, on) {
     var d = await api('/api/rh2/quick-links/' + encodeURIComponent(id), { method: 'PATCH', body: { isActive: !!on } });
-    if (!d.ok) toast('Could not update', d.error || 'Please try again.');
+    if (!d.ok) toast('Could not update', d.error || 'Please try again.', 'warn');
     loadAdminLinks();
   }
 
@@ -6125,7 +6127,7 @@
             }] }] },
           },
         });
-        if (!made.ok) toast('Not added to the library', made.error || 'The walkthrough was created, but its induction could not be.');
+        if (!made.ok) toast('Not added to the library', made.error || 'The walkthrough was created, but its induction could not be.', 'warn');
         loadLa();
       }
       return;
@@ -6479,7 +6481,7 @@
     if (pending) {
       pending.then(function (ok) {
         if (ok) toast('Saved', '“' + title + '” was updated.');
-        else toast('Not saved', 'The changes to “' + title + '” could not be saved. Open it again to retry.');
+        else toast('Not saved', 'The changes to “' + title + '” could not be saved. Open it again to retry.', 'warn');
         loadLa();
       });
     }

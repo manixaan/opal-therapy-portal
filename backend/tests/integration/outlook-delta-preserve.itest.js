@@ -188,4 +188,29 @@ describe('an app-side move that has not reached Outlook yet', () => {
     expect(later.last_modified_by).toBe('outlook');
     expect(later.sync_status).toBe('synced');
   });
+
+  // 10 Oct 2026: with Outlook write-back off nothing ever pushes the move, so
+  // the pin used to hold for good and drop every later change the organiser
+  // made in Outlook. Graph's lastModifiedDateTime now decides: an echo older
+  // than the portal edit is stale, a change made after it wins.
+  test('a change made in Outlook AFTER the portal edit wins and releases the pin', async () => {
+    const u = await seedUser();
+    const row = await db.upsertOutlookEvent(u.id, FULL(OL(21)));
+    await db.updateEvent(row.id, { startTime: '2026-07-02T09:00:00Z', endTime: '2026-07-02T10:00:00Z', lastModifiedBy: 'app', syncStatus: 'pending' });
+    const { rows: [{ last_modified_at: editedAt }] } = await db.pool.query('SELECT last_modified_at FROM events WHERE id = $1', [row.id]);
+    const editedMs = new Date(editedAt).getTime();
+
+    // An echo stamped before the edit: stale, the portal's time holds.
+    const stale = await db.upsertOutlookEvent(u.id, { outlookId: OL(21), startTime: '2026-07-01T09:50:00Z', endTime: '2026-07-01T10:53:00Z',
+      lastModifiedAt: new Date(editedMs - 60e3).toISOString() });
+    expect(new Date(stale.start_time).toISOString()).toBe(new Date('2026-07-02T09:00:00Z').toISOString());
+    expect(stale.sync_status).toBe('pending');
+
+    // The organiser moves it in Outlook afterwards: Outlook wins, pin released.
+    const newer = await db.upsertOutlookEvent(u.id, { outlookId: OL(21), startTime: '2026-07-02T14:00:00Z', endTime: '2026-07-02T15:00:00Z',
+      lastModifiedAt: new Date(editedMs + 60e3).toISOString() });
+    expect(new Date(newer.start_time).toISOString()).toBe(new Date('2026-07-02T14:00:00Z').toISOString());
+    expect(newer.sync_status).toBe('synced');
+    expect(newer.last_modified_by).toBe('outlook');
+  });
 });

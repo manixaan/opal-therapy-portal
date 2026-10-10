@@ -251,6 +251,20 @@ describe('a schedule reload never overwrites an edit the server may not have', (
     expect(env.c.WORK_LOCATION.wk.mon).toBe('home-2');
   });
 
+  test('a GET sent while the PUT is in flight is ignored even when the PUT answers first', async () => {
+    const env = await boot({ wk: { mon: 'home-1' } });
+    env.c.WORK_LOCATION.wk.mon = 'home-2';
+    env.c.debouncedSaveWorkSchedule();
+    await env.fireTimers();
+    const put = env.last('PUT');                      // in flight
+    env.c.loadWorkSchedule();                          // My Profile opens now
+    const getDuringPut = env.last('GET');
+    await env.reply(put, {});                          // the PUT lands here first…
+    // …but the server read the row before the PUT committed.
+    await env.reply(getDuringPut, { workLocationSchedule: { wk: { mon: 'home-1' } }, travelBases: null });
+    expect(env.c.WORK_LOCATION.wk.mon).toBe('home-2');
+  });
+
   test('a reload refills each week in place, so a held week stays live', async () => {
     const env = await boot({ wk: { mon: 'home-1', tue: 'home-1' } });
     const held = env.c.WORK_LOCATION.wk;

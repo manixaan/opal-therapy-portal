@@ -3000,10 +3000,15 @@ router.post('/api/outlook/events/:dbId/restore', requireAuth, async (req, res) =
               appEventId: target.dbRowId,
               sploseId:   null,
             });
+            // Link through the same release-and-link transaction as a new
+            // booking: a delta tick that imported the re-created event in the
+            // gap would otherwise trip events_user_outlook_unique here and
+            // leave the row pointing at the deleted Graph event (10 Oct 2026).
+            // The row is the caller's — the SELECTs above are user-scoped.
+            await db.updateEventOutlookId(target.dbRowId, created.outlookId);
             await db.pool.query(
-              `UPDATE events SET outlook_id = $1, sync_status = 'synced', last_modified_by = 'app'
-               WHERE id = $2 AND user_id = $3`,
-              [created.outlookId, target.dbRowId, req.session.userId]
+              `UPDATE events SET last_modified_by = 'app' WHERE id = $1 AND user_id = $2`,
+              [target.dbRowId, req.session.userId]
             );
             await db.pool.query(
               `INSERT INTO sync_log (event_id, action, source, target, status) VALUES ($1, 'created', 'app', 'outlook', 'success')`,

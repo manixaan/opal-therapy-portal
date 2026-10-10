@@ -496,11 +496,14 @@ describe('POST /api/outlook/events/:dbId/restore — soft-delete undo', () => {
     expect(res.body).toMatchObject({ ok: true, outlookRecreated: 2, outlookPending: 0, outlookStatus: 'synced' });
     expect(outlookApi.createOutlookEvent).toHaveBeenCalledTimes(2);
 
-    const idStores = db.pool.query.mock.calls.filter(([sql]) => /SET outlook_id = \$1/.test(sql));
-    expect(idStores.map(([, params]) => params)).toEqual([
-      ['AAMkNewMain==', DB_ID, USER_ID],
-      ['AAMkNewTravel==', TB_ID, USER_ID],
+    // Linked through the release-and-link transaction (a delta twin imported
+    // in the gap must not trip the unique index), then stamped as the app's.
+    expect(db.updateEventOutlookId.mock.calls).toEqual([
+      [DB_ID, 'AAMkNewMain=='],
+      [TB_ID, 'AAMkNewTravel=='],
     ]);
+    const stamps = db.pool.query.mock.calls.filter(([sql]) => /SET last_modified_by = 'app' WHERE id = \$1 AND user_id = \$2/.test(sql));
+    expect(stamps.map(([, params]) => params)).toEqual([[DB_ID, USER_ID], [TB_ID, USER_ID]]);
 
     const syncLogs = db.pool.query.mock.calls.filter(([sql]) => /INSERT INTO sync_log/.test(sql));
     expect(syncLogs).toHaveLength(2);

@@ -629,7 +629,8 @@ describe('changed assets are cache-busted', () => {
       // one screen meant to edit them. It opens the side-panel editor, offers
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
-      ['resourcehub.js', 'r52'], ['resourcehub.css', 'r30'],
+      // r53: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
+      ['resourcehub.js', 'r53'], ['resourcehub.css', 'r30'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -702,7 +703,8 @@ describe('changed assets are cache-busted', () => {
       // 3: travel bases are one Google-powered address field; no suburb box.
       // 5: the office field stays disabled (coming soon) when bases load.
       // 10: setup card guarded; an unsaved work-location edit survives a schedule reload.
-      ['profile.js', 10],
+      // 11: a GET sent while the work-schedule PUT is in flight is ignored.
+      ['profile.js', 11],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -746,7 +748,8 @@ describe('changed assets are cache-busted', () => {
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
-      ['templates.js', 7], ['templates.css', 6],
+      // 8: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
+      ['templates.js', 8], ['templates.css', 6],
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
       ['theme.js', 2], ['theme.css', 3],

@@ -1598,7 +1598,9 @@ window.workScheduleLoaded = function () { return _wsLoaded; };
 })(0);
 
 async function loadWorkSchedule() {
-  var seqAtSend = _wlEditSeq;
+  // Both read NOW: a GET sent while a PUT is in flight can be answered
+  // with the pre-PUT row even though the PUT lands first on this side.
+  var seqAtSend = _wlEditSeq, savedAtSend = _wlSavedSeq;
   try {
     var r = await fetch('/api/profile/work-schedule', { credentials: 'include' });
     if (!r.ok) return;
@@ -1609,9 +1611,10 @@ async function loadWorkSchedule() {
     // A reload (every My Profile visit) used to put the server's copy over an
     // edit still waiting on its debounced PUT, which then saved the old week
     // (10 Oct 2026). It now skips while the page holds an edit the server may
-    // not have: one not yet saved, or one made after this GET went out. The
-    // first load always applies — until then the page's copy is empty.
-    var pageIsNewer = _wsLoaded && (_wlEditSeq !== _wlSavedSeq || _wlEditSeq !== seqAtSend);
+    // not have: one not yet saved, one made after this GET went out, or one
+    // whose PUT was still in flight when it went out. The first load always
+    // applies — until then the page's copy is empty.
+    var pageIsNewer = _wsLoaded && (_wlEditSeq !== _wlSavedSeq || _wlEditSeq !== seqAtSend || savedAtSend !== seqAtSend);
 
     // Populate WORK_LOCATION from backend. Each week is refilled IN PLACE,
     // never swapped for the parsed copy, so code holding a week (ensureDayBase
