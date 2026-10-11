@@ -715,7 +715,8 @@ describe('changed assets are cache-busted', () => {
       // 19: route-aware Smart Booking — routed preview with loading/error
       // states, the earliest feasible start, departure-time routing.
       // 38: failure toasts pass 'warn'; the work-location undo resolves its week by key (10 Oct 2026).
-      ['travel.js', 38],
+      // 39: Go somewhere else in between — a new place typed in the travel panel.
+      ['travel.js', 39],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.

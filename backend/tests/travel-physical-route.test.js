@@ -381,6 +381,41 @@ describe('Go Somewhere Else between two sessions (6 Oct 2026)', () => {
     expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
   });
 
+  // 11 Oct 2026 — a new place typed in the travel panel, between two sessions.
+  test('the panel input saves a typed place as the way and clears a Direct / Home choice', async () => {
+    const c = load();
+    const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { next: 'home' } } });
+    const b = add(c, { at: '14:00', to: '15:00', s: { address: JOONDALUP, patient: 'B' } });
+    c._renderTravelPanel = jest.fn();
+    c.closeTravelPanel = jest.fn();
+    c.registerTravelUndo = () => {};
+    const on = {};
+    const mk = (extra) => Object.assign({ dataset: {}, hidden: true, classList: { toggle: () => {} }, focus: () => {},
+      addEventListener: (t, f) => { on[t] = f; }, getAttribute: (k) => (k === 'data-between' ? a.id : null) }, extra);
+    const addr = mk({ value: '', dataset: { placeName: '' } });
+    const openBtn = mk();
+    let openClick;
+    openBtn.addEventListener = (t, f) => { openClick = f; };
+    const box = mk({ querySelector: () => addr });
+    const between = mk({ querySelector: () => openBtn });
+    const body = { querySelector: (q) => (q === '.tp-else' ? box : null) };
+    c.attachPlacesAutocomplete = undefined;
+    c._wireBetweenElsewhere(body, between);
+    openClick();
+    expect(box.hidden).toBe(false);
+    addr.value = SCHOOL;
+    on.keydown({ key: 'Enter', preventDefault: () => {} });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const bodies = c.fetch.mock.calls.map(([, o]) => JSON.parse(o.body));
+    expect(bodies[0].after).toMatchObject({ kind: 'address', address: SCHOOL, purpose: 'elsewhere', suburb: 'Scarborough' });
+    expect(bodies[1]).toEqual({ next: null, afterOffsetMin: null });
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['place-in', 'place-out']);
+    expect([L[0].fromSessionId, L[1].toSessionId]).toEqual([a.id, b.id]);
+    expect(c._renderTravelPanel).toHaveBeenCalled();
+  });
+
   test('a "Return Home" after (purpose home) is not a place — the home/direct rule decides', () => {
     const c = load();
     add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: { kind: 'base', id: 'home-1', purpose: 'home' } } } });

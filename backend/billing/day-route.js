@@ -17,6 +17,11 @@
  *     minutes and drive out again is a trip home (Return + Start legs), not a
  *     drive between clients — travel.js `betweenTravelPlan`, same rule. The
  *     session's choice on the calendar (travel.next 'direct' | 'home') wins.
+ *   • somewhere else in between: a session whose `travel.after` is a place
+ *     with purpose 'elsewhere' and no Direct/Home choice goes there before the
+ *     next session (travel.js betweenTravelPlan, mode 'elsewhere'). Billed
+ *     like a trip home: the drive to the place is a midday RETURN, the drive
+ *     on to the next client an OUTBOUND leg.
  * Differences, deliberate for billing: only billable in-person sessions form
  * the route (a telehealth or DNA session is not a stop), and a between leg is
  * kept whenever the two addresses differ even if the gap is tight — the drive
@@ -129,6 +134,18 @@ function viaBase(base, from, to, gapMin, minutesFor, choice) {
 }
 
 /**
+ * The place a session goes to before the next one ("Go somewhere else in
+ * between"), or null. A Direct / Home choice made since wins, as on the calendar.
+ */
+function viaPlace(travel, user) {
+  if (!travel || travel.next === 'direct' || travel.next === 'home') return null;
+  const spec = travel.after;
+  if (!spec || spec.purpose !== 'elsewhere') return null;
+  const pt = resolveSpec(spec, user);
+  return pt && !pt.remote && pt.address ? pt : null;
+}
+
+/**
  * @param {object} p
  * @param {object} p.user      users row (work_location_schedule, default_work_location)
  * @param {string} p.date      YYYY-MM-DD (local)
@@ -157,6 +174,18 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     const from = eventAddress(a), to = eventAddress(b);
     if (!from || !to) continue;
     const gapMin = Math.round((new Date(b.start_time) - new Date(a.end_time)) / 60000);
+    const place = viaPlace(meta(a), user);
+    if (place) {
+      if (canonAddr(from) !== canonAddr(place.address)) {
+        legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
+          origin: from, destination: place.address, destinationLabel: place.label });
+      }
+      if (canonAddr(place.address) !== canonAddr(to)) {
+        legs.push({ id: `start:${b.id}`, kind: 'OUTBOUND', fromEventId: null, toEventId: b.id, midday: true,
+          origin: place.address, destination: to, originLabel: place.label });
+      }
+      continue;
+    }
     const home = viaBase(base, from, to, gapMin, minutesFor, meta(a).next);
     if (home) {
       legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
@@ -180,4 +209,4 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
   return { legs, base, baseUnset: !base && !explicitStart };
 }
 
-module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, buildDayLegs };
+module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, viaPlace, buildDayLegs };

@@ -345,6 +345,24 @@ describe('day route mirrors the calendar\'s travel rules', () => {
     expect(kinds([withNext('home', '2026-09-25T02:00:00Z'), near])).toEqual(['OUTBOUND', 'RETURN', 'OUTBOUND', 'RETURN']);
   });
 
+  // 11 Oct 2026 — "Go somewhere else in between" (travel.after purpose 'elsewhere').
+  test('a place between sessions bills Return to it + Outbound from it; Direct / Home chosen since wins', () => {
+    const place = { kind: 'address', address: '7 Cafe Lane, Fremantle WA 6160', label: 'Cafe', purpose: 'elsewhere' };
+    const a = (travel) => ({ ...ev('a', '1 A St, Willetton', 1), end_time: '2026-09-25T02:00:00Z', custom_metadata: { travel } });
+    const b = { ...ev('b', '2 B St, Riverton', 2), start_time: '2026-09-25T02:45:00Z' };
+    const legs = s => DR.buildDayLegs({ user, date: '2026-09-25', sessions: s }).legs;
+    expect(legs([a({ after: place }), b]).map(l => [l.kind, l.origin, l.destination, !!l.midday])).toEqual([
+      ['OUTBOUND', '5 Base Rd, Canning Vale WA', '1 A St, Willetton', false],
+      ['RETURN', '1 A St, Willetton', place.address, true],
+      ['OUTBOUND', place.address, '2 B St, Riverton', true],
+      ['RETURN', '2 B St, Riverton', '5 Base Rd, Canning Vale WA', false]]);
+    expect(legs([a({ after: place, next: 'direct' }), b]).map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+    // A plain end-of-day answer (no purpose) is not a stop between sessions.
+    expect(legs([a({ after: { kind: 'address', address: '7 Cafe Lane, Fremantle WA 6160' } }), b]).map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+    // The place is the next client's own address: no drive out of it.
+    expect(legs([a({ after: { ...place, address: '2 B St, Riverton' } }), b]).map(l => l.kind)).toEqual(['OUTBOUND', 'RETURN', 'RETURN']);
+  });
+
   test('a manual pin beats the Outlook location', () => {
     expect(DR.eventAddress({ location: 'Outlook text', manual_location: { address: '9 Pin St' } })).toBe('9 Pin St');
   });

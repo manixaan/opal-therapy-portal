@@ -2323,7 +2323,11 @@ function _renderTravelPanel(seg) {
       // A saved Go Somewhere Else place is its own way; choosing it clears the
       // Direct / Home choice so the place applies again.
       (plan.placeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'elsewhere' ? ' on' : '') + '" data-mode="">Go to ' + _tpEsc(placeName) + ' in between</button>' : '') +
-      '</div><div class="tp-plan-hint">' + _tpEsc(why) + '</div>';
+      // A new place, typed here (11 Oct 2026): the drive there and on to the next client are redrawn.
+      '<button type="button" class="tp-plan-opt" data-else-open>' + (plan.placeAvailable ? 'Somewhere else…' : 'Go somewhere else in between') + '</button>' +
+      '</div><div class="tp-plan-hint">' + _tpEsc(why) + '</div>' +
+      '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
+      '<div class="tp-plan-hint">Pick a suggestion or press Enter. Travel there and on to ' + _tpEsc(_stopName(gapTo) || 'the next client') + ' is recalculated.</div></div>';
   }
 
   // What the leg belongs to, and whose time it keeps. The association is
@@ -2420,6 +2424,7 @@ function _renderTravelPanel(seg) {
   _wireTravelPlan(body, seg);
   _wireRouteAddressEdits(body, seg);
   var between = body.querySelector('.tp-between');
+  if (between) _wireBetweenElsewhere(body, between);
   if (between) between.querySelectorAll('[data-mode]').forEach(function (b) {
     b.addEventListener('click', function () {
       var fromId = between.getAttribute('data-between'), mode = b.getAttribute('data-mode') || null;
@@ -2466,6 +2471,50 @@ function _tpFmtTime(h, m) {
 // ═══════════════════════════════════════════════════════════════
 refreshAllOverlays();
 
+
+/* "Go somewhere else in between" — a new place typed in the panel. Saved
+   exactly like Smart Booking's Go Somewhere Else (booking-route.js
+   saveAfter): the place becomes this session's "after" with purpose
+   'elsewhere', and a Direct / Home choice is cleared so the place is the way.
+   Billing mirrors it (backend/billing/day-route.js viaPlace). */
+function _wireBetweenElsewhere(body, between) {
+  var open = between.querySelector('[data-else-open]');
+  var box = body.querySelector('.tp-else');
+  var addr = box && box.querySelector('[data-else-addr]');
+  if (!open || !box || !addr) return;
+  var fromId = between.getAttribute('data-between');
+  open.addEventListener('click', function () {
+    box.hidden = !box.hidden;
+    open.classList.toggle('on', !box.hidden);
+    if (!box.hidden) addr.focus();
+  });
+  var busy = false;
+  var apply = function (a, lat, lng, placeId) {
+    a = String(a || '').trim();
+    if (!a || busy) return;
+    busy = true;
+    var name = String(addr.dataset.placeName || '').trim();
+    var suburb = (typeof addrSuburb === 'function' ? addrSuburb(a) : null) || a;
+    var spec = { kind: 'address', address: a, suburb: suburb, label: name && name !== a ? name : suburb, purpose: 'elsewhere' };
+    if (placeId) spec.placeId = String(placeId);
+    if (lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) { spec.lat = Number(lat); spec.lng = Number(lng); }
+    setTravelOverride(fromId, 'after', spec).then(function (ok) {
+      if (!ok) return false;
+      var s = window.SESSIONS && window.SESSIONS[fromId];
+      return (s && s.travel && s.travel.next) ? setBetweenTravel(fromId, null) : true;
+    }).then(function (ok) {
+      busy = false;
+      if (!ok) return;
+      var o = window.SESSIONS && window.SESSIONS[fromId];
+      var again = o ? computeDayTravelSegments(o.day).find(function (x) { return x.gapFromSessionId === fromId; }) : null;
+      if (again) _renderTravelPanel(again); else closeTravelPanel();
+    });
+  };
+  if (typeof attachPlacesAutocomplete === 'function') attachPlacesAutocomplete(addr, apply);
+  addr.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); apply(addr.value, addr.dataset.lat, addr.dataset.lng, addr.dataset.placeId); }
+  });
+}
 
 /* ---------- Before / After controls behind the travel panel ---------- */
 function _tpEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
