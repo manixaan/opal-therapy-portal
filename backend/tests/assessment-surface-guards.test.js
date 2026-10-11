@@ -721,7 +721,8 @@ describe('changed assets are cache-busted', () => {
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
-      ['booking-route.js', 7], ['booking-route.css', 2],
+      // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
+      ['booking-route.js', 8], ['booking-route.css', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
