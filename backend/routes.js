@@ -2294,15 +2294,6 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
   // so an expired or missing Outlook sign-in silently lost the booking (the
   // browser drew a tile that vanished on the next refresh).
   try {
-    const { dbEventId, title, startTime, endTime, location, categories,
-            sploseId, targetTherapistUserId } = req.body;
-
-    // Client rules are the server's as well as the panel's: a direct service or
-    // a requested report without a client is refused before anything is written.
-    const checked = bookingRules.validateBooking(req.body);
-    if (!checked.ok) return res.status(400).json({ error: checked.error });
-    const booking = checked.booking;
-
     const requestId = bookingRules.cleanRequestId(req.body.requestId);
     if (requestId) {
       const key = req.session.userId + ':' + requestId;
@@ -2318,143 +2309,164 @@ router.post('/api/outlook/events', requireAuth, async (req, res) => {
       }
     }
 
-    if (!title || !startTime || !endTime) {
-      return res.status(400).json({ error: 'title, startTime, and endTime are required' });
-    }
-    if (req.user?.role === 'read_only' || req.user?.role === 'pre_employee') {
-      return res.status(403).json({ error: 'Your account cannot create bookings' });
-    }
-
-    // Whose calendar the event belongs to
-    let targetUser;
-    const callerIsManager = ['owner', 'admin'].includes(req.user?.role);
-    if (targetTherapistUserId && callerIsManager) {
-      targetUser = await db.getUser(targetTherapistUserId);
-      if (!targetUser || (req.user.organisation_id && targetUser.organisation_id !== req.user.organisation_id)) {
-        return res.status(404).json({ error: 'Target therapist user not found' });
-      }
-    } else {
-      targetUser = await db.getUser(req.session.userId);
-    }
-
-    // 1. Save to the portal — authoritative, never depends on Outlook.
-    let localDbId = dbEventId || null;
-    if (localDbId) {
-      // Mirroring an existing row: it must be on the target calendar.
-      const own = await db.pool.query('SELECT 1 FROM events WHERE id = $1 AND user_id = $2', [localDbId, targetUser.id]);
-      if (!own.rows.length) return res.status(404).json({ error: 'Event not found' });
-    } else {
-      const row = await db.createEvent(targetUser.id, {
-        title,
-        startTime,
-        endTime,
-        location: location || '',
-        categories: categories || [],
-        sploseId: sploseId || null,
-        eventType: classifyEventType(categories || [], false),
-      });
-      localDbId = row.id;
-      // Ownership stamps the master scheduler and practitioner queries rely on.
-      await db.pool.query(
-        `UPDATE events e SET
-            therapist_profile_id = COALESCE(e.therapist_profile_id, (SELECT tp.id FROM therapist_profiles tp WHERE tp.user_id = e.user_id LIMIT 1)),
-            organisation_id      = COALESCE(e.organisation_id, (SELECT u.organisation_id FROM users u WHERE u.id = e.user_id))
-          WHERE e.id = $1`, [localDbId]);
-    }
-
-    // The booking type and its client (if any) stay on the event. A report or
-    // non-face-to-face client lives here, NOT in client_id: client_id marks a
-    // Splose appointment, and the reconciler would offer to publish it.
-    if (localDbId && booking) {
-      await db.pool.query(
-        `UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('booking', $2::jsonb) WHERE id = $1`,
-        [localDbId, JSON.stringify(booking)]
-      ).catch(e => console.warn('⚠️  Booking type not stored (non-fatal):', e.message));
-    }
-
-    // The client link belongs to the event whether or not Splose sync is on
-    // (invoicing, case notes and travel all read it).
-    if (req.body.splose && req.body.splose.patientId) {
-      await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
-        [localDbId, String(req.body.splose.patientId), req.body.splose.patientName || null]).catch(() => {});
-    }
-
-    // MMM zone picked in the Smart Booking panel — kept only when it is a real
-    // choice (differs from what the session address says). Billing only.
-    if (!dbEventId && req.body.mmmZone != null) {
-      await require('./billing/session-mmm-store').recordBookingZone(db.pool, {
-        eventId: localDbId, zone: req.body.mmmZone, address: location || '', userId: req.session.userId,
-      }).catch(e => console.warn('⚠️  Session MMM zone not stored (non-fatal):', e.message));
-    }
-
-    // 2. Draft-and-publish (058): a client booking that names its Splose client
-    //    is queued for "Sync Splose" — nothing is written to Splose here.
-    let sploseQueued = null;
-    if (req.body.splose && req.body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
-      try {
-        const sp = req.body.splose;
-        const qrow = await draftSync.enqueueChange(db, {
-          userId: targetUser.id, createdBy: req.session.userId, eventId: localDbId, action: 'create',
-          payload: {
-            start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-            patientId: sp.patientId, serviceId: sp.serviceId || null, locationId: sp.locationId || null,
-            practitionerId: sp.practitionerId || null, caseId: sp.caseId || null,
-            note: typeof sp.note === 'string' ? sp.note.slice(0, 500) : '',
-            summary: title, sessionType: sp.sessionType || null,
-          },
-        });
-        sploseQueued = qrow ? qrow.id : null;
-        if (qrow) require('./splose-sync-routes').notifyQueued(targetUser.id);
-        await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
-          [localDbId, String(sp.patientId), sp.patientName || null]).catch(() => {});
-      } catch (qErr) {
-        console.warn('⚠️  Splose draft queue failed (non-fatal):', qErr.message);
-      }
-    }
-
-    // 3. Mirror to the calendar owner's own Outlook, when connected. Never to
-    //    another person's mailbox: a copy there would come back through that
-    //    person's delta sync as a duplicate appointment on their calendar.
-    let outlookId = null;
-    let outlookStatus = 'not_connected';
-    if (targetUser && targetUser.access_token) {
-      try {
-        const accessToken = await getValidAccessToken(targetUser);
-        const result = await outlookApi.createOutlookEvent(accessToken, {
-          title,
-          startTime,
-          endTime,
-          location: location || '',
-          categories: categories || [],
-          appEventId: localDbId,
-          sploseId:   sploseId  || null,
-        });
-        outlookId = result.outlookId;
-        await db.updateEventOutlookId(localDbId, outlookId);
-        outlookStatus = 'synced';
-      } catch (outlookErr) {
-        if (outlookErr && outlookErr.code === 'FEATURE_DISABLED') {
-          outlookStatus = 'disabled';
-        } else {
-          outlookStatus = 'failed';
-          console.warn('⚠️  Outlook mirror failed (booking kept in the portal):', outlookErr.response?.data || outlookErr.message);
-          await db.updateEventWriteError(localDbId, outlookErr.message).catch(() => {});
-        }
-      }
-    }
-
-    console.log(`✅ Event saved: ${localDbId} — "${title}" (Outlook: ${outlookStatus})`);
-    // dbId: the local row id, so the frontend can offer Cmd+Z undo
-    // (DELETE /api/outlook/events/:dbId) for a fresh booking.
-    res.status(201).json({
-      ok: true, dbId: localDbId, sploseQueued,
-      outlookId, savedToOutlook: outlookStatus === 'synced', outlookStatus,
-    });
+    const r = await createBookingCore(req, req.body);
+    res.status(r.status).json(r.body);
   } catch (err) {
     console.error('Event create error:', err.message);
     res.status(500).json({ error: 'Could not save the event' });
   }
 });
+
+/**
+ * Create one booking: portal row first, then client link, MMM zone, Splose
+ * draft queue and the owner's Outlook mirror. Shared by POST
+ * /api/outlook/events and the repeats of a recurring series
+ * (series-routes.js), so every repeat is booked exactly like a single one.
+ * Returns { status, body }; never throws for a rule failure.
+ */
+async function createBookingCore(req, body) {
+  const { dbEventId, title, startTime, endTime, location, categories,
+          sploseId, targetTherapistUserId } = body;
+
+  // Client rules are the server's as well as the panel's: a direct service or
+  // a requested report without a client is refused before anything is written.
+  const checked = bookingRules.validateBooking(body);
+  if (!checked.ok) return { status: 400, body: { error: checked.error } };
+  const booking = checked.booking;
+
+  if (!title || !startTime || !endTime) {
+    return { status: 400, body: { error: 'title, startTime, and endTime are required' } };
+  }
+  if (req.user?.role === 'read_only' || req.user?.role === 'pre_employee') {
+    return { status: 403, body: { error: 'Your account cannot create bookings' } };
+  }
+
+  // Whose calendar the event belongs to
+  let targetUser;
+  const callerIsManager = ['owner', 'admin'].includes(req.user?.role);
+  if (targetTherapistUserId && callerIsManager) {
+    targetUser = await db.getUser(targetTherapistUserId);
+    if (!targetUser || (req.user.organisation_id && targetUser.organisation_id !== req.user.organisation_id)) {
+      return { status: 404, body: { error: 'Target therapist user not found' } };
+    }
+  } else {
+    targetUser = await db.getUser(req.session.userId);
+  }
+
+  // 1. Save to the portal — authoritative, never depends on Outlook.
+  let localDbId = dbEventId || null;
+  if (localDbId) {
+    // Mirroring an existing row: it must be on the target calendar.
+    const own = await db.pool.query('SELECT 1 FROM events WHERE id = $1 AND user_id = $2', [localDbId, targetUser.id]);
+    if (!own.rows.length) return { status: 404, body: { error: 'Event not found' } };
+  } else {
+    const row = await db.createEvent(targetUser.id, {
+      title,
+      startTime,
+      endTime,
+      location: location || '',
+      categories: categories || [],
+      sploseId: sploseId || null,
+      eventType: classifyEventType(categories || [], false),
+    });
+    localDbId = row.id;
+    // Ownership stamps the master scheduler and practitioner queries rely on.
+    await db.pool.query(
+      `UPDATE events e SET
+          therapist_profile_id = COALESCE(e.therapist_profile_id, (SELECT tp.id FROM therapist_profiles tp WHERE tp.user_id = e.user_id LIMIT 1)),
+          organisation_id      = COALESCE(e.organisation_id, (SELECT u.organisation_id FROM users u WHERE u.id = e.user_id))
+        WHERE e.id = $1`, [localDbId]);
+  }
+
+  // The booking type and its client (if any) stay on the event. A report or
+  // non-face-to-face client lives here, NOT in client_id: client_id marks a
+  // Splose appointment, and the reconciler would offer to publish it.
+  if (localDbId && booking) {
+    await db.pool.query(
+      `UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('booking', $2::jsonb) WHERE id = $1`,
+      [localDbId, JSON.stringify(booking)]
+    ).catch(e => console.warn('⚠️  Booking type not stored (non-fatal):', e.message));
+  }
+
+  // The client link belongs to the event whether or not Splose sync is on
+  // (invoicing, case notes and travel all read it).
+  if (body.splose && body.splose.patientId) {
+    await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
+      [localDbId, String(body.splose.patientId), body.splose.patientName || null]).catch(() => {});
+  }
+
+  // MMM zone picked in the Smart Booking panel — kept only when it is a real
+  // choice (differs from what the session address says). Billing only.
+  if (!dbEventId && body.mmmZone != null) {
+    await require('./billing/session-mmm-store').recordBookingZone(db.pool, {
+      eventId: localDbId, zone: body.mmmZone, address: location || '', userId: req.session.userId,
+    }).catch(e => console.warn('⚠️  Session MMM zone not stored (non-fatal):', e.message));
+  }
+
+  // 2. Draft-and-publish (058): a client booking that names its Splose client
+  //    is queued for "Sync Splose" — nothing is written to Splose here.
+  let sploseQueued = null;
+  if (body.splose && body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
+    try {
+      const sp = body.splose;
+      const qrow = await draftSync.enqueueChange(db, {
+        userId: targetUser.id, createdBy: req.session.userId, eventId: localDbId, action: 'create',
+        payload: {
+          start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
+          patientId: sp.patientId, serviceId: sp.serviceId || null, locationId: sp.locationId || null,
+          practitionerId: sp.practitionerId || null, caseId: sp.caseId || null,
+          note: typeof sp.note === 'string' ? sp.note.slice(0, 500) : '',
+          summary: title, sessionType: sp.sessionType || null,
+        },
+      });
+      sploseQueued = qrow ? qrow.id : null;
+      if (qrow) require('./splose-sync-routes').notifyQueued(targetUser.id);
+      await db.pool.query(`UPDATE events SET client_id = $2, client_name = COALESCE(client_name, $3) WHERE id = $1`,
+        [localDbId, String(sp.patientId), sp.patientName || null]).catch(() => {});
+    } catch (qErr) {
+      console.warn('⚠️  Splose draft queue failed (non-fatal):', qErr.message);
+    }
+  }
+
+  // 3. Mirror to the calendar owner's own Outlook, when connected. Never to
+  //    another person's mailbox: a copy there would come back through that
+  //    person's delta sync as a duplicate appointment on their calendar.
+  let outlookId = null;
+  let outlookStatus = 'not_connected';
+  if (targetUser && targetUser.access_token) {
+    try {
+      const accessToken = await getValidAccessToken(targetUser);
+      const result = await outlookApi.createOutlookEvent(accessToken, {
+        title,
+        startTime,
+        endTime,
+        location: location || '',
+        categories: categories || [],
+        appEventId: localDbId,
+        sploseId:   sploseId  || null,
+      });
+      outlookId = result.outlookId;
+      await db.updateEventOutlookId(localDbId, outlookId);
+      outlookStatus = 'synced';
+    } catch (outlookErr) {
+      if (outlookErr && outlookErr.code === 'FEATURE_DISABLED') {
+        outlookStatus = 'disabled';
+      } else {
+        outlookStatus = 'failed';
+        console.warn('⚠️  Outlook mirror failed (booking kept in the portal):', outlookErr.response?.data || outlookErr.message);
+        await db.updateEventWriteError(localDbId, outlookErr.message).catch(() => {});
+      }
+    }
+  }
+
+  console.log(`✅ Event saved: ${localDbId} — "${title}" (Outlook: ${outlookStatus})`);
+  // dbId: the local row id, so the frontend can offer Cmd+Z undo
+  // (DELETE /api/outlook/events/:dbId) for a fresh booking.
+  return { status: 201, body: {
+    ok: true, dbId: localDbId, sploseQueued,
+    outlookId, savedToOutlook: outlookStatus === 'synced', outlookStatus,
+  } };
+}
 
 /**
  * PATCH /api/events/:dbId/travel
@@ -3170,3 +3182,4 @@ router.post('/api/outlook/travel-blocks', requireAuth, async (req, res) => {
 module.exports = router;
 module.exports.cleanTravelSpec = cleanTravelSpec;
 module.exports.getValidAccessToken = getValidAccessToken;
+module.exports.createBookingCore = createBookingCore;

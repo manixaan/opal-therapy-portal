@@ -530,6 +530,9 @@ app.use('/', routes);
 app.use('/auth', routes);
 app.use('/api', routes);
 
+// Recurring appointments: Outlook-style repeat rules, booked one by one (075)
+app.use('/', require('./series-routes'));
+
 // Multi-therapist calendar routes: therapist profiles + master calendar API
 const calendarRoutes = require('./calendar-routes');
 app.use('/', calendarRoutes);

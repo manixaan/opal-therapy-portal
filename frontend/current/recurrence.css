@@ -1,0 +1,32 @@
+/* Repeating appointments — Smart Booking › Repeat, the event panel, delete
+   scope (recurrence.js). Outlook's controls, in the panel's own style. */
+.bsp-repeat { margin-top: 14px; }
+.bsp-repeat[hidden] { display: none; }
+.rec-preset { width: 100%; }
+.rec-custom { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border, #d9d4cc); border-radius: 10px; background: var(--panel-soft, #faf8f5); }
+.rec-custom[hidden], .rec-end[hidden], .rec-summary[hidden] { display: none; }
+.rec-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rec-row + .rec-row { margin-top: 10px; }
+.rec-lbl { font-size: 13px; color: var(--ink-soft, #5c5650); }
+.rec-interval { width: 64px; }
+.rec-unit { width: auto; min-width: 96px; }
+.rec-day {
+  appearance: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--border, #d9d4cc); background: var(--panel, #fff);
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink, #241f1a);
+}
+.rec-day.on { background: var(--info, #2563eb); border-color: var(--info, #2563eb); color: #fff; }
+.rec-day:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(37, 99, 235, 0.25)); }
+.rec-monthly { flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13.5px; }
+.rec-end { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.rec-end-opt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rec-until { width: auto; }
+.rec-count { width: 64px; }
+.rec-summary { margin-top: 8px; font-size: 12.5px; color: var(--ink-soft, #5c5650); line-height: 1.45; }
+.rec-summary.warn { color: var(--warn-ink, #7a4e0b); }
+.rec-detail { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border, #e7e2da); font-size: 13.5px; line-height: 1.5; }
+.rec-dim { color: var(--muted, #8a837b); font-size: 12.5px; }
+.rec-link { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--accent, #0f766e); text-decoration: underline; cursor: pointer; }
+.rec-dialog { max-width: 520px; }
+.rec-scope { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; }
+.rec-scope label { display: flex; gap: 8px; align-items: center; }

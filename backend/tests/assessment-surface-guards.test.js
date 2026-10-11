@@ -726,6 +726,8 @@ describe('changed assets are cache-busted', () => {
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
       // 9 (js): no Return Home when a no-address booking leaves you at home already.
       ['booking-route.js', 9], ['booking-route.css', 2],
+      // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
+      ['recurrence.js', 1], ['recurrence.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
