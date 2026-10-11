@@ -436,3 +436,12 @@ describe('Go Somewhere Else between two sessions (6 Oct 2026)', () => {
     expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
   });
 });
+
+describe('past days are not mirrored to Outlook (11 Oct 2026)', () => {
+  test('travelDayIsPast follows the Perth date of the column', () => {
+    const c = load();
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
+    c.DAY_DATES = { mon: '2020-01-06', tue: today, wed: '2999-01-01' };
+    expect([c.travelDayIsPast('mon'), c.travelDayIsPast('tue'), c.travelDayIsPast('wed'), c.travelDayIsPast('sun')]).toEqual([true, false, false, false]);
+  });
+});

@@ -1955,6 +1955,12 @@ function travelOutlookPayload(day, segs) {
   });
   return { date, legs, seenEventIds: seen };
 }
+/* Is this column's date before today (Perth)? Past days are never mirrored. */
+function travelDayIsPast(day) {
+  const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
+  if (!date) return false;
+  return date < new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
+}
 function scheduleTravelOutlookSync(day, segs) {
   if (typeof fetch !== 'function') return;
   clearTimeout(TRAVEL_OUTLOOK_SYNC.timers[day]);
@@ -2309,6 +2315,12 @@ function _renderTravelPanel(seg) {
   // Source chip
   html += '<span class="tp-source-chip ' + sourceClass + '">' +
     (isOutlook ? 'Outlook event' : 'Calculated route') + '</span>';
+
+  // Travel goes to Outlook from today on; past days are left as they were
+  // (runTravelOutlookSync). Say so, instead of leaving it to look broken.
+  if (!isOutlook && travelDayIsPast(seg.day)) {
+    html += '<div class="tp-plan-hint tp-past-note">Past day: travel changes here are not sent to Outlook.</div>';
+  }
 
   // Stat row
   html += '<div class="tp-stat-row">';
