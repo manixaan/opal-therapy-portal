@@ -3025,3 +3025,50 @@ describe('failure toasts pass their kind through the module wrappers', () => {
     });
   }
 });
+
+describe('side-by-side layout follows the tiles (11 Oct 2026)', () => {
+  // A tile that left (a cancelled booking, a reload, a move) or was hidden by a
+  // filter kept its neighbour at half width beside an empty space.
+  const { JSDOM } = require('jsdom');
+  const code = HTML.slice(HTML.indexOf('function __overlapTiles(col)'), HTML.indexOf('(function paintWeek() {'));
+  function env() {
+    const dom = new JSDOM('<style>.cal-grid.hide-x .session.x{display:none}</style><div id="cal-grid" class="cal-grid"><div class="cal-col" id="day-mon"></div></div>', { runScripts: 'outside-only' });
+    dom.window.eval(code);
+    const col = dom.window.document.getElementById('day-mon');
+    const mk = (top, h, cls) => { const e = dom.window.document.createElement('div'); e.className = 'session ' + (cls || ''); e.style.top = top + 'px'; e.style.height = h + 'px'; col.appendChild(e); return e; };
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+    return { dom, col, mk, tick };
+  }
+  // jsdom drops calc() widths; a shared lane is marked by right: auto, a solo tile by right: 4px.
+  const half = (el) => el.style.right === 'auto';
+  const full = (el) => el.style.left === '4px' && el.style.right === '4px';
+
+  test('a neighbour that leaves gives the full width back, with no explicit re-layout call', async () => {
+    const { mk, tick } = env();
+    const a = mk(100, 200); const b = mk(150, 100);
+    await tick();
+    expect(half(a)).toBe(true);
+    b.remove(); await tick();
+    expect(full(a)).toBe(true);
+  });
+
+  test('a tile hidden by a filter takes no lane; shown again, both share', async () => {
+    const { dom, mk, tick } = env();
+    const a = mk(100, 200); mk(150, 100, 'x');
+    await tick();
+    dom.window.document.getElementById('cal-grid').classList.add('hide-x'); await tick();
+    expect(full(a)).toBe(true);
+    dom.window.document.getElementById('cal-grid').classList.remove('hide-x'); await tick();
+    expect(half(a)).toBe(true);
+  });
+
+  test('a tile moved away from its neighbour frees it', async () => {
+    const { mk, tick } = env();
+    const a = mk(100, 50); const b = mk(120, 50);
+    await tick();
+    expect(half(a)).toBe(true);
+    b.style.top = '400px'; await tick();
+    expect(full(a)).toBe(true);
+    expect(full(b)).toBe(true);
+  });
+});

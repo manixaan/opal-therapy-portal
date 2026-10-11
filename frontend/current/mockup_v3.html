@@ -13720,6 +13720,7 @@ function repositionAllSessionTiles() {
     }
   });
   // Tops changed → re-run the side-by-side overlap layout for each day column.
+  if (typeof window.__watchDayOverlaps === 'function') window.__watchDayOverlaps();
   if (typeof reflowDayOverlaps === 'function') {
     document.querySelectorAll('#cal-grid .cal-col')
       .forEach(function (c) { try { reflowDayOverlaps(c); } catch (e) {} });
@@ -13740,8 +13741,18 @@ function repositionAllSessionTiles() {
    4. Within each cluster, assign column indices greedily and set
       left/width via inline styles.
    ─────────────────────────────────────────────────────────────────── */
+function __overlapTiles(col) {
+  // A tile hidden by a filter (a category, Splose / Outlook) takes no lane:
+  // it used to keep its neighbour at half width beside an empty space.
+  return Array.from(col.querySelectorAll('.session:not(.drag-block)'))
+    .filter(el => !(window.getComputedStyle && getComputedStyle(el).display === 'none'));
+}
+function __overlapSignature(col) {
+  return __overlapTiles(col).map(el => (parseFloat(el.style.top) || 0) + ':' + (parseFloat(el.style.height) || 30)).join('|');
+}
 function reflowDayOverlaps(col) {
-  const blocks = Array.from(col.querySelectorAll('.session:not(.drag-block)'));
+  col.__overlapSig = __overlapSignature(col);
+  const blocks = __overlapTiles(col);
   if (blocks.length === 0) return;
 
   // Read positions from current inline styles (set by addSession via tToY)
@@ -13804,6 +13815,47 @@ function reflowDayOverlaps(col) {
     }
   }
 }
+
+/* Keep the side-by-side layout true without every caller remembering to
+   re-run it (11 Oct 2026). A tile that left by a reload, a move or a cancelled
+   booking left its neighbour at half width with nothing beside it. Each day
+   column now lays itself out again whenever its tiles, their times or their
+   visibility change; the signature check stops it reacting to its own
+   left/width writes. */
+(function watchDayOverlaps() {
+  if (typeof MutationObserver !== 'function') return;
+  const pending = new Set();
+  const flush = () => {
+    pending.forEach(col => { try { if (__overlapSignature(col) !== col.__overlapSig) reflowDayOverlaps(col); } catch (e) { /* layout only */ } });
+    pending.clear();
+  };
+  const obs = new MutationObserver(muts => {
+    for (const m of muts) {
+      const node = m.target && m.target.nodeType === 1 ? m.target : m.target && m.target.parentElement;
+      // A category filter is a class on the grid itself: every column may change.
+      if (node && node.id === 'cal-grid') { node.querySelectorAll('.cal-col').forEach(c => pending.add(c)); continue; }
+      const col = node && node.closest ? node.closest('.cal-col') : null;
+      if (col) pending.add(col);
+    }
+    // Mutation records already arrive batched; lay out straight away (an
+    // animation frame never comes in a background tab).
+    if (pending.size) flush();
+  });
+  const attach = () => {
+    const grid = document.getElementById('cal-grid');
+    if (grid && !grid.__overlapObserved) { grid.__overlapObserved = true; obs.observe(grid, { attributes: true, attributeFilter: ['class'] }); }
+    document.querySelectorAll('#cal-grid .cal-col').forEach(col => {
+      if (col.__overlapObserved) return;
+      col.__overlapObserved = true;
+      obs.observe(col, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+    });
+  };
+  window.__watchDayOverlaps = attach;
+  // The day columns are already parsed above this script; attach now, and
+  // again once the page has loaded (idempotent).
+  attach();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
+})();
 
 (function paintWeek() {
   // FIRST-TIME EXPERIENCE — calendar starts blank.
