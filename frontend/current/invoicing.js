@@ -420,6 +420,7 @@
         '<div><b>' + s.invoicesCreated + '</b><span>invoices created</span></div>' +
         '<div><b>' + s.invoicesUpdated + '</b><span>drafts updated</span></div>' +
         '<div><b>' + s.sessionsIncluded + '</b><span>sessions included</span></div>' +
+        '<div><b>' + (s.nf2fIncluded || 0) + '</b><span>non-face-to-face shares</span></div>' +
         '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
         '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
         '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +

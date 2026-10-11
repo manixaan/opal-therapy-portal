@@ -1,0 +1,62 @@
+/* Non-face-to-face billable time (nf2f.js): picked clients, the block's
+   timer button, the running-timer chip, the panel and Allocate billing. */
+.nf2f-picked { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--info-soft, #eef3ff); font-size: 13px; line-height: 1.45; }
+.nf2f-picked[hidden] { display: none; }
+.nf2f-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.nf2f-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--panel, #fff); border: 1px solid var(--border, #d9d4cc); font-size: 12.5px; }
+.nf2f-chip button { appearance: none; border: 0; background: none; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 5px; color: var(--muted, #8a837b); }
+.nf2f-chip button:hover { color: var(--danger, #c2412e); }
+
+/* On the block */
+.session .nf2f-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 11px; }
+.session .nf2f-clients { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft, #5c5650); }
+.session .nf2f-btn {
+  appearance: none; border: 1px solid var(--accent, #0f766e); background: var(--panel, #fff); color: var(--accent, #0f766e);
+  border-radius: 999px; padding: 2px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.session .nf2f-btn:hover { background: var(--accent, #0f766e); color: #fff; }
+.session .nf2f-btn.running { border-color: var(--danger, #c2412e); color: #fff; background: var(--danger, #c2412e); }
+.session .nf2f-nonbill { padding: 1px 7px; border-radius: 999px; background: var(--border-soft, #f0ece6); color: var(--muted, #8a837b); font-weight: 700; letter-spacing: 0.02em; }
+.session.s-compact .nf2f-bar { display: none; }
+
+/* The running-timer chip on the calendar */
+.nf2f-run-chip {
+  position: fixed; left: 22px; bottom: 22px; z-index: 1490;
+  display: flex; align-items: center; gap: 10px; max-width: min(420px, calc(100vw - 44px));
+  padding: 8px 8px 8px 14px; border-radius: 999px;
+  background: var(--panel, #fff); border: 1px solid var(--border, #d9d4cc); box-shadow: var(--shadow-lg, 0 12px 32px rgba(0,0,0,0.18));
+  font-size: 13px;
+}
+.nf2f-run-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger, #c2412e); flex: none; animation: nf2f-pulse 1.4s ease-in-out infinite; }
+@keyframes nf2f-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .nf2f-run-dot { animation: none; } }
+.nf2f-run-open { appearance: none; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; min-width: 0; display: flex; flex-direction: column; font: inherit; color: inherit; }
+.nf2f-run-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nf2f-run-sub { font-size: 11.5px; color: var(--muted, #8a837b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nf2f-run-time { font-variant-numeric: tabular-nums; font-weight: 700; }
+.nf2f-run-stop { appearance: none; border: 0; border-radius: 999px; padding: 7px 14px; background: var(--danger, #c2412e); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.nf2f-run-stop:focus-visible, .nf2f-run-open:focus-visible, .session .nf2f-btn:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(15,118,110,0.25)); }
+
+/* The block's panel */
+.nf2f-detail { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border, #e7e2da); font-size: 13.5px; }
+.nf2f-detail-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 8px; }
+.nf2f-big { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.nf2f-dim { color: var(--muted, #8a837b); font-size: 12.5px; }
+.nf2f-split { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 13px; }
+.nf2f-split td { padding: 4px 0; border-bottom: 1px solid var(--border-soft, #f0ece6); }
+.nf2f-split td:nth-child(2), .nf2f-split td:nth-child(3) { text-align: right; width: 70px; font-variant-numeric: tabular-nums; }
+.nf2f-split .nf2f-nb td { color: var(--muted, #8a837b); }
+.nf2f-act { min-height: 34px; padding: 6px 14px; }
+
+/* Allocate billing */
+.nf2f-alloc { max-width: 520px; }
+.nf2f-alloc-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.nf2f-alloc-table th { text-align: left; font-size: 12px; color: var(--muted, #8a837b); font-weight: 600; padding: 0 0 6px; }
+.nf2f-alloc-table td { padding: 5px 0; border-bottom: 1px solid var(--border-soft, #f0ece6); }
+.nf2f-alloc-table td:nth-child(3) { text-align: right; width: 70px; font-variant-numeric: tabular-nums; }
+.nf2f-alloc-table .nf2f-pct { width: 86px; padding: 6px 8px; display: inline-block; }
+.nf2f-alloc-table tr.set td:first-child { font-weight: 700; }
+.nf2f-alloc-table tr.nf2f-nb td { color: var(--muted, #8a837b); }
+.nf2f-alloc-table tr.nf2f-nb:not(.on) .nf2f-pct { background: var(--border-soft, #f0ece6); }
+.nf2f-total { margin-top: 10px; font-weight: 700; font-size: 13.5px; }
+.nf2f-total.bad { color: var(--danger, #c2412e); }

@@ -532,6 +532,8 @@ app.use('/api', routes);
 
 // Recurring appointments: Outlook-style repeat rules, booked one by one (075)
 app.use('/', require('./series-routes'));
+// Non-face-to-face billable time: the block's timer and its client allocation (076)
+app.use('/', require('./nf2f-routes'));
 
 // Multi-therapist calendar routes: therapist profiles + master calendar API
 const calendarRoutes = require('./calendar-routes');

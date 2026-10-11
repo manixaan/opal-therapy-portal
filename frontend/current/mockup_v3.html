@@ -104,6 +104,7 @@
 <link rel="stylesheet" href="/people.css?v=2" />
 <link rel="stylesheet" href="/booking-route.css?v=2" />
 <link rel="stylesheet" href="/recurrence.css?v=1" />
+<link rel="stylesheet" href="/nf2f.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=3" />
 <script src="/resourcehub.js?v=r53" defer></script>
@@ -117,7 +118,7 @@
 <script src="/docpreview.js?v=6" defer></script>
 <script src="/opa.js?v=3" defer></script>
 <script src="/finance.js?v=1" defer></script>
-<script src="/invoicing.js?v=4" defer></script>
+<script src="/invoicing.js?v=5" defer></script>
 <script src="/induction-assistant.js?v=3" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=3" defer></script>
@@ -166,6 +167,7 @@
      booking panel; the route maths live in travel.js, loaded just above. -->
 <script src="/booking-route.js?v=9" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
+<script src="/nf2f.js?v=1" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -4614,6 +4616,7 @@ window.opIcon = function (name, size) {
           <details class="bk-group">
             <summary>Non-face-to-face</summary>
             <button class="bk-item" data-leaf="case-noting" onclick="selectBookingLeaf('case-noting')">Case Noting</button>
+            <button class="bk-item" data-leaf="case-management" onclick="selectBookingLeaf('case-management')">Case Management</button>
             <button class="bk-item" data-leaf="resource-prep" onclick="selectBookingLeaf('resource-prep')">Resource Preparation</button>
             <button class="bk-item" data-leaf="emails" onclick="selectBookingLeaf('emails')">Emails</button>
             <button class="bk-item" data-leaf="phone-calls" onclick="selectBookingLeaf('phone-calls')">Phone Calls</button>
@@ -4626,6 +4629,7 @@ window.opIcon = function (name, size) {
           <button class="bk-item bk-single" data-leaf="pd" onclick="selectBookingLeaf('pd')">Professional development</button>
           <button class="bk-item bk-single" data-leaf="supervision" onclick="selectBookingLeaf('supervision')">Supervision</button>
           <button class="bk-item bk-single" data-leaf="lunch" onclick="selectBookingLeaf('lunch')">Lunch</button>
+          <button class="bk-item bk-single" data-leaf="custom" onclick="selectBookingLeaf('custom')">Custom</button>
 
         </div>
 
@@ -12483,6 +12487,7 @@ var BOOKING_LEAVES = {
   // Non-face-to-face — client OPTIONAL. All four share the custom form (name +
   // notes) so each creates exactly the event it names.
   'case-noting':     { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Case Noting', prefill: 'Case Noting' },
+  'case-management': { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Case Management', prefill: 'Case Management' },
   'resource-prep':   { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Resource Preparation', prefill: 'Resource Preparation' },
   'emails':          { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Emails', prefill: 'Emails' },
   'phone-calls':     { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Phone Calls', prefill: 'Phone Calls' },
@@ -12490,6 +12495,8 @@ var BOOKING_LEAVES = {
   'pd':              { cat: 'custom', group: 'other', client: 'none', label: 'Professional development', prefill: 'Professional development' },
   'supervision':     { cat: 'custom', group: 'other', client: 'none', label: 'Supervision', prefill: 'Supervision' },
   'lunch':           { cat: 'custom', group: 'other', client: 'none', label: 'Lunch', prefill: 'Lunch' },
+  // A non-billable activity of the clinician's own: they name it.
+  'custom':          { cat: 'custom', group: 'other', client: 'none', label: 'Custom', prefill: '' },
 };
 /* Portal session type for a Splose service, from its name. Drives colour,
    default duration and clustering; the Splose service itself is what gets
@@ -12587,6 +12594,12 @@ function selectBookingLeaf(id) {
     // stale "FCA" must not title a Resource Preparation); one the user typed is kept.
     var nameEl = document.getElementById('custom-name');
     if (nameEl && (!nameEl.value || (prev && prev.prefill && nameEl.value === prev.prefill))) nameEl.value = leaf.prefill;
+  } else {
+    // Custom (non-billable): the clinician names it — a name another type
+    // filled in is cleared and the field asks for one.
+    var ownEl = document.getElementById('custom-name');
+    if (ownEl && prev && prev.prefill && ownEl.value === prev.prefill) ownEl.value = '';
+    if (ownEl && id === 'custom') setTimeout(function () { try { ownEl.focus(); } catch (e) {} }, 0);
   }
 }
 
@@ -12905,7 +12918,11 @@ async function confirmBooking() {
     const _client = bookingClientRule() !== 'none' ? bookingClientFor() : null;
     const _clientName = _client ? `${_client.first || ''} ${_client.last || ''}`.trim() : '';
     const _baseTitle  = fd.title || fd.name || fd.taskType || CAT_LABELS[cat] || cat;
-    const outlookTitle = _clientName ? `${_baseTitle} — ${_clientName}` : _baseTitle;
+    // Non-face-to-face (nf2f.js): several clients, or none (not billable).
+    const _nfClients = (_leaf && _leaf.group === 'nf2f' && window.Nf2f) ? Nf2f.selectedClients() : null;
+    const outlookTitle = _nfClients
+      ? (_nfClients.length > 1 ? `${_baseTitle} — ${_nfClients.length} clients` : _nfClients.length === 1 ? `${_baseTitle} — ${_nfClients[0].clientName}` : _baseTitle)
+      : (_clientName ? `${_baseTitle} — ${_clientName}` : _baseTitle);
     // Address is optional for every event. One given moves the therapist
     // there for travel; none means they stay where they were (travel.js).
     const _unsureNc = !!document.getElementById('bsp-location-unsure')?.checked;
@@ -12920,6 +12937,7 @@ async function confirmBooking() {
       'progress-report': ['Report Writing', 'report'], 'support-letter': ['Report Writing', 'report'],
       'resource-prep': ['Report Writing', 'report'],
       pd: ['PD', 'cpd'], supervision: ['PD', 'cpd'], lunch: ['Lunch', 'lunch'],
+      'case-management': ['Case Management', 'report'],
     };
     const [outlookCategory, tileType] = LEAF_KIND[BOOKING_STATE.serviceType] || ['Admin', 'admin'];
 
@@ -12938,7 +12956,9 @@ async function confirmBooking() {
           body: JSON.stringify({
             title: outlookTitle, startTime: t.startISO, endTime: t.endISO, categories: [outlookCategory],
             ...(_location ? { location: _location } : {}),
-            ...(_leaf ? { booking: { kind: BOOKING_STATE.serviceType, clientId: _client ? String(_client.id) : null, clientName: _clientName || null } } : {}),
+            ...(_leaf ? { booking: _nfClients
+              ? { kind: BOOKING_STATE.serviceType, clients: _nfClients }
+              : { kind: BOOKING_STATE.serviceType, clientId: _client ? String(_client.id) : null, clientName: _clientName || null } } : {}),
             ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
           }),
         });
@@ -14826,6 +14846,7 @@ function openBlockDetail(id) {
   // Owner: the event's invoice number(s) and billing mark (invoicing.js).
   if (typeof window.invoicingDecorateDetail === 'function') window.invoicingDecorateDetail(s);
   if (typeof window.recurrenceDecorateDetail === 'function') window.recurrenceDecorateDetail(s);
+  if (typeof window.nf2fDecorateDetail === 'function') window.nf2fDecorateDetail(s);
 
   document.getElementById('detail-backdrop').classList.add('show');
   document.getElementById('detail-drawer').classList.add('show');

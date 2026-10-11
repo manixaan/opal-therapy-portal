@@ -19,8 +19,9 @@
 const DIRECT_KINDS = ['assessment', 'assessment-ei', 'initial', 'initial-ei', 'mdt', 'mdu',
   'telehealth', 'telehealth-ei', 'therapy', 'therapy-ei'];
 const REPORT_KINDS = ['fca', 'at-report', 'progress-report', 'support-letter'];
-const NF2F_KINDS   = ['case-noting', 'resource-prep', 'emails', 'phone-calls'];
-const OTHER_KINDS  = ['pd', 'supervision', 'lunch'];
+const NF2F_KINDS   = ['case-noting', 'case-management', 'resource-prep', 'emails', 'phone-calls'];
+const OTHER_KINDS  = ['pd', 'supervision', 'lunch', 'custom'];
+const MAX_NF2F_CLIENTS = 20;
 
 const GROUP_BY_KIND = Object.freeze(Object.assign({},
   ...DIRECT_KINDS.map(k => ({ [k]: 'direct' })),
@@ -62,6 +63,23 @@ function validateBooking(body) {
   }
   if (rule === 'none') clientId = null;
   const clientName = clientId && typeof b.clientName === 'string' ? b.clientName.trim().slice(0, 120) || null : null;
+  if (group === 'nf2f') {
+    // Non-face-to-face (11 Oct 2026): several clients, or none. With none the
+    // block is not billable; with clients its timed work is split between them
+    // (billing/nf2f-timer.js). `clientId` stays the first, for older readers.
+    const clients = [];
+    const raw = Array.isArray(b.clients) ? b.clients : (clientId ? [{ clientId, clientName }] : []);
+    if (raw.length > MAX_NF2F_CLIENTS) return { ok: false, error: `At most ${MAX_NF2F_CLIENTS} clients on one block` };
+    for (const c of raw) {
+      const id = c && c.clientId != null && c.clientId !== '' ? cleanClientId(c.clientId) : null;
+      if (!id) return { ok: false, error: 'Invalid client' };
+      if (clients.some(x => x.clientId === id)) continue;
+      const name = typeof c.clientName === 'string' ? c.clientName.trim().slice(0, 120) || null : null;
+      clients.push({ clientId: id, clientName: name });
+    }
+    if (!clients.length) return { ok: true, booking: { kind: b.kind, group, clientId: null, clientName: null } };
+    return { ok: true, booking: { kind: b.kind, group, clientId: clients[0].clientId, clientName: clients[0].clientName, clients } };
+  }
   return { ok: true, booking: { kind: b.kind, group, clientId, clientName } };
 }
 
@@ -106,6 +124,6 @@ function cleanRequestId(v) {
 }
 
 module.exports = {
-  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, OTHER_KINDS, CLIENT_RULE,
+  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, OTHER_KINDS, CLIENT_RULE, MAX_NF2F_CLIENTS,
   bookingGroup, validateBooking, createIdempotencyStore, cleanRequestId,
 };

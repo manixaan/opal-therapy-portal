@@ -237,3 +237,23 @@ describe('PATCH /api/events/:dbId/travel — a moved leg', () => {
     expect(JSON.parse(params[2])).toEqual({ after: { kind: 'base', id: 'home-1' } });
   });
 });
+
+describe('non-face-to-face: several clients, or none (11 Oct 2026)', () => {
+  test('case management is non-face-to-face; Custom is non-billable', () => {
+    expect(rules.bookingGroup('case-management')).toBe('nf2f');
+    expect(rules.bookingGroup('custom')).toBe('other');
+    expect(rules.validateBooking({ booking: { kind: 'custom', clientId: 4 } }).booking.clientId).toBeNull();
+  });
+  test('a list of clients is kept, cleaned and de-duplicated; the first is the clientId', () => {
+    const r = rules.validateBooking({ booking: { kind: 'case-management', clients: [
+      { clientId: 7, clientName: 'Al' }, { clientId: '8', clientName: 'Bo' }, { clientId: 7, clientName: 'Al again' }] } });
+    expect(r.booking).toEqual({ kind: 'case-management', group: 'nf2f', clientId: '7', clientName: 'Al',
+      clients: [{ clientId: '7', clientName: 'Al' }, { clientId: '8', clientName: 'Bo' }] });
+  });
+  test('no clients = not billable: no client list at all; a bad id or too many clients are refused', () => {
+    expect(rules.validateBooking({ booking: { kind: 'emails', clients: [] } }).booking).toEqual({ kind: 'emails', group: 'nf2f', clientId: null, clientName: null });
+    expect(rules.validateBooking({ booking: { kind: 'emails', clients: [{ clientId: 'x y' }] } })).toEqual({ ok: false, error: 'Invalid client' });
+    const many = Array.from({ length: 21 }, (_, i) => ({ clientId: String(i + 1) }));
+    expect(rules.validateBooking({ booking: { kind: 'emails', clients: many } }).ok).toBe(false);
+  });
+});

@@ -728,6 +728,8 @@ describe('changed assets are cache-busted', () => {
       ['booking-route.js', 9], ['booking-route.css', 2],
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
       ['recurrence.js', 1], ['recurrence.css', 1],
+      // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.
+      ['nf2f.js', 1], ['nf2f.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
@@ -752,7 +754,8 @@ describe('changed assets are cache-busted', () => {
       ['finance.js', 1], ['finance.css', 1],
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
-      ['invoicing.js', 4], ['invoicing.css', 2],
+      // 5 (js): Complete invoicing counts non-face-to-face shares.
+      ['invoicing.js', 5], ['invoicing.css', 2],
       ['induction-assistant.js', 3], ['induction-assistant.css', 3],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
@@ -952,7 +955,9 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/isLeaveDay\(slot\.day\)/);
     // After a booking the grid reloads from the server, so the saved row is shown
     // even though the week jump re-renders from the stale cache.
-    const cb = SHELL.slice(SHELL.indexOf('async function confirmBooking()'), SHELL.indexOf('async function confirmBooking()') + 20000);
+    // The whole of confirmBooking (to the next top-level function), not a fixed slice.
+    const cbStart = SHELL.indexOf('async function confirmBooking()');
+    const cb = SHELL.slice(cbStart, SHELL.indexOf('\nfunction ', cbStart + 30) > 0 ? SHELL.indexOf('\nfunction ', cbStart + 30) : cbStart + 40000);
     expect(cb.match(/loadOutlookEventsToCalendar\(\);/g).length).toBeGreaterThanOrEqual(2);
     // The optimistic booking tile is the saved row: id, address, Outlook stamp.
     expect(SHELL).toMatch(/dbId: newDbId, outlookId,/);

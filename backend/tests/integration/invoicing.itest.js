@@ -738,3 +738,86 @@ describe('session MMM zone — where the session is delivered (migration 074)', 
     expect(kept).toMatchObject({ mmm_zone: 3, source: 'OWNER' }); // a booking never overwrites the owner
   });
 });
+
+describe('non-face-to-face billable time (migration 076)', () => {
+  async function nf2fBlock(user, { date, start = '13:00', minutes = 60, clients, timer }) {
+    const startIso = utc(date, start);
+    const endIso = new Date(Date.parse(startIso) + minutes * 60000).toISOString();
+    const booking = { kind: 'case-management', group: 'nf2f', clientId: clients[0] ? clients[0].clientId : null,
+      clientName: clients[0] ? clients[0].clientName : null, clients };
+    const { rows: [e] } = await db.pool.query(
+      `INSERT INTO events (user_id, title, start_time, end_time, location, event_type, status, organisation_id, custom_metadata, categories)
+       VALUES ($1,'Case Management',$2,$3,'','report','confirmed',$4,$5,'{"Case Management"}') RETURNING id`,
+      [user.id, startIso, endIso, user.organisation_id, JSON.stringify({ booking })]);
+    if (timer) {
+      await db.pool.query(
+        `INSERT INTO event_billing_timers (event_id, organisation_id, user_id, status, run_started_at, accumulated_seconds, limit_seconds, allocation, non_billable_percent)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [e.id, user.organisation_id, user.id, timer.status || 'STOPPED', timer.runStartedAt || null, timer.seconds || 0, minutes * 60,
+          timer.allocation ? JSON.stringify(timer.allocation) : null, timer.nonBillable || 0]);
+    }
+    return e.id;
+  }
+
+  test('timed work is split across the block\'s clients and priced at each client\'s zone and the session rate', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'n1', planManaged('Nina One', 1));
+    await profile(agent, 'n7', planManaged('Ned Seven', 7));
+    const ev = await nf2fBlock(pr, { date: day(0), clients: [{ clientId: 'n1', clientName: 'Nina One' }, { clientId: 'n7', clientName: 'Ned Seven' }],
+      timer: { seconds: 3600, allocation: [{ clientId: 'n1', percent: 40 }, { clientId: 'n7', percent: 40 }], nonBillable: 20 } });
+    const summary = await run(agent, day(0), day(0));
+    expect(summary.nf2fIncluded).toBe(2);
+    const lines = [];
+    for (const inv of await invoices(agent)) lines.push(...active((await detail(agent, inv.id)).lines));
+    const nf = lines.filter(l => l.component === 'NF2F').sort((a, b) => a.client_id.localeCompare(b.client_id));
+    expect(nf.map(l => [l.client_id, l.quantity, l.unit_price, l.amount, l.mmm_zone])).toEqual([
+      ['n1', '0.4000', '193.99', '77.60', 1], ['n7', '0.4000', '290.99', '116.40', 7]]);
+    expect(nf[0].description).toMatch(/24 minutes, Non-Face-to-Face Support \(Case management\)/);
+    expect(nf[0].calculation).toMatchObject({ method: 'timed_nf2f_share', timedSeconds: 3600, sharePercent: 40, nonBillablePercent: 20, claimType: 'NON_FACE_TO_FACE' });
+
+    // Re-running never duplicates; a new split reprices the drafts in place.
+    await db.pool.query(`UPDATE event_billing_timers SET allocation = $2, non_billable_percent = 0 WHERE event_id = $1`,
+      [ev, JSON.stringify([{ clientId: 'n1', percent: 100 }, { clientId: 'n7', percent: 0 }])]);
+    await run(agent, day(0), day(0));
+    const after = [];
+    for (const inv of await invoices(agent)) after.push(...active((await detail(agent, inv.id)).lines));
+    const nf2 = after.filter(l => l.component === 'NF2F');
+    expect(nf2.map(l => [l.client_id, l.amount])).toEqual([['n1', '193.99']]);   // n7's 0% share left its draft
+  });
+
+  test('no clients = not billable; a running timer is a warning, not a charge; nothing timed bills nothing', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'r1', planManaged('Run One', 1));
+    await nf2fBlock(pr, { date: day(0), clients: [], timer: { seconds: 3600 } });
+    await nf2fBlock(pr, { date: day(0), start: '15:00', clients: [{ clientId: 'r1', clientName: 'Run One' }],
+      timer: { status: 'RUNNING', runStartedAt: new Date(), seconds: 0 } });
+    await nf2fBlock(pr, { date: day(0), start: '17:00', clients: [{ clientId: 'r1', clientName: 'Run One' }], timer: { seconds: 0 } });
+    const summary = await run(agent, day(0), day(0));
+    expect(summary.nf2fIncluded).toBe(0);
+    expect(await invoices(agent)).toHaveLength(0);
+    const types = (await agent.get('/api/invoicing/issues')).body.issues.map(i => i.issue_type);
+    expect(types).toContain('NF2F_TIMER_RUNNING');
+  });
+
+  test('a forgotten timer stops itself at the block length and bills exactly that', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'f1', planManaged('Forgot One', 1));
+    const ev = await nf2fBlock(pr, { date: day(0), minutes: 30, clients: [{ clientId: 'f1', clientName: 'Forgot One' }],
+      timer: { status: 'RUNNING', runStartedAt: new Date(Date.now() - 5 * 3600000), seconds: 0 } });
+    expect((await run(agent, day(0), day(0))).nf2fIncluded).toBe(1);
+    const [inv] = await invoices(agent);
+    const [line] = active((await detail(agent, inv.id)).lines).filter(l => l.component === 'NF2F');
+    expect(line).toMatchObject({ quantity: '0.5000', amount: '97.00' });
+    const { rows: [t] } = await db.pool.query(`SELECT status, auto_stopped, accumulated_seconds FROM event_billing_timers WHERE event_id = $1`, [ev]);
+    expect(t).toEqual({ status: 'STOPPED', auto_stopped: true, accumulated_seconds: 1800 });
+  });
+});

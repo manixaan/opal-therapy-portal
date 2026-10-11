@@ -31,6 +31,7 @@ const RC = require('./rate-cards');
 const BP = require('./billing-profiles');
 const MMM = require('./mmm-classification');
 const Loc = require('./mmm-locality');
+const NF = require('./nf2f-timer');
 const T = require('./travel-billing');
 const DR = require('./day-route');
 const RF = require('./route-facts');
@@ -82,6 +83,39 @@ async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, client
 }
 
 /**
+ * Non-face-to-face blocks in the period that name clients and carry a timer
+ * (migration 076). Their timed work is billed per client as NF2F lines.
+ */
+async function loadNf2fBlocks(q, orgId, { from, to, practitionerIds, eventIds, tz }) {
+  const params = [orgId, from, to, tz];
+  const where = [
+    'u.organisation_id = $1',
+    `((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date`,
+    'COALESCE(e.is_deleted, FALSE) = FALSE',
+    `e.custom_metadata->'booking'->>'group' = 'nf2f'`,
+  ];
+  if (practitionerIds && practitionerIds.length) { params.push(practitionerIds); where.push(`e.user_id = ANY($${params.length}::uuid[])`); }
+  if (eventIds && eventIds.length) { params.push(eventIds); where.push(`e.id = ANY($${params.length}::uuid[])`); }
+  const { rows } = await q.query(
+    `SELECT e.id, e.user_id, e.title, e.start_time, e.end_time, e.status, e.custom_metadata,
+            to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date,
+            COALESCE(tp.display_name, u.name) AS practitioner_name, ceb.attendance,
+            t.event_id AS t_event_id, t.status AS t_status, t.run_started_at, t.accumulated_seconds, t.limit_seconds,
+            t.auto_stopped, t.stopped_at, t.non_billable_percent, t.allocation
+       FROM events e
+       JOIN users u ON u.id = e.user_id
+       JOIN event_billing_timers t ON t.event_id = e.id
+       LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+       LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY e.user_id, e.start_time`, params);
+  return rows;
+}
+
+const NF2F_ACTIVITY = { 'case-noting': 'Case noting', 'case-management': 'Case management', 'resource-prep': 'Resource preparation',
+  emails: 'Emails', 'phone-calls': 'Phone calls' };
+
+/**
  * Evaluate everything that needs no transaction. Returns a plan the commit
  * phase applies. Exposed for tests and for a future "preview" endpoint.
  */
@@ -93,10 +127,37 @@ async function prepare(q, orgId, opts) {
   const events = await loadCandidateEvents(q, orgId, { ...opts, tz });
   const issues = new Issues.IssueCollector();
   const summary = {
-    eventsExamined: events.length, skipped: {}, sessionsIncluded: 0, travelAllocations: 0,
+    eventsExamined: events.length, skipped: {}, sessionsIncluded: 0, nf2fIncluded: 0, travelAllocations: 0,
     alreadyInvoiced: 0, excludedByOwner: 0, invoicesCreated: 0, invoicesUpdated: 0,
     itemsNeedAttention: 0, linesAdded: 0, linesUpdated: 0, totalCents: 0,
   };
+
+  // 1b. Non-face-to-face blocks: each client's share of the timed work.
+  const nf2fParts = [];
+  for (const b of await loadNf2fBlocks(q, orgId, { ...opts, tz })) {
+    const clients = NF.blockClients(b);
+    if (!clients.length) continue;                                   // no clients = not billable
+    if (String(b.status || '').toLowerCase() === 'cancelled' || ['CANCELLED', 'NOT_BILLABLE', 'DID_NOT_ATTEND'].includes(b.attendance)) continue;
+    summary.eventsExamined++;
+    const timer = await NF.settleRow(q, { event_id: b.t_event_id, status: b.t_status, run_started_at: b.run_started_at,
+      accumulated_seconds: b.accumulated_seconds, limit_seconds: b.limit_seconds, auto_stopped: b.auto_stopped,
+      stopped_at: b.stopped_at, non_billable_percent: b.non_billable_percent, allocation: b.allocation }, now);
+    if (timer.status === 'RUNNING') {
+      issues.raise('NF2F_TIMER_RUNNING', { eventId: b.id, practitionerId: b.user_id, serviceDate: b.local_date,
+        message: `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} still has its timer running. Stop it to bill the time.`,
+        fixTarget: { kind: 'event', eventId: b.id, date: b.local_date } });
+      continue;
+    }
+    const timed = Number(timer.accumulated_seconds) || 0;
+    if (timed <= 0) continue;
+    const alloc = NF.allocationFor(timer, clients);
+    for (const part of NF.splitSeconds(timed, alloc)) {
+      if (part.seconds <= 0) continue;
+      if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(part.clientId)) continue;
+      nf2fParts.push({ ev: { ...b, client_id: part.clientId, client_name: part.clientName }, block: b, part, timed, alloc,
+        clientsOnBlock: clients.length, activity: NF2F_ACTIVITY[(b.custom_metadata.booking || {}).kind] || null });
+    }
+  }
 
   // 1. Event-level eligibility
   const evaluated = events.map(ev => ({ ev, res: S.evaluateEvent(ev, { now, completionRule: settings.completionRule, hasLocation: !!DR.eventAddress(ev) }) }));
@@ -120,6 +181,11 @@ async function prepare(q, orgId, opts) {
     if (res.state === 'SKIP' || !ev.client_id) continue;
     if (!clientNames.has(ev.client_id)) clientNames.set(ev.client_id, ev.client_name);
     if (res.telehealth && ev.mmm_set_zone == null) profileZoneClients.add(ev.client_id);
+  }
+  // Non-face-to-face work has no session address: it is priced at the client's own zone.
+  for (const n of nf2fParts) {
+    if (!clientNames.has(n.part.clientId)) clientNames.set(n.part.clientId, n.part.clientName);
+    profileZoneClients.add(n.part.clientId);
   }
   await BP.ensureStubProfiles(q, orgId, [...clientNames].map(([clientId, clientName]) => ({ clientId, clientName })));
   const profiles = await BP.getProfilesByClient(q, orgId, [...clientNames.keys()]);
@@ -168,6 +234,38 @@ async function prepare(q, orgId, opts) {
       }
     }
     sessions.push(entry);
+  }
+
+  // 3b. Non-face-to-face shares: the client's zone, the session rate, the client's payer.
+  const nf2f = [];
+  for (const n of nf2fParts) {
+    const p = profiles.get(n.part.clientId);
+    const entry = { ...n, profile: p, blocked: false, recipientIssues: [] };
+    const mmm = MMM.effectiveMmm(p);
+    entry.mmm = mmm;
+    entry.mmmSnapshot = mmm == null ? null : { ...MMM.mmmSnapshot(p), source: 'client profile (non-face-to-face)' };
+    if (mmm == null) {
+      entry.blocked = true;
+      const type = !p || !p.service_address ? 'CLIENT_ADDRESS_MISSING' : (p.mmm_zone && p.mmm_confidence === 'REVIEW' ? 'MMM_REVIEW' : 'MMM_UNRESOLVED');
+      issues.raise(type, { clientId: n.part.clientId, message: issueMessage(type, n.ev, p), fixTarget: { kind: 'client', clientId: n.part.clientId } });
+    } else {
+      entry.rate = RC.resolveRule(cards, { serviceDate: n.block.local_date, mmm, discipline: 'OT' });
+      if (!entry.rate) {
+        entry.blocked = true;
+        issues.raise('RATE_UNAVAILABLE', { eventId: n.block.id, clientId: n.part.clientId, practitionerId: n.block.user_id,
+          serviceDate: n.block.local_date, message: issueMessage('RATE_UNAVAILABLE', n.ev, p, mmm), fixTarget: { kind: 'rate_cards' } });
+      }
+    }
+    entry.payer = BP.resolvePayer(p);
+    if (!entry.payer) {
+      entry.recipientIssues.push('CLIENT_MISSING_PAYER');
+      issues.raise('CLIENT_MISSING_PAYER', { clientId: n.part.clientId, message: issueMessage('CLIENT_MISSING_PAYER', n.ev, p), fixTarget: { kind: 'client', clientId: n.part.clientId } });
+    }
+    if (BP.ndisNumberRequired(p) && !(p && p.ndis_number)) {
+      entry.recipientIssues.push('NDIS_NUMBER_MISSING');
+      issues.raise('NDIS_NUMBER_MISSING', { clientId: n.part.clientId, message: issueMessage('NDIS_NUMBER_MISSING', n.ev, p), fixTarget: { kind: 'client', clientId: n.part.clientId } });
+    }
+    nf2f.push(entry);
   }
 
   // 4. Travel: one route per practitioner-day over its in-person sessions
@@ -233,7 +331,7 @@ async function prepare(q, orgId, opts) {
     }
   }
 
-  return { settings, tz, now, sessions, issues, summary, profiles, dayPlans };
+  return { settings, tz, now, sessions, nf2f, issues, summary, profiles, dayPlans };
 }
 
 /**
@@ -289,13 +387,18 @@ function issueMessage(type, ev, p, mmm) {
 
 // ── Phase B ────────────────────────────────────────────────────────────────
 
+/** One live claim per event per component — and, for non-face-to-face, per client. */
+function claimKey(eventId, component, clientId) {
+  return component === 'NF2F' ? `${eventId}|NF2F|${clientId}` : `${eventId}|${component}`;
+}
+
 async function loadClaims(tx, eventIds) {
   if (!eventIds.length) return new Map();
   const { rows } = await tx.query(
     `SELECT l.*, i.status AS invoice_status, i.invoice_number
        FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
       WHERE l.calendar_event_id = ANY($1::uuid[]) AND l.line_status IN ('ACTIVE','REMOVED')`, [eventIds]);
-  return new Map(rows.map(r => [`${r.calendar_event_id}|${r.component}`, r]));
+  return new Map(rows.map(r => [claimKey(r.calendar_event_id, r.component, r.client_id), r]));
 }
 
 class DraftBook {
@@ -380,7 +483,7 @@ async function updateLine(tx, lineId, line, extra) {
 
 function sortKey(ev, component) {
   const t = Math.floor(new Date(ev.start_time).getTime() / 60000);
-  return (t % 100000000) * 10 + ({ SESSION: 1, TRAVEL_LABOUR: 2, TRAVEL_KM: 3 }[component] || 5);
+  return (t % 100000000) * 10 + ({ SESSION: 1, TRAVEL_LABOUR: 2, TRAVEL_KM: 3, NF2F: 4 }[component] || 5);
 }
 
 async function insertAllocation(tx, orgId, runId, s, settings) {
@@ -446,7 +549,7 @@ async function runInvoicing(opts) {
   if (!validRange(from, to)) throw Object.assign(new Error('from/to must be YYYY-MM-DD with from <= to'), { status: 400 });
   const plan = await prepare(q, orgId, opts);
   if (opts.preparePhase) await opts.preparePhase(q, plan);
-  const { settings, sessions, issues, summary, profiles } = plan;
+  const { settings, sessions, nf2f, issues, summary, profiles } = plan;
 
   const tx = await q.connect();
   try {
@@ -459,7 +562,7 @@ async function runInvoicing(opts) {
         opts.practitionerIds && opts.practitionerIds.length === 1 ? opts.practitionerIds[0] : null, userId || null]);
     const runId = run.id;
     const book = new DraftBook(tx, orgId, userId, runId, plan);
-    const claims = await loadClaims(tx, sessions.map(s => s.ev.id));
+    const claims = await loadClaims(tx, [...new Set(sessions.map(s => s.ev.id).concat(nf2f.map(n => n.block.id)))]);
     const alreadyCounted = new Set();
     const clientRecipient = new Map(); // clientId → {profile, payer, recipientIssues}
 
@@ -515,6 +618,55 @@ async function runInvoicing(opts) {
           }
         }
       }
+    }
+
+    // Non-face-to-face: one line per client share, claimed per block per client.
+    for (const n of nf2f) {
+      if (n.blocked) continue;
+      const clientId = n.part.clientId;
+      clientRecipient.set(clientId, { profile: n.profile, payer: n.payer, recipientIssues: n.recipientIssues });
+      const line = S.buildNf2fLine({ serviceDate: n.block.local_date, seconds: n.part.seconds, rate: n.rate, mmm: n.mmm,
+        activity: n.activity, sharePercent: n.part.percent, timedSeconds: n.timed, clientsOnBlock: n.clientsOnBlock,
+        nonBillablePercent: n.alloc.nonBillablePercent, mmmSnapshot: n.mmmSnapshot });
+      const claim = claims.get(claimKey(n.block.id, 'NF2F', clientId));
+      const extra = { eventId: n.block.id, clientId, practitionerId: n.block.user_id, taxTreatment: settings.defaultTaxTreatment,
+        tripId: null, sortOrder: sortKey(n.block, 'NF2F') };
+      if (claim) {
+        if (!OPEN_STATUSES.includes(claim.invoice_status)) { summary.alreadyInvoiced++; continue; }
+        if (claim.line_status === 'REMOVED') { summary.excludedByOwner++; continue; }
+        book.touch(claim.invoice_id);
+        if (claim.is_overridden) continue;
+        await updateLine(tx, claim.id, line, extra);
+        summary.linesUpdated++;
+      } else {
+        const invoiceId = await book.forClient(clientId, n.profile, n.payer, { from, to, tripId: null });
+        await insertLine(tx, orgId, invoiceId, line, extra);
+        summary.linesAdded++;
+      }
+      summary.nf2fIncluded++;
+    }
+
+    // Draft NF2F lines whose block / client share no longer bills (timer reset,
+    // client removed, block cancelled or deleted) leave the draft.
+    const nf2fKeep = nf2f.map(n => `${n.block.id}|${n.part.clientId}`);
+    const nfParams = [orgId, from, to, nf2fKeep];
+    let nfScope = '';
+    if (opts.practitionerIds && opts.practitionerIds.length) { nfParams.push(opts.practitionerIds); nfScope += ` AND l.practitioner_user_id = ANY($${nfParams.length}::uuid[])`; }
+    if (opts.clientIds && opts.clientIds.length) { nfParams.push(opts.clientIds); nfScope += ` AND l.client_id = ANY($${nfParams.length}::text[])`; }
+    if (opts.eventIds && opts.eventIds.length) { nfParams.push(opts.eventIds); nfScope += ` AND l.calendar_event_id = ANY($${nfParams.length}::uuid[])`; }
+    const { rows: nfDropped } = await tx.query(
+      `UPDATE invoice_lines l SET line_status = 'VOIDED', removed_reason = 'Non-face-to-face time no longer billable for this client',
+              removed_at = NOW(), updated_at = NOW()
+         FROM invoices i
+        WHERE i.id = l.invoice_id AND i.organisation_id = $1 AND i.status IN ('DRAFT','NEEDS_ATTENTION')
+          AND l.line_status = 'ACTIVE' AND l.component = 'NF2F' AND l.is_overridden IS NOT TRUE
+          AND l.service_date BETWEEN $2::date AND $3::date
+          AND NOT ((l.calendar_event_id::text || '|' || l.client_id) = ANY($4::text[]))${nfScope}
+      RETURNING l.invoice_id, l.id, l.amount`, nfParams);
+    for (const d of nfDropped) {
+      book.touch(d.invoice_id);
+      await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.line_removed', entityType: 'invoice_line', entityId: d.id,
+        invoiceId: d.invoice_id, before: { component: 'NF2F', amount: d.amount }, reason: 'Non-face-to-face time no longer billable for this client' });
     }
 
     // Draft lines whose source event is no longer billable (cancelled, DNA, deleted, moved out) leave the draft.
@@ -573,7 +725,7 @@ async function runInvoicing(opts) {
     }
     await Issues.resolveStale(tx, orgId, {
       runId, from, to, practitionerIds: opts.practitionerIds, tripId: opts.trip ? opts.trip.id : null,
-      raisedKeys: issues.list().map(i => i.dedupeKey), clientIds: [...new Set(sessions.map(s => s.ev.client_id).filter(Boolean))],
+      raisedKeys: issues.list().map(i => i.dedupeKey), clientIds: [...new Set(sessions.map(s => s.ev.client_id).concat(nf2f.map(n => n.part.clientId)).filter(Boolean))],
     });
     summary.itemsNeedAttention = issues.list().filter(i => i.severity === 'BLOCKING').length;
     summary.warnings = issues.list().filter(i => i.severity === 'WARNING').length;

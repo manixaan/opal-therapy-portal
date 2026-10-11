@@ -108,6 +108,49 @@ function buildSessionLine({ serviceDate, minutes, rate, mmm, sessionLabel = 'The
   };
 }
 
+/**
+ * A client's share of a non-face-to-face block's timed work (billing/nf2f-timer.js).
+ * Priced like a session — the rate card's session hourly rate for the
+ * client's MMM zone, same support item, NDIS non-face-to-face claim — with
+ * quantity = the client's seconds ÷ 3600 (4 dp) so the face reconciles.
+ */
+function buildNf2fLine({ serviceDate, seconds, rate, mmm, activity, sharePercent, timedSeconds, clientsOnBlock, nonBillablePercent, mmmSnapshot = null }) {
+  const qtyE4 = M.minutesToHoursQty(seconds, 60);
+  const unitCents = rate.sessionRateCents;
+  const amountCents = M.lineAmount(qtyE4, unitCents);
+  const minutes = Math.round(seconds / 60);
+  return {
+    component: 'NF2F',
+    itemCode: rate.rule.sessionItemCode || null,
+    description: `${displayDate(serviceDate)}, ${minutes} minutes, Non-Face-to-Face Support${activity ? ' (' + activity + ')' : ''}`,
+    serviceDate,
+    durationMinutes: minutes,
+    quantityE4: qtyE4,
+    unitCents,
+    amountCents,
+    mmm,
+    rateCardId: rate.card.id,
+    rateCardVersion: rate.card.version,
+    calculation: {
+      method: 'timed_nf2f_share',
+      serviceDate,
+      timedSeconds,
+      clientsOnBlock,
+      sharePercent,
+      nonBillablePercent,
+      clientSeconds: seconds,
+      quantityHours: M.qtyToString(qtyE4),
+      mmm,
+      mmmSource: mmmSnapshot,
+      rateCard: rate.card,
+      zone: rate.rule.zoneLabel,
+      hourlyRate: M.fromCents(unitCents),
+      amount: M.fromCents(amountCents),
+      claimType: 'NON_FACE_TO_FACE',
+    },
+  };
+}
+
 function buildTravelLines({ serviceDate, allocation, rate, practitionerName, legs }) {
   const lines = [];
   const snapshot = {
@@ -203,5 +246,5 @@ function displayStatus(inv, today) {
 
 module.exports = {
   MAX_SESSION_MINUTES, isTelehealth, durationMinutes, evaluateEvent, displayDate, gstFor,
-  buildSessionLine, buildTravelLines, invoiceTotals, addDays, todayInTz, displayStatus,
+  buildSessionLine, buildNf2fLine, buildTravelLines, invoiceTotals, addDays, todayInTz, displayStatus,
 };
