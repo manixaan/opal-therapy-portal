@@ -200,11 +200,23 @@ describe('15-minute snapping — one grid for every calendar gesture', () => {
     expect(SHELL).toContain("e.target.closest('.cal-preview-block') ||");
   });
 
-  test('typed start times land on the grid too', async () => {
+  test('typed start times land on the grid too — once the field is left', async () => {
     const env = makeEnv();
     env.$('bsp-start').value = '10:08';
-    env.$('bsp-start').dispatchEvent(new env.win.Event('change'));
+    env.$('bsp-start').dispatchEvent(new env.win.Event('blur'));
     expect(start(env)).toBe('10:15');
+  });
+
+  test('typing a start time is never snapped mid-entry (Chrome fires change per keystroke)', async () => {
+    const env = makeEnv();
+    // Typing 10:45: the "4" of "45" makes 10:04 before the "5" arrives.
+    env.$('bsp-start').value = '10:04';
+    env.$('bsp-start').dispatchEvent(new env.win.Event('change'));
+    expect(start(env)).toBe('10:04');
+    env.$('bsp-start').value = '10:45';
+    env.$('bsp-start').dispatchEvent(new env.win.Event('change'));
+    env.$('bsp-start').dispatchEvent(new env.win.Event('blur'));
+    expect(start(env)).toBe('10:45');
   });
 
   test('the proposed block is the session shape, without the star', () => {

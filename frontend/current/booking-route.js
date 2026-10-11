@@ -767,8 +767,12 @@
     });
     if (unsure) unsure.addEventListener('change', applyUnsure);
     var start = $('bsp-start');
-    if (start) start.addEventListener('change', function () {
-      // Typed times land on the 15-minute grid like every calendar gesture.
+    if (start) start.addEventListener('blur', function () {
+      // Typed times land on the 15-minute grid like every calendar gesture —
+      // once the field is left. Chrome fires 'change' on every keystroke in a
+      // time field, so snapping there turned the "4" of "45" into :00 and no
+      // minute could be typed (11 Oct 2026). While typing, the calendar block
+      // follows each keystroke through the field's own oninput.
       var parts = (start.value || '').split(':').map(Number);
       if (parts.length < 2 || !Number.isFinite(parts[0])) return;
       var m = parts[0] * 60 + (parts[1] || 0);
