@@ -159,11 +159,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=39" defer></script>
+<script src="/travel.js?v=40" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=8" defer></script>
+<script src="/booking-route.js?v=9" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -11710,7 +11710,7 @@ function handleDragEnd(event) {
   dragState.block = null;
   if (typeof openBookingPanel === 'function') {
     // A drag while the panel is open re-picks the time and keeps the form.
-    openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM, keepState: _bspOpen });
+    openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM, keepState: _bspOpen, fromDrag: true });
   }
 }
 
@@ -22148,7 +22148,10 @@ function _bspApplyTimingPrefill(opts) {
   if (opts.endH !== undefined && opts.startH !== undefined) {
     const durMin = (opts.endH * 60 + (opts.endM || 0)) - (opts.startH * 60 + (opts.startM || 0));
     if (durMin > 0 && durMin <= 240) {
-      bspSetDur(durMin, true); // don't mark as manual — came from drag
+      // A dragged range is the clinician's own timing: picking a booking type
+      // afterwards must not shrink it to the type's default (11 Oct 2026).
+      // A plain slot click (an hour by default) still takes the type default.
+      bspSetDur(durMin, !opts.fromDrag);
     } else {
       _bspRecomputeEnd();
     }

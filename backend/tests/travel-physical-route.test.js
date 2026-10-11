@@ -350,6 +350,19 @@ describe('travel badge on each event', () => {
   });
 });
 
+describe('Return Home follows the day\'s base (11 Oct 2026)', () => {
+  test('a saved Return Home ends the day at the base set in the header now, not the one saved with it', () => {
+    const c = load();
+    const parents = { kind: 'address', address: '11 Rostrata Ave, Willetton WA 6155', label: "Parent's Home" };
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: { ...parents, purpose: 'home' } } } });
+    expect(legs(c).find((x) => x.kind === 'end').toLoc).toMatchObject({ label: 'Home', addr: HOME.addr });
+    // Chosen on purpose in the panel (no "home" purpose): that place stands.
+    const d = load();
+    add(d, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: parents } } });
+    expect(legs(d).find((x) => x.kind === 'end').toLoc).toMatchObject({ label: "Parent's Home" });
+  });
+});
+
 describe('Go Somewhere Else between two sessions (6 Oct 2026)', () => {
   // A at Osborne Park, then a school visit saved as A's "after", then B in Joondalup.
   const placeAfter = { kind: 'address', address: SCHOOL, suburb: 'Scarborough', label: 'School', purpose: 'elsewhere' };

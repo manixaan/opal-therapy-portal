@@ -481,7 +481,7 @@
       '<div class="pd-body">' +
         '<p class="br-sub">' + esc(who) + ' · ' + esc(DAY_NAMES[info.day] || info.day) + ' ' + esc(fmt(info.startMin)) + '–' + esc(fmt(info.endMin)) + ' is booked.</p>' +
         '<div class="br-choices">' +
-          '<button type="button" class="br-choice" data-next="home"><strong>Return Home</strong><span>Drive back to your base after this session</span></button>' +
+          (alreadyHome(info) ? '' : '<button type="button" class="br-choice" data-next="home"><strong>Return Home</strong><span>Drive back to your base after this session</span></button>') +
           '<button type="button" class="br-choice" data-next="another"><strong>Book Another Client</strong><span>The next appointment starts after the drive</span></button>' +
           '<button type="button" class="br-choice" data-next="elsewhere"><strong>Go Somewhere Else</strong><span>Hospital, school, office, supplier, meeting…</span></button>' +
         '</div>' +
@@ -508,6 +508,26 @@
     var first = el.querySelector('.br-choice'); if (first) first.focus();
   }
   BR.showContinuation = showContinuation;
+
+  /* Already home after this session? A booking with no address (a
+     telehealth) leaves the clinician where they were; when the day's travel
+     before it ends at the day's home, "Return Home" is no choice — the
+     choices are another booking, somewhere else, or Done (11 Oct 2026). */
+  function alreadyHome(info) {
+    if (!info || info.unsure || info.location) return false;
+    var st = clinicianDayBase(info.day);
+    if (!st.own || st.status !== 'set' || !st.base) return false;
+    var home = canon(st.base.addr || st.base.suburb || '');
+    if (!home || !fn('computeDayTravelSegments')) return false;
+    var legs = global.computeDayTravelSegments(info.day).filter(function (x) {
+      return x.kind !== 'gap' && x.travelMin > 0 && x.endMin <= info.startMin;
+    }).sort(function (a, b) { return a.endMin - b.endMin; });
+    // No drive yet today: the day has not left its start point.
+    if (!legs.length) return true;
+    var to = legs[legs.length - 1].toLoc || {};
+    return canon(to.address || to.addr || to.suburb || '') === home;
+  }
+  BR.alreadyHome = alreadyHome;
 
   function backToChoices() {
     if (!NEXT) return;

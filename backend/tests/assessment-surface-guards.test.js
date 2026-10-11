@@ -716,13 +716,15 @@ describe('changed assets are cache-busted', () => {
       // states, the earliest feasible start, departure-time routing.
       // 38: failure toasts pass 'warn'; the work-location undo resolves its week by key (10 Oct 2026).
       // 39: Go somewhere else in between — a new place typed in the travel panel.
-      ['travel.js', 39],
+      // 40: no-address booking never routes; Return Home follows the day's base; delete → change where the day ends finds the stop again.
+      ['travel.js', 40],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
-      ['booking-route.js', 8], ['booking-route.css', 2],
+      // 9 (js): no Return Home when a no-address booking leaves you at home already.
+      ['booking-route.js', 9], ['booking-route.css', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

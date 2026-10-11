@@ -630,6 +630,17 @@ function sessionTravelOverride(s, side) {
 }
 function resolveTravelPoint(spec, day) {
   if (!spec) return null;
+  // "Return Home" (purpose 'home') means the day's home, whichever it is now:
+  // changing the day's base in the header moves the drive home with it — it
+  // used to keep driving to the base picked when the answer was saved
+  // (11 Oct 2026). Only with no base for the day does the saved one stand.
+  if (spec.purpose === 'home' && day && typeof dayAnchorBase === 'function') {
+    const b = dayAnchorBase(day);
+    if (b && !b.unset && (b.addr || b.suburb || b.remote)) {
+      return { suburb: b.suburb || null, label: b.label || 'Home', addr: b.addr || null,
+               region: b.region || suburbRegion(b.suburb) || 'central', remote: !!b.remote, baseId: (calendarWeekLocations() || {})[day] || null };
+    }
+  }
   if (spec.kind === 'base') {
     const b = (typeof getBase === 'function') ? getBase(spec.id) : null;
     if (!b) return null;
@@ -870,7 +881,15 @@ async function travelReplanAfterDelete(ctx) {
     side === 'end' ? at(lone) + ' is now the last stop on ' + dayName + '. The day ends with the drive to ' + where + ' (' + seg.travelMin + ' min).'
                    : at(lone) + ' is now the first stop on ' + dayName + '. The day starts with the drive from ' + where + ' (' + seg.travelMin + ' min).',
     [{ key: 'keep', label: 'Keep that' }, { key: 'change', label: side === 'end' ? 'Change where the day ends →' : 'Change where the day starts →' }]);
-  if (key === 'change') openTravelPanel(seg);
+  if (key === 'change') {
+    // The delete re-rendered the calendar while the question was open, and
+    // tiles come back under new ids: find the stop again by its saved event,
+    // or the panel opens without the session (no "After this session, go
+    // to", nothing to amend — 11 Oct 2026).
+    const now = (lone.dbId && _sessionByDbId(lone.dbId)) || (window.SESSIONS && window.SESSIONS[lone.id]) || lone;
+    const fresh = computeDayTravelSegments(now.day).find(x => x.kind === side && (side === 'end' ? x.fromSessionId === now.id : x.toSessionId === now.id));
+    openTravelPanel(fresh || seg);
+  }
   return key;
 }
 
@@ -1108,10 +1127,16 @@ function _bspUnsure() { const u = document.getElementById('bsp-location-unsure')
    client's address on file. */
 function _bspTargetAddress() {
   if (_bspUnsure()) return '';
+  // Exactly what the panel holds, as the save does (confirmBooking). An empty
+  // Location means "I stay where I am" (a telehealth) — never the client's
+  // address on file: that drew a 2,035-minute drive to a booking with no
+  // address (11 Oct 2026).
   const typed = (document.getElementById('bsp-location') || {}).value || '';
-  if (typed.trim()) return typed.trim();
-  const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
-  return p ? (p.address || p.suburb || '') : '';
+  return typed.trim();
+}
+function _bspNoAddressChosen() {
+  const sel = document.getElementById('bsp-loc-select');
+  return !!(sel && !sel.hidden && sel.value === '__none');
 }
 function _bspIsClientBooking() {
   return !(typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.category && BOOKING_STATE.category !== 'client');
@@ -1197,7 +1222,9 @@ function runBspRoutePreview(opts) {
     // No location yet is the normal starting state, not a warning: the panel
     // line asks for it. A chip on the calendar here sat at the previous
     // stop's end, away from the proposal, and read like a stray travel leg.
-    setBspRouteStatus('info', 'After ' + fromName + ' — choose the location to calculate travel.');
+    setBspRouteStatus('info', _bspNoAddressChosen()
+      ? 'No address — no drive. You stay where you are after ' + fromName + '.'
+      : 'After ' + fromName + ' — choose the location to calculate travel.');
     return;
   }
   // Straight from the last stop, or home in between? Same rule as the
@@ -2356,7 +2383,7 @@ function _renderTravelPanel(seg) {
     html += '<div class="tp-plan-current">' + _tpEsc(cur) + (current ? ' <button type="button" class="tp-plan-reset" data-plan="reset">Use day default</button>' : '') + '</div>';
     html += '<div class="tp-plan-opts">';
     bases.forEach(function (k) {
-      var sel = current && current.kind === 'base' && current.id === k;
+      var sel = current && (current.purpose === 'home' ? (resolveTravelPoint(current, seg.day) || {}).baseId === k : current.kind === 'base' && current.id === k);
       html += '<button type="button" class="tp-plan-opt' + (sel ? ' on' : '') + '" data-plan="base" data-key="' + _tpEsc(k) + '">' + _tpEsc(LOCATIONS[k].label || k) + '</button>';
     });
     html += '</div>';

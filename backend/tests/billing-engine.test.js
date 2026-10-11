@@ -363,6 +363,18 @@ describe('day route mirrors the calendar\'s travel rules', () => {
     expect(legs([a({ after: { ...place, address: '2 B St, Riverton' } }), b]).map(l => l.kind)).toEqual(['OUTBOUND', 'RETURN', 'RETURN']);
   });
 
+  test('Return Home (purpose home) ends at the day\'s base, not the base saved with the answer', () => {
+    const u = { ...user, default_work_location: { homes: [...user.default_work_location.homes,
+      { id: 'parents', label: "Parent's Home", kind: 'local', addr: '11 Rostrata Ave, Willetton WA 6155' }] } };
+    const last = { ...ev('a', '1 A St, Willetton', 1), custom_metadata: { travel: { after: { kind: 'base', id: 'parents', purpose: 'home' } } } };
+    const legs = DR.buildDayLegs({ user: u, date: '2026-09-25', sessions: [last] }).legs;
+    expect(legs[legs.length - 1]).toMatchObject({ kind: 'RETURN', destination: '5 Base Rd, Canning Vale WA' });
+    // A place chosen on purpose (no "home" purpose) still stands.
+    const fixed = { ...last, custom_metadata: { travel: { after: { kind: 'base', id: 'parents' } } } };
+    const legs2 = DR.buildDayLegs({ user: u, date: '2026-09-25', sessions: [fixed] }).legs;
+    expect(legs2[legs2.length - 1]).toMatchObject({ kind: 'RETURN', destination: '11 Rostrata Ave, Willetton WA 6155' });
+  });
+
   test('a manual pin beats the Outlook location', () => {
     expect(DR.eventAddress({ location: 'Outlook text', manual_location: { address: '9 Pin St' } })).toBe('9 Pin St');
   });

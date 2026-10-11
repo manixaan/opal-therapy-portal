@@ -200,6 +200,11 @@ describe('15-minute snapping — one grid for every calendar gesture', () => {
     expect(SHELL).toContain("e.target.closest('.cal-preview-block') ||");
   });
 
+  test('a dragged range is the clinician\'s timing: a booking type\'s default never shrinks it', () => {
+    expect(SHELL).toMatch(/openBookingPanel\(\{ day: dragState\.day,[^)]*fromDrag: true \}\)/);
+    expect(SHELL).toContain('bspSetDur(durMin, !opts.fromDrag);');
+  });
+
   test('typed start times land on the grid too — once the field is left', async () => {
     const env = makeEnv();
     env.$('bsp-start').value = '10:08';
@@ -535,6 +540,17 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     expect(env.ev('_bspTargetAddress()')).toBe('');
   });
 
+  test('no address (a telehealth) never routes to the client\'s address on file', async () => {
+    const env = makeEnv({ routes });
+    continueFrom(env);
+    env.ev(`BOOKING_STATE.selectedPatient = { id: 501, first: 'Bo', last: 'B', address: ${JSON.stringify(CV_ADDR)} }`);
+    env.$('bsp-location').value = '';
+    env.ev('bspTravelPreview()'); await flush();
+    expect(env.ev('_bspTargetAddress()')).toBe('');
+    expect(env.routeCalls()).toHaveLength(0);
+    expect(env.win.document.querySelectorAll('.travel-overlay.preview')).toHaveLength(0);
+  });
+
   test('no location yet asks for one instead of drawing a drive', async () => {
     const env = makeEnv({ routes });
     continueFrom(env);
@@ -784,6 +800,21 @@ describe('after Create appointment — What would you like to do next?', () => {
     expect(dialog(env).querySelector('#br-next-title').textContent).toBe('What would you like to do next?');
     expect(Array.from(dialog(env).querySelectorAll('.br-choice strong')).map((s) => s.textContent))
       .toEqual(['Return Home', 'Book Another Client', 'Go Somewhere Else']);
+  });
+
+  test('a no-address booking after the day\'s drive home: no Return Home — another booking, somewhere else, or Done', () => {
+    const cfg = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+    const env = makeEnv(cfg);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.T = { id: 'T', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 12, endM: 0, patient: 'Tele Client', dbId: 'db-T' };`);
+    const tele = { dbId: 'db-T', day: 'mon', startMin: 660, endMin: 720, durationMin: 60, location: '', unsure: false, patientName: 'Tele Client' };
+    env.ev('BookingRoute.showContinuation(' + JSON.stringify(tele) + ')');
+    expect(Array.from(dialog(env).querySelectorAll('.br-choice strong')).map((x) => x.textContent))
+      .toEqual(['Book Another Client', 'Go Somewhere Else']);
+    expect(dialog(env).querySelector('[data-next="done"]')).not.toBeNull();
+    // The same telehealth before any drive home (straight after Ada, still at her place) keeps Return Home.
+    env.ev('BookingRoute.showContinuation(' + JSON.stringify({ ...tele, startMin: 600, endMin: 630 }) + ')');
+    expect(Array.from(dialog(env).querySelectorAll('.br-choice strong')).map((x) => x.textContent)[0]).toBe('Return Home');
   });
 
   test('Return Home routes client → the clinician\'s own base for that day and saves the leg', async () => {
@@ -1135,6 +1166,19 @@ describe('deleting a session re-plans the travel either side (6 Oct 2026)', () =
     popup(env).querySelector('[data-key="change"]').click();
     expect(await env.ev('__done')).toBe('change');
     expect(env.ev('__opened')).toBe('end');
+  });
+
+  test('change where the day ends opens the panel for the stop as it is NOW (the calendar re-renders under new ids)', async () => {
+    const env = makeEnv(HOME);
+    day(env);
+    env.ev("delete SESSIONS.N2; var __seg = null; openTravelPanel = function (seg) { __seg = seg; };");
+    env.ev("var __ctx = travelNeighboursOf('S'); delete SESSIONS.S; var __done = travelReplanAfterDelete(__ctx);");
+    await flush();
+    // The reload while the question is open: N1 comes back as N1b.
+    env.ev("SESSIONS.N1b = Object.assign({}, SESSIONS.N1, { id: 'N1b' }); delete SESSIONS.N1;");
+    popup(env).querySelector('[data-key="change"]').click();
+    expect(await env.ev('__done')).toBe('change');
+    expect(env.ev('__seg && [__seg.kind, __seg.fromSessionId, __seg.ownerSessionId]')).toEqual(['end', 'N1b', 'N1b']);
   });
 
   test('deleting a telehealth (no address) changes no travel and asks nothing', () => {

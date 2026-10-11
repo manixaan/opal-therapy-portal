@@ -197,7 +197,9 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     if (canonAddr(from) === canonAddr(to)) continue;
     legs.push({ id: `between:${a.id}:${b.id}`, kind: 'BETWEEN', fromEventId: a.id, toEventId: b.id, origin: from, destination: to });
   }
-  const endPt = resolveSpec(meta(last).after, user) || base;
+  // "Return Home" (purpose 'home') is the day's home, whichever it is now — travel.js resolveTravelPoint.
+  const lastAfter = meta(last).after;
+  const endPt = (lastAfter && lastAfter.purpose === 'home' && base) ? base : (resolveSpec(lastAfter, user) || base);
   if (endPt && !endPt.remote && endPt.address) {
     const from = eventAddress(last);
     if (from && canonAddr(from) !== canonAddr(endPt.address)) {
