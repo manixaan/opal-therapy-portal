@@ -18,6 +18,12 @@
 .session .nf2f-btn.running { border-color: var(--danger, #c2412e); color: #fff; background: var(--danger, #c2412e); }
 .session .nf2f-nonbill { padding: 1px 7px; border-radius: 999px; background: var(--border-soft, #f0ece6); color: var(--muted, #8a837b); font-weight: 700; letter-spacing: 0.02em; }
 .session.s-compact .nf2f-bar { display: none; }
+/* A running timer: one small blinking red dot in the block's corner, whatever its size. */
+.session .nf2f-live-dot {
+  position: absolute; top: 6px; right: 6px; z-index: 2; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--danger, #c2412e); box-shadow: 0 0 0 2px var(--panel, #fff);
+  animation: nf2f-pulse 1.4s ease-in-out infinite; pointer-events: none;
+}
 
 /* The running-timer chip on the calendar */
 .nf2f-run-chip {

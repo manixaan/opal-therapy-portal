@@ -92,11 +92,14 @@ describe('the block and the running timer', () => {
     expect(log.some((l) => l[0] === 'POST' && l[1] === '/api/events/db-1/nf2f/start')).toBe(true);
     const chip = $('nf2f-run-chip');
     expect(chip.textContent).toMatch(/Case Management.*Al A/);
-    expect(w.SESSIONS.A.element.querySelector('.nf2f-btn.running')).not.toBeNull();
+    // The block shows a blinking dot while it records — no clock to get cut off.
+    expect(w.SESSIONS.A.element.querySelector('.nf2f-live-dot')).not.toBeNull();
+    expect(w.SESSIONS.A.element.querySelector('.nf2f-btn')).toBeNull();
     chip.querySelector('[data-nf2f-stop]').click();
     await flush();
     expect(log.some((l) => l[0] === 'POST' && l[1] === '/api/events/db-1/nf2f/stop')).toBe(true);
     expect($('nf2f-run-chip')).toBeNull();
+    expect(w.SESSIONS.A.element.querySelector('.nf2f-live-dot')).toBeNull();
   });
 });
 

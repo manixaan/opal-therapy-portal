@@ -730,7 +730,8 @@ describe('changed assets are cache-busted', () => {
       ['recurrence.js', 1], ['recurrence.css', 1],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.
       // 2 (js): Start billable time moves to the block's right-click menu.
-      ['nf2f.js', 2], ['nf2f.css', 1],
+      // 3 (js) / 2 (css): a running timer is a blinking dot on the block, not a clock.
+      ['nf2f.js', 3], ['nf2f.css', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

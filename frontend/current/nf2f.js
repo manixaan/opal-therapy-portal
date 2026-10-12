@@ -138,10 +138,6 @@
     if (reached) { refreshRunning(); return; }   // the server stops it at the block's length
     var chip = $('nf2f-run-chip');
     if (chip && RUN.list[0]) { var t = chip.querySelector('.nf2f-run-time'); if (t) t.textContent = clock(liveElapsed(RUN.list[0])); }
-    document.querySelectorAll('.nf2f-btn.running').forEach(function (b) {
-      var r = runningFor(b.dataset.nf2fEvent); var t = b.querySelector('.nf2f-btn-time');
-      if (r && t) t.textContent = clock(liveElapsed(r));
-    });
   }
 
   function renderChip() {
@@ -215,12 +211,20 @@
     }
     el.classList.remove('nf2f-nonbillable');
     var r = s.dbId ? runningFor(s.dbId) : null;
-    // Start lives in the right-click menu (12 Oct 2026); the block only shows
-    // its clients, and a running timer's Stop.
-    bar.innerHTML = '<span class="nf2f-clients" title="' + esc(namesOf(clients, 99)) + '">' + esc(namesOf(clients, 3)) + '</span>' +
-      (s.dbId && r
-        ? '<button type="button" class="nf2f-btn running" data-nf2f-event="' + esc(s.dbId) + '" data-nf2f-stop="' + esc(s.dbId) + '" title="Stop billable time">■ <span class="nf2f-btn-time">' + clock(liveElapsed(r)) + '</span></button>'
-        : '');
+    // Start / Stop live in the right-click menu and the calendar chip
+    // (12 Oct 2026). The block lists its clients; while its timer runs it
+    // carries a small blinking red dot in the corner — a number got cut off
+    // on short blocks.
+    bar.innerHTML = '<span class="nf2f-clients" title="' + esc(namesOf(clients, 99)) + '">' + esc(namesOf(clients, 3)) + '</span>';
+    var dot = el.querySelector('.nf2f-live-dot');
+    if (r && !dot) {
+      dot = document.createElement('span');
+      dot.className = 'nf2f-live-dot';
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', 'Billable time is recording for this block');
+      dot.title = 'Billable time is recording — right-click the block or use the timer chip to stop it';
+      el.appendChild(dot);
+    } else if (!r && dot) dot.remove();
   }
   function decorateAllTiles() {
     Object.values(global.SESSIONS || {}).forEach(function (s) { try { decorateTile(s); } catch (e) { /* tile gone */ } });
