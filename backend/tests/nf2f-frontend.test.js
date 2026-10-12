@@ -74,14 +74,20 @@ describe('the block and the running timer', () => {
     w.addSession($('day-mon'), { id: 'B', dbId: 'db-2', booking: { group: 'nf2f', clientId: null } });
     await flush();
     expect(w.SESSIONS.A.element.querySelector('.nf2f-clients').textContent).toBe('Al A, Bo B');
-    expect(w.SESSIONS.A.element.querySelector('.nf2f-btn').textContent).toMatch(/Start billable time/);
+    // Start is in the right-click menu, not on the block.
+    expect(w.SESSIONS.A.element.querySelector('.nf2f-btn')).toBeNull();
+    expect(w.Nf2f.menuItems(w.SESSIONS.A)).toMatch(/data-nf2f-start="db-1".*Start billable time.*data-nf2f-alloc="db-1".*Allocate billing/);
+    expect(w.Nf2f.menuItems(w.SESSIONS.B)).toBe('');
     expect(w.SESSIONS.B.element.querySelector('.nf2f-nonbill').textContent).toBe('Non-billable');
   });
-  test('Start → the chip appears on the calendar with Stop; Stop from the chip clears it', async () => {
+  test('Start (right-click menu) → the chip appears on the calendar with Stop; Stop from the chip clears it', async () => {
     const { w, $, log, flush } = env();
     w.addSession($('day-mon'), { id: 'A', dbId: 'db-1', booking: { group: 'nf2f', clients: [{ clientId: '1', clientName: 'Al A' }] } });
     await flush();
-    w.SESSIONS.A.element.querySelector('[data-nf2f-start]').click();
+    const menu = w.document.createElement('div');
+    menu.innerHTML = w.Nf2f.menuItems(w.SESSIONS.A);
+    w.document.body.appendChild(menu);
+    menu.querySelector('[data-nf2f-start]').click();
     await flush();
     expect(log.some((l) => l[0] === 'POST' && l[1] === '/api/events/db-1/nf2f/start')).toBe(true);
     const chip = $('nf2f-run-chip');

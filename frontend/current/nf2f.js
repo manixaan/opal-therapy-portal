@@ -190,6 +190,7 @@
     var b = e.target.closest && e.target.closest('[data-nf2f-start],[data-nf2f-stop],[data-nf2f-open],[data-nf2f-alloc]');
     if (!b) return;
     e.stopPropagation(); e.preventDefault();
+    if (fn('closeCalContextMenu')) global.closeCalContextMenu();
     if (b.hasAttribute('data-nf2f-start')) start(b.getAttribute('data-nf2f-start'));
     else if (b.hasAttribute('data-nf2f-stop')) stop(b.getAttribute('data-nf2f-stop'));
     else if (b.hasAttribute('data-nf2f-alloc')) openAllocate(b.getAttribute('data-nf2f-alloc'));
@@ -214,15 +215,28 @@
     }
     el.classList.remove('nf2f-nonbillable');
     var r = s.dbId ? runningFor(s.dbId) : null;
+    // Start lives in the right-click menu (12 Oct 2026); the block only shows
+    // its clients, and a running timer's Stop.
     bar.innerHTML = '<span class="nf2f-clients" title="' + esc(namesOf(clients, 99)) + '">' + esc(namesOf(clients, 3)) + '</span>' +
-      (s.dbId ? (r
+      (s.dbId && r
         ? '<button type="button" class="nf2f-btn running" data-nf2f-event="' + esc(s.dbId) + '" data-nf2f-stop="' + esc(s.dbId) + '" title="Stop billable time">■ <span class="nf2f-btn-time">' + clock(liveElapsed(r)) + '</span></button>'
-        : '<button type="button" class="nf2f-btn" data-nf2f-event="' + esc(s.dbId) + '" data-nf2f-start="' + esc(s.dbId) + '" title="Start billable time">▶ Start billable time</button>') : '');
+        : '');
   }
   function decorateAllTiles() {
     Object.values(global.SESSIONS || {}).forEach(function (s) { try { decorateTile(s); } catch (e) { /* tile gone */ } });
   }
   NF.decorateAllTiles = decorateAllTiles;
+
+  /** Right-click menu items for a block (mockup_v3.html showCalContextMenu): Start / Stop, Allocate billing. */
+  NF.menuItems = function (s) {
+    if (!s || !s.dbId || !blockOf(s) || !clientsOf(s).length) return '';
+    var r = runningFor(s.dbId);
+    var id = esc(s.dbId);
+    return (r
+      ? '<div class="cal-ctx-menu-item" data-nf2f-stop="' + id + '"><span class="ctx-icon">■</span> Stop billable time (' + clock(liveElapsed(r)) + ')</div>'
+      : '<div class="cal-ctx-menu-item" data-nf2f-start="' + id + '"><span class="ctx-icon">▶</span> Start billable time</div>') +
+      '<div class="cal-ctx-menu-item" data-nf2f-alloc="' + id + '"><span class="ctx-icon">%</span> Allocate billing…</div>';
+  };
 
   /* ─────────────────────── The block's detail panel ─────────────────────── */
   global.nf2fDecorateDetail = function (s) {

@@ -729,7 +729,8 @@ describe('changed assets are cache-busted', () => {
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
       ['recurrence.js', 1], ['recurrence.css', 1],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.
-      ['nf2f.js', 1], ['nf2f.css', 1],
+      // 2 (js): Start billable time moves to the block's right-click menu.
+      ['nf2f.js', 2], ['nf2f.css', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

@@ -167,7 +167,7 @@
      booking panel; the route maths live in travel.js, loaded just above. -->
 <script src="/booking-route.js?v=9" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
-<script src="/nf2f.js?v=1" defer></script>
+<script src="/nf2f.js?v=2" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -14351,6 +14351,7 @@ function showCalContextMenu(x, y, id) {
     ${MOVABLE_TYPES.has(s.type) && !s.cancelled ? `<div class="cal-ctx-menu-item" onclick="startPreciseMove('${id}')">
       <span class="ctx-icon">${opIcon('clock', 13)}</span> Precision move${CAL_SELECTION.has(id) && CAL_SELECTION.size > 1 ? ` (${CAL_SELECTION.size} sessions)` : ''}
     </div>` : ''}
+    ${window.Nf2f && Nf2f.menuItems ? Nf2f.menuItems(s) : ''}
     <div class="cal-ctx-menu-sep"></div>
     <div class="cal-ctx-menu-item" style="color:var(--danger,#c2412e);"
          onclick="ctxDeleteEvent('${id}')">
