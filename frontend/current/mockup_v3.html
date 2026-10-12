@@ -21881,6 +21881,19 @@ function closeBookingPanel(confirmIfDirty = false) {
   clearPreviewBlocks();
 }
 
+/* Right-click anywhere outside the open booking panel closes it (12 Oct
+   2026) — the quick way out after a slot click. Capture phase, so that
+   right-click only closes the panel: it does not also open a block's menu
+   or the browser's. Inside the panel a right-click behaves as normal. */
+document.addEventListener('contextmenu', (e) => {
+  const panel = document.getElementById('booking-side-panel');
+  if (!panel || !panel.classList.contains('open')) return;
+  if (panel.contains(e.target)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  window.closeBookingPanel();
+}, true);
+
 function clearPanelPrefill() {
   _bspPrefill = null;
   document.getElementById('bsp-prefill-strip').style.display = 'none';

@@ -3072,3 +3072,32 @@ describe('side-by-side layout follows the tiles (11 Oct 2026)', () => {
     expect(full(b)).toBe(true);
   });
 });
+
+describe('right-click closes the booking panel (12 Oct 2026)', () => {
+  const { JSDOM } = require('jsdom');
+  const start = HTML.indexOf("/* Right-click anywhere outside the open booking panel closes it");
+  const code = HTML.slice(start, HTML.indexOf('function clearPanelPrefill() {', start));
+  function env(open) {
+    const dom = new JSDOM(`<div id="booking-side-panel" class="${open ? 'open' : ''}"><input id="in-panel"></div><div id="cal-grid"><div class="session" id="tile"></div></div>`, { runScripts: 'outside-only' });
+    const w = dom.window;
+    w.__closed = 0; w.__tileMenu = 0;
+    w.closeBookingPanel = () => { w.__closed++; w.document.getElementById('booking-side-panel').classList.remove('open'); };
+    w.document.getElementById('tile').addEventListener('contextmenu', () => { w.__tileMenu++; });
+    w.eval(code);
+    const rc = (id) => { const ev = new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true }); w.document.getElementById(id).dispatchEvent(ev); return ev.defaultPrevented; };
+    return { w, rc };
+  }
+  test('outside the open panel: closes it, and nothing else opens', () => {
+    const { w, rc } = env(true);
+    expect(rc('tile')).toBe(true);
+    expect([w.__closed, w.__tileMenu]).toEqual([1, 0]);
+  });
+  test('inside the panel, or with the panel closed, right-click is untouched', () => {
+    const a = env(true);
+    expect(a.rc('in-panel')).toBe(false);
+    expect(a.w.__closed).toBe(0);
+    const b = env(false);
+    b.rc('tile');
+    expect([b.w.__closed, b.w.__tileMenu]).toEqual([0, 1]);
+  });
+});
