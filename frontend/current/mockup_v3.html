@@ -12737,8 +12737,6 @@ async function createBookingNow() {
   }
 
   const timing = _getBspTiming();
-  // Repeat chosen in the panel (recurrence.js) — read now: the wizard resets after the save.
-  const _repeatRuleNow = (window.Recurrence && Recurrence.panelRule) ? Recurrence.panelRule() : null;
   if (!timing || !timing.day) {
     showToast('Set a time', 'Please choose a day and start time in the "When & Where" section.', 'warn');
     return;
@@ -12911,6 +12909,8 @@ async function confirmBooking() {
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
     const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
+    // Repeat chosen in the panel (recurrence.js) — read now: the wizard resets after the save.
+    const _repeatRuleNow = (window.Recurrence && Recurrence.panelRule) ? Recurrence.panelRule() : null;
     // The client, by the type's rule (required for a report, optional for
     // non-face-to-face, none otherwise) — named in the title and stored on the
     // event so the link survives a reload.

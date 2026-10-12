@@ -3101,3 +3101,21 @@ describe('right-click closes the booking panel (12 Oct 2026)', () => {
     expect([b.w.__closed, b.w.__tileMenu]).toEqual([0, 1]);
   });
 });
+
+describe('repeat rule is read where it is used (12 Oct 2026)', () => {
+  // "Can't find variable: _repeatRuleNow": the non-client save used a const
+  // declared in createBookingNow, a different function, and threw after saving.
+  test('each repeat-rule const is declared inside confirmBooking, before its use', () => {
+    const start = HTML.indexOf('async function confirmBooking()');
+    const body = HTML.slice(start, HTML.indexOf('\nfunction ', start + 30));
+    for (const name of ['_repeatRuleNow', '_repeatRule']) {
+      const use = body.indexOf('afterBooked(newDbId, ' + name + ')');
+      const decl = body.indexOf('const ' + name + ' =');
+      expect(use).toBeGreaterThan(0);
+      expect(decl).toBeGreaterThan(0);
+      expect(decl).toBeLessThan(use);
+    }
+    const cbn = HTML.slice(HTML.indexOf('async function createBookingNow()'), HTML.indexOf('async function confirmBooking()'));
+    expect(cbn).not.toMatch(/_repeatRule/);
+  });
+});
