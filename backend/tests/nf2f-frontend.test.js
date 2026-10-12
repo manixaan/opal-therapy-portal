@@ -126,3 +126,18 @@ describe('Allocate billing — the rest is shared by the clients not changed', (
     expect(rows.map((r) => r.percent)).toEqual([50, 16.68, 16.66, 16.66]);
   });
 });
+
+test('the panel shows each client\'s share to the second (1:51 over 4 clients is not "0 min")', async () => {
+  const { w, $, flush } = env();
+  w.fetch = async () => ({ ok: true, status: 200, json: async () => ({
+    timer: { status: 'STOPPED', elapsedSeconds: 111, limitSeconds: 3600 },
+    allocation: { nonBillablePercent: 0, clients: [] },
+    split: [{ clientId: '1', clientName: 'Al', percent: 25, seconds: 28 }, { clientId: '2', clientName: 'Bo', percent: 25, seconds: 28 },
+      { clientId: '3', clientName: 'Cy', percent: 25, seconds: 28 }, { clientId: '4', clientName: 'Di', percent: 25, seconds: 27 }],
+  }) });
+  w.nf2fDecorateDetail({ dbId: 'db-1', booking: { group: 'nf2f', clients: [{ clientId: '1' }] } });
+  await flush();
+  const cells = Array.from($('nf2f-detail').querySelectorAll('.nf2f-split td:last-child')).map((td) => td.textContent);
+  expect(cells).toEqual(['0:28', '0:28', '0:28', '0:27']);
+});
+

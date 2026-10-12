@@ -45,6 +45,9 @@
     return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
   }
   function mins(sec) { var m = Math.round(sec / 60); return m + ' min'; }
+  // A client's share, to the second (m:ss) — whole minutes showed "0 min" for
+  // short timings (12 Oct 2026).
+  function share(sec) { return clock(Math.round(sec)); }
   function isNf2fLeaf() { var l = fn('currentBookingLeaf') ? global.currentBookingLeaf() : null; return !!(l && l.group === 'nf2f'); }
   function blockOf(s) { var b = s && s.booking; return b && b.group === 'nf2f' ? b : null; }
   function clientsOf(s) {
@@ -268,8 +271,8 @@
               : '<button type="button" class="pd-btn pd-btn-primary nf2f-act" data-nf2f-start="' + esc(s.dbId) + '">' + (v.timer.elapsedSeconds ? 'Resume' : 'Start billable time') + '</button>') +
           '</div>' +
           '<table class="nf2f-split"><tbody>' + v.split.map(function (p) {
-            return '<tr><td>' + esc(p.clientName || ('Client ' + p.clientId)) + '</td><td>' + p.percent + '%</td><td>' + mins(p.seconds) + '</td></tr>';
-          }).join('') + (nb ? '<tr class="nf2f-nb"><td>Non-billable</td><td>' + nb + '%</td><td>' + mins(v.timer.elapsedSeconds * nb / 100) + '</td></tr>' : '') + '</tbody></table>' +
+            return '<tr><td>' + esc(p.clientName || ('Client ' + p.clientId)) + '</td><td>' + p.percent + '%</td><td>' + share(p.seconds) + '</td></tr>';
+          }).join('') + (nb ? '<tr class="nf2f-nb"><td>Non-billable</td><td>' + nb + '%</td><td>' + share(v.timer.elapsedSeconds * nb / 100) + '</td></tr>' : '') + '</tbody></table>' +
           '<button type="button" class="pd-btn nf2f-act" data-nf2f-alloc="' + esc(s.dbId) + '">Allocate billing</button>';
       }).catch(function (e) { box.innerHTML = '<b>Billable time</b> <span class="nf2f-dim">' + esc(e.message) + '</span>'; });
     };
@@ -317,11 +320,11 @@
         rows.map(function (r, i) {
           return '<tr' + (r.locked ? ' class="set"' : '') + '><td>' + esc(r.clientName || ('Client ' + r.clientId)) + '</td>' +
             '<td><input type="number" min="0" max="100" step="0.01" class="pd-input nf2f-pct" data-row="' + i + '" value="' + r.percent + '" aria-label="Share for ' + esc(r.clientName || r.clientId) + '"> %</td>' +
-            '<td>' + mins(timed * r.percent / 100) + '</td></tr>';
+            '<td>' + share(timed * r.percent / 100) + '</td></tr>';
         }).join('') +
         '<tr class="nf2f-nb' + (nbOn ? ' on' : '') + '"><td><label><input type="checkbox" data-nb-on' + (nbOn ? ' checked' : '') + '> Non-billable</label></td>' +
           '<td><input type="number" min="0" max="100" step="0.01" class="pd-input nf2f-pct" data-nb value="' + nb + '"' + (nbOn ? '' : ' disabled') + ' aria-label="Non-billable share"> %</td>' +
-          '<td>' + mins(timed * nb / 100) + '</td></tr>' +
+          '<td>' + share(timed * nb / 100) + '</td></tr>' +
         '</tbody></table>' +
         '<div class="nf2f-total' + (ok ? '' : ' bad') + '">Total ' + total + '%' + (ok ? '' : ' — must be 100%') + '</div></div>' +
         '<div class="pd-foot"><button type="button" class="pd-btn" data-act="equal">Equal split</button>' +
