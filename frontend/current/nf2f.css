@@ -66,3 +66,4 @@
 .nf2f-alloc-table tr.nf2f-nb:not(.on) .nf2f-pct { background: var(--border-soft, #f0ece6); }
 .nf2f-total { margin-top: 10px; font-weight: 700; font-size: 13.5px; }
 .nf2f-total.bad { color: var(--danger, #c2412e); }
+.nf2f-alloc-table tr.over .nf2f-pct { border-color: var(--danger, #c2412e); color: var(--danger, #c2412e); }

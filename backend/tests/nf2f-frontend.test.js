@@ -141,3 +141,56 @@ test('the panel shows each client\'s share to the second (1:51 over 4 clients is
   expect(cells).toEqual(['0:28', '0:28', '0:28', '0:27']);
 });
 
+describe('Allocate billing — typing', () => {
+  function dialogEnv() {
+    const e = env();
+    e.w.fetch = async (url, o) => ({ ok: true, status: 200, json: async () => ({
+      title: 'Case Management', timer: { status: 'STOPPED', elapsedSeconds: 600, limitSeconds: 3600 },
+      allocation: { nonBillablePercent: 0, clients: ['1', '2', '3', '4'].map((id) => ({ clientId: id, clientName: 'C' + id, percent: 25 })) },
+      split: [] }) });
+    return e;
+  }
+  const type = (w, inp, text) => { inp.value = text; inp.dispatchEvent(new w.Event('input', { bubbles: true })); };
+
+  test('two digits stay in the box; the other shares follow as you type', async () => {
+    const { w, flush } = dialogEnv();
+    w.Nf2f.openAllocate('db-1'); await flush();
+    const box = w.document.querySelector('[data-row="0"]');
+    type(w, box, '4');
+    type(w, box, '40');
+    expect(box.value).toBe('40');
+    expect(Array.from(w.document.querySelectorAll('.nf2f-pct[data-row]')).map((i) => i.value)).toEqual(['40', '20', '20', '20']);
+    expect(w.document.querySelector('.nf2f-total').textContent).toBe('Total 100%');
+    expect(w.document.querySelector('[data-act="save"]').disabled).toBe(false);
+  });
+
+  test('any number can be typed; over 100% in a share or in total is a warning and Save waits', async () => {
+    const { w, flush } = dialogEnv();
+    w.Nf2f.openAllocate('db-1'); await flush();
+    const a = w.document.querySelector('[data-row="0"]');
+    type(w, a, '150');
+    expect(a.value).toBe('150');
+    expect(w.document.querySelector('.nf2f-total').textContent).toMatch(/a share cannot be over 100%/);
+    expect(w.document.querySelector('[data-act="save"]').disabled).toBe(true);
+    type(w, a, '70');
+    const b = w.document.querySelector('[data-row="1"]');
+    type(w, b, '50');
+    expect(w.document.querySelector('.nf2f-total').textContent).toMatch(/Total 120% — over 100%/);
+    expect(w.document.querySelector('[data-act="save"]').disabled).toBe(true);
+    type(w, b, '10');
+    expect(w.document.querySelector('.nf2f-total').textContent).toBe('Total 100%');
+  });
+
+  test('non-billable is greyed until ticked, then takes its share off the clients not changed', async () => {
+    const { w, flush } = dialogEnv();
+    w.Nf2f.openAllocate('db-1'); await flush();
+    const nb = w.document.querySelector('[data-nb]');
+    expect(nb.disabled).toBe(true);
+    const tick = w.document.querySelector('[data-nb-on]');
+    tick.checked = true; tick.dispatchEvent(new w.Event('change', { bubbles: true }));
+    expect(nb.disabled).toBe(false);
+    type(w, nb, '20');
+    expect(Array.from(w.document.querySelectorAll('.nf2f-pct[data-row]')).map((i) => i.value)).toEqual(['20', '20', '20', '20']);
+  });
+});
+

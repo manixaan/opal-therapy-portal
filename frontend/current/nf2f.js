@@ -299,6 +299,16 @@
   }
   NF._redistribute = redistribute;
 
+  /* Typing never redraws the box being typed in (12 Oct 2026: a redraw on
+     every keystroke kept only one digit). Each change updates the other
+     shares, the times and the total in place. Any number can be typed; a
+     share over 100%, or a total that is not 100%, is a warning and Save
+     waits until it is fixed. */
+  function parsePct(text) {
+    var t = String(text == null ? '' : text).replace(',', '.').replace(/[^0-9.]/g, '');
+    var n = parseFloat(t);
+    return Number.isFinite(n) ? round2(n) : 0;
+  }
   async function openAllocate(dbId) {
     var v;
     try { v = await api('/api/events/' + encodeURIComponent(dbId) + '/nf2f'); }
@@ -309,57 +319,71 @@
     var timed = v.timer.elapsedSeconds;
     var el = document.createElement('div');
     el.className = 'pd-backdrop nf2f-backdrop';
+    el.innerHTML = '<section class="pd-dialog nf2f-alloc" role="dialog" aria-modal="true" aria-labelledby="nf2f-alloc-title">' +
+      '<div class="pd-head"><h2 class="pd-title" id="nf2f-alloc-title">Allocate billing</h2></div>' +
+      '<div class="pd-body"><p class="nf2f-dim">' + esc(v.title || 'This block') + ' · ' + clock(timed) + ' timed. Change a client’s share and the rest is divided between the clients you have not changed.</p>' +
+      '<table class="nf2f-alloc-table"><thead><tr><th>Client</th><th>Share</th><th>Time</th></tr></thead><tbody>' +
+      rows.map(function (r, i) {
+        return '<tr data-tr="' + i + '"><td>' + esc(r.clientName || ('Client ' + r.clientId)) + '</td>' +
+          '<td><input type="text" inputmode="decimal" autocomplete="off" class="pd-input nf2f-pct" data-row="' + i + '" value="' + r.percent + '" aria-label="Share for ' + esc(r.clientName || r.clientId) + '"> %</td>' +
+          '<td class="nf2f-time"></td></tr>';
+      }).join('') +
+      '<tr class="nf2f-nb" data-tr="nb"><td><label><input type="checkbox" data-nb-on' + (nbOn ? ' checked' : '') + '> Non-billable</label></td>' +
+        '<td><input type="text" inputmode="decimal" autocomplete="off" class="pd-input nf2f-pct" data-nb value="' + nb + '"' + (nbOn ? '' : ' disabled') + ' aria-label="Non-billable share"> %</td>' +
+        '<td class="nf2f-time"></td></tr>' +
+      '</tbody></table>' +
+      '<div class="nf2f-total" aria-live="polite"></div></div>' +
+      '<div class="pd-foot"><button type="button" class="pd-btn" data-act="equal">Equal split</button>' +
+        '<button type="button" class="pd-btn" data-act="cancel">Cancel</button>' +
+        '<button type="button" class="pd-btn pd-btn-primary" data-act="save">Save</button></div></section>';
     document.body.appendChild(el);
-    var render = function (total) {
-      total = total == null ? round2(rows.reduce(function (a, r) { return a + r.percent; }, 0) + nb) : total;
-      var ok = Math.abs(total - 100) <= 0.05;
-      el.innerHTML = '<section class="pd-dialog nf2f-alloc" role="dialog" aria-modal="true" aria-labelledby="nf2f-alloc-title">' +
-        '<div class="pd-head"><h2 class="pd-title" id="nf2f-alloc-title">Allocate billing</h2></div>' +
-        '<div class="pd-body"><p class="nf2f-dim">' + esc(v.title || 'This block') + ' · ' + clock(timed) + ' timed. Change a client’s share and the rest is divided between the clients you have not changed.</p>' +
-        '<table class="nf2f-alloc-table"><thead><tr><th>Client</th><th>Share</th><th>Time</th></tr></thead><tbody>' +
-        rows.map(function (r, i) {
-          return '<tr' + (r.locked ? ' class="set"' : '') + '><td>' + esc(r.clientName || ('Client ' + r.clientId)) + '</td>' +
-            '<td><input type="number" min="0" max="100" step="0.01" class="pd-input nf2f-pct" data-row="' + i + '" value="' + r.percent + '" aria-label="Share for ' + esc(r.clientName || r.clientId) + '"> %</td>' +
-            '<td>' + share(timed * r.percent / 100) + '</td></tr>';
-        }).join('') +
-        '<tr class="nf2f-nb' + (nbOn ? ' on' : '') + '"><td><label><input type="checkbox" data-nb-on' + (nbOn ? ' checked' : '') + '> Non-billable</label></td>' +
-          '<td><input type="number" min="0" max="100" step="0.01" class="pd-input nf2f-pct" data-nb value="' + nb + '"' + (nbOn ? '' : ' disabled') + ' aria-label="Non-billable share"> %</td>' +
-          '<td>' + share(timed * nb / 100) + '</td></tr>' +
-        '</tbody></table>' +
-        '<div class="nf2f-total' + (ok ? '' : ' bad') + '">Total ' + total + '%' + (ok ? '' : ' — must be 100%') + '</div></div>' +
-        '<div class="pd-foot"><button type="button" class="pd-btn" data-act="equal">Equal split</button>' +
-          '<button type="button" class="pd-btn" data-act="cancel">Cancel</button>' +
-          '<button type="button" class="pd-btn pd-btn-primary" data-act="save"' + (ok ? '' : ' disabled') + '>Save</button></div></section>';
+
+    // Refresh everything except the box being typed in.
+    var paint = function (typing) {
+      rows.forEach(function (r, i) {
+        var inp = el.querySelector('[data-row="' + i + '"]');
+        if (inp && inp !== typing) inp.value = r.percent;
+        var tr = el.querySelector('[data-tr="' + i + '"]');
+        tr.classList.toggle('set', r.locked);
+        tr.classList.toggle('over', r.percent > 100);
+        tr.querySelector('.nf2f-time').textContent = share(timed * Math.min(100, r.percent) / 100);
+      });
+      var nbRow = el.querySelector('[data-tr="nb"]'), nbInp = el.querySelector('[data-nb]');
+      nbRow.classList.toggle('on', nbOn);
+      nbRow.classList.toggle('over', nb > 100);
+      nbInp.disabled = !nbOn;
+      if (nbInp !== typing) nbInp.value = nb;
+      nbRow.querySelector('.nf2f-time').textContent = share(timed * Math.min(100, nb) / 100);
+      var total = round2(rows.reduce(function (a, r) { return a + r.percent; }, 0) + nb);
+      var over = rows.some(function (r) { return r.percent > 100; }) || nb > 100;
+      var ok = !over && Math.abs(total - 100) <= 0.05;
+      var t = el.querySelector('.nf2f-total');
+      t.classList.toggle('bad', !ok);
+      t.textContent = 'Total ' + total + '%' + (over ? ' — a share cannot be over 100%' : total > 100.05 ? ' — over 100%, lower a share' : total < 99.95 ? ' — must add up to 100%' : '');
+      el.querySelector('[data-act="save"]').disabled = !ok;
     };
-    var focusRow = null;
-    var reRender = function () {
-      var total = redistribute(rows, nb);
-      render(total);
-      if (focusRow != null) {
-        var inp = el.querySelector(focusRow === 'nb' ? '[data-nb]' : '[data-row="' + focusRow + '"]');
-        if (inp) { inp.focus(); try { var l = inp.value.length; inp.setSelectionRange(l, l); } catch (e) { /* number inputs */ } }
-      }
-    };
-    el.addEventListener('change', function (e) {
-      if (e.target.hasAttribute('data-nb-on')) {
-        nbOn = e.target.checked;
-        if (!nbOn) nb = 0;
-        focusRow = nbOn ? 'nb' : null;
-        reRender();
-      }
-    });
+    var update = function (typing) { redistribute(rows, nb); paint(typing); };
+
     el.addEventListener('input', function (e) {
       var t = e.target;
-      if (t.hasAttribute('data-nb')) {
-        nb = Math.max(0, Math.min(100, round2(Number(t.value) || 0)));
-        focusRow = 'nb';
-      } else if (t.hasAttribute('data-row')) {
+      if (t.hasAttribute('data-nb')) nb = parsePct(t.value);
+      else if (t.hasAttribute('data-row')) {
         var r = rows[Number(t.getAttribute('data-row'))];
-        r.percent = Math.max(0, Math.min(100, round2(Number(t.value) || 0)));
+        r.percent = parsePct(t.value);
         r.locked = true;
-        focusRow = Number(t.getAttribute('data-row'));
       } else return;
-      reRender();
+      update(t);
+    });
+    // Leaving a box tidies what was typed (e.g. "40." → 40).
+    el.addEventListener('focusout', function (e) {
+      if (e.target.classList && e.target.classList.contains('nf2f-pct')) paint(null);
+    });
+    el.addEventListener('change', function (e) {
+      if (!e.target.hasAttribute('data-nb-on')) return;
+      nbOn = e.target.checked;
+      if (!nbOn) nb = 0;
+      update(null);
+      if (nbOn) { var inp = el.querySelector('[data-nb]'); inp.focus(); inp.select(); }
     });
     var close = function () { el.remove(); document.removeEventListener('keydown', onKey, true); };
     var onKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); close(); } };
@@ -369,7 +393,7 @@
       var b = e.target.closest && e.target.closest('[data-act]'); if (!b) return;
       var act = b.getAttribute('data-act');
       if (act === 'cancel') close();
-      else if (act === 'equal') { rows.forEach(function (r) { r.locked = false; }); focusRow = null; reRender(); }
+      else if (act === 'equal') { rows.forEach(function (r) { r.locked = false; }); update(null); }
       else if (act === 'save') {
         b.disabled = true;
         try {
@@ -381,7 +405,8 @@
         } catch (err) { b.disabled = false; toast('Could not save the allocation', err.message, 'warn'); }
       }
     });
-    render();
+    paint(null);
+    var first = el.querySelector('[data-row="0"]'); if (first) { first.focus(); first.select(); }
   }
   NF.openAllocate = openAllocate;
 

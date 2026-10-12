@@ -732,7 +732,8 @@ describe('changed assets are cache-busted', () => {
       // 2 (js): Start billable time moves to the block's right-click menu.
       // 3 (js) / 2 (css): a running timer is a blinking dot on the block, not a clock.
       // 4 (js): each client's share shows m:ss, not rounded minutes.
-      ['nf2f.js', 4], ['nf2f.css', 2],
+      // 5 (js) / 3 (css): Allocate billing takes any typed number; warns over 100%.
+      ['nf2f.js', 5], ['nf2f.css', 3],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.
