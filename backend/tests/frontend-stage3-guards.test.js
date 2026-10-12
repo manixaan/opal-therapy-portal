@@ -3119,3 +3119,53 @@ describe('repeat rule is read where it is used (12 Oct 2026)', () => {
     expect(cbn).not.toMatch(/_repeatRule/);
   });
 });
+
+describe('one side panel at a time (12 Oct 2026)', () => {
+  // Travel Details opened on top of New Appointment: two side panels at once.
+  const { JSDOM } = require('jsdom');
+  const start = HTML.indexOf('const SIDE_PANELS = [');
+  const code = HTML.slice(start, HTML.indexOf('/* Right-click anywhere outside the open booking panel closes it', start));
+  function env() {
+    const ids = ['booking-side-panel', 'detail-drawer', 'travel-panel', 'notif-panel', 'help-panel', 'sup-my-panel', 'inv-detail-panel', 'ndis-detail-panel', 'ct-detail-panel'];
+    const dom = new JSDOM(ids.map((id) => `<div id="${id}"></div>`).join('') + '<aside id="people-panel" hidden></aside><button id="ppl-close"></button>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    const $ = (id) => w.document.getElementById(id);
+    const shut = (id, cls) => () => $(id).classList.remove(cls);
+    Object.assign(w, {
+      closeBookingPanel: shut('booking-side-panel', 'open'), closeBlockDetail: shut('detail-drawer', 'show'),
+      closeTravelPanel: shut('travel-panel', 'open'), closeNotificationsPanel: shut('notif-panel', 'open'),
+      closeHelpPanel: shut('help-panel', 'open'), supCloseMyTickets: shut('sup-my-panel', 'open'),
+      closeInvDetail: shut('inv-detail-panel', 'open'), closeNDISDetail: shut('ndis-detail-panel', 'open'),
+      closeContactDetail: shut('ct-detail-panel', 'open'),
+    });
+    $('ppl-close').addEventListener('click', () => { $('people-panel').hidden = true; });
+    w.eval(code);
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const open = () => ['booking-side-panel', 'detail-drawer', 'travel-panel', 'notif-panel', 'people-panel']
+      .filter((id) => (id === 'people-panel' ? !$(id).hidden : $(id).classList.contains(id === 'detail-drawer' ? 'show' : 'open')));
+    return { $, flush, open };
+  }
+  test('opening Travel Details closes New Appointment', async () => {
+    const { $, flush, open } = env();
+    $('booking-side-panel').classList.add('open'); await flush();
+    $('travel-panel').classList.add('open'); await flush();
+    expect(open()).toEqual(['travel-panel']);
+  });
+  test('whichever opens last stays — event details, notifications, the people panel', async () => {
+    const { $, flush, open } = env();
+    $('detail-drawer').classList.add('show'); await flush();
+    $('notif-panel').classList.add('open'); await flush();
+    expect(open()).toEqual(['notif-panel']);
+    $('people-panel').hidden = false; await flush();
+    expect(open()).toEqual(['people-panel']);
+    $('booking-side-panel').classList.add('open'); await flush();
+    expect(open()).toEqual(['booking-side-panel']);
+  });
+  test('opening two in the same moment still leaves one', async () => {
+    const { $, flush, open } = env();
+    $('booking-side-panel').classList.add('open');
+    $('detail-drawer').classList.add('show');
+    await flush();
+    expect(open()).toHaveLength(1);
+  });
+});

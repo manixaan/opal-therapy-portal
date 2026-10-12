@@ -21881,6 +21881,53 @@ function closeBookingPanel(confirmIfDirty = false) {
   clearPreviewBlocks();
 }
 
+/* ONE side panel at a time (12 Oct 2026). Opening any side panel closes
+   every other open one — however it was opened (a click, a menu, a module,
+   a panel opening another). It watches the panels themselves, so a new
+   opener cannot get round it. Each entry: the element, how to tell it is
+   open, and its own close (which also clears its backdrop). The workshop
+   dock is not a side panel: it is designed to sit beside the portal. */
+const SIDE_PANELS = [
+  { id: 'booking-side-panel', open: el => el.classList.contains('open'), close: () => window.closeBookingPanel && window.closeBookingPanel() },
+  { id: 'detail-drawer',      open: el => el.classList.contains('show'), close: () => window.closeBlockDetail && window.closeBlockDetail() },
+  { id: 'travel-panel',       open: el => el.classList.contains('open'), close: () => window.closeTravelPanel && window.closeTravelPanel() },
+  { id: 'notif-panel',        open: el => el.classList.contains('open'), close: () => window.closeNotificationsPanel && window.closeNotificationsPanel() },
+  { id: 'help-panel',         open: el => el.classList.contains('open'), close: () => window.closeHelpPanel && window.closeHelpPanel() },
+  { id: 'sup-my-panel',       open: el => el.classList.contains('open'), close: () => window.supCloseMyTickets && window.supCloseMyTickets() },
+  { id: 'inv-detail-panel',   open: el => el.classList.contains('open'), close: () => window.closeInvDetail && window.closeInvDetail() },
+  { id: 'ndis-detail-panel',  open: el => el.classList.contains('open'), close: () => window.closeNDISDetail && window.closeNDISDetail() },
+  { id: 'ct-detail-panel',    open: el => el.classList.contains('open'), close: () => window.closeContactDetail && window.closeContactDetail() },
+  { id: 'people-panel',       open: el => !el.hidden, close: () => { const b = document.getElementById('ppl-close'); if (b) b.click(); } },
+];
+(function oneSidePanelAtATime() {
+  if (typeof MutationObserver !== 'function') return;
+  const byId = new Map(SIDE_PANELS.map(p => [p.id, p]));
+  const wasOpen = new Map();
+  const isOpen = (p) => { const el = document.getElementById(p.id); return !!(el && p.open(el)); };
+  let closing = false;
+  const obs = new MutationObserver((records) => {
+    if (closing) return;
+    let opened = null;
+    for (const m of records) {
+      const p = m.target && byId.get(m.target.id);
+      if (!p) continue;
+      const now = p.open(m.target);
+      if (now && !wasOpen.get(p.id)) opened = p;      // the latest to open wins
+      wasOpen.set(p.id, now);
+    }
+    if (!opened) return;
+    closing = true;
+    try {
+      SIDE_PANELS.forEach(p => {
+        if (p !== opened && isOpen(p)) { try { p.close(); } catch (e) { /* a panel that cannot close must not block the one opening */ } }
+        wasOpen.set(p.id, isOpen(p));
+      });
+    } finally { closing = false; }
+  });
+  obs.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  SIDE_PANELS.forEach(p => wasOpen.set(p.id, isOpen(p)));
+})();
+
 /* Right-click anywhere outside the open booking panel closes it (12 Oct
    2026) — the quick way out after a slot click. Capture phase, so that
    right-click only closes the panel: it does not also open a block's menu
