@@ -4,8 +4,15 @@
 
 **RAN** · 2026-10-16 18:08–18:30 UTC · commit audited: `aacf8e6`
 (`feat(maps): address suggestions use Place Autocomplete, limited to WA`,
-2026-09-27) · first run, so no prior brief and no "addressed this window"
-commits exist yet.
+2026-09-27). This is the **second** run — a prior brief
+(`docs/qa/nightly/2026-10-15.md`) exists on this branch. No code on
+`develop` was reachable from `docs/qa/nightly/` at bootstrap time (that
+directory only holds `README.md` there — the dated briefs live only on
+`claude/nightly-audit`, which this run fetched and merged in rather than
+overwrote), so the window was computed as 14 days by this run's own
+logic; checking the actual last audit date (2026-10-15) instead would
+have given a 1-day window. Substantively this makes no difference: no
+commits touched `backend/` or `frontend/current` in either window.
 
 **Counts across 13 tracker features:** proven 1 · tab-unproven 3 ·
 needs-refinement 6 · broken 1 · untouched 2 · built-untested 0.
@@ -46,6 +53,15 @@ disagreement tonight — every tracker stage in this snapshot is still
 checklists, and Opa Mobile Companion's "Calendar View hasn't started" —
 see section 3), which is the opposite direction but still worth a
 person's attention.
+
+**None of last night's (2026-10-15) five "do this first" prompts were
+acted on** — there are zero commits since 2026-09-27, so the Outlook bug,
+the Snapshot utilisation-index gap, the Portal/Splose Inductions
+tracker-housekeeping item, and the Finance-dashboard browser check are
+all still open tonight in the same shape. Items 1–3 above repeat that
+list; items 4–5 are new since this run looked at Employee Personal
+Page's and Professional Development's test coverage in more depth than
+last night did.
 
 ## 3. Every feature
 
@@ -113,20 +129,31 @@ person's attention.
 
 ## 5. Ideas without a start
 
-Every feature's folder was created tonight (first run, so none existed
-before). None reached `proven` tonight except Clinical resources, whose
-`START.md` was replaced with the two-line "proven" note per the rules
-instead of a starter prompt.
+Every feature's folder already existed from last night's run (merged in
+from `claude/nightly-audit` rather than recreated); every `STATUS.md` was
+rewritten tonight per the rules, and most `START.md` files are
+substantially unchanged since the underlying evidence and the tracker
+cards haven't moved either. Clinical resources remains `proven`, so its
+`START.md` stays the two-line note rather than a starter prompt.
 
 ## 6. What changed since last audit
 
 **No commits** touched `backend/` or `frontend/current/` in the audit
-window (2026-10-02 to 2026-10-16 — the first-run 14-day default, since no
-prior brief exists). The repository's most recent commit on `develop` is
+window (2026-10-02 to 2026-10-16 by this run's 14-day default; also true
+for the narrower 2026-10-15 to 2026-10-16 window against the actual last
+audit date). The repository's most recent commit on `develop` is
 `aacf8e6` (2026-09-27, `feat(maps): address suggestions use Place
-Autocomplete, limited to WA`). No subsystem changed, so there is nothing
-to group by subsystem and no "subsystem changed but has no tracker
-feature" case to report tonight.
+Autocomplete, limited to WA`) — 19 days before tonight's run. No
+subsystem changed, so there is nothing to group by subsystem and no
+"subsystem changed but has no tracker feature" case to report tonight.
+
+Several portal tabs still have no corresponding tracker card at all —
+Employees, Interview Preparation, NDIS Cases, Dormant Cases, Travel &
+Flights, Travel Logbook, Contacts Directory, Activity Feed, Settings,
+Support Tickets, Billing Dashboard, and Auto-fit Multiple Clients (first
+noted on 2026-10-15, still true tonight). Not a defect — a gap between
+the tracker and the portal's actual surface area, for whoever triages
+the tracker next.
 
 ## 7. Technical detail
 
@@ -166,8 +193,18 @@ features, 19 tasks.
 
 **Could not locate:** a client-facing appointment-reminder feature (none
 exists), SharePoint integration code (none exists beyond a CSP allowlist
-entry), and any mobile-app frontend for Opa Mobile Companion (it lives
-outside this repository).
+entry), `backend/onboarding-policies/` (named in `CLAUDE.md`'s repository
+map but absent from disk — confirmed again tonight), and any mobile-app
+frontend for Opa Mobile Companion (it lives outside this repository).
+
+**Correction to last night's brief:** 2026-10-15 reported that
+`backend/service-agreement-routes.js` *and* `backend/service-agreements/`
+both don't exist on disk. Only the first half is true —
+`backend/service-agreements/templates/` does exist, holding the
+service-agreement `.docx`/`.pdf` masters; the routing for them simply
+lives in `backend/templates-routes.js` rather than a dedicated
+`service-agreement-routes.js` file. `CLAUDE.md`'s repository map is stale
+on the routes-file name, not on the whole feature.
 
 **Open questions for the team:**
 - Should the environment's setup script install `@tesseract.js-data/eng`
