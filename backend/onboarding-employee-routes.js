@@ -255,7 +255,12 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
   }).catch(() => {});
 
   // Sign them straight in — asking someone to set a password and then log in
-  // with it immediately is friction with no security benefit.
+  // with it immediately is friction with no security benefit. A NEW session
+  // id first, exactly as login does (audit M-8): reusing whatever session the
+  // browser arrived with is session fixation if that id was planted.
+  await new Promise((resolve, reject) => {
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
   req.session.userId = userId;
   return res.json({ ok: true, redirect: '/#onboarding' });
 }));

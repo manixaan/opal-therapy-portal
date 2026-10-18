@@ -669,7 +669,12 @@ router.post('/api/onboarding/journey/records', requirePermission('onboarding.ass
   }, engine.EMPLOYMENT_TYPES);
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
-  const proposedRole = ['owner', 'admin', 'therapist', 'read_only'].includes(b.proposedRole) ? b.proposedRole : 'therapist';
+  // Never 'owner' (audit H-2): onboarding is delegable, and a delegated user
+  // must not be able to mint an Owner. Granting Owner is a Users & Roles act.
+  if (b.proposedRole && !lifecycle.ONBOARDING_ROLES.includes(b.proposedRole)) {
+    return res.status(400).json({ error: 'proposedRole must be one of: ' + lifecycle.ONBOARDING_ROLES.join(', '), code: 'invalid_role' });
+  }
+  const proposedRole = b.proposedRole || 'therapist';
   const roleCategory = str(b.roleCategory, 40);
 
   // Package: an explicit choice, else the best recommendation.

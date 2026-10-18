@@ -162,6 +162,17 @@ describe('Stage 1 — Start Onboarding creates the record and the letter togethe
     expect(body.record.packageId).toBeTruthy();
   });
 
+  test('H-2: Start Onboarding refuses the Owner role (it used to accept it and activation applied it)', async () => {
+    const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
+    const res = await agent.post('/api/onboarding/journey/records').send({ ...START_BODY, proposedRole: 'owner' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('invalid_role');
+    const { rows } = await db.pool.query("SELECT COUNT(*)::int AS n FROM onboarding_assignments WHERE applicant_email = 'jane.smith@example.com'");
+    expect(rows[0].n).toBe(0);
+    // An allowed role still works.
+    expect((await start(agent, { proposedRole: 'admin' })).record).toBeTruthy();
+  });
+
   test('the terms are validated as a letter, not just stored', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const res = await agent.post('/api/onboarding/journey/records').send({ ...START_BODY, payBasis: null, payRate: 50 });

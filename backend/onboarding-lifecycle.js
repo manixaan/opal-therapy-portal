@@ -26,6 +26,14 @@ const odb = require('./onboarding-db');
 const engine = require('./onboarding-engine');
 const log = require('./logger').createLogger('onboarding-lifecycle');
 
+/**
+ * The roles an onboarding may hand out on activation. Never 'owner': the
+ * onboarding permissions are delegable to an Admin, and "granting is
+ * owner-only" (permissions.js) would mean nothing if an onboarding record
+ * could carry the Owner role through activation (audit H-2).
+ */
+const ONBOARDING_ROLES = Object.freeze(['therapist', 'admin', 'read_only']);
+
 class LifecycleError extends Error {
   constructor(status, body) {
     super(body?.error || 'lifecycle error');
@@ -160,18 +168,57 @@ async function releaseAssignment({ org, assignment, actor, expiresInDays }) {
   const outcome = await odb.withTransaction(async (q) => {
     // 1. Pre-employee account. Created without a password: the invitation is
     //    what lets them set one. No temporary password is ever generated.
+    //
+    //    An account that ALREADY uses this email is never converted (audit
+    //    H-3): this used to be ON CONFLICT … DO UPDATE SET role =
+    //    'pre_employee', which silently demoted a live therapist — or owner —
+    //    whose account had appeared since the onboarding was created. The
+    //    only existing account a release may adopt is a pre-employee that no
+    //    other open onboarding is using, in the same organisation; adopting
+    //    it changes nothing about the account.
     let userId = assignment.user_id;
     if (!userId) {
-      const { rows } = await q.query(
-        `INSERT INTO users
-           (email, name, role, organisation_id, is_active, account_status, email_verified,
-            profile_completed, is_treating_therapist)
-         VALUES (LOWER($1), $2, 'pre_employee', $3, TRUE, 'active', FALSE, TRUE, $4)
-         ON CONFLICT (email) DO UPDATE SET role = 'pre_employee', organisation_id = $3
-         RETURNING id`,
-        [assignment.applicant_email, assignment.applicant_name, org, assignment.is_treating_therapist]
+      const { rows: existingRows } = await q.query(
+        `SELECT id, email, name, role, is_active, organisation_id
+           FROM users WHERE LOWER(email) = LOWER($1)
+          ORDER BY created_at ASC LIMIT 1
+          FOR UPDATE`,
+        [assignment.applicant_email]
       );
-      userId = rows[0].id;
+      const existing = existingRows[0] || null;
+      if (existing) {
+        const { rows: busy } = existing.role === 'pre_employee'
+          ? await q.query(
+            `SELECT 1 FROM onboarding_assignments
+              WHERE user_id = $1 AND id <> $2
+                AND status NOT IN ('cancelled', 'archived', 'activated', 'completed')
+              LIMIT 1`,
+            [existing.id, assignment.id])
+          : { rows: [] };
+        const adoptable = existing.role === 'pre_employee'
+          && !busy.length
+          && String(existing.organisation_id || '') === String(org || '');
+        if (!adoptable) {
+          throw new LifecycleError(409, {
+            error: existing.role === 'pre_employee'
+              ? 'That email belongs to a different onboarding in progress.'
+              : 'An account already uses this email address, so this onboarding cannot be released. '
+                + 'Change the applicant email, or manage the existing account from Settings → Users & Roles.',
+            code: 'account_exists',
+          });
+        }
+        userId = existing.id;
+      } else {
+        const { rows } = await q.query(
+          `INSERT INTO users
+             (email, name, role, organisation_id, is_active, account_status, email_verified,
+              profile_completed, is_treating_therapist)
+           VALUES (LOWER($1), $2, 'pre_employee', $3, TRUE, 'active', FALSE, TRUE, $4)
+           RETURNING id`,
+          [assignment.applicant_email, assignment.applicant_name, org, assignment.is_treating_therapist]
+        );
+        userId = rows[0].id;
+      }
     }
 
     // 2. Invitation, reusing the proven user_invites mechanism: 32 random
@@ -287,6 +334,17 @@ async function activateAssignment({ assignment, actor }) {
   if (!assignment.user_id) {
     throw new LifecycleError(409, { error: 'This onboarding has not been released yet', code: 'not_released' });
   }
+  // Defence in depth for H-2: the create routes refuse 'owner', but a row
+  // written before that fix (or by SQL) must still never activate into one.
+  // Covers the automatic activation in onboarding-autosetup.js too, which
+  // calls this function.
+  if (!ONBOARDING_ROLES.includes(assignment.proposed_role)) {
+    throw new LifecycleError(409, {
+      error: 'This onboarding proposes a role that onboarding cannot grant. '
+        + 'Activate them with a staff role, then change the role in Settings → Users & Roles if needed.',
+      code: 'role_not_grantable',
+    });
+  }
 
   const requirements = await odb.listRequirements(assignment.id);
   const activation = engine.evaluateActivation(requirements);
@@ -358,6 +416,7 @@ async function activateAssignment({ assignment, actor }) {
 }
 
 module.exports = {
+  ONBOARDING_ROLES,
   LifecycleError,
   materialiseRequirements,
   checkReleasable,

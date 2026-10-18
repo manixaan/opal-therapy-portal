@@ -279,8 +279,10 @@ router.post('/api/onboarding/assignments', requirePermission('onboarding.assign'
       return res.status(400).json({ error: 'employmentType is not recognised' });
     }
     if (!isUuid(b.packageId)) return res.status(400).json({ error: 'packageId is required' });
-    if (b.proposedRole && !['owner', 'admin', 'therapist', 'read_only'].includes(b.proposedRole)) {
-      return res.status(400).json({ error: 'proposedRole is not recognised' });
+    // Never 'owner' (audit H-2): onboarding is delegable, and a delegated
+    // user must not be able to mint an Owner through activation.
+    if (b.proposedRole && !lifecycle.ONBOARDING_ROLES.includes(b.proposedRole)) {
+      return res.status(400).json({ error: 'proposedRole must be one of: ' + lifecycle.ONBOARDING_ROLES.join(', '), code: 'invalid_role' });
     }
 
     const applicantEmail = String(b.applicantEmail).trim().toLowerCase();
