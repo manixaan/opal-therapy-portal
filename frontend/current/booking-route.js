@@ -161,7 +161,7 @@
       savedAt: Date.now(), leaf: b.serviceType || null, cat: b.category || null,
       patientId: p ? String(p.id) : null, day: day, start: start, dur: dur,
       location: loc ? { value: loc.value, placeId: loc.dataset.placeId || '', lat: loc.dataset.lat || '', lng: loc.dataset.lng || '', locId: loc.dataset.locId || '' } : null,
-      unsure: !!(($('bsp-location-unsure') || {}).checked),
+      unsure: !!(($('bsp-location-unsure') || {}).checked), home: HOME.on,
       therapistId: (typeof _bspSelectedTherapist !== 'undefined' && _bspSelectedTherapist) ? _bspSelectedTherapist.id : null,
       context: rs.context || null, manualStart: !!rs.manualStart, travelFrom: b.travelFrom || null,
     };
@@ -185,12 +185,13 @@
       var rs = routeState(); var b = bookingState();
       if (rs) { rs.context = d.context; rs.manualStart = d.manualStart; }
       if (b && d.travelFrom) b.travelFrom = d.travelFrom;
-      LOC.pending = d.location; LOC.pendingUnsure = d.unsure;
+      LOC.pending = d.home ? null : d.location; LOC.pendingUnsure = d.unsure;
       if (d.patientId) {
         var card = document.querySelector('.patient-card[data-patient-id="' + String(d.patientId).replace(/"/g, '') + '"]');
         if (card) card.click();
       }
       var u = $('bsp-location-unsure'); if (u) { u.checked = !!d.unsure; applyUnsure(); }
+      if (d.home) applyHome();
       refreshWorkLocationNotice();
       if (fn('bspTravelPreview')) global.bspTravelPreview();
       toast('Booking restored', 'Your unfinished appointment is back where you left it.');
@@ -255,6 +256,7 @@
       LOC.mode = 'none';
       sel.hidden = true; if (add) add.hidden = true; if (meta) { meta.hidden = true; meta.textContent = ''; }
       input.hidden = false; input.placeholder = 'Start typing an address…';
+      if (HOME.on) applyHome();
       return;
     }
     // Address is optional for every booking: "No address" means the therapist
@@ -269,7 +271,7 @@
     }
     html += '<option value="__add">+ Add another address</option>';
     sel.innerHTML = html;
-    sel.hidden = false;
+    sel.hidden = HOME.on; // Home shows the greyed address, not the picker
   }
 
   function setMeta(text, kind) {
@@ -283,6 +285,7 @@
     var l = LOC.list[idx];
     if (!input || !l) return;
     LOC.mode = 'select';
+    LOC.selIdx = idx;
     if (sel) sel.value = String(idx);
     if (add) add.hidden = true;
     input.hidden = true;
@@ -313,6 +316,7 @@
   }
   /* The booking type changed: re-pick the default unless the therapist chose. */
   function relevelLocationDefault() {
+    if (HOME.on) return;
     if (LOC.userPicked || !LOC.clientId || !isClientCategory()) return;
     if (LOC.mode !== 'select' && LOC.mode !== 'noaddr') return;
     if (leafNoDefaultAddress()) { if (LOC.mode !== 'noaddr') applyNone(); }
@@ -350,6 +354,7 @@
     renderLocationUI();
     restoreOrDefault();
     setMeta(LOC.list.length ? 'Splose · ' + LOC.list[0].address + ' · checking saved locations…' : 'Checking saved locations…');
+    if (HOME.on) applyHome();
     var server = null, failed = false;
     try {
       var j = await getJson('/api/client-locations/' + encodeURIComponent(p.id));
@@ -360,12 +365,13 @@
     var wasAdd = LOC.mode === 'add';
     LOC.list = mergeLocations(server || [], sploseFallback(p));
     renderLocationUI();
-    if (wasAdd) { $('bsp-loc-select').value = '__add'; return; }
+    if (wasAdd) { $('bsp-loc-select').value = '__add'; if (HOME.on) applyHome(); return; }
     var idx = keepAddr ? LOC.list.findIndex(function (l) { return canon(l.address) === canon(keepAddr); }) : -1;
     if (!restoreOrDefault(idx)) {
       if (!LOC.list.length) enterAddMode();
     }
     if (failed) setMeta('Saved locations are unavailable right now — the Splose address is still here.', 'muted');
+    if (HOME.on) applyHome();
   }
 
   /* Re-select a draft's location, else the given index, else the first. True if one was applied. */
@@ -417,6 +423,8 @@
   function applyUnsure() {
     var u = $('bsp-location-unsure'), sel = $('bsp-loc-select'), input = $('bsp-location');
     var on = !!(u && u.checked);
+    if (on && HOME.on) releaseHome();
+    if (!on && HOME.on) return; // Home keeps its greyed address
     if (sel) sel.disabled = on;
     if (input) input.disabled = on;
     var field = document.querySelector('.bsp-loc-field');
@@ -426,6 +434,75 @@
     else if (LOC.mode === 'noaddr') applyNone();
     else setMeta('');
   }
+
+  /* ─────────── Home — "this one happens at home" (18 Oct 2026) ───────────
+     One chip for every booking type: the address becomes the selected
+     clinician's home base for the booking's day, shown greyed so they can see
+     the right home was picked up. The underlying choice (client location,
+     No address, a typed address) is left alone and comes back on release. */
+  var HOME = { on: false };
+  function homeBtn() { return $('bsp-loc-home'); }
+  function paintHome(on) {
+    var b = homeBtn(); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    var field = document.querySelector('.bsp-loc-field'); if (field) field.classList.toggle('is-home', on);
+  }
+  /* PURE-ish — the home address for the booking's day, or why there is none. */
+  function homeForDay(day) {
+    var st = clinicianDayBase(day || activeDay() || 'mon');
+    if (st.status === 'set' && st.base && (st.base.addr || st.base.suburb)) {
+      return { ok: true, addr: st.base.addr || st.base.suburb, label: st.base.label || 'Home', own: st.own, name: st.name };
+    }
+    var who = st.own === false ? (st.name || 'this clinician') + ' has' : 'You have';
+    var why = st.status === 'loading' ? 'Checking ' + (st.name || 'the clinician') + '’s work locations…'
+      : st.status === 'leave' ? 'That day is marked as leave — there is no home base to use.'
+      : who + ' no home base set for ' + (DAY_NAMES[day] || 'that day') + ' — set it in weekly work locations.';
+    return { ok: false, why: why };
+  }
+  function applyHome() {
+    var input = $('bsp-location'), sel = $('bsp-loc-select'), add = $('bsp-loc-add'), u = $('bsp-location-unsure');
+    if (!input) return false;
+    var day = activeDay();
+    var h = homeForDay(day);
+    if (!h.ok) { if (HOME.on) releaseHome(); paintHome(false); setMeta(h.why, 'warn'); return false; }
+    HOME.on = true;
+    if (u && u.checked) { u.checked = false; var f = document.querySelector('.bsp-loc-field'); if (f) f.classList.remove('is-unsure'); if (sel) sel.disabled = false; }
+    if (sel) sel.hidden = true;
+    if (add) add.hidden = true;
+    input.hidden = false;
+    input.disabled = true;
+    LOC.applying = true;
+    input.value = h.addr;
+    ['placeId', 'lat', 'lng', 'locId'].forEach(function (k) { delete input.dataset[k]; });
+    input.dataset.locSource = 'home';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    LOC.applying = false;
+    paintHome(true);
+    setMeta('Home · ' + h.label + ' — ' + (h.own === false ? h.name + '’s' : 'your') + ' base for ' + (DAY_NAMES[day] || 'this day') + '.');
+    return true;
+  }
+  /* Back to whatever the field held before Home. */
+  function releaseHome() {
+    var input = $('bsp-location'), sel = $('bsp-loc-select');
+    HOME.on = false;
+    paintHome(false);
+    if (!input) return;
+    input.disabled = false;
+    if (input.dataset.locSource === 'home') { input.value = ''; delete input.dataset.locSource; }
+    if (isClientCategory() && LOC.clientId) {
+      renderLocationUI();
+      if (LOC.mode === 'add') { if (sel) sel.value = '__add'; enterAddMode(); }
+      else if (LOC.mode === 'select' && LOC.selIdx != null && LOC.list[LOC.selIdx]) applySelection(LOC.selIdx);
+      else if (LOC.mode === 'noaddr' || !restoreOrDefault()) applyNone();
+    } else {
+      input.hidden = false;
+      LOC.applying = true; input.dispatchEvent(new Event('change', { bubbles: true })); LOC.applying = false;
+      setMeta('');
+    }
+  }
+  function resetHome() { if (HOME.on) releaseHome(); else paintHome(false); }
+  BR.applyHome = applyHome;
+  BR.releaseHome = releaseHome;
+  BR.homeOn = function () { return HOME.on; };
 
   function onPatientMaybeChanged() {
     var p = isClientCategory() ? selectedPatient() : null;
@@ -514,10 +591,12 @@
      before it ends at the day's home, "Return Home" is no choice — the
      choices are another booking, somewhere else, or Done (11 Oct 2026). */
   function alreadyHome(info) {
-    if (!info || info.unsure || info.location) return false;
+    if (!info || info.unsure) return false;
     var st = clinicianDayBase(info.day);
     if (!st.own || st.status !== 'set' || !st.base) return false;
     var home = canon(st.base.addr || st.base.suburb || '');
+    // Booked at home (the Home chip, 18 Oct 2026): already there.
+    if (info.location) return !!home && canon(info.location) === home;
     if (!home || !fn('computeDayTravelSegments')) return false;
     var legs = global.computeDayTravelSegments(info.day).filter(function (x) {
       return x.kind !== 'gap' && x.travelMin > 0 && x.endMin <= info.startMin;
@@ -786,6 +865,8 @@
       if (input.dataset.placeId || input.dataset.lat) saveNewLocation();
     });
     if (unsure) unsure.addEventListener('change', applyUnsure);
+    var hb = homeBtn();
+    if (hb) hb.addEventListener('click', function () { if (HOME.on) releaseHome(); else applyHome(); });
     var start = $('bsp-start');
     if (start) start.addEventListener('blur', function () {
       // Typed times land on the 15-minute grid like every calendar gesture —
@@ -804,11 +885,12 @@
 
     wrapGlobal('renderRightContext', onPatientMaybeChanged);
     wrapGlobal('selectBookingCat', function () { onPatientMaybeChanged(); relevelLocationDefault(); refreshWorkLocationNotice(); });
-    wrapGlobal('bspSelectDay', refreshWorkLocationNotice);
+    wrapGlobal('bspSelectDay', function () { refreshWorkLocationNotice(); if (HOME.on) applyHome(); });
     wrapGlobal('selectBspTherapist', function () {
       var c = selectedClinician();
-      if (!c.own) loadClinicianSchedule(c.userId).then(function () { refreshWorkLocationNotice(); if (fn('bspTravelPreview')) global.bspTravelPreview(); });
+      if (!c.own) loadClinicianSchedule(c.userId).then(function () { refreshWorkLocationNotice(); if (HOME.on) applyHome(); if (fn('bspTravelPreview')) global.bspTravelPreview(); });
       refreshWorkLocationNotice();
+      if (HOME.on) applyHome();
       if (fn('bspTravelPreview')) global.bspTravelPreview();
     });
     // A keepState open (a re-pick on the grid while the panel is open, or the
@@ -816,10 +898,11 @@
     // forced reset — the day's notice and Unsure still refresh (10 Oct 2026).
     wrapGlobal('openBookingPanel', function (o) {
       var keep = !!(o && o.keepState);
-      setTimeout(function () { if (!keep) LOC.clientId = '__reset'; onPatientMaybeChanged(); refreshWorkLocationNotice(); applyUnsure(); }, 40);
+      setTimeout(function () { if (!keep) { resetHome(); LOC.clientId = '__reset'; } onPatientMaybeChanged(); refreshWorkLocationNotice(); applyUnsure(); }, 40);
     });
     wrapGlobal('closeBookingPanel', function () {
       var rs = routeState();
+      if (!(rs && rs.keepOnClose)) resetHome();
       if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.viaMode = 'auto'; var b = bookingState(); if (b) b.travelFrom = null; }
       if (fn('setBspRouteStatus')) global.setBspRouteStatus('hidden');
       var n = $('bsp-wl-notice'); if (n) n.hidden = true;

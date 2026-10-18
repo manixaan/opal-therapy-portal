@@ -43,6 +43,7 @@ const FIXTURE = `<!doctype html><body>
       <input type="time" id="bsp-start" value="10:00"><input type="time" id="bsp-end" value="11:00">
       <input type="range" id="bsp-dur-slider" min="1" max="240" value="60">
       <div class="bsp-loc-field">
+        <button type="button" id="bsp-loc-home" aria-pressed="false">Home</button>
         <select id="bsp-loc-select" hidden></select>
         <input type="text" id="bsp-location">
         <div id="bsp-loc-add" hidden></div><div id="bsp-loc-meta" hidden></div>
@@ -1338,5 +1339,124 @@ describe('Shift+click multi-select — move a selection together (6 Oct 2026)', 
     expect(c).toMatch(/if \(blocked\) \{\s+if \(onBlocked\) onBlocked\(\);[\s\S]*openMoveImpact\(b\.id/);
     expect(c).toMatch(/sort\(\(a, b\) => \(later \? -1 : 1\)/);
     expect(c).toMatch(/window\.commitMove\(\);/);
+  });
+});
+
+describe('Home chip — "this one happens at home" (18 Oct 2026)', () => {
+  const PAT = { id: 501, first: 'Ada', last: 'Client', address: '12 Example Street, Willetton WA 6155', suburb: 'Willetton' };
+  const HOMES = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek' }] };
+  const TELE = "BOOKING_LEAVES.tele = { cat: 'client', label: 'Telehealth Therapy Session', noDefaultAddress: true };";
+  async function withPatient(extra = {}) {
+    const env = makeEnv(Object.assign({ api: { 'GET /api/client-locations/501': [200, { locations: [] }] } }, HOMES, extra));
+    env.ev('document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.ev('BOOKING_STATE.selectedPatient = ' + JSON.stringify(PAT) + '; renderRightContext();');
+    await flush();
+    return env;
+  }
+
+  test('Home greys the field and fills it with the day\'s home base; release puts the client\'s address back', async () => {
+    const env = await withPatient();
+    const input = env.$('bsp-location');
+    expect(input.value).toBe(PAT.address);
+    env.$('bsp-loc-home').click();
+    expect(input.value).toBe(HOME_ADDR);
+    expect(input.disabled).toBe(true);
+    expect(input.hidden).toBe(false);
+    expect(env.$('bsp-loc-select').hidden).toBe(true);
+    expect(env.$('bsp-loc-home').getAttribute('aria-pressed')).toBe('true');
+    expect(env.$('bsp-loc-meta').textContent).toMatch(/your base for Monday/);
+    env.$('bsp-loc-home').click();
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe(PAT.address);
+    expect(env.$('bsp-loc-select').hidden).toBe(false);
+  });
+
+  test('a telehealth on No address: Home, then release, goes back to No address', async () => {
+    const env = makeEnv(Object.assign({ api: { 'GET /api/client-locations/501': [200, { locations: [] }] } }, HOMES));
+    env.ev(TELE + " BOOKING_STATE.serviceType = 'tele';");
+    env.ev('document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.ev('BOOKING_STATE.selectedPatient = ' + JSON.stringify(PAT) + '; renderRightContext();');
+    await flush();
+    env.$('bsp-loc-home').click();
+    expect(env.$('bsp-location').value).toBe(HOME_ADDR);
+    env.$('bsp-loc-home').click();
+    expect(env.$('bsp-loc-select').value).toBe('__none');
+    expect(env.$('bsp-location').value).toBe('');
+  });
+
+  test('works with no client (a non-client activity) — the typed address returns empty on release', () => {
+    const env = makeEnv(HOMES);
+    env.ev('BOOKING_STATE.category = "admin"; document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.$('bsp-loc-home').click();
+    expect(env.$('bsp-location').value).toBe(HOME_ADDR);
+    expect(env.$('bsp-location').disabled).toBe(true);
+    env.$('bsp-loc-home').click();
+    expect(env.$('bsp-location').value).toBe('');
+    expect(env.$('bsp-location').disabled).toBe(false);
+  });
+
+  test('no home base set for the day: nothing is filled and the reason is named', () => {
+    const env = makeEnv();
+    env.ev('BOOKING_STATE.category = "admin"; document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.$('bsp-loc-home').click();
+    expect(env.$('bsp-location').value).toBe('');
+    expect(env.$('bsp-location').disabled).toBe(false);
+    expect(env.$('bsp-loc-home').getAttribute('aria-pressed')).toBe('false');
+    expect(env.$('bsp-loc-meta').textContent).toMatch(/no home base set for Monday/);
+  });
+
+  test('the late saved-locations reply does not knock Home off; Unsure releases it', async () => {
+    let resolve;
+    const env = makeEnv(Object.assign({}, HOMES));
+    env.win.fetch = ((orig) => async (url, o) => (String(url).startsWith('/api/client-locations/501')
+      ? new Promise((r) => { resolve = () => r({ ok: true, status: 200, json: async () => ({ locations: [] }) }); })
+      : orig(url, o)))(env.win.fetch);
+    env.ev('document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon");');
+    env.ev('BOOKING_STATE.selectedPatient = ' + JSON.stringify(PAT) + '; renderRightContext();');
+    env.$('bsp-loc-home').click();
+    resolve(); await flush();
+    expect(env.$('bsp-location').value).toBe(HOME_ADDR);
+    expect(env.$('bsp-loc-select').hidden).toBe(true);
+    const u = env.$('bsp-location-unsure'); u.checked = true; u.dispatchEvent(new env.win.Event('change'));
+    expect(env.ev('BookingRoute.homeOn()')).toBe(false);
+    expect(env.$('bsp-location').disabled).toBe(true); // Unsure's own greying
+  });
+
+  test('a session booked at home offers no Return Home', () => {
+    const env = makeEnv(HOMES);
+    env.ev(`SESSIONS.H = { id: 'H', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 12, endM: 0, address: ${JSON.stringify(HOME_ADDR)}, patient: 'Home Client', dbId: 'db-H' };`);
+    expect(env.ev('BookingRoute.alreadyHome(' + JSON.stringify({ dbId: 'db-H', day: 'mon', startMin: 660, endMin: 720, location: HOME_ADDR }) + ')')).toBe(true);
+    expect(env.ev('BookingRoute.alreadyHome(' + JSON.stringify({ dbId: 'db-H', day: 'mon', startMin: 660, endMin: 720, location: A_ADDR }) + ')')).toBe(false);
+  });
+
+  // Already home (18 Oct 2026): a session AT home after a client is reached by
+  // the drive home when that client ends — never a drive parked before it.
+  test('booking at home after a client: the drive home stays, no travel before the new session', async () => {
+    const env = makeEnv(Object.assign({ routes: { [A_ADDR + '|' + HOME_ADDR]: 15 } }, HOMES));
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0,
+      address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' }`);
+    env.ev(`document.getElementById('booking-side-panel').classList.add('open'); bspSelectDay('mon');
+      document.getElementById('bsp-start').value = '19:00';`);
+    await chooseLocation(env, HOME_ADDR);
+    expect(status(env).textContent).toMatch(/Home after Ada Client/);
+    expect(status(env).textContent).toMatch(/Already home — no drive before this one/);
+    expect(status(env).querySelector('[data-route]')).toBeNull();     // no Direct ⇄ Via home switch
+    expect(legs(env).filter((l) => !l.classList.contains('home-after'))).toHaveLength(0);
+    expect(env.routeCalls().filter((c) => c.body.destination === HOME_ADDR && c.body.origin !== A_ADDR)).toHaveLength(0);
+  });
+
+  test('on the calendar, client → session at home is one drive home leaving when the client ends', () => {
+    const env = makeEnv(HOMES);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.H = { id: 'H', day: 'mon', type: 'therapy', startH: 19, startM: 0, endH: 20, endM: 0, address: ${JSON.stringify(HOME_ADDR)}, patient: 'Home Client', dbId: 'db-H' };`);
+    const segs = env.ev("computeDayTravelSegments('mon')");
+    const between = segs.filter((x) => x.kind === 'between');
+    expect(between).toHaveLength(1);
+    expect(between[0]).toMatchObject({ via: 'home-return', startMin: 600, ownerSessionId: 'A', ownerSide: 'after' });
+    expect(segs.filter((x) => x.kind === 'end')).toHaveLength(0);   // the day ends at home already
+  });
+
+  test('the shell carries the chip in the Location field', () => {
+    expect(SHELL).toMatch(/<button type="button" class="bsp-loc-chip bsp-loc-home" id="bsp-loc-home" aria-pressed="false"/);
   });
 });

@@ -1323,7 +1323,7 @@ function runBspRoutePreview(opts) {
       '<span class="t-ico">' + (tight ? 'Tight' : 'Travel') + '</span><span class="t-label">' + plan.travelMin + ' min' +
       (small ? '' : ' · ' + esc(pred.suburb || 'previous') + ' → ' + esc(toSub)) + '</span>',
       'Travel ' + plan.travelMin + ' min · ' + (pred.suburb || 'previous stop') + ' → ' + toSub + (plan.bufferMin ? ' (+' + plan.bufferMin + ' min buffer)' : ''));
-  } else if (col) {
+  } else if (col && !homePlan.atHome) {
     _previewLeg(col, legTop, legTop, '', '<span class="t-ico">Travel</span><span class="t-label">no drive · same place</span>');
   }
   // The drive home is never deleted, only moved: if the proposal becomes the
@@ -1332,7 +1332,8 @@ function runBspRoutePreview(opts) {
 
   const parts = [];
   if (pred.viaHome) parts.push('Home after ' + prevName + ' (' + (homePlan.toBase || 0) + ' min)');
-  parts.push(plan.travelMin > 0 ? '<strong>' + plan.travelMin + ' min</strong> drive from ' + fromName : 'Same place as ' + fromName + ' — no drive');
+  if (homePlan.atHome) parts.push('Already home — no drive before this one');
+  else parts.push(plan.travelMin > 0 ? '<strong>' + plan.travelMin + ' min</strong> drive from ' + fromName : 'Same place as ' + fromName + ' — no drive');
   if (plan.bufferMin) parts.push('+' + plan.bufferMin + ' min buffer');
   parts.push('earliest start <strong>' + fmt(plan.earliestStartMin) + '</strong>');
   let kind = 'ok';
@@ -1410,6 +1411,11 @@ function _bspHomePlan(day, pred, toKey, startMin) {
   const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
   const out = { mode, available: false, home: false, baseKey, base, toBase: 0, fromBase: 0 };
   if (!baseKey || !pred || !pred.fromKey || !toKey) return out;
+  // Booked at home (the Home chip, 18 Oct 2026): the drive home after the
+  // last stop is the only travel — the proposal starts from home, no drive.
+  if (canonAddr(baseKey) === canonAddr(toKey) && canonAddr(baseKey) !== canonAddr(pred.fromKey)) {
+    return Object.assign(out, { home: true, atHome: true, toBase: travelMinutes(pred.fromKey, baseKey), fromBase: 0 });
+  }
   if (canonAddr(baseKey) === canonAddr(pred.fromKey) || canonAddr(baseKey) === canonAddr(toKey)) return out;
   out.available = true;
   out.toBase = travelMinutes(pred.fromKey, baseKey);
@@ -1716,6 +1722,24 @@ function computeDayTravelSegments(day) {
         continue;
       }
       const travel  = travelMinutes(fromKey, toKey);
+      // The next stop IS home (18 Oct 2026): the drive is the drive home,
+      // leaving when this session ends — not one parked before the session
+      // at home, as if the therapist waited at the client's until then.
+      const homeKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
+      if (travel > 0 && homeKey && canonAddr(homeKey) === canonAddr(toKey)) {
+        const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: travel, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
+        segs.push({
+          day, kind: 'between', via: 'home-return', plan: 'home', auto: plan.auto, homeAvailable: false,
+          fromLoc: locOf(from), toLoc: locOf(to),
+          startMin: ret.startMin, endMin: ret.endMin, travelMin: travel, freeMin: 0,
+          moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next),
+          autoStartMin: ret.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: travel, busy: busyFor(curr, next) }).startMin : ret.startMin,
+          fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
+          ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: base.baseId || calendarWeekLocations()[day] || null,
+          cacheKey: routeKey(fromKey, toKey, 'driving')
+        });
+        continue;
+      }
       if (travel <= 0) {
         // Same place — no drive. Still a choice when home is possible (a
         // morning and an afternoon at one client's), so a slim marker carries
