@@ -18453,17 +18453,18 @@ async function loadOutlookEventsToCalendar() {
     // initial render — tiles refresh their address chip when the Splose data arrives.
     enrichOutlookTilesWithSploseAddresses();
 
-    // Initial scroll, once per week shown: the current hour minus one when
-    // today is in view, else 7am. Any later reload of the same week restores
-    // where the user was — it used to jump to midnight after every booking.
+    // Initial scroll, once per page load: the current hour minus one when
+    // today is in view, else 7am. Every later reload restores where the user
+    // was. It used to be once per WEEK, but ‹ / › and the mini month change
+    // week without this loader, so booking on a week reached that way jumped
+    // the grid back to 7am instead of keeping the new tile in view (18 Oct 2026).
     requestAnimationFrame(() => {
       const grid = document.getElementById('cal-grid');
       if (!grid) return;
       const todayKey = __perthDateStr(new Date());
       const mon = window.__currentWeekMonday;
-      const weekKey = mon ? __ymd(mon) : '';
-      if (window.__calScrolledWeek === weekKey) { grid.scrollTop = _scrollBefore; return; }
-      window.__calScrolledWeek = weekKey;
+      if (window.__calScrolledOnce) { grid.scrollTop = _scrollBefore; return; }
+      window.__calScrolledOnce = true;
       // Grid starts at START_H — scroll to just above current hour (clamped to 0)
       let target = Math.max(0, 7 - START_H) * HOUR_PX;
       if (mon) {
