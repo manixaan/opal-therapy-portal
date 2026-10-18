@@ -94,8 +94,16 @@ jobs:
             exit 1
           fi
 
-      - name: Dependency security audit (zero known vulnerabilities)
-        run: npm audit
+      # Everything that ships (production dependencies) must have zero known
+      # vulnerabilities. Dev-only tooling (jest, nodemon) is reported but does
+      # not block: on 18 Oct 2026 advisories for braces and sprintf-js covered
+      # every published version, so no fix existed and the gate could not pass
+      # (owner decision, 18 Oct 2026).
+      - name: Dependency security audit (zero known vulnerabilities in shipped code)
+        run: npm audit --omit=dev
+
+      - name: Dev-tooling audit (report only)
+        run: npm audit || true
 
   integration:
     name: Integration tests (shard ${{ matrix.shard }}/4)
