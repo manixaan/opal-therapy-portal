@@ -1342,9 +1342,11 @@ function runBspRoutePreview(opts) {
       '<span class="t-ico">' + (tight ? 'Tight' : 'Travel') + '</span><span class="t-label">' + plan.travelMin + ' min' +
       (small ? '' : ' · ' + esc(pred.suburb || 'previous') + ' → ' + esc(toSub)) + '</span>',
       'Travel ' + plan.travelMin + ' min · ' + (pred.suburb || 'previous stop') + ' → ' + toSub + (plan.bufferMin ? ' (+' + plan.bufferMin + ' min buffer)' : ''));
-  } else if (col && !homePlan.atHome) {
-    _previewLeg(col, legTop, legTop, '', '<span class="t-ico">Travel</span><span class="t-label">no drive · same place</span>');
   }
+  // No drive (same place, or already home): nothing is drawn on the grid.
+  // A "no drive · same place" chip sat at the previous stop's end — right
+  // under the proposal — and showed through it as a faint second block
+  // (18 Oct 2026). The panel's route line already says there is no drive.
   // The drive home is never deleted, only moved: if the proposal becomes the
   // day's last stop, the day now ends with a drive home from it.
   if (col) _bspPreviewHomeAfter(col, day, predS, toKey, shownStart + dur);

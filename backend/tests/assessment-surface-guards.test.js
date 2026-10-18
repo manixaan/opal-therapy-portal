@@ -718,7 +718,7 @@ describe('changed assets are cache-busted', () => {
       // 39: Go somewhere else in between — a new place typed in the travel panel.
       // 40: no-address booking never routes; Return Home follows the day's base; delete → change where the day ends finds the stop again.
       // 41: the travel panel says a past day's travel is not sent to Outlook.
-      ['travel.js', 43],
+      ['travel.js', 44],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.

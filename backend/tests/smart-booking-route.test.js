@@ -1481,6 +1481,16 @@ describe('Home chip — "this one happens at home" (18 Oct 2026)', () => {
     expect(segs.filter((x) => x.kind === 'end')).toHaveLength(0);   // the day ends at home already
   });
 
+  // 18 Oct 2026: a "no drive · same place" chip sat under the proposal and
+  // showed through it as a faint double block.
+  test('the same place as the last client: no drive, and nothing drawn on the grid', async () => {
+    const env = makeEnv();
+    continueFrom(env);
+    await chooseLocation(env, A_ADDR);
+    expect(status(env).textContent).toMatch(/Same place as Ada Client .* no drive/);
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay.preview')).toHaveLength(0);
+  });
+
   test('the shell carries the chip in the Location field', () => {
     expect(SHELL).toMatch(/<button type="button" class="bsp-loc-chip bsp-loc-home" id="bsp-loc-home" aria-pressed="false"/);
   });
