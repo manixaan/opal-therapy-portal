@@ -1219,6 +1219,25 @@ function runBspRoutePreview(opts) {
     return;
   }
   if (!toKey) {
+    // Book Another Client with no address (a telehealth): no drive, so the
+    // proposal starts when the last client finishes. A start an earlier pick
+    // moved for the drive (the client's address, before the type cleared it)
+    // comes back (18 Oct 2026). Still walks past anything already booked.
+    if (pred.explicit && !BOOKING_ROUTE.manualStart) {
+      const busy0 = sessionsForDay(day)
+        .filter(s => s !== pred.s && !isTravelBlock(s) && sessionEndMin(s) > pred.endMin)
+        .map(s => ({ id: s.id, startMin: sessionStartMin(s), endMin: sessionEndMin(s), label: s.patient || s.title || 'appointment' }));
+      const p0 = planNextStop({ prevEndMin: pred.endMin, travelMin: 0, bufferMin: 0, durationMin: dur, desiredStartMin: null,
+                                busy: busy0, dayEndMin: (typeof END_H !== 'undefined' ? END_H : 24) * 60 });
+      if (p0.startMin !== startMin) {
+        startEl.value = _hhmm(p0.startMin);
+        if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
+      }
+      BOOKING_ROUTE.lastClamp = null;
+      if (typeof renderCalendarPreviewBlocks === 'function') {
+        renderCalendarPreviewBlocks([{ day, dayLabel: day, startH: Math.floor(p0.startMin / 60), startM: p0.startMin % 60, startMin: p0.startMin, durationMin: dur, score: 100 }]);
+      }
+    }
     // No location yet is the normal starting state, not a warning: the panel
     // line asks for it. A chip on the calendar here sat at the previous
     // stop's end, away from the proposal, and read like a stray travel leg.

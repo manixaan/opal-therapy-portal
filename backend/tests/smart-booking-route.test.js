@@ -862,6 +862,31 @@ describe('after Create appointment — What would you like to do next?', () => {
     expect(appointmentWrites(env)).toHaveLength(0);
   });
 
+  // 18 Oct 2026: picking the client (address on file) moved the start for the
+  // drive; switching to a telehealth then cleared the address but left the
+  // start there — 5:45 after a 5:15 finish, with no drive at all.
+  test('Book Another Client with no address starts when the last client finishes, even after a routed pick', async () => {
+    const env = booked({ week: { mon: 'home-1' }, homes: [{ id: 'home-1', addr: HOME_ADDR }], routes: { [A_ADDR + '|' + CV_ADDR]: 25 } });
+    dialog(env).querySelector('[data-next="another"]').click();
+    await flush(100);
+    expect(start(env)).toBe('10:00');
+    await chooseLocation(env, CV_ADDR);                      // the client's address: 25 min drive
+    expect(start(env)).toBe('10:30');
+    await chooseLocation(env, '');                           // telehealth: No address
+    expect(start(env)).toBe('10:00');
+    expect(end(env)).toBe('11:00');
+    expect(legs(env)).toHaveLength(0);
+  });
+
+  test('a start the clinician typed is kept when the address is cleared', async () => {
+    const env = booked({ week: { mon: 'home-1' }, homes: [{ id: 'home-1', addr: HOME_ADDR }], routes: { [A_ADDR + '|' + CV_ADDR]: 25 } });
+    dialog(env).querySelector('[data-next="another"]').click();
+    await flush(100);
+    env.$('bsp-start').value = '14:00'; env.ev('bspOnStartChange()');
+    await chooseLocation(env, '');
+    expect(start(env)).toBe('14:00');
+  });
+
   test('Book Another Client carries only the route — no booking type or client is pre-selected', async () => {
     const env = booked({ week: { mon: 'home-1' }, homes: [{ id: 'home-1', addr: HOME_ADDR }] });
     env.ev("window.__leafCalls = 0; var __sbl = selectBookingLeaf; selectBookingLeaf = function (id) { __leafCalls++; return __sbl(id); }; BOOKING_STATE.selectedPatient = null;");
