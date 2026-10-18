@@ -18,11 +18,19 @@ untested step is a real Outlook mailbox connect, which happens live here).
    Send invite.
 2. **Copy-link fallback** (email not configured yet): the modal shows the
    registration link with a **Copy link** button — send it to the
-   therapist yourself (SMS/Teams). Later: **Pending invites → Copy link**
-   retrieves it again (each retrieval is audit-logged).
-3. **Approve**: after they register, Settings → Users & Roles → Team list →
-   **Approve** next to their name. (This also covers the email-verification
-   step while SMTP is not configured.)
+   therapist yourself (SMS/Teams), to them only: the link is what lets them
+   create the account. Later: their row in Users & Roles → **Copy link**
+   retrieves it again (each retrieval is audit-logged). If the invite has
+   expired, **Resend** renews it with a fresh link (the old one stops
+   working); Resend says "Email not sent — copy the link instead" when email
+   is not configured.
+3. **They register from the link**: opening the invitation link and choosing
+   a password makes their account **active straight away**. There is
+   nothing for you to approve and no verification email. They must use the
+   link: typing their email into the register page does not find the
+   invite. (**Approve** is only for people who self-registered through the
+   allowlist, and only after they have verified their email. A row that
+   says "waiting for email verification" cannot be approved.)
 4. **Check the profile**: Settings → Users & Roles → **Team setup status** —
    their row should show `account ✅ onboarding … profile ✅`. If profile
    shows ⚠ (only possible if the treating toggle was off), click
@@ -52,17 +60,19 @@ untested step is a real Outlook mailbox connect, which happens live here).
 ## Offboarding / suspension (any staff member)
 
 Settings → Users & Roles → **Suspend** (kills their sessions immediately).
-Then Settings → Integrations is unavailable to them; their Outlook tokens
-are cleared on disconnect — if they never disconnected, ask the developer
-to clear tokens (one query) until the automatic-clear ships. Their
-mirrored events and records remain (soft-delete policy).
+Suspend and Deactivate also release their Outlook connection: tokens,
+connected mailbox and sync state are cleared, so their calendar stops
+syncing (nothing changes in Outlook itself). If they are re-activated they
+reconnect Outlook from Settings → Integrations. Their mirrored events and
+records remain (soft-delete policy).
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Invite email never arrived | Expected while SMTP is unconfigured — use **Copy link** (Pending invites) |
-| “Pending approval” after registering | Team list → Approve (covers verification too) |
+| “Pending approval” after registering | They self-registered through the allowlist and verified their email: Users & Roles → Approve |
+| “Pending email” / waiting for email verification | They self-registered but have not clicked the verification email yet. Approve is refused until they do — ask them to check their inbox for the verification email |
 | Wrong mailbox connected | Their Settings → Integrations → Disconnect → reconnect with the practice account |
 | Calendar empty after connect | Wait 2 min (first sync); still empty → check Team setup shows a last-sync time; none → have them reconnect; still stuck → developer |
 | “Not linked to a Splose practitioner” | Runbook step 5 (Link Splose ID) |

@@ -20,24 +20,64 @@ sent!" regardless. This documents the fixed behaviour and the owner setup.
   - **skipped** (email not configured) — the modal shows "Invite created.
     Email is not configured…" with the registration link + Copy button
   - **failed** (SMTP errored) — same copy-link fallback, marked as a failure
-- Owner/admin can retrieve the link for any still-pending invite later:
-  **"Copy link"** in Settings → Users & Roles → Pending invites, backed by
-  the audited `GET /api/invites/:id/link` endpoint (`invite.link_retrieved`
-  audit event). Tokens are never present in list responses.
-- Invite creation remains owner/admin-only (admin: therapist/read_only
-  invites only); therapists and read_only get 403 (integration-tested).
+- The owner can retrieve the link for any still-pending invite later:
+  **"Copy link"** in Settings → Users & Roles, backed by the audited
+  `GET /api/invites/:id/link` endpoint (`invite.link_retrieved` audit
+  event). Tokens are never present in list responses.
+- **Resend** says "✓ Sent" only when the email actually went; otherwise it
+  says "Email not sent — copy the link instead". Resending an **expired**
+  invite renews it first (fresh link, fresh 14-day expiry; the old link stops
+  working; `invite.renewed` audit event). New invites expire after 1–30 days
+  (`expiresInDays` is clamped; default 14).
+- Invite creation, listing, resend, copy-link and revoke are **owner-only**
+  (RBAC 2026-08-06); admin, therapist and read_only get 403
+  (integration-tested).
+- **Onboarding invitations** (new starters released from Onboarding) are not
+  listed in Users & Roles and cannot be copied, resent or revoked through
+  `/api/invites`: they are redeemed on `/onboarding-invite` and managed from
+  Onboarding.
+
+## Registration rules (accounts & access hardening, 18 Oct 2026)
+
+- An invited person registers **only through the link in their invitation**
+  (`/register?token=…`). Typing an invited email into the register page does
+  not find the invite. It gets the same answer as any unknown email, so
+  nobody who merely knows the address can claim the account or its role.
+- Holding the token proves the mailbox, so an invite registration is created
+  **active and email-verified** straight away: no verification email, no
+  approval. The person signs in with the password they chose.
+- Self-registration through the allowlist (`ALLOWED_EMAILS` /
+  `ALLOWED_DOMAINS`) still verifies the email and then waits in
+  `pending_approval`. The owner's **Approve** accepts only
+  `pending_approval`. An account still at `pending_verification` shows
+  "waiting for email verification" and cannot be approved.
+- The first owner: while no active owner exists, only the address in
+  `BOOTSTRAP_OWNER_EMAIL` (which must also be allowlisted) may register, and
+  it becomes the owner. If no organisation exists yet, one is created, named
+  `ORG_NAME` (default "Opal Therapy"). Outside development, with
+  `BOOTSTRAP_OWNER_EMAIL` unset, the bootstrap is refused and nothing is
+  created.
+- Forgot-password sends a reset link to any **active** account, verified or
+  not. Completing a reset also verifies the email and clears any temporary
+  password.
 
 ## Required environment variables
 
 | Var | Required? | Example |
 |---|---|---|
 | `APP_BASE_URL` | **Boot-critical (staging/prod)**, https only | `https://opal-portal-staging.azurewebsites.net` / `https://portal.opaltherapy.com.au` |
-| `EMAIL_HOST` | Optional — without it the app runs in copy-link mode | `smtp.office365.com` |
+| `EMAIL_HOST` | Optional — without it the app runs in copy-link mode (boot warns if it is set without EMAIL_USER / EMAIL_PASS) | `smtp.office365.com` |
 | `EMAIL_PORT` | Optional (default 587) | `587` |
 | `EMAIL_SECURE` | Optional (`true` only for port 465) | `false` |
 | `EMAIL_USER` | Required for sending | `portal@opaltherapy.com.au` |
 | `EMAIL_PASS` | Required for sending — **Key Vault reference, never plaintext** | KV secret `email-pass` |
 | `EMAIL_FROM` | Optional | `Opal Therapy <portal@opaltherapy.com.au>` |
+| `BOOTSTRAP_OWNER_EMAIL` | Optional, non-secret. Needed only to create the first owner outside development | `ann@opaltherapy.com.au` |
+| `ORG_NAME` | Optional, non-secret (default "Opal Therapy"). Name of the organisation the bootstrap creates | `Opal Therapy` |
+
+In copy-link mode, register / verify / reset / onboarding links are printed
+to the server log **only when `NODE_ENV=development`**. They are
+credentials, so staging and production logs never contain them.
 
 Azure Key Vault: store the SMTP password as secret `email-pass` in
 `opal-portal-stg-kv` (prod: the prod KV) and set the app setting as a KV
@@ -150,6 +190,6 @@ links follow the setting. The boot validator enforces https and presence.
 
 - No email queue/retry; a failed send falls back to copy-link mode.
 - No Graph sendMail implementation (SMTP path only; abstraction ready).
-- Invited users still land in `pending_approval` after verifying (the
-  owner approves in Settings → Team) — flow works but has this extra step;
-  scheduled for Stage 2 polish.
+- (Superseded.) Invited users used to land in `pending_approval` after
+  verifying. Since 4 Oct 2026 verification activated them, and since
+  18 Oct 2026 an invite-link registration is active immediately.

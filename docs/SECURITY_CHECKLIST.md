@@ -35,8 +35,8 @@ NDIS participants have additional protections under the NDIS Act 2013. Breaches 
 - [ ] **HTTPS** — Deploy behind a reverse proxy (nginx/Caddy) with a valid TLS certificate. Never serve the app over plain HTTP outside localhost.
 - [ ] **Strong DB password** — `DB_PASSWORD=postgres` must be changed to a random password before cloud deployment.
 - [ ] **Role-based access** — Add a `role` field to users (admin / therapist). Antony sees billing + all client data; Ann sees only scheduling and her own clients.
-- [ ] **Session store** — Replace in-memory sessions with a PostgreSQL-backed session store (`connect-pg-simple`). In-memory sessions are lost on server restart.
-- [ ] **Rate limiting** — Add `express-rate-limit` on login and Splose proxy endpoints to prevent brute force or excessive API calls.
+- [x] **Session store** — Sessions are PostgreSQL-backed (`backend/session-store.js`, the `sessions` table) and survive restarts.
+- [x] **Login rate limiting** — In-memory, no extra dependency (`backend/request-safety.js`): 10 login attempts per client IP per 15 minutes (the IP is normalised, so Azure's `ip:port` forwarding cannot bypass it), plus 10 failed attempts per submitted email per 15 minutes from any IP (same generic message, so it does not reveal whether an account exists). `/api/auth/check-invite` has its own per-IP limit. Counters are per instance and reset on restart. Splose proxy endpoints are not rate limited.
 - [ ] **Audit log** — Log every access to patient data (who, what endpoint, when). Store in a `audit_log` table. Required for Privacy Act compliance.
 - [ ] **Data minimisation** — Patient list endpoint should return only fields needed for the UI (name, suburb, NDIS number) — not emergency contacts, diagnoses, birthdates — unless the full profile is explicitly requested.
 
