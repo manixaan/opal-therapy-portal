@@ -431,7 +431,9 @@ router.get('/auth/oauth/callback', async (req, res) => {
     // on an interstitial that mentioned "mockup_v3.html"). Only relative
     // paths are honoured — an absolute/protocol URL from state falls back to
     // '/' so the state param can never become an open redirect.
-    const safeReturn = (returnUrl && /^\/(?!\/)/.test(returnUrl)) ? returnUrl : '/';
+    // safeReturnPath also refuses backslashes ("/\evil.com" is "//evil.com" to a
+    // browser) and anything whose resolved origin is not ours (audit L-10).
+    const safeReturn = require('./request-safety').safeReturnPath(returnUrl);
     const redirectUrl = safeReturn.includes('?')
       ? safeReturn + '&outlook=connected'
       : safeReturn + '?outlook=connected';

@@ -104,6 +104,37 @@ describe('no secrets leak', () => {
     } finally { spy.mockRestore(); }
   });
 
+  test('outside development, skipped-mode logs never contain a token link (audit M-6)', async () => {
+    const logs = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a) => logs.push(a.join(' ')));
+    try {
+      const email = fresh({ NODE_ENV: 'production', APP_BASE_URL: 'https://portal.example.test' });
+      const results = [
+        await email.sendInviteEmail({ toEmail: 'a@y.test', inviteToken: 'tok-invite-secret', role: 'therapist' }),
+        await email.sendVerificationEmail({ toEmail: 'b@y.test', token: 'tok-verify-secret', name: 'B' }),
+        await email.sendPasswordResetEmail({ toEmail: 'c@y.test', token: 'tok-reset-secret', name: 'C' }),
+        await email.sendOnboardingInviteEmail({ toEmail: 'd@y.test', inviteToken: 'tok-onboard-secret', displayName: 'D' }),
+      ];
+      // The link still comes back to the caller (copy-link mode) …
+      expect(results.every((r) => r.skipped)).toBe(true);
+      expect(JSON.stringify(results)).toContain('tok-invite-secret');
+      // … but never reaches the log stream.
+      const out = logs.join('\n');
+      expect(out).not.toMatch(/tok-(invite|verify|reset|onboard)-secret/);
+      expect(out).toMatch(/withheld/);
+    } finally { spy.mockRestore(); }
+  });
+
+  test('in development, skipped-mode logs still print the link for the local workflow', async () => {
+    const logs = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a) => logs.push(a.join(' ')));
+    try {
+      const email = fresh({ NODE_ENV: 'development' });
+      await email.sendVerificationEmail({ toEmail: 'b@y.test', token: 'tok-dev-verify', name: 'B' });
+      expect(logs.join('\n')).toContain('tok-dev-verify');
+    } finally { spy.mockRestore(); }
+  });
+
   test('env-validation now treats APP_BASE_URL as boot-critical (https) in strict envs', () => {
     jest.resetModules();
     const { validateEnvironment } = require('../env-validation');

@@ -234,3 +234,77 @@ test('rate limiter returns 429 after 10 failed login attempts from same IP', asy
   expect(blockedRes.status).toBe(429);
   expect(blockedRes.headers['retry-after']).toBeDefined();
 }, 30000); // generous timeout — 11 sequential requests with bcrypt
+
+// ── Per-account backoff and IP normalisation (audit M-3, 18 Oct 2026) ────────
+
+describe('login throttling hardening', () => {
+  beforeEach(() => require('../auth')._resetLoginRateLimit());
+  afterAll(() => require('../auth')._resetLoginRateLimit());
+
+  test('10 failures against one account from 10 different IPs lock it — even the right password gets 429', async () => {
+    for (let i = 0; i < 10; i++) {
+      db.getUserByEmail.mockResolvedValueOnce({ ...ACTIVE_USER });
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', `10.7.0.${i + 1}`)
+        .send({ email: ACTIVE_USER.email.toUpperCase(), password: 'WrongPass9' });
+      expect(res.status).toBe(401);
+    }
+    db.getUserByEmail.mockResolvedValueOnce({ ...ACTIVE_USER });
+    const blocked = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '10.7.1.1')
+      .send({ email: ACTIVE_USER.email, password: TEST_PASS });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toMatch(/Too many login attempts/);
+    expect(blocked.headers['retry-after']).toBeDefined();
+  }, 30000);
+
+  test('an unknown email locks exactly like a real one (no account enumeration)', async () => {
+    for (let i = 0; i < 10; i++) {
+      db.getUserByEmail.mockResolvedValueOnce(null);
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', `10.8.0.${i + 1}`)
+        .send({ email: 'nobody@example.invalid', password: 'WrongPass9' });
+      expect(res.status).toBe(401);
+    }
+    const blocked = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '10.8.1.1')
+      .send({ email: 'nobody@example.invalid', password: 'WrongPass9' });
+    expect(blocked.status).toBe(429);
+  }, 30000);
+
+  test('a successful login clears the account backoff', async () => {
+    for (let i = 0; i < 9; i++) {
+      db.getUserByEmail.mockResolvedValueOnce({ ...ACTIVE_USER });
+      await request(app).post('/api/auth/login').set('X-Forwarded-For', `10.9.0.${i + 1}`)
+        .send({ email: ACTIVE_USER.email, password: 'WrongPass9' });
+    }
+    db.getUserByEmail.mockResolvedValueOnce({ ...ACTIVE_USER });
+    expect((await request(app).post('/api/auth/login').set('X-Forwarded-For', '10.9.1.1')
+      .send({ email: ACTIVE_USER.email, password: TEST_PASS })).status).toBe(200);
+    for (let i = 0; i < 2; i++) {
+      db.getUserByEmail.mockResolvedValueOnce({ ...ACTIVE_USER });
+      expect((await request(app).post('/api/auth/login').set('X-Forwarded-For', `10.9.2.${i + 1}`)
+        .send({ email: ACTIVE_USER.email, password: 'WrongPass9' })).status).toBe(401);
+    }
+  }, 30000);
+
+  test('Azure-style "ip:port" forwarded addresses share one per-IP bucket', async () => {
+    for (let i = 0; i < 10; i++) {
+      db.getUserByEmail.mockResolvedValueOnce(null);
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', `203.0.113.7:${50000 + i}`)
+        .send({ email: `probe${i}@example.invalid`, password: 'WrongPass9' });
+      expect(res.status).toBe(401);
+    }
+    const blocked = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.7:61000')
+      .send({ email: 'probe-last@example.invalid', password: 'WrongPass9' });
+    expect(blocked.status).toBe(429);
+  }, 30000);
+});

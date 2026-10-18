@@ -95,15 +95,20 @@ function resolvePortalRole(choice) {
 /**
  * Generate a temporary password a human can retype from an email.
  *
- * Four words plus a two-digit number: roughly 4 × log2(2048) + log2(90) ≈ 50
- * bits from a CSPRNG, which is far beyond what an online login endpoint
- * rate-limited to ten attempts per fifteen minutes can be walked through, and
- * unlike a random character string it survives being read aloud over the phone.
+ * Four words from a 64-word list plus an eight-digit number, written as two
+ * groups of four: 4 × log2(64) + log2(10^8) = 24 + 26.6 ≈ 50.6 bits from a
+ * CSPRNG. (This used to claim ~50 bits for four words and a two-digit number,
+ * as if the list had 2048 entries; with 64 entries that was only ~30.5 bits —
+ * audit L-3.) Far beyond what a login endpoint rate-limited per IP and per
+ * account can be walked through, and unlike a random character string it
+ * survives being read aloud over the phone.
  *
  * The wordlist is deliberately plain and unambiguous: no homophones, no words
  * that differ by one letter, nothing that reads as a slur or a name. It is
- * short by design — entropy comes from the number of draws, and a short list
+ * short by design — the digits carry most of the entropy, and a short list
  * that a person can transcribe correctly beats a long one they mistype.
+ * Changing WORDS.length or the digit count changes the entropy: keep
+ * TEMP_PASSWORD_ENTROPY_BITS (and its test) honest.
  */
 const WORDS = Object.freeze([
   'anchor', 'basket', 'candle', 'copper', 'dolphin', 'ember', 'falcon', 'garden',
@@ -125,13 +130,28 @@ function pick(list) {
   }
 }
 
+/** A uniform integer in [0, range), rejection-sampled from 32 random bits. */
+function uniformInt(range) {
+  const limit = Math.floor(0x100000000 / range) * range;
+  for (;;) {
+    const n = crypto.randomBytes(4).readUInt32BE(0);
+    if (n < limit) return n % range;
+  }
+}
+
+const TEMP_PASSWORD_WORDS = 4;
+const TEMP_PASSWORD_DIGITS = 8;
+const TEMP_PASSWORD_ENTROPY_BITS =
+  TEMP_PASSWORD_WORDS * Math.log2(WORDS.length) + TEMP_PASSWORD_DIGITS * Math.log2(10);
+
 function generateTemporaryPassword() {
-  const words = [pick(WORDS), pick(WORDS), pick(WORDS), pick(WORDS)];
+  const words = [];
+  for (let i = 0; i < TEMP_PASSWORD_WORDS; i += 1) words.push(pick(WORDS));
   // Capitalised first word and a trailing number so the result satisfies the
   // portal's own password policy without the recipient having to think about it.
   words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
-  const number = 10 + (crypto.randomBytes(2).readUInt16BE(0) % 90);
-  return `${words.join('-')}-${number}`;
+  const digits = String(uniformInt(10 ** TEMP_PASSWORD_DIGITS)).padStart(TEMP_PASSWORD_DIGITS, '0');
+  return `${words.join('-')}-${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
 /** Hash a password with the portal's existing cost factor. */
@@ -203,6 +223,7 @@ module.exports = {
   TEMP_PASSWORD_TTL_DAYS,
   PORTAL_ROLES,
   WORDS,
+  TEMP_PASSWORD_ENTROPY_BITS,
   resolvePortalRole,
   generateTemporaryPassword,
   hashPassword,

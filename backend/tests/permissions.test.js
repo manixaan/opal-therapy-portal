@@ -241,3 +241,23 @@ test('stripFinancials works on arrays', () => {
   expect(result[1]).not.toHaveProperty('rate');
   expect(result[0].title).toBe('A');
 });
+
+// ── requireAuth requires account_status = 'active' (audit L-6) ──────────────
+
+test.each(['suspended', 'deactivated', 'pending_approval', 'pending_verification'])(
+  'requireAuth ends a live session whose account_status became %s, even with is_active still TRUE',
+  async (status) => {
+    const agent = await loginAs('therapist');
+    db.getUser.mockResolvedValue(makeUser({ id: 'user-therapist', role: 'therapist', is_active: true, account_status: status }));
+    const res = await agent.get('/api/events');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/inactive/i);
+  }
+);
+
+test('requireAuth still admits an active account', async () => {
+  const agent = await loginAs('therapist');
+  const res = await agent.get('/api/events');
+  expect(res.status).not.toBe(401);
+  expect(res.status).not.toBe(403);
+});

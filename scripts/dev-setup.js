@@ -149,7 +149,8 @@ step('6/7  Development logins');
 if (CHECK_ONLY || ping.status !== 0) {
   info('skipped');
 } else {
-  run('node', ['setup/seed-users.js'], { env: { DB_NAME, DB_USER, DB_PASSWORD } });
+  // seed-users refuses to run unless NODE_ENV=development and DB_HOST is local.
+  run('node', ['setup/seed-users.js'], { env: { DB_NAME, DB_USER, DB_PASSWORD, NODE_ENV: 'development' } });
   ok('seeded owner@opaltherapy.dev / admin@opaltherapy.dev / therapist@opaltherapy.dev');
   if (WITH_DEMO) {
     run('node', ['setup/seed-demo-calendar.js'], { env: { DB_NAME, DB_USER, DB_PASSWORD } });

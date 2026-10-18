@@ -435,7 +435,10 @@ async function requireAuth(req, res, next) {
       // Lazy-load db to avoid circular dependency at module init time
       const db   = require('./database');
       const user = await db.getUser(req.session.userId);
-      if (!user || user.is_active === false) {
+      // account_status as well as is_active (audit L-6): every status change
+      // flips both today, but a session must not outlive a suspension,
+      // deactivation or pending state just because one flag was missed.
+      if (!user || user.is_active === false || (user.account_status || 'active') !== 'active') {
         req.session.destroy(() => {});
         return res.status(401).json({ error: 'Session expired or account inactive' });
       }

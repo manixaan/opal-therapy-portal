@@ -18,17 +18,17 @@ const ROOT = path.join(__dirname, '..');
 const DB = process.env.E2E_LOCAL_DB || 'therapy_scheduler_capture';
 const PORT = process.env.E2E_LOCAL_PORT || '5009';
 
-function sh(cmd, args) {
+function sh(cmd, args, env = {}) {
   execFileSync(cmd, args, {
     cwd: path.join(ROOT, 'backend'),
-    env: { ...process.env, DB_NAME: DB },
+    env: { ...process.env, DB_NAME: DB, ...env },
     stdio: 'pipe',
   });
 }
 
 try { execFileSync('createdb', ['-U', process.env.DB_USER || 'postgres', DB], { stdio: 'pipe' }); } catch (e) { /* exists */ }
 sh('node', ['migrate.js', 'up']);
-sh('node', ['setup/seed-users.js']);
+sh('node', ['setup/seed-users.js'], { NODE_ENV: 'development' }); // dev-only guard
 sh('node', ['setup/seed-demo-calendar.js']);
 sh('node', ['setup/seed-resource-hub-r2.js']);
 sh('node', ['setup/seed-learning-workflows.js']);

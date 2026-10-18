@@ -68,7 +68,7 @@ function prepareDb() {
   try { execFileSync('createdb', ['-U', process.env.DB_USER || 'postgres', DB], { stdio: 'pipe' }); }
   catch (e) { /* exists */ }
   sh('node', ['migrate.js', 'up']);
-  sh('node', ['setup/seed-users.js']);
+  sh('node', ['setup/seed-users.js'], { NODE_ENV: 'development' }); // dev-only guard
   sh('node', ['setup/seed-demo-calendar.js']);
   sh('node', ['setup/seed-resource-hub-r2.js']);
 }

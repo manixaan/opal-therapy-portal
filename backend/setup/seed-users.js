@@ -8,7 +8,8 @@
  *   node backend/setup/seed-users.js
  *
  * ⚠️  These are local-development credentials only.
- *     Do NOT use these passwords in staging or production.
+ *     The script REFUSES to run unless NODE_ENV=development and DB_HOST is
+ *     localhost / 127.0.0.1 (run it as: NODE_ENV=development node …).
  *
  * Accounts created:
  *   owner@opaltherapy.dev      DEV_OWNER_PASS     or "OwnerDev2026!"
@@ -240,6 +241,32 @@ async function main() {
   console.log('\n  4. Test registration: open the Register link above in your browser\n');
 }
 
-main()
-  .catch(err => { console.error('Seed script error:', err); process.exit(1); })
-  .finally(() => pool.end());
+/**
+ * Refuse to run anywhere but a local development database (audit L-9): this
+ * script upserts an OWNER with a well-known default password, and used to run
+ * against whatever DB_* happened to point at. Returns an error string, or null.
+ */
+function developmentGuard(env = process.env) {
+  if (env.NODE_ENV !== 'development') {
+    return `NODE_ENV must be "development" (it is "${env.NODE_ENV || 'unset'}").`;
+  }
+  const host = String(env.DB_HOST || 'localhost').trim().toLowerCase();
+  if (!['localhost', '127.0.0.1'].includes(host)) {
+    return `DB_HOST must be localhost or 127.0.0.1 (it is "${host}").`;
+  }
+  return null;
+}
+
+if (require.main === module) {
+  const refusal = developmentGuard();
+  if (refusal) {
+    console.error(`❌ seed-users refused: ${refusal} These are development-only accounts with default passwords.`);
+    pool.end().finally(() => process.exit(1));
+  } else {
+    main()
+      .catch(err => { console.error('Seed script error:', err); process.exit(1); })
+      .finally(() => pool.end());
+  }
+}
+
+module.exports = { developmentGuard };

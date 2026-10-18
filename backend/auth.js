@@ -42,49 +42,35 @@ function validatePassword(password) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Login rate limiter — 10 attempts per IP per 15 minutes
+//  Login rate limiters — 10 attempts per IP per 15 minutes, and 10 FAILED
+//  attempts per submitted email per 15 minutes.
 //
-//  Implemented inline to avoid an extra dependency.  Resets on server restart
-//  (acceptable for this deployment size — the window is short enough that a
-//  restart-based bypass provides no meaningful advantage).
-//
-//  Map structure:  ip → { count: Number, resetAt: Date }
+//  In-memory (request-safety.js) to avoid an extra dependency. Resets on
+//  server restart and is per instance (acceptable for this deployment size —
+//  the window is short enough that a restart-based bypass provides no
+//  meaningful advantage).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LOGIN_WINDOW_MS   = 15 * 60 * 1000; // 15 minutes
 const LOGIN_MAX_ATTEMPTS = 10;
-const _loginAttempts     = new Map();
+const ACCOUNT_MAX_FAILURES = 10;           // per submitted email, same window
 
-// Prune stale entries every 10 minutes so the map doesn't grow unbounded
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of _loginAttempts) {
-    if (entry.resetAt <= now) _loginAttempts.delete(ip);
-  }
-}, 10 * 60 * 1000).unref();
+const { createIpRateLimiter, createFailureTracker } = require('./request-safety');
 
-function loginRateLimit(req, res, next) {
-  const ip  = req.ip || req.connection?.remoteAddress || 'unknown';
-  const now = Date.now();
-  let entry = _loginAttempts.get(ip);
+const tooManyAttempts = (retryAfterSec) =>
+  `Too many login attempts. Please try again in ${Math.ceil(retryAfterSec / 60)} minute(s).`;
 
-  if (!entry || entry.resetAt <= now) {
-    entry = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
-    _loginAttempts.set(ip, entry);
-  }
+// Per-IP — keyed on the NORMALISED client address (request-safety.js), so an
+// Azure "ip:port" forwarded value no longer makes every connection a new key.
+const loginRateLimit = createIpRateLimiter({
+  windowMs: LOGIN_WINDOW_MS, max: LOGIN_MAX_ATTEMPTS, message: tooManyAttempts,
+});
 
-  entry.count++;
-
-  if (entry.count > LOGIN_MAX_ATTEMPTS) {
-    const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
-    res.set('Retry-After', String(retryAfterSec));
-    return res.status(429).json({
-      error: `Too many login attempts. Please try again in ${Math.ceil(retryAfterSec / 60)} minute(s).`,
-    });
-  }
-
-  next();
-}
+// Per-account — failures against one submitted email, from anywhere. Stops a
+// guesser spread across many addresses (audit M-3). Keyed on what was typed,
+// so an unknown email locks exactly like a real one: nothing here reveals
+// whether an account exists.
+const accountFailures = createFailureTracker({ windowMs: LOGIN_WINDOW_MS, max: ACCOUNT_MAX_FAILURES });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/auth/login
@@ -98,8 +84,15 @@ router.post('/api/auth/login', loginRateLimit, async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  const accountKey = String(email).trim().toLowerCase();
+  if (accountFailures.isLocked(accountKey)) {
+    const retryAfterSec = accountFailures.retryAfterSec(accountKey);
+    res.set('Retry-After', String(retryAfterSec));
+    return res.status(429).json({ error: tooManyAttempts(retryAfterSec) });
+  }
+
   try {
-    const user = await db.getUserByEmail(email.trim().toLowerCase());
+    const user = await db.getUserByEmail(accountKey);
 
     // Use a constant-time comparison even when user doesn't exist to prevent
     // timing-based email enumeration attacks.
@@ -108,6 +101,7 @@ router.post('/api/auth/login', loginRateLimit, async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, hashToCompare);
 
     if (!user || !passwordMatch) {
+      accountFailures.recordFailure(accountKey);
       // Log failed attempt (best-effort — don't let logging failure break login)
       try {
         await db.logAuditEvent({
@@ -124,6 +118,7 @@ router.post('/api/auth/login', loginRateLimit, async (req, res) => {
       // Always return the same generic error
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+    accountFailures.clear(accountKey); // the correct password ends the backoff
 
     if (!user.is_active) {
       return res.status(403).json({ error: 'Account is inactive. Please contact your administrator.' });
@@ -519,7 +514,8 @@ router.post('/api/auth/resend-verification', async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/auth/forgot-password
-//  Accepts email, sends a reset link if the account exists and is active/verified.
+//  Accepts email, sends a reset link if the account exists and is active
+//  (or verified and pending approval).
 //  Always returns the same response to avoid email enumeration.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -545,8 +541,16 @@ router.post('/api/auth/forgot-password', async (req, res) => {
     );
     const user = rows[0];
 
-    // Only send if account exists, is email-verified, and is active or pending_approval
-    if (user && user.email_verified && ['active', 'pending_approval'].includes(user.account_status)) {
+    // Send to any ACTIVE account, verified or not (audit M-7): owner-approved
+    // and onboarding-provisioned accounts are active with email_verified =
+    // FALSE, and used to be silently refused a reset — a dead end once a
+    // temporary password expired. Receiving the link is itself proof of the
+    // mailbox. A pending_approval account still has to have verified first.
+    const eligible = user && (
+      user.account_status === 'active'
+      || (user.account_status === 'pending_approval' && user.email_verified)
+    );
+    if (eligible) {
       const token   = generateToken();
       const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
@@ -614,6 +618,17 @@ router.post('/api/auth/reset-password', async (req, res) => {
           SET password_hash           = $1,
               password_reset_token    = NULL,
               password_reset_expires_at = NULL,
+              -- A password the person chose for themselves (audit M-7): the
+              -- temporary-password gates have nothing left to enforce, exactly
+              -- as change-password clears them. Without this a starter whose
+              -- temporary password had expired could reset and STILL be told
+              -- "that temporary password has expired".
+              password_is_temporary   = FALSE,
+              must_change_password    = FALSE,
+              temp_password_expires_at = NULL,
+              password_changed_at     = NOW(),
+              -- The reset link arrived in their mailbox: that verifies it.
+              email_verified          = TRUE,
               updated_at              = NOW()
         WHERE id = $2`,
       [hash, user.id]
@@ -651,4 +666,4 @@ module.exports.validatePassword = validatePassword;
 // Test-only: clear the in-memory login rate-limit window so a test file that
 // logs in many distinct users from the same IP is not throttled. Not used in
 // production; does not weaken the limiter (which stays fully active).
-module.exports._resetLoginRateLimit = () => _loginAttempts.clear();
+module.exports._resetLoginRateLimit = () => { loginRateLimit.reset(); accountFailures.reset(); };

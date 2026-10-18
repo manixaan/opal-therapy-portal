@@ -62,6 +62,21 @@ function _resetTransporter() { transporter = null; }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Log a register / verify / reset / onboarding link when email is not
+ * configured — ONLY in development (audit M-6). Each of these links is a
+ * credential: anyone reading a staging or production log stream could use it
+ * to take over the account. Elsewhere the owner gets the link from the
+ * portal's own copy-link flow instead.
+ */
+function logLinkForDevelopment(label, url) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`    ${label}: ${url}`);
+  } else {
+    console.log(`    ${label}: (withheld — links are only logged when NODE_ENV=development)`);
+  }
+}
+
 const FROM = () => process.env.EMAIL_FROM || `Opal Therapy <${process.env.EMAIL_USER}>`;
 
 /**
@@ -196,7 +211,7 @@ If you weren't expecting this, you can ignore it.
     console.log(`\n📧  [EMAIL SKIPPED — not configured]`);
     console.log(`    To: ${toEmail}`);
     console.log(`    Role: ${roleName}`);
-    console.log(`    Register link: ${registerUrl}\n`);
+    logLinkForDevelopment('Register link', registerUrl);
     return { skipped: true, registerUrl };
   }
 
@@ -344,7 +359,7 @@ This invitation is for ${toEmail} only.
     // The link is logged; nothing about the person is.
     console.log('\n📧  [ONBOARDING INVITE SKIPPED — email not configured]');
     console.log(`    To: ${toEmail}`);
-    console.log(`    Onboarding link: ${onboardingUrl}\n`);
+    logLinkForDevelopment('Onboarding link', onboardingUrl);
     return { skipped: true, onboardingUrl };
   }
 
@@ -474,7 +489,7 @@ async function sendVerificationEmail({ toEmail, token, name }) {
   const transport = getTransporter();
   if (!transport) {
     console.log(`📧  [EMAIL SKIPPED] Verification email for ${toEmail}`);
-    console.log(`📧  Verify URL (dev): ${verifyUrl}`);
+    logLinkForDevelopment('Verify URL', verifyUrl);
     return { skipped: true, verifyUrl };
   }
 
@@ -541,7 +556,7 @@ async function sendPasswordResetEmail({ toEmail, token, name }) {
   const transport = getTransporter();
   if (!transport) {
     console.log(`📧  [EMAIL SKIPPED] Password reset email for ${toEmail}`);
-    console.log(`📧  Reset URL (dev): ${resetUrl}`);
+    logLinkForDevelopment('Reset URL', resetUrl);
     return { skipped: true, resetUrl };
   }
 

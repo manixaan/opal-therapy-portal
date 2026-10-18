@@ -79,6 +79,19 @@ describe('generateTemporaryPassword', () => {
     expect(new Set(accounts.WORDS).size).toBe(accounts.WORDS.length);
   });
 
+  test('carries at least 50 bits of entropy, computed from the real list and format (audit L-3)', () => {
+    // The old format (four words + a two-digit number) claimed ~50 bits but,
+    // with a 64-word list, gave ~30.5. Recompute from the generated shape.
+    const pw = accounts.generateTemporaryPassword();
+    const parts = pw.split('-');
+    const words = parts.filter((p) => /^[A-Za-z]+$/.test(p));
+    const digits = parts.filter((p) => /^\d+$/.test(p)).join('').length;
+    const bits = words.length * Math.log2(accounts.WORDS.length) + digits * Math.log2(10);
+    expect(bits).toBeGreaterThanOrEqual(50);
+    expect(accounts.TEMP_PASSWORD_ENTROPY_BITS).toBeCloseTo(bits, 6);
+    expect(pw).toMatch(/^[A-Z][a-z]+(-[a-z]+){3}-\d{4}-\d{4}$/);
+  });
+
   test('hashing produces a bcrypt hash the login path can verify', async () => {
     const bcrypt = require('bcryptjs');
     const pw = accounts.generateTemporaryPassword();
