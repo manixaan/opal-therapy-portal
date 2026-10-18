@@ -47,6 +47,9 @@ function buildApp() {
   app.use('/', require('../../onboarding-assignment-routes'));
   app.use('/', require('../../onboarding-library-routes'));
   app.use('/', require('../../onboarding-routes'));
+  // Users & Roles + /api/invites — for the M-2 exclusion test.
+  app.use('/', require('../../invite-routes'));
+  app.use('/', require('../../app-routes'));
   return app;
 }
 
@@ -768,6 +771,98 @@ describe('invitation security', () => {
     });
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('account_exists');
+  });
+
+  // ── Accounts & access hardening, 18 Oct 2026 ───────────────────────────────
+
+  test('H-2: an onboarding can never propose the Owner role', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const pkgs = (await owner.get('/api/onboarding/packages')).body.packages;
+    const pkg = pkgs.find((p) => p.code === 'PKG_ADMIN_CASUAL');
+    const res = await owner.post('/api/onboarding/assignments').send({
+      applicantName: 'Would-be Owner', applicantEmail: 'me2@test.invalid',
+      packageId: pkg.id, employmentType: 'casual', roleCategory: 'administration', proposedRole: 'owner',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('invalid_role');
+    const { rows } = await db.pool.query("SELECT COUNT(*)::int AS n FROM onboarding_assignments WHERE applicant_email = 'me2@test.invalid'");
+    expect(rows[0].n).toBe(0);
+  });
+
+  test('H-2: activation refuses an assignment that (from older data) proposes Owner', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const { assignmentId } = await makeInvite(owner);
+    await db.pool.query("UPDATE onboarding_assignments SET proposed_role = 'owner' WHERE id = $1", [assignmentId]);
+    const res = await owner.post(`/api/onboarding/assignments/${assignmentId}/activate`).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('role_not_grantable');
+    const { rows } = await db.pool.query("SELECT role FROM users WHERE email = 'invite@test.invalid'");
+    expect(rows[0].role).toBe('pre_employee');
+  });
+
+  test('H-3: release refuses — and never demotes — an account that appeared after the onboarding was created', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    await publishAllDocuments(owner);
+    const pkgs = (await owner.get('/api/onboarding/packages')).body.packages;
+    const pkg = pkgs.find((p) => p.code === 'PKG_ADMIN_CASUAL');
+    const created = await owner.post('/api/onboarding/assignments').send({
+      applicantName: 'Jane', applicantEmail: 'jane@test.invalid',
+      packageId: pkg.id, employmentType: 'casual', roleCategory: 'administration',
+    });
+    expect(created.status).toBe(201);
+    // Meanwhile Jane registered through an ordinary invite.
+    const jane = await seedUser({ organisation_id: org.id, role: 'therapist', email: 'Jane@Test.Invalid' });
+
+    const released = await owner.post(`/api/onboarding/assignments/${created.body.assignment.id}/release`).send({});
+    expect(released.status).toBe(409);
+    expect(released.body.code).toBe('account_exists');
+    const after = await db.getUser(jane.id);
+    expect(after.role).toBe('therapist');
+    expect(after.organisation_id).toBe(org.id);
+    const { rows } = await db.pool.query('SELECT status FROM onboarding_assignments WHERE id = $1', [created.body.assignment.id]);
+    expect(rows[0].status).toBe('created');
+    const inv = await db.pool.query('SELECT COUNT(*)::int AS n FROM user_invites WHERE onboarding_assignment_id = $1', [created.body.assignment.id]);
+    expect(inv.rows[0].n).toBe(0);
+  });
+
+  test('M-2: onboarding invitations are not exposed through Users & Roles or /api/invites', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const { invite } = await makeInvite(owner);
+
+    const people = await owner.get('/api/admin/people');
+    expect(people.status).toBe(200);
+    expect(people.body.people.some((p) => p.invite && p.invite.id === invite.id)).toBe(false);
+
+    const list = await owner.get('/api/invites');
+    expect(list.body.invites.some((i) => i.id === invite.id)).toBe(false);
+    expect((await owner.get(`/api/invites/${invite.id}/link`)).status).toBe(404);
+    expect((await owner.post(`/api/invites/${invite.id}/resend`)).status).toBe(404);
+    expect((await owner.delete(`/api/invites/${invite.id}`)).status).toBe(404);
+    const { rows } = await db.pool.query('SELECT status FROM user_invites WHERE id = $1', [invite.id]);
+    expect(rows[0].status).toBe('pending');
+  });
+
+  test('M-8: accepting an invitation issues a new session id; the old one is not signed in', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner' });
+    const { invite } = await makeInvite(owner);
+
+    // A browser that already holds a session (planted or left over).
+    const other = await seedUser({ organisation_id: org.id, password_hash: await bcrypt.hash(PASSWORD, 4) });
+    const login = await request(app).post('/api/auth/login').set('X-Forwarded-For', nextIp())
+      .send({ email: other.email, password: PASSWORD });
+    const oldCookie = login.headers['set-cookie'][0].split(';')[0];
+
+    const accept = await request(app).post('/api/onboarding-invite/accept').set('Cookie', oldCookie)
+      .send({ token: invite.invite_token, password: 'NewStarter1!' });
+    expect(accept.status).toBe(200);
+    const newCookie = (accept.headers['set-cookie'] || [])[0]?.split(';')[0];
+    expect(newCookie).toBeTruthy();
+    expect(newCookie).not.toBe(oldCookie);
+
+    // The new session is the new starter; the old id carries nobody.
+    const mine = await request(app).get('/api/onboarding/me').set('Cookie', newCookie);
+    expect(mine.status).toBe(200);
+    expect((await request(app).get('/api/onboarding/me').set('Cookie', oldCookie)).status).toBe(401);
   });
 });
 

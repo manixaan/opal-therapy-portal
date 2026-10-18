@@ -77,4 +77,26 @@ describe('validateEnvironment', () => {
     expect(r.ok).toBe(true);
     expect(r.warnings.some(w => w.key === 'GOOGLE_MAPS_API_KEY')).toBe(true);
   });
+
+  test('EMAIL_HOST without EMAIL_USER / EMAIL_PASS warns (half-configured email sends nothing)', () => {
+    const r = validateEnvironment({ ...GOOD_PROD, EMAIL_USER: '', EMAIL_PASS: '' });
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map(w => w.key)).toEqual(expect.arrayContaining(['EMAIL_USER', 'EMAIL_PASS']));
+    const full = validateEnvironment({ ...GOOD_PROD, EMAIL_USER: 'u', EMAIL_PASS: 'p' });
+    expect(full.warnings.some(w => w.key === 'EMAIL_USER' || w.key === 'EMAIL_PASS')).toBe(false);
+  });
+
+  test('BOOTSTRAP_OWNER_EMAIL and ORG_NAME are optional: unset is silent, malformed warns, never fails', () => {
+    const unset = validateEnvironment(GOOD_PROD);
+    expect(unset.warnings.some(w => ['BOOTSTRAP_OWNER_EMAIL', 'ORG_NAME'].includes(w.key))).toBe(false);
+
+    const good = validateEnvironment({ ...GOOD_PROD, BOOTSTRAP_OWNER_EMAIL: 'ann@practice.example', ORG_NAME: 'Opal Therapy' });
+    expect(good.ok).toBe(true);
+    expect(good.warnings.some(w => ['BOOTSTRAP_OWNER_EMAIL', 'ORG_NAME'].includes(w.key))).toBe(false);
+
+    const bad = validateEnvironment({ ...GOOD_PROD, BOOTSTRAP_OWNER_EMAIL: 'not-an-email', ORG_NAME: '   ' });
+    expect(bad.ok).toBe(true);
+    expect(bad.errors).toEqual([]);
+    expect(bad.warnings.map(w => w.key)).toEqual(expect.arrayContaining(['BOOTSTRAP_OWNER_EMAIL', 'ORG_NAME']));
+  });
 });

@@ -277,7 +277,11 @@
 
     var acts = [];
     var s = p.accountStatus;
-    if (needsAttention(p)) acts.push('<button class="btn primary" data-act="approve" type="button">Approve account</button>');
+    // Only a VERIFIED self-registration can be approved: approving an
+    // unverified one would skip the proof that whoever registered owns the
+    // mailbox (the server refuses it too).
+    if (s === 'pending_approval') acts.push('<button class="btn primary" data-act="approve" type="button">Approve account</button>');
+    if (s === 'pending_verification') html += '<p class="ppl-quiet">Waiting for them to verify their email address. You can approve the account once they have clicked the link in their verification email.</p>';
     if (s === 'active') { acts.push('<button class="btn ppl-danger" data-act="suspend" type="button">Suspend</button>'); acts.push('<button class="btn" data-act="deactivate" type="button">Deactivate</button>'); }
     if (s === 'suspended') { acts.push('<button class="btn primary" data-act="activate" type="button">Re-activate</button>'); acts.push('<button class="btn" data-act="deactivate" type="button">Deactivate</button>'); }
     if (s === 'deactivated') acts.push('<button class="btn primary" data-act="activate" type="button">Restore</button>');
@@ -406,7 +410,14 @@
       case 'resend':
         busy(btn, true, 'Sending…');
         return api('/api/invites/' + p.invite.id + '/resend', { method: 'POST' }).then(function (r) {
-          if (r.ok) { busy(btn, false, '✓ Sent'); setTimeout(function () { busy(btn, false, original); }, 2500); return; }
+          if (r.ok && r.data && r.data.emailSent) {
+            busy(btn, false, '✓ Sent');
+            setTimeout(function () { busy(btn, false, original); if (r.data.renewed) load(); }, 1500);
+            return;
+          }
+          // Never claim "Sent" when the server says the email was skipped
+          // (not configured) or failed — the owner has to deliver the link.
+          if (r.ok) { busy(btn, false, original); toast('Email not sent — copy the link instead', true); return load(); }
           fail(r, 'Could not resend invite'); busy(btn, false, original);
         });
       case 'revoke':

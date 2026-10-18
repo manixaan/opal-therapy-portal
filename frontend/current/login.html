@@ -320,6 +320,8 @@
       showInfo('Your account has been suspended. Please contact the practice owner for assistance.');
     } else if (reason === 'deactivated') {
       showInfo('This account is no longer active. Please contact the practice owner if you believe this is a mistake.');
+    } else if (reason === 'registered') {
+      showInfo('Your account is ready. Sign in with the password you just chose.');
     } else if (reason === 'verified') {
       showInfo('Your email has been verified. You can now sign in.');
     } else if (reason === 'reset') {

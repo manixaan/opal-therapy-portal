@@ -1,19 +1,37 @@
 /**
- * INVITE MANAGEMENT ROUTES
+ * INVITE MANAGEMENT ROUTES — owner-only (RBAC 2026-08-06).
  *
- * Owner/Admin can create, list, and revoke invites.
- * The invite record pre-assigns the email+role before the person registers.
+ * The practice owner creates, lists, resends and revokes invites. The invite
+ * record pre-assigns the email+role before the person registers; the person
+ * registers ONLY through the token in the invitation link (/register?token=),
+ * which also counts as their email verification.
+ *
+ * Onboarding invitations (onboarding_assignment_id set) are not managed here —
+ * they are redeemed on /onboarding-invite and handled from Onboarding.
  *
  * Routes:
- *   POST   /api/invites          — create invite (sends email)
- *   GET    /api/invites          — list all invites for the organisation
- *   DELETE /api/invites/:id      — revoke a pending invite
+ *   POST   /api/invites            — create invite (sends email)
+ *   GET    /api/invites            — list the organisation's invites
+ *   DELETE /api/invites/:id        — revoke a pending invite
+ *   GET    /api/invites/:id/link   — the registration link, for manual delivery
+ *   POST   /api/invites/:id/resend — resend; an expired invite gets a fresh link
  */
 
 'use strict';
 
 const express = require('express');
+const crypto  = require('crypto');
 const router  = express.Router();
+
+const DEFAULT_INVITE_DAYS = 14;
+const MAX_INVITE_DAYS     = 30;
+
+/** expiresInDays from the request, clamped to 1–30 (default 14). */
+function clampInviteDays(value) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return DEFAULT_INVITE_DAYS;
+  return Math.max(1, Math.min(n, MAX_INVITE_DAYS));
+}
 
 const db    = require('./database');
 const email = require('./email');
@@ -23,8 +41,7 @@ const email = require('./email');
 const { requireAuth, requireRole } = require('./permissions');
 
 // ── POST /api/invites ─────────────────────────────────────────────────────────
-// Create a new invite and send the invite email.
-// Owner can invite any role. Admin can invite therapists only.
+// Create a new invite and send the invite email. Owner-only.
 
 router.post('/api/invites', requireAuth, async (req, res) => {
   const { role: actorRole, organisation_id: orgId, name: actorName } = req.user;
@@ -73,9 +90,9 @@ router.post('/api/invites', requireAuth, async (req, res) => {
       });
     }
 
-    // Calculate expiry
-    const days = parseInt(expiresInDays, 10) || 14;
-    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    // Calculate expiry — clamped to 1–30 days (audit M-1c: a negative value
+    // used to create an already-expired invite, and 100000 was accepted).
+    const expiresAt = new Date(Date.now() + clampInviteDays(expiresInDays) * 24 * 60 * 60 * 1000);
 
     // Create invite
     const invite = await db.createInvite({
@@ -139,7 +156,7 @@ router.post('/api/invites', requireAuth, async (req, res) => {
 });
 
 // ── GET /api/invites ──────────────────────────────────────────────────────────
-// List all invites for the organisation. Owner and Admin only.
+// List the organisation's invites (onboarding invitations excluded). Owner-only.
 
 router.get('/api/invites', requireAuth, requireRole('owner'), async (req, res) => {
   try {
@@ -152,13 +169,15 @@ router.get('/api/invites', requireAuth, requireRole('owner'), async (req, res) =
 });
 
 // ── DELETE /api/invites/:id ───────────────────────────────────────────────────
-// Revoke a pending invite. Owner can revoke any. Admin can revoke therapist invites only.
+// Revoke a pending invite. Owner-only. Onboarding invitations are cancelled
+// from Onboarding, not here.
 
 router.delete('/api/invites/:id', requireAuth, requireRole('owner'), async (req, res) => {
   try {
-    // Fetch the invite FIRST so we can check role permissions before writing
     const existing = await db.pool.query(
-      'SELECT * FROM user_invites WHERE id = $1 AND organisation_id = $2 LIMIT 1',
+      `SELECT * FROM user_invites
+        WHERE id = $1 AND organisation_id = $2 AND onboarding_assignment_id IS NULL
+        LIMIT 1`,
       [req.params.id, req.user.organisation_id]
     );
     const invite = existing.rows[0];
@@ -168,11 +187,6 @@ router.delete('/api/invites/:id', requireAuth, requireRole('owner'), async (req,
     }
     if (invite.status !== 'pending') {
       return res.status(409).json({ error: `Invite is already ${invite.status} — cannot revoke` });
-    }
-
-    // Admin cannot revoke owner or admin invites
-    if (req.user.role === 'admin' && ['owner', 'admin'].includes(invite.role)) {
-      return res.status(403).json({ error: 'Admin can only revoke Therapist invites' });
     }
 
     const revoked = await db.revokeInvite(req.params.id, req.user.id);
@@ -234,29 +248,63 @@ router.get('/api/invites/:id/link', requireAuth, requireRole('owner'), async (re
 });
 
 // ── Resend invite email ───────────────────────────────────────────────────────
-// POST /api/invites/:id/resend  — resend the email for a still-pending invite
+// POST /api/invites/:id/resend  — resend the email for a still-pending invite.
+// An EXPIRED pending invite is renewed first (fresh token, fresh expiry), so
+// the resent email never carries a link that already says "expired"
+// (audit M-1a). The old token stops working the moment it is replaced.
 
 router.post('/api/invites/:id/resend', requireAuth, requireRole('owner'), async (req, res) => {
   try {
     const invites = await db.getInvitesByOrganisation(req.user.organisation_id);
-    const invite  = invites.find(i => i.id === req.params.id && i.status === 'pending');
+    let invite    = invites.find(i => i.id === req.params.id && i.status === 'pending');
 
     if (!invite) {
       return res.status(404).json({ error: 'Pending invite not found' });
     }
 
-    const emailResult = await email.sendInviteEmail({
-      toEmail:     invite.email,
-      inviteToken: invite.invite_token,
-      role:        invite.role,
-      displayName: invite.display_name_hint || null,
-      invitedBy:   req.user.name || req.user.email,
-    }).catch(err => ({ error: err.message }));
+    let renewed = false;
+    if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+      const { rows } = await db.pool.query(
+        `UPDATE user_invites
+            SET invite_token = $1, expires_at = $2, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3 AND status = 'pending'
+          RETURNING *`,
+        [crypto.randomBytes(32).toString('hex'),
+         new Date(Date.now() + DEFAULT_INVITE_DAYS * 24 * 60 * 60 * 1000), invite.id]
+      );
+      if (!rows[0]) return res.status(404).json({ error: 'Pending invite not found' });
+      invite  = rows[0];
+      renewed = true;
+      await db.logAuditEvent({
+        actorUserId: req.user.id, action: 'invite.renewed', targetType: 'invite', targetId: invite.id,
+        organisationId: req.user.organisation_id, ipAddress: req.ip,
+        metadata: { targetEmail: invite.email, role: invite.role },
+      }).catch(() => {});
+    }
 
+    let emailResult;
+    try {
+      emailResult = await email.sendInviteEmail({
+        toEmail:     invite.email,
+        inviteToken: invite.invite_token,
+        role:        invite.role,
+        displayName: invite.display_name_hint || null,
+        invitedBy:   req.user.name || req.user.email,
+      });
+    } catch (err) {
+      console.error('⚠️  Failed to resend invite email:', err.message);
+      emailResult = { failed: true };
+    }
+
+    // Same three-state contract as creation: the UI says "Sent" only when
+    // emailSent is true, and otherwise offers the link.
     return res.json({
       ok: true,
+      renewed,
+      expiresAt: invite.expires_at,
       emailSent: emailResult?.sent || false,
       emailSkipped: emailResult?.skipped || false,
+      emailFailed: emailResult?.failed || false,
     });
   } catch (err) {
     console.error('POST /api/invites/:id/resend error:', err);
@@ -274,3 +322,4 @@ function safeInvite(invite) {
 }
 
 module.exports = router;
+module.exports.clampInviteDays = clampInviteDays;

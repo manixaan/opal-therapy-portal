@@ -480,8 +480,9 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
         sessionStorage.setItem('pending_verification_email', data.email || inviteData.email || '');
         window.location.replace('/verify-email?state=sent');
       } else {
-        // Bootstrap owner: auto-active — go straight to onboarding
-        window.location.replace('/onboarding');
+        // Active straight away (an invitation link, or the first owner):
+        // sign in with the password just chosen.
+        window.location.replace('/login?reason=registered');
       }
     } else {
       showError(data.error || 'Account creation failed. Please try again.');
@@ -555,6 +556,7 @@ function reasonMessage(reason) {
   switch (reason) {
     case 'not_authorised':   return 'This email is not authorised to create an Opal Therapy account. Please contact the practice owner if you believe this is a mistake.';
     case 'not_invited':      return 'This email is not authorised to create an Opal Therapy account. Please contact the practice owner if you believe this is a mistake.';
+    case 'use_invite_link':  return 'If you have been invited, please open the link in your invitation email to create your account. Otherwise, contact the practice owner.';
     case 'expired':          return 'This invitation has expired. Please contact the practice owner for a new invite.';
     case 'revoked':          return 'This invitation has been cancelled. Please contact the practice owner.';
     case 'already_accepted':

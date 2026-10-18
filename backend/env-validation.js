@@ -52,6 +52,23 @@ const CONDITIONAL = [
   },
 ];
 
+// Optional, non-secret settings. Never required; a value that is SET but
+// malformed is a warning (never a boot failure) because each one only
+// matters for a specific, rare moment.
+const OPTIONAL = [
+  {
+    key: 'BOOTSTRAP_OWNER_EMAIL',
+    why: 'while no active owner exists, only this address may register (via the allowlist) and become the first owner; '
+      + 'outside development the first-owner bootstrap is refused when it is unset. It must also be in ALLOWED_EMAILS or ALLOWED_DOMAINS',
+    validate: v => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(String(v).trim()),
+  },
+  {
+    key: 'ORG_NAME',
+    why: 'the practice name given to the organisation created by the first-owner bootstrap (default "Opal Therapy")',
+    validate: v => String(v).trim().length > 0 && String(v).trim().length <= 255,
+  },
+];
+
 const WEAK_SECRETS = new Set([
   '', 'dev-secret-change-in-production', 'thisismyrandomsecret12345',
   'secret', 'change_me', 'changeme', 'password',
@@ -77,6 +94,21 @@ function validateEnvironment(env = process.env) {
 
   for (const item of RECOMMENDED) {
     if (!env[item.key]) warnings.push({ key: item.key, why: item.why });
+  }
+
+  for (const item of OPTIONAL) {
+    const value = env[item.key];
+    if (value !== undefined && value !== '' && !item.validate(value)) {
+      warnings.push({ key: item.key, why: `is set but looks malformed — ${item.why}` });
+    }
+  }
+
+  // EMAIL_HOST alone does nothing: email.js needs host, user AND password, so
+  // a half-configured server silently falls back to copy-link mode.
+  if (env.EMAIL_HOST) {
+    for (const key of ['EMAIL_USER', 'EMAIL_PASS']) {
+      if (!env[key]) warnings.push({ key, why: 'EMAIL_HOST is set but this is missing — no email will be sent (copy-link mode)' });
+    }
   }
 
   for (const item of CONDITIONAL) {
@@ -105,4 +137,4 @@ function enforceEnvironmentOrExit(env = process.env, exit = process.exit) {
   return report;
 }
 
-module.exports = { validateEnvironment, enforceEnvironmentOrExit };
+module.exports = { validateEnvironment, enforceEnvironmentOrExit, OPTIONAL };

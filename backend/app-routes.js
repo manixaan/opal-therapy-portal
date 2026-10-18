@@ -1415,11 +1415,23 @@ router.patch('/api/admin/users/:id/approve', requireAuth, requireRole('owner'), 
     const { rows } = await pool.query(
       `UPDATE users SET account_status = 'active', approved_by_user_id = $1, approved_at = NOW(),
                         is_active = TRUE, updated_at = NOW()
-         WHERE id = $2 AND account_status IN ('pending_approval','pending_verification')
+         WHERE id = $2 AND account_status = 'pending_approval'
          RETURNING id, email, name, display_name, role`,
       [req.user.id, id]
     );
-    if (!rows[0]) return res.status(404).json({ error: 'User not found or already active' });
+    if (!rows[0]) {
+      // pending_verification is deliberately NOT approvable (audit H-1):
+      // approving it skipped the only proof that the person who registered
+      // holds the mailbox — someone else could have registered that address.
+      const cur = await pool.query('SELECT account_status FROM users WHERE id = $1', [id]).catch(() => ({ rows: [] }));
+      if (cur.rows[0]?.account_status === 'pending_verification') {
+        return res.status(409).json({
+          error: 'This account is waiting for its owner to verify their email address. It can be approved once they have clicked the link in the verification email.',
+          code: 'pending_verification',
+        });
+      }
+      return res.status(404).json({ error: 'User not found or already active' });
+    }
 
     // (Was pool.logAuditEvent?.call(...) — pool has no such method, so the
     //  optional chain silently skipped approval auditing entirely.)
@@ -1478,6 +1490,10 @@ router.get('/api/admin/people', requireAuth, requireRole('owner'), async (req, r
         SELECT id, email, role, display_name_hint, invited_at, expires_at, status
           FROM user_invites
          WHERE organisation_id IS NOT DISTINCT FROM $1 AND status = 'pending'
+           -- Onboarding invitations are redeemed on /onboarding-invite and
+           -- managed from Onboarding; their copy-link/resend here produced a
+           -- dead /register link (audit M-2).
+           AND onboarding_assignment_id IS NULL
          ORDER BY invited_at DESC`, [orgId]),
     ]);
 
@@ -1631,17 +1647,30 @@ router.patch('/api/admin/users/:id/role', requireAuth, requireRole('owner'), asy
  * connected email, delta state and microsoft_id. Nothing is changed in
  * Outlook itself. Audited.
  */
+/**
+ * Release a user's Outlook connection: tokens, connected email, microsoft_id
+ * and delta state. Shared by the owner's explicit release and by suspend /
+ * deactivate (audit M-4 — a leaver's tokens used to stay live and their
+ * calendar kept syncing every cycle). Nothing is changed in Outlook itself.
+ * Returns the updated row, or null when the user does not exist.
+ */
+async function releaseOutlookConnection(userId) {
+  const { rows } = await pool.query(
+    `UPDATE users SET access_token = NULL, refresh_token = NULL,
+            token_expires_at = NULL, outlook_connected_email = NULL,
+            microsoft_id = NULL, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, email`, [userId]);
+  if (!rows.length) return null;
+  await pool.query('DELETE FROM outlook_delta_state WHERE user_id = $1', [userId]).catch(() => {});
+  return rows[0];
+}
+
 router.post('/api/admin/users/:id/release-outlook', requireAuth, requireRole('owner'), async (req, res) => {
   const { id } = req.params;
   try {
-    const { rows } = await pool.query(
-      `UPDATE users SET access_token = NULL, refresh_token = NULL,
-              token_expires_at = NULL, outlook_connected_email = NULL,
-              microsoft_id = NULL, updated_at = NOW()
-        WHERE id = $1
-        RETURNING id, email`, [id]);
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    await pool.query('DELETE FROM outlook_delta_state WHERE user_id = $1', [id]).catch(() => {});
+    const released = await releaseOutlookConnection(id);
+    if (!released) return res.status(404).json({ error: 'User not found' });
     await require('./database').logAuditEvent({
       actorUserId: req.user.id, action: 'outlook.claim_released_by_owner',
       targetType: 'user', targetId: id, ipAddress: req.ip,
@@ -1679,6 +1708,9 @@ router.patch('/api/admin/users/:id/suspend', requireAuth, requireRole('owner'), 
 
     // Invalidate all sessions for suspended user
     await pool.query(`DELETE FROM sessions WHERE sess->>'userId' = $1`, [id]).catch(() => {});
+    // …and their Outlook connection, so their calendar stops syncing (M-4).
+    // They reconnect from Settings → Integrations if re-activated.
+    await releaseOutlookConnection(id).catch((e) => console.error('suspend: Outlook release failed:', e.message));
 
     const dbMod = require('./database');
     await dbMod.logAuditEvent({
@@ -1741,6 +1773,7 @@ router.patch('/api/admin/users/:id/deactivate', requireAuth, requireRole('owner'
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
 
     await pool.query(`DELETE FROM sessions WHERE sess->>'userId' = $1`, [id]).catch(() => {});
+    await releaseOutlookConnection(id).catch((e) => console.error('deactivate: Outlook release failed:', e.message));
 
     const dbMod = require('./database');
     await dbMod.logAuditEvent({

@@ -348,26 +348,40 @@ const INIT_QUERIES = `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at         TIMESTAMP;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_reason     TEXT;
 
-  -- Backfill: mark all existing accounts (created before the invite system) as
-  -- profile-complete so they are not redirected to /onboarding on next login.
-  -- Only touches rows that have a password_hash (i.e. real accounts, not OAuth-only stubs).
-  UPDATE users
-  SET profile_completed   = TRUE,
-      onboarding_step     = 'complete',
-      updated_at          = CURRENT_TIMESTAMP
-  WHERE password_hash IS NOT NULL
-    AND (profile_completed IS NULL OR profile_completed = FALSE)
-    AND onboarding_step IS DISTINCT FROM 'complete';
+  -- ONE-TIME back-fills from the introduction of the invite system. They used
+  -- to run on EVERY boot, which silently marked invitees' profiles complete
+  -- (skipping the onboarding wizard and its therapist-profile safety net) and
+  -- marked owner-approved / temporary-password accounts as email-verified on
+  -- every restart (audit M-5). Guarded so they only run on a database that
+  -- has never been migrated (no schema_migrations rows): a brand-new database
+  -- — where users is empty and they are a no-op — or a legacy pre-migration
+  -- dev database, which is the only place they were ever meant for. Every
+  -- tracked database (staging, production, *_test) skips them.
+  DO $$
+  BEGIN
+    IF to_regclass('schema_migrations') IS NULL
+       OR NOT EXISTS (SELECT 1 FROM schema_migrations) THEN
+      -- Mark accounts created before the invite system as profile-complete
+      -- so they are not redirected to /onboarding on next login. Only rows
+      -- with a password_hash (real accounts, not OAuth-only stubs).
+      UPDATE users
+      SET profile_completed   = TRUE,
+          onboarding_step     = 'complete',
+          updated_at          = CURRENT_TIMESTAMP
+      WHERE password_hash IS NOT NULL
+        AND (profile_completed IS NULL OR profile_completed = FALSE)
+        AND onboarding_step IS DISTINCT FROM 'complete';
 
-  -- Backfill: mark all existing real accounts as active + email verified.
-  -- New accounts created after this migration will start at pending_verification.
-  UPDATE users
-  SET account_status = 'active',
-      email_verified = TRUE,
-      updated_at     = CURRENT_TIMESTAMP
-  WHERE password_hash IS NOT NULL
-    AND account_status = 'active'
-    AND email_verified IS NOT TRUE;
+      -- Mark those existing real accounts as email verified.
+      UPDATE users
+      SET account_status = 'active',
+          email_verified = TRUE,
+          updated_at     = CURRENT_TIMESTAMP
+      WHERE password_hash IS NOT NULL
+        AND account_status = 'active'
+        AND email_verified IS NOT TRUE;
+    END IF;
+  END $$;
 
   -- ── Invite / pre-approved user table ──────────────────────────────────────
   -- Owner/Admin pre-registers an email+role before the employee creates their
@@ -1602,6 +1616,10 @@ async function getInvitesByOrganisation(organisationId) {
     FROM user_invites i
     LEFT JOIN users u ON u.id = i.invited_by_user_id
     WHERE i.organisation_id = $1
+      -- Onboarding invitations belong to Onboarding (redeemed on
+      -- /onboarding-invite); /api/invites must never hand out a /register
+      -- link, resend or revoke for one (audit M-2).
+      AND i.onboarding_assignment_id IS NULL
     ORDER BY i.invited_at DESC
   `, [organisationId]);
   return result.rows;

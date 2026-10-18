@@ -41,19 +41,36 @@ async function tokenFor(email) {
 }
 const statusOf = async (email) => (await db.pool.query('SELECT account_status, email_verified FROM users WHERE LOWER(email) = LOWER($1)', [email])).rows[0];
 
-test('invite → register → verify: the invitee is active, no second approval', async () => {
+test('invite token → register: the invitee is active and verified at once (the token is the mailbox proof)', async () => {
+  // Was: pending_verification, then active on verify. Since the account
+  // hardening of 18 Oct 2026 (audit H-1 / M-1b) the token itself proves the
+  // mailbox, so there is no verification step — and no copy-link dead end
+  // when email is not configured.
   const invite = await db.createInvite({ organisationId: org.id, email: 'invitee@test.invalid', role: 'therapist', invitedByUserId: owner.id, isTreatingTherapist: true });
   const reg = await request(app).post('/api/auth/register').send({
     token: invite.invite_token, password: PASSWORD, confirmPassword: PASSWORD, profile: { name: 'Ivy Invitee' },
   });
-  expect(reg.status).toBeLessThan(300);
-  const before = await tokenFor('invitee@test.invalid');
-  expect(before.account_status).toBe('pending_verification');
+  expect(reg.status).toBe(201);
+  expect(reg.body.requiresVerification).toBe(false);
+  expect(reg.body.accountStatus).toBe('active');
+  const after = await tokenFor('invitee@test.invalid');
+  expect(after.email_verification_token).toBeNull();
+  expect(await statusOf('invitee@test.invalid')).toEqual({ account_status: 'active', email_verified: true });
 
-  const v = await request(app).get('/api/auth/verify-email').query({ token: before.email_verification_token });
+  const login = await request(app).post('/api/auth/login').send({ email: 'invitee@test.invalid', password: PASSWORD });
+  expect(login.status).toBe(200);
+});
+
+test('verify-email still activates an older invite-created account left at pending_verification', async () => {
+  // Accounts registered through an invite before the change above are still
+  // pending_verification; their emailed link must keep working.
+  const invite = await db.createInvite({ organisationId: org.id, email: 'legacy@test.invalid', role: 'therapist', invitedByUserId: owner.id });
+  await seedUser({ email: 'legacy@test.invalid', organisation_id: org.id, account_status: 'pending_verification', email_verified: false });
+  await db.pool.query(`UPDATE user_invites SET status = 'accepted', accepted_at = NOW() WHERE id = $1`, [invite.id]);
+  await db.pool.query(`UPDATE users SET email_verification_token = 'tok-legacy', email_verification_expires_at = NOW() + interval '1 day' WHERE email = 'legacy@test.invalid'`);
+  const v = await request(app).get('/api/auth/verify-email').query({ token: 'tok-legacy' });
   expect(v.status).toBe(200);
   expect(v.body.newStatus).toBe('active');
-  expect(await statusOf('invitee@test.invalid')).toEqual({ account_status: 'active', email_verified: true });
 });
 
 test('a self-registration (no invite) still waits for the owner', async () => {

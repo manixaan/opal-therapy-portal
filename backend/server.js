@@ -874,7 +874,11 @@ async function runDeltaSyncForAllUsers() {
 
   try {
     const result = await db.pool.query(
-      'SELECT id, email, access_token, refresh_token, token_expires_at FROM users WHERE access_token IS NOT NULL'
+      // Only live accounts (audit M-4): a suspended or deactivated user's tokens
+      // must not be refreshed, nor their calendar read, every cycle.
+      `SELECT id, email, access_token, refresh_token, token_expires_at FROM users
+        WHERE access_token IS NOT NULL
+          AND is_active = TRUE AND account_status = 'active'`
     );
     if (result.rows.length === 0) { deltaRunning = false; return stats; }
 

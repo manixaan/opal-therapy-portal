@@ -641,7 +641,7 @@ describe('changed assets are cache-busted', () => {
       // people 1: Settings → Users & Roles redesigned — one row per person
       // (accounts + open invites from /api/admin/people), a side panel per
       // person, and the Splose practitioner chosen from a dropdown of names.
-      ['people.js', 1], ['people.css', 2],
+      ['people.js', 2], ['people.css', 2],
       // 2: the dashboard renders one card per module group (portal, then
       // Splose), and every step screenshot links to its full-size image. The
       // CSS carries the figure link and the stacked-card spacing.

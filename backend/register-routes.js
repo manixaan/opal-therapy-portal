@@ -22,7 +22,16 @@ const router   = express.Router();
 
 const db      = require('./database');
 const emailSvc = require('./email');
-const { getPermissions } = require('./permissions');
+const { getPermissions, requireAuth } = require('./permissions');
+const { createIpRateLimiter } = require('./request-safety');
+
+// /check-invite answers anonymous callers, so it gets the same per-IP limiter
+// shape as login (audit M-3 / L-1): 10 per 15 minutes per client address.
+const checkInviteRateLimit = createIpRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many attempts. Please wait a few minutes and try again.',
+});
 
 const SALT_ROUNDS = 12;
 
@@ -33,11 +42,11 @@ const SALT_ROUNDS = 12;
 
 // Defaults are empty strings — production MUST set these env vars explicitly.
 // No personal email is ever hardcoded here; configure via ALLOWED_EMAILS in .env.
-const ALLOWED_DOMAINS = (process.env.ALLOWED_DOMAINS || '')
-  .split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
-
-const ALLOWED_EMAILS  = (process.env.ALLOWED_EMAILS  || '')
-  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+// Read on each call (not frozen at module load) so a test can exercise the
+// allowlist and bootstrap paths; the cost is a split of a short string.
+function envList(key) {
+  return (process.env[key] || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+}
 
 /**
  * Returns true if the email is permitted to self-register without an invite.
@@ -45,9 +54,14 @@ const ALLOWED_EMAILS  = (process.env.ALLOWED_EMAILS  || '')
  */
 function isAllowlistedEmail(email) {
   const norm   = (email || '').trim().toLowerCase();
-  if (ALLOWED_EMAILS.includes(norm)) return true;
+  if (envList('ALLOWED_EMAILS').includes(norm)) return true;
   const domain = norm.split('@')[1] || '';
-  return ALLOWED_DOMAINS.includes(domain);
+  return !!domain && envList('ALLOWED_DOMAINS').includes(domain);
+}
+
+/** The practice name used when the first organisation is created (ORG_NAME). */
+function defaultOrgName() {
+  return (process.env.ORG_NAME || '').trim() || 'Opal Therapy';
 }
 
 function generateToken(bytes = 32) {
@@ -94,7 +108,7 @@ function validatePassword(password) {
 // Step 1 of registration: validate the email or token before showing the form.
 // Accepts either { email } or { token } (from the email link).
 
-router.post('/api/auth/check-invite', async (req, res) => {
+router.post('/api/auth/check-invite', checkInviteRateLimit, async (req, res) => {
   const { email: inputEmail, token } = req.body;
 
   if (!inputEmail && !token) {
@@ -107,7 +121,8 @@ router.post('/api/auth/check-invite', async (req, res) => {
       // Look for any invite with this token first (to give specific error messages)
       const anyInvite = await db.findInviteByToken(token);
 
-      if (!anyInvite) {
+      // An onboarding invitation is redeemed on /onboarding-invite, never here.
+      if (!anyInvite || anyInvite.onboarding_assignment_id) {
         return res.json({ canRegister: false, reason: 'not_invited' });
       }
       if (anyInvite.status === 'accepted') {
@@ -129,7 +144,7 @@ router.post('/api/auth/check-invite', async (req, res) => {
 
       // Get organisation name
       const orgRow = await db.pool.query('SELECT name FROM organisations WHERE id = $1', [anyInvite.organisation_id]);
-      const orgName = orgRow.rows[0]?.name || 'Opal Therapy';
+      const orgName = orgRow.rows[0]?.name || defaultOrgName();
 
       return res.json({
         canRegister:          true,
@@ -142,66 +157,165 @@ router.post('/api/auth/check-invite', async (req, res) => {
     }
 
     // ── Email path (manual entry flow) ────────────────────────────────────
-    const normEmail = inputEmail.trim().toLowerCase();
+    // Deliberately says NOTHING about whether this email has an account, a
+    // pending invite, or what role an invite carries (audit H-1 / L-1): an
+    // anonymous caller used to learn all three, and could then claim the
+    // invite with a password of their choosing. Only the allowlist — which is
+    // configuration, not account data — changes the answer. An invited person
+    // registers through the link in their invitation (the token path above).
+    const normEmail = String(inputEmail).trim().toLowerCase();
 
-    // Check if account already exists — generic message to limit enumeration
-    const existingUser = await db.getUserByEmail(normEmail);
-    if (existingUser) {
-      return res.json({ canRegister: false, reason: 'account_exists' });
-    }
-
-    // ── Allowlist path — no invite required ───────────────────────────────
     if (isAllowlistedEmail(normEmail)) {
-      // Valid domain or exact email — can self-register
       const orgRow = await db.pool.query('SELECT name FROM organisations ORDER BY created_at ASC LIMIT 1');
-      const orgName = orgRow.rows[0]?.name || 'Opal Therapy';
+      const orgName = orgRow.rows[0]?.name || defaultOrgName();
       return res.json({
         canRegister:      true,
         email:            normEmail,
-        role:             'therapist', // default — admin can elevate later
+        role:             'therapist', // default — the owner can change it later
         registrationPath: 'allowlist',
         organisationName: orgName,
       });
     }
 
-    // ── Invite-only path ──────────────────────────────────────────────────
-    // Look for a valid pending invite
-    const invite = await db.findPendingInviteByEmail(normEmail);
-    if (!invite) {
-      // Also check if there's an expired/revoked invite to give a better message
-      const anyResult = await db.pool.query(
-        "SELECT status FROM user_invites WHERE LOWER(email) = $1 ORDER BY invited_at DESC LIMIT 1",
-        [normEmail]
-      );
-      const anyStatus = anyResult.rows[0]?.status;
-      if (anyStatus === 'accepted') return res.json({ canRegister: false, reason: 'already_accepted' });
-      if (anyStatus === 'revoked')  return res.json({ canRegister: false, reason: 'revoked' });
-      if (anyStatus === 'expired')  return res.json({ canRegister: false, reason: 'expired' });
-      // Not on allowlist and no invite — explicitly blocked
-      return res.json({ canRegister: false, reason: 'not_authorised' });
-    }
-
-    const orgRow = await db.pool.query('SELECT name FROM organisations WHERE id = $1', [invite.organisation_id]);
-    const orgName = orgRow.rows[0]?.name || 'Opal Therapy';
-
-    return res.json({
-      canRegister:          true,
-      email:                invite.email,
-      role:                 invite.role,
-      isTreatingTherapist:  invite.is_treating_therapist,
-      displayNameHint:      invite.display_name_hint || null,
-      organisationName:     orgName,
-    });
+    return res.json({ canRegister: false, reason: 'use_invite_link' });
   } catch (err) {
     console.error('POST /api/auth/check-invite error:', err);
     return res.status(500).json({ error: 'Failed to check invite' });
   }
 });
 
+// ── First-owner bootstrap ─────────────────────────────────────────────────────
+// While no ACTIVE owner exists, an allowlist registration would make the
+// registrant the practice owner, active, with no approval (audit H-4). That is
+// now allowed only for the address named in BOOTSTRAP_OWNER_EMAIL
+// (case-insensitive). In development with it unset the old behaviour stays, so
+// a fresh local database is still one sign-up away from usable. Anywhere else
+// with it unset, the bootstrap is refused and nothing is created.
+
+const BOOTSTRAP_LOCK_KEY = 0x0BA1_0001; // pg_advisory_xact_lock key — one bootstrap at a time
+
+function bootstrapDecision(email, env = process.env) {
+  const configured = String(env.BOOTSTRAP_OWNER_EMAIL || '').trim().toLowerCase();
+  const norm = String(email || '').trim().toLowerCase();
+  if (configured) {
+    if (norm && norm === configured) return { allowed: true };
+    return {
+      allowed: false,
+      message: 'This portal has not been set up yet. Only the practice owner configured for this server can create the first account.',
+    };
+  }
+  if ((env.NODE_ENV || 'development') === 'development') return { allowed: true };
+  return {
+    allowed: false,
+    message: 'First-owner setup is not enabled on this server. Set BOOTSTRAP_OWNER_EMAIL to the practice owner\'s email address, then register with that address.',
+  };
+}
+
+/**
+ * Create an allowlist (self-registration) account in one transaction.
+ * Returns { user, role, initialStatus, bootstrapped, orgName } or
+ * { refused: { status, body } } — in which case nothing was written.
+ *
+ *  • No active owner → bootstrap (if bootstrapDecision allows it): role owner,
+ *    active, and the practice organisation is created when none exists
+ *    (audit C-1 — previously the first owner got organisation_id NULL and
+ *    could never create an invite).
+ *  • Otherwise → therapist, pending_verification → pending_approval, and the
+ *    practice organisation MUST already exist: an account with a NULL
+ *    organisation is refused rather than created.
+ */
+async function createAllowlistAccount({ email, profile, passwordHash }) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialise registrations that could bootstrap, so two simultaneous
+    // first sign-ups cannot both become owner or create two organisations.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [BOOTSTRAP_LOCK_KEY]);
+
+    const ownerCheck = await client.query(
+      `SELECT COUNT(*) AS cnt FROM users WHERE role = 'owner' AND account_status = 'active'`
+    );
+    const hasOwner = parseInt(ownerCheck.rows[0]?.cnt, 10) > 0;
+
+    let role = 'therapist';
+    let initialStatus = 'pending_verification';
+    let bootstrapped = false;
+    if (!hasOwner) {
+      const decision = bootstrapDecision(email);
+      if (!decision.allowed) {
+        await client.query('ROLLBACK');
+        return { refused: { status: 403, body: { error: decision.message, code: 'bootstrap_not_permitted' } } };
+      }
+      role = 'owner';
+      initialStatus = 'active';
+      bootstrapped = true;
+    }
+
+    let org = (await client.query(
+      'SELECT id, name FROM organisations ORDER BY created_at ASC LIMIT 1'
+    )).rows[0];
+    let createdOrganisation = false;
+    if (!org) {
+      if (!bootstrapped) {
+        await client.query('ROLLBACK');
+        return { refused: { status: 409, body: {
+          error: 'The practice has not been set up yet, so accounts cannot be created. Please contact the practice owner.',
+          code: 'no_organisation',
+        } } };
+      }
+      org = (await client.query(
+        'INSERT INTO organisations (name) VALUES ($1) RETURNING id, name', [defaultOrgName()]
+      )).rows[0];
+      createdOrganisation = true;
+    }
+
+    const verified = initialStatus === 'active';
+    const verificationToken  = verified ? null : generateToken();
+    const verificationExpiry = verified ? null : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const { rows } = await client.query(
+      `INSERT INTO users
+         (email, name, display_name, phone, role, password_hash, is_active,
+          account_status, email_verified, email_verification_token, email_verification_expires_at,
+          email_verification_sent_at, organisation_id, profile_completed, onboarding_step, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7,$8,$9,$10,$11,$12,FALSE,'profile',NOW(),NOW())
+       RETURNING *`,
+      [
+        email,
+        profile.name.trim(),
+        profile.displayName || profile.name.trim(),
+        profile.phone || null,
+        role,
+        passwordHash,
+        initialStatus,
+        // The bootstrap owner is active with no emailed proof: the address
+        // was named in server configuration, which is the proof. It is NOT
+        // marked verified, so nothing downstream mistakes it for one.
+        false,
+        verificationToken,
+        verificationExpiry,
+        verified ? null : new Date(),
+        org.id,
+      ]
+    );
+    await client.query('COMMIT');
+    const user = rows[0];
+    user._createdOrganisation = createdOrganisation;
+    return { user, role, initialStatus, bootstrapped, orgName: org.name };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 // Step 2: create the account.
-//   - Invite path:    role from invite; skips pending_approval (admin already pre-approved).
-//   - Allowlist path: role defaults to 'therapist'; status = pending_verification → pending_approval.
+//   - Invite path (token only): role from the invite; created active and
+//     email-verified — the token came from the invitee's mailbox.
+//   - Allowlist path: role defaults to 'therapist'; status = pending_verification
+//     → pending_approval. While no active owner exists, only the configured
+//     BOOTSTRAP_OWNER_EMAIL may register, and becomes the owner (see above).
 
 router.post('/api/auth/register', async (req, res) => {
   const {
@@ -226,17 +340,25 @@ router.post('/api/auth/register', async (req, res) => {
 
   try {
     // ── Determine registration path ───────────────────────────────────────
-    let invite          = null;
+    // Exactly two ways in (audit H-1):
+    //   • the invitation TOKEN from the owner's email link — proves the
+    //     person holds the invited mailbox;
+    //   • the allowlist (ALLOWED_EMAILS / ALLOWED_DOMAINS) — self-registration
+    //     that must still verify the email and wait for the owner.
+    // An email alone no longer redeems a pending invite: anyone who knew an
+    // invitee's address could previously claim their account and role.
+    let invite           = null;
     let registrationPath = 'invite'; // 'invite' | 'allowlist'
-    let resolvedEmail   = null;
-    let resolvedRole    = 'therapist';
+    let resolvedEmail    = null;
+    let resolvedRole     = 'therapist';
 
     if (token) {
       // Invite-link path
       invite = await db.findPendingInviteByToken(token);
+      if (invite && invite.onboarding_assignment_id) invite = null; // redeemed on /onboarding-invite only
       if (!invite) {
         const anyInvite = await db.findInviteByToken(token);
-        if (!anyInvite) return res.status(400).json({ error: 'Invalid registration link.', code: 'invalid_token' });
+        if (!anyInvite || anyInvite.onboarding_assignment_id) return res.status(400).json({ error: 'Invalid registration link.', code: 'invalid_token' });
         if (anyInvite.status === 'accepted') return res.status(400).json({ error: 'This invitation has already been used.', code: 'already_accepted' });
         if (anyInvite.status === 'revoked')  return res.status(400).json({ error: 'This invitation has been revoked.', code: 'revoked' });
         return res.status(400).json({ error: 'This invitation has expired. Please contact your administrator.', code: 'expired' });
@@ -244,23 +366,18 @@ router.post('/api/auth/register', async (req, res) => {
       resolvedEmail = invite.email;
       resolvedRole  = invite.role;
     } else if (inputEmail) {
-      const norm = inputEmail.trim().toLowerCase();
-
-      // MUST be on allowlist OR have a pending invite — backend enforces, no client bypass
-      invite = await db.findPendingInviteByEmail(norm);
-      if (invite) {
-        resolvedEmail = invite.email;
-        resolvedRole  = invite.role;
-      } else if (isAllowlistedEmail(norm)) {
-        registrationPath = 'allowlist';
-        resolvedEmail    = norm;
-        resolvedRole     = 'therapist'; // default; admin elevates later
-      } else {
+      const norm = String(inputEmail).trim().toLowerCase();
+      if (!isAllowlistedEmail(norm)) {
+        // The same answer whether or not this email has a pending invite or
+        // an account — nothing here may tell an anonymous caller either.
         return res.status(403).json({
-          error: 'This email is not authorised to create an Opal Therapy account. Please contact the practice owner if you believe this is a mistake.',
+          error: 'This email cannot be used to create an account here. If you were invited, please use the link in your invitation email.',
           code:  'not_authorised',
         });
       }
+      registrationPath = 'allowlist';
+      resolvedEmail    = norm;
+      resolvedRole     = 'therapist'; // default; the owner elevates later
     } else {
       return res.status(400).json({ error: 'token or email is required' });
     }
@@ -274,33 +391,18 @@ router.post('/api/auth/register', async (req, res) => {
       });
     }
 
-    // ── Determine initial account status ──────────────────────────────────
-    // Invite path → pending_verification (must verify email, then auto-active since admin invited them)
-    // Allowlist path → pending_verification (must verify email, then pending_approval for admin to activate)
-    //
-    // Special case: if no owner exists yet AND this is the owner allowlist email, auto-approve as owner.
-    let initialStatus = 'pending_verification';
-    const ownerCheck = await db.pool.query(
-      `SELECT COUNT(*) AS cnt FROM users WHERE role = 'owner' AND account_status = 'active'`
-    );
-    const hasOwner = parseInt(ownerCheck.rows[0]?.cnt, 10) > 0;
-
-    // First owner bootstrap: if no active owner exists, first allowlist signup becomes owner + active
-    if (!hasOwner && registrationPath === 'allowlist') {
-      resolvedRole  = 'owner';
-      initialStatus = 'active'; // bootstrap — no approval needed for first owner
-      console.log(`🔑 Bootstrap: first owner account being created for ${resolvedEmail}`);
-    }
-
-    // ── Create account ────────────────────────────────────────────────────
-    const passwordHash       = await bcrypt.hash(password, SALT_ROUNDS);
-    const verificationToken  = generateToken();
-    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    let user, therapistProfile;
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    let user;
+    let initialStatus;
+    let orgName = defaultOrgName();
+    let bootstrapped = false;
 
     if (invite) {
-      // Use existing invite-creation path in database.js
+      // ── Invite path ─────────────────────────────────────────────────────
+      // The token arrived in the invitee's mailbox, so holding it IS the
+      // email verification: the account is created verified and active. (It
+      // used to start at pending_verification, which left an invitee stuck
+      // whenever email was not configured — the copy-link dead end.)
       const result = await db.registerUserFromInvite({
         invite,
         passwordHash,
@@ -309,69 +411,58 @@ router.post('/api/auth/register', async (req, res) => {
         displayName: profile.displayName || profile.name.trim(),
         roleTitle:   profile.roleTitle || null,
       });
-      user             = result.user;
-      therapistProfile = result.therapistProfile;
-
-      // Apply status + verification token on top
-      await db.pool.query(
-        `UPDATE users SET account_status = $1, email_verified = FALSE,
-                email_verification_token = $2, email_verification_expires_at = $3,
-                email_verification_sent_at = NOW(), updated_at = NOW()
-           WHERE id = $4`,
-        [initialStatus, verificationToken, verificationExpiry, user.id]
-      );
-    } else {
-      // Allowlist self-registration — create user directly
-      const orgRow = await db.pool.query(`SELECT id, name FROM organisations ORDER BY created_at ASC LIMIT 1`);
-      const org    = orgRow.rows[0];
-
+      initialStatus = 'active';
       const { rows } = await db.pool.query(
-        `INSERT INTO users
-           (email, name, display_name, phone, role, password_hash, is_active,
-            account_status, email_verified, email_verification_token, email_verification_expires_at,
-            email_verification_sent_at, organisation_id, profile_completed, onboarding_step, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7,FALSE,$8,$9,NOW(),$10,FALSE,'profile',NOW(),NOW())
+        `UPDATE users SET account_status = 'active', is_active = TRUE, email_verified = TRUE,
+                email_verification_token = NULL, email_verification_expires_at = NULL,
+                updated_at = NOW()
+           WHERE id = $1
          RETURNING *`,
-        [
-          resolvedEmail,
-          profile.name.trim(),
-          profile.displayName || profile.name.trim(),
-          profile.phone || null,
-          resolvedRole,
-          passwordHash,
-          initialStatus,
-          verificationToken,
-          verificationExpiry,
-          org?.id || null,
-        ]
+        [result.user.id]
       );
-      user = rows[0];
+      user = rows[0] || result.user;
+      const orgRow = await db.pool.query('SELECT name FROM organisations WHERE id = $1', [invite.organisation_id]);
+      orgName = orgRow.rows[0]?.name || orgName;
+    } else {
+      // ── Allowlist path ──────────────────────────────────────────────────
+      const outcome = await createAllowlistAccount({
+        email: resolvedEmail, profile, passwordHash,
+      });
+      if (outcome.refused) {
+        return res.status(outcome.refused.status).json(outcome.refused.body);
+      }
+      user          = outcome.user;
+      initialStatus = outcome.initialStatus;
+      resolvedRole  = outcome.role;
+      bootstrapped  = outcome.bootstrapped;
+      orgName       = outcome.orgName || orgName;
     }
 
     // ── Audit ─────────────────────────────────────────────────────────────
     await Promise.allSettled([
       db.logAuditEvent({ actorUserId: user.id, action: 'account.created', targetType: 'user', targetId: user.id,
         ipAddress: req.ip, organisationId: user.organisation_id,
-        metadata: { role: resolvedRole, path: registrationPath } }),
+        metadata: { role: resolvedRole, path: registrationPath, bootstrap: bootstrapped } }),
       invite ? db.logAuditEvent({ actorUserId: user.id, action: 'invite.accepted', targetType: 'invite', targetId: invite.id, ipAddress: req.ip }) : Promise.resolve(),
+      bootstrapped ? db.logAuditEvent({ actorUserId: user.id, action: 'account.bootstrap_owner', targetType: 'user', targetId: user.id,
+        ipAddress: req.ip, organisationId: user.organisation_id, metadata: { createdOrganisation: !!user._createdOrganisation } }) : Promise.resolve(),
     ]);
+    if (bootstrapped) console.warn('🔑 Bootstrap: the first owner account was created via /register');
 
-    // ── Send verification email ───────────────────────────────────────────
+    // ── Email ─────────────────────────────────────────────────────────────
     if (initialStatus !== 'active') {
-      // Only send verification if not already bootstrapped as active
       emailSvc.sendVerificationEmail({
         toEmail: user.email,
-        token:   verificationToken,
+        token:   user.email_verification_token,
         name:    user.display_name || user.name,
       }).catch(e => console.error('⚠️  Verification email failed:', e.message));
     } else {
-      // Bootstrap owner — send welcome email instead
       emailSvc.sendWelcomeEmail({
-        toEmail: user.email, name: user.name, role: resolvedRole, orgName: 'Opal Therapy',
+        toEmail: user.email, name: user.name, role: resolvedRole, orgName,
       }).catch(() => {});
     }
 
-    // ── Response (no session yet — user must verify email first) ──────────
+    // ── Response (no session — the person signs in with the new password) ─
     return res.status(201).json({
       ok:              true,
       requiresVerification: initialStatus !== 'active',
@@ -393,7 +484,12 @@ router.post('/api/auth/register', async (req, res) => {
 // Returns the current user's onboarding state. Used by onboarding.html to know
 // what step to show and what data has already been saved.
 
-router.get('/api/auth/onboarding', async (req, res) => {
+// requireAuth (audit L-2): the single choke point — inactive / non-active
+// accounts, the forced password change and the pre-employee allowlist all
+// apply here too. All three routes sit under /api/auth/, which the
+// pre-employee allowlist already admits; a temporary-password session is
+// (deliberately) sent to change its password first.
+router.get('/api/auth/onboarding', requireAuth, async (req, res) => {
   if (!req.session?.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -419,7 +515,7 @@ router.get('/api/auth/onboarding', async (req, res) => {
 // Called when the user submits the onboarding profile form.
 // Updates the user's profile fields and marks onboarding complete.
 
-router.post('/api/auth/complete-profile', async (req, res) => {
+router.post('/api/auth/complete-profile', requireAuth, async (req, res) => {
   if (!req.session?.userId) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -485,7 +581,7 @@ router.post('/api/auth/complete-profile', async (req, res) => {
 // Saves individual onboarding step data. Called after each step is completed or skipped.
 // Body: { step: string, data: object, skipped: boolean }
 
-router.post('/api/auth/complete-onboarding-step', async (req, res) => {
+router.post('/api/auth/complete-onboarding-step', requireAuth, async (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
   const { step, data = {}, skipped = false } = req.body || {};
@@ -604,3 +700,7 @@ router.post('/api/auth/complete-onboarding-step', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.bootstrapDecision = bootstrapDecision;
+module.exports.isAllowlistedEmail = isAllowlistedEmail;
+// Test-only: clear the in-memory /check-invite limiter between test cases.
+module.exports._resetCheckInviteRateLimit = () => checkInviteRateLimit.reset();

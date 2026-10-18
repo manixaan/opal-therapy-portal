@@ -49,7 +49,7 @@ describe('account approval (route SQL)', () => {
     const { rows } = await db.pool.query(
       `UPDATE users SET account_status = 'active', approved_by_user_id = $1, approved_at = NOW(),
                         is_active = TRUE, updated_at = NOW()
-         WHERE id = $2 AND account_status IN ('pending_approval','pending_verification')
+         WHERE id = $2 AND account_status = 'pending_approval'
          RETURNING id, email, account_status`,
       [owner.id, pending.id]
     );
@@ -66,7 +66,7 @@ describe('account approval (route SQL)', () => {
     const active = await seedUser({ account_status: 'active' });
     const { rows } = await db.pool.query(
       `UPDATE users SET account_status='active', approved_by_user_id=$1, approved_at=NOW()
-        WHERE id=$2 AND account_status IN ('pending_approval','pending_verification') RETURNING id`,
+        WHERE id=$2 AND account_status = 'pending_approval' RETURNING id`,
       [owner.id, active.id]
     );
     expect(rows).toHaveLength(0);
