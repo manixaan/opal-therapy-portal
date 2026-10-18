@@ -357,10 +357,18 @@ const INIT_QUERIES = `
   -- — where users is empty and they are a no-op — or a legacy pre-migration
   -- dev database, which is the only place they were ever meant for. Every
   -- tracked database (staging, production, *_test) skips them.
+  -- schema_migrations is only read once it is known to exist: in PL/pgSQL
+  -- an OR does not stop a reference to a missing table from failing, which
+  -- broke every brand-new database (CI, 18 Oct 2026). Hence the EXECUTE.
   DO $$
+  DECLARE never_migrated BOOLEAN;
   BEGIN
-    IF to_regclass('schema_migrations') IS NULL
-       OR NOT EXISTS (SELECT 1 FROM schema_migrations) THEN
+    IF to_regclass('schema_migrations') IS NULL THEN
+      never_migrated := TRUE;
+    ELSE
+      EXECUTE 'SELECT NOT EXISTS (SELECT 1 FROM schema_migrations)' INTO never_migrated;
+    END IF;
+    IF never_migrated THEN
       -- Mark accounts created before the invite system as profile-complete
       -- so they are not redirected to /onboarding on next login. Only rows
       -- with a password_hash (real accounts, not OAuth-only stubs).

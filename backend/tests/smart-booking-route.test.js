@@ -161,11 +161,23 @@ function continueFrom(env, { aAddr = A_ADDR } = {}) {
     BOOKING_ROUTE.context = { dbId: 'db-A', day: 'mon', endMin: 600, label: 'Ada Client', address: ${JSON.stringify(aAddr)} };
     BOOKING_ROUTE.manualStart = false;`);
 }
+/* Wait until the route preview has settled: nothing routing, nothing
+   calculating. A fixed 30 ms was enough on a laptop but not on a loaded CI
+   runner (18 Oct 2026: two tests read the start before the route landed). */
+async function settled(env, maxMs = 2000) {
+  await flush();
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const busy = env.ev("(typeof ROUTE_INFLIGHT !== 'undefined' && ROUTE_INFLIGHT.size > 0) || BOOKING_ROUTE.status === 'loading'");
+    if (!busy) { await flush(10); return; }
+    await flush(10);
+  }
+}
 async function chooseLocation(env, addr) {
   const input = env.$('bsp-location');
   input.value = addr;
   input.dispatchEvent(new env.win.Event('change', { bubbles: true }));
-  await flush();
+  await settled(env);
 }
 const start = (env) => env.$('bsp-start').value;
 const end = (env) => env.$('bsp-end').value;
