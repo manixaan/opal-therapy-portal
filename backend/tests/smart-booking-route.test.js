@@ -1495,3 +1495,44 @@ describe('Home chip — "this one happens at home" (18 Oct 2026)', () => {
     expect(SHELL).toMatch(/<button type="button" class="bsp-loc-chip bsp-loc-home" id="bsp-loc-home" aria-pressed="false"/);
   });
 });
+
+describe('no address on a lunch, admin… = where the therapist already is (18 Oct 2026)', () => {
+  const JARRAH = '7 Jarrah Ln, Mount Claremont WA 6010';
+  const HOMES = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek' }] };
+  const noah = (after) => `SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 17, startM: 30, endH: 18, endM: 0,
+    address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Client', dbId: 'db-A'${after ? ', travel: { after: ' + JSON.stringify(after) + ' }' : ''} };`;
+
+  test('after Go Somewhere Else: the place it went to', () => {
+    const env = makeEnv(Object.assign({ routes: { [A_ADDR + '|' + JARRAH]: 29 } }, HOMES));
+    env.ev(noah({ kind: 'address', address: JARRAH, label: '7 Jarrah Lane', purpose: 'elsewhere' }));
+    expect(env.ev("whereAtMin('mon', 18 * 60 + 30)")).toEqual({ address: JARRAH, label: '7 Jarrah Lane' });
+  });
+
+  test('straight after a client, before any drive: the client\'s address; before anything: the day\'s base', () => {
+    const env = makeEnv(HOMES);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 15, startM: 0, endH: 16, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    expect(env.ev("whereAtMin('mon', 10 * 60)").address).toBe(A_ADDR);
+    expect(env.ev("whereAtMin('mon', 7 * 60)")).toEqual({ address: HOME_ADDR, label: 'Home' });
+  });
+
+  test('the panel says where a no-address non-client event will be; a typed address or Unsure silences it', () => {
+    const env = makeEnv(Object.assign({ routes: { [A_ADDR + '|' + JARRAH]: 29 } }, HOMES));
+    env.ev(noah({ kind: 'address', address: JARRAH, label: '7 Jarrah Lane', purpose: 'elsewhere' }));
+    env.ev('BOOKING_STATE.category = "admin"; document.getElementById("booking-side-panel").classList.add("open"); bspSelectDay("mon"); document.getElementById("bsp-start").value = "18:30";');
+    expect(env.ev('BookingRoute.stayHintText()')).toBe('No address — you stay at 7 Jarrah Lane · ' + JARRAH + '. Type an address to change it.');
+    env.$('bsp-location').value = CV_ADDR;
+    expect(env.ev('BookingRoute.stayHintText()')).toBe('');
+    env.$('bsp-location').value = '';
+    env.$('bsp-location-unsure').checked = true;
+    expect(env.ev('BookingRoute.stayHintText()')).toBe('');
+    env.$('bsp-location-unsure').checked = false;
+    env.ev('BOOKING_STATE.category = "client"');
+    expect(env.ev('BookingRoute.stayHintText()')).toBe('');            // client bookings keep "No address"
+  });
+
+  test('the shell saves that address on a non-client event and passes on where the day ends', () => {
+    expect(SHELL).toMatch(/const _here = whereAtMin\(t\.day, t\.startH \* 60 \+ \(t\.startM \|\| 0\)\);\s*if \(_here && _here\.address\) _location = _here\.address;/);
+    expect(SHELL).toContain('if (newDbId && _chainNc && typeof travelChainInherit === \'function\') await travelChainInherit(newDbId, _chainNc);');
+  });
+});

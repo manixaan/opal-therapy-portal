@@ -161,11 +161,11 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=44" defer></script>
+<script src="/travel.js?v=45" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=10" defer></script>
+<script src="/booking-route.js?v=11" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=5" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
@@ -12930,7 +12930,21 @@ async function confirmBooking() {
     // Address is optional for every event. One given moves the therapist
     // there for travel; none means they stay where they were (travel.js).
     const _unsureNc = !!document.getElementById('bsp-location-unsure')?.checked;
-    const _location = _unsureNc ? '' : (t.location || '');
+    let _location = _unsureNc ? '' : (t.location || '');
+    // No address on a lunch, admin, PD… (18 Oct 2026): it happens where the
+    // therapist already is — the end of the last drive, the last client, or
+    // the day's base — and is saved with that address, so it shows on the
+    // event and needs no travel. Own calendar only; typing one overrides it.
+    const _ownCal = !_bspSelectedTherapist || !_bspSelectedTherapist.userId || String(_bspSelectedTherapist.userId) === String(window.APP_USER?.id);
+    if (!_location && !_unsureNc && _ownCal && typeof whereAtMin === 'function') {
+      const _here = whereAtMin(t.day, t.startH * 60 + (t.startM || 0));
+      if (_here && _here.address) _location = _here.address;
+    }
+    // With an address it is a stop: if it becomes the day's last, it inherits
+    // where the day was going to end, as a client booking does — a lunch at
+    // the place Go Somewhere Else went to must not add a drive home (18 Oct 2026).
+    const _chainNc = (_location && _ownCal && typeof travelInheritSpecFor === 'function')
+      ? travelInheritSpecFor(t.day, t.startH * 60 + (t.startM || 0)) : null;
     // The Outlook category is what the backend classifies the saved row by
     // (sync-utils classifyEventType), so the tile's type follows the booking
     // leaf: reports and resource preparation are support activities, PD and
@@ -13008,6 +13022,7 @@ async function confirmBooking() {
 
       // No success modal — land the user straight on the calendar with the
       // new event in view; a quiet toast confirms the write.
+      if (newDbId && _chainNc && typeof travelChainInherit === 'function') await travelChainInherit(newDbId, _chainNc);
       WIZARD_BOOKED = true;
       resetBtn();
       if (typeof resetWizard === 'function') resetWizard();

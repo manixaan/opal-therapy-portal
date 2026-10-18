@@ -1113,6 +1113,25 @@ function _bspPredecessor(day, startMin) {
   const loc = sessionLocation(s);
   return { s, explicit: false, endMin: sessionEndMin(s), fromKey: locTravelKey(loc), suburb: loc.suburb || '', label: _stopName(s) || 'previous session' };
 }
+/* Where the therapist is at a minute of the day (18 Oct 2026): the end of
+   the last drive that has arrived by then (a client, home, a place from Go
+   Somewhere Else), else the last physical stop, else the day's base. An event
+   booked with no address stays there — { address, label } or null. */
+function whereAtMin(day, atMin) {
+  const addrOf = (l) => (l && (l.address || l.addr || l.suburb)) || '';
+  const legs = computeDayTravelSegments(day)
+    .filter(x => x.kind !== 'gap' && x.travelMin > 0 && x.endMin <= atMin && addrOf(x.toLoc))
+    .sort((a, b) => a.endMin - b.endMin);
+  const leg = legs.length ? legs[legs.length - 1] : null;
+  const stop = _lastPhysicalStopBefore(day, atMin, null);
+  const stopEnd = stop ? sessionEndMin(stop) : -1;
+  if (leg && leg.endMin >= stopEnd) return { address: addrOf(leg.toLoc), label: leg.toLoc.label || leg.toLoc.suburb || '' };
+  if (stop) { const loc = sessionLocation(stop); if (addrOf(loc)) return { address: addrOf(loc), label: _stopName(stop) }; }
+  const base = dayAnchorBase(day);
+  if (base && !base.unset && !base.remote && (base.addr || base.suburb)) return { address: base.addr || base.suburb, label: base.label || 'Home' };
+  return null;
+}
+window.whereAtMin = whereAtMin;
 function _lastPhysicalStopBefore(day, endByMin, include) {
   const before = sessionsForDay(day).filter(x => (x === include || sessionEndMin(x) <= endByMin) && isPhysicalStop(x));
   return before.length ? before[before.length - 1] : null;

@@ -974,7 +974,33 @@
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'bsp-mmm-zone') { MMM.picked = true; renderMmm(); }
   });
-  setInterval(checkMmm, 600);
+  /* No address on a non-client event (lunch, admin, PD…): it is saved where
+     the therapist already is (travel.js whereAtMin — confirmBooking does the
+     same), so say where before Create (18 Oct 2026). Own calendar only, and
+     never over another message in the line. */
+  var STAY = { text: '' };
+  function stayHintText() {
+    var input = $('bsp-location'), u = $('bsp-location-unsure'), st = $('bsp-start');
+    if (!input || !panelOpen() || isClientCategory() || HOME.on || (u && u.checked) || input.value.trim()) return '';
+    if (!selectedClinician().own || !fn('whereAtMin') || !st || !st.value) return '';
+    var day = activeDay(); if (!day) return '';
+    var p = st.value.split(':').map(Number);
+    var w = global.whereAtMin(day, p[0] * 60 + (p[1] || 0));
+    if (!w || !w.address) return '';
+    var lbl = w.label && canon(w.label) !== canon(w.address) ? w.label + ' · ' : '';
+    return 'No address — you stay at ' + lbl + w.address + '. Type an address to change it.';
+  }
+  BR.stayHintText = stayHintText;
+  function renderStayHint() {
+    var meta = $('bsp-loc-meta'); if (!meta) return;
+    var text = stayHintText();
+    var mine = !meta.textContent || meta.textContent === STAY.text;
+    if (text === STAY.text && (!text || meta.textContent === text)) return;
+    if (!mine) { STAY.text = ''; return; }
+    STAY.text = text;
+    setMeta(text, 'muted');
+  }
+  setInterval(function () { checkMmm(); renderStayHint(); }, 600);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })(window);
