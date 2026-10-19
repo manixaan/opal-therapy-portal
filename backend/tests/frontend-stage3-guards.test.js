@@ -397,24 +397,24 @@ describe('resource hub v1', () => {
   const view = () => HTML.slice(HTML.indexOf('<section class="view" id="view-resources">'),
                                 HTML.indexOf('<!-- ============ ACCOUNTING TAB'));
 
-  test('two live areas; Therapy Store deliberately parked as Coming soon', () => {
+  test('one live area; Therapy Store deliberately parked as Coming soon; AI Resource Studio removed', () => {
     // PRODUCT DECISION 2026-08-09 (Antony): the Therapy Store is parked. The
     // store sub-tab is disabled with a "Coming soon" chip and rhSwitch quietly
     // refuses 'store'. This is UI parking only — the store panel markup, the
     // store/purchase JS and the admin Purchasing queue all remain intact.
     const v = view();
     expect(v).toContain('>Hub</button>'); // R2: the Library panel became the full Hub
-    expect(v).toContain('>AI Resource Studio</button>');
+    // AI Resource Studio removed (19 Oct 2026, Antony): no tab, panel or route.
+    expect(v).not.toContain('AI Resource Studio');
+    expect(v).not.toContain('data-rh="ai"');
     expect(v).toContain('Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>');
     // Store tab is non-interactive: disabled + aria-disabled, no onclick
     expect(v).toMatch(/data-rh="store"[^>]*\bdisabled\b/);
     expect(v).toMatch(/data-rh="store"[^>]*aria-disabled="true"/);
     expect(v).not.toMatch(/data-rh="store"[^>]*onclick/);
-    // The other two tabs remain enabled and clickable
+    // The Hub tab remains enabled and clickable
     expect(v).toMatch(/data-rh="shared"[^>]*onclick="rhSwitch\('shared'\)"/);
-    expect(v).toMatch(/data-rh="ai"[^>]*onclick="rhSwitch\('ai'\)"/);
     expect(v).not.toMatch(/data-rh="shared"[^>]*\bdisabled\b/);
-    expect(v).not.toMatch(/data-rh="ai"[^>]*\bdisabled\b/);
     // Programmatic guard: rhSwitch('store') is a quiet no-op
     expect(HTML).toContain("if (area === 'store') return;");
   });
@@ -435,12 +435,9 @@ describe('resource hub v1', () => {
     expect(HTML).toContain('function rhToggleKitStep(kitKey, idx, on)');
   });
 
-  test('AI studio is a local draft workspace — no provider call exists', () => {
-    const v = view();
-    expect(v).toContain('AI generation is not enabled yet');
-    expect(v).toContain('Do not include client-identifying or sensitive clinical information.');
-    expect(v).toContain('>Create manual draft</button>');
-    expect(HTML).toContain("fetch('/api/resources/ai-drafts/config'");
+  test('AI Resource Studio is gone — no drafts endpoint or loader is referenced', () => {
+    expect(HTML).not.toContain('/api/resources/ai-drafts');
+    expect(HTML).not.toContain('function rhLoadDrafts');
     expect(HTML).not.toMatch(/fetch\(['"][^'"]*\/api\/(ai|generate|llm)\b/i);
   });
 
@@ -2103,7 +2100,7 @@ describe('Resource Hub layout hierarchy', () => {
     // The shared header is: heading -> top-level tabs -> #rh2-root (which
     // renders the hub nav, then content). Anything mounted before #rh2-root
     // lands in the gap between the tabs and the nav.
-    const tabs = HTML.indexOf('data-rh="ai"');            // last top-level tab
+    const tabs = HTML.indexOf('data-rh="store"');         // last top-level tab (AI Studio removed 19 Oct 2026)
     const root = HTML.indexOf('id="rh2-root"');
     expect(tabs).toBeGreaterThan(-1);
     expect(root).toBeGreaterThan(tabs);

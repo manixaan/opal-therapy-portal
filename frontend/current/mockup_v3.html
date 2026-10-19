@@ -5259,11 +5259,10 @@ window.opIcon = function (name, size) {
 </style>
 <div class="acct-page">
   <h1 style="margin:0 0 4px;">Resource Hub</h1>
-  <p style="color:var(--muted);margin:0 0 12px;">Shared therapy materials, drafting tools and purchasing — in one workspace.</p>
+  <p style="color:var(--muted);margin:0 0 12px;">Shared therapy materials and purchasing — in one workspace.</p>
 
   <div class="rh-tabs" role="tablist">
     <button class="rh-tab active" role="tab" data-rh="shared" onclick="rhSwitch('shared')">Hub</button>
-    <button class="rh-tab" role="tab" data-rh="ai" onclick="rhSwitch('ai')">AI Resource Studio</button>
     <!-- Therapy Store PARKED as "Coming soon" (2026-08-09, Antony's decision):
          UI-only parking — the panel markup and all store/purchase JS stay intact. -->
     <button class="rh-tab" role="tab" data-rh="store" disabled aria-disabled="true" title="Therapy Store is coming soon">Therapy Store &amp; Purchase Requests<span class="rh-soon">Coming soon</span></button>
@@ -5291,47 +5290,6 @@ window.opIcon = function (name, size) {
          for the same reason the two builders above are: resourcehub.js rebuilds
          that subtree wholesale, which would tear out a form mid-keystroke. -->
     <div id="templates-root" hidden></div>
-  </div>
-
-  <!-- ── AI Resource Studio ── -->
-  <div class="rh-panel" id="rh-panel-ai">
-    <div class="rh-two-col">
-      <div class="rh-col">
-        <h3 style="margin:0 0 4px;">Draft a resource</h3>
-        <p class="rh-quiet" id="rh-ai-mode-note">AI generation is not enabled yet — drafts are written manually and follow the same review path.</p>
-        <p class="rh-quiet">Do not include client-identifying or sensitive clinical information.</p>
-        <input type="hidden" id="rhd-id" value="">
-        <label class="rh-lbl">Title</label>
-        <input type="text" id="rhd-title" class="rh-input">
-        <div class="rh-grid-2">
-          <div><label class="rh-lbl">Resource type</label>
-            <select id="rhd-type" class="rh-input"><option value="worksheet">Worksheet</option><option value="handout">Handout</option><option value="checklist">Checklist</option><option value="session_plan">Session plan</option><option value="template" selected>Template</option></select></div>
-          <div><label class="rh-lbl">Topic</label><input type="text" id="rhd-topic" class="rh-input" placeholder="e.g. Emotional regulation"></div>
-          <div><label class="rh-lbl">Audience</label>
-            <select id="rhd-audience" class="rh-input"><option>Client</option><option>Parent / carer</option><option>School</option><option>Therapist</option></select></div>
-          <div><label class="rh-lbl">Tone</label>
-            <select id="rhd-tone" class="rh-input"><option>Plain and encouraging</option><option>Clinical</option><option>Child-friendly</option></select></div>
-        </div>
-        <label class="rh-lbl">Instructions / outline</label>
-        <textarea id="rhd-instructions" class="rh-input" rows="3"></textarea>
-        <label class="rh-lbl">Draft content</label>
-        <textarea id="rhd-content" class="rh-input" rows="8" placeholder="Write the draft here…"></textarea>
-        <div id="rhd-err" class="rh-err" style="display:none;"></div>
-        <div style="display:flex;gap:8px;margin-top:12px;">
-          <button class="btn primary" id="rhd-save" onclick="rhSaveDraft(false)">Create manual draft</button>
-          <button class="btn" onclick="rhSaveDraft(true)">Save &amp; submit for review</button>
-          <button class="btn" onclick="rhClearDraftForm()">Clear</button>
-        </div>
-      </div>
-      <div class="rh-col">
-        <h3 style="margin:0 0 8px;">My drafts</h3>
-        <div id="rh-draft-list" class="rh-quiet">Loading…</div>
-        <div id="rh-review-queue-wrap" style="display:none;margin-top:18px;">
-          <h3 style="margin:0 0 8px;">Review queue</h3>
-          <div id="rh-review-queue" class="rh-quiet"></div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- ── Therapy Store & Purchase Requests ── -->
@@ -8411,12 +8369,11 @@ function rhSwitch(area) {
   // only — the panel markup and store/purchase JS remain intact.
   if (area === 'store') return;
   document.querySelectorAll('.rh-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.rh === area); });
-  ['shared', 'ai', 'store'].forEach(function (a) {
+  ['shared', 'store'].forEach(function (a) {
     var p = document.getElementById('rh-panel-' + a);
     if (p) p.classList.toggle('active', a === area);
   });
   if (area === 'shared') { if (typeof window.RH2 !== 'undefined' && typeof RH2.open === 'function') RH2.open(); else resReload(); }
-  if (area === 'ai' && typeof rhLoadDrafts === 'function') rhLoadDrafts();
   if (area === 'store' && typeof rhLoadStore === 'function') rhLoadStore();
 }
 
@@ -8710,106 +8667,6 @@ async function rhToggleKitStep(kitKey, idx, on) {
     method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ completedSteps: __rhKitProgress[kitKey] }),
   }).catch(function () {});
-}
-
-/* ── AI Resource Studio: local drafts + owner review (no provider calls) ── */
-async function rhLoadDrafts() {
-  var list = document.getElementById('rh-draft-list');
-  if (!list) return;
-  try {
-    var cfg = await fetch('/api/resources/ai-drafts/config', { credentials: 'include' }).then(function (r) { return r.json(); });
-    var note = document.getElementById('rh-ai-mode-note');
-    if (note && cfg && cfg.aiEnabled) note.textContent = 'AI drafting is enabled — generated drafts are always labelled and require therapist review.';
-  } catch (_) {}
-  var d = await fetch('/api/resources/ai-drafts', { credentials: 'include' })
-    .then(function (r) { return r.ok ? r.json() : { drafts: [] }; }).catch(function () { return { drafts: [] }; });
-  var drafts = d.drafts || [];
-  window.__rhDrafts = {};
-  drafts.forEach(function (x) { window.__rhDrafts[x.id] = x; });
-  list.innerHTML = drafts.length ? drafts.map(function (x) {
-    return '<div class="rh-item"><div style="display:flex;align-items:center;gap:8px;">' +
-      '<span style="flex:1;font-weight:600;font-size:13px;">' + escapeHtml(x.title) + '</span>' +
-      '<span class="rh-status-chip">' + escapeHtml(String(x.status).replace(/_/g, ' ')) + '</span></div>' +
-      '<div style="display:flex;gap:6px;margin-top:6px;">' +
-      (x.status === 'private_draft' || x.status === 'changes_requested'
-        ? '<button class="btn" style="font-size:12px;" onclick="rhEditDraft(\'' + x.id + '\')">Edit</button>' +
-          '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'submit\')">Submit for review</button>' : '') +
-      (x.review_comment ? '<span class="rh-quiet" style="margin:0;">Reviewer: ' + escapeHtml(x.review_comment) + '</span>' : '') +
-      '</div></div>';
-  }).join('') : '<div class="rh-quiet">No drafts yet — create one on the left. Drafts stay private until you submit them.</div>';
-
-  var qwrap = document.getElementById('rh-review-queue-wrap');
-  if (rhIsOwner() && qwrap) {
-    qwrap.style.display = '';
-    var q = await fetch('/api/resources/ai-drafts?queue=1', { credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : { drafts: [] }; }).catch(function () { return { drafts: [] }; });
-    var qd = q.drafts || [];
-    document.getElementById('rh-review-queue').innerHTML = qd.length ? qd.map(function (x) {
-      return '<div class="rh-item"><div style="font-weight:600;font-size:13px;">' + escapeHtml(x.title) + '</div>' +
-        '<div class="rh-quiet" style="margin:2px 0 6px;">' + escapeHtml(x.author_name || '') + '</div>' +
-        '<div style="display:flex;gap:6px;">' +
-        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'approve\')">Approve &amp; publish</button>' +
-        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'request-changes\')">Request changes</button>' +
-        '<button class="btn" style="font-size:12px;" onclick="rhDraftAction(\'' + x.id + '\',\'decline\')">Decline</button>' +
-        '</div></div>';
-    }).join('') : '<div class="rh-quiet">Nothing waiting for review.</div>';
-  }
-}
-
-function rhClearDraftForm() {
-  ['rhd-id', 'rhd-title', 'rhd-topic', 'rhd-instructions', 'rhd-content'].forEach(function (id) {
-    var el = document.getElementById(id); if (el) el.value = '';
-  });
-}
-
-function rhEditDraft(id) {
-  var x = (window.__rhDrafts || {})[id];
-  if (!x) return;
-  document.getElementById('rhd-id').value = x.id;
-  document.getElementById('rhd-title').value = x.title || '';
-  document.getElementById('rhd-topic').value = x.topic || '';
-  document.getElementById('rhd-instructions').value = x.instructions || '';
-  document.getElementById('rhd-content').value = x.content || '';
-}
-
-async function rhSaveDraft(alsoSubmit) {
-  var err = document.getElementById('rhd-err');
-  var title = (document.getElementById('rhd-title').value || '').trim();
-  if (!title) { err.textContent = 'A title is required.'; err.style.display = ''; return; }
-  err.style.display = 'none';
-  var id = document.getElementById('rhd-id').value;
-  var payload = {
-    title: title,
-    resourceType: document.getElementById('rhd-type').value,
-    topic: document.getElementById('rhd-topic').value,
-    audience: document.getElementById('rhd-audience').value,
-    tone: document.getElementById('rhd-tone').value,
-    instructions: document.getElementById('rhd-instructions').value,
-    content: document.getElementById('rhd-content').value,
-  };
-  var r = await fetch('/api/resources/ai-drafts' + (id ? '/' + id : ''), {
-    method: id ? 'PATCH' : 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  }).catch(function () { return null; });
-  if (!r || !r.ok) { err.textContent = 'Could not save the draft.'; err.style.display = ''; return; }
-  var saved = await r.json().catch(function () { return {}; });
-  var draftId = id || (saved.draft && saved.draft.id);
-  if (alsoSubmit && draftId) await rhDraftAction(draftId, 'submit', true);
-  rhClearDraftForm();
-  showToast('Draft saved', alsoSubmit ? 'Submitted for the owner\'s review.' : 'Saved privately to My drafts.');
-  rhLoadDrafts();
-}
-
-async function rhDraftAction(id, action, quiet) {
-  var body;
-  if (action === 'request-changes') body = JSON.stringify({ comment: await portalPrompt('What should change?') || 'Please revise' });
-  if (action === 'decline') body = JSON.stringify({ comment: 'Not suitable for the shared library' });
-  await fetch('/api/resources/ai-drafts/' + id + '/' + action, {
-    method: 'POST', credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body,
-  }).catch(function () {});
-  if (!quiet) rhLoadDrafts();
-  if (action === 'approve') { showToast('Published', 'The draft is now an approved library resource.'); resReload(); }
 }
 
 /* ── Therapy Store: catalogue + local purchase workflow ── */

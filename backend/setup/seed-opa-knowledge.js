@@ -6,7 +6,7 @@
  * (frontend/current/mockup_v3.html navigation + flows, and the backend route
  * modules: scheduler-routes, resource-hub-r2-routes, resources-routes,
  * accounting-routes, profile-routes, invite-routes, travel-routes,
- * snapshot-routes, ai-drafts-routes, purchases-routes, server.js delta sync).
+ * snapshot-routes, purchases-routes, server.js delta sync).
  * Honesty is the point: partial features carry their caveat in the summary,
  * and nothing planned or aspirational is described as live.
  *
@@ -269,7 +269,7 @@ const RECORDS = [
     troubleshooting: [
       'Therapists cannot approve resources — approval is an owner function. If your draft is pending, the owner has not reviewed it yet.',
     ],
-    related_features: ['Resource Hub admin centre', 'AI Resource Studio drafts'],
+    related_features: ['Resource Hub admin centre'],
   },
   {
     module: 'resources', feature: 'Resource Hub admin centre', route: '/resources', minimum_role: 'admin',
@@ -282,20 +282,6 @@ const RECORDS = [
     ],
     troubleshooting: [
       'Admins cannot approve or publish — if a resource needs approval, the owner must do it.',
-    ],
-    related_features: ['Submit a resource for review'],
-  },
-  {
-    module: 'resources', feature: 'AI Resource Studio drafts', route: '/resources', status: 'partial',
-    summary: 'PARTIAL: the AI Resource Studio is a local drafting workspace with a review flow (draft, submit, owner approve/decline). AI generation is NOT enabled — there are no external AI calls; drafts are written by you. Approved drafts publish into the Resource Hub.',
-    aliases: ['ai resource studio', 'ai drafts', 'resource studio'],
-    instructions: [
-      'Open the Resource Studio from the Resources tab.',
-      'Create a draft and edit its content yourself.',
-      'Submit the draft for review; the owner can approve it into the Hub.',
-    ],
-    troubleshooting: [
-      'There is no generate-with-AI button that produces content — generation is planned behind a disabled flag, and the Studio currently works as a structured drafting tool.',
     ],
     related_features: ['Submit a resource for review'],
   },

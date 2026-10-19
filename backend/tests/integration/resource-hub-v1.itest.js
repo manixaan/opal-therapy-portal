@@ -24,8 +24,6 @@ function buildApp() {
   app.use('/', require('../../auth'));
   app.use('/', require('../../resources-routes'));
   app.use('/', require('../../purchases-routes'));
-  app.use('/', require('../../ai-drafts-routes'));
-  // The AI-draft publish flow now hands off to the rh2 review chain
   app.use('/', require('../../resource-hub-r2-routes'));
   app.use('/', require('../../instrument-register-routes'));
   return app;
@@ -171,117 +169,6 @@ test('purchase lifecycle: create→edit→submit→approve→order→receive wit
 });
 
 // ═══ AI Resource Studio drafts ═══════════════════════════════════════════════
-
-test('ai drafts: private → review queue → publish to hub; admin/read_only denied', async () => {
-  const app = buildApp();
-  const { agent: owner } = await agentFor(app, 'owner');
-  const { agent: admin } = await agentFor(app, 'admin');
-  const { agent: therapistA } = await agentFor(app, 'therapist');
-  const { agent: therapistB } = await agentFor(app, 'therapist');
-  const { agent: ro } = await agentFor(app, 'read_only');
-
-  // Config: provider flag is off everywhere
-  const cfg = await therapistA.get('/api/resources/ai-drafts/config');
-  expect(cfg.status).toBe(200);
-  expect(cfg.body.aiEnabled).toBe(false);
-
-  // Admin + read_only: 403 on everything
-  expect((await admin.get('/api/resources/ai-drafts')).status).toBe(403);
-  expect((await admin.get('/api/resources/ai-drafts/config')).status).toBe(403);
-  expect((await admin.post('/api/resources/ai-drafts').send({ title: 'x' })).status).toBe(403);
-  expect((await ro.get('/api/resources/ai-drafts')).status).toBe(403);
-
-  // Therapist A drafts privately
-  const created = await therapistA.post('/api/resources/ai-drafts').send({
-    title: 'Sensory diet handout', resourceType: 'handout', topic: 'sensory regulation',
-    audience: 'parents', tone: 'warm', format: 'one-page',
-    content: 'Step-by-step sensory diet guidance written by the therapist.',
-  });
-  expect(created.status).toBe(201);
-  const draftId = created.body.draft.id;
-  expect(created.body.draft.status).toBe('private_draft');
-
-  // Private drafts are invisible to everyone else — including the owner queue
-  expect((await therapistB.get(`/api/resources/ai-drafts/${draftId}`)).status).toBe(404);
-  expect((await owner.get(`/api/resources/ai-drafts/${draftId}`)).status).toBe(404);
-  expect((await owner.get('/api/resources/ai-drafts?queue=1')).body.drafts).toHaveLength(0);
-
-  // Author edits, then submits for review
-  expect((await therapistA.patch(`/api/resources/ai-drafts/${draftId}`).send({ content: 'Final wording.' })).status).toBe(200);
-  expect((await therapistB.post(`/api/resources/ai-drafts/${draftId}/submit`)).status).toBe(404);
-  expect((await therapistA.post(`/api/resources/ai-drafts/${draftId}/submit`)).body.draft.status).toBe('submitted_for_review');
-
-  // Owner queue now shows it (with author), and owner can open it
-  const queue = await owner.get('/api/resources/ai-drafts?queue=1');
-  expect(queue.body.drafts).toHaveLength(1);
-  expect(queue.body.drafts[0].id).toBe(draftId);
-  expect(queue.body.drafts[0].author_name).toBe('Test User');
-  expect((await owner.get(`/api/resources/ai-drafts/${draftId}`)).status).toBe(200);
-
-  // Author can no longer edit while under review
-  expect((await therapistA.patch(`/api/resources/ai-drafts/${draftId}`).send({ content: 'sneak' })).status).toBe(409);
-  // Therapist cannot run the review actions
-  expect((await therapistA.post(`/api/resources/ai-drafts/${draftId}/approve`)).status).toBe(403);
-
-  // Owner approves the draft → the resource enters the standard review
-  // lifecycle (clinical review first), NOT the hub. AI-assisted content no
-  // longer skips rights/clinical/brand review.
-  const pub = await owner.post(`/api/resources/ai-drafts/${draftId}/approve`);
-  expect(pub.status).toBe(200);
-  expect(pub.body.draft.status).toBe('published');
-  expect(pub.body.draft.published_resource_id).toBe(pub.body.resource.id);
-  expect(pub.body.resource.status).toBe('draft');
-  expect(pub.body.resource.publication_state).toBe('clinical-review');
-  expect(pub.body.resource.source_reference).toBe('AI Resource Studio draft (manually authored)');
-  expect(pub.body.resource.usage_instructions).toBe('Final wording.');
-
-  // Not visible to therapists until it clears the review chain
-  const preList = await therapistB.get('/api/resources');
-  expect(preList.body.resources.find((r) => r.id === pub.body.resource.id)).toBeUndefined();
-
-  // Approval is still blocked until a human records a rights decision
-  const early = await owner.post(`/api/rh2/resources/${pub.body.resource.id}/approve`).send({});
-  expect(early.status).toBe(422);
-  expect(early.body.code).toBe('governance_requirements_unmet');
-
-  // Owner records the rights review, then approval walks the review chain
-  const rights = await owner.post(`/api/rh2/admin/source-review/${pub.body.resource.id}`)
-    .send({ rightsStatus: 'opal-owned', reason: 'Authored in the AI Resource Studio by our therapist.' });
-  expect(rights.status).toBe(200);
-
-  const walked = await owner.post(`/api/rh2/resources/${pub.body.resource.id}/approve`).send({});
-  expect(walked.status).toBe(200);
-  expect(walked.body.resource.status).toBe('approved');
-  expect(walked.body.resource.publication_state).toBe('approved');
-
-  const hubList = await therapistB.get('/api/resources');
-  const published = hubList.body.resources.find((r) => r.id === pub.body.resource.id);
-  expect(published).toBeTruthy();
-  expect(published.title).toBe('Sensory diet handout');
-
-  // Changes-requested loop + decline on a second draft
-  const d2 = await therapistA.post('/api/resources/ai-drafts').send({ title: 'Fine motor menu' });
-  await therapistA.post(`/api/resources/ai-drafts/${d2.body.draft.id}/submit`);
-  expect((await owner.post(`/api/resources/ai-drafts/${d2.body.draft.id}/request-changes`).send({})).status).toBe(400);
-  const rc = await owner.post(`/api/resources/ai-drafts/${d2.body.draft.id}/request-changes`).send({ comment: 'Add age range' });
-  expect(rc.body.draft.status).toBe('changes_requested');
-  expect(rc.body.draft.review_comment).toBe('Add age range');
-  expect((await therapistA.patch(`/api/resources/ai-drafts/${d2.body.draft.id}`).send({ topic: 'fine motor' })).status).toBe(200);
-  const declined = await owner.post(`/api/resources/ai-drafts/${d2.body.draft.id}/decline`).send({ comment: 'Duplicate of existing kit' });
-  expect(declined.body.draft.status).toBe('declined');
-
-  // Own list shows both drafts to the author only
-  expect((await therapistA.get('/api/resources/ai-drafts')).body.drafts).toHaveLength(2);
-  expect((await therapistB.get('/api/resources/ai-drafts')).body.drafts).toHaveLength(0);
-
-  // Audit trail: publish recorded, and no draft content in ai_draft metadata
-  const audit = await db.pool.query(
-    "SELECT action, metadata::text AS m FROM audit_logs WHERE action LIKE 'ai_draft.%' OR action = 'resource.published_from_draft'");
-  expect(audit.rows.map((r) => r.action)).toContain('resource.published_from_draft');
-  for (const r of audit.rows) expect(r.m || '').not.toContain('sensory diet guidance');
-});
-
-// ═══ Saved filter ════════════════════════════════════════════════════════════
 
 test('?saved=1 returns only the caller\'s favourites', async () => {
   const app = buildApp();

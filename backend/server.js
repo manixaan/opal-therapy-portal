@@ -657,9 +657,6 @@ app.use('/', require('./purchases-routes'));
 // admin/owner triage). Soft states only; attachments stay private.
 app.use('/', require('./support-routes'));
 
-// AI Resource Studio drafts (local store only — no external AI calls)
-app.use('/', require('./ai-drafts-routes'));
-
 // Functional Capacity Assessment reports (therapist-composed DOCX from the
 // Opal template; org-scoped client profiles; own-only drafts; no external AI)
 app.use('/', require('./fca-routes'));
