@@ -133,6 +133,9 @@ async function runAllSystemChecks(userId, role) {
   await Promise.allSettled([
     checkCredentialExpiry(userId),
     checkIncompleteProfile(userId),
+    // "Finish your credentials" after the first-login wizard — one live
+    // reminder, gone once the key ones are on file or it is dismissed.
+    require('./credential-reminder').syncNotification(pool, userId),
     checkOutlookTokenExpiry(userId),
     checkCalendarConflicts(userId),
     checkLongTravelTrips(userId),

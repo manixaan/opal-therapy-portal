@@ -23,6 +23,8 @@ const router  = express.Router();
 const db      = require('./database');
 const { requireAuth, requirePermission } = require('./permissions');
 const credentialExtraction = require('./credential-extraction');
+const wizardLink = require('./onboarding-wizard-link');
+const credentialReminder = require('./credential-reminder');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -696,7 +698,9 @@ router.get('/api/profile/credentials', requireAuth, async (req, res) => {
       allOrg:         !mineOnly,
     });
 
-    res.json({ credentials: creds });
+    // scope/canViewAll let My Profile open on the caller's OWN credentials
+    // (?mine=1) and offer "All staff" only to those who may see it.
+    res.json({ credentials: creds, scope: mineOnly ? 'mine' : 'all', canViewAll: canViewAll(user) });
   } catch (err) {
     console.error('GET /api/profile/credentials error:', err);
     res.status(500).json({ error: 'Failed to load credentials' });
@@ -720,8 +724,19 @@ router.post('/api/profile/credentials', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'credentialType and credentialName are required' });
     }
 
-    const scan = await resolveScanForClaim({ documentId, userId: user.id });
-    if (scan.error) return res.status(scan.status).json({ error: scan.error });
+    // `scanLater: true` (first-login wizard, Oct 2026): the document is
+    // optional there, so a person can record what they know now. The record
+    // is created WITHOUT a document, shows "Scan missing" like any legacy
+    // record, and the credential reminder chases it. Without the flag the
+    // scan stays required, exactly as before. A documentId, if sent, is
+    // always checked — the flag never waives that.
+    const deferScan = req.body.scanLater === true && !documentId;
+    let scanDocId = null;
+    if (!deferScan) {
+      const scan = await resolveScanForClaim({ documentId, userId: user.id });
+      if (scan.error) return res.status(scan.status).json({ error: scan.error });
+      scanDocId = scan.document.id;
+    }
 
     const canonical = credentialExtraction.canonicalType(credentialType);
     if (!canonical) return res.status(400).json({ error: 'Unknown credential type' });
@@ -730,7 +745,7 @@ router.post('/api/profile/credentials', requireAuth, async (req, res) => {
       userId:             user.id,
       organisationId:     user.organisation_id,
       credentialType: canonical, credentialName, issuingBody, registrationNumber,
-      issueDate, expiryDate, documentId: scan.document.id, notes,
+      issueDate, expiryDate, documentId: scanDocId, notes,
     });
 
     await linkExtraction({ extractionId, credential: record, user });
@@ -739,7 +754,7 @@ router.post('/api/profile/credentials', requireAuth, async (req, res) => {
       actorUserId: user.id, action: 'credential.created',
       targetType: 'credential', targetId: record.id, ipAddress: req.ip,
       organisationId: user.organisation_id,
-      metadata: { credentialType, documentId: scan.document.id, fromExtraction: Boolean(extractionId) },
+      metadata: { credentialType, documentId: scanDocId, scanPending: deferScan, fromExtraction: Boolean(extractionId) },
     }).catch(() => {});
 
     res.status(201).json({ credential: record });
@@ -1081,6 +1096,11 @@ router.post('/api/profile/credentials/:id/scan', requireAuth, async (req, res) =
    address in Riverton is kept. Same rule as profile.js loadWorkSchedule. */
 const SAMPLE_HOME_LABEL = /^\s*home\s*\(\s*riverton\s*\)\s*$/i;
 function cleanTravelBases(bases) {
+  // The first-login wizard used to store `{ formattedAddress }` or an array
+  // here, which no screen could read. Read as WORK_BASES (and healed below).
+  if (bases && typeof bases === 'object' && !Array.isArray(bases.homes)) {
+    bases = wizardLink.toWorkBases(bases) || bases;
+  }
   if (!bases || typeof bases !== 'object' || !Array.isArray(bases.homes)) return bases;
   return Object.assign({}, bases, {
     homes: bases.homes.map((h) => {
@@ -1275,7 +1295,8 @@ router.get('/api/profile/setup-status', requireAuth, async (req, res) => {
         email: r.outlook_connected ? (r.outlook_connected_email || r.email) : null,
         lastSyncedAt: r.outlook_last_synced_at || null,
       },
-      travelBaseSet: !!r.default_work_location,
+      // A base only counts once it has an address travel can start from.
+      travelBaseSet: wizardLink.hasUsableBase(r.default_work_location),
     };
     // Ordered next actions for the UI — empty array = fully set up.
     const actions = [];
@@ -1287,11 +1308,40 @@ router.get('/api/profile/setup-status', requireAuth, async (req, res) => {
     if (r.role !== 'read_only' && !status.splosePractitionerMapped) actions.push({ key: 'splose_mapping', label: 'Choose which Splose practitioner you are (Settings → Integrations)' });
     if (!status.outlook.connected) actions.push({ key: 'connect_outlook', label: 'Connect your Outlook calendar (Settings → Integrations)' });
     if (!status.travelBaseSet) actions.push({ key: 'travel_base', label: 'Set your home/travel base (Profile → Work locations)' });
+    // Credentials are optional in the first-login wizard; this is the nudge
+    // to finish them. Quiet once the key ones are on file with their scans,
+    // or once dismissed (credential-reminder.js).
+    try {
+      const cr = await credentialReminder.load(db.pool, req.user.id);
+      status.credentials = {
+        total: cr.total, withoutScan: cr.withoutScan, keyTypes: cr.keyTypes,
+        missingKeyTypes: cr.missingKeyTypes, keyTypesWithoutScan: cr.keyTypesWithoutScan,
+        complete: cr.satisfied, reminderDue: cr.due, dismissed: cr.dismissed,
+      };
+      if (cr.due) actions.push({ key: 'credentials', label: credentialReminder.describe(cr) });
+    } catch (e) {
+      console.warn('setup-status credentials check failed:', e.message);
+    }
     status.actions = actions;
     res.json(status);
   } catch (err) {
     console.error('GET /api/profile/setup-status error:', err.message);
     res.status(500).json({ error: 'Failed to load setup status' });
+  }
+});
+
+/**
+ * POST /api/profile/credential-reminder/dismiss
+ * The caller's own "finish your credentials" reminder, silenced — on the
+ * setup card and in the notification bell alike. Own record only.
+ */
+router.post('/api/profile/credential-reminder/dismiss', requireAuth, async (req, res) => {
+  try {
+    await credentialReminder.dismiss(db.pool, req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST credential-reminder dismiss error:', err.message);
+    res.status(500).json({ error: 'Failed to dismiss the reminder' });
   }
 });
 

@@ -24,6 +24,7 @@ const db      = require('./database');
 const emailSvc = require('./email');
 const { getPermissions, requireAuth } = require('./permissions');
 const { createIpRateLimiter } = require('./request-safety');
+const wizardLink = require('./onboarding-wizard-link');
 
 // /check-invite answers anonymous callers, so it gets the same per-IP limiter
 // shape as login (audit M-3 / L-1): 10 per 15 minutes per client address.
@@ -577,6 +578,59 @@ router.post('/api/auth/complete-profile', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * The wizard's Work location / Travel bases steps, merged into the columns
+ * My Profile → Work Locations reads. One transaction, row locked, so a
+ * double-click cannot interleave two read-modify-writes.
+ *
+ *   work-location: { homeAddress: { address, lat?, lng?, placeId? }, weekKeys?: string[] }
+ *                  (the old { defaultWorkLocation: { formattedAddress, … } } is still read)
+ *   travel-bases:  { travelBases: [{ name, address, lat?, lng? }] }
+ */
+async function applyWorkLocationStep(userId, step, data) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT default_work_location, work_location_schedule FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+    const row = rows[0] || {};
+    let bases = row.default_work_location;
+    let schedule = row.work_location_schedule;
+    let changed = false;
+
+    if (step === 'work-location') {
+      const legacy = data.defaultWorkLocation && typeof data.defaultWorkLocation === 'object'
+        ? { address: data.defaultWorkLocation.formattedAddress, lat: data.defaultWorkLocation.lat,
+            lng: data.defaultWorkLocation.lng, placeId: data.defaultWorkLocation.placeId }
+        : null;
+      const home = (data.homeAddress && typeof data.homeAddress === 'object') ? data.homeAddress : legacy;
+      if (home && typeof home.address === 'string' && home.address.trim()) {
+        bases = wizardLink.setPrimaryHome(bases, home);
+        schedule = wizardLink.fillScheduleDefaults(schedule, data.weekKeys, 'home-1');
+        changed = true;
+      }
+    } else if (Array.isArray(data.travelBases) && data.travelBases.length) {
+      bases = wizardLink.appendExtraBases(bases, data.travelBases);
+      changed = true;
+    }
+
+    if (changed) {
+      await client.query(
+        `UPDATE users SET default_work_location = $1::jsonb,
+                          work_location_schedule = $2::jsonb,
+                          updated_at = NOW()
+          WHERE id = $3`,
+        [JSON.stringify(bases), schedule == null ? null : JSON.stringify(schedule), userId]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── POST /api/auth/complete-onboarding-step ──────────────────────────────────
 // Saves individual onboarding step data. Called after each step is completed or skipped.
 // Body: { step: string, data: object, skipped: boolean }
@@ -584,7 +638,9 @@ router.post('/api/auth/complete-profile', requireAuth, async (req, res) => {
 router.post('/api/auth/complete-onboarding-step', requireAuth, async (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
 
-  const { step, data = {}, skipped = false } = req.body || {};
+  const { step, skipped = false } = req.body || {};
+  const data = req.body && req.body.data && typeof req.body.data === 'object' && !Array.isArray(req.body.data)
+    ? req.body.data : {};
   if (!step) return res.status(400).json({ error: 'step is required' });
 
   const VALID_STEPS = ['profile','professional','outlook','work-location','travel-bases',
@@ -642,27 +698,12 @@ router.post('/api/auth/complete-onboarding-step', requireAuth, async (req, res) 
           [name || null, displayName || null, phone || null, roleTitle || null, userId]
         );
       }
-      if (step === 'work-location') {
-        const { workLocationSchedule, defaultWorkLocation } = data;
-        await db.pool.query(
-          `UPDATE users SET
-              work_location_schedule = COALESCE($1::jsonb, work_location_schedule),
-              default_work_location  = COALESCE($2::jsonb, default_work_location),
-              updated_at             = NOW()
-            WHERE id = $3`,
-          [workLocationSchedule ? JSON.stringify(workLocationSchedule) : null,
-           defaultWorkLocation   ? JSON.stringify(defaultWorkLocation)  : null,
-           userId]
-        );
-      }
-      if (step === 'travel-bases') {
-        const { travelBases } = data;
-        if (travelBases) {
-          await db.pool.query(
-            `UPDATE users SET default_work_location = $1::jsonb, updated_at = NOW() WHERE id = $2`,
-            [JSON.stringify(travelBases), userId]
-          );
-        }
+      if (step === 'work-location' || step === 'travel-bases') {
+        // Both steps write the portal's own shapes (WORK_BASES + the
+        // week-keyed schedule) and MERGE: step 4 sets home-1, step 5 appends
+        // homes, and neither overwrites the other, an office entry, or a day
+        // the person already set. See onboarding-wizard-link.js.
+        await applyWorkLocationStep(userId, step, data);
       }
       if (step === 'notifications') {
         const { prefs } = data;
