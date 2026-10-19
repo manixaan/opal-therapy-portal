@@ -242,6 +242,19 @@
 
     /* ── Location wrap ── */
     .location-wrap { position: relative; }
+    /* Address suggestions (places-autocomplete.js) — same look as the portal. */
+    .pac-panel {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 4000;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: var(--shadow); max-height: 260px; overflow-y: auto;
+    }
+    .pac-item {
+      display: block; width: 100%; text-align: left; cursor: pointer;
+      border: none; background: transparent; font-family: inherit; padding: 8px 12px;
+    }
+    .pac-item:hover, .pac-item.hi { background: var(--bg); }
+    .pac-item .pac-name { display: block; font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pac-item .pac-sub { display: block; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .location-wrap input { padding-left: 38px; }
     .location-icon {
       position: absolute; left: 12px; top: 50%;
@@ -708,6 +721,7 @@
   </div>
 </div>
 
+<script src="/places-autocomplete.js?v=1"></script>
 <script>
 'use strict';
 
@@ -937,7 +951,11 @@ document.getElementById('btn-4-next').addEventListener('click', async () => {
     showError('Please enter your base location, or use "Skip" to add it later.');
     return;
   }
-  const payload = location ? { defaultWorkLocation: { formattedAddress: location } } : {};
+  // A picked Google suggestion carries its coordinates and place id.
+  const locEl = document.getElementById('s4-location');
+  const picked = locEl.dataset.lat && locEl.dataset.lng
+    ? { lat: Number(locEl.dataset.lat), lng: Number(locEl.dataset.lng), placeId: locEl.dataset.placeId || undefined } : {};
+  const payload = location ? { defaultWorkLocation: Object.assign({ formattedAddress: location }, picked) } : {};
   setLoading('btn-4-next', true);
   const ok = await postStep('work-location', payload);
   setLoading('btn-4-next', false);
@@ -949,7 +967,11 @@ function addBase() {
   const name = document.getElementById('s5-base-name').value.trim();
   const addr = document.getElementById('s5-base-addr').value.trim();
   if (!addr) { showError('Please enter an address for the base.'); return; }
-  travelBases.push({ name: name || addr, address: addr });
+  const addrEl = document.getElementById('s5-base-addr');
+  const base = { name: name || addr, address: addr };
+  if (addrEl.dataset.lat && addrEl.dataset.lng) { base.lat = Number(addrEl.dataset.lat); base.lng = Number(addrEl.dataset.lng); }
+  travelBases.push(base);
+  delete addrEl.dataset.lat; delete addrEl.dataset.lng; delete addrEl.dataset.placeId;
   document.getElementById('s5-base-name').value = '';
   document.getElementById('s5-base-addr').value = '';
   clearError();
@@ -1094,6 +1116,12 @@ function setLoading(btnId, on) {
   btn.classList.toggle('loading', on);
   btn.disabled = on;
 }
+// Google address suggestions for the base location and travel bases.
+if (window.OpalPlaces) {
+  OpalPlaces.attach(document.getElementById('s4-location'));
+  OpalPlaces.attach(document.getElementById('s5-base-addr'));
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
