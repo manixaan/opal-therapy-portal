@@ -175,7 +175,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=11" defer></script>
+<script src="/profile.js?v=12" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -20584,6 +20584,18 @@ async function loadSetupStatusCard() {
     html += row('Outlook calendar', st.outlook.connected,
       st.outlook.connected ? ('Connected as ' + (st.outlook.email || '') + (st.outlook.lastSyncedAt ? ' · synced ' + _fmtAgo(st.outlook.lastSyncedAt) : ' · first sync pending')) : 'Not connected — Settings → Integrations');
     html += row('Home / travel base', st.travelBaseSet);
+    // Credentials are optional at first login; this row is the nudge to
+    // finish them, with a way straight there and a way to silence it.
+    if (st.credentials && (st.credentials.reminderDue || st.credentials.complete)) {
+      html += row('Credentials', st.credentials.complete,
+        st.credentials.complete ? 'Key credentials on file' :
+          (st.credentials.total ? (st.credentials.missingKeyTypes.length + ' key credential(s) to add · ' + st.credentials.keyTypesWithoutScan.length + ' waiting for a scan') : 'None added yet'));
+      if (st.credentials.reminderDue) {
+        html += '<div style="display:flex;gap:6px;margin:2px 0 4px 18px;">' +
+          '<button type="button" class="btn primary" style="font-size:12px;" onclick="openMyCredentials()">Add credentials</button>' +
+          '<button type="button" class="btn" style="font-size:12px;" onclick="dismissCredentialReminder()">Not now</button></div>';
+      }
+    }
     var pending = (st.actions && st.actions.length) || 0;
     // Compact summary indicator (always); the full card shows ONLY while
     // setup work remains — a completed setup stays out of the way.
@@ -20599,6 +20611,13 @@ async function loadSetupStatusCard() {
     body.innerHTML = html;
     card.style.display = '';
   } catch (e) { card.style.display = 'none'; }
+}
+
+async function dismissCredentialReminder() {
+  try {
+    await fetch('/api/profile/credential-reminder/dismiss', { method: 'POST', credentials: 'include' });
+  } catch (e) { /* the card simply stays */ }
+  loadSetupStatusCard();
 }
 
 /* loadProfileView / toggleProfileEdit / saveProfileDetails → /profile.js.
@@ -24745,6 +24764,8 @@ function detectAndMarkRuralTrips() {
       // Action button based on type or relatedEntityType
       if (n.actionPayload && n.actionPayload.action === 'reconnect_outlook') {
         actionHtml = '<button class="notif-retry-btn" onclick="event.stopPropagation();retryOutlookConnect()">Reconnect Outlook</button>';
+      } else if (n.actionPayload && n.actionPayload.action === 'open_credentials') {
+        actionHtml = '<button class="notif-retry-btn" onclick="event.stopPropagation();closeNotificationsPanel();openMyCredentials()">Open Credentials</button>';
       } else if (n.actionPayload && n.actionPayload.action === 'retry_splose_sync') {
         actionHtml = '<button class="notif-retry-btn" onclick="event.stopPropagation();retrySploseSync(this)">Retry sync</button>';
       } else if (n.relatedEntityType === 'integration') {
@@ -24784,6 +24805,9 @@ function detectAndMarkRuralTrips() {
     if (!n) return;
     markNotificationRead(id);
     var et = n.relatedEntityType;
+    if (n.actionPayload && n.actionPayload.action === 'open_credentials' && typeof openMyCredentials === 'function') {
+      closeNotificationsPanel(); openMyCredentials(); return;
+    }
     if (et === 'calendar')    { switchTab('calendar');  closeNotificationsPanel(); }
     else if (et === 'profile')     { switchTab('profile');   closeNotificationsPanel(); }
     else if (et === 'travel')      { switchTab('logbook');   closeNotificationsPanel(); }

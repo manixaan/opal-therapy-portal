@@ -109,6 +109,7 @@
     input[type="number"],
     input[type="tel"],
     input[type="email"],
+    input[type="date"],
     select,
     textarea {
       width: 100%;
@@ -312,6 +313,26 @@
       font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .tag-add-btn:hover { background: var(--brand-dark); }
+
+    /* ── Credential rows (steps 2 and 6) ── */
+    .cred-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+    .cred-row { border: 1.5px solid var(--border); border-radius: 8px; }
+    .cred-row[open] { border-color: var(--brand); }
+    .cred-row > summary {
+      list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px; font-size: 14px; color: var(--ink);
+    }
+    .cred-row > summary::-webkit-details-marker { display: none; }
+    .cred-row > summary::before { content: '+'; font-weight: 700; color: var(--brand); width: 12px; }
+    .cred-row[open] > summary::before { content: '–'; }
+    .cred-row-title { flex: 1; font-weight: 600; }
+    .cred-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #f8f9fc; color: #8a8379; white-space: nowrap; }
+    .cred-chip.saved { background: var(--success-bg); color: var(--success); }
+    .cred-chip.noscan { background: var(--warn-bg); color: var(--warn-txt); }
+    .cred-row-body { padding: 4px 14px 14px; }
+    .cred-row-body .field { margin-bottom: 12px; }
+    input[type="file"] { font-family: inherit; font-size: 13px; color: var(--ink-soft); max-width: 100%; }
+    .saved-base { display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid var(--border); border-radius:8px; font-size:13.5px; background:#fbfaf7; }
   </style>
 </head>
 <body>
@@ -351,7 +372,7 @@
       <input type="email" id="s1-email" readonly />
     </div>
     <div class="field">
-      <label for="s1-display-name">Display name <span class="required">*</span></label>
+      <label for="s1-display-name">Display name <span class="optional">(optional — your registered name is used otherwise)</span></label>
       <input type="text" id="s1-display-name" placeholder="e.g. Ann or Ann Smith" />
       <p class="field-hint">Appears on calendar tiles and to other staff.</p>
     </div>
@@ -386,38 +407,15 @@
         <span class="spinner"></span>
       </button>
     </div>
+    <a class="skip-link" onclick="skipStep(1)">Skip for now</a>
   </div>
 
-  <!-- ══ STEP 2: Professional details ══════════════════════════════════════ -->
+  <!-- ══ STEP 2: Professional registration ══════════════════════════════════ -->
   <div class="panel" id="panel-2">
-    <p class="section-title">Professional details</p>
-    <p class="section-sub">Your registration and practice information. You can update these any time in My Profile.</p>
+    <p class="section-title">Professional registration</p>
+    <p class="section-sub">Your Ahpra registration and professional indemnity insurance. Each one you fill in is saved straight to <strong>My Profile → Credentials</strong>, where you can change it later. Everything here is optional.</p>
 
-    <div class="field">
-      <label for="s2-ahpra">AHPRA registration number <span class="optional">(optional)</span></label>
-      <input type="text" id="s2-ahpra" placeholder="e.g. OCC0001234567" autocomplete="off" />
-    </div>
-    <div class="field">
-      <label for="s2-years">Years of experience <span class="optional">(optional)</span></label>
-      <input type="number" id="s2-years" placeholder="e.g. 5" min="0" max="50" />
-    </div>
-    <div class="field">
-      <label>Areas of specialisation <span class="optional">(optional)</span></label>
-      <div class="tags-wrap" id="spec-tags"></div>
-      <div class="tag-input-wrap">
-        <input type="text" id="spec-input" placeholder="Add a specialisation…" />
-        <button type="button" class="tag-add-btn" onclick="addSpec()">Add</button>
-      </div>
-      <p class="field-hint">e.g. Paediatrics, NDIS, Mental Health, Stroke Rehabilitation</p>
-    </div>
-    <div class="field">
-      <label for="s2-insurance">Professional indemnity insurance provider <span class="optional">(optional)</span></label>
-      <input type="text" id="s2-insurance" placeholder="e.g. MIPS, Avant" />
-    </div>
-    <div class="field">
-      <label for="s2-bio">Short bio <span class="optional">(optional)</span></label>
-      <textarea id="s2-bio" placeholder="Brief description for client-facing use…"></textarea>
-    </div>
+    <div class="cred-list" id="cred-list-2"></div>
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="goTo(1)">← Back</button>
@@ -479,12 +477,12 @@
     </div>
 
     <div class="field">
-      <label for="s4-location" id="step4-location-label">Default base location <span class="required">*</span></label>
+      <label for="s4-location" id="step4-location-label">Home / default base <span class="optional">(optional)</span></label>
       <div class="location-wrap">
         <span class="location-icon"></span>
         <input type="text" id="s4-location" placeholder="Start typing an address…" autocomplete="off" />
       </div>
-      <p class="field-hint">Full street address. You can update this any time in My Profile.</p>
+      <p class="field-hint">Full street address. It becomes your <strong>Home</strong> base in My Profile → Work Locations, and Monday–Friday of this week and the next three are set to it (any day you have already set is left alone).</p>
     </div>
 
     <div class="btn-row">
@@ -502,6 +500,7 @@
     <p class="section-title">Travel bases</p>
     <p class="section-sub">Add any additional bases you work from — satellite clinics, schools, or community locations. These let the scheduler choose the nearest start point for each appointment.</p>
 
+    <div id="saved-bases-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;"></div>
     <div id="bases-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
 
     <div class="field">
@@ -529,29 +528,11 @@
 
   <!-- ══ STEP 6: Credentials ════════════════════════════════════════════════ -->
   <div class="panel" id="panel-6">
-    <p class="section-title">Credentials &amp; registration</p>
-    <p class="section-sub">Expiry dates help the app warn you before renewals are due. All fields are optional — fill in what's relevant to you.</p>
+    <p class="section-title">Checks &amp; credentials</p>
+    <p class="section-sub">Add what you have to hand — a number, an expiry date, and a scan or photo of the document. Each one is saved to <strong>My Profile → Credentials</strong>, so the app can warn you before it expires. All optional; anything you leave closed is not created.</p>
 
-    <div class="field">
-      <label for="s6-ahpra-expiry">AHPRA registration expiry <span class="optional">(optional)</span></label>
-      <input type="text" id="s6-ahpra-expiry" placeholder="e.g. 30/11/2025" />
-    </div>
-    <div class="field">
-      <label for="s6-insurance-expiry">Insurance expiry <span class="optional">(optional)</span></label>
-      <input type="text" id="s6-insurance-expiry" placeholder="e.g. 01/07/2026" />
-    </div>
-    <div class="field">
-      <label for="s6-wwc">Working With Children check expiry <span class="optional">(optional)</span></label>
-      <input type="text" id="s6-wwc" placeholder="e.g. 15/03/2027" />
-    </div>
-    <div class="field">
-      <label for="s6-police">Police check date <span class="optional">(optional)</span></label>
-      <input type="text" id="s6-police" placeholder="e.g. 01/01/2024" />
-    </div>
-    <div class="field">
-      <label for="s6-ndis">NDIS Worker Screening expiry <span class="optional">(optional)</span></label>
-      <input type="text" id="s6-ndis" placeholder="e.g. 01/01/2028" />
-    </div>
+    <div class="cred-list" id="cred-list-6"></div>
+    <p class="field-hint">Documents: PDF, PNG or JPEG, up to 5 MB each. Other credential types (first aid, CPR, public liability…) can be added in My Profile → Credentials.</p>
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="goTo(5)">← Back</button>
@@ -566,41 +547,13 @@
   <!-- ══ STEP 7: CPD ════════════════════════════════════════════════════════ -->
   <div class="panel" id="panel-7">
     <p class="section-title">CPD &amp; professional development</p>
-    <p class="section-sub">Set your annual CPD hour targets so the app can track your progress and send reminders.</p>
+    <p class="section-sub">How CPD works in the portal — nothing to fill in here.</p>
 
     <div class="callout info">
       <span class="icon"></span>
-      <span>AHPRA requires OTs to complete <strong>30 hours</strong> of CPD per registration year. You can adjust targets and add entries any time in My Profile.</span>
+      <span>The Occupational Therapy Board's standard is <strong>at least 20 hours</strong> of CPD per registration year (to the 30 November renewal), at least 5 of them interactive. Log activities in the portal under <strong>Resource Hub → Learning → CPD</strong>; it keeps the running total for the registration year.</span>
     </div>
-
-    <div class="field">
-      <label for="s7-cpd-target">Annual CPD target (hours) <span class="optional">(optional)</span></label>
-      <input type="number" id="s7-cpd-target" placeholder="30" min="0" max="200" value="30" />
-    </div>
-    <div class="field">
-      <label for="s7-pd-target">Annual PD target (hours) <span class="optional">(optional)</span></label>
-      <input type="number" id="s7-pd-target" placeholder="e.g. 10" min="0" max="200" />
-      <p class="field-hint">Professional development events, workshops, conferences.</p>
-    </div>
-    <div class="field">
-      <label for="s7-reg-year-start">Registration year start <span class="optional">(optional)</span></label>
-      <select id="s7-reg-year-start">
-        <option value="">-- Select month --</option>
-        <option value="1">January</option>
-        <option value="2">February</option>
-        <option value="3">March</option>
-        <option value="4">April</option>
-        <option value="5">May</option>
-        <option value="6">June</option>
-        <option value="7">July</option>
-        <option value="8" selected>August</option>
-        <option value="9">September</option>
-        <option value="10">October</option>
-        <option value="11">November</option>
-        <option value="12">December</option>
-      </select>
-      <p class="field-hint">OT registration typically renews in November — the year is counted from December to November.</p>
-    </div>
+    <p class="field-hint">CPD reminders can be switched on or off in the next step.</p>
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="goTo(6)">← Back</button>
@@ -686,6 +639,7 @@
         <span class="spinner"></span>
       </button>
     </div>
+    <a class="skip-link" onclick="skipStep(8)">Skip — keep the defaults</a>
   </div>
 
   <!-- ══ STEP 9: Review & finish ════════════════════════════════════════════ -->
@@ -728,17 +682,18 @@
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TOTAL_STEPS   = 9;
 const STEP_KEYS     = ['profile','professional','outlook','work-location','travel-bases','credentials','cpd','notifications','review'];
-const STEP_LABELS   = ['Your details','Professional details','Connect Outlook','Work location','Travel bases','Credentials & registration','CPD & PD goals','Notifications','Review & finish'];
+const STEP_LABELS   = ['Your details','Professional registration','Connect Outlook','Work location','Travel bases','Checks & credentials','CPD','Notifications','Review & finish'];
 const STEP_ICONS    = ['','','','','','','','',''];
-const OPTIONAL_STEPS = [2,3,4,5,6,7]; // step numbers that can be skipped (1-indexed; 8 is notifs which always saves; 9 is review)
+const OPTIONAL_STEPS = [1,2,3,4,5,6,7,8]; // every step can be skipped; 9 (review) finishes
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let USER         = null;
 let currentStep  = 1;
 let completedSteps = new Set();
 let skippedSteps   = new Set();
-let specialisations = [];
-let travelBases     = [];
+let travelBases     = [];   // step 5: new bases, not yet saved
+let SAVED_BASES     = null; // WORK_BASES as saved (GET /api/profile/work-schedule)
+let MY_CREDS        = [];   // the caller's own credentials (GET /api/profile/credentials?mine=1)
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 (async function init() {
@@ -760,6 +715,11 @@ let travelBases     = [];
     (USER.onboardingSkippedSteps   || []).forEach((k,i) => skippedSteps.add(STEP_KEYS.indexOf(k) + 1));
 
     populateStep1();
+    // What is already saved, so a return visit shows it (and re-saving
+    // cannot duplicate it). Neither failing stops the wizard.
+    await Promise.all([loadSavedBases(), loadMyCredentials()]);
+    renderCredRows(2); renderCredRows(6);
+    populateStep4(); renderSavedBases();
 
     // Resume where the user left off instead of always resetting to Step 1:
     // an explicit step override (OAuth return stores it before cleaning the
@@ -788,6 +748,7 @@ function goTo(step, skipSave) {
   updateProgress(step);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  if (step === 4) setupStep4();
   if (step === 9) buildReviewList();
 }
 
@@ -830,11 +791,11 @@ function populateStep1() {
 
 document.getElementById('btn-1-next').addEventListener('click', async () => {
   clearError();
+  // Optional: an empty name keeps the one given at registration.
   const displayName = document.getElementById('s1-display-name').value.trim();
-  if (!displayName) { showError('Display name is required.'); return; }
 
   const payload = {
-    displayName,
+    displayName:     displayName || undefined,
     roleTitle:       document.getElementById('s1-role-title').value.trim() || undefined,
     phone:           document.getElementById('s1-phone').value.trim()       || undefined,
     isTreatingTherapist: USER?.role === 'owner'
@@ -845,44 +806,18 @@ document.getElementById('btn-1-next').addEventListener('click', async () => {
   setLoading('btn-1-next', true);
   const ok = await postStep('profile', payload);
   setLoading('btn-1-next', false);
-  if (ok) { completedSteps.add(1); goTo(2); }
+  if (ok) { completedSteps.add(1); skippedSteps.delete(1); goTo(2); }
 });
 
-// ── Step 2: Professional details ──────────────────────────────────────────────
+// ── Step 2: Professional registration ─────────────────────────────────────────
 document.getElementById('btn-2-next').addEventListener('click', async () => {
-  const payload = {
-    ahpraNumber:  document.getElementById('s2-ahpra').value.trim()    || undefined,
-    yearsExp:     document.getElementById('s2-years').value           || undefined,
-    specialisations: specialisations.length ? specialisations : undefined,
-    insuranceProvider: document.getElementById('s2-insurance').value.trim() || undefined,
-    bio:          document.getElementById('s2-bio').value.trim()      || undefined,
-  };
+  clearError();
   setLoading('btn-2-next', true);
-  const ok = await postStep('professional', payload);
+  const ok = await saveCredRows(2);
+  const posted = ok && await postStep('professional', {});
   setLoading('btn-2-next', false);
-  if (ok) { completedSteps.add(2); skippedSteps.delete(2); goTo(3); }
+  if (posted) { completedSteps.add(2); skippedSteps.delete(2); goTo(3); }
 });
-
-// Tags (specialisations)
-document.getElementById('spec-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); addSpec(); }
-});
-function addSpec() {
-  const v = document.getElementById('spec-input').value.trim();
-  if (!v || specialisations.includes(v)) return;
-  specialisations.push(v);
-  document.getElementById('spec-input').value = '';
-  renderSpecs();
-}
-function removeSpec(val) {
-  specialisations = specialisations.filter(s => s !== val);
-  renderSpecs();
-}
-function renderSpecs() {
-  document.getElementById('spec-tags').innerHTML = specialisations.map(s =>
-    `<span class="tag" onclick="removeSpec('${escHtml(s)}')">${escHtml(s)} <span class="rm">×</span></span>`
-  ).join('');
-}
 
 // ── Step 3: Outlook connect ───────────────────────────────────────────────────
 async function connectOutlook() {
@@ -928,38 +863,85 @@ async function connectOutlook() {
 })();
 
 // ── Step 4: Work location ─────────────────────────────────────────────────────
+function isTreatingUser() {
+  const role = USER?.role || 'therapist';
+  return role === 'therapist' || (role === 'owner' && !!document.getElementById('s1-is-treating')?.checked);
+}
+
 function setupStep4() {
-  const role       = USER?.role || 'therapist';
-  const isTreating = role === 'therapist' || (role === 'owner' && document.getElementById('s1-is-treating')?.checked);
-  const callout    = document.getElementById('step4-callout');
-  if (!isTreating) {
+  const callout = document.getElementById('step4-callout');
+  if (!isTreatingUser()) {
     callout.className = 'callout info';
     document.getElementById('step4-callout-text').textContent =
-      'As an administrator, a work location is optional. You can add it any time in My Profile.';
-    document.getElementById('step4-location-label').innerHTML =
-      'Work location <span class="optional">(optional)</span>';
+      'A work location is optional for you. You can add it any time in My Profile → Work Locations.';
     document.getElementById('skip-4').textContent = 'Skip — I\'ll add this later';
+  } else {
+    callout.className = 'callout';
+    document.getElementById('step4-callout-text').textContent =
+      'Enter your home or usual starting base. The scheduler uses it to estimate drive time to each appointment. ' +
+      'Without one, travel times can\'t be worked out and the calendar will ask where you\'re working each day — ' +
+      'you can still continue and add it later in My Profile → Work Locations.';
   }
+}
+
+/* Week keys — an EXACT copy of the shell's mondayOf / addDays / weekKeyFor
+   (mockup_v3.html, "Week key helpers"). The portal stores the work-location
+   schedule under these keys (browser local time, not ISO weeks); a key that
+   differs by one week is a schedule nobody sees. Pinned equal to the shell by
+   tests/onboarding-wizard-weekkey.test.js. */
+function mondayOf(d) {
+  const x = new Date(d);
+  const day = (x.getDay() + 6) % 7;  // 0 = Mon
+  x.setDate(x.getDate() - day);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function weekKeyFor(monday) {
+  // ISO-ish week number (good enough for mockup)
+  const start = new Date(monday.getFullYear(), 0, 1);
+  const diff = (monday - start) / 86400000;
+  const week = Math.floor(diff / 7) + 1;
+  return `${monday.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+/** This week and the next three, as the shell keys them. */
+function wizardWeekKeys(today) {
+  const first = mondayOf(today || new Date());
+  return [0, 1, 2, 3].map(i => weekKeyFor(addDays(first, i * 7)));
+}
+
+function savedHome() {
+  const homes = (SAVED_BASES && Array.isArray(SAVED_BASES.homes)) ? SAVED_BASES.homes : [];
+  return homes.find(h => h && h.id === 'home-1') || null;
+}
+function populateStep4() {
+  const h = savedHome();
+  const el = document.getElementById('s4-location');
+  if (!h || !h.addr || el.value) return;
+  el.value = h.addr;
+  if (h.lat != null && h.lng != null) { el.dataset.lat = String(h.lat); el.dataset.lng = String(h.lng); }
+  if (h.placeId) el.dataset.placeId = h.placeId;
 }
 
 document.getElementById('btn-4-next').addEventListener('click', async () => {
   clearError();
-  const role       = USER?.role || 'therapist';
-  const isTreating = role === 'therapist' || (role === 'owner' && document.getElementById('s1-is-treating')?.checked);
-  const location   = document.getElementById('s4-location').value.trim();
-  if (isTreating && !location) {
-    showError('Please enter your base location, or use "Skip" to add it later.');
-    return;
+  const locEl    = document.getElementById('s4-location');
+  const location = locEl.value.trim();
+  let payload = {};
+  if (location) {
+    // A picked Google suggestion carries its coordinates and place id.
+    const home = { address: location };
+    if (locEl.dataset.lat && locEl.dataset.lng) { home.lat = Number(locEl.dataset.lat); home.lng = Number(locEl.dataset.lng); }
+    if (locEl.dataset.placeId) home.placeId = locEl.dataset.placeId;
+    payload = { homeAddress: home, weekKeys: wizardWeekKeys() };
   }
-  // A picked Google suggestion carries its coordinates and place id.
-  const locEl = document.getElementById('s4-location');
-  const picked = locEl.dataset.lat && locEl.dataset.lng
-    ? { lat: Number(locEl.dataset.lat), lng: Number(locEl.dataset.lng), placeId: locEl.dataset.placeId || undefined } : {};
-  const payload = location ? { defaultWorkLocation: Object.assign({ formattedAddress: location }, picked) } : {};
+  // No location is fine: the step is optional and the note above says why
+  // it helps. Nothing here stops the person moving on.
   setLoading('btn-4-next', true);
   const ok = await postStep('work-location', payload);
+  if (ok && location) await loadSavedBases();
   setLoading('btn-4-next', false);
-  if (ok) { completedSteps.add(4); skippedSteps.delete(4); goTo(5); }
+  if (ok) { completedSteps.add(4); skippedSteps.delete(4); renderSavedBases(); goTo(5); }
 });
 
 // ── Step 5: Travel bases ──────────────────────────────────────────────────────
@@ -976,6 +958,18 @@ function addBase() {
   document.getElementById('s5-base-addr').value = '';
   clearError();
   renderBases();
+}
+function renderSavedBases() {
+  const el = document.getElementById('saved-bases-list');
+  if (!el) return;
+  const homes = (SAVED_BASES && Array.isArray(SAVED_BASES.homes)) ? SAVED_BASES.homes : [];
+  const extra = homes.filter(h => h && h.id !== 'home-1' && h.addr);
+  el.innerHTML = extra.length
+    ? extra.map(h => `<div class="saved-base"><div style="flex:1"><strong>${escHtml(h.label || 'Base')}</strong>` +
+        `<br><span style="font-size:12px;color:var(--ink-soft)">${escHtml(h.addr)}</span></div>` +
+        `<span class="cred-chip saved">Saved</span></div>`).join('') +
+      '<p class="field-hint" style="margin-bottom:6px;">Saved bases are edited or removed in My Profile → Work Locations.</p>'
+    : '';
 }
 function removeBase(i) {
   travelBases.splice(i, 1);
@@ -996,38 +990,200 @@ function renderBases() {
 }
 
 document.getElementById('btn-5-next').addEventListener('click', async () => {
+  // An address typed but not yet added is added for the person, not lost.
+  if (document.getElementById('s5-base-addr').value.trim()) addBase();
   const payload = { travelBases };
   setLoading('btn-5-next', true);
   const ok = await postStep('travel-bases', payload);
+  if (ok && travelBases.length) { travelBases = []; renderBases(); await loadSavedBases(); renderSavedBases(); }
   setLoading('btn-5-next', false);
   if (ok) { completedSteps.add(5); skippedSteps.delete(5); goTo(6); }
 });
 
-// ── Step 6: Credentials ───────────────────────────────────────────────────────
-document.getElementById('btn-6-next').addEventListener('click', async () => {
-  const payload = {
-    ahpraExpiry:    document.getElementById('s6-ahpra-expiry').value.trim()    || undefined,
-    insuranceExpiry: document.getElementById('s6-insurance-expiry').value.trim() || undefined,
-    wwcExpiry:      document.getElementById('s6-wwc').value.trim()             || undefined,
-    policeCheckDate: document.getElementById('s6-police').value.trim()         || undefined,
-    ndisExpiry:     document.getElementById('s6-ndis').value.trim()            || undefined,
+// ── Steps 2 & 6: credentials, as real credential records ──────────────────────
+/* Same types and labels as My Profile → Credentials (profile.js
+   CRED_TYPE_LABELS / the Add credential dialog). Each row saves through the
+   portal's own API — POST /api/profile/credentials, the scan endpoints, and
+   PATCH for a record that already exists — so it appears on My Profile at
+   once and stays editable there. A row left empty creates nothing. */
+const CRED_ROWS = {
+  ahpra_registration:     { label: 'AHPRA registration', number: 'Registration number', numberPh: 'e.g. OCC0001234567', issuer: 'Issued by', issuerPh: 'e.g. Ahpra' },
+  professional_indemnity: { label: 'Professional indemnity', number: 'Policy number', issuer: 'Insurer', issuerPh: 'e.g. Guild, Aon, MIPS' },
+  wwcc:                   { label: 'Working with Children Check', number: 'Card number', issuer: 'Issued by', issuerPh: 'e.g. WA Department of Communities' },
+  ndis_worker_screening:  { label: 'NDIS Worker Screening Check', number: 'Clearance number', issuer: 'Issued by', issuerPh: 'e.g. WA Worker Screening Unit' },
+  police_check:           { label: 'Police check', number: 'Certificate number', issuer: 'Issued by', issuerPh: 'e.g. WA Police' },
+  drivers_licence:        { label: "Driver's licence", number: 'Licence number', issuer: 'Issued by', issuerPh: 'e.g. Department of Transport WA' },
+  qualification:          { label: 'Qualification', askName: true, namePh: 'e.g. Bachelor of Occupational Therapy', number: 'Certificate number', issuer: 'Institution', issuerPh: 'e.g. Curtin University' },
+};
+const CRED_STEP_TYPES = {
+  2: ['ahpra_registration', 'professional_indemnity'],
+  6: ['wwcc', 'ndis_worker_screening', 'police_check', 'drivers_licence', 'qualification'],
+};
+const CRED_ALIASES = { ahpra: 'ahpra_registration', ndis_screening: 'ndis_worker_screening', police_clearance: 'police_check', indemnity_insurance: 'professional_indemnity' };
+const SCAN_TYPES = { 'application/pdf': ['pdf'], 'image/png': ['png'], 'image/jpeg': ['jpg', 'jpeg'] };
+const SCAN_MAX_BYTES = 5 * 1024 * 1024;
+
+function credCanonical(t) { const k = String(t || '').toLowerCase(); return CRED_ALIASES[k] || k; }
+function myCred(type) { return MY_CREDS.find(c => credCanonical(c.credential_type) === type) || null; }
+
+async function loadMyCredentials() {
+  try {
+    const r = await fetch('/api/profile/credentials?mine=1', { credentials: 'include' });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    const me = USER && USER.id;
+    MY_CREDS = (j.credentials || []).filter(c => !me || c.user_id === me);
+  } catch (_) { /* rows start empty */ }
+}
+async function loadSavedBases() {
+  try {
+    const r = await fetch('/api/profile/work-schedule', { credentials: 'include' });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    SAVED_BASES = j.travelBases || null;
+  } catch (_) { /* nothing shown as saved */ }
+}
+
+function credChip(c) {
+  if (!c) return '<span class="cred-chip">Not added</span>';
+  return c.document_id
+    ? '<span class="cred-chip saved">Saved · document attached</span>'
+    : '<span class="cred-chip noscan">Saved · no document yet</span>';
+}
+function renderCredRows(step) {
+  const host = document.getElementById('cred-list-' + step);
+  if (!host) return;
+  host.innerHTML = CRED_STEP_TYPES[step].map(type => {
+    const d = CRED_ROWS[type], c = myCred(type), id = 'cr-' + type;
+    const v = (x) => escHtml(x == null ? '' : String(x));
+    return `<details class="cred-row" id="${id}"${c ? ' open' : ''}>
+      <summary><span class="cred-row-title">${escHtml(d.label)}</span><span id="${id}-chip">${credChip(c)}</span></summary>
+      <div class="cred-row-body">
+        ${d.askName ? `<div class="field"><label for="${id}-name">Qualification name</label>
+          <input type="text" id="${id}-name" maxlength="200" placeholder="${escHtml(d.namePh)}" value="${c ? v(c.credential_name) : ''}" /></div>` : ''}
+        <div class="field"><label for="${id}-number">${escHtml(d.number)} <span class="optional">(optional)</span></label>
+          <input type="text" id="${id}-number" maxlength="120" autocomplete="off" placeholder="${escHtml(d.numberPh || '')}" value="${c ? v(c.registration_number) : ''}" /></div>
+        <div class="field"><label for="${id}-issuer">${escHtml(d.issuer)} <span class="optional">(optional)</span></label>
+          <input type="text" id="${id}-issuer" maxlength="200" placeholder="${escHtml(d.issuerPh || '')}" value="${c ? v(c.issuing_body) : ''}" /></div>
+        <div class="field"><label for="${id}-expiry">Expiry date <span class="optional">(optional)</span></label>
+          <input type="date" id="${id}-expiry" value="${c && c.expiry_date ? v(String(c.expiry_date).slice(0, 10)) : ''}" /></div>
+        <div class="field"><label for="${id}-file">Document <span class="optional">(optional)</span></label>
+          <input type="file" id="${id}-file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" />
+          <p class="field-hint">${c && c.document_id ? 'A document is already attached. Choose a file only to replace it.' : 'A scan or photo of the certificate or card.'}</p></div>
+      </div>
+    </details>`;
+  }).join('');
+}
+
+function readFileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = e => resolve(String(e.target.result).split(',')[1] || '');
+    fr.onerror = () => reject(new Error('That file could not be read.'));
+    fr.readAsDataURL(file);
+  });
+}
+function checkScanFile(file) {
+  const exts = SCAN_TYPES[String(file.type || '').toLowerCase()];
+  const ext = String(file.name || '').split('.').pop().toLowerCase();
+  if (!exts || !exts.includes(ext)) return 'must be a PDF, PNG or JPEG';
+  if (file.size > SCAN_MAX_BYTES) return 'is larger than 5 MB';
+  return null;
+}
+async function scanPayload(file) {
+  return { fileName: file.name, fileMime: file.type, fileSizeBytes: file.size, fileData: await readFileBase64(file) };
+}
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method, credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Could not save');
+  return j;
+}
+
+/** Save one row. Returns null on success (or nothing to do), else a message. */
+async function saveCredRow(type) {
+  const d = CRED_ROWS[type], id = 'cr-' + type;
+  const val = (suffix) => (document.getElementById(id + '-' + suffix)?.value || '').trim();
+  const fields = {
+    credentialName:     d.askName ? val('name') : '',
+    registrationNumber: val('number'),
+    issuingBody:        val('issuer'),
+    expiryDate:         val('expiry'),
   };
-  const hasAny = Object.values(payload).some(Boolean);
+  const fileEl = document.getElementById(id + '-file');
+  const file = fileEl && fileEl.files && fileEl.files[0];
+  if (file) {
+    const bad = checkScanFile(file);
+    if (bad) return `${d.label}: the document ${bad}.`;
+  }
+  const existing = myCred(type);
+  try {
+    if (existing) {
+      // Only what changed; an emptied field is cleared.
+      const patch = {};
+      if (d.askName && fields.credentialName && fields.credentialName !== existing.credential_name) patch.credentialName = fields.credentialName;
+      [['registrationNumber', 'registration_number'], ['issuingBody', 'issuing_body'], ['expiryDate', 'expiry_date']].forEach(([k, col]) => {
+        let before = existing[col] == null ? '' : String(existing[col]);
+        if (col === 'expiry_date') before = before.slice(0, 10);
+        if (fields[k] !== before) patch[k] = fields[k] || null;
+      });
+      let rec = existing;
+      if (Object.keys(patch).length) rec = (await api('PATCH', '/api/profile/credentials/' + encodeURIComponent(existing.id), patch)).credential || rec;
+      if (file) rec = (await api('POST', '/api/profile/credentials/' + encodeURIComponent(existing.id) + '/scan', await scanPayload(file))).credential || rec;
+      Object.assign(existing, rec);
+    } else {
+      const anything = fields.registrationNumber || fields.issuingBody || fields.expiryDate || (d.askName && fields.credentialName) || file;
+      if (!anything) return null; // left empty — nothing is created
+      const body = {
+        credentialType:     type,
+        credentialName:     (d.askName && fields.credentialName) || d.label,
+        registrationNumber: fields.registrationNumber || null,
+        issuingBody:        fields.issuingBody || null,
+        expiryDate:         fields.expiryDate || null,
+      };
+      if (file) body.documentId = (await api('POST', '/api/profile/credentials/scans', await scanPayload(file))).document.id;
+      else body.scanLater = true; // saved now; the portal reminds them to add the document
+      const rec = (await api('POST', '/api/profile/credentials', body)).credential;
+      if (rec) MY_CREDS.push(rec);
+    }
+    if (fileEl) fileEl.value = '';
+    const chip = document.getElementById(id + '-chip');
+    if (chip) chip.innerHTML = credChip(myCred(type));
+    return null;
+  } catch (e) {
+    return `${d.label}: ${e.message || 'could not be saved'}.`;
+  }
+}
+async function saveCredRows(step) {
+  const errors = [];
+  for (const type of CRED_STEP_TYPES[step]) {
+    const err = await saveCredRow(type);
+    if (err) errors.push(err);
+  }
+  if (errors.length) {
+    showError(errors.join(' ') + ' Fix it, or use "Skip for now" — whatever saved is kept.');
+    return false;
+  }
+  return true;
+}
+
+document.getElementById('btn-6-next').addEventListener('click', async () => {
+  clearError();
   setLoading('btn-6-next', true);
-  const ok = await postStep('credentials', hasAny ? payload : {});
+  const ok = await saveCredRows(6);
+  const posted = ok && await postStep('credentials', {});
   setLoading('btn-6-next', false);
-  if (ok) { completedSteps.add(6); skippedSteps.delete(6); goTo(7); }
+  if (posted) { completedSteps.add(6); skippedSteps.delete(6); goTo(7); }
 });
 
-// ── Step 7: CPD ───────────────────────────────────────────────────────────────
+// ── Step 7: CPD (information only — the portal keeps no CPD targets) ──────────
 document.getElementById('btn-7-next').addEventListener('click', async () => {
-  const payload = {
-    cpdTargetHours: parseInt(document.getElementById('s7-cpd-target').value) || undefined,
-    pdTargetHours:  parseInt(document.getElementById('s7-pd-target').value)  || undefined,
-    regYearStartMonth: parseInt(document.getElementById('s7-reg-year-start').value) || undefined,
-  };
   setLoading('btn-7-next', true);
-  const ok = await postStep('cpd', payload);
+  const ok = await postStep('cpd', {});
   setLoading('btn-7-next', false);
   if (ok) { completedSteps.add(7); skippedSteps.delete(7); goTo(8); }
 });
@@ -1044,7 +1200,7 @@ document.getElementById('btn-8-next').addEventListener('click', async () => {
   setLoading('btn-8-next', true);
   const ok = await postStep('notifications', payload);
   setLoading('btn-8-next', false);
-  if (ok) { completedSteps.add(8); goTo(9); }
+  if (ok) { completedSteps.add(8); skippedSteps.delete(8); goTo(9); }
 });
 
 // ── Step 9: Review ────────────────────────────────────────────────────────────

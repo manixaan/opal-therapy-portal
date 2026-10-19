@@ -704,7 +704,8 @@ describe('changed assets are cache-busted', () => {
       // 5: the office field stays disabled (coming soon) when bases load.
       // 10: setup card guarded; an unsaved work-location edit survives a schedule reload.
       // 11: a GET sent while the work-schedule PUT is in flight is ignored.
-      ['profile.js', 11],
+      // 12: Credentials open on your own; "All staff" is a switch; openMyCredentials.
+      ['profile.js', 12],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],

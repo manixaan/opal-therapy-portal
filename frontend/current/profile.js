@@ -628,33 +628,68 @@ async function pfDeleteDocument(id) {
 
 // ── Credentials section ────────────────────────────────────────────────────
 
+/* Whose credentials the section shows. My Profile is the signed-in person's
+   OWN page, so it opens on their own credentials (Oct 2026 — a new Owner used
+   to land on every staff member's records, synthetic test staff included).
+   "All staff" is a deliberate switch, offered only when the server says the
+   caller may see it (canViewAll). */
+var _credScope = 'mine';
+
+function credSetScope(scope) {
+  _credScope = scope === 'all' ? 'all' : 'mine';
+  loadCredentialsSection();
+}
+
+/** Straight to My Profile → Credentials (notification bell, setup card). */
+function openMyCredentials() {
+  _credScope = 'mine';
+  if (typeof switchTab === 'function') switchTab('profile');
+  pfOpenArea('pf-credentials');
+  loadCredentialsSection();
+}
+
 async function loadCredentialsSection() {
   const u = window.APP_USER;
   if (!u) return;
-  const isManager = ['owner','admin'].includes(u.role);
 
   const hdr  = document.getElementById('pf-credentials-header');
   const body = document.getElementById('pf-credentials-body');
 
-  hdr.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-      <h3 style="margin:0;">Credentials</h3>
-      <button class="btn primary" onclick="credOpenAddModal()" style="font-size:12px;">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add credential</button>
-    </div>
-    <p class="section-desc">${isManager
-      ? 'View credentials across staff. Use the verification button to mark credentials as verified.'
-      : 'Manage your professional credentials, licences, and clearances. The app alerts you before expiry.'}</p>
-  `;
+  const renderHeader = function (canViewAll) {
+    const allStaff = canViewAll && _credScope === 'all';
+    const tab = function (scope, label) {
+      const on = _credScope === scope;
+      return `<button type="button" class="btn${on ? ' primary' : ''}" aria-pressed="${on}"
+        onclick="credSetScope('${scope}')" style="font-size:12px;">${label}</button>`;
+    };
+    hdr.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <h3 style="margin:0;">Credentials</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${canViewAll ? `<div role="group" aria-label="Whose credentials" style="display:flex;gap:4px;">${tab('mine', 'My credentials')}${tab('all', 'All staff')}</div>` : ''}
+          <button class="btn primary" onclick="credOpenAddModal()" style="font-size:12px;">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add credential</button>
+        </div>
+      </div>
+      <p class="section-desc">${allStaff
+        ? 'Credentials across staff. Use the verification button to mark credentials as verified.'
+        : 'Your professional credentials, licences and clearances. The app alerts you before expiry.'}</p>
+    `;
+  };
 
+  if (!hdr.innerHTML) renderHeader(false);
   body.innerHTML = '<div class="pf-loading">Loading…</div>';
 
   try {
-    const r = await fetch('/api/profile/credentials', { credentials: 'include' });
+    const url = _credScope === 'all' ? '/api/profile/credentials' : '/api/profile/credentials?mine=1';
+    const r = await fetch(url, { credentials: 'include' });
     if (!r.ok) throw new Error('Failed');
-    const { credentials } = await r.json();
-    _renderCredentialCards(body, credentials, isManager);
+    const data = await r.json();
+    const canViewAll = !!data.canViewAll;
+    if (!canViewAll) _credScope = 'mine';
+    renderHeader(canViewAll);
+    _renderCredentialCards(body, data.credentials || [], canViewAll && data.scope === 'all');
   } catch {
     body.innerHTML = '<p style="color:var(--danger);font-size:12.5px;">Could not load credentials.</p>';
   }
