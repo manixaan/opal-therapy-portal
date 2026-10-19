@@ -25,8 +25,24 @@ const nodemailer = require('nodemailer');
 
 let transporter = null;
 
+function useGraph() {
+  return String(process.env.EMAIL_TRANSPORT || '').trim().toLowerCase() === 'graph';
+}
+
 function getTransporter() {
   if (transporter) return transporter;
+
+  // Microsoft Graph (EMAIL_TRANSPORT=graph): sends as EMAIL_SENDER with the
+  // portal's app registration — no mailbox password. See graph-mail-transport.js.
+  if (useGraph()) {
+    const gm = require('./graph-mail-transport');
+    if (!gm.isGraphMailConfigured()) {
+      console.warn('⚠️  EMAIL_TRANSPORT=graph but EMAIL_SENDER / MICROSOFT_CLIENT_ID / _SECRET / _TENANT_ID are not all set — emails will be skipped');
+      return null;
+    }
+    transporter = gm.createGraphTransport();
+    return transporter;
+  }
 
   const host    = process.env.EMAIL_HOST;
   const port    = parseInt(process.env.EMAIL_PORT || '587', 10);
@@ -52,6 +68,7 @@ function getTransporter() {
 
 /** Returns true if email is fully configured. */
 function isEmailConfigured() {
+  if (useGraph()) return require('./graph-mail-transport').isGraphMailConfigured();
   return !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS);
 }
 
@@ -77,7 +94,7 @@ function logLinkForDevelopment(label, url) {
   }
 }
 
-const FROM = () => process.env.EMAIL_FROM || `Opal Therapy <${process.env.EMAIL_USER}>`;
+const FROM = () => process.env.EMAIL_FROM || `Opal Therapy <${process.env.EMAIL_SENDER || process.env.EMAIL_USER}>`;
 
 /**
  * Base URL for every emailed link (invite/verify/reset). APP_BASE_URL is

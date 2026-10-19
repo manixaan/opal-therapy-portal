@@ -103,9 +103,17 @@ function validateEnvironment(env = process.env) {
     }
   }
 
+  // EMAIL_TRANSPORT=graph sends through Microsoft Graph instead of SMTP
+  // (graph-mail-transport.js): EMAIL_HOST is then irrelevant, and the sender
+  // mailbox plus the app registration are what must be present.
+  if (String(env.EMAIL_TRANSPORT || '').trim().toLowerCase() === 'graph') {
+    for (let i = warnings.length - 1; i >= 0; i--) if (warnings[i].key === 'EMAIL_HOST') warnings.splice(i, 1);
+    for (const key of ['EMAIL_SENDER', 'MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_TENANT_ID']) {
+      if (!env[key]) warnings.push({ key, why: 'EMAIL_TRANSPORT=graph but this is missing — no email will be sent (copy-link mode)' });
+    }
+  } else if (env.EMAIL_HOST) {
   // EMAIL_HOST alone does nothing: email.js needs host, user AND password, so
   // a half-configured server silently falls back to copy-link mode.
-  if (env.EMAIL_HOST) {
     for (const key of ['EMAIL_USER', 'EMAIL_PASS']) {
       if (!env[key]) warnings.push({ key, why: 'EMAIL_HOST is set but this is missing — no email will be sent (copy-link mode)' });
     }
