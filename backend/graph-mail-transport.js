@@ -13,6 +13,8 @@
  *   EMAIL_SENDER=portal@opaltherapy.com.au   the mailbox mail is sent from
  *   EMAIL_FROM="Opal Therapy <portal@…>"     optional display name
  *   EMAIL_REPLY_TO=ann.mathew@…              optional reply-to
+ *   EMAIL_SAVE_TO_SENT=false                 default: portal mail is NOT kept in
+ *                                            the sender's Sent Items (see below)
  *   MICROSOFT_CLIENT_ID / _SECRET / _TENANT_ID   (already used for Outlook)
  *
  * Tenant side (owner/Microsoft admin): the app registration needs the
@@ -48,6 +50,10 @@ function graphMailConfig(env = process.env) {
   return {
     sender: String(env.EMAIL_SENDER || '').trim(),
     replyTo: String(env.EMAIL_REPLY_TO || '').trim(),
+    // Invite, verification and password-reset emails carry account links. In a
+    // SHARED mailbox every member can read Sent Items, so a kept copy would
+    // hand those links to the whole team. Off unless explicitly turned on.
+    saveToSentItems: String(env.EMAIL_SAVE_TO_SENT || '').trim().toLowerCase() === 'true',
     clientId: env.MICROSOFT_CLIENT_ID || '',
     clientSecret: env.MICROSOFT_CLIENT_SECRET || '',
     tenantId: env.MICROSOFT_TENANT_ID || '',
@@ -78,7 +84,7 @@ function toRecipients(to) {
 }
 
 /** PURE — nodemailer-style options → the Graph sendMail request body. */
-function buildGraphMessage(opts, { sender, replyTo } = {}) {
+function buildGraphMessage(opts, { sender, replyTo, saveToSentItems = false } = {}) {
   const o = opts || {};
   const recipients = toRecipients(o.to);
   if (!recipients.length) throw new GraphMailError('No recipient', { code: 'no_recipient' });
@@ -116,7 +122,7 @@ function buildGraphMessage(opts, { sender, replyTo } = {}) {
         { code: 'attachments_too_large' });
     }
   }
-  return { message, saveToSentItems: true };
+  return { message, saveToSentItems: !!saveToSentItems };
 }
 
 /**

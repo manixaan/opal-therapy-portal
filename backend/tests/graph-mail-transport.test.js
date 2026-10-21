@@ -33,7 +33,7 @@ describe('buildGraphMessage', () => {
     const b = gm.buildGraphMessage(
       { from: 'Opal Therapy <someone@else>', to: 'a@x.test, Bea <b@x.test>', subject: 'Hi', html: '<p>Hi</p>', text: 'Hi' },
       { sender: 'portal@opal.example' });
-    expect(b.saveToSentItems).toBe(true);
+    expect(b.saveToSentItems).toBe(false); // account links never left in a shared Sent Items
     expect(b.message.body).toEqual({ contentType: 'HTML', content: '<p>Hi</p>' });
     expect(b.message.toRecipients).toEqual([
       { emailAddress: { address: 'a@x.test' } },
@@ -85,6 +85,16 @@ describe('createGraphTransport', () => {
       .rejects.toThrow(/Mail\.Send/);
     await expect(gm.createGraphTransport({ env: ENV, http: fakeHttp({ tokenFails: true }) }).sendMail({ to: 'a@x', text: 'x' }))
       .rejects.toThrow(/MICROSOFT_CLIENT_ID/);
+  });
+
+  test('Sent Items copy is off by default and only on with EMAIL_SAVE_TO_SENT=true', async () => {
+    const send = async (env) => {
+      const http = fakeHttp();
+      await gm.createGraphTransport({ env, http }).sendMail({ to: 'a@x', text: 'x' });
+      return http.calls.find((c) => c.url.endsWith('/sendMail')).body.saveToSentItems;
+    };
+    expect(await send(ENV)).toBe(false);
+    expect(await send({ ...ENV, EMAIL_SAVE_TO_SENT: 'true' })).toBe(true);
   });
 
   test('configured only with the sender and all three app settings', () => {
