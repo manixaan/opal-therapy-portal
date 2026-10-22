@@ -53,6 +53,14 @@ process.env.ALLOWED_EMAILS = '';
 process.env.EMAIL_HOST = '';
 process.env.EMAIL_USER = '';
 process.env.EMAIL_PASS = '';
+// Email OFF, whatever the developer's .env says: the Graph transport
+// (EMAIL_TRANSPORT=graph + EMAIL_SENDER) would otherwise attempt a real send
+// with the fake Microsoft secret below and turn a skipped email into a 502.
+process.env.EMAIL_TRANSPORT = '';
+process.env.EMAIL_SENDER = '';
+process.env.EMAIL_REPLY_TO = '';
+process.env.GRAPH_MAIL_ENABLED = 'false';
+process.env.M365_PROVISIONING_ENABLED = 'false';
 process.env.SPLOSE_API_KEY = 'integration-test-not-real';
 process.env.GOOGLE_MAPS_API_KEY = '';
 process.env.WEBHOOK_BASE_URL = '';
