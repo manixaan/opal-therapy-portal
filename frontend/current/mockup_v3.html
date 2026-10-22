@@ -83,6 +83,7 @@
 })();
 </script>
 <link rel="stylesheet" href="/resourcehub.css?v=r30" />
+<link rel="stylesheet" href="/resourcelibrary.css?v=1" />
 <link rel="stylesheet" href="/opa.css?v=1" />
 <link rel="stylesheet" href="/finance.css?v=1" />
 <link rel="stylesheet" href="/invoicing.css?v=2" />
@@ -107,7 +108,10 @@
 <link rel="stylesheet" href="/nf2f.css?v=3" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=3" />
-<script src="/resourcehub.js?v=r54" defer></script>
+<!-- The Library's document library (folders, list/tiles, bin, versions). Before
+     resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
+<script src="/resourcelibrary.js?v=1" defer></script>
+<script src="/resourcehub.js?v=r55" defer></script>
 <!-- Interactive induction: pure module definitions first (also require()d by
      the backend for validation), then the walkthrough engine. -->
 <script src="/induction-modules.js?v=4" defer></script>
@@ -181,7 +185,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=9" defer></script>
-<script src="/navigation.js?v=15" defer></script>
+<script src="/navigation.js?v=16" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */

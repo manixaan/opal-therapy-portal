@@ -132,8 +132,11 @@
    *  '#resources/instruments/<key>' is one assessment. Without an address the
    *  page could not be linked to and Back skipped straight past it.
    *  'assignment' is a learning-assignment player ('#resources/assignment/<id>')
-   *  — id-only: without an id RH2.nav degrades it to My Learning. */
-  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment', 'lwedit'];
+   *  — id-only: without an id RH2.nav degrades it to My Learning.
+   *  'library' carries the open folder ('#resources/library/<folder-id>', or
+   *  '.../recycle-bin') so Back/Forward walk folders and a reload stays in
+   *  one. Like 'pd', idless it is itself: the top of the Library. */
+  var RH_VIEWS_WITH_ID = ['detail', 'pd', 'instruments', 'assignment', 'lwedit', 'library'];
 
   /** Onboarding sub-views. Mirrors MANAGE_VIEWS in onboarding.js; an
    *  unrecognised value — including the retired dashboard/active/employees/
@@ -275,6 +278,7 @@
       else if (s.view === 'instruments') out += '/instruments' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view === 'assignment') out += '/assignment' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view === 'lwedit') out += '/lwedit' + (s.id ? '/' + encodeURIComponent(s.id) : '');
+      else if (s.view === 'library') out += '/library' + (s.id ? '/' + encodeURIComponent(s.id) : '');
       else if (s.view && s.view !== 'home') out += '/' + s.view;
     } else if (s.tab === 'onboarding') {
       // '#onboarding' IS Track Onboarding, so it needs no segment of its own.
@@ -902,6 +906,11 @@
       } else if (t.view === 'assignment' && t.id && isFn(global.RH2.openAssignment)) {
         try { global.RH2.openAssignment(t.id); } catch (e) {}
         NAV.rhView = 'assignment'; NAV.rhId = t.id;
+      } else if (t.view === 'library' && t.id && isFn(global.RH2.libOpenFolder)) {
+        // A folder (or the recycle bin) of the Library — Back, Forward or a
+        // reload lands in that folder rather than at the top.
+        try { global.RH2.libOpenFolder(t.id); } catch (e) {}
+        NAV.rhView = 'library'; NAV.rhId = t.id;
       } else if (t.view === 'lwedit' && t.id && isFn(global.RH2.laEdit)) {
         // Forward (or a reload) re-opens the editor over the Learning console;
         // laEdit itself refuses for anyone who is not the Owner.
@@ -1077,7 +1086,21 @@
         return function (view) {
           var out = orig.apply(this, arguments);
           NAV.rhView = lower(view) || 'home';
-          NAV.rhId = null;
+          // Returning to the Library lands in the folder the reader was last
+          // in, so the address names that folder too.
+          NAV.rhId = (NAV.rhView === 'library' && isFn(global.RH2.libCurrentFolder))
+            ? (safeId(global.RH2.libCurrentFolder()) || null) : null;
+          syncBase();
+          return out;
+        };
+      });
+      // Opening a Library folder is a real navigation: its own history entry,
+      // so Back walks up through the folders the reader came down.
+      hookMethod('RH2', 'libOpenFolder', function (orig) {
+        return function (id) {
+          var out = orig.apply(this, arguments);
+          NAV.rhView = 'library';
+          NAV.rhId = safeId(id) || null;
           syncBase();
           return out;
         };

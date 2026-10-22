@@ -379,10 +379,9 @@
       sort: 'relevant', saved: false, rows: null, loading: false, offset: 0, hasMore: false, loadingMore: false,
       browse: 'folders', folders: null, foldersLoading: false, foldersErr: '', organised: false,
       totalResources: 0, folderId: '', folderMeta: null, folderSearch: false,
-      orgErr: '', busy: '',
-      selMode: false, sel: {}, moveOpen: false, moveErr: '', moveNote: '', folderForm: null,
-      // Uploading, right-click and renaming.
-      uploads: null, dropTarget: '', wsDrop: false, menu: null, renaming: null,
+      // Folder browsing, uploads, menus, selection and the recycle bin are
+      // resourcelibrary.js's (window.RHLib); folderId mirrors its open folder
+      // so a search can offer "this folder only".
     },
     detail: { id: null, data: null, loading: false, ackConfirm: false, fbKind: '', fbDone: false, showVersions: false, quizResult: null, backView: 'home', files: null, filesLoading: false, filesErr: '' },
     learning: { data: null, loading: false, cpdOpen: false, cpd: null, pd: null, pdPastOpen: false },
@@ -449,6 +448,9 @@
     else if (S.view === 'instruments') body = renderInstruments();
     else if (S.view === 'admin') body = renderAdmin();
     host.innerHTML = renderNav() + body;
+    // The document library draws into its own mount inside the Library view.
+    var lib = doc.getElementById('rhl-root');
+    if (lib && global.RHLib) global.RHLib.mount(lib);
 
     if (focusId) {
       var next = doc.getElementById(focusId);
@@ -508,13 +510,23 @@
         q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '',
         sort: 'relevant', saved: true, rows: null, loading: false, offset: 0, hasMore: false,
         folderId: '', folderMeta: null, folderSearch: false, browse: 'folders',
-        selMode: false, sel: {}, moveOpen: false, folderForm: null,
-        menu: null, renaming: null, uploads: null, dropTarget: '', wsDrop: false,
       });
       view = 'library';
-    } else if (view === 'library' && S.lib.saved) {
-      S.lib.saved = false;
-      S.lib.rows = null;
+    } else if (view === 'library') {
+      // The Library tab returns to the document library — in the folder the
+      // reader was last in this session, or the one remembered from last time.
+      if (S.lib.saved) { S.lib.saved = false; S.lib.rows = null; }
+      Object.assign(S.lib, {
+        q: '', kind: '', type: '', topic: '', cost: '', population: '', setting: '', authority: '',
+        browse: 'folders', collection: '', folderSearch: false,
+      });
+      if (global.RHLib) {
+        var last = global.RHLib.current() || (!S.lib.visited ? global.RHLib.remembered() : '');
+        S.lib.visited = true;
+        global.RHLib.open(last);
+        S.lib.folderId = last === 'recycle-bin' ? '' : last;
+        if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
+      }
     }
     // 'assignment' is only addressable with an id: re-enter the one that is
     // open (or the Owner preview that is open), otherwise degrade to
@@ -537,10 +549,7 @@
     }
     S.view = view;
     if (view === 'home' && !S.home) loadHome();
-    if (view === 'library') {
-      if (!S.lib.rows) loadLibrary();
-      loadFolders();
-    }
+    if (view === 'library') loadFolders();
     if (view === 'learning') {
       if (isOwner()) {
         // The library and the staff list; Home supplies the PD panel.
@@ -1082,439 +1091,41 @@
     if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
   }
 
-  /* ── Uploading ────────────────────────────────────────────────────────────
-     Two ways in, one path: drag files onto a folder, or press Upload and pick
-     them. Both end up in libUploadFiles, so the two doors cannot behave
-     differently.
-
-     Files are read one at a time rather than all at once. A person dropping
-     twenty PDFs would otherwise have twenty base64 copies in memory
-     simultaneously, and the browser tab is not the place to discover that. */
-
-  var UPLOAD_EXT = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'];
-  var UPLOAD_ACCEPT = '.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg';
-  var UPLOAD_MAX = 25 * 1024 * 1024;
-
-  function readAsBase64(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onerror = function () { reject(new Error('unreadable')); };
-      reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
-      reader.readAsDataURL(file);
-    });
-  }
-
   /**
-   * Send each file to the folder, one after another, reporting as it goes.
-   *
-   * Rejections are per FILE, not per batch: an Excel sheet with client details
-   * in it stops that file and nothing else. The server decides — the checks
-   * here only save a round trip on the obvious cases.
+   * Open a Library folder ('' is the top, 'recycle-bin' the bin). This is the
+   * one door: the tree, the breadcrumbs, the folder rows and a deep link all
+   * come through here, and navigation.js hooks it so each folder gets its own
+   * history entry. The folder itself is drawn by resourcelibrary.js.
    */
-  async function libUploadFiles(folderId, fileList) {
-    var files = [].slice.call(fileList || []);
-    if (!files.length || !folderId) return;
-
-    S.lib.uploads = files.map(function (f) { return { name: f.name, state: 'waiting' }; });
-    S.lib.dropTarget = '';
-    S.lib.wsDrop = false;
-    render();
-
-    for (var i = 0; i < files.length; i++) {
-      var file = files[i];
-      var entry = S.lib.uploads[i];
-      var ext = String(file.name.split('.').pop() || '').toLowerCase();
-
-      if (UPLOAD_EXT.indexOf(ext) === -1) {
-        entry.state = 'error';
-        entry.message = 'Not a supported file type.';
-        render();
-        continue;
-      }
-      if (file.size > UPLOAD_MAX) {
-        entry.state = 'error';
-        entry.message = 'Larger than 25 MB.';
-        render();
-        continue;
-      }
-
-      entry.state = 'uploading';
-      render();
-      try {
-        var base64 = await readAsBase64(file);
-        var d = await api('/api/rh2/library/folders/' + encodeURIComponent(folderId) + '/upload', {
-          method: 'POST',
-          body: { fileName: file.name, fileData: base64 },
-        });
-        if (d.ok) {
-          entry.state = 'done';
-          entry.message = (d.warnings || []).join(' ');
-        } else {
-          entry.state = 'error';
-          entry.message = d.error || 'Upload failed.';
-        }
-      } catch (e) {
-        entry.state = 'error';
-        entry.message = 'Could not read that file.';
-      }
-      render();
-    }
-
-    // The folder counts and the open list are both stale now.
-    libRefreshFolders();
-    if (S.lib.folderId) loadLibrary();
-  }
-
-  function libPickFiles(folderId) {
-    var input = doc.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = UPLOAD_ACCEPT;
-    input.onchange = function () { libUploadFiles(folderId, input.files); };
-    input.click();
-  }
-
-  function libUploadsDismiss() { S.lib.uploads = null; render(); }
-
-  /**
-   * A drag only counts when it is carrying files from outside the browser.
-   *
-   * Dragging selected text, an image already on the page or a card across the
-   * workspace must not raise an upload affordance the drop could never
-   * satisfy — the promise has to be one the drop can keep.
-   */
-  function dragHasFiles(dt) {
-    if (!dt) return false;
-    var types = dt.types;
-    if (!types) return false;
-    for (var i = 0; i < types.length; i++) if (types[i] === 'Files') return true;
-    return false;
-  }
-
-  /* Drag state is kept as the id of the folder currently under the pointer, so
-     only that card highlights. dragleave is unreliable across child elements,
-     so entering another card simply replaces the value. */
-  function libDragOver(ev, folderId) {
-    if (!isOwner() || !dragHasFiles(ev.dataTransfer)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
-    if (S.lib.dropTarget !== folderId) { S.lib.dropTarget = folderId; render(); }
-  }
-
-  function libDragLeave(ev, folderId) {
-    if (S.lib.dropTarget === folderId) { S.lib.dropTarget = ''; render(); }
-  }
-
-  function libDrop(ev, folderId) {
-    if (!isOwner()) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    S.lib.dropTarget = '';
-    var dt = ev.dataTransfer;
-    if (dt && dt.files && dt.files.length) libUploadFiles(folderId, dt.files);
-    else render();
-  }
-
-  /* ── The workspace itself as a drop target ────────────────────────────────
-     Inside a folder the whole page takes a file, not just the strip: somebody
-     dragging a PDF out of Finder aims at the window, not at a band of it. The
-     destination is still the folder they are looking at and the route is still
-     libUploadFiles, so widening the target widens nothing else — the server
-     decides exactly as it did before.
-
-     On the folder grid there is no single destination, so the workspace does
-     not invent one; the cards keep their own drop handlers and each names the
-     folder it would file into.
-
-     Unlike every other state on this surface, the drag class is written
-     straight onto the node instead of going through render(). Re-rendering
-     replaces the whole subtree, which would tear out the element the pointer
-     is currently over mid-drag; the flag is mirrored into S.lib.wsDrop so a
-     render triggered by something else still paints the right state. */
-
-  function libWsCanDrop() { return isOwner() && !!S.lib.folderId; }
-
-  function libWsMark(on) {
-    S.lib.wsDrop = !!on;
-    var el = doc.getElementById('rh2-lib-ws');
-    if (el && el.classList) el.classList.toggle('is-dropping', !!on);
-  }
-
-  function libWsDragOver(ev) {
-    if (!libWsCanDrop() || !dragHasFiles(ev.dataTransfer)) return;
-    ev.preventDefault();
-    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
-    if (!S.lib.wsDrop) libWsMark(true);
-  }
-
-  /* dragleave fires at every child boundary. Only a leave whose destination is
-     outside the workspace is a real one; anything else is the pointer crossing
-     between two cards inside it. */
-  function libWsDragLeave(ev) {
-    if (!S.lib.wsDrop) return;
-    var to = ev.relatedTarget;
-    var host = ev.currentTarget;
-    if (to && host && host.contains && host.contains(to)) return;
-    libWsMark(false);
-  }
-
-  function libWsDrop(ev) {
-    if (!libWsCanDrop()) return;
-    ev.preventDefault();
-    libWsMark(false);
-    var dt = ev.dataTransfer;
-    if (dt && dt.files && dt.files.length) libUploadFiles(S.lib.folderId, dt.files);
-  }
-
-  function uploadPanel() {
-    var ups = S.lib.uploads;
-    if (!ups || !ups.length) return '';
-    var done = ups.filter(function (u) { return u.state === 'done'; }).length;
-    var failed = ups.filter(function (u) { return u.state === 'error'; });
-    var busy = ups.some(function (u) { return u.state === 'uploading' || u.state === 'waiting'; });
-    return '<div class="rh2-uploads" role="status" aria-live="polite">'
-      + '<div class="rh2-uploads-head">'
-      + '<strong>' + (busy ? 'Uploading…' : ('Uploaded ' + done + ' of ' + ups.length)) + '</strong>'
-      + (busy ? '' : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libUploadsDismiss()">Dismiss</button>')
-      + '</div>'
-      + ups.map(function (u) {
-        var mark = u.state === 'done' ? '✓' : u.state === 'error' ? '✗' : '·';
-        return '<div class="rh2-upload-row rh2-upload-' + esc(u.state) + '">'
-          + '<span class="rh2-upload-mark" aria-hidden="true">' + mark + '</span>'
-          + '<span class="rh2-upload-name">' + esc(u.name) + '</span>'
-          + (u.message ? '<span class="rh2-upload-msg">' + esc(u.message) + '</span>' : '')
-          + '</div>';
-      }).join('')
-      + (failed.length
-        ? '<p class="rh2-libnote">Files that were refused have not been stored. Nothing else was affected.</p>'
-        : '')
-      + '</div>';
-  }
-
-  /* ── Right-click ──────────────────────────────────────────────────────────
-     One menu, three kinds of target: a folder, a document, and the workspace
-     behind them. It is Owner-only because every action on it is: a therapist
-     right-clicking gets their browser's own menu, which is the correct outcome
-     rather than a menu of buttons that would all be refused.
-
-     Nothing on the menu is an authority. Every entry calls the handler its
-     toolbar equivalent already calls, so the menu can do nothing the surface
-     could not do without it, and the server refuses the same things either
-     way. */
-
-  /* Where a right-click still belongs to the browser: copy, paste and
-     spell-check on a field are not ours to take away, and the menu's own
-     surfaces must not re-open it on top of itself. */
-  var MENU_KEEP_NATIVE = 'input, textarea, select, a[href], .rh2-menu, .rh2-menu-veil';
-
-  function libMenu(ev, kind, id, name, review) {
-    if (!isOwner()) return true;
-    ev.preventDefault();
-    ev.stopPropagation();
-    S.lib.menu = { kind: kind, id: id, name: name, review: !!review, x: ev.clientX, y: ev.clientY };
-    render();
-    // Measured, not guessed: the workspace menu is a different height from the
-    // folder one, so one fixed clamp would put one of them off the short edge.
-    libMenuPlace();
-    var first = doc.querySelector('.rh2-menu .rh2-menu-item:not([aria-disabled="true"])');
-    if (first) { try { first.focus({ preventScroll: true }); } catch (e) { /* gone */ } }
-    return false;
-  }
-
-  /**
-   * The background menu: what can be made HERE.
-   *
-   * Only blank workspace opens it. A folder or a document stops the event on
-   * its own handler long before it reaches here, so an item's menu always wins
-   * over the room's — right-clicking a folder still offers the folder's actions.
-   */
-  function libWorkspaceMenu(ev) {
-    if (!isOwner()) return true;
-    var t = ev.target;
-    if (t && t.closest && t.closest(MENU_KEEP_NATIVE)) return true;
-    return libMenu(ev, 'workspace', S.lib.folderId || '', libHereName(), false);
-  }
-
-  /** The name of the place the reader is standing in. */
-  function libHereName() {
-    var meta = S.lib.folderMeta;
-    if (S.lib.folderId && meta && meta.folder) return meta.folder.name;
-    return 'Library';
-  }
-
-  /** Keep the whole menu on screen, whichever edge the pointer was near. */
-  function libMenuPlace() {
-    var m = S.lib.menu;
-    var el = doc.querySelector('.rh2-menu');
-    if (!m || !el) return;
-    var box = el.getBoundingClientRect();
-    var vw = global.innerWidth || 1200;
-    var vh = global.innerHeight || 800;
-    el.style.left = Math.round(Math.max(8, Math.min(m.x, vw - box.width - 8))) + 'px';
-    el.style.top = Math.round(Math.max(8, Math.min(m.y, vh - box.height - 8))) + 'px';
-  }
-
-  function libMenuClose() { S.lib.menu = null; render(); }
-
-  function renderMenu() {
-    var m = S.lib.menu;
-    if (!m) return '';
-    // Each entry is [label, handler, icon, disabled].
-    var items = [];
-    var note = '';
-    if (m.kind === 'workspace') {
-      var here = S.lib.folderId || '';
-      items.push(['New document', 'RH2.libNewDocument()', 'doc', false]);
-      items.push(['New folder', 'RH2.libFolderForm(true)', 'folder', false]);
-      items.push(['Upload…', here ? "RH2.libPickFiles('" + esc(here) + "')" : '', 'plus', !here]);
-      // Said rather than hidden. On the folder grid there is no one folder to
-      // upload into; a greyed entry with the reason beats a menu that quietly
-      // changes shape depending on where it was opened.
-      if (!here) note = 'Open a folder to upload into it.';
-    } else if (m.kind === 'folder') {
-      items.push(['Open', "RH2.libOpenFolder('" + esc(m.id) + "')", 'forward', false]);
-      items.push(['Rename…', "RH2.libRenameStart('folder','" + esc(m.id) + "')", 'edit', false]);
-      items.push(['Upload files here…', "RH2.libPickFiles('" + esc(m.id) + "')", 'plus', false]);
-      // Needs Review is fixed — the server refuses to remove it (400
-      // review_bucket_fixed) — so the menu stops offering it. Until libMenu
-      // carried the flag this test could never be true and the entry always
-      // showed, on a folder where it could only ever fail.
-      if (!m.review) items.push(['Remove folder…', "RH2.libFolderArchive('" + esc(m.id) + "','" + esc(String(m.name).replace(/'/g, '')) + "')", 'trash', false]);
-    } else {
-      items.push(['Open', "RH2.openDetail('" + esc(m.id) + "','library')", 'forward', false]);
-      items.push(['Rename…', "RH2.libRenameStart('resource','" + esc(m.id) + "')", 'edit', false]);
-      items.push(['Move to folder…', "RH2.libMoveOne('" + esc(m.id) + "')", 'folder', false]);
-    }
-    return '<div class="rh2-menu-veil" onclick="RH2.libMenuClose()" oncontextmenu="RH2.libMenuClose();return false;"></div>'
-      + '<div class="rh2-menu" role="menu" aria-label="Actions for ' + esc(m.name) + '" '
-      + 'style="left:' + Math.round(m.x) + 'px; top:' + Math.round(m.y) + 'px;">'
-      + '<div class="rh2-menu-title">' + esc(m.name) + '</div>'
-      + items.map(function (it, i) {
-        var face = '<span class="rh2-menu-icon" aria-hidden="true">' + icn(it[2], 'doc', 15) + '</span>'
-          + '<span class="rh2-menu-label">' + esc(it[0]) + '</span>';
-        if (it[3]) {
-          return '<span class="rh2-menu-item is-disabled" role="menuitem" aria-disabled="true">' + face + '</span>';
-        }
-        return '<button type="button" role="menuitem" class="rh2-menu-item" id="rh2-menu-i' + i + '" '
-          + 'onclick="RH2.libMenuClose();' + it[1] + '">' + face + '</button>';
-      }).join('')
-      + (note ? '<p class="rh2-menu-note">' + esc(note) + '</p>' : '')
-      + '</div>';
-  }
-
-  /**
-   * The open menu owns the keyboard.
-   *
-   * One document-level listener rather than a per-render binding, for the same
-   * reason the learning dialogs give further down: this module replaces its
-   * whole subtree on every render, so a handler attached to the menu would be
-   * thrown away and rebuilt constantly. Escape closes it, the arrows walk it,
-   * and Tab cannot wander off and leave it hanging over the page.
-   */
-  doc.addEventListener('keydown', function (e) {
-    if (!S.lib || !S.lib.menu) return;
-    if (e.key === 'Escape') { e.preventDefault(); libMenuClose(); return; }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab') return;
-    var menu = doc.querySelector('.rh2-menu');
-    if (!menu) return;
-    var items = menu.querySelectorAll('.rh2-menu-item:not([aria-disabled="true"])');
-    if (!items.length) return;
-    var at = -1;
-    for (var i = 0; i < items.length; i++) if (items[i] === doc.activeElement) at = i;
-    e.preventDefault();
-    var back = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
-    at = back ? at - 1 : at + 1;
-    if (at < 0) at = items.length - 1;
-    if (at >= items.length) at = 0;
-    try { items[at].focus({ preventScroll: true }); } catch (err) { /* gone */ }
-  });
-
-  /* ── Renaming ─────────────────────────────────────────────────────────────
-     An inline panel rather than window.prompt: prompt cannot be styled, cannot
-     show the server's refusal, and is blocked outright in some browsers. */
-
-  function libRenameStart(kind, id) {
-    var name = '';
-    if (kind === 'folder') {
-      (S.lib.folders || []).forEach(function (f) {
-        if (f.id === id) name = f.name;
-        (f.children || []).forEach(function (c) { if (c.id === id) name = c.name; });
-      });
-    } else {
-      (S.lib.rows || []).forEach(function (r) { if (pick(r, 'id') === id) name = pick(r, 'title'); });
-    }
-    S.lib.renaming = { kind: kind, id: id, name: name, err: '' };
-    render();
-  }
-
-  function libRenameField(v) { if (S.lib.renaming) S.lib.renaming.name = v; }
-  function libRenameCancel() { S.lib.renaming = null; render(); }
-
-  async function libRenameSave() {
-    var r = S.lib.renaming;
-    if (!r || S.lib.busy) return;
-    S.lib.busy = 'rename';
-    render();
-    var d = r.kind === 'folder'
-      ? await api('/api/rh2/library/folders/' + encodeURIComponent(r.id), {
-        method: 'PATCH', body: { name: r.name },
-      })
-      : await api('/api/rh2/library/resources/' + encodeURIComponent(r.id), {
-        method: 'PATCH', body: { title: r.name },
-      });
-    S.lib.busy = '';
-    if (!d.ok) { r.err = d.error || 'That name could not be saved.'; render(); return; }
-    S.lib.renaming = null;
-    libRefreshFolders();
-    if (r.kind === 'resource') loadLibrary();
-    render();
-  }
-
-  function renameDialog() {
-    var r = S.lib.renaming;
-    if (!r) return '';
-    return '<div class="rh2-folderform" role="group" aria-label="Rename">'
-      + '<h2 class="rh2-h2">Rename ' + (r.kind === 'folder' ? 'folder' : 'document') + '</h2>'
-      + '<label class="rh2-label" for="rh2-rename">Name</label>'
-      + '<input id="rh2-rename" class="rh2-input" maxlength="300" value="' + esc(r.name) + '" '
-      + 'oninput="RH2.libRenameField(this.value)">'
-      + (r.err ? '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(r.err) + '</p>' : '')
-      + '<div class="rh2-folderform-actions">'
-      + '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '') + ' onclick="RH2.libRenameSave()">Save</button>'
-      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libRenameCancel()">Cancel</button>'
-      + '</div></div>';
-  }
-
-  /** Move a single resource — the right-click counterpart to bulk selection. */
-  function libMoveOne(id) {
-    S.lib.sel = {};
-    S.lib.sel[id] = true;
-    S.lib.selMode = true;
-    S.lib.moveOpen = true;
-    render();
-  }
-
   function libOpenFolder(id) {
     var f = S.lib;
-    f.folderId = id || '';
+    id = String(id || '');
+    S.view = 'library';
+    f.saved = false;
+    f.browse = 'folders';
+    f.folderId = id === 'recycle-bin' ? '' : id;
     f.folderMeta = null;
     f.folderSearch = false;
-    f.browse = 'folders';
     f.q = ''; f.kind = ''; f.type = ''; f.topic = ''; f.cost = '';
     f.population = ''; f.setting = ''; f.authority = '';
-    // A collection left over from wherever the reader came from would narrow
-    // the list this folder returns while its count stayed unnarrowed — the
-    // folder would look emptier than its card, with nothing on screen saying
-    // why. Opening a folder asks one question: what is filed in here.
     f.collection = '';
-    f.sel = {}; f.selMode = false;
-    f.menu = null; f.renaming = null; f.wsDrop = false;
-    // The shelves are needed inside a folder too — the move picker reads them,
-    // and a reader who arrived here without passing the grid has none. It is
-    // cached, so this is free on every path that already loaded them.
-    loadFolders();
-    if (id) loadFolderMeta(id);
+    f.rows = null;
+    // Its name is needed for "New document" filing and "search this folder only".
+    if (f.folderId) loadFolderMeta(f.folderId);
+    if (global.RHLib) global.RHLib.open(id);
+    render();
+  }
+
+  /** The folder the Library is showing (for the address bar). */
+  function libCurrentFolder() {
+    return global.RHLib ? global.RHLib.current() : (S.lib.folderId || '');
+  }
+
+  /** A library-wide search, started from the document library's search box. */
+  function libSearch(q) {
+    S.lib.q = String(q || '');
+    S.lib.folderSearch = false;
+    if (S.lib.folderId) loadFolderMeta(S.lib.folderId);
     loadLibrary();
   }
 
@@ -1529,10 +1140,13 @@
     S.lib.browse = mode;
     S.lib.folderId = '';
     S.lib.folderMeta = null;
-    S.lib.sel = {}; S.lib.selMode = false;
-    // Moving is leaving: a menu opened in the old place must not survive into
-    // the new one, where its target may no longer be on screen.
-    S.lib.menu = null; S.lib.wsDrop = false;
+    S.lib.saved = false;
+    if (mode === 'folders' && global.RHLib) {
+      // Back to the document library, where the reader was.
+      S.lib.q = ''; S.lib.kind = ''; S.lib.type = ''; S.lib.topic = ''; S.lib.cost = '';
+      S.lib.population = ''; S.lib.setting = ''; S.lib.authority = ''; S.lib.collection = '';
+      return libOpenFolder(global.RHLib.current());
+    }
     // All Resources states the library's size from the same tree read the
     // "All Resources · 653" row uses, so the row and the page it opens cannot
     // give two answers. Cached, so this costs nothing on the usual path.
@@ -1543,57 +1157,6 @@
   /** Search this folder instead of the whole library — the reader's choice (§21). */
   function libScopeSearch(on) {
     S.lib.folderSearch = !!on;
-    loadLibrary();
-  }
-
-  // ── Owner: selection and moving ─────────────────────────────────────────
-
-  function libSelectMode(on) {
-    S.lib.selMode = !!on;
-    if (!on) S.lib.sel = {};
-    render();
-  }
-
-  function libToggleSel(id) {
-    if (S.lib.sel[id]) delete S.lib.sel[id];
-    else S.lib.sel[id] = true;
-    render();
-  }
-
-  function libSelCount() { return Object.keys(S.lib.sel || {}).length; }
-
-  function libMoveOpen(on) {
-    S.lib.moveOpen = !!on;
-    S.lib.moveErr = '';
-    render();
-  }
-
-  /** Every folder as a flat list, for the move picker. */
-  function libFolderOptions() {
-    var out = [];
-    (S.lib.folders || []).forEach(function (p) {
-      out.push({ id: p.id, label: p.name });
-      (p.children || []).forEach(function (c) {
-        out.push({ id: c.id, label: p.name + ' → ' + c.name });
-      });
-    });
-    return out;
-  }
-
-  async function libMoveTo(folderId) {
-    if (!folderId) return;
-    var ids = Object.keys(S.lib.sel || {});
-    if (!ids.length) return;
-    S.lib.busy = 'move';
-    render();
-    var d = await api('/api/rh2/library/move', {
-      method: 'POST', body: { folderId: folderId, resourceIds: ids },
-    });
-    S.lib.busy = '';
-    if (!d.ok) { S.lib.moveErr = d.error || 'Those resources could not be moved.'; render(); return; }
-    S.lib.sel = {}; S.lib.selMode = false; S.lib.moveOpen = false; S.lib.moveErr = '';
-    S.lib.moveNote = d.moved + (d.moved === 1 ? ' resource moved to ' : ' resources moved to ') + d.folder;
-    libRefreshFolders();
     loadLibrary();
   }
 
@@ -1616,7 +1179,6 @@
    * a tampered value buys nothing a hand-typed one would not have.
    */
   function libNewDocument() {
-    S.lib.menu = null;
     S.admin.fileInto = S.lib.folderId || '';
     S.admin.fileIntoName = libHereName();
     S.admin.tab = 'content';
@@ -1624,342 +1186,67 @@
     adminNew();
   }
 
-  function libFolderForm(open, folder) {
-    S.lib.folderForm = open ? {
-      id: folder ? folder.id : '',
-      name: folder ? folder.name : '',
-      description: folder ? (folder.description || '') : '',
-      parentId: folder ? (folder.parentId || '') : (S.lib.folderId || ''),
-      err: '',
-    } : null;
-    render();
-  }
-
-  function libFolderFormField(k, v) {
-    if (S.lib.folderForm) S.lib.folderForm[k] = v;
-  }
-
-  async function libFolderSave() {
-    var form = S.lib.folderForm;
-    if (!form || S.lib.busy) return;
-    S.lib.busy = 'folder';
-    render();
-    var body = { name: form.name, description: form.description };
-    var d;
-    if (form.id) {
-      d = await api('/api/rh2/library/folders/' + encodeURIComponent(form.id), {
-        method: 'PATCH', body: body,
-      });
-    } else {
-      body.parentId = form.parentId || null;
-      d = await api('/api/rh2/library/folders', { method: 'POST', body: body });
-    }
-    S.lib.busy = '';
-    if (!d.ok) { form.err = d.error || 'That folder could not be saved.'; render(); return; }
-    S.lib.folderForm = null;
-    libRefreshFolders();
-    render();
-  }
-
-  async function libFolderArchive(id, name) {
-    if (S.lib.busy) return;
-    if (!await portalConfirm('Remove the folder "' + name + '"? Its resources move to Needs Review — nothing is deleted.', { danger: true })) return;
-    S.lib.busy = 'folder';
-    render();
-    var d = await api('/api/rh2/library/folders/' + encodeURIComponent(id), { method: 'DELETE' });
-    S.lib.busy = '';
-    if (!d.ok) { S.lib.orgErr = d.error || 'That folder could not be removed.'; render(); return; }
-    if (S.lib.folderId === id) { S.lib.folderId = ''; S.lib.folderMeta = null; }
-    libRefreshFolders();
-    loadLibrary();
+  /** The name of the folder the reader is standing in. */
+  function libHereName() {
+    var meta = S.lib.folderMeta;
+    if (S.lib.folderId && meta && meta.folder) return meta.folder.name;
+    return 'Library';
   }
 
   // ── Rendering ───────────────────────────────────────────────────────────
-
-  function folderIcon() {
-    return '<span class="rh2-folder-glyph" aria-hidden="true">' + icn('folder', 'doc', 18) + '</span>';
-  }
 
   function countLabel(n) {
     return n + (n === 1 ? ' resource' : ' resources');
   }
 
-  /**
-   * A folder row. The name is the heading and the count is the fact; there is
-   * deliberately nothing else on it. Metadata belongs on the resource, not on
-   * the shelf (§18).
-   */
-  function folderCard(node, owner) {
-    var kids = (node.children || []).length;
-    var dropping = owner && S.lib.dropTarget === node.id;
-    // The drop handlers are only attached for an Owner: a therapist dragging a
-    // file onto a folder they cannot write to should get the browser's default
-    // (open the file), not a silent no-op that looks broken.
-    var dnd = owner
-      ? ' ondragover="RH2.libDragOver(event,\'' + esc(node.id) + '\')"'
-        + ' ondragleave="RH2.libDragLeave(event,\'' + esc(node.id) + '\')"'
-        + ' ondrop="RH2.libDrop(event,\'' + esc(node.id) + '\')"'
-        + ' oncontextmenu="return RH2.libMenu(event,\'folder\',\'' + esc(node.id) + '\',\''
-        + esc(String(node.name).replace(/'/g, '')) + '\',' + (node.isReviewBucket ? 'true' : 'false') + ')"'
-      : '';
-    return '<div class="rh2-folder' + (node.isReviewBucket ? ' rh2-folder-review' : '')
-      + (dropping ? ' is-dropping' : '') + '"' + dnd + '>'
-      + '<button type="button" class="rh2-folder-open" onclick="RH2.libOpenFolder(\'' + esc(node.id) + '\')">'
-      + folderIcon()
-      + '<span class="rh2-folder-body">'
-      + '<span class="rh2-folder-name">' + esc(node.name) + '</span>'
-      + (node.description ? '<span class="rh2-folder-desc">' + esc(node.description) + '</span>' : '')
-      + '<span class="rh2-folder-count">' + esc(countLabel(node.count))
-      + (kids ? ' · ' + kids + (kids === 1 ? ' subfolder' : ' subfolders') : '') + '</span>'
-      + '</span></button>'
-      + (dropping ? '<span class="rh2-folder-dropmsg" aria-hidden="true">Drop to upload</span>' : '')
-      + (owner ? '<span class="rh2-folder-tools">'
-        + '<button type="button" class="rh2-iconbtn" title="Upload files here" aria-label="Upload files into ' + esc(node.name) + '" '
-        + 'onclick="RH2.libPickFiles(\'' + esc(node.id) + '\')">' + icn('plus', 'doc', 14) + '</button>'
-        + '<button type="button" class="rh2-iconbtn" title="Rename folder" aria-label="Rename ' + esc(node.name) + '" '
-        + 'onclick="RH2.libRenameStart(\'folder\',\'' + esc(node.id) + '\')">' + icn('edit', 'doc', 14) + '</button>'
-        + (node.isReviewBucket ? '' : '<button type="button" class="rh2-iconbtn" title="Remove folder" aria-label="Remove ' + esc(node.name) + '" '
-          + 'onclick="RH2.libFolderArchive(\'' + esc(node.id) + '\',\'' + esc(String(node.name).replace(/'/g, '')) + '\')">'
-          + icn('trash', 'x', 14) + '</button>')
-        + '</span>' : '')
-      + '</div>';
-  }
-
-  /** Where the reader is. Always present once they are inside a folder (§20). */
-  function libCrumbs() {
-    var meta = S.lib.folderMeta;
-    var parts = ['<button type="button" class="rh2-crumb-link" onclick="RH2.libOpenFolder(\'\')">Library</button>'];
-    if (meta) {
-      (meta.breadcrumb || []).forEach(function (b) {
-        parts.push('<button type="button" class="rh2-crumb-link" onclick="RH2.libOpenFolder(\'' + esc(b.id) + '\')">' + esc(b.name) + '</button>');
-      });
-      parts.push('<span class="rh2-crumb-here" aria-current="page">' + esc(meta.folder.name) + '</span>');
-    }
-    return '<nav class="rh2-crumbs" aria-label="Library location">'
-      + parts.join('<span class="rh2-crumb-sep" aria-hidden="true">›</span>')
-      + '</nav>';
-  }
-
-  /**
-   * The Owner's controls.
-   *
-   * Everything here acts on the folder the reader is actually looking at, so
-   * "Upload files" inside Assessments puts them in Assessments. On the folder
-   * grid there is no single target, so uploading is offered per folder instead
-   * — by dropping onto a card or right-clicking it.
-   *
-   * These read as buttons and not as prose. They used to be rh2-btn-quiet,
-   * which is a transparent border on the page's own background and muted text:
-   * correct for a Cancel sitting beside a primary action, wrong for the only
-   * two things you can do to a folder. They now carry the standard button
-   * surface, an icon, and a pressed state, because a control nobody recognises
-   * as a control is not a control.
-   */
-  function libOwnerBar() {
-    if (!isOwner()) return '';
-    var f = S.lib;
-    var out = '<div class="rh2-libtools" role="group" aria-label="Library actions">';
-
-    if (f.folderId) {
-      out += '<button type="button" class="rh2-btn rh2-btn-primary" '
-        + 'onclick="RH2.libPickFiles(\'' + esc(f.folderId) + '\')">'
-        + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('plus', 'doc', 15) + '</span>Upload files</button>';
-    }
-    out += '<button type="button" class="rh2-btn" onclick="RH2.libFolderForm(true)">'
-      + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('folder', 'doc', 15) + '</span>New folder</button>';
-    if ((f.folders || []).length) {
-      out += '<button type="button" class="rh2-btn" aria-pressed="' + (f.selMode ? 'true' : 'false') + '" '
-        + 'onclick="RH2.libSelectMode(' + (f.selMode ? 'false' : 'true') + ')">'
-        + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('check', 'doc', 15) + '</span>'
-        + (f.selMode ? 'Done selecting' : 'Select resources') + '</button>';
-    }
-    out += '<span class="rh2-libhint">Right-click the workspace to add something here, or a folder or document to act on it.</span>';
-
-    if (f.orgErr) out += '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(f.orgErr) + '</p>';
-    if (f.moveNote) out += '<p class="rh2-libnote" role="status">' + esc(f.moveNote) + '</p>';
-    return out + '</div>';
-  }
-
-  /** The move panel: a folder list, not a tree widget. */
-  function libMovePanel() {
-    if (!S.lib.moveOpen) return '';
-    var options = libFolderOptions();
-    return '<div class="rh2-movebar" role="group" aria-label="Move selected resources">'
-      + '<span class="rh2-movebar-count">' + esc(countLabel(libSelCount())) + ' selected</span>'
-      + '<label class="rh2-visually-hidden" for="rh2-move-to">Move to folder</label>'
-      + '<select id="rh2-move-to" class="rh2-select" onchange="RH2.libMoveTo(this.value)">'
-      + '<option value="">Move to folder…</option>'
-      + options.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.label) + '</option>'; }).join('')
-      + '</select>'
-      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libMoveOpen(false)">Cancel</button>'
-      + (S.lib.moveErr ? '<span class="rh2-libnote rh2-libnote-warn">' + esc(S.lib.moveErr) + '</span>' : '')
-      + '</div>';
-  }
-
-  function libFolderDialog() {
-    var form = S.lib.folderForm;
-    if (!form) return '';
-    var parents = (S.lib.folders || []).filter(function (p) { return !p.isReviewBucket; });
-    return '<div class="rh2-folderform" role="group" aria-label="' + (form.id ? 'Rename folder' : 'New folder') + '">'
-      + '<h2 class="rh2-h2">' + (form.id ? 'Rename folder' : 'New folder') + '</h2>'
-      + '<label class="rh2-label" for="rh2-ff-name">Name</label>'
-      + '<input id="rh2-ff-name" class="rh2-input" maxlength="60" value="' + esc(form.name) + '" '
-      + 'oninput="RH2.libFolderFormField(\'name\',this.value)">'
-      + '<label class="rh2-label" for="rh2-ff-desc">Short description</label>'
-      + '<input id="rh2-ff-desc" class="rh2-input" maxlength="200" value="' + esc(form.description) + '" '
-      + 'oninput="RH2.libFolderFormField(\'description\',this.value)">'
-      + (form.id ? '' : '<label class="rh2-label" for="rh2-ff-parent">Inside</label>'
-        + '<select id="rh2-ff-parent" class="rh2-select" onchange="RH2.libFolderFormField(\'parentId\',this.value)">'
-        + '<option value="">Top level</option>'
-        + parents.map(function (p) {
-          return '<option value="' + esc(p.id) + '"' + (form.parentId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
-        }).join('') + '</select>')
-      + (form.err ? '<p class="rh2-libnote rh2-libnote-warn" role="status">' + esc(form.err) + '</p>' : '')
-      + '<div class="rh2-folderform-actions">'
-      + '<button type="button" class="rh2-btn rh2-btn-primary" ' + (S.lib.busy ? 'disabled' : '') + ' onclick="RH2.libFolderSave()">Save</button>'
-      + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libFolderForm(false)">Cancel</button>'
-      + '</div></div>';
-  }
-
-  /** The default screen: folders, then the way out to the flat list (§48, §49). */
-  function renderFolderGrid() {
-    var f = S.lib;
-    if (f.foldersLoading || f.folders === null) {
-      if (f.folders === null && !f.foldersLoading) loadFolders();
-      return '<div class="rh2-folders">' + skel(4, 44) + '</div>';
-    }
-    if (f.foldersErr) {
-      return '<div class="rh2-empty">' + esc(f.foldersErr)
-        + ' <button type="button" class="rh2-btn" onclick="RH2.libReloadFolders()">Retry</button></div>';
-    }
-    if (!f.folders.length) {
-      return '<div class="rh2-empty">'
-        + (isOwner()
-          ? 'No folders yet. Choose <strong>New folder</strong> to make one, then drag documents onto it or use <strong>Upload files</strong>.'
-          : 'No folders yet. Search, or open All Resources to browse everything.')
-        + '</div>' + allResourcesRow();
-    }
-    var owner = isOwner();
-    return '<div class="rh2-folders">'
-      + f.folders.map(function (n) { return folderCard(n, owner); }).join('')
-      + '</div>' + allResourcesRow();
-  }
-
-  function allResourcesRow() {
-    var n = S.lib.totalResources || 0;
-    return '<div class="rh2-allrow">'
-      + '<button type="button" class="rh2-allrow-btn" onclick="RH2.libBrowse(\'all\')">'
-      + '<span class="rh2-allrow-name">All Resources</span>'
-      + '<span class="rh2-folder-count">' + esc(countLabel(n)) + '</span>'
-      + '</button></div>';
-  }
-
-  /**
-   * Subfolders of the open folder, above its own resources.
-   *
-   * Counts come from the folder route with the subfolders themselves. Looking
-   * them up in the folder tree meant a reader who had not passed the grid was
-   * shown "0 resources" on a shelf that was full, and the number changed under
-   * them the moment the tree happened to load.
-   */
-  function renderSubfolders() {
-    var meta = S.lib.folderMeta;
-    if (!meta || !(meta.children || []).length) return '';
-    var owner = isOwner();
-    return '<div class="rh2-folders rh2-folders-sub">'
-      + meta.children.map(function (c) {
-        return folderCard({
-          id: c.id, name: c.name, description: c.description,
-          count: c.count || 0, children: [], parentId: meta.folder.id,
-        }, owner);
-      }).join('') + '</div>';
-  }
-
   var KINDS = [['hosted', 'Documents'], ['external', 'External links'], ['guide', 'Guides']];
 
   /**
-   * One card, optionally with a selection box in front of it.
+   * The Library has two faces.
    *
-   * The card itself is untouched — same markup, same handler, same everything
-   * (§19). Selection is a wrapper the Owner turns on, so a therapist's Library
-   * is exactly the Library it always was.
+   *   browsing   the document library — folder tree, breadcrumbs, list/tiles,
+   *              command bar, recycle bin — drawn by resourcelibrary.js into
+   *              #rhl-root after this render (see render()).
+   *   a list     Saved, All Resources, or any search or filter: the flat card
+   *              list below, which spans the WHOLE library (§21) unless the
+   *              reader deliberately narrows a search back to their folder.
    */
-  function selectableCard(r, backView) {
-    var id = pick(r, 'id');
-    // Right-click is Owner-only, so a therapist keeps the browser's own menu.
-    if (!S.lib.selMode) {
-      if (!isOwner()) return resourceCard(r, backView);
-      return '<div class="rh2-ctxwrap" oncontextmenu="return RH2.libMenu(event,\'resource\',\''
-        + esc(id) + '\',\'' + esc(String(pick(r, 'title') || '').replace(/'/g, '')) + '\')">'
-        + resourceCard(r, backView) + '</div>';
-    }
-    var on = !!S.lib.sel[id];
-    return '<div class="rh2-selwrap' + (on ? ' is-selected' : '') + '">'
-      + '<label class="rh2-selbox">'
-      + '<input type="checkbox"' + (on ? ' checked' : '')
-      + ' onchange="RH2.libToggleSel(\'' + esc(id) + '\')">'
-      + '<span class="rh2-visually-hidden">Select ' + esc(pick(r, 'title')) + '</span>'
-      + '</label>' + resourceCard(r, backView) + '</div>';
-  }
-
   function renderLibrary() {
     var f = S.lib;
     var searching = libSearching(f);
+    if (!f.saved && f.browse !== 'all' && !searching && !f.collection) {
+      return '<div class="rh2-page rh2-library"><div id="rhl-root" class="rhl-root"></div></div>';
+    }
     var inFolder = !!f.folderId;
-    // Saved, All Resources and any search are all "a list of resources".
-    // Only an unqualified browse shows folders.
-    var flat = f.saved || f.browse === 'all' || searching || inFolder;
 
     var title = 'Library';
     if (f.saved) title = 'Saved';
-    else if (f.browse === 'all' && !searching) title = 'All Resources';
-    else if (inFolder && f.folderMeta && !searching) title = f.folderMeta.folder.name;
+    else if (searching) title = 'Search results';
+    else if (f.browse === 'all') title = 'All Resources';
 
-    /* The workspace.
-       Right-click anywhere blank in here offers what can be made here, and —
-       once the reader is inside a folder — the whole surface accepts a dropped
-       file rather than only the strip below the filters. Both are Owner-only,
-       both end in handlers that already existed, and neither is attached
-       outside this element, so a drag across the nav or another tab does
-       nothing. */
-    var ws = isOwner()
-      ? ' oncontextmenu="return RH2.libWorkspaceMenu(event)"'
-        + (inFolder
-          ? ' ondragover="RH2.libWsDragOver(event)" ondragleave="RH2.libWsDragLeave(event)"'
-            + ' ondrop="RH2.libWsDrop(event)"'
-          : '')
-      : '';
-    var out = '<div id="rh2-lib-ws" class="rh2-page rh2-library'
-      + (isOwner() ? ' rh2-ws' : '') + (f.wsDrop ? ' is-dropping' : '') + '"' + ws + '>';
-    if (isOwner() && inFolder) {
-      out += '<div class="rh2-wsdrop" aria-hidden="true"><span class="rh2-wsdrop-face">'
-        + icn('plus', 'doc', 22) + 'Drop files here to upload</span></div>';
-    }
-    out += renderMenu();
+    var out = '<div id="rh2-lib-ws" class="rh2-page rh2-library">';
     out += '<h1 class="rh2-h1">' + esc(title) + '</h1>';
 
-    // Breadcrumbs whenever the reader is anywhere other than the front page.
-    if (!f.saved && (inFolder || f.browse === 'all')) {
-      out += (inFolder ? libCrumbs()
-        : '<nav class="rh2-crumbs" aria-label="Library location">'
-          + '<button type="button" class="rh2-crumb-link" onclick="RH2.libBrowse(\'folders\')">Library</button>'
-          + '<span class="rh2-crumb-sep" aria-hidden="true">›</span>'
-          + '<span class="rh2-crumb-here" aria-current="page">All Resources</span></nav>');
-    }
-    if (inFolder && f.folderMeta && f.folderMeta.folder.description && !searching) {
-      out += '<p class="rh2-folder-lede">' + esc(f.folderMeta.folder.description) + '</p>';
+    if (!f.saved) {
+      var back = inFolder && f.folderMeta && f.folderMeta.folder
+        ? '<button type="button" class="rh2-crumb-link" onclick="RH2.libOpenFolder(\'' + esc(f.folderId) + '\')">'
+          + esc(f.folderMeta.folder.name) + '</button><span class="rh2-crumb-sep" aria-hidden="true">›</span>'
+        : '';
+      out += '<nav class="rh2-crumbs" aria-label="Library location">'
+        + '<button type="button" class="rh2-crumb-link" onclick="RH2.libBrowse(\'folders\')">Library</button>'
+        + '<span class="rh2-crumb-sep" aria-hidden="true">›</span>' + back
+        + '<span class="rh2-crumb-here" aria-current="page">' + esc(title) + '</span></nav>';
     }
 
     // ── search and filters ────────────────────────────────────────────────
-    // The search box is always the first control, and it always searches the
-    // whole library. A reader inside a folder is offered the narrower search
-    // rather than given it (§21).
+    // The search box always searches the whole library. A reader who started
+    // inside a folder is offered the narrower search rather than given it (§21).
     out += '<div class="rh2-filters">'
       + '<input type="search" id="rh2-lib-q" class="rh2-search" '
       + 'placeholder="Search all resources..." aria-label="Search all resources" value="' + esc(f.q) + '" '
       + 'oninput="RH2.libInput(this.value)">';
 
-    if (flat && !f.saved) {
+    if (!f.saved) {
       out += sel('rh2-f-kind', 'All kinds', KINDS, f.kind, "RH2.libFilter('kind',this.value)")
         + sel('rh2-f-type', 'All types', CONTENT_TYPES, f.type, "RH2.libFilter('type',this.value)")
         + sel('rh2-f-topic', 'All topics', (S.topics || []).map(function (t) { return [t.id, t.name]; }), f.topic, "RH2.libFilter('topic',this.value)")
@@ -1992,37 +1279,6 @@
         + '</p>';
     }
 
-    out += libOwnerBar();
-    out += uploadPanel();
-    out += libFolderDialog();
-    out += renameDialog();
-    if (f.selMode) {
-      out += libSelCount()
-        ? (S.lib.moveOpen ? libMovePanel()
-          : '<div class="rh2-movebar"><span class="rh2-movebar-count">' + esc(countLabel(libSelCount())) + ' selected</span>'
-            + '<button type="button" class="rh2-btn rh2-btn-primary" onclick="RH2.libMoveOpen(true)">Move to folder</button>'
-            + '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.libSelectMode(false)">Cancel</button></div>')
-        : '<p class="rh2-libnote" role="status">Tick the resources you want to move.</p>';
-    }
-
-    // ── the folder front page ─────────────────────────────────────────────
-    if (!flat) return out + renderFolderGrid() + '</div>';
-
-    // ── a list of resources ───────────────────────────────────────────────
-    if (inFolder && !searching) out += renderSubfolders();
-    /* The strip stays as the resting explanation — what may be dropped, and
-       the way in for anyone not dragging anything. It no longer carries its
-       own drag handlers: the workspace around it does, so there is one drop
-       state instead of two competing ones, and no flicker as the pointer
-       crosses the strip's edge. Its highlight comes from the workspace class
-       in CSS. */
-    if (inFolder && isOwner()) {
-      out += '<div class="rh2-dropzone">'
-        + 'Drop files here, or <button type="button" class="rh2-linkbtn" onclick="RH2.libPickFiles(\''
-        + esc(f.folderId) + '\')">choose files</button> — PDF, Word, Excel, PowerPoint or images'
-        + '</div>';
-    }
-
     if (f.loading || f.rows === null) {
       out += '<div class="rh2-grid">' + skelCards(8) + '</div>';
       if (f.rows === null && !f.loading) loadLibrary();
@@ -2043,25 +1299,15 @@
           + '<div class="rh2-grid">' + tools.map(toolCard).join('') + '</div></div>';
       }
       if (f.saved) return out + '<div class="rh2-empty">Save resources you use often and they will appear here.</div></div>';
-      if (inFolder && !searching) {
-        return out + '<div class="rh2-empty">Nothing is filed here yet.'
-          + (isOwner() ? ' Select resources elsewhere in the Library and move them in.' : '') + '</div></div>';
-      }
       return out + '<div class="rh2-empty">No resources match. Try clearing a filter, or tell us what is missing via feedback on any related resource.</div></div>';
     }
 
     /* BROWSING STATES THE SIZE OF THE SHELF; SEARCHING STATES THE HITS.
-       A page is 48 cards, and counting them made a folder of 451 announce
-       "48+ resources" one line below the card that had just said 451 — then a
-       third number as soon as Load more ran. Whenever the reader is browsing
-       a known set, the tally is that set's server count: the folder's, sent
-       with the folder, or the library's, sent with the tree. A search or a
-       filter is a different question — how many matched — and keeps counting
-       what came back. */
+       A page is 48 cards. Browsing All Resources states the library's size
+       from the same tree read the Library uses; a search or a filter is a
+       different question — how many matched — and counts what came back. */
     var known = null;
-    if (inFolder && !searching && f.folderMeta && f.folderMeta.folder
-      && typeof f.folderMeta.folder.count === 'number') known = f.folderMeta.folder.count;
-    else if (!inFolder && !searching && !f.saved && !f.collection
+    if (!inFolder && !searching && !f.saved && !f.collection
       && f.browse === 'all' && typeof f.totalResources === 'number') known = f.totalResources;
 
     var tally = known !== null ? countLabel(known)
@@ -2070,7 +1316,7 @@
     out += '<p class="rh2-count" role="status">' + esc(tally) + '</p>';
     out += '<div class="rh2-grid">'
       + tools.map(toolCard).join('')
-      + f.rows.map(function (r) { return selectableCard(r, backView); }).join('') + '</div>';
+      + f.rows.map(function (r) { return resourceCard(r, backView); }).join('') + '</div>';
     if (f.hasMore) {
       out += '<div class="rh2-loadmore"><button type="button" class="rh2-btn" '
         + (f.loadingMore ? 'disabled' : '') + ' onclick="RH2.libMore()">'
@@ -2111,7 +1357,7 @@
     render();
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id));
     S.detail.loading = false;
-    S.detail.data = d.ok ? d : { ok: false, error: d.error };
+    S.detail.data = d.ok ? d : { ok: false, error: d.error, status: d.status };
     render();
     loadDetailFiles(id);
   }
@@ -2401,7 +1647,15 @@
     var out = '<div class="rh2-page">' +
       '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.nav(\'' + esc(st.backView === 'detail' ? 'library' : st.backView) + '\')">Back</button>';
     if (st.loading || !st.data) return out + '<div class="rh2-card" style="margin-top:12px;">' + skel(4, 40) + '</div></div>';
-    if (!st.data.ok) return out + '<div class="rh2-empty">' + esc(st.data.error || 'This resource could not be loaded.') + '</div></div>';
+    // A document deleted from the Library (or withdrawn) answers 404. Said
+    // plainly, because a learner following an induction link lands here.
+    if (!st.data.ok) {
+      return out + '<div class="rh2-empty" role="status">'
+        + (st.data.status === 404
+          ? '<strong>This resource was removed.</strong> It is no longer in the Library. If you need it, ask the practice owner or an admin.'
+          : esc(st.data.error || 'This resource could not be loaded.'))
+        + '</div></div>';
+    }
 
     var d = st.data, r = detailRes();
     var authority = pick(r, 'authority_level') || 'internal';
@@ -5164,6 +4418,14 @@
       // Tasks join the launch-tile club only when they name a walkthrough
       // this user can actually run; otherwise a task is plain content.
       var mod = alWalkModule(it);
+      // A linked document deleted from the Library (the server flags it) is
+      // said to be gone, not offered as a link that opens nothing.
+      if (it.type === 'resource' && it.resource_removed && !mod) {
+        return '<li class="rh2-ind-item rh2-ind-item-removed' + (done ? ' is-done' : '') + '" id="rh2-item-' + esc(it.key) + '">' +
+          '<div class="rh2-ind-item-head">' + head + '</div>' +
+          '<p class="rh2-quiet" role="note">This resource was removed from the Library. Ask the practice owner if you still need it.</p>' +
+          alItemBody(it, done) + '</li>';
+      }
       if (it.type === 'resource' || mod) {
         var verb = mod
           ? ((done ? 'Replay' : 'Open') + ' the interactive walkthrough')
@@ -8228,36 +7490,15 @@
     libInput: libInput,
     libFilter: libFilter,
     libMore: libMore,
+    // The Library's folders, uploads, menus and bin live in resourcelibrary.js
+    // (window.RHLib); these are the doors it and navigation.js come through.
     libOpenFolder: libOpenFolder,
+    libCurrentFolder: libCurrentFolder,
+    libSearch: libSearch,
     libBrowse: libBrowse,
     libScopeSearch: libScopeSearch,
     libReloadFolders: libReloadFolders,
-    libPickFiles: libPickFiles,
-    libUploadFiles: libUploadFiles,
-    libUploadsDismiss: libUploadsDismiss,
-    libDragOver: libDragOver,
-    libDragLeave: libDragLeave,
-    libDrop: libDrop,
-    libMenu: libMenu,
-    libMenuClose: libMenuClose,
-    libRenameStart: libRenameStart,
-    libRenameField: libRenameField,
-    libRenameCancel: libRenameCancel,
-    libRenameSave: libRenameSave,
-    libMoveOne: libMoveOne,
-    libSelectMode: libSelectMode,
-    libWorkspaceMenu: libWorkspaceMenu,
-    libWsDragOver: libWsDragOver,
-    libWsDragLeave: libWsDragLeave,
-    libWsDrop: libWsDrop,
     libNewDocument: libNewDocument,
-    libToggleSel: libToggleSel,
-    libMoveOpen: libMoveOpen,
-    libMoveTo: libMoveTo,
-    libFolderForm: libFolderForm,
-    libFolderFormField: libFolderFormField,
-    libFolderSave: libFolderSave,
-    libFolderArchive: libFolderArchive,
     previewFile: previewFile,
     regenPreview: regenPreview,
     adminUpload: adminUpload,

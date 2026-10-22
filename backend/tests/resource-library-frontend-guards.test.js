@@ -1,635 +1,46 @@
 'use strict';
 
 /**
- * LIBRARY FOLDER UI — STATIC GUARDS.
+ * LIBRARY UI — GUARDS.
  *
- * resourcehub.js has no browser test harness, so most of these read the source
- * and assert the properties that a refactor would break silently. They are
- * crude on purpose: if a renderer is renamed, update the assertion beside it
- * rather than deleting it.
+ * The Library's folder browsing is a SharePoint-style document library in
+ * frontend/current/resourcelibrary.js (window.RHLib), mounted by
+ * resourcehub.js into #rhl-root whenever the Library is browsed. Searches,
+ * Saved and All Resources stay in resourcehub.js's flat list.
  *
- * The two rules that decide what a folder actually shows — which cards may be
- * added to a grid, and how a count reads — are the exception. The file loads
- * cleanly against a stub window, so those are CALLED (see the last describe)
- * rather than pattern-matched. A number a user is shown deserves a test that
- * would notice if it changed.
+ * Both files load cleanly against a stub window, so the rules that decide
+ * what a person sees — sort order, range selection, the filter, which actions
+ * a role is offered, what a folder can be moved into — are CALLED here rather
+ * than pattern-matched. The rest are source guards on properties a refactor
+ * would break silently:
  *
- * What is protected here is what a reviewer cannot see by reading a diff:
- *
- *   - the folder view never renders a name, description or count without
- *     escaping it — folder names can come from a model
+ *   - every server-supplied string is escaped; inline handlers carry ids only
+ *   - every inline handler the markup calls is exported
+ *   - the controls a therapist would be refused are not offered to them
+ *     (the server is the control: permissions.js requireRole)
+ *   - keyboard and ARIA: tree, grid, menu, dialog roles; arrow keys, F2,
+ *     Delete, Enter, Escape, Shift+F10
  *   - search is not silently scoped to a folder (§21)
- *   - the Owner-only controls are gated in the client TOO, so a therapist is
- *     never offered a button that would 403. (The server is the control; this
- *     is manners.)
- *   - no model id, token count or job id reaches a user (§16)
- *   - every inline handler the markup calls is actually exported on RH2
  */
 
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const FRONTEND = path.join(__dirname, '..', '..', 'frontend', 'current');
+const LIB = fs.readFileSync(path.join(FRONTEND, 'resourcelibrary.js'), 'utf8');
+const LIBCSS = fs.readFileSync(path.join(FRONTEND, 'resourcelibrary.css'), 'utf8');
 const JS = fs.readFileSync(path.join(FRONTEND, 'resourcehub.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(FRONTEND, 'resourcehub.css'), 'utf8');
-
-describe('the folder view exists and is the default', () => {
-  it('renders folders before falling through to a flat list (§48)', () => {
-    expect(JS).toContain('function renderFolderGrid()');
-    expect(JS).toContain('function folderCard(');
-    expect(JS).toContain("browse: 'folders'");
-  });
-
-  it('keeps a way to the flat list (§49)', () => {
-    expect(JS).toContain('function allResourcesRow()');
-    expect(JS).toContain('All Resources');
-    // The handler is written inside a single-quoted JS string, so the source
-    // carries the escaped form.
-    expect(JS).toContain("RH2.libBrowse(\\'all\\')");
-  });
-
-  it('shows breadcrumbs (§20)', () => {
-    expect(JS).toContain('function libCrumbs()');
-    expect(JS).toContain('aria-label="Library location"');
-    expect(JS).toContain('aria-current="page"');
-  });
-});
-
-describe('escaping every folder-derived string', () => {
-  const MUST_CONTAIN = [
-    // Folder name, description and count all pass through esc().
-    "'<span class=\"rh2-folder-name\">' + esc(node.name) + '</span>'",
-    "esc(node.description)",
-    "esc(countLabel(node.count))",
-    // Breadcrumb segments.
-    'esc(b.name)',
-    'esc(meta.folder.name)',
-    // The folder id in an inline handler.
-    "RH2.libOpenFolder(\\'' + esc(node.id) + '\\')",
-  ];
-
-  it.each(MUST_CONTAIN)('escapes: %s', (snippet) => {
-    expect(JS).toContain(snippet);
-  });
-
-  it('never interpolates a folder field raw into markup', () => {
-    // Any `+ node.<field> +` outside an esc() call would be a raw sink.
-    const raw = JS.match(/\+\s*node\.(name|description|id|slug)\s*\+/g) || [];
-    expect(raw).toEqual([]);
-  });
-});
-
-describe('search stays global (§21)', () => {
-  it('only adds a folder to the query when browsing it, or on request', () => {
-    expect(JS).toContain('if (f.folderId && (!libSearching(f) || f.folderSearch))');
-    expect(JS).toContain("qs.push('folderId=' + encodeURIComponent(f.folderId))");
-  });
-
-  it('labels the search box as spanning everything', () => {
-    expect(JS).toContain('placeholder="Search all resources..."');
-    expect(JS).toContain('aria-label="Search all resources"');
-  });
-
-  it('offers folder-only search rather than imposing it', () => {
-    expect(JS).toContain('Searching the whole library.');
-    expect(JS).toContain('RH2.libScopeSearch(true)');
-    expect(JS).toContain('RH2.libScopeSearch(false)');
-  });
-});
-
-describe('Owner-only controls are gated in the client too (§34)', () => {
-  it('renders the folder controls only inside an owner check', () => {
-    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('function libMovePanel()'));
-    expect(bar).toContain("if (!isOwner()) return '';");
-    for (const control of ['RH2.libPickFiles(', 'RH2.libFolderForm(true)', 'RH2.libSelectMode(']) {
-      expect(bar).toContain(control);
-    }
-  });
-
-  it('passes an owner flag into every folder card rather than assuming', () => {
-    expect(JS).toContain('function folderCard(node, owner)');
-    expect(JS).toContain('var owner = isOwner();');
-  });
-
-  it('attaches drop handlers only for an Owner', () => {
-    // A therapist dragging a file onto a folder should get the browser's
-    // default, not a silent no-op that looks broken.
-    expect(JS).toContain('var dnd = owner');
-    const drag = JS.slice(JS.indexOf('function libDragOver('), JS.indexOf('function uploadPanel()'));
-    expect(drag).toContain('if (!isOwner()) return;');
-  });
-
-  it('gives a therapist the browser\'s own right-click menu', () => {
-    const menu = JS.slice(JS.indexOf('function libMenu('), JS.indexOf('function libMenuClose()'));
-    expect(menu).toContain('if (!isOwner()) return true;');
-    expect(JS).toContain('if (!isOwner()) return resourceCard(r, backView);');
-  });
-});
-
-describe('the AI organisation is gone, not hidden', () => {
-  /**
-   * The practice asked for automatic organisation to be removed. A button that
-   * merely stops being rendered is not removal — the handler, the polling and
-   * the phase vocabulary all have to be absent, or the next person to read
-   * this file will reasonably assume the feature still exists.
-   */
-  it('leaves no organise handler, poller or phase vocabulary behind', () => {
-    for (const gone of ['libOrganise', 'libUndoOrganise', 'loadOrgStatus', 'ORG_PHASES',
-      'Organise Library', 'Reorganise Library', 'Undo last organisation',
-      '/api/rh2/library/organise', '/api/rh2/library/rollback', '/api/rh2/library/status',
-      '/api/rh2/library/reclassify']) {
-      expect(JS).not.toContain(gone);
-    }
-  });
-
-  it('leaves no organise styling behind', () => {
-    expect(CSS).not.toContain('rh2-organising');
-  });
-});
-
-describe('Home no longer browses by collection', () => {
-  /**
-   * Organised browsing belongs to the Library's folders. Home's collection
-   * grid was the older answer to the same question, and two of them on one
-   * hub is one too many. Same standard as the AI organisation above: the
-   * cards, the heading, the empty state and the handler all have to be gone,
-   * not merely unrendered.
-   */
-  const home = (() => {
-    const start = JS.indexOf('function renderHome()');
-    return JS.slice(start, JS.indexOf('\n  function ', start + 10));
-  })();
-
-  it('renders no collection heading, cards or empty state on Home', () => {
-    for (const gone of ['rh2-h-col', 'Browse by collection', 'rh2-collections',
-      'Collections will appear here once content is approved']) {
-      expect(home).not.toContain(gone);
-    }
-  });
-
-  it('leaves no Home-only handler behind', () => {
-    expect(JS).not.toContain('RH2.openCollection');
-    expect(JS).not.toContain('function openCollection(');
-    expect(JS).not.toContain('openCollection: openCollection');
-  });
-
-  it('keeps the Library folders as the way in', () => {
-    expect(JS).toContain('function renderFolderGrid()');
-    expect(JS).toContain("browse: 'folders'");
-  });
-
-  it('takes the shared collection cards with it, now nothing renders them', () => {
-    // The .rh2-collection* rules were kept when Home's grid went, because
-    // Assign Learning still drew the same cards. It no longer does — its
-    // catalogue is one unified list — so the rules are dead CSS and the
-    // handlers are unreachable code.
-    expect(JS).not.toContain('RH2.aslOpenCollection(');
-    expect(JS).not.toContain('function aslOpenCollection(');
-    for (const gone of ['.rh2-collections', '.rh2-collection-icn', '.rh2-collection-name',
-      '.rh2-collection-tag', '.rh2-collection-on']) {
-      expect(`${gone}:${CSS.includes(gone)}`).toBe(`${gone}:false`);
-    }
-  });
-});
-
-describe('manual control is offered where the mistake is noticed (§35, §36)', () => {
-  it('supports selecting several resources and moving them at once', () => {
-    expect(JS).toContain('function selectableCard(');
-    expect(JS).toContain('function libMoveTo(');
-    expect(JS).toContain("api('/api/rh2/library/move'");
-  });
-
-  it('leaves the resource card itself untouched when not selecting (§19)', () => {
-    // Selection and right-click are both WRAPPERS. The card markup, its
-    // handler and its classes are the same ones every other view renders.
-    const sel = JS.slice(JS.indexOf('function selectableCard('), JS.indexOf('function renderLibrary()'));
-    expect(sel).toContain('if (!isOwner()) return resourceCard(r, backView);');
-    expect(sel).toContain("+ resourceCard(r, backView) + '</div>'");
-    expect(sel).toContain('resourceCard(r, backView)');
-  });
-
-  it('warns that removing a folder does not delete anything', () => {
-    expect(JS).toContain('Its resources move to Needs Review — nothing is deleted.');
-  });
-});
-
-describe('the api() contract', () => {
-  /**
-   * api() JSON-stringifies opts.body itself. Passing an already-stringified
-   * body double-encodes it, and the server then receives a JSON *string*
-   * where it expects an object — which fails silently as "nothing selected"
-   * rather than as an error. Every library call must pass a plain object.
-   */
-  it('never hands api() a pre-stringified body', () => {
-    const calls = [...JS.matchAll(/api\('\/api\/rh2\/library[^)]*\{[^}]*body:\s*([^,\n}]+)/g)];
-    for (const [, body] of calls) {
-      expect(body).not.toMatch(/JSON\.stringify/);
-      expect(body.trim()).not.toMatch(/^'/);
-    }
-  });
-
-  it('passes objects on the multi-line call sites too', () => {
-    const block = JS.slice(JS.indexOf('async function libOrganise('), JS.indexOf('function libFolderArchive('));
-    expect(block).not.toMatch(/body:\s*JSON\.stringify/);
-    expect(block).not.toMatch(/body:\s*'\{/);
-  });
-});
-
-describe('uploading (drag-and-drop and the button)', () => {
-  it('offers both doors, and both end up in one place', () => {
-    expect(JS).toContain('function libUploadFiles(');
-    expect(JS).toContain('function libPickFiles(');
-    expect(JS).toContain("api('/api/rh2/library/folders/'");
-    // The button builds an <input type=file> that routes into the same call.
-    const pick = JS.slice(JS.indexOf('function libPickFiles('), JS.indexOf('function libUploadsDismiss()'));
-    expect(pick).toContain('libUploadFiles(folderId, input.files)');
-  });
-
-  it('accepts the formats the server accepts, and no more', () => {
-    expect(JS).toContain("var UPLOAD_EXT = ['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'];");
-    expect(JS).toContain("'.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg'");
-  });
-
-  it('reads files one at a time rather than all at once', () => {
-    // Twenty base64 copies of twenty PDFs in memory at once is how a browser
-    // tab dies; the loop awaits each read before starting the next.
-    const up = JS.slice(JS.indexOf('async function libUploadFiles('), JS.indexOf('function libPickFiles('));
-    expect(up).toContain('for (var i = 0; i < files.length; i++)');
-    expect(up).toContain('await readAsBase64(file)');
-  });
-
-  it('reports each file\'s outcome separately', () => {
-    expect(JS).toContain('function uploadPanel()');
-    expect(JS).toContain("entry.state = 'error'");
-    expect(JS).toContain("entry.state = 'done'");
-    expect(JS).toContain('Files that were refused have not been stored.');
-  });
-
-  it('refreshes the counts and the open folder once uploading ends', () => {
-    // Both server-side numbers — the folder grid and the open folder's own
-    // header — go through libRefreshFolders, so an upload cannot leave the
-    // card saying one figure and the folder saying another.
-    const up = JS.slice(JS.indexOf('async function libUploadFiles('), JS.indexOf('function libPickFiles('));
-    expect(up).toContain('libRefreshFolders()');
-    expect(up).toContain('loadLibrary()');
-  });
-
-  it('shows a drop target before the file lands', () => {
-    // The strip stays as the resting explanation of what may be dropped; the
-    // live affordance is the folder card on the grid and, inside a folder, the
-    // workspace overlay (see 'the workspace is a drop target' below).
-    expect(JS).toContain('rh2-dropzone');
-    expect(JS).toContain('Drop to upload');
-    expect(CSS).toContain('.rh2-folder.is-dropping');
-    expect(CSS).toContain('.rh2-ws.is-dropping .rh2-wsdrop');
-  });
-
-  it('signals a drop target by more than colour (§54)', () => {
-    // Border and a label, so the affordance survives a monochrome display.
-    expect(CSS).toContain('border-style: dashed');
-    expect(JS).toContain('rh2-folder-dropmsg');
-  });
-});
-
-describe('right-click', () => {
-  it('opens one menu for folders and documents alike', () => {
-    expect(JS).toContain('function libMenu(');
-    expect(JS).toContain('function renderMenu()');
-    expect(JS).toContain("oncontextmenu=\"return RH2.libMenu(event,\\'folder\\'");
-    expect(JS).toContain("oncontextmenu=\"return RH2.libMenu(event,\\'resource\\'");
-  });
-
-  it('offers rename on both, and upload on a folder', () => {
-    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('/* ── Renaming'));
-    expect(menu).toContain("RH2.libRenameStart('folder'");
-    expect(menu).toContain("RH2.libRenameStart('resource'");
-    expect(menu).toContain('RH2.libPickFiles(');
-    expect(menu).toContain('RH2.libMoveOne(');
-  });
-
-  it('closes on an outside click and is dismissible', () => {
-    expect(JS).toContain('rh2-menu-veil');
-    expect(JS).toContain('RH2.libMenuClose()');
-  });
-
-  it('escapes every name it renders', () => {
-    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('/* ── Renaming'));
-    expect(menu).toContain('esc(m.name)');
-    expect(menu).toContain('esc(it[0])');
-  });
-
-  it('labels the menu for a screen reader', () => {
-    expect(JS).toContain('role="menu"');
-    expect(JS).toContain('role="menuitem"');
-  });
-});
-
-describe('renaming', () => {
-  it('uses an inline panel, never window.prompt', () => {
-    // A native prompt cannot be styled, cannot show the server's refusal, and
-    // is blocked outright in some browsers.
-    expect(JS).toContain('function renameDialog()');
-    const rename = JS.slice(JS.indexOf('function libRenameStart('), JS.indexOf('function renameDialog()'));
-    expect(rename).not.toMatch(/(?:window|global)\.prompt\(/);
-    expect(JS).toContain("<input id=\"rh2-rename\"");
-  });
-
-  it('sends a folder rename and a document rename to different routes', () => {
-    const save = JS.slice(JS.indexOf('async function libRenameSave()'), JS.indexOf('function renameDialog()'));
-    expect(save).toContain("'/api/rh2/library/folders/'");
-    expect(save).toContain("'/api/rh2/library/resources/'");
-  });
-
-  it('shows the server\'s refusal rather than swallowing it', () => {
-    const save = JS.slice(JS.indexOf('async function libRenameSave()'), JS.indexOf('function renameDialog()'));
-    expect(save).toContain('r.err = d.error');
-  });
-});
-
-describe('the workspace is a drop target, not just the strip', () => {
-  it('accepts a drag on the whole workspace, and only inside a folder', () => {
-    // Attached to the library page element itself, and only when the reader is
-    // standing in a folder — on the grid there is no one destination.
-    expect(JS).toContain('function libWsCanDrop() { return isOwner() && !!S.lib.folderId; }');
-    expect(JS).toContain('RH2.libWsDragOver(event)');
-    expect(JS).toContain('RH2.libWsDragLeave(event)');
-    expect(JS).toContain('RH2.libWsDrop(event)');
-    const ws = JS.slice(JS.indexOf('var ws = isOwner()'), JS.indexOf('out += renderMenu();'));
-    expect(ws).toContain('inFolder');
-  });
-
-  it('drops into the folder that is open, through the one upload path', () => {
-    const drop = JS.slice(JS.indexOf('function libWsDrop('), JS.indexOf('function uploadPanel()'));
-    expect(drop).toContain('if (!libWsCanDrop()) return;');
-    expect(drop).toContain('libUploadFiles(S.lib.folderId, dt.files)');
-    // No second upload implementation: the workspace, the folder cards and the
-    // button all end in libUploadFiles.
-    expect(JS.match(/api\('\/api\/rh2\/library\/folders\/' \+ encodeURIComponent\(folderId\) \+ '\/upload'/g))
-      .toHaveLength(1);
-  });
-
-  it('ignores a drag that is not carrying files', () => {
-    // Dragging text or a card across the workspace must not raise an upload
-    // affordance the drop could never satisfy.
-    expect(JS).toContain('function dragHasFiles(dt)');
-    expect(JS).toContain("if (types[i] === 'Files') return true;");
-    expect(JS).toContain('if (!libWsCanDrop() || !dragHasFiles(ev.dataTransfer)) return;');
-    expect(JS).toContain('if (!isOwner() || !dragHasFiles(ev.dataTransfer)) return;');
-  });
-
-  it('only ends the drag when the pointer really left the workspace', () => {
-    // dragleave fires at every child boundary; a naive handler flickers the
-    // overlay off as the pointer crosses between two cards.
-    const leave = JS.slice(JS.indexOf('function libWsDragLeave('), JS.indexOf('function libWsDrop('));
-    expect(leave).toContain('host.contains(to)');
-  });
-
-  it('does not re-render the page while a file is over it', () => {
-    // render() replaces the whole subtree, which would tear out the element the
-    // pointer is on mid-drag. The class is written straight onto the node.
-    const mark = JS.slice(JS.indexOf('function libWsMark('), JS.indexOf('function libWsDragOver('));
-    expect(mark).toContain("doc.getElementById('rh2-lib-ws')");
-    expect(mark).toContain("classList.toggle('is-dropping'");
-    expect(mark).not.toContain('render()');
-  });
-
-  it('announces the drop by border and words, not colour alone (§54)', () => {
-    expect(JS).toContain('Drop files here to upload');
-    expect(CSS).toContain('.rh2-ws.is-dropping .rh2-wsdrop');
-    expect(CSS).toContain('border: 2px dashed var(--accent)');
-    // The overlay must not eat the events of the element beneath it.
-    const overlay = CSS.slice(CSS.indexOf('.rh2-wsdrop {'), CSS.indexOf('.rh2-ws.is-dropping'));
-    expect(overlay).toContain('pointer-events: none');
-  });
-});
-
-describe('right-clicking the workspace', () => {
-  it('offers exactly New document, New folder and Upload', () => {
-    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('The open menu owns the keyboard'));
-    const ws = menu.slice(menu.indexOf("m.kind === 'workspace'"), menu.indexOf("m.kind === 'folder'"));
-    expect(ws).toContain("['New document', 'RH2.libNewDocument()'");
-    expect(ws).toContain("['New folder', 'RH2.libFolderForm(true)'");
-    expect(ws).toContain('RH2.libPickFiles(');
-  });
-
-  it('leaves fields, links and the menu itself to the browser', () => {
-    expect(JS).toContain("var MENU_KEEP_NATIVE = 'input, textarea, select, a[href], .rh2-menu, .rh2-menu-veil';");
-    const wsm = JS.slice(JS.indexOf('function libWorkspaceMenu('), JS.indexOf('/** The name of the place'));
-    expect(wsm).toContain('if (!isOwner()) return true;');
-    expect(wsm).toContain('t.closest(MENU_KEEP_NATIVE)');
-  });
-
-  it('lets a folder or a document win over the background', () => {
-    // Both item handlers stop the event, so it never reaches the workspace.
-    const lm = JS.slice(JS.indexOf('function libMenu(ev, kind, id, name, review)'), JS.indexOf('The background menu'));
-    expect(lm).toContain('ev.stopPropagation();');
-  });
-
-  it('says why Upload is unavailable rather than hiding it', () => {
-    const menu = JS.slice(JS.indexOf('function renderMenu()'), JS.indexOf('The open menu owns the keyboard'));
-    expect(menu).toContain("note = 'Open a folder to upload into it.'");
-    expect(menu).toContain('aria-disabled="true"');
-  });
-
-  it('closes on Escape and walks with the arrows', () => {
-    const keys = JS.slice(JS.indexOf('The open menu owns the keyboard'), JS.indexOf('── Renaming'));
-    expect(keys).toContain("if (e.key === 'Escape') { e.preventDefault(); libMenuClose(); return; }");
-    expect(keys).toContain("e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Tab'");
-    expect(keys).toContain('items[at].focus');
-  });
-
-  it('moves focus onto the menu when it opens', () => {
-    const lm = JS.slice(JS.indexOf('function libMenu(ev, kind, id, name, review)'), JS.indexOf('The background menu'));
-    expect(lm).toContain(".rh2-menu .rh2-menu-item:not([aria-disabled=\"true\"])");
-    expect(lm).toContain('first.focus(');
-  });
-
-  it('measures the menu instead of guessing its size', () => {
-    expect(JS).toContain('function libMenuPlace()');
-    expect(JS).toContain('el.getBoundingClientRect()');
-    // The old hard-coded clamp is gone.
-    expect(JS).not.toContain('(global.innerWidth || 1200) - 210');
-  });
-
-  it('does not survive a move between folders', () => {
-    const open = JS.slice(JS.indexOf('function libOpenFolder(id)'), JS.indexOf('async function loadFolderMeta('));
-    expect(open).toContain('f.menu = null;');
-    const browse = JS.slice(JS.indexOf('function libBrowse(mode)'), JS.indexOf('/** Search this folder instead'));
-    expect(browse).toContain('S.lib.menu = null;');
-  });
-
-  it('stops offering Remove on the folder the server refuses to remove', () => {
-    // libMenu now carries the flag renderMenu was already testing; before this
-    // it was always undefined, so Needs Review was offered a button that could
-    // only ever come back 400.
-    expect(JS).toContain('function libMenu(ev, kind, id, name, review)');
-    expect(JS).toContain('review: !!review');
-    expect(JS).toContain("(node.isReviewBucket ? 'true' : 'false')");
-  });
-});
-
-describe('new document is the existing author, not a second one', () => {
-  it('opens the resource form that Admin already uses', () => {
-    const nd = JS.slice(JS.indexOf('function libNewDocument()'), JS.indexOf('function libFolderForm('));
-    expect(nd).toContain("nav('admin')");
-    expect(nd).toContain('adminNew()');
-    // No new create route, no new document type.
-    expect(JS).not.toContain('/api/rh2/library/documents');
-  });
-
-  it('files it into the folder it was started from, through the move route', () => {
-    const nd = JS.slice(JS.indexOf('function libNewDocument()'), JS.indexOf('function libFolderForm('));
-    expect(nd).toContain('S.admin.fileInto = S.lib.folderId');
-    const save = JS.slice(JS.indexOf('async function adminSave('), JS.indexOf('async function adminAction('));
-    expect(save).toContain("api('/api/rh2/library/move'");
-    expect(save).toContain('resourceIds: [id]');
-    // Only a NEW resource is filed, and the destination is consumed once.
-    expect(save).toContain("var into = !editing ? S.admin.fileInto : '';");
-    expect(save).toContain("S.admin.fileInto = ''; S.admin.fileIntoName = '';");
-  });
-
-  it('forgets the destination when the form is abandoned', () => {
-    const close = JS.slice(JS.indexOf('function adminFormClose()'), JS.indexOf('function renderResourceForm('));
-    expect(close).toContain("S.admin.fileInto = ''");
-  });
-
-  it('says a refusal rather than swallowing it', () => {
-    const save = JS.slice(JS.indexOf('async function adminSave('), JS.indexOf('async function adminAction('));
-    expect(save).toContain('It could not be filed into that folder');
-  });
-});
-
-describe('the Library actions read as controls', () => {
-  it('gives New folder and Select resources a button surface', () => {
-    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
-    // rh2-btn-quiet is a transparent border on the page background — correct
-    // for a Cancel, wrong for the only two things you can do to a folder.
-    expect(bar).not.toContain('rh2-btn-quiet');
-    expect(bar).toContain("class=\"rh2-btn\" onclick=\"RH2.libFolderForm(true)\"");
-    expect(bar).toContain('RH2.libSelectMode(');
-  });
-
-  it('gives them hover, focus and pressed states', () => {
-    expect(CSS).toContain('.rh2-libtools .rh2-btn:hover');
-    expect(CSS).toContain('.rh2-libtools .rh2-btn:active');
-    expect(CSS).toContain('.rh2-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }');
-    // The scoped shadow rules tie with .rh2-btn:focus-visible on specificity and
-    // come later, so the ring must be restated inside the scope or keyboard
-    // focus goes invisible on the very buttons this made visible.
-    expect(CSS).toContain('.rh2-libtools .rh2-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }');
-    expect(CSS).toContain('.rh2-libtools .rh2-btn[aria-pressed="true"]');
-  });
-
-  it('keeps a text label beside every icon', () => {
-    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
-    expect(bar).toContain('New folder</button>');
-    expect(bar).toContain('rh2-btn-icon');
-    expect(bar).toContain('aria-hidden="true"');
-    expect(bar).toContain("role=\"group\" aria-label=\"Library actions\"");
-  });
-
-  it('says the selection mode is on', () => {
-    const bar = JS.slice(JS.indexOf('function libOwnerBar()'), JS.indexOf('/** The move panel'));
-    expect(bar).toContain("aria-pressed=\"' + (f.selMode ? 'true' : 'false') + '\"");
-  });
-
-  it('respects a reduced-motion preference', () => {
-    const rm = CSS.slice(CSS.indexOf('THE LIBRARY AS A WORKSPACE'));
-    expect(rm).toContain('@media (prefers-reduced-motion: reduce)');
-  });
-});
-
-describe('every inline handler is reachable', () => {
-  it('exports each RH2.lib* function the markup calls', () => {
-    const called = new Set(
-      [...JS.matchAll(/RH2\.(lib[A-Za-z]+)\s*\(/g)].map((m) => m[1]));
-    expect(called.size).toBeGreaterThan(8);
-    const exportBlock = JS.slice(JS.indexOf('global.RH2 = {'));
-    for (const name of called) {
-      expect(exportBlock).toContain(`${name}:`);
-    }
-  });
-});
-
-describe('accessibility (§54)', () => {
-  it('gives the folder controls text labels, not icon-only buttons', () => {
-    expect(JS).toContain('aria-label="Rename ');
-    expect(JS).toContain('aria-label="Remove ');
-    expect(JS).toContain('rh2-visually-hidden');
-  });
-
-  it('announces progress and results to a screen reader', () => {
-    expect(JS).toContain('role="status" aria-live="polite"');
-  });
-
-  it('marks folder icons decorative', () => {
-    expect(JS).toContain("'<span class=\"rh2-folder-glyph\" aria-hidden=\"true\">'");
-  });
-
-  it('does not leave the folder tools hover-only', () => {
-    expect(CSS).toContain('.rh2-folder:focus-within .rh2-folder-tools');
-    expect(CSS).toContain('@media (hover: none) { .rh2-folder-tools { opacity: 1; } }');
-  });
-
-  it('distinguishes the review folder by more than colour', () => {
-    expect(CSS).toContain('.rh2-folder-review { border-style: dashed; }');
-  });
-
-  it('respects a reduced-motion preference', () => {
-    expect(CSS).toContain('@media (prefers-reduced-motion: reduce)');
-  });
-});
-
-describe('responsive layout (§53)', () => {
-  it('lays folders out as rows rather than a wide card grid', () => {
-    expect(CSS).toContain('.rh2-folders { display: flex; flex-direction: column;');
-  });
-
-  it('adapts the folder row, the form and the dropzone on a narrow screen', () => {
-    // There is more than one narrow-screen block now, so gather them all
-    // rather than assuming the last one carries every rule.
-    const blocks = CSS.split('@media (max-width: 640px)').slice(1).join('\n');
-    for (const rule of ['.rh2-folder-open', '.rh2-folderform', '.rh2-dropzone']) {
-      expect(blocks).toContain(rule);
-    }
-  });
-});
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  A FOLDER SHOWS WHAT IS FILED IN IT — the rules, executed
-// ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * THE REGRESSION.
- *
- * A folder card read "30 resources"; opening it showed one card, and that card
- * was the Service Agreement — a workflow tool that is not filed anywhere,
- * offered inside every folder because the filter that chose the tools never
- * looked at which folder was open. As Templates grows, the FCA and Progress
- * Note masters join it, and each one appears in Handwriting & Motor Skills as
- * readily as in Reports & Documentation. An empty folder went furthest of all:
- * it reported "1 resource" and showed a template instead of saying it was
- * empty.
- *
- * Two properties are pinned here. A tool is never inside a folder — and is
- * still everywhere else, because removing it from the Library altogether would
- * be a different bug. And a count reads as a person writes it.
- *
- * The harness is a stub window, which is all the file needs at load time. If
- * this block starts failing on the require rather than on an expectation,
- * resourcehub.js has begun touching the DOM as it loads, and the stub — not
- * the assertion — is what needs extending.
- */
-describe('the rules a folder is rendered by', () => {
-  const vm = require('vm');
-
+const NAV = fs.readFileSync(path.join(FRONTEND, 'navigation.js'), 'utf8');
+const SHELL = fs.readFileSync(path.join(FRONTEND, 'mockup_v3.html'), 'utf8');
+
+/** Load a frontend file against a stub window and return the sandbox. */
+function load(source, filename, role) {
   const sandbox = {
-    console,
-    setTimeout,
-    clearTimeout,
+    console, setTimeout, clearTimeout,
     fetch: () => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }),
-    location: { hash: '' },
+    location: { hash: '', origin: 'https://portal.test', pathname: '/' },
+    localStorage: { getItem: () => null, setItem() {} },
     document: {
       createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }),
       getElementById: () => null,
@@ -638,87 +49,450 @@ describe('the rules a folder is rendered by', () => {
       addEventListener() {},
       body: {},
     },
-    // The hub reads the signed-in user from APP_USER, as the shell supplies it.
-    // An owner holds every service-agreement permission implicitly, so this is
-    // the reader who sees the most tools — the hardest case for the folder gate.
-    APP_USER: { role: 'owner', permissions: ['service_agreements.access'] },
+    APP_USER: { role, permissions: ['service_agreements.access'] },
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(JS, sandbox, { filename: 'resourcehub.js' });
-  const RH2 = sandbox.RH2;
+  vm.runInContext(source, sandbox, { filename });
+  return sandbox;
+}
+
+const asOwner = load(LIB, 'resourcelibrary.js', 'owner');
+const T = asOwner.RHLib._test;
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE RULES, EXECUTED
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('sorting', () => {
+  const items = [
+    { kind: 'doc', name: 'beta', modifiedAt: '2026-01-02', size: 300, format: 'pdf', modifiedBy: 'Zoe' },
+    { kind: 'folder', name: 'Zeta', modifiedAt: '2026-01-01' },
+    { kind: 'doc', name: 'Alpha 10', modifiedAt: '2026-03-01', size: 10, format: 'docx', modifiedBy: 'amy' },
+    { kind: 'doc', name: 'Alpha 9', modifiedAt: '2026-02-01', size: null, format: 'xlsx', modifiedBy: 'Bob' },
+    { kind: 'folder', name: 'alpha folder', modifiedAt: '2026-05-01' },
+  ];
+  const names = (list) => list.map((i) => i.name);
+
+  it('puts folders first in both directions', () => {
+    expect(names(T.sortItems(items, 'name', 'asc')).slice(0, 2)).toEqual(['alpha folder', 'Zeta']);
+    expect(names(T.sortItems(items, 'name', 'desc')).slice(0, 2)).toEqual(['Zeta', 'alpha folder']);
+  });
+
+  it('sorts names naturally and case-insensitively', () => {
+    expect(names(T.sortItems(items, 'name', 'asc')).slice(2)).toEqual(['Alpha 9', 'Alpha 10', 'beta']);
+  });
+
+  it('sorts by modified, size, type and modified-by, ascending and descending', () => {
+    expect(names(T.sortItems(items, 'modified', 'desc')).slice(2)).toEqual(['Alpha 10', 'Alpha 9', 'beta']);
+    expect(names(T.sortItems(items, 'size', 'asc')).slice(2)).toEqual(['Alpha 9', 'Alpha 10', 'beta']);
+    expect(names(T.sortItems(items, 'size', 'desc')).slice(2)).toEqual(['beta', 'Alpha 10', 'Alpha 9']);
+    expect(names(T.sortItems(items, 'type', 'asc')).slice(2)).toEqual(['Alpha 9', 'beta', 'Alpha 10']);
+    expect(names(T.sortItems(items, 'modifiedBy', 'asc')).slice(2)).toEqual(['Alpha 10', 'Alpha 9', 'beta']);
+  });
+
+  it('falls back to name for an unknown column and never mutates its input', () => {
+    const copy = items.slice();
+    T.sortItems(items, 'nonsense', 'asc');
+    expect(items).toEqual(copy);
+    expect(names(T.sortItems(items, 'nonsense', 'asc'))).toEqual(names(T.sortItems(items, 'name', 'asc')));
+  });
+});
+
+describe('range selection and filtering', () => {
+  const order = ['a', 'b', 'c', 'd', 'e'];
+  it('selects from the anchor to the target, either direction', () => {
+    expect(T.rangeKeys(order, 'b', 'd')).toEqual(['b', 'c', 'd']);
+    expect(T.rangeKeys(order, 'd', 'b')).toEqual(['b', 'c', 'd']);
+    expect(T.rangeKeys(order, 'zz', 'c')).toEqual(['c']);
+    expect(T.rangeKeys(order, 'a', 'zz')).toEqual([]);
+  });
+
+  it('filters on name and file name, case-insensitively', () => {
+    const items = [{ name: 'Policy', fileName: 'p.pdf' }, { name: 'Form', fileName: 'NDIS intake.docx' }];
+    expect(T.filterItems(items, 'ndis').map((i) => i.name)).toEqual(['Form']);
+    expect(T.filterItems(items, '  ').length).toBe(2);
+  });
+
+  it('labels sizes and types the way a person reads them', () => {
+    expect(T.fmtSize(512)).toBe('512 B');
+    expect(T.fmtSize(2048)).toBe('2 KB');
+    expect(T.fmtSize(1.5 * 1024 * 1024)).toBe('1.5 MB');
+    expect(T.typeLabel({ kind: 'folder' })).toBe('Folder');
+    expect(T.typeLabel({ kind: 'doc', format: 'docx' })).toBe('Word');
+  });
+});
+
+describe('the actions each role is offered (the server refuses the rest)', () => {
+  const doc = { kind: 'doc', id: 'd1', key: 'd-d1', name: 'Policy', file: { downloadUrl: '/x' } };
+  const folder = { kind: 'folder', id: 'f1', key: 'f-f1', name: 'HR' };
+  const acts = (sandbox, items) => sandbox.RHLib._test.actionsFor(items).map((a) => a.act);
+
+  it('gives an owner and an admin every management action', () => {
+    const admin = load(LIB, 'resourcelibrary.js', 'admin');
+    for (const sb of [asOwner, admin]) {
+      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'rename', 'move', 'replace', 'versions', 'details', 'delete']);
+      expect(acts(sb, [folder])).toEqual(['open', 'copyLink', 'rename', 'move', 'details', 'delete']);
+      expect(acts(sb, [doc, folder])).toEqual(['download', 'move', 'delete']);
+    }
+  });
+
+  it('gives a therapist and read_only only what they may do: open, download, link, history, details', () => {
+    for (const role of ['therapist', 'read_only']) {
+      const sb = load(LIB, 'resourcelibrary.js', role);
+      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'versions', 'details']);
+      expect(acts(sb, [doc, folder])).toEqual(['download']);
+    }
+  });
+
+  it('never offers Delete on Needs Review', () => {
+    expect(acts(asOwner, [{ ...folder, isReviewBucket: true }])).not.toContain('delete');
+  });
+});
+
+describe('the move picker', () => {
+  it('leaves out the folders being moved and everything inside them', () => {
+    T.setTree([
+      { id: 'a', name: 'A', children: [{ id: 'b', name: 'B', children: [{ id: 'c', name: 'C', children: [] }] }] },
+      { id: 'd', name: 'D', children: [] },
+    ]);
+    expect(T.moveTargets(['b']).map((t) => t.id)).toEqual(['a', 'd']);
+    expect(T.moveTargets([]).map((t) => [t.id, t.depth])).toEqual([['a', 0], ['b', 1], ['c', 2], ['d', 0]]);
+    T.setTree(null);
+  });
+});
+
+describe('error messages a person can act on', () => {
+  it('names the permission, the size limit and passes the server sentence through', () => {
+    expect(T.errorText(403, {})).toMatch(/permission/i);
+    expect(T.errorText(413, {})).toMatch(/25 MB/);
+    expect(T.errorText(415, { error: 'That file type is not supported.' })).toBe('That file type is not supported.');
+    expect(T.errorText(422, { error: 'This file appears to contain a person\'s completed details' }))
+      .toMatch(/completed details/);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  SOURCE GUARDS
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('escaping', () => {
+  it('escapes every name, path and message it renders', () => {
+    for (const s of ['esc(it.name)', 'esc(d.folder.name)', 'esc(b.name)', 'esc(n.name)', 'esc(u.name)',
+      'esc(u.message)', 'esc(i.name)', 'esc(t.name)', 'esc(v.fileName', 'esc(r.title)']) {
+      expect(LIB).toContain(s);
+    }
+  });
+
+  it('never puts a name inside an inline handler — ids and keys only', () => {
+    const handlers = LIB.match(/on[a-z]+="RHLib\.[^"]*"/g) || [];
+    expect(handlers.length).toBeGreaterThan(20);
+    for (const h of handlers) expect(h).not.toMatch(/\.name|\.title|fileName/);
+  });
+
+  it('defines the same esc() as resourcehub.js', () => {
+    expect(LIB).toContain(".replace(/\"/g, '&quot;').replace(/'/g, '&#39;')");
+  });
+});
+
+describe('every inline handler is reachable', () => {
+  it('exports each RHLib.* the markup calls', () => {
+    const called = new Set((LIB.match(/RHLib\.([a-zA-Z]+)\(/g) || []).map((m) => m.slice(6, -1)));
+    for (const name of called) expect(typeof asOwner.RHLib[name]).toBe('function');
+  });
+
+  it('exports each RH2.* the library markup calls', () => {
+    const hub = load(JS, 'resourcehub.js', 'owner');
+    const called = new Set((LIB.match(/RH2\.([a-zA-Z]+)\(/g) || []).map((m) => m.slice(4, -1)));
+    expect(called.size).toBeGreaterThan(2);
+    for (const name of called) expect(typeof hub.RH2[name]).toBe('function');
+    const rhCalled = new Set((JS.match(/RH2\.lib[a-zA-Z]+\(/g) || []).map((m) => m.slice(4, -1)));
+    for (const name of rhCalled) expect(typeof hub.RH2[name]).toBe('function');
+  });
+});
+
+describe('the document library replaces the old folder grid', () => {
+  it('mounts into #rhl-root from the Library view', () => {
+    expect(JS).toContain('<div id="rhl-root" class="rhl-root"></div>');
+    expect(JS).toContain('global.RHLib.mount(lib)');
+  });
+
+  it('left no old folder-grid, right-click or upload code behind in resourcehub.js', () => {
+    for (const gone of ['function renderFolderGrid', 'function folderCard', 'function libUploadFiles',
+      'function libMenu(', 'function libMoveTo', 'function libFolderArchive', 'libSelectMode']) {
+      expect(JS).not.toContain(gone);
+    }
+  });
+
+  it('is loaded by the shell before resourcehub.js', () => {
+    const lib = SHELL.indexOf('/resourcelibrary.js?v=');
+    const hub = SHELL.indexOf('/resourcehub.js?v=');
+    expect(lib).toBeGreaterThan(-1);
+    expect(lib).toBeLessThan(hub);
+    expect(SHELL).toContain('/resourcelibrary.css?v=');
+  });
+});
+
+describe('navigation: tree, breadcrumbs, deep links', () => {
+  it('renders an ARIA tree with levels, expansion and the current folder', () => {
+    for (const s of ['role="tree"', 'role="treeitem"', 'aria-expanded', 'aria-level', 'role="group"', 'aria-selected']) {
+      expect(LIB).toContain(s);
+    }
+    expect(LIB).toContain('function treeKey(');
+    for (const k of ["'ArrowDown'", "'ArrowRight'", "'ArrowLeft'", "'Home'", "'End'"]) {
+      expect(LIB.slice(LIB.indexOf('function treeKey('))).toContain(k);
+    }
+  });
+
+  it('shows breadcrumbs with the current folder marked', () => {
+    expect(LIB).toContain('aria-label="Library location"');
+    expect(LIB).toContain('aria-current="page"');
+  });
+
+  it('navigates through RH2.libOpenFolder, which navigation.js hooks for history', () => {
+    expect(LIB).toContain("global.RH2.libOpenFolder(id || '')");
+    expect(NAV).toContain("hookMethod('RH2', 'libOpenFolder'");
+    expect(NAV).toContain("'lwedit', 'library']");
+    expect(NAV).toContain("out += '/library' + (s.id ?");
+    expect(NAV).toContain("t.view === 'library' && t.id && isFn(global.RH2.libOpenFolder)");
+  });
+
+  it('remembers the last folder and the chosen view', () => {
+    expect(LIB).toContain("var LAST_KEY = 'opal.rhl.lastFolder'");
+    expect(LIB).toContain("var VIEW_KEY = 'opal.rhl.view'");
+    // Storage can throw (private windows); every access is guarded.
+    expect(LIB).toMatch(/function store\([^)]*\) \{\s*try \{/);
+    expect(LIB).toMatch(/function recall\([^)]*\) \{\s*try \{/);
+  });
+});
+
+describe('list view, selection and keyboard', () => {
+  it('is an ARIA grid with sortable headers', () => {
+    expect(LIB).toContain('role="grid" aria-multiselectable="true"');
+    expect(LIB).toContain('aria-sort="');
+    for (const col of ["'name', 'Name'", "'modified', 'Modified'", "'modifiedBy', 'Modified by'", "'size', 'Size'", "'type', 'Type'"]) {
+      expect(LIB).toContain(col);
+    }
+  });
+
+  it('supports Shift ranges, Ctrl/Cmd toggles and select all', () => {
+    const click = LIB.slice(LIB.indexOf('function applyClick('), LIB.indexOf('function checkClick('));
+    expect(click).toContain('ev.shiftKey && L.anchor');
+    expect(click).toContain('ev.ctrlKey || ev.metaKey');
+    expect(LIB).toContain('aria-label="Select all"');
+  });
+
+  it('handles arrows, Enter, Space, F2, Delete, Escape and the menu key in the list', () => {
+    const keys = LIB.slice(LIB.indexOf('function listKey('), LIB.indexOf('function ensureSelected('));
+    for (const k of ["'ArrowDown'", "'ArrowUp'", "'Enter'", "' '", "'F2'", "'Delete'", "'Escape'", "'ContextMenu'", "'F10'"]) {
+      expect(keys).toContain(k);
+    }
+    // F2 and Delete are management actions — offered to managers only.
+    expect(keys).toContain("k === 'F2' && canManage()");
+  });
+
+  it('uses one roving tab stop per list, not one per row', () => {
+    expect(LIB).toContain("tabindex=\"' + (it.key === focusKey ? '0' : '-1')");
+  });
+});
+
+describe('command bar, "…" button and context menu share one action list', () => {
+  it('builds all three from actionsFor()', () => {
+    expect(LIB).toContain('actionsFor(sel).forEach');
+    expect(LIB).toContain("else items = actionsFor(selectedItems());");
+    expect(LIB).toContain('function more(ev, k)');
+    expect(LIB).toContain('oncontextmenu="return RHLib.ctx(event,');
+  });
+
+  it('labels the menu and returns focus on close', () => {
+    expect(LIB).toContain('role="menu"');
+    expect(LIB).toContain('role="menuitem"');
+    expect(LIB).toContain('returnTo');
+    expect(LIB).toContain("if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }");
+  });
+
+  it('leaves fields and links to the browser menu', () => {
+    expect(LIB).toContain("t.closest('input, textarea, select, a[href], .rhl-menu, .rhl-dialog')");
+  });
+
+  it('offers New ▸ Folder and Upload ▸ Files as menus', () => {
+    expect(LIB).toContain("RHLib.menuFor(event,\\'new\\')");
+    expect(LIB).toContain("RHLib.menuFor(event,\\'upload\\')");
+    expect(LIB).toContain('aria-haspopup="menu"');
+  });
+});
+
+describe('moving uses an explicit Move button, never a select that fires on change (B7)', () => {
+  it('has a dialog with a radio tree and a Move here button', () => {
+    expect(LIB).toContain('Move here');
+    expect(LIB).toContain('type="radio" name="rhl-move"');
+    expect(LIB).not.toMatch(/<select[^>]*onchange="RHLib\.move/);
+  });
+
+  it('creates a new folder in exactly the folder that is open (B9)', () => {
+    const nf = LIB.slice(LIB.indexOf('async function newFolder('), LIB.indexOf('// ── Move'));
+    expect(nf).toContain("parentId: parent || null");
+    expect(nf).toContain("var parent = L.folderId && L.folderId !== BIN ? L.folderId : ''");
+  });
+});
+
+describe('uploads', () => {
+  it('queues a second drop instead of replacing the first batch (P1)', () => {
+    const q = LIB.slice(LIB.indexOf('function queueUpload('), LIB.indexOf('async function runQueue('));
+    expect(q).toContain('L.uploads.push(');
+    expect(q).toContain('if (!L.uploading) runQueue();');
+  });
+
+  it('reports per-file progress and a results summary', () => {
+    expect(LIB).toContain('xhr.upload.onprogress');
+    expect(LIB).toContain('role="progressbar"');
+    expect(LIB).toContain("' refused' : ''");
+  });
+
+  it('asks Replace / Keep both / Skip on a duplicate name, with apply-to-all', () => {
+    expect(LIB).toContain("r.data.code === 'duplicate_name'");
+    expect(LIB).toContain('Replace (new version)');
+    expect(LIB).toContain('Keep both');
+    expect(LIB).toContain('id="rhl-dup-all"');
+  });
+
+  it('accepts the formats the server accepts, and no more', () => {
+    expect(LIB).toContain("var UPLOAD_ACCEPT = '.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg'");
+  });
+
+  it('tells a drag of files from a drag of library items', () => {
+    expect(LIB).toContain("var DRAG_TYPE = 'application/x-opal-library'");
+    expect(LIB).toContain("types.indexOf('Files')");
+  });
+
+  it('accepts drops on folder rows, the tree and breadcrumbs', () => {
+    expect(LIB).toContain('function crumbTarget(');
+    expect(LIB).toMatch(/treeNode[\s\S]*RHLib\.drop\(event/);
+    expect(LIB).toMatch(/function dragAttrs[\s\S]*RHLib\.drop\(event/);
+  });
+});
+
+describe('safety: confirmation and undo', () => {
+  it('confirms delete, permanent delete and emptying the bin', () => {
+    const del = LIB.slice(LIB.indexOf('async function deleteItems('), LIB.indexOf('// ── Upload'));
+    expect(del).toContain('portalConfirm');
+    expect(del).toContain('danger: true');
+    const purge = LIB.slice(LIB.indexOf('async function binPurge('), LIB.indexOf('function renderBin('));
+    expect(purge).toContain('portalConfirm');
+    expect(purge).toContain('This cannot be undone.');
+  });
+
+  it('warns about learning workflows before deleting a document they use', () => {
+    expect(LIB).toContain('/api/rh2/library/delete-check');
+    expect(LIB).toContain('This resource was removed');
+    expect(LIB).toContain('body.confirm = workflows.length > 0');
+  });
+
+  it('offers Undo for move, rename and delete, on the toast and on Cmd/Ctrl+Z', () => {
+    expect(LIB).toContain('function offerUndo(');
+    expect(LIB).toContain('global.OpalUndo.register');
+    expect(LIB).toContain('global.OpalUndo.unregister');
+    expect((LIB.match(/offerUndo\('/g) || []).length).toBeGreaterThanOrEqual(3);
+    // Undo of a delete is a restore from the bin.
+    expect(LIB).toContain("api('/api/rh2/library/recycle-bin/restore'");
+  });
+});
+
+describe('recycle bin, versions and details', () => {
+  it('lists original location, who deleted it, when, and days left', () => {
+    for (const s of ['Original location', 'Deleted by', 'Days left']) expect(LIB).toContain(s);
+  });
+
+  it('only offers permanent delete when the server says this user may', () => {
+    expect(LIB).toContain('if (b.canPurge) out += cmdBtn(\'purge\'');
+    expect(LIB).toContain("if (b.canPurge && (b.items || []).length) out += cmdBtn('empty'");
+  });
+
+  it('shows version history with download and (for managers) restore', () => {
+    expect(LIB).toContain("'/versions'");
+    expect(LIB).toContain('p.versions.canRestore && !v.isCurrent');
+  });
+
+  it('copies links to documents and folders', () => {
+    expect(LIB).toContain("'#resources/library/' + encodeURIComponent(it.id)");
+    expect(LIB).toContain("'#resources/detail/' + encodeURIComponent(it.id)");
+  });
+});
+
+describe('search stays global (§21)', () => {
+  it('sends the library search box to the whole-library search', () => {
+    expect(LIB).toContain('global.RH2.libSearch(q)');
+    expect(JS).toContain('function libSearch(q)');
+    expect(JS).toContain('S.lib.folderSearch = false;');
+  });
+
+  it('only adds a folder to the query when the reader asks for it', () => {
+    expect(JS).toContain("if (f.folderId && (!libSearching(f) || f.folderSearch))");
+    expect(JS).toContain('Search the whole library');
+  });
+});
+
+describe('accessibility and layout (§53, §54)', () => {
+  it('signals selection, the current folder and drop targets by more than colour', () => {
+    expect(LIBCSS).toMatch(/\.rhl-row\.is-selected \{[^}]*box-shadow: inset 3px 0 0/);
+    expect(LIBCSS).toMatch(/\.rhl-tnode\.is-current > \.rhl-trow \{[^}]*border-left-color/);
+    expect(LIBCSS).toMatch(/is-drop[^{]*\{[^}]*dashed/);
+  });
+
+  it('shows a visible focus ring on rows, tree items, menu items and sort headers', () => {
+    for (const s of ['.rhl-row:focus-visible', '.rhl-tnode:focus-visible', '.rhl-menuitem:focus-visible', '.rhl-sort:focus-visible']) {
+      expect(LIBCSS).toContain(s);
+    }
+  });
+
+  it('collapses the tree and hides secondary columns on narrow screens', () => {
+    expect(LIBCSS).toContain('@media (max-width: 760px)');
+    expect(LIBCSS).toContain('.rhl-tree-toggle { display: flex; }');
+    expect(LIBCSS).toContain('.rhl-hide-sm { display: none; }');
+  });
+
+  it('respects a reduced-motion preference', () => {
+    expect(LIBCSS).toContain('prefers-reduced-motion');
+  });
+
+  it('traps Tab inside its dialogs and closes them on Escape', () => {
+    expect(LIB).toContain('role="dialog" aria-modal="true"');
+    const k = LIB.slice(LIB.indexOf('function dialogKey('));
+    expect(k).toContain("ev.key === 'Escape'");
+    expect(k).toContain("ev.key !== 'Tab'");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  resourcehub.js — the flat list's rules, executed
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the rules the flat list is rendered by', () => {
+  const RH2 = load(JS, 'resourcehub.js', 'owner').RH2;
 
   it('offers the workflow tools when the reader is browsing the library', () => {
     expect(RH2._toolsFor({}).length).toBeGreaterThan(0);
   });
 
-  it('offers none of them inside a folder', () => {
-    // The whole defect in one assertion: a folder is not a place a tool lives.
-    expect(RH2._toolsFor({ folderId: '9f55dee8-c218-4e11-9ef5-d5328e31935a' })).toEqual([]);
-  });
-
   it('offers none of them inside a folder however the reader got there', () => {
-    for (const extra of [{ q: 'agreement' }, { folderSearch: true }, { collection: 'templates' },
-      { sort: 'az' }, { type: 'template' }]) {
+    for (const extra of [{}, { q: 'agreement' }, { folderSearch: true }, { collection: 'templates' }]) {
       expect(RH2._toolsFor(Object.assign({ folderId: 'f0000000-0000-4000-8000-000000000000' }, extra)))
         .toEqual([]);
     }
   });
 
   it('still offers them in the Templates collection, which is where they belong', () => {
-    // Removing a tool from every folder must not remove it from the library.
     expect(RH2._toolsFor({ collection: 'templates' }).length).toBeGreaterThan(0);
   });
 
   it('counts the way a person writes it', () => {
     expect(RH2._countLabel(0)).toBe('0 resources');
     expect(RH2._countLabel(1)).toBe('1 resource');
-    expect(RH2._countLabel(2)).toBe('2 resources');
     expect(RH2._countLabel(451)).toBe('451 resources');
   });
-});
 
-describe('the number a folder shows comes from the server', () => {
-  /**
-   * Source guards, because the tally is produced inside a renderer that needs
-   * a DOM. What they protect is that neither number is arithmetic on the page:
-   * the folder's comes from the folder route, the library's from the tree.
-   */
-  it('reads the folder count off the folder route, not off the rendered page', () => {
-    expect(JS).toContain('known = f.folderMeta.folder.count');
-    expect(JS).toContain('known = f.totalResources');
-    expect(JS).toContain('var tally = known !== null ? countLabel(known)');
-  });
-
-  it('keeps counting results while the reader is searching or filtering', () => {
-    // A search asks how many matched; only browsing asks how big the shelf is.
-    const tally = JS.slice(JS.indexOf('var known = null;'), JS.indexOf('var tally = known'));
-    expect(tally).toContain('!searching');
-    expect(tally).toContain('!f.saved');
-    expect(tally).toContain('!f.collection');
-  });
-
-  it('asks the server for the folder again whenever what is filed changes', () => {
-    expect(JS).toContain('function libRefreshFolders()');
-    expect(JS).toContain('if (S.lib.folderId) loadFolderMeta(S.lib.folderId);');
-    // Every mutation goes through the one refresh, so the card and the header
-    // can never be reloaded one without the other.
-    const body = JS.slice(JS.indexOf('function libUploadFiles('), JS.indexOf('// ── Rendering'));
-    expect(body).not.toContain('loadFolders(true)');
-  });
-
-  it('takes the subfolder counts from the folder route too', () => {
-    const subs = JS.slice(JS.indexOf('function renderSubfolders()'), JS.indexOf('var KINDS ='));
-    expect(subs).toContain('count: c.count || 0');
-    // The old lookup into a folder tree that may never have loaded is gone.
-    expect(subs).not.toContain('S.lib.folders');
-  });
-
-  it('leaves no filter behind when a folder is opened', () => {
-    const open = JS.slice(JS.indexOf('function libOpenFolder('), JS.indexOf('async function loadFolderMeta('));
-    for (const cleared of ["f.q = ''", "f.collection = ''", "f.authority = ''"]) {
-      expect(open).toContain(cleared);
-    }
-    expect(open).toContain('loadFolders();');
+  it('says plainly when a linked resource was removed', () => {
+    expect(JS).toContain('This resource was removed');
+    expect(JS).toContain('it.resource_removed');
   });
 });

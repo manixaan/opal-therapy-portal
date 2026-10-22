@@ -631,7 +631,14 @@ describe('changed assets are cache-busted', () => {
       // walkthrough as a learner. The CSS carries the strip.
       // r53: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
       // r54: Admin → Content "Archive" asks before withdrawing a live document.
-      ['resourcehub.js', 'r54'], ['resourcehub.css', 'r30'],
+      // r55: browsing the Library hands over to resourcelibrary.js (the
+      // SharePoint-style document library); the old folder grid, owner bar,
+      // right-click menu and upload code left this file. A removed resource
+      // reads "This resource was removed" in Detail and in the learner player.
+      ['resourcehub.js', 'r55'], ['resourcehub.css', 'r30'],
+      // resourcelibrary 1: the document library — folder tree, breadcrumbs,
+      // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
+      ['resourcelibrary.js', 1], ['resourcelibrary.css', 1],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -685,7 +692,8 @@ describe('changed assets are cache-busted', () => {
       // 13: the Invoicing tab joined KNOWN_TABS.
       // 14: bootRestore lifts the boot cloak once the start screen is settled.
       // 15: the no-hash landing waits (bounded) for settings before lifting the cloak.
-      ['navigation.js', 15],
+      // 16: '#resources/library/<folder-id>' — a Library folder is an address.
+      ['navigation.js', 16],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.
