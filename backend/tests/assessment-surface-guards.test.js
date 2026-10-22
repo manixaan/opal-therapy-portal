@@ -758,7 +758,9 @@ describe('changed assets are cache-busted', () => {
       // 7 (js): no sync popups — no idle nudge, no tab-leave prompt, no page-close
       // warning; the server's auto-sync writes the queue, Sync Splose stays manual.
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
-      ['splose-sync.js', 8], ['splose-sync.css', 1],
+      // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
+      // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
+      ['splose-sync.js', 9], ['splose-sync.css', 2],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
