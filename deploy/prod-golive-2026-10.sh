@@ -26,7 +26,9 @@ OWNER_EMAIL=ann.mathew@opaltherapy.com.au
 case "${1:-}" in
 check)
   echo "── Subscription"; az account show --query "{name:name, user:user.name}" -o tsv
-  echo "── App state";    az webapp show -g "$RG" -n "$APP" --query "{state:state, host:defaultHostName}" -o tsv
+  # `az resource show`, not `az webapp show`: the latter loads publish profiles
+  # through xmltodict/pyexpat, which crashes on some Homebrew Python builds.
+  echo "── App state";    az resource show -g "$RG" -n "$APP" --resource-type Microsoft.Web/sites --query "{state:properties.state, host:properties.defaultHostName}" -o tsv
   echo "── App setting NAMES"
   az webapp config appsettings list -g "$RG" -n "$APP" --query "[].name" -o tsv | sort | tr '\n' ' '; echo
   echo "── Key Vault secret NAMES"
@@ -34,8 +36,7 @@ check)
   echo "── Database server + databases"
   az postgres flexible-server show -g "$RG" -n "$PG" --query "{state:state, version:version, backupDays:backup.backupRetentionDays}" -o tsv
   az postgres flexible-server db list -g "$RG" -s "$PG" --query "[].name" -o tsv | tr '\n' ' '; echo
-  echo "── Storage containers"
-  az storage container list --account-name "$SA" --query "[].name" -o tsv | tr '\n' ' '; echo
+  echo "── Storage containers: check in the Azure Portal (storage commands crash on some Homebrew Python builds)"
   echo "── Live /ready"; curl -s --max-time 20 "$BASE/ready"; echo
   ;;
 
@@ -48,8 +49,9 @@ settings)
     echo "  ✓ onboarding-encryption-key already present"
   fi
   KVURI=$(az keyvault show -n "$KV" --query properties.vaultUri -o tsv); KVURI="${KVURI%/}"
-  echo "── resource-hub storage container (created only if missing)"
-  az storage container create --account-name "$SA" -n resource-hub --public-access off -o none && echo "  ✓ resource-hub"
+  # The resource-hub storage container is created in the Azure Portal during
+  # the wipe: storage data-plane commands parse XML, which crashes on some
+  # Homebrew Python builds (pyexpat/libexpat mismatch).
   echo "── Launch settings"
   az webapp config appsettings set -g "$RG" -n "$APP" -o none --settings \
     NODE_ENV=production \
