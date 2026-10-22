@@ -139,10 +139,10 @@ function inviteProblem(invite) {
     return { code: 'revoked', message: 'This onboarding link has been cancelled. Please contact the practice.' };
   }
   if (invite.status === 'expired') {
-    return { code: 'expired', message: 'This onboarding link has expired. Please ask for a new one.' };
+    return { code: 'expired', message: 'This onboarding link has expired. Ask the practice to send you a new one — it takes them one click, and the new link works straight away.' };
   }
   if (invite.expires_at && new Date(invite.expires_at) <= new Date()) {
-    return { code: 'expired', message: 'This onboarding link has expired. Please ask for a new one.' };
+    return { code: 'expired', message: 'This onboarding link has expired. Ask the practice to send you a new one — it takes them one click, and the new link works straight away.' };
   }
   if (!invite.assignment_id) {
     return { code: 'invalid', message: 'This onboarding link is not valid.' };

@@ -459,6 +459,67 @@ async function releaseAssignment({ org, assignment, actor, expiresInDays }) {
   return { ...outcome, emailResult, onboardingUrl };
 }
 
+/**
+ * A fresh invitation for a released starter who has not yet set a password
+ * (audit B-12, B-30): every older pending link is revoked and a new token
+ * with a new expiry is issued, so an expired invitation is never a dead end
+ * and an old link stops working the moment a new one exists.
+ */
+async function renewInvitation({ assignment, actor, expiresInDays }) {
+  if (!assignment.user_id || !assignment.released_at) {
+    throw new LifecycleError(409, { error: 'This onboarding has not been released yet. Release it first.', code: 'not_released' });
+  }
+  if (['activated', 'completed', 'cancelled', 'archived'].includes(assignment.status)) {
+    throw new LifecycleError(409, { error: `This onboarding is ${assignment.status}.`, code: 'closed' });
+  }
+  const invite = await odb.withTransaction(async (q) => {
+    const own = await guard.loadAndAssess(q, assignment, assignment.user_id, { lock: true });
+    if (!own.ok) throw guardRefusal(own, 'invited');
+    if (own.user.password_hash && !own.user.password_is_temporary) {
+      throw new LifecycleError(409, {
+        error: 'The starter has already accepted the invitation and set their password. They can use "Forgot password" on the sign-in page.',
+        code: 'already_accepted',
+      });
+    }
+    await q.query(
+      `UPDATE user_invites SET status = 'revoked', revoked_at = NOW(), revoked_by_user_id = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE onboarding_assignment_id = $1 AND status = 'pending'`,
+      [assignment.id, actor.id]
+    );
+    const inviteDays = Math.max(1, Math.min(Number(expiresInDays) || 14, 60));
+    const token = crypto.randomBytes(32).toString('hex');
+    const { rows } = await q.query(
+      `INSERT INTO user_invites
+         (organisation_id, email, role, invited_by_user_id, is_treating_therapist,
+          display_name_hint, invite_token, expires_at, onboarding_assignment_id, metadata)
+       VALUES ($1, LOWER($2), 'pre_employee', $3, $4, $5, $6, NOW() + ($7 || ' days')::INTERVAL, $8, $9)
+       RETURNING *`,
+      [
+        assignment.organisation_id, assignment.applicant_email, actor.id, assignment.is_treating_therapist,
+        assignment.applicant_name, token, String(inviteDays), assignment.id,
+        JSON.stringify({ onboarding: true, renewed: true }),
+      ]
+    );
+    await q.query(
+      `UPDATE onboarding_assignments SET invite_id = $2, last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [assignment.id, rows[0].id]
+    );
+    return rows[0];
+  });
+  let emailResult = null;
+  try {
+    emailResult = await email.sendOnboardingInviteEmail({
+      toEmail: invite.email, inviteToken: invite.invite_token, displayName: assignment.applicant_name,
+      roleTitle: assignment.job_title || assignment.package_title, startDate: assignment.start_date,
+      dueAt: assignment.due_at, invitedBy: actor.name || actor.email,
+    });
+  } catch (err) {
+    log.warn('onboarding invite email failed', { error: err, assignmentId: assignment.id });
+    emailResult = { failed: true };
+  }
+  return { invite, emailResult, onboardingUrl: email.buildOnboardingInviteUrl(invite.invite_token) };
+}
+
 /** Probation end date from start date + probation months, or null. */
 function probationEnd(assignment) {
   const months = Number(assignment.probation_months);
@@ -638,6 +699,7 @@ module.exports = {
   checkReleasable,
   documentProblemsFor,
   releaseAssignment,
+  renewInvitation,
   activationReadiness,
   activateAssignment,
   completeIfFinished,

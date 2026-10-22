@@ -119,6 +119,8 @@ async function throughPhase2(agent) {
   const res = await agent.post('/api/onboarding/journey/records').send(ADMIN);
   const id = res.body.record.id; const base = `/api/onboarding/journey/records/${id}`;
   await agent.post(`${base}/offer/skip`);
+  // The paper document pack is now a secondary route, prepared on request (owner decision 1).
+  await agent.post(`${base}/pack/prepare`);
   await agent.post(`${base}/pack/mark-sent`);
   return { id, base };
 }

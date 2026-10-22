@@ -451,37 +451,34 @@ router.post('/api/onboarding/assignments/:id/resend-invite', requirePermission('
   safe(async (req, res) => {
     const assignment = await odb.getAssignment(orgOf(req), req.params.id);
     if (!assignment) return notFound(res);
-    if (assignment.status !== 'invite_sent') {
-      return res.status(409).json({ error: 'This onboarding is not awaiting invitation acceptance' });
+    // Always a FRESH link with a new expiry (audit B-12/B-30): an expired
+    // invitation used to be a dead end ("release again", which release refused).
+    let outcome;
+    try {
+      outcome = await lifecycle.renewInvitation({
+        assignment, actor: { id: req.user.id, name: req.user.name, email: req.user.email },
+        expiresInDays: req.body?.expiresInDays,
+      });
+    } catch (err) {
+      if (err instanceof lifecycle.LifecycleError) return res.status(err.status).json(err.body);
+      throw err;
     }
-    const { rows } = await odb.pool.query(
-      `SELECT * FROM user_invites
-        WHERE onboarding_assignment_id = $1 AND status = 'pending'
-          AND (expires_at IS NULL OR expires_at > NOW())
-        ORDER BY invited_at DESC LIMIT 1`, [assignment.id]
-    );
-    const invite = rows[0];
-    if (!invite) return res.status(409).json({ error: 'No valid pending invitation — release again to issue a new one' });
-
-    const result = await email.sendOnboardingInviteEmail({
-      toEmail: invite.email,
-      inviteToken: invite.invite_token,
-      displayName: assignment.applicant_name,
-      roleTitle: assignment.job_title || assignment.package_title,
-      startDate: assignment.start_date,
-      dueAt: assignment.due_at,
-      invitedBy: req.user.name || req.user.email,
-    }).catch((err) => ({ failed: true, error: err.message }));
-
+    const result = outcome.emailResult || {};
     await auditOnboarding(req, 'invitation_resent', {
-      targetType: 'invite', targetId: invite.id,
-      metadata: { assignmentId: assignment.id, emailSent: result?.sent || false },
+      targetType: 'invite', targetId: outcome.invite.id,
+      metadata: { assignmentId: assignment.id, emailSent: result.sent || false, emailSkipped: result.skipped || false },
     });
     res.json({
       ok: true,
-      emailSent: result?.sent || false,
-      emailSkipped: result?.skipped || false,
-      emailFailed: result?.failed || false,
+      emailSent: result.sent || false,
+      emailSkipped: result.skipped || false,
+      emailFailed: result.failed || false,
+      expiresAt: outcome.invite.expires_at,
+      // Returned to the person who renewed it, for copy-link delivery.
+      onboardingUrl: outcome.onboardingUrl,
+      message: result.sent
+        ? 'A new invitation link has been emailed. The previous link no longer works.'
+        : 'A new invitation link is ready — copy it and send it to the starter. The previous link no longer works.',
     });
   }));
 

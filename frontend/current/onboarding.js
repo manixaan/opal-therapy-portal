@@ -1203,8 +1203,10 @@
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
       + '/resend-invite', { method: 'POST', body: {} });
     if (!res.ok) { toast(res.error, true); return; }
-    toast(res.emailSent ? 'Invitation resent'
-      : 'Email is not configured — use “Copy link” to share it manually', !res.emailSent);
+    // Resend always issues a NEW link (the old one stops working), so an
+    // expired invitation is never a dead end.
+    toast(res.message || (res.emailSent ? 'A new invitation link has been emailed'
+      : 'A new link is ready — use “Copy link” to share it'), !res.emailSent && !res.message);
   }
 
   async function showInviteLink() {
@@ -2731,6 +2733,23 @@
             + ' rel="noopener noreferrer">open the official page</a>.</p>';
         }
       }
+    } else if (r.attachedDocument) {
+      // The practice's own document for this person — their contract or
+      // position description. The acknowledgement is against exactly this file.
+      var ad = r.attachedDocument;
+      body += '<div class="ob-inline-actions ob-mb-3"><a class="btn" href="' + esc(ad.url) + '" target="_blank" rel="noopener">Open '
+        + esc(ad.fileName) + '</a></div>';
+      if (ad.mime === 'application/pdf') {
+        body += '<iframe class="ob-doc-frame" title="' + esc(req.title) + '" src="' + esc(ad.url) + '"></iframe>';
+      }
+    } else if (r.attachedDocument === null) {
+      openModal({
+        title: req.title,
+        body: '<div class="ob-note is-info">The practice has not attached this document yet. You do not need to do anything — '
+          + 'it will appear here when it is ready.</div>',
+        footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
+      });
+      return;
     } else if (req.externalUrl) {
       body += '<p>This is published by an external body. Open it, read it, then confirm below.</p>'
         + '<p class="ob-mt-3"><a class="btn" href="' + esc(req.externalUrl) + '" target="_blank"'
@@ -4077,12 +4096,10 @@
       subtitle: a.name || '',
       body: '<div class="ob-note is-info">We will generate a temporary password and show it to you '
         + 'once. They will be asked to choose their own the first time they sign in.</div>'
-        + '<div class="ob-field"><label>Portal access</label>'
-        + radio('portalRole', 'employee', 'Employee',
-          'Their own calendar, their own clients, their own records.', true)
-        + radio('portalRole', 'admin', 'Admin',
-          'Practice-wide scheduling and travel. No financials, no user management.', false)
-        + '</div>'
+        // The role is the one agreed on the onboarding record and is granted
+        // only when the Owner presses Activate — this dialog never changes it.
+        + '<p class="ob-hint">Portal access: the role agreed on the onboarding record'
+        + (a.proposedRole ? ' (' + esc(titleCase(a.proposedRole)) + ')' : '') + ', granted when you activate them.</p>'
         + field2('Sign-in email', 'loginEmail', 'email', a.loginEmail || a.email || '')
         + '<p class="ob-hint">This is what they type to sign in. It can be their personal address '
         + 'or an Opal Therapy one — whichever they will actually use.</p>',
@@ -4095,7 +4112,7 @@
   async function submitCreateAccount() {
     var v = modalValues();
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
-      + '/account', { method: 'POST', body: { portalRole: v.portalRole, loginEmail: v.loginEmail } });
+      + '/account', { method: 'POST', body: { loginEmail: v.loginEmail } });
     if (!res.ok) { modalError(res.error); return; }
     showCredential(res, 'Account created');
     await refreshAssignment();

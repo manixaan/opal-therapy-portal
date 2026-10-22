@@ -59,6 +59,8 @@ function buildApp() {
   app.use('/', require('../../onboarding-employee-routes'));
   app.use('/', require('../../onboarding-workflow-routes'));
   app.use('/', require('../../onboarding-journey-routes'));
+  app.use('/', require('../../onboarding-pack-routes'));
+  app.use('/', require('../../onboarding-returns-routes'));
   app.use('/', require('../../onboarding-assignment-routes'));
   app.use('/', require('../../onboarding-routes'));
   return app;
@@ -457,7 +459,10 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     const verified = await agent.post(`${base}/offer/verify`).send({ acknowledge: true });
     expect(verified.status).toBe(200);
     expect(verified.body.offer.status).toBe('accepted');
-    expect(verified.body.prepared.status).toBe('prepared');
+    // Owner decision 1: the portal route — internal setup starts, the Owner releases next.
+    expect(verified.body.prepared.status).toBe('setup_started');
+    expect(verified.body.route).toBe('portal');
+    expect(verified.body.journey.next).toMatchObject({ actor: 'admin', action: 'release' });
     expect((await agent.post(`${base}/offer/verify`).send({ acknowledge: true })).status).toBe(409);
     // A wrong letter can still be replaced after acceptance: the offer stays accepted,
     // and the new letter with its own reading supersedes the old one.
@@ -468,14 +473,12 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect(Buffer.from((await agent.get(`${base}/offer/signed/download`)).body).toString()).toBe('%PDF-1.4 signed letter v2');
     const { rows: signedDocs } = await db.pool.query(`SELECT status FROM onboarding_offer_documents WHERE assignment_id = $1 AND kind = 'signed' ORDER BY uploaded_at`, [record.id]);
     expect(signedDocs.map((r) => r.status)).toEqual(['superseded', 'active']);
-    expect(verified.body.prepared.total).toBeGreaterThan(8);
     expect(verified.body.record.status).toBe('created');
     expect(verified.body.journey.stage.key).toBe('documentation');
     expect(verified.body.journey.stages[0].state).toBe('complete');
-    expect(verified.body.journey.next).toMatchObject({ actor: 'admin', action: 'review_pack' });
-    expect(verified.body.pack.items.length).toBe(verified.body.prepared.total);
+    expect(verified.body.pack.prepared).toBe(false);
 
-    // The 034 release (portal account + invitation) is still available by hand.
+    // The Owner releases: portal account + invitation (owner decision 1).
     const released = await agent.post(`${base}/release`);
     expect(released.status).toBe(201);
     expect(released.body.record.status).toBe('invite_sent');
@@ -590,15 +593,23 @@ describe('Stage 1 → 2 — letter, Email 1, Outlook draft, signed copy, verific
     expect((await viewer.agent.post(`${base}/offer/verify`)).status).toBe(403);
   });
 
-  test('skipping the letter prepares the document pack straight away', async () => {
+  test('skipping the letter goes to the portal route: release is next, no paper pack, setup under way', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const res = await agent.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
     expect(res.status).toBe(200);
     expect(res.body.offer.status).toBe('not_required');
-    expect(res.body.prepared.status).toBe('prepared');
+    expect(res.body.prepared.status).toBe('setup_started');
     expect(res.body.record.status).toBe('created');
-    expect(res.body.journey.next.action).toBe('review_pack');
+    expect(res.body.pack.prepared).toBe(false);
+    expect(res.body.journey.next.action).toBe('release');
+    expect(res.body.releaseCheck).toMatchObject({ ready: true });
+    expect(res.body.releaseCheck.toAttach.map((d) => d.attachKind).sort()).toEqual(['contract', 'position_description']);
+    expect(res.body.tasks.map((t) => t.code)).toEqual(expect.arrayContaining(['portal_access', 'payroll_setup']));
+    // The paper pack can still be prepared on purpose — but never over a released record.
+    const rel = await agent.post(`/api/onboarding/journey/records/${record.id}/release`);
+    expect(rel.status).toBe(201);
+    expect((await agent.post(`/api/onboarding/journey/records/${record.id}/pack/prepare`)).body.code).toBe('portal_route');
   });
 });
 
@@ -636,7 +647,9 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     expect(codes).toEqual(expect.arrayContaining(['portal_access', 'work_email', 'payroll_setup', 'induction_walkthrough']));
     expect(codes).not.toContain('clinical_supervision');
     expect(codes).not.toContain('first_week_checkin');
-    expect(one.body.journey.next).toMatchObject({ actor: 'admin', action: 'activate' });
+    // Not yet activatable: the next line names what stands in the way (owner decision 2).
+    expect(one.body.journey.next).toMatchObject({ actor: 'admin', action: 'activation_blocked' });
+    expect(one.body.activation.ok).toBe(false);
     expect(one.body.record.inductionStartedAt).toBeTruthy();
 
     const two = await agent.get(base);

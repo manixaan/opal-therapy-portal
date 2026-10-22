@@ -512,7 +512,16 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);
     if (!(await phase1Settled(assignment))) return res.status(409).json({ error: 'The letter of offer has not been verified yet.', code: 'phase1_open' });
-    const out = await preparePack(assignment);
+    // The paper pack is the secondary route (owner decision 1): never laid
+    // over a record already released to the starter through the portal.
+    if (assignment.released_at && !assignment.pack_prepared_at) {
+      return res.status(409).json({ error: 'This onboarding has been released to the starter through the portal. The paper pack is not used for it.', code: 'portal_route' });
+    }
+    let out;
+    try { out = await preparePack(assignment); } catch (err) {
+      if (err instanceof require('./onboarding-account-guard').AccountGuardError) return res.status(409).json({ error: err.message, code: 'account_exists' });
+      throw err;
+    }
     await auditOnboarding(req, P.auditPrefix + '_prepared', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, inserted: out.inserted, total: out.total } });
     await respond(req, res, assignment, 200, phase);
   }));

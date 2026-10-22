@@ -324,8 +324,8 @@ describe('the changed assets are cache-busted', () => {
     // would call routes the old code does not know about.
     expect(SHELL).toContain('href="/onboarding.css?v=8"');
     // 10: the management surface is handed to onboarding-journey.js.
-    expect(SHELL).toContain('src="/onboarding.js?v=15"');
-    expect(SHELL).toContain('src="/onboarding-journey.js?v=79"');
+    expect(SHELL).toContain('src="/onboarding.js?v=16"');
+    expect(SHELL).toContain('src="/onboarding-journey.js?v=80"');
     expect(SHELL).toContain('href="/onboarding-journey.css?v=42"');
   });
 
@@ -395,5 +395,37 @@ describe('accessibility', () => {
     for (const cls of ['ob-journey-step', 'ob-pack-list', 'ob-review-row']) {
       expect(`${cls}:${responsive.includes(cls)}`).toBe(`${cls}:true`);
     }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE PORTAL ROUTE (owner decisions, Oct 2026)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('the journey screen follows the portal route', () => {
+  const JOURNEY = fs.readFileSync(path.join(FRONTEND, 'onboarding-journey.js'), 'utf8');
+
+  test('B-16: treating clinician is the Owner\'s choice on the form, never hard-coded', () => {
+    expect(JOURNEY).not.toMatch(/isTreatingTherapist:\s*true/);
+    expect(JOURNEY).toContain('oj-f-treating');
+  });
+
+  test('B-17: every published package can be chosen — no title allowlist', () => {
+    expect(JOURNEY).not.toContain('liveRe');
+  });
+
+  test('Stage 2 releases and invites; Stage 3 activates only when ready (decisions 1 and 2)', () => {
+    expect(JOURNEY).toContain('portalDocumentationPanel');
+    expect(JOURNEY).toContain('Release the onboarding to the starter');
+    expect(JOURNEY).toContain('resendInvitation');
+    expect(JOURNEY).toMatch(/A\.ok \? '' : ' disabled aria-disabled="true"'/);
+  });
+
+  test('the verify-offer confirmation no longer promises a release that does not happen (B-23)', () => {
+    expect(JOURNEY).not.toContain('the onboarding documentation is released to the employee');
+  });
+
+  test('the account dialog never chooses a role (B-4)', () => {
+    expect(MODULE).not.toMatch(/radio\('portalRole'/);
   });
 });

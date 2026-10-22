@@ -101,7 +101,10 @@ async function settled(agent, body) {
   const id = res.body.record.id;
   const skip = await agent.post(`/api/onboarding/journey/records/${id}/offer/skip`);
   expect(skip.status).toBe(200);
-  return { id, base: `/api/onboarding/journey/records/${id}`, pack: skip.body.pack };
+  // The paper document pack is now a secondary route, prepared on request (owner decision 1).
+  const prepared = await agent.post(`/api/onboarding/journey/records/${id}/pack/prepare`);
+  expect(prepared.status).toBe(200);
+  return { id, base: `/api/onboarding/journey/records/${id}`, pack: prepared.body.pack };
 }
 
 beforeAll(() => {

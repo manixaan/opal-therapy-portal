@@ -97,7 +97,7 @@ describe('Edit onboarding', () => {
     const start = async (body) => (await agent.post('/api/onboarding/journey/records').send(body)).body.record.id;
     const ot = await start({ name: 'Jane Smith', personalEmail: 'jane@example.com', position: 'Occupational Therapist', roleCategory: 'occupational_therapist', employmentType: 'full_time', isTreatingTherapist: true, mobileCommunityRole: true, usesOwnVehicle: true, childRelatedWork: 'yes', ndisRiskAssessedRole: 'yes', startDate: '2026-11-02' });
     const admin = await start({ name: 'Bob Brown', personalEmail: 'bob@example.com', position: 'Admin', roleCategory: 'administration', employmentType: 'full_time', isTreatingTherapist: false, startDate: '2026-11-02' });
-    for (const id of [ot, admin]) await agent.post(`/api/onboarding/journey/records/${id}/offer/skip`);
+    for (const id of [ot, admin]) { await agent.post(`/api/onboarding/journey/records/${id}/offer/skip`); await agent.post(`/api/onboarding/journey/records/${id}/pack/prepare`); }
     const otPack = (await agent.get(`/api/onboarding/journey/records/${ot}/pack`)).body.pack.items.filter((i) => i.status === 'included');
     expect(otPack.map((i) => i.code)).not.toContain('PACK_FIRST_AID');
     expect(otPack.find((i) => i.code === 'PACK_CONTRACT')).toMatchObject({ title: 'Employment Contract', required: false });
@@ -139,6 +139,7 @@ describe('Edit onboarding', () => {
     expect((await agent.patch(`/api/onboarding/journey/defaults/${otFull.id}/items/${parking.code}/file`).send({ phase: 'documentation', fileName: ' ' })).status).toBe(400);
     const later = await start({ name: 'Kim Lee', personalEmail: 'kim@example.com', position: 'OT', roleCategory: 'occupational_therapist', employmentType: 'full_time', isTreatingTherapist: true, startDate: '2026-11-02' });
     await agent.post(`/api/onboarding/journey/records/${later}/offer/skip`);
+    await agent.post(`/api/onboarding/journey/records/${later}/pack/prepare`);
     const laterPack = (await agent.get(`/api/onboarding/journey/records/${later}/pack`)).body.pack.items;
     expect(laterPack.find((i) => i.code === 'PACK_SUPER_CHOICE').file.source).toBe('library');
     expect(laterPack.find((i) => i.title === 'Parking map').file.source).toBe('library');

@@ -326,7 +326,7 @@
         btn.disabled = false;
         btn.textContent = 'Start my onboarding';
         if (res.data && (res.data.code === 'used' || res.data.code === 'expired'
-            || res.data.code === 'revoked' || res.data.code === 'cancelled')) {
+            || res.data.code === 'revoked' || res.data.code === 'cancelled' || res.data.code === 'account_conflict')) {
           return showProblem(res.data.error);
         }
         showError((res.data && res.data.error) || 'Something went wrong. Please try again.');

@@ -359,3 +359,66 @@ describe('Owner decision 2 — activation is the Owner\'s press, only when every
     expect(rows[0].verified_by_user_id).toBeTruthy();
   });
 });
+
+describe('Owner decision 1 — the portal route', () => {
+  test('the offer settles → release is next; Create portal account refers the Owner to the release', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { record } = await start(owner);
+    const skip = await owner.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
+    expect(skip.body.route).toBe('portal');
+    expect(skip.body.journey.next).toMatchObject({ actor: 'admin', action: 'release' });
+    const res = await owner.post(`/api/onboarding/assignments/${record.id}/account`).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('use_release');
+  });
+
+  test('B-12: an expired invitation is renewed by Resend — a new link, the old one dead, the starter told plainly', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id, url } = await released(owner);
+    await db.pool.query(`UPDATE user_invites SET expires_at = NOW() - INTERVAL '1 day' WHERE onboarding_assignment_id = $1`, [id]);
+    const dead = await request(server).post('/api/onboarding-invite/check').set('X-Forwarded-For', nextIp()).send({ token: tokenOf(url) });
+    expect(dead.body).toMatchObject({ ok: false, code: 'expired' });
+    expect(dead.body.message).toMatch(/ask the practice/i);
+
+    const rec = await owner.get(`/api/onboarding/journey/records/${id}`);
+    expect(rec.body.invitation).toMatchObject({ status: 'expired', canResend: true });
+    const renewed = await owner.post(`/api/onboarding/assignments/${id}/resend-invite`).send({});
+    expect(renewed.status).toBe(200);
+    expect(renewed.body.onboardingUrl).toBeTruthy();
+    expect(tokenOf(renewed.body.onboardingUrl)).not.toBe(tokenOf(url));
+    const old = await request(server).post('/api/onboarding-invite/check').set('X-Forwarded-For', nextIp()).send({ token: tokenOf(url) });
+    expect(old.body.ok).toBe(false);
+    const accept = await request(server).post('/api/onboarding-invite/accept').set('X-Forwarded-For', nextIp())
+      .send({ token: tokenOf(renewed.body.onboardingUrl), password: STARTER_PASSWORD });
+    expect(accept.status).toBe(200);
+    // Once the starter has their own password, Resend refuses and says why.
+    const again = await owner.post(`/api/onboarding/assignments/${id}/resend-invite`).send({});
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('already_accepted');
+    // Only someone who may assign onboarding can renew.
+    const { agent: viewer } = await agentFor({ role: 'admin', email: 'v@example.test', permissions: ['onboarding.view'] });
+    expect((await viewer.post(`/api/onboarding/assignments/${id}/resend-invite`).send({})).status).toBe(403);
+  });
+
+  test('B-13: an unreleased record moves to the current package version on a confirmed request only', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { record } = await start(owner);
+    const odb = require('../../onboarding-db');
+    const pkg = await odb.getPackage(org.id, record.packageId);
+    await odb.publishPackage(org.id, pkg, null, 'v next');
+    const before = await owner.get(`/api/onboarding/journey/records/${record.id}`);
+    expect(before.body.packageVersion.behind).toBe(true);
+    expect((await owner.post(`/api/onboarding/journey/records/${record.id}/package-version`).send({})).body.code).toBe('confirm_required');
+    const moved = await owner.post(`/api/onboarding/journey/records/${record.id}/package-version`).send({ confirm: true });
+    expect(moved.status).toBe(200);
+    expect(moved.body.packageVersion.behind).toBe(false);
+    const { agent: viewer } = await agentFor({ role: 'admin', email: 'v2@example.test', permissions: ['onboarding.view'] });
+    expect((await viewer.post(`/api/onboarding/journey/records/${record.id}/package-version`).send({ confirm: true })).status).toBe(403);
+  });
+
+  test('B-15: the letter particulars typed on the Start form reach the offer terms', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { offer } = await start(owner, { award: 'QA-AWARD', payCycle: 'Weekly', workPattern: 'QA-PATTERN', superannuationRate: 12, offerClosingDate: '2026-11-20', cpdAllowance: 1500 });
+    expect(offer.terms).toMatchObject({ award: 'QA-AWARD', payCycle: 'Weekly', workPattern: 'QA-PATTERN', superannuationRate: 12, offerClosingDate: '2026-11-20', cpdAllowance: 1500 });
+  });
+});
