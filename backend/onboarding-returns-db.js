@@ -100,8 +100,12 @@ async function upsertResolved({ organisationId, assignmentId, runId, key, outcom
        status = EXCLUDED.status, outcome = EXCLUDED.outcome, outcome_reason = EXCLUDED.outcome_reason,
        resolution = EXCLUDED.resolution, conflict_options = EXCLUDED.conflict_options, updated_at = NOW()
      WHERE onboarding_extracted_fields.resolution IS DISTINCT FROM 'owner'
-       AND onboarding_extracted_fields.status IN ('proposed', 'accepted')
        AND onboarding_extracted_fields.value_source = 'extraction'
+       AND (onboarding_extracted_fields.status IN ('proposed', 'accepted')
+            -- A later document that DISAGREES with a value already applied
+            -- reopens it as a conflict for the Owner (audit B-6); it used to
+            -- be counted as a conflict and then silently dropped.
+            OR (onboarding_extracted_fields.status = 'applied' AND EXCLUDED.outcome = 'conflict'))
      RETURNING *`,
     [organisationId, assignmentId, runId || null, def.group, key, def.label, sensitive ? 'sensitive' : 'standard',
       hasValue && !sensitive ? String(value) : null, hasValue && sensitive ? encryptField(String(value)) : null,

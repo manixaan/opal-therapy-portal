@@ -511,4 +511,20 @@ describe('data, validation and permissions', () => {
     const { rows } = await db.pool.query("SELECT 1 FROM audit_logs WHERE action = 'onboarding.returned_document_viewed'");
     expect(rows.length).toBe(1);
   });
+
+  test('B-6: a later document that disagrees with an applied value reopens it as a conflict', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { record } = await start(owner);
+    const rdb = require('../../onboarding-returns-db');
+    const base = { organisationId: org.id, assignmentId: record.id, key: 'surname', source: { sourceLabel: 'New Employee Details' } };
+    const first = await rdb.upsertResolved({ ...base, outcome: 'reliable', value: 'Adopt', confidence: 'high' });
+    await db.pool.query(`UPDATE onboarding_extracted_fields SET status = 'applied', applied_at = NOW() WHERE id = $1`, [first.id]);
+    const reopened = await rdb.upsertResolved({ ...base, outcome: 'conflict', value: null, reason: 'The documents disagree',
+      options: [{ sourceKind: 'form', sourceLabel: 'New Employee Details', value: 'Adopt', display: 'Adopt' }, { sourceKind: 'form', sourceLabel: 'Passport', value: 'Adoptt', display: 'Adoptt' }] });
+    expect(reopened).toBeTruthy();
+    expect(reopened).toMatchObject({ outcome: 'conflict', status: 'proposed' });
+    // Once the Owner has settled it, a later reading never overrides their choice.
+    await db.pool.query(`UPDATE onboarding_extracted_fields SET resolution = 'owner', status = 'applied' WHERE id = $1`, [first.id]);
+    expect(await rdb.upsertResolved({ ...base, outcome: 'conflict', value: null })).toBeNull();
+  });
 });
