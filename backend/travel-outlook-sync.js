@@ -101,7 +101,10 @@ const perUser = new Map(); // userId → promise chain: one sync at a time per u
 function serialise(userId, fn) {
   const prev = perUser.get(userId) || Promise.resolve();
   const next = prev.catch(() => {}).then(fn);
-  perUser.set(userId, next.finally(() => { if (perUser.get(userId) === next) perUser.delete(userId); }));
+  // The stored copy is only a queue position: a failure is the caller's to
+  // handle (via `next`), so the copy swallows it — otherwise every refused run
+  // (e.g. "Outlook not connected") was logged as an unhandled rejection.
+  perUser.set(userId, next.catch(() => {}).finally(() => { if (perUser.get(userId) === next) perUser.delete(userId); }));
   return next;
 }
 
