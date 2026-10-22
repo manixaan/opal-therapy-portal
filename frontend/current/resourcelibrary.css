@@ -12,8 +12,15 @@
 .rhl { display: flex; flex-direction: column; gap: 12px; padding-bottom: 32px; }
 
 /* ── Header ── */
-.rhl-head { position: static; display: flex; flex-direction: column; gap: 6px; }
-.rhl-crumbs { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; padding: 0; font-size: 13px; }
+.rhl-head {
+  /* The app shell styles every bare <header> as its sticky white top bar
+     (centred flex, panel background, border, padding, z-index 1000). Undo all
+     of it so the folder header sits flush, left-aligned, with the page. */
+  position: static; top: auto; z-index: auto;
+  background: transparent; border: 0; padding: 0;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+}
+.rhl-crumbs { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 0 -6px; padding: 0; font-size: 12.5px; }
 .rhl-crumb {
   background: none; border: 1px solid transparent; border-radius: var(--radius-sm, 6px);
   padding: 2px 6px; color: var(--accent); font: inherit; cursor: pointer;
@@ -22,11 +29,11 @@
 .rhl-crumb:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .rhl-crumb-here { color: var(--ink); font-weight: 600; padding: 2px 6px; }
 .rhl-crumb-sep { color: var(--muted); }
-.rhl-titlebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rhl-title { flex: 1 1 auto; overflow-wrap: anywhere; }
-.rhl-search { flex: 0 1 320px; margin: 0; }
+.rhl-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.rhl-title { flex: 1 1 auto; overflow-wrap: anywhere; font-size: 20px; text-align: left; }
+.rhl-search { flex: 0 1 300px; margin: 0; }
 .rhl-search .rh2-search { width: 100%; }
-.rhl-lede { margin: 0; color: var(--ink-soft); }
+.rhl-lede { margin: 0; color: var(--ink-soft); font-size: 13px; text-align: left; }
 
 /* ── Layout: tree | main | details ── */
 .rhl-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -62,10 +69,16 @@
 .rhl-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; position: relative; }
 .rhl-main.is-drop { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--radius-md, 10px); }
 .rhl-cmdbar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px;
+  /* One fixed-height row in every state: ticking an item swaps the buttons
+     in place and never pushes the list down (Oct 2026). Overflow scrolls
+     sideways on narrow screens instead of wrapping. */
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px;
+  min-height: 50px; box-sizing: border-box; overflow-x: auto; scrollbar-width: thin;
   border: 1px solid var(--border); border-radius: var(--radius-md, 10px); background: var(--panel);
 }
-.rhl-cmd { display: inline-flex; align-items: center; gap: 6px; }
+.rhl-cmd { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; white-space: nowrap; }
+.rhl-cmdbar > * { flex-shrink: 0; }
+.rhl-cmdbar > .rhl-cmd-spacer { flex: 1 1 auto; flex-shrink: 1; }
 .rhl-cmd[data-danger] { color: var(--danger, #b42318); }
 .rhl-cmd-spacer { flex: 1 1 auto; }
 .rhl-selcount { font-size: 13px; color: var(--ink-soft); padding: 0 4px; }
@@ -267,7 +280,7 @@
   .rhl-tree-toggle { display: flex; }
   .rhl-tree:not(.is-shown) .rhl-tlist, .rhl-tree:not(.is-shown) .rhl-allres { display: none; }
   .rhl-search { flex: 1 1 100%; }
-  .rhl-filter { width: 100%; flex: 1 1 100%; order: 10; }
+  .rhl-filter { width: 160px; }
   .rhl-hide-sm { display: none; }
 }
 @media (max-width: 480px) {

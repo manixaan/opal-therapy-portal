@@ -1859,3 +1859,12 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-rich h4, .rh2-rich h5 { font-size: 14.5px; }
 .rh2-rich ul, .rh2-rich ol { margin: 0 0 10px; padding-left: 22px; }
 .rh2-rich a { color: var(--accent-deep); }
+
+/* Document page: a small "← Back" link on the left (Oct 2026). */
+.rh2-backlink {
+  appearance: none; background: none; border: 0; padding: 4px 2px; margin: 0 0 6px;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--accent); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+}
+.rh2-backlink:hover { text-decoration: underline; }
+.rh2-backlink:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }

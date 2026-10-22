@@ -635,10 +635,10 @@ describe('changed assets are cache-busted', () => {
       // SharePoint-style document library); the old folder grid, owner bar,
       // right-click menu and upload code left this file. A removed resource
       // reads "This resource was removed" in Detail and in the learner player.
-      ['resourcehub.js', 'r55'], ['resourcehub.css', 'r30'],
+      ['resourcehub.js', 'r56'], ['resourcehub.css', 'r31'],
       // resourcelibrary 1: the document library — folder tree, breadcrumbs,
       // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
-      ['resourcelibrary.js', 1], ['resourcelibrary.css', 1],
+      ['resourcelibrary.js', 2], ['resourcelibrary.css', 2],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module

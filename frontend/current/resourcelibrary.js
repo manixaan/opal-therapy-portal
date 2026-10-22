@@ -419,6 +419,7 @@
       + '</form></div>'
       + (d && d.folder && d.folder.description && !bin ? '<p class="rhl-lede">' + esc(d.folder.description) + '</p>' : '')
       + '</header>';
+    // (Layout: .rhl-head neutralises the app shell's global <header> bar style.)
   }
 
   function search(ev) {
@@ -569,7 +570,10 @@
    * bar, the "…" button and the right-click menu all read from here, so the
    * three can never offer different things.
    */
-  function actionsFor(items) {
+  function actionsFor(items, where) {
+    // where: 'bar' for the command bar, anything else for the "…"/right-click
+    // menus. The bar is kept short so it fits one row (Oct 2026): Version
+    // history is only in the menus, Details is gone.
     var out = [];
     var mgr = canManage();
     var one = items.length === 1 ? items[0] : null;
@@ -583,8 +587,7 @@
     if (mgr && one) out.push({ act: 'rename', label: 'Rename', icon: 'edit', key: 'F2' });
     if (mgr) out.push({ act: 'move', label: 'Move to…', icon: 'folder' });
     if (mgr && one && one.kind === 'doc') out.push({ act: 'replace', label: 'Replace (new version)', icon: 'refresh' });
-    if (one && one.kind === 'doc') out.push({ act: 'versions', label: 'Version history', icon: 'clock' });
-    if (one) out.push({ act: 'details', label: 'Details', icon: 'info' });
+    if (one && one.kind === 'doc' && where !== 'bar') out.push({ act: 'versions', label: 'Version history', icon: 'clock' });
     if (mgr && !items.some(function (i) { return i.isReviewBucket; })) {
       out.push({ act: 'delete', label: 'Delete', icon: 'trash', danger: true, key: 'Del' });
     }
@@ -616,22 +619,20 @@
       }
       if (L.data && L.data.folder) out += cmdBtn('copyfolder', 'Copy link', 'pin', 'RHLib.copyFolderLink()');
     } else {
-      actionsFor(sel).forEach(function (a) {
+      actionsFor(sel, 'bar').forEach(function (a) {
         out += cmdBtn(a.act, a.label, a.icon, 'RHLib.act(\'' + a.act + '\')', a.danger ? ' data-danger="1"' : '');
       });
       out += '<span class="rhl-selcount" role="status">' + sel.length + ' selected</span>'
         + '<button type="button" class="rh2-btn rh2-btn-quiet" id="rhl-cmd-clear" onclick="RHLib.clearSel()" aria-label="Clear selection">✕</button>';
     }
     out += '<span class="rhl-cmd-spacer"></span>';
-    out += '<label class="rh2-visually-hidden" for="rhl-filter">Filter this folder</label>'
+    if (!sel.length) out += '<label class="rh2-visually-hidden" for="rhl-filter">Filter this folder</label>'
       + '<input type="search" id="rhl-filter" class="rhl-filter" placeholder="Filter this folder" value="' + esc(L.filter) + '"'
       + ' oninput="RHLib.setFilter(this.value)">';
     out += '<div class="rhl-viewtoggle" role="group" aria-label="View">'
       + '<button type="button" class="rh2-btn' + (L.view === 'list' ? ' is-on' : '') + '" id="rhl-view-list" aria-pressed="' + (L.view === 'list') + '" onclick="RHLib.setView(\'list\')">List</button>'
       + '<button type="button" class="rh2-btn' + (L.view === 'tiles' ? ' is-on' : '') + '" id="rhl-view-tiles" aria-pressed="' + (L.view === 'tiles') + '" onclick="RHLib.setView(\'tiles\')">Tiles</button>'
       + '</div>';
-    out += '<button type="button" class="rh2-btn" id="rhl-cmd-pane" aria-pressed="' + (!!L.details) + '" onclick="RHLib.togglePane()">'
-      + '<span class="rh2-btn-icon" aria-hidden="true">' + icn('info', 15) + '</span>Details</button>';
     return out + '</div>';
   }
 

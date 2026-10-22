@@ -1644,8 +1644,9 @@
 
   function renderDetail() {
     var st = S.detail;
+    // A small "← Back" link on the left, not a full-width button (Oct 2026).
     var out = '<div class="rh2-page">' +
-      '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RH2.nav(\'' + esc(st.backView === 'detail' ? 'library' : st.backView) + '\')">Back</button>';
+      '<button type="button" class="rh2-backlink" onclick="RH2.nav(\'' + esc(st.backView === 'detail' ? 'library' : st.backView) + '\')">&larr; Back</button>';
     if (st.loading || !st.data) return out + '<div class="rh2-card" style="margin-top:12px;">' + skel(4, 40) + '</div></div>';
     // A document deleted from the Library (or withdrawn) answers 404. Said
     // plainly, because a learner following an induction link lands here.
@@ -1737,22 +1738,16 @@
     else if (!external && !(st.files || []).length) out += '<p class="rh2-quiet">No content yet.</p>';
     out += '</div>';
 
-    // Info panel
-    out += '<aside class="rh2-info" aria-label="Resource information">' +
-      kvRow('Owner', esc(pick(r, 'content_owner_name') || pick(r, 'owner_name') || '')) +
-      kvRow('Version', esc(version)) +
-      kvRow('Last reviewed', esc(fmtDate(pick(r, 'last_reviewed_at')))) +
-      kvRow('Next review', esc(fmtDate(pick(r, 'review_due_at') || pick(r, 'next_review_at')))) +
-      (external ? kvRow('Official source', '<a href="' + esc(extUrl) + '" target="_blank" rel="noopener noreferrer">Check current source</a>') : '') +
-      kvRow('Source', esc([pick(r, 'source_publisher'), pick(r, 'source_title')].filter(Boolean).join(' — '))) +
-      kvRow('Source verified', esc(fmtDate(pick(r, 'source_verified_at'))));
+    // The document page is the document: Preview and Download (the hero
+    // above). Version, source, owner and review dates, the Files list,
+    // Governance and Feedback were duplication on this page and are gone
+    // (owner decision, Oct 2026); governance is managed in the Library.
     if (regulatory) {
       out += '<p class="rh2-disclaimer">This summary is provided for convenience. The official source remains the authoritative version — always check it for current requirements.</p>';
     }
-    out += '</aside>';
 
-    out += renderDetailFiles();
-    out += renderGovernance(r);
+    // Files list only when there is no single main file to preview/download.
+    if (!primaryFile()) out += renderDetailFiles();
 
     // Quiz
     var quiz = pick(d, 'quiz');
@@ -1765,45 +1760,8 @@
         related.map(function (rr) { return homeResRow(rr); }).join('') + '</section>';
     }
 
-    // Feedback
-    if (canWrite()) {
-      out += '<section class="rh2-card" aria-labelledby="rh2-h-fb"><h2 id="rh2-h-fb">Feedback</h2>' +
-        '<p class="rh2-quiet">Do not include participant-identifying information in Resource Hub feedback.</p>';
-      if (st.fbDone) out += '<p class="rh2-quiet">Thanks — your feedback has been recorded.</p>';
-      else {
-        out += '<div class="rh2-fb-row">' + [['helpful', 'Helpful'], ['needs_update', 'Needs updating'], ['missing', 'Something missing']].map(function (k) {
-          return '<button type="button" class="rh2-btn' + (st.fbKind === k[0] ? ' rh2-btn-primary' : '') + '" aria-pressed="' + (st.fbKind === k[0]) + '" onclick="RH2.fbSelect(\'' + k[0] + '\')">' + k[1] + '</button>';
-        }).join('') + '</div>';
-        if (st.fbKind) {
-          out += '<label class="rh2-lbl" for="rh2-fb-comment">Comment (optional)</label>' +
-            '<textarea id="rh2-fb-comment" class="rh2-input" rows="2" maxlength="1000"></textarea>' +
-            '<button type="button" class="rh2-btn rh2-btn-primary" style="margin-top:8px;" onclick="RH2.fbSubmit()">Send feedback</button>';
-          // Support bridge: content problems can become a tracked ticket.
-          // Guarded so the hub keeps working if the support module is absent.
-          if ((st.fbKind === 'needs_update' || st.fbKind === 'missing') &&
-              typeof window.OpalSupport !== 'undefined' && window.OpalSupport.openReport) {
-            out += '<p class="rh2-quiet" style="margin-top:8px;">Needs a fix rather than a note? ' +
-              '<a href="#" onclick="RH2.raiseTicket();return false;">Raise a support ticket</a></p>';
-          }
-        }
-      }
-      out += '</section>';
-    }
-
-    // Version history
-    var versions = pick(d, 'versions') || [];
-    if (versions.length) {
-      out += '<section class="rh2-card"><button type="button" class="rh2-collapse" aria-expanded="' + st.showVersions + '" onclick="RH2.toggleVersions()">Version history (' + versions.length + ')</button>';
-      if (st.showVersions) {
-        out += versions.map(function (v) {
-          return '<div class="rh2-ver"><span class="rh2-ver-no">v' + esc(pick(v, 'version')) + '</span>' +
-            '<span class="rh2-ver-date">' + esc(fmtDate(pick(v, 'created_at'))) + '</span>' +
-            '<span class="rh2-chip">' + esc(pick(v, 'change_kind') || 'minor') + '</span>' +
-            (pick(v, 'change_note') ? '<span class="rh2-row-sub">' + esc(pick(v, 'change_note')) + '</span>' : '') + '</div>';
-        }).join('');
-      }
-      out += '</section>';
-    }
+    // Feedback and version history were removed from the document page
+    // (owner decision, Oct 2026). Versions live in the Library's "…" menu.
 
     return out + '</article></div>';
   }

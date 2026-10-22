@@ -131,18 +131,25 @@ describe('the actions each role is offered (the server refuses the rest)', () =>
   it('gives an owner and an admin every management action', () => {
     const admin = load(LIB, 'resourcelibrary.js', 'admin');
     for (const sb of [asOwner, admin]) {
-      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'rename', 'move', 'replace', 'versions', 'details', 'delete']);
-      expect(acts(sb, [folder])).toEqual(['open', 'copyLink', 'rename', 'move', 'details', 'delete']);
+      // Menus ("…" / right-click). Details was removed in Oct 2026.
+      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'rename', 'move', 'replace', 'versions', 'delete']);
+      expect(acts(sb, [folder])).toEqual(['open', 'copyLink', 'rename', 'move', 'delete']);
       expect(acts(sb, [doc, folder])).toEqual(['download', 'move', 'delete']);
     }
   });
 
-  it('gives a therapist and read_only only what they may do: open, download, link, history, details', () => {
+  it('gives a therapist and read_only only what they may do: open, download, link, history', () => {
     for (const role of ['therapist', 'read_only']) {
       const sb = load(LIB, 'resourcelibrary.js', role);
-      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'versions', 'details']);
+      expect(acts(sb, [doc])).toEqual(['open', 'download', 'copyLink', 'versions']);
       expect(acts(sb, [doc, folder])).toEqual(['download']);
     }
+  });
+
+  it('keeps the command bar short: no Version history or Details there (Oct 2026)', () => {
+    expect(LIB).toContain("where !== 'bar'");
+    expect(LIB).not.toContain("act: 'details'");
+    expect(LIB).not.toContain('id="rhl-cmd-pane"');
   });
 
   it('never offers Delete on Needs Review', () => {
@@ -298,7 +305,7 @@ describe('list view, selection and keyboard', () => {
 
 describe('command bar, "…" button and context menu share one action list', () => {
   it('builds all three from actionsFor()', () => {
-    expect(LIB).toContain('actionsFor(sel).forEach');
+    expect(LIB).toContain("actionsFor(sel, 'bar').forEach");
     expect(LIB).toContain("else items = actionsFor(selectedItems());");
     expect(LIB).toContain('function more(ev, k)');
     expect(LIB).toContain('oncontextmenu="return RHLib.ctx(event,');
