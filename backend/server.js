@@ -760,6 +760,11 @@ server.listen(PORT, () => {
   // In-process like the existing pollers; single-instance assumption noted in
   // onboarding-expiry.js.
   require('./onboarding-expiry').startExpiryScheduler();
+
+  // Resource Library recycle bin: anything deleted more than 90 days ago is
+  // purged daily (rows, then the stored bytes nothing else still references).
+  // Same in-process, single-instance pattern as the expiry sweep above.
+  require('./resource-recycle-bin').startRecycleBinScheduler();
 });
 
 // ===== BACKGROUND DELTA SYNC POLLER =====

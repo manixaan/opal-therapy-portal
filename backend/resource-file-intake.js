@@ -133,14 +133,28 @@ async function storeFile(resource, upload, ctx = {}) {
     await fileStorage.putBuffer(storageKey, buffer);
   }
 
+  /**
+   * A new PRIMARY file is a new version of the document (migration 078).
+   *
+   * It goes live at once; the file it replaces is marked superseded — kept,
+   * downloadable through the version history, but no longer listed as one of
+   * the resource's files. Every primary upload records a version row, whichever
+   * door it came through, so the history cannot have gaps. Attachments
+   * (isPrimary false) are not versions and record nothing.
+   */
   const wantPrimary = upload.isPrimary !== false;
   const client = await pool.connect();
   let fileRow;
+  let versionNo = null;
   try {
     await client.query('BEGIN');
     if (wantPrimary) {
+      // Serialise two replacements of the same document, so they cannot both
+      // claim the same version number.
+      await client.query('SELECT id FROM resources WHERE id = $1 FOR UPDATE', [resource.id]);
       await client.query(
-        'UPDATE resource_files SET is_primary = FALSE WHERE resource_id = $1 AND is_primary',
+        `UPDATE resource_files SET is_primary = FALSE, superseded_at = NOW()
+          WHERE resource_id = $1 AND is_primary`,
         [resource.id]);
     }
     const { rows: created } = await client.query(
@@ -149,11 +163,26 @@ async function storeFile(resource, upload, ctx = {}) {
           storage_key, checksum_sha256, is_primary, format, uploaded_by)
        VALUES ($1,$2,$3,$4,'rhub',$5,$6,$7,$8,$9)
        ON CONFLICT (resource_id, storage_key) WHERE storage_key IS NOT NULL DO UPDATE
-         SET file_name = EXCLUDED.file_name, is_primary = EXCLUDED.is_primary
+         SET file_name = EXCLUDED.file_name, is_primary = EXCLUDED.is_primary,
+             superseded_at = CASE WHEN EXCLUDED.is_primary THEN NULL
+                                  ELSE resource_files.superseded_at END
        RETURNING id, file_name, format, file_size_bytes, checksum_sha256, is_primary, uploaded_at`,
       [resource.id, fileName, fileStorage.mimeForFormat(format), buffer.length,
         storageKey, checksum, wantPrimary, format, ctx.userId || null]);
     fileRow = created[0];
+    if (wantPrimary) {
+      const { rows: v } = await client.query(
+        `INSERT INTO resource_file_versions
+           (resource_id, organisation_id, version_no, file_id, file_name, format,
+            file_size_bytes, checksum_sha256, action, created_by)
+         SELECT $1, $2, COALESCE(MAX(version_no), 0) + 1, $3, $4, $5, $6, $7,
+                CASE WHEN COUNT(*) = 0 THEN 'upload' ELSE 'replace' END, $8
+           FROM resource_file_versions WHERE resource_id = $1
+         RETURNING version_no`,
+        [resource.id, resource.organisation_id || null, fileRow.id, fileName, format,
+          buffer.length, checksum, ctx.userId || null]);
+      versionNo = v[0].version_no;
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -193,6 +222,8 @@ async function storeFile(resource, upload, ctx = {}) {
   return {
     ok: true,
     checksum,
+    storageKey,
+    versionNo,
     sizeBytes: buffer.length,
     privacyScanned,
     warnings: assessment ? assessment.warnings : [],

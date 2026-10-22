@@ -498,15 +498,19 @@ async function attachResourceSlugs(content, org) {
   }
   if (!ids.length) return content;
   const { rows } = await pool.query(
-    `SELECT id, slug FROM resources
-      WHERE organisation_id IS NOT DISTINCT FROM $1 AND id = ANY($2::uuid[]) AND slug IS NOT NULL`,
+    `SELECT id, slug, archived_at IS NOT NULL AS removed FROM resources
+      WHERE organisation_id IS NOT DISTINCT FROM $1 AND id = ANY($2::uuid[])`,
     [org, ids]);
-  const slugById = Object.fromEntries(rows.map((r) => [String(r.id), r.slug]));
+  const byId = Object.fromEntries(rows.map((r) => [String(r.id), r]));
   for (const s of (content && content.sections) || []) {
     for (const it of s.items || []) {
-      if (it.type === 'resource' && slugById[String(it.resource_id)]) {
-        it.resource_slug = slugById[String(it.resource_id)];
-      }
+      if (it.type !== 'resource' || !isUuid(it.resource_id)) continue;
+      const hit = byId[String(it.resource_id)];
+      // A linked document that was deleted from the Library (or withdrawn, or
+      // purged) is flagged, so the player says "This resource was removed"
+      // instead of offering a link that opens nothing.
+      if (!hit || hit.removed) { it.resource_removed = true; continue; }
+      if (hit.slug) it.resource_slug = hit.slug;
     }
   }
   return content;

@@ -139,25 +139,27 @@ describe('making folders', () => {
     expect(folderNamed(listed, 'Supervision Records')).toBeTruthy();
   });
 
-  it('holds the hierarchy to two levels', async () => {
+  it('nests to any depth (owner decision, Oct 2026)', async () => {
     const org = await seedOrganisation();
     const { agent } = await agentFor('owner', org.id);
     const top = await makeFolder(agent, 'Student Placements');
     const sub = await makeFolder(agent, 'Supervision Records', top.id);
-
-    const third = await agent.post('/api/rh2/library/folders')
-      .send({ name: 'Weekly Notes', parentId: sub.id });
-    expect(third.status).toBe(400);
-    expect(third.body.code).toBe('depth_limit');
+    const third = await makeFolder(agent, 'Weekly Notes', sub.id);
+    const fourth = await makeFolder(agent, 'Term 2', third.id);
+    expect(fourth.parent_id).toBe(third.id);
   });
 
-  it('refuses a name that means nothing', async () => {
+  it('accepts ordinary practice names and refuses broken ones, saying why', async () => {
     const org = await seedOrganisation();
     const { agent } = await agentFor('owner', org.id);
-    for (const bad of ['Miscellaneous', 'Other Documents', 'CLINICAL_MISC_03', 'General Files 2', '']) {
+    for (const good of ['NDIS', '2026 Policies', 'Forms (old)', 'Documents']) {
+      expect((await agent.post('/api/rh2/library/folders').send({ name: good })).status).toBe(201);
+    }
+    for (const [bad, code] of [['', 'folder_name_empty'], ['A/B', 'folder_name_slash'],
+      ['.hidden', 'folder_name_dot'], ['Notes: old', 'folder_name_characters']]) {
       const res = await agent.post('/api/rh2/library/folders').send({ name: bad });
       expect(res.status).toBe(400);
-      expect(res.body.code).toBe('invalid_folder_name');
+      expect(res.body.code).toBe(code);
     }
   });
 
@@ -406,7 +408,7 @@ describe('moving documents by hand', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('removing a folder never loses a document', () => {
-  it('sends its documents to Needs Review, creating that folder if needed', async () => {
+  it('sends the folder and its documents to the recycle bin, together', async () => {
     const org = await seedOrganisation();
     const { agent } = await agentFor('owner', org.id);
     const folder = await makeFolder(agent, 'Old Policies');
@@ -418,27 +420,26 @@ describe('removing a folder never loses a document', () => {
 
     const res = await agent.delete(`/api/rh2/library/folders/${folder.id}`);
     expect(res.status).toBe(200);
-    expect(res.body.movedToReview).toBe(1);
+    expect(res.body.counts).toEqual({ documents: 1, folders: 1 });
 
     const after = await db.pool.query(
       'SELECT COUNT(*)::int AS n FROM resources WHERE organisation_id = $1', [org.id]);
     expect(after.rows[0].n).toBe(before.rows[0].n);
 
-    const listed = await listFolders(agent);
-    expect(folderNamed(listed, 'Old Policies')).toBeNull();
-    expect(folderNamed(listed, 'Needs Review').count).toBe(1);
+    expect(folderNamed(await listFolders(agent), 'Old Policies')).toBeNull();
+    const binList = await agent.get('/api/rh2/library/recycle-bin');
+    expect(binList.body.items).toEqual([
+      expect.objectContaining({ kind: 'folder', name: 'Old Policies', documentCount: 1 }),
+    ]);
   });
 
   it('will not remove Needs Review itself', async () => {
     const org = await seedOrganisation();
     const { agent } = await agentFor('owner', org.id);
-    const folder = await makeFolder(agent, 'Old Policies');
-    const doc = await seedResource(org.id);
-    await agent.post('/api/rh2/library/move').send({ folderId: folder.id, resourceIds: [doc.id] });
-    await agent.delete(`/api/rh2/library/folders/${folder.id}`);
-
-    const review = folderNamed(await listFolders(agent), 'Needs Review');
-    const res = await agent.delete(`/api/rh2/library/folders/${review.id}`);
+    const { rows } = await db.pool.query(
+      `INSERT INTO resource_folders (organisation_id, name, slug, kind, source, is_active, is_review_bucket)
+       VALUES ($1, 'Needs Review', 'needs-review', 'library', 'manual', TRUE, TRUE) RETURNING id`, [org.id]);
+    const res = await agent.delete(`/api/rh2/library/folders/${rows[0].id}`);
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('review_bucket_fixed');
   });
@@ -487,13 +488,13 @@ describe('permissions', () => {
     for (const call of calls) {
       const res = await call();
       expect(res.status).toBe(403);
-      expect(res.body.code).toBe('library_structure_forbidden');
+      expect(res.body.error).toBe('Forbidden');
     }
   });
 
-  it('refuses an admin too — the structure is the Owner\'s alone', async () => {
+  it('lets an admin manage the library too (owner decision, Oct 2026)', async () => {
     const admin = await agentFor('admin', org.id);
-    expect((await admin.agent.post('/api/rh2/library/folders').send({ name: 'Theirs' })).status).toBe(403);
+    expect((await admin.agent.post('/api/rh2/library/folders').send({ name: 'Theirs' })).status).toBe(201);
   });
 
   it('does not leak another organisation\'s folders or counts', async () => {
@@ -575,10 +576,9 @@ describe('a folder id the client picked is still checked', () => {
     expect(mv.status).toBe(400);
   });
 
-  it('lets an admin author a resource but not file one', async () => {
-    // The New document flow is create-then-file. An admin may do the first
-    // half (POST /api/rh2/resources) and must be refused the second, because
-    // filing is a change to the library's structure.
+  it('lets an admin author a resource and file it', async () => {
+    // The New document flow is create-then-file. Since Oct 2026 Admins manage
+    // the library alongside the Owner, so both halves succeed.
     const admin = (await agentFor('admin', org.id)).agent;
     const created = await admin.post('/api/rh2/resources')
       .send({ title: 'Sensory Diet Handout', contentType: 'guide', content: '## Notes' });
@@ -587,12 +587,11 @@ describe('a folder id the client picked is still checked', () => {
 
     const filed = await admin.post('/api/rh2/library/move')
       .send({ folderId: folder.id, resourceIds: [id] });
-    expect(filed.status).toBe(403);
-    expect(filed.body.code).toBe('library_structure_forbidden');
+    expect(filed.status).toBe(200);
 
     const { rows } = await db.pool.query(
-      'SELECT 1 FROM resource_folder_assignments WHERE resource_id = $1', [id]);
-    expect(rows).toHaveLength(0);
+      'SELECT folder_id FROM resource_folder_assignments WHERE resource_id = $1', [id]);
+    expect(rows[0].folder_id).toBe(folder.id);
   });
 
   it('files an owner\'s new document into the folder it was started from', async () => {
@@ -618,7 +617,7 @@ describe('a folder id the client picked is still checked', () => {
     const res = await therapist.post(`/api/rh2/library/folders/${folder.id}/upload`)
       .send({ fileName: 'worksheet.pdf', fileData: samplePdf() });
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('library_structure_forbidden');
+    expect(res.body.error).toBe('Forbidden');
 
     const { rows } = await db.pool.query('SELECT 1 FROM resource_files');
     expect(rows).toHaveLength(0);
@@ -844,11 +843,8 @@ describe('a folder\'s count and its contents are the same set', () => {
   });
 
   it('a removed subfolder takes its documents out of both at once', async () => {
-    // DELETE deactivates the folder and re-files its documents under Needs
-    // Review, so both numbers move for the same reason. The browse route's
-    // subfolder scan also matches the count's `kind='library' AND is_active`
-    // enumeration now — belt and braces for a deactivated shelf the re-filing
-    // ever failed to empty, which this test does not reach.
+    // DELETE sends the folder and its documents to the recycle bin, so both
+    // numbers move for the same reason.
     const parent = await makeFolder(agent, 'Therapy Resources');
     const child = await makeFolder(agent, 'Handwriting', parent.id);
     const doc = await seedResource(org.id, { title: 'Pencil Grip Guide' });
@@ -860,8 +856,9 @@ describe('a folder\'s count and its contents are the same set', () => {
     expect(await cardCount(agent, 'Therapy Resources')).toBe(0);
     expect(await headerCount(agent, parent.id)).toBe(0);
     expect(await openedIds(agent, parent.id)).toEqual([]);
-    // Nothing was destroyed — it is in Needs Review, and counted there.
-    expect(await cardCount(agent, 'Needs Review')).toBe(1);
+    // Nothing was destroyed — it is in the recycle bin with its folder.
+    const binList = await agent.get('/api/rh2/library/recycle-bin');
+    expect(binList.body.items[0]).toMatchObject({ kind: 'folder', name: 'Handwriting', documentCount: 1 });
   });
 
   it('does not leak another organisation\'s count through the folder route', async () => {

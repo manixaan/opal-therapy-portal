@@ -161,6 +161,18 @@ async function transition(req, resourceId, {
 
     const from = r.publication_state;
 
+    // A document in the recycle bin comes back through Restore, which puts
+    // back its folder and its exact prior state. A governance transition
+    // would revive it half-way (no folder, a guessed state), so it waits.
+    if (r.deleted_at) {
+      await client.query('ROLLBACK');
+      return {
+        ok: false,
+        status: 409,
+        body: { error: 'This document is in the recycle bin. Restore it first.', code: 'in_recycle_bin' },
+      };
+    }
+
     // Authoritative role check. It lives HERE rather than in the route because
     // policing the clinical-attestation step needs the record's current state,
     // which only exists once the row is loaded. The route-level gates are a
@@ -465,6 +477,9 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
   // record must never be reachable through it, by anyone, so the predicate is
   // applied before the role branch rather than inside the non-author arm.
   where += ` AND ${PRIVACY_PREDICATE}`;
+  // A document in the Library recycle bin is nobody's search result — not even
+  // an author's catalogue. It is reached through the bin (migration 077).
+  where += ' AND r.deleted_at IS NULL';
 
   if (canAuthor(req.user)) {
     const status = str(req.query.status, 30);
@@ -522,12 +537,17 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
     // it counts only live Library folders, so a deactivated subfolder — or an
     // ingestion folder that ended up parented to a Library one — must not put
     // rows into a list the card never counted.
+    // Folders nest to any depth (Oct 2026), so "the tree" is every live
+    // descendant, not just the children.
     const scoped = req.query.folderScope === 'tree'
-      ? `(a.folder_id = ${p} OR a.folder_id IN (
-            SELECT sf.id FROM resource_folders sf
-             WHERE sf.parent_id = ${p}
-               AND sf.organisation_id IS NOT DISTINCT FROM $1
-               AND sf.kind = 'library' AND sf.is_active))`
+      ? `a.folder_id IN (
+            WITH RECURSIVE sub AS (
+              SELECT ${p}::uuid AS id
+              UNION
+              SELECT sf.id FROM resource_folders sf JOIN sub ON sf.parent_id = sub.id
+               WHERE sf.organisation_id IS NOT DISTINCT FROM $1
+                 AND sf.kind = 'library' AND sf.is_active)
+            SELECT id FROM sub)`
       : `a.folder_id = ${p}`;
     where += ` AND EXISTS (SELECT 1 FROM resource_folder_assignments a
                  WHERE a.resource_id = r.id AND ${scoped})`;
@@ -672,7 +692,7 @@ router.get('/api/rh2/resources', safe(async (req, res) => {
                 EXISTS (SELECT 1 FROM resource_file_derivatives d
                          WHERE d.resource_file_id = f.id AND d.kind = 'thumbnail') AS has_thumbnail
            FROM resource_files f
-          WHERE f.resource_id = r.id
+          WHERE f.resource_id = r.id AND f.superseded_at IS NULL
           ORDER BY f.is_primary DESC, f.uploaded_at
           LIMIT 1
        ) pf ON TRUE
@@ -1531,7 +1551,10 @@ router.get('/api/rh2/resources/:id/files', safe(async (req, res) => {
                      WHERE d.resource_file_id = f.id AND d.kind = 'thumbnail') AS has_thumbnail,
             EXISTS (SELECT 1 FROM resource_file_derivatives d
                      WHERE d.resource_file_id = f.id AND d.kind = 'preview-docx') AS has_preview_docx
-       FROM resource_files f WHERE f.resource_id = $1 ORDER BY f.is_primary DESC, f.file_name`,
+       FROM resource_files f
+      -- Previous versions live in the version history, not in this list.
+      WHERE f.resource_id = $1 AND f.superseded_at IS NULL
+      ORDER BY f.is_primary DESC, f.file_name`,
     [req.params.id]);
 
   // Only files this caller could actually download are listed at all.
