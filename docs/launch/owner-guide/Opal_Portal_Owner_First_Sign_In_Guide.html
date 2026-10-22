@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en-AU"><head><meta charset="utf-8">
+<title>Opal Portal — Your First Sign-In</title>
+<style>
+@page { size: A4; margin: 0; }
+:root {
+  --teal: #0f7c6c; --teal-deep: #0a5d51; --teal-soft: #e3f1ee; --teal-mist: #f1f8f6;
+  --cream: #faf6f0; --sand: #f2ebe0; --ink: #241f1a; --ink-soft: #5d564e; --line: #e6ded2;
+  --coral: #e07a5f; --sun: #f2b544; --sky: #5b8fd6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Plus Jakarta Sans", "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--cream); font-size: 10.5pt; line-height: 1.5; }
+.page { width: 210mm; height: 297mm; padding: 16mm 16mm 14mm; page-break-after: always; position: relative; background: var(--cream); overflow: hidden; }
+html, body { width: 210mm; overflow-x: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page:last-child { page-break-after: auto; }
+.foot { position: absolute; bottom: 8mm; left: 16mm; right: 16mm; display: flex; justify-content: space-between; font-size: 8pt; color: var(--ink-soft); }
+h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 19pt; color: var(--teal-deep); margin-bottom: 4mm; }
+h3 { font-size: 12pt; margin: 5mm 0 2mm; color: var(--ink); }
+p { margin: 0 0 3mm; }
+.kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 8pt; font-weight: 700; color: var(--teal); margin-bottom: 2mm; }
+.lead { font-size: 11.5pt; color: var(--ink-soft); }
+
+/* Cover */
+.cover { background: linear-gradient(160deg, var(--teal) 0%, var(--teal-deep) 70%); color: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+.cover .logo { width: 22mm; height: 22mm; border-radius: 6mm; background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20pt; }
+.cover h1 { font-size: 34pt; line-height: 1.08; margin: 10mm 0 5mm; }
+.cover .sub { font-size: 13pt; opacity: .92; max-width: 140mm; }
+.cover .pill { display: inline-block; background: rgba(255,255,255,.18); border-radius: 99px; padding: 2mm 5mm; font-size: 10pt; margin: 2mm 2mm 0 0; }
+.cover .blob { position: absolute; border-radius: 50%; opacity: .14; background: #fff; }
+.cover .meta { font-size: 9pt; opacity: .85; }
+
+/* Steps */
+.step { display: grid; grid-template-columns: 13mm 1fr; gap: 4mm; margin: 0 0 5mm; }
+.num { width: 11mm; height: 11mm; border-radius: 50%; background: var(--teal); color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 12pt; }
+.step h3 { margin-top: 1.5mm; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 4mm; padding: 4mm 5mm; margin: 2mm 0 4mm; }
+.tip { background: var(--teal-mist); border-left: 1.2mm solid var(--teal); border-radius: 2mm; padding: 3mm 4mm; margin: 2mm 0 4mm; font-size: 9.8pt; }
+.warn { background: #fdf3e3; border-left: 1.2mm solid var(--sun); border-radius: 2mm; padding: 3mm 4mm; margin: 2mm 0 4mm; font-size: 9.8pt; }
+.stop { background: #fbe9e4; border-left: 1.2mm solid var(--coral); border-radius: 2mm; padding: 3mm 4mm; margin: 2mm 0 4mm; font-size: 9.8pt; }
+.tip b, .warn b, .stop b { color: var(--ink); }
+ul.check { list-style: none; padding: 0; margin: 0 0 3mm; }
+ul.check li { padding-left: 7mm; position: relative; margin: 1.2mm 0; }
+ul.check li::before { content: ""; position: absolute; left: 0; top: 1.2mm; width: 3.6mm; height: 3.6mm; border: .5mm solid var(--teal); border-radius: 1mm; background: #fff; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.chip { display: inline-block; background: var(--teal-soft); color: var(--teal-deep); border-radius: 99px; padding: .6mm 3mm; font-size: 8.6pt; font-weight: 600; }
+kbd, .btn { display: inline-block; font-family: inherit; font-size: 8.8pt; font-weight: 700; border-radius: 2mm; padding: .5mm 2.4mm; background: var(--teal); color: #fff; }
+.btn.ghost { background: #fff; color: var(--teal-deep); border: .3mm solid var(--teal); }
+.url { font-family: ui-monospace, Menlo, monospace; background: #fff; border: 1px dashed var(--teal); border-radius: 2mm; padding: 2mm 3mm; display: inline-block; font-size: 10pt; color: var(--teal-deep); }
+
+/* Mock screens */
+.screen { background: #fff; border: 1px solid var(--line); border-radius: 3mm; box-shadow: 0 2mm 6mm rgba(36,31,26,.07); overflow: hidden; margin: 2mm 0 4mm; }
+.screen .bar { background: var(--sand); padding: 1.6mm 3mm; display: flex; gap: 1.4mm; align-items: center; font-size: 7.5pt; color: var(--ink-soft); }
+.screen .bar i { width: 2.2mm; height: 2.2mm; border-radius: 50%; background: #d8cfc2; display: inline-block; }
+.screen .bar span { margin-left: 2mm; }
+.screen .body { padding: 4mm 5mm; }
+.field { border: 1px solid var(--line); border-radius: 2mm; padding: 1.6mm 3mm; font-size: 8.8pt; color: var(--ink-soft); margin: 1.4mm 0; background: #fff; }
+.field.on { border-color: var(--teal); color: var(--ink); }
+.lbl { font-size: 7.6pt; font-weight: 700; color: var(--ink-soft); margin-top: 2mm; }
+.progress { height: 1.6mm; background: var(--sand); border-radius: 99px; overflow: hidden; margin: 2mm 0 3mm; }
+.progress b { display: block; height: 100%; background: var(--teal); }
+.cal { display: grid; grid-template-columns: 10mm repeat(5, 1fr); gap: .8mm; font-size: 7pt; }
+.cal .h { font-weight: 700; color: var(--ink-soft); text-align: center; padding: 1mm 0; }
+.cal .t { color: var(--ink-soft); text-align: right; padding-right: 1mm; }
+.cal .c { background: var(--teal-mist); border-radius: 1mm; min-height: 6mm; }
+.cal .ev { background: #fdf0d8; border-left: .8mm solid var(--sun); border-radius: 1mm; padding: .6mm 1mm; font-size: 6.6pt; }
+.cal .tr { background: #e4ecf9; border-left: .8mm solid var(--sky); border-radius: 1mm; padding: .6mm 1mm; font-size: 6.4pt; color: #2f4f86; }
+.cal .pr { border: .4mm dashed var(--sky); border-radius: 1mm; padding: .6mm 1mm; font-size: 6.6pt; color: #2f4f86; background: #f4f8ff; }
+table.t { width: 100%; border-collapse: collapse; font-size: 9.2pt; margin: 2mm 0 4mm; }
+table.t th, table.t td { text-align: left; padding: 1.8mm 2.4mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.t th { color: var(--teal-deep); font-size: 8.4pt; text-transform: uppercase; letter-spacing: .06em; }
+.big-num { font-size: 26pt; font-weight: 800; color: var(--teal); line-height: 1; }
+.map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; }
+.map .card { margin: 0; }
+.map .card b { color: var(--teal-deep); display: block; margin-bottom: 1mm; }
+</style></head>
+<body>
+
+<!-- ═════════ COVER ═════════ -->
+<section class="page cover">
+  <div class="blob" style="width:120mm;height:120mm;right:-40mm;top:-30mm;"></div>
+  <div class="blob" style="width:70mm;height:70mm;left:-25mm;bottom:40mm;"></div>
+  <div>
+    <div class="logo">O</div>
+    <h1>Welcome to your<br>Opal Portal</h1>
+    <p class="sub">A friendly, step-by-step guide for the practice owner: signing in for the very first time, setting up your profile, and moving your calendar into the portal.</p>
+    <div>
+      <span class="pill">⏱ About 45 minutes for setup</span>
+      <span class="pill">☕ Then the calendar, at your own pace</span>
+    </div>
+  </div>
+  <div class="meta">Opal Therapy Pty Ltd · Owner edition · October 2026<br>Keep this guide handy for your first session.</div>
+</section>
+
+<!-- ═════════ BEFORE YOU START ═════════ -->
+<section class="page">
+  <div class="kicker">Before you start</div>
+  <h2>Gather these first ✨</h2>
+  <p class="lead">Having everything beside you makes setup quick. Nothing here is compulsory on the day — every setup step can be skipped and finished later — but the more you add now, the smarter the portal is from day one.</p>
+
+  <div class="two">
+    <div class="card">
+      <h3 style="margin-top:0">About you</h3>
+      <ul class="check">
+        <li>The email address the practice set up for you as Owner</li>
+        <li>Your mobile number</li>
+        <li>A new password in mind (8+ characters, with a capital, a small letter and a number)</li>
+        <li>Your home address — where your working day usually starts</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Your credentials (scans or photos)</h3>
+      <ul class="check">
+        <li>Ahpra registration</li>
+        <li>Professional indemnity insurance</li>
+        <li>Working with Children Check</li>
+        <li>NDIS Worker Screening Check</li>
+        <li>Police check, first aid and CPR certificates</li>
+        <li>OT qualification and driver's licence</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">For the calendar move</h3>
+    <ul class="check">
+      <li>Your Outlook calendar open in another window or on a second screen</li>
+      <li>A notepad (paper or digital) to jot down anything that feels clunky — that's gold for us</li>
+    </ul>
+  </div>
+
+  <div class="warn"><b>Please don't connect Outlook yet.</b> In this first stage the portal is a "read-only rehearsal": everything you enter appears in the portal, but nothing is written to Outlook or Splose. We'll switch those on together once the calendar is in and checked.</div>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>2</span></div>
+</section>
+
+<!-- ═════════ SIGN IN ═════════ -->
+<section class="page">
+  <div class="kicker">Part 1 · Getting in</div>
+  <h2>Open the portal and create your account</h2>
+
+  <div class="step"><div class="num">1</div><div>
+    <h3>Open the portal</h3>
+    <p>In Chrome, Edge or Safari, go to:</p>
+    <p><span class="url">https://opal-portal-prod.azurewebsites.net</span></p>
+    <p>Bookmark it — this is your practice's live portal. (Your practice may later move to <b>portal.opaltherapy.com.au</b>; we'll tell you if that happens.)</p>
+  </div></div>
+
+  <div class="step"><div class="num">2</div><div>
+    <h3>Click <span class="btn ghost">Create account</span></h3>
+    <p>On the sign-in page, choose <b>Create account</b>. Use <b>exactly the email address</b> the practice set up for you as Owner — the portal only lets that address create the first Owner account.</p>
+    <div class="screen"><div class="bar"><i></i><i></i><i></i><span>opal-portal-prod.azurewebsites.net/register</span></div>
+      <div class="body">
+        <div style="font-weight:800;font-size:11pt;margin-bottom:2mm;">Create your account</div>
+        <div class="lbl">Email</div><div class="field on">you@opaltherapy.com.au</div>
+        <div class="lbl">Full name</div><div class="field on">Ann Mary Mathew</div>
+        <div class="lbl">Phone (optional)</div><div class="field">04xx xxx xxx</div>
+        <div class="lbl">Password</div><div class="field on">••••••••••</div>
+        <div style="margin-top:3mm"><span class="btn">Create account</span></div>
+      </div></div>
+    <div class="tip"><b>You become the Owner automatically.</b> As the very first account, you're made Owner and the practice is created in the same moment — no waiting for approval.</div>
+  </div></div>
+
+  <div class="step"><div class="num">3</div><div>
+    <h3>Sign in</h3>
+    <p>You'll land on the sign-in page. Enter your email and new password and click <span class="btn">Sign in</span>.</p>
+    <div class="tip"><b>Forgot it already?</b> Use <b>Forgot password?</b> under the sign-in button — a reset link arrives by email and works for one hour.</div>
+  </div></div>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>3</span></div>
+</section>
+
+<!-- ═════════ SETUP WIZARD ═════════ -->
+<section class="page">
+  <div class="kicker">Part 2 · Set up your profile</div>
+  <h2>The 9-step setup wizard</h2>
+  <p class="lead">Right after your first sign-in, a short wizard walks you through your profile. Every step has a <b>Skip</b> link — nothing blocks you — and everything you enter carries straight into the portal, where you can change it later under <b>My Profile</b>.</p>
+
+  <div class="screen"><div class="bar"><i></i><i></i><i></i><span>Set up your profile</span></div>
+    <div class="body">
+      <div style="display:flex;justify-content:space-between;font-size:8pt;color:var(--ink-soft)"><span>Step 4 of 9</span><span>44%</span></div>
+      <div class="progress"><b style="width:44%"></b></div>
+      <div style="font-weight:800;">Work location</div>
+      <div class="lbl">Default base location</div><div class="field on">64 Talbot… ▾ &nbsp;<span style="color:var(--teal)">Google suggestions appear as you type</span></div>
+    </div></div>
+
+  <table class="t">
+    <tr><th style="width:9mm">#</th><th style="width:44mm">Step</th><th>What to do</th></tr>
+    <tr><td>1</td><td>Your details</td><td>Check your name and phone; add a display name if you like.</td></tr>
+    <tr><td>2</td><td>Professional details</td><td>Your Ahpra number and insurer — these become credential records automatically.</td></tr>
+    <tr><td>3</td><td>Connect Outlook</td><td><span class="chip">Skip for now</span> — we'll connect it together later.</td></tr>
+    <tr><td>4</td><td>Work location</td><td>Type your home address and <b>pick the Google suggestion</b> — this is where travel is measured from.</td></tr>
+    <tr><td>5</td><td>Travel bases</td><td>Any other places you regularly start from (optional).</td></tr>
+    <tr><td>6</td><td>Credentials</td><td>For each credential: number, expiry date and a scan/photo. Add what you have; the rest can wait.</td></tr>
+    <tr><td>7</td><td>CPD</td><td>Information only — the Board's minimum is 20 hours a year.</td></tr>
+    <tr><td>8</td><td>Notifications</td><td>Choose what the portal tells you about.</td></tr>
+    <tr><td>9</td><td>Review &amp; finish</td><td>Check it over and click <span class="btn">Finish</span>.</td></tr>
+  </table>
+
+  <div class="tip"><b>Your Monday–Friday is filled in for you.</b> Once you add a home address, this week and the next three are set to "Home" in Work Locations — so you can book straight away.</div>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>4</span></div>
+</section>
+
+<!-- ═════════ LOOK AROUND + CHECK SETTINGS ═════════ -->
+<section class="page">
+  <div class="kicker">Part 3 · Find your way around</div>
+  <h2>A quick tour, then five quick checks</h2>
+
+  <div class="map">
+    <div class="card"><b>📅 Calendar</b>Your week, travel between visits, and booking.</div>
+    <div class="card"><b>📝 Case Notes</b>Write and keep session notes.</div>
+    <div class="card"><b>📚 Resources</b>The practice library, folders and documents.</div>
+    <div class="card"><b>🧾 Invoicing</b>NDIS invoices built from your sessions.</div>
+    <div class="card"><b>👥 Users &amp; Roles</b>Invite staff (in Settings).</div>
+    <div class="card"><b>⚙️ Settings</b>Practice details and integrations.</div>
+  </div>
+
+  <h3>Five quick checks before the calendar</h3>
+  <div class="step"><div class="num">1</div><div><b>Settings → Integrations:</b> Splose shows <span class="chip">Connected</span>. Under <b>Your Splose practitioner</b>, choose your name and click <span class="btn ghost">Link</span> so your own appointments are recognised. (Only the name whose Splose email matches your sign-in email can be chosen — if yours isn't there, link it under Settings → Users &amp; Roles → you → Splose practitioner.)</div></div>
+  <div class="step"><div class="num">2</div><div><b>Invoicing → Settings:</b> ABN 49 699 791 958, phone 0484 827 212, your email, and the footer line with the ACN. Save.</div></div>
+  <div class="step"><div class="num">3</div><div><b>Settings → Organisation:</b> practice phone and email are right; no street address.</div></div>
+  <div class="step"><div class="num">4</div><div><b>My Profile → Work Locations:</b> your Home base shows your address; Monday–Friday are set. Mark any leave days.</div></div>
+  <div class="step"><div class="num">5</div><div><b>My Profile → Credentials:</b> the ones you added are there. A reminder card nudges you about anything still missing.</div></div>
+
+  <div class="warn"><b>Still: no Outlook.</b> In Settings → Integrations you'll see "Connect Outlook" — leave it for now.</div>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>5</span></div>
+</section>
+
+<!-- ═════════ CALENDAR MIGRATION ═════════ -->
+<section class="page">
+  <div class="kicker">Part 4 · Moving your calendar in</div>
+  <h2>Copy your week from Outlook, one booking at a time</h2>
+  <p class="lead">This is the real test drive. As you add each appointment, the portal works out locations and travel — the things Outlook never knew.</p>
+
+  <div class="screen"><div class="bar"><i></i><i></i><i></i><span>Calendar · Week</span></div>
+    <div class="body">
+      <div class="cal">
+        <div></div><div class="h">Mon</div><div class="h">Tue</div><div class="h">Wed</div><div class="h">Thu</div><div class="h">Fri</div>
+        <div class="t">9am</div><div class="ev">Client — Noah M.</div><div class="c"></div><div class="ev">Client — Ada J.</div><div class="c"></div><div class="c"></div>
+        <div class="t">10am</div><div class="tr">Travel 18 min</div><div class="c"></div><div class="tr">Travel 12 min</div><div class="c"></div><div class="c"></div>
+        <div class="t">11am</div><div class="pr">Proposed · Ben C.</div><div class="c"></div><div class="ev">Telehealth</div><div class="c"></div><div class="c"></div>
+      </div>
+    </div></div>
+
+  <div class="step"><div class="num">1</div><div><b>Click an empty time</b> (or drag to cover the length). The booking panel opens on the right.</div></div>
+  <div class="step"><div class="num">2</div><div><b>Choose the type</b> — client session, telehealth, report writing, lunch, admin…</div></div>
+  <div class="step"><div class="num">3</div><div><b>Pick the client</b> (they come from Splose) and check the <b>location</b>. Use the <span class="chip">Home</span> chip for anything you do at home. No address means "I stay where I am".</div></div>
+  <div class="step"><div class="num">4</div><div><b>Create appointment.</b> The portal asks <i>"What would you like to do next?"</i> — <b>Book Another Client</b> starts the next one after the drive, <b>Return Home</b> adds the drive home, <b>Go Somewhere Else</b> for a school, hospital or supplier.</div></div>
+
+  <div class="tip"><b>Watch the blue travel blocks.</b> They're calculated from real driving times. If one looks wrong, note it down — that's exactly what this session is for.</div>
+  <div class="stop"><b>Don't press "Sync Splose" yet.</b> After the calendar is in, we'll use it together to <b>link</b> each appointment to the one already in Splose (so nothing is duplicated) or ignore it.</div>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>6</span></div>
+</section>
+
+<!-- ═════════ AFTER + HELP ═════════ -->
+<section class="page">
+  <div class="kicker">Part 5 · Afterwards</div>
+  <h2>What happens next</h2>
+
+  <div class="two">
+    <div class="card"><div class="big-num">1</div><h3>Sync Splose — together</h3><p>Open <b>Sync Splose</b>. For each appointment the portal shows whether it's already in Splose: <span class="chip">Link</span> it, or <span class="chip">Ignore</span> it permanently. Nothing new is created in Splose at this stage.</p></div>
+    <div class="card"><div class="big-num">2</div><h3>Then Outlook</h3><p>We clear your Outlook calendar, connect it, and send your portal calendar across once. From then on the portal is where you make changes.</p></div>
+    <div class="card"><div class="big-num">3</div><h3>Then writing on</h3><p>Once you trust it, the portal starts updating Splose and Outlook as you book, move and cancel.</p></div>
+    <div class="card"><div class="big-num">4</div><h3>Then your team</h3><p>Invite staff from Settings → Users &amp; Roles. New employees go through onboarding in the portal; you press Activate when they're ready.</p></div>
+  </div>
+
+  <h3>Your notes from today</h3>
+  <div class="card" style="min-height:42mm;color:var(--ink-soft);font-size:9pt;">What felt slow, confusing or wrong? What did you love? Write it here — every note makes the portal better.<br><br>…………………………………………………………………………………………………………………………………………<br><br>…………………………………………………………………………………………………………………………………………<br><br>…………………………………………………………………………………………………………………………………………</div>
+
+  <h3>Need a hand?</h3>
+  <table class="t">
+    <tr><td style="width:55mm"><b>Can't sign in</b></td><td>Use <b>Forgot password?</b>. If that email doesn't arrive, check Junk, then ask Antony.</td></tr>
+    <tr><td><b>A screen looks broken</b></td><td>Take a screenshot and note what you clicked just before. Reload the page (⌘R / Ctrl+R) and carry on.</td></tr>
+    <tr><td><b>Something saved wrongly</b></td><td>Click the appointment to edit or delete it — nothing has reached Outlook or Splose yet, so it's safe.</td></tr>
+  </table>
+
+  <div class="foot"><span>Opal Portal · Owner first sign-in</span><span>7</span></div>
+</section>
+</body></html>
