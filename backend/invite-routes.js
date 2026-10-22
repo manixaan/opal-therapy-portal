@@ -80,6 +80,23 @@ router.post('/api/invites', requireAuth, async (req, res) => {
       });
     }
 
+    // An open onboarding owns this email: a staff invite created now would
+    // later be adopted by that onboarding (audit B-1). Finish or cancel the
+    // onboarding first.
+    const { rows: openOnboarding } = await db.pool.query(
+      `SELECT id FROM onboarding_assignments
+        WHERE LOWER(applicant_email) = LOWER($1)
+          AND status NOT IN ('cancelled', 'archived', 'activated', 'completed')
+        LIMIT 1`,
+      [inviteEmail.trim()]
+    );
+    if (openOnboarding.length) {
+      return res.status(409).json({
+        error: 'This email has an onboarding in progress. Finish or cancel the onboarding before inviting it separately.',
+        code: 'onboarding_in_progress',
+      });
+    }
+
     // Check for an existing pending invite for this email
     const existingInvite = await db.findPendingInviteByEmail(inviteEmail.trim());
     if (existingInvite) {

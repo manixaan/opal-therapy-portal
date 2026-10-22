@@ -1347,8 +1347,39 @@ router.post('/api/onboarding/assignments/:id/account',
       return res.status(409).json({ error: 'This onboarding is closed.' });
     }
 
-    const roleChoice = accounts.resolvePortalRole(req.body?.portalRole || 'employee');
-    if (!roleChoice.ok) return res.status(400).json({ error: roleChoice.error });
+    // The agreed role is the RECORD's, set at Start Onboarding; this dialog
+    // never changes it (audit B-4: a Read-only hire became a therapist here).
+    // A client that still sends a choice must send the agreed one.
+    const agreedRole = assignment.proposed_role;
+    if (req.body?.portalRole != null && String(req.body.portalRole).trim() !== '') {
+      const roleChoice = accounts.resolvePortalRole(req.body.portalRole);
+      if (!roleChoice.ok) return res.status(400).json({ error: roleChoice.error });
+      if (roleChoice.role !== agreedRole) {
+        return res.status(409).json({
+          error: `This onboarding's agreed role is ${accounts.roleLabel(agreedRole)}. `
+            + 'The account is created with that role; change it on the onboarding record first if it is wrong.',
+          code: 'role_mismatch',
+        });
+      }
+    }
+
+    // The route decides what this act may do (audit B-4):
+    //  • a journey record not yet released is released instead — the starter
+    //    gets an invitation and sets their own password;
+    //  • a record on the paper document pack, or one already released, gets a
+    //    temporary password ONLY — its status, role and requirement list are
+    //    not touched;
+    //  • the older paper round-trip (no pack) creates the account and issues
+    //    the requirement list, as it always did.
+    const journeyRecord = !!(await require('./onboarding-journey-db').getCurrentOffer(assignment.id));
+    const released = !!assignment.released_at || JOURNEY_ORDER.indexOf(assignment.status) >= JOURNEY_ORDER.indexOf('account_created');
+    if (journeyRecord && assignment.status === 'created' && !assignment.pack_prepared_at) {
+      return res.status(409).json({
+        error: 'Release the onboarding instead: the starter receives an invitation link and sets their own password.',
+        code: 'use_release',
+      });
+    }
+    const credentialOnly = !!assignment.pack_prepared_at || released;
 
     const loginEmail = String(req.body?.loginEmail || assignment.login_email
       || assignment.applicant_email).trim().toLowerCase();
@@ -1379,13 +1410,30 @@ router.post('/api/onboarding/assignments/:id/account',
       });
     }
 
+    const guard = require('./onboarding-account-guard');
     const existingUser = await db.getUserByEmail(loginEmail);
-    const target = accounts.classifyAccountTarget(existingUser, assignment);
-    if (target.action === 'conflict') {
-      return res.status(409).json({
-        error: target.reason, code: 'email_in_use',
-        existingUserName: existingUser?.name || null,
-      });
+    let targetId = null;
+    if (assignment.user_id) {
+      // The record's own account, re-checked now (audit B-1).
+      const own = await guard.loadAndAssess(odb.pool, assignment, assignment.user_id);
+      if (!own.ok) return res.status(409).json({ error: own.error, code: 'account_not_owned' });
+      if (existingUser && existingUser.id !== assignment.user_id) {
+        return res.status(409).json({ error: 'That email address belongs to another account.', code: 'email_in_use', existingUserName: existingUser.name || null });
+      }
+      targetId = assignment.user_id;
+    } else {
+      const target = accounts.classifyAccountTarget(existingUser, assignment);
+      if (target.action === 'conflict') {
+        return res.status(409).json({
+          error: target.reason, code: 'email_in_use',
+          existingUserName: existingUser?.name || null,
+        });
+      }
+      if (target.userId) {
+        const own = await guard.loadAndAssess(odb.pool, assignment, target.userId);
+        if (!own.ok) return res.status(409).json({ error: own.error, code: 'email_in_use', existingUserName: existingUser?.name || null });
+        targetId = target.userId;
+      }
     }
 
     const version = await odb.getPackageVersion(assignment.package_version_id);
@@ -1396,20 +1444,24 @@ router.post('/api/onboarding/assignments/:id/account',
     const passwordHash = await accounts.hashPassword(tempPassword);
     const expiresAt = accounts.temporaryPasswordExpiry(req.body?.expiresInDays);
 
-    const outcome = await odb.withTransaction(async (q) => {
-      let userId = target.userId || null;
+    let outcome;
+    try {
+      outcome = await odb.withTransaction(async (q) => {
+      let userId = targetId;
 
       if (userId) {
+        // Time of check = time of use: the lock holds the account while it is changed.
+        await guard.assertOwnPreEmployee(q, assignment, userId, { lock: true });
         await q.query(
           `UPDATE users
-              SET email = LOWER($2), name = COALESCE($3, name), role = 'pre_employee',
+              SET email = LOWER($2), name = COALESCE($3, name),
                   organisation_id = $4, is_active = TRUE, account_status = 'active',
                   email_verified = FALSE, profile_completed = TRUE,
                   password_hash = $5, password_is_temporary = TRUE,
                   must_change_password = TRUE, temp_password_expires_at = $6,
                   temp_password_issued_at = NOW(), temp_password_issued_by = $7,
                   is_treating_therapist = $8, updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1`,
+            WHERE id = $1 AND role = 'pre_employee'`,
           [
             userId, loginEmail, assignment.applicant_name, assignment.organisation_id,
             passwordHash, expiresAt, req.user.id, assignment.is_treating_therapist,
@@ -1431,6 +1483,21 @@ router.post('/api/onboarding/assignments/:id/account',
           ]
         );
         userId = rows[0].id;
+      }
+
+      if (credentialOnly) {
+        // A temporary password and nothing else: the record keeps its route,
+        // status, agreed role and requirement list exactly as they were.
+        await q.query(
+          `UPDATE onboarding_assignments
+              SET user_id = COALESCE(user_id, $2), login_email = $3,
+                  account_created_at = COALESCE(account_created_at, NOW()),
+                  account_created_by = COALESCE(account_created_by, $4),
+                  last_activity_at = NOW(), updated_at = NOW()
+            WHERE id = $1`,
+          [assignment.id, userId, loginEmail, req.user.id]
+        );
+        return { userId, issued: 0 };
       }
 
       // The requirement list, materialised from the pinned snapshot. Reuses
@@ -1463,16 +1530,20 @@ router.post('/api/onboarding/assignments/:id/account',
 
       await q.query(
         `UPDATE onboarding_assignments
-            SET user_id = $2, login_email = $3, proposed_role = $4,
+            SET user_id = $2, login_email = $3,
                 status = 'account_created', account_created_at = NOW(),
-                account_created_by = $5, last_activity_at = NOW(), updated_at = NOW()
+                account_created_by = $4, last_activity_at = NOW(), updated_at = NOW()
           WHERE id = $1`,
-        [assignment.id, userId, loginEmail, roleChoice.role, req.user.id]
+        [assignment.id, userId, loginEmail, req.user.id]
       );
 
       await odb.recomputeAssignment(q, assignment.id);
       return { userId, issued };
-    });
+      });
+    } catch (err) {
+      if (err instanceof guard.AccountGuardError) return res.status(409).json({ error: err.message, code: 'account_not_owned' });
+      throw err;
+    }
 
     // Now that a user row exists, the reviewed details can land on it.
     const refreshed = await odb.getAssignment(orgOf(req), assignment.id);
@@ -1492,7 +1563,7 @@ router.post('/api/onboarding/assignments/:id/account',
       targetType: 'user', targetId: outcome.userId,
       metadata: {
         assignmentId: assignment.id, subjectUserId: outcome.userId,
-        portalRole: roleChoice.key, accountRole: roleChoice.role,
+        portalRole: accounts.portalKeyFor(agreedRole), accountRole: agreedRole, credentialOnly,
         requirementCount: outcome.issued, fieldsApplied: appliedFields,
         tempPasswordIssued: true,
       },
@@ -1505,8 +1576,8 @@ router.post('/api/onboarding/assignments/:id/account',
       ok: true,
       userId: outcome.userId,
       loginEmail,
-      portalRole: roleChoice.key,
-      portalRoleLabel: accounts.PORTAL_ROLES[roleChoice.key].label,
+      portalRole: accounts.portalKeyFor(agreedRole),
+      portalRoleLabel: accounts.roleLabel(agreedRole),
       requirementsIssued: outcome.issued,
       fieldsApplied: appliedFields,
       temporaryPassword: tempPassword,
@@ -1539,6 +1610,9 @@ router.post('/api/onboarding/assignments/:id/account/reissue-password',
 
     const user = await db.getUser(assignment.user_id);
     if (!user) return notFound(res);
+    // Never a staff or Owner account, however the record came to point at it (audit B-1).
+    const own = await require('./onboarding-account-guard').loadAndAssess(odb.pool, assignment, assignment.user_id);
+    if (!own.ok) return res.status(409).json({ error: own.error, code: 'account_not_owned' });
     // Once somebody has chosen their own password, an Owner may not silently
     // replace it. That is a password RESET, and it belongs to the user via the
     // forgotten-password flow — not to an administrator via this button.
@@ -1559,7 +1633,7 @@ router.post('/api/onboarding/assignments/:id/account/reissue-password',
           SET password_hash = $2, password_is_temporary = TRUE, must_change_password = TRUE,
               temp_password_expires_at = $3, temp_password_issued_at = NOW(),
               temp_password_issued_by = $4, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1`,
+        WHERE id = $1 AND role = 'pre_employee'`,
       [assignment.user_id, passwordHash, expiresAt, req.user.id]
     );
 
@@ -1589,9 +1663,20 @@ router.post('/api/onboarding/assignments/:id/account/invite',
   requirePermission('onboarding.assign'), safe(async (req, res) => {
     const assignment = await loadAssignment(req);
     if (!assignment) return notFound(res);
+    if (assignment.user_id && !assignment.account_created_at && assignment.released_at) {
+      // A released starter signs in through their onboarding invitation,
+      // where they choose their own password — there are no other "sign-in
+      // details" to send (audit B-3).
+      return res.status(409).json({
+        error: 'This starter signs in through their onboarding invitation. Use "Resend invitation" — it renews the link if it has expired.',
+        code: 'use_invitation',
+      });
+    }
     if (!assignment.user_id || !assignment.account_created_at) {
       return res.status(409).json({ error: 'Create the portal account first.', code: 'no_account' });
     }
+    const ownAccount = await require('./onboarding-account-guard').loadAndAssess(odb.pool, assignment, assignment.user_id);
+    if (!ownAccount.ok) return res.status(409).json({ error: ownAccount.error, code: 'account_not_owned' });
 
     const { orgName } = await practiceDetails(req, assignment);
     const loginEmail = assignment.login_email || assignment.applicant_email;
@@ -1638,7 +1723,9 @@ router.post('/api/onboarding/assignments/:id/account/invite',
     });
 
     if (outcome.status === 'sent' || outcome.status === 'skipped') {
-      await advanceStatus(assignment.id, assignment.status, 'invite_sent', {
+      // Only the account-created step of the older round-trip moves on here; a
+      // paper-pack or released record keeps its own status (audit B-4).
+      await advanceStatus(assignment.id, assignment.status === 'account_created' ? assignment.status : 'invite_sent', 'invite_sent', {
         invitation_sent_at: new Date(),
       });
     }

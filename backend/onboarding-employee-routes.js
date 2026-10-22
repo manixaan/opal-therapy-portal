@@ -213,6 +213,20 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
       throw err;
     }
 
+    // Only ever this onboarding's own pre-employee (audit B-1). An account
+    // that has since become — or always was — a staff or Owner account keeps
+    // its password: the invitation is refused and the spend rolled back.
+    const { rows: arows } = await q.query(
+      'SELECT id, organisation_id FROM onboarding_assignments WHERE id = $1', [invite.assignment_id]
+    );
+    const own = await require('./onboarding-account-guard')
+      .loadAndAssess(q, arows[0] || { id: invite.assignment_id, organisation_id: invite.organisation_id }, userId, { lock: true });
+    if (!own.ok) {
+      const err = new Error('account_not_owned');
+      err.code = 'ACCOUNT_NOT_OWNED';
+      throw err;
+    }
+
     await q.query(
       `UPDATE users
           SET password_hash = $2, name = COALESCE($3, name),
@@ -224,7 +238,7 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
               password_is_temporary = FALSE, must_change_password = FALSE,
               temp_password_expires_at = NULL, password_changed_at = NOW(),
               updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1`,
+        WHERE id = $1 AND role = 'pre_employee'`,
       [userId, passwordHash, str(name, 200)]
     );
 
@@ -240,6 +254,12 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
     if (err.code === 'INVITE_SPENT') {
       res.status(409).json({
         error: 'This link has already been used. Please sign in instead.', code: 'used',
+      });
+      return null;
+    }
+    if (err.code === 'ACCOUNT_NOT_OWNED') {
+      res.status(409).json({
+        error: 'This onboarding link cannot be used for this account. Please contact the practice.', code: 'account_conflict',
       });
       return null;
     }

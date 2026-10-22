@@ -24,6 +24,7 @@ const crypto = require('crypto');
 const email = require('./email');
 const odb = require('./onboarding-db');
 const engine = require('./onboarding-engine');
+const guard = require('./onboarding-account-guard');
 const log = require('./logger').createLogger('onboarding-lifecycle');
 
 /**
@@ -40,6 +41,19 @@ class LifecycleError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+/**
+ * The account guard's refusal as the LifecycleError every caller already
+ * answers with. `account_exists` stays the code for "a live account uses this
+ * email" so existing clients keep their handling; `reason` says which rule.
+ */
+function guardRefusal(out, act) {
+  const error = out.code === 'not_pre_employee'
+    ? `An account already uses this email address, so this onboarding cannot be ${act}. `
+      + 'Change the applicant email, or manage the existing account from Settings → Users & Roles.'
+    : out.error;
+  return new LifecycleError(409, { error, code: out.code === 'no_account' ? 'not_released' : 'account_exists', reason: out.code });
 }
 
 /**
@@ -177,37 +191,17 @@ async function releaseAssignment({ org, assignment, actor, expiresInDays }) {
     //    other open onboarding is using, in the same organisation; adopting
     //    it changes nothing about the account.
     let userId = assignment.user_id;
-    if (!userId) {
-      const { rows: existingRows } = await q.query(
-        `SELECT id, email, name, role, is_active, organisation_id
-           FROM users WHERE LOWER(email) = LOWER($1)
-          ORDER BY created_at ASC LIMIT 1
-          FOR UPDATE`,
-        [assignment.applicant_email]
-      );
-      const existing = existingRows[0] || null;
-      if (existing) {
-        const { rows: busy } = existing.role === 'pre_employee'
-          ? await q.query(
-            `SELECT 1 FROM onboarding_assignments
-              WHERE user_id = $1 AND id <> $2
-                AND status NOT IN ('cancelled', 'archived', 'activated', 'completed')
-              LIMIT 1`,
-            [existing.id, assignment.id])
-          : { rows: [] };
-        const adoptable = existing.role === 'pre_employee'
-          && !busy.length
-          && String(existing.organisation_id || '') === String(org || '');
-        if (!adoptable) {
-          throw new LifecycleError(409, {
-            error: existing.role === 'pre_employee'
-              ? 'That email belongs to a different onboarding in progress.'
-              : 'An account already uses this email address, so this onboarding cannot be released. '
-                + 'Change the applicant email, or manage the existing account from Settings → Users & Roles.',
-            code: 'account_exists',
-          });
-        }
-        userId = existing.id;
+    if (userId) {
+      // Re-checked at the moment of release, not trusted from when the link
+      // was made (audit B-1): the linked account must still be this record's
+      // own pre-employee. A live staff or Owner account is never invited.
+      const own = await guard.loadAndAssess(q, assignment, userId, { lock: true });
+      if (!own.ok) throw guardRefusal(own, 'released');
+    } else {
+      const found = await guard.adoptableByEmail(q, assignment, assignment.applicant_email, { lock: true });
+      if (found.exists) {
+        if (!found.ok) throw guardRefusal(found, 'released');
+        userId = found.user.id;
       } else {
         const { rows } = await q.query(
           `INSERT INTO users
@@ -357,6 +351,21 @@ async function activateAssignment({ assignment, actor }) {
   }
 
   const outcome = await odb.withTransaction(async (q) => {
+    // A concurrent second activation waits on this lock, then finds the stamp.
+    const { rows: stamp } = await q.query(
+      'SELECT activated_from_onboarding_at FROM users WHERE id = $1 FOR UPDATE', [assignment.user_id]
+    );
+    if (stamp[0] && stamp[0].activated_from_onboarding_at) {
+      const err = new Error('already_activated');
+      err.code = 'ALREADY_ACTIVATED';
+      throw err;
+    }
+    // The account must still be this record's own pre-employee (audit B-1):
+    // activation must never change the role of a live staff or Owner account
+    // that happens to share the applicant's email.
+    const own = await guard.loadAndAssess(q, assignment, assignment.user_id, { lock: true });
+    if (!own.ok) throw guardRefusal(own, 'activated');
+
     // Guard against a concurrent second activation: the stamp is set only
     // where it is still null, so exactly one call can win.
     const { rows: userRows } = await q.query(
@@ -364,7 +373,7 @@ async function activateAssignment({ assignment, actor }) {
           SET role = $2, is_active = TRUE, account_status = 'active',
               is_treating_therapist = $3,
               activated_from_onboarding_at = NOW(), updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1 AND activated_from_onboarding_at IS NULL
+        WHERE id = $1 AND activated_from_onboarding_at IS NULL AND role = 'pre_employee'
         RETURNING id, name, email, role`,
       [assignment.user_id, assignment.proposed_role, assignment.is_treating_therapist]
     );

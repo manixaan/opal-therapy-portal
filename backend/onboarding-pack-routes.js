@@ -326,17 +326,35 @@ async function missingFilesFor(assignment, phase) {
 
 /** A users row for the record, created once; the employment profile from the offer terms. */
 async function ensureProfileOwner(assignment) {
-  if (!assignment.user_id) {
-    const { rows } = await odb.pool.query(
-      `INSERT INTO users (email, name, role, organisation_id, is_active, account_status, email_verified, profile_completed, is_treating_therapist)
-       VALUES (LOWER($1), $2, 'pre_employee', $3, TRUE, 'active', FALSE, TRUE, $4)
-       ON CONFLICT (email) DO UPDATE SET role = CASE WHEN users.role = 'pre_employee' THEN 'pre_employee' ELSE users.role END, organisation_id = COALESCE(users.organisation_id, $3)
-       RETURNING id, role`,
-      [assignment.applicant_email, assignment.applicant_name, assignment.organisation_id, assignment.is_treating_therapist === true]
-    );
-    await odb.pool.query('UPDATE onboarding_assignments SET user_id = $2, updated_at = NOW() WHERE id = $1 AND user_id IS NULL', [assignment.id, rows[0].id]);
-    assignment.user_id = rows[0].id;
-  }
+  // Only ever this record's OWN pre-employee (audit B-1). This used to be
+  // INSERT … ON CONFLICT (email) DO UPDATE, which adopted any account that
+  // shared the applicant's email — an Admin or the Owner included — and then
+  // overwrote its employment profile. Re-checked even when the link exists.
+  const guard = require('./onboarding-account-guard');
+  await odb.withTransaction(async (q) => {
+    if (assignment.user_id) {
+      await guard.assertOwnPreEmployee(q, assignment, assignment.user_id, { lock: true });
+      return;
+    }
+    const found = await guard.adoptableByEmail(q, assignment, assignment.applicant_email, { lock: true });
+    let userId;
+    if (found.exists) {
+      if (!found.ok) throw new guard.AccountGuardError(found.code, found.error);
+      userId = found.user.id;
+    } else {
+      // Created INACTIVE: nobody signs in to a pre-release account (B-29).
+      // The invitation (or a temporary password) activates it.
+      const { rows } = await q.query(
+        `INSERT INTO users (email, name, role, organisation_id, is_active, account_status, email_verified, profile_completed, is_treating_therapist)
+         VALUES (LOWER($1), $2, 'pre_employee', $3, FALSE, 'active', FALSE, TRUE, $4)
+         RETURNING id`,
+        [assignment.applicant_email, assignment.applicant_name, assignment.organisation_id, assignment.is_treating_therapist === true]
+      );
+      userId = rows[0].id;
+    }
+    await q.query('UPDATE onboarding_assignments SET user_id = $2, updated_at = NOW() WHERE id = $1 AND user_id IS NULL', [assignment.id, userId]);
+    assignment.user_id = userId;
+  });
   await odb.upsertEmploymentProfile(assignment.user_id, assignment.organisation_id, {
     assignmentId: assignment.id, jobTitle: assignment.job_title, employmentType: assignment.employment_type, roleCategory: assignment.role_category,
     startDate: assignment.start_date, endDate: assignment.end_date, hoursPerWeek: assignment.hours_per_week ?? undefined,
