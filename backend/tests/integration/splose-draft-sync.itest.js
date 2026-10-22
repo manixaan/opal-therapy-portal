@@ -328,10 +328,13 @@ describe('publishing', () => {
     const booked = await bookClient(agent);
     const pend = await agent.get('/api/splose-sync/pending');
     const pub = await agent.post('/api/splose-sync/publish').send({ overrides: { [pend.body.changes[0].id]: { serviceId: 125320 } } });
-    expect(pub.status).toBe(202);
-    const st = await waitForIdle(agent);
-    expect(st.lastRun.failed).toBe(1);
-    expect(st.lastRun.results[0].error).toMatch(/switched off/);
+    // Refused up front (080): no run starts, so the row is not marked failed
+    // (a failed row would never be auto-synced once writing is turned on).
+    expect(pub.status).toBe(403);
+    expect(pub.body).toMatchObject({ code: 'splose_write_disabled', error: expect.stringMatching(/switched off/) });
+    expect(mockSplose.createAppointment).not.toHaveBeenCalled();
+    const q = await db.pool.query(`SELECT status, attempts FROM splose_sync_queue WHERE event_id = $1`, [booked.dbId]);
+    expect(q.rows[0]).toEqual({ status: 'pending', attempts: 0 });
     const ev = await db.pool.query(`SELECT splose_id FROM events WHERE id = $1`, [booked.dbId]);
     expect(ev.rows[0].splose_id).toBeNull();
   });

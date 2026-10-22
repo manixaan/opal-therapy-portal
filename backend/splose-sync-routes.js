@@ -11,6 +11,17 @@
  *   POST   /api/splose-sync/alerts/:id/ack      { verdict: 'valid'|'invalid', note? }
  *   GET    /api/splose/cancellation-reasons     reference list for the review panel
  *
+ * Match, link or ignore (080) — for a calendar migrated into the portal by hand:
+ *   GET    /api/splose-sync/matches             per queued create: is it already in Splose?
+ *   POST   /api/splose-sync/pending/:id/link    { sploseAppointmentId } — adopt that appointment, no write
+ *   POST   /api/splose-sync/link-matches        { queueIds? } — link every row with one exact match
+ *   POST   /api/splose-sync/pending/:id/ignore  never write this booking to Splose
+ *   POST   /api/splose-sync/ignore              { queueIds } — bulk ignore
+ *   GET    /api/splose-sync/ignored             the ignored bookings
+ *   POST   /api/splose-sync/ignored/:eventId/undo  Owner/Admin: undo an ignore (re-queues the create)
+ * Link and ignore read Splose at most; they never write to it, so they work
+ * with ENABLE_SPLOSE_WRITE off.
+ *
  * Guards: signed in, not read-only. Everything is scoped to the caller's own
  * calendar (user_id) — owners and admins see their own queue too; a manager
  * booking on a therapist's behalf queues onto that therapist's calendar and
@@ -25,6 +36,7 @@ const { requireAuth } = require('./permissions');
 const sploseApi = require('./splose-api');
 const outlookApi = require('./outlook-oauth');
 const draftSync = require('./splose-draft-sync');
+const sploseMatch = require('./splose-match');
 const flags = require('./feature-flags');
 const { getIo } = require('./webhook-state');
 
@@ -141,6 +153,11 @@ router.delete('/api/splose-sync/pending/:id', safe(async (req, res) => {
 
 router.post('/api/splose-sync/publish', safe(async (req, res) => {
   const userId = targetUserId(req);
+  // Refused up front (080): starting a run that can only fail would mark
+  // every row failed, and a failed row is never auto-synced again.
+  if (!flags.isSploseWriteEnabled()) {
+    return res.status(403).json({ error: 'Splose writing is switched off in this environment', code: 'splose_write_disabled', flag: 'ENABLE_SPLOSE_WRITE' });
+  }
   const queueIds = Array.isArray(req.body && req.body.queueIds) ? req.body.queueIds.map(String) : null;
   const overrides = (req.body && typeof req.body.overrides === 'object' && req.body.overrides) || {};
   // Only allow overriding the review-time fields, never the target event/client.
@@ -198,6 +215,7 @@ router.get('/api/splose-sync/alerts', safe(async (req, res) => {
     `SELECT a.*, e.title AS event_title FROM splose_change_alerts a
        LEFT JOIN events e ON e.id = a.event_id
       WHERE a.acknowledged_at IS NULL AND (a.user_id = $1 ${manager ? 'OR a.user_id IS NULL' : ''})
+        AND NOT (a.kind = 'unlinked' AND COALESCE(e.splose_sync_ignored_at IS NOT NULL, FALSE))
       ORDER BY a.detected_at
       LIMIT 50`,
     [userId]
@@ -241,6 +259,283 @@ router.post('/api/splose-sync/alerts/:id/ack', safe(async (req, res) => {
     metadata: { kind: alert.kind, sploseAppointmentId: alert.splose_appointment_id, applied: !!applied }, organisationId: req.user.organisation_id || null,
   }).catch(() => {});
   res.json({ ok: true, verdict, applied });
+}));
+
+// ── Match, link or ignore (080) ──────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SPLOSE_ID_RE = /^\d{1,20}$/;
+const isManager = (req) => ['owner', 'admin'].includes(req.user && req.user.role);
+
+function sploseConnected() {
+  return typeof sploseApi.isConfigured !== 'function' || sploseApi.isConfigured();
+}
+
+/** A live queued create of this user's calendar, joined to its event. */
+async function loadLiveCreate(queueId, userId) {
+  if (!UUID_RE.test(String(queueId))) return null;
+  const r = await db.pool.query(
+    `SELECT q.id, q.user_id, q.event_id, q.action, q.status, q.payload,
+            e.splose_id, e.client_id, e.start_time, e.end_time, e.is_deleted, e.splose_sync_ignored_at
+       FROM splose_sync_queue q JOIN events e ON e.id = q.event_id
+      WHERE q.id = $1 AND q.user_id = $2 AND q.status IN ('pending', 'failed')`,
+    [queueId, userId]
+  );
+  return r.rows[0] || null;
+}
+
+function refusal(status, code, error) { return { status, code, error }; }
+
+/** Can this queued create be the appointment Splose already holds? null = yes. */
+function linkRefusal(row, appt, practitionerId) {
+  if (!row) return refusal(404, 'not_found', 'No such pending change');
+  if (row.action !== 'create') return refusal(409, 'not_a_create', 'Only a new appointment can be linked to one already in Splose');
+  if (row.splose_id) return refusal(409, 'already_linked', 'This booking is already linked to Splose');
+  if (!appt) return refusal(404, 'splose_not_found', 'Splose has no appointment with that number');
+  if (draftSync.isCancelledAppointment(appt)) return refusal(409, 'splose_cancelled', 'That Splose appointment is cancelled');
+  const patient = String((row.payload && row.payload.patientId) || row.client_id || '');
+  const holds = (appt.patients || []).map(p => String(p.patientId));
+  if (!patient || !holds.includes(patient)) return refusal(409, 'patient_mismatch', 'That Splose appointment is for a different client');
+  if (practitionerId && appt.practitionerId && String(practitionerId) !== String(appt.practitionerId)) {
+    return refusal(409, 'practitioner_mismatch', 'That Splose appointment belongs to another practitioner');
+  }
+  return null;
+}
+
+/**
+ * Adopt a Splose appointment as this booking: the event takes its splose_id
+ * (so the watcher knows it, and later edits queue an update or cancel against
+ * it), the queued create is resolved as 'linked', and any open "unlinked" /
+ * "created in Splose" alert about the pair is closed. One transaction; the
+ * one-live-row-per-Splose-id index (061) is the last word on duplicates.
+ */
+async function applyLink(row, sploseId, actorUserId) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const held = await client.query(`SELECT id FROM events WHERE splose_id = $1 AND id <> $2 LIMIT 1`, [sploseId, row.event_id]);
+    if (held.rows.length) { await client.query('ROLLBACK'); return refusal(409, 'already_linked_elsewhere', 'That Splose appointment is already linked to another portal booking'); }
+    const patient = (row.payload && row.payload.patientId) || row.client_id || null;
+    const ev = await client.query(
+      `UPDATE events SET splose_id = $2, client_id = COALESCE(client_id, $3), last_synced_to_splose = NOW(), updated_at = NOW()
+        WHERE id = $1 AND splose_id IS NULL AND splose_sync_ignored_at IS NULL AND (is_deleted IS NULL OR is_deleted = FALSE)
+        RETURNING id`,
+      [row.event_id, sploseId, patient !== null ? String(patient) : null]
+    );
+    if (!ev.rows.length) { await client.query('ROLLBACK'); return refusal(409, 'event_changed', 'This booking changed while you were looking — refresh and try again'); }
+    const q = await client.query(
+      `UPDATE splose_sync_queue SET status = 'done', resolution = 'linked', splose_appointment_id = $2, error = NULL, updated_at = NOW()
+        WHERE id = $1 AND status IN ('pending', 'failed') RETURNING id`,
+      [row.id, sploseId]
+    );
+    if (!q.rows.length) { await client.query('ROLLBACK'); return refusal(409, 'queue_changed', 'This change is no longer waiting — refresh and try again'); }
+    await client.query(
+      `UPDATE splose_change_alerts SET acknowledged_at = NOW(), acknowledged_by = $3, verdict = 'valid', note = 'Linked to a portal booking'
+        WHERE acknowledged_at IS NULL
+          AND ((kind = 'unlinked' AND event_id = $1) OR (kind = 'created' AND splose_appointment_id = $2))`,
+      [row.event_id, sploseId, actorUserId]
+    );
+    await client.query('COMMIT');
+    return null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') return refusal(409, 'already_linked_elsewhere', 'That Splose appointment is already linked to another portal booking');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function auditLink(req, row, sploseId, how) {
+  await db.logAuditEvent({
+    actorUserId: req.session.userId, action: 'splose_sync_linked', targetType: 'events', targetId: row.event_id,
+    metadata: { queueId: row.id, sploseAppointmentId: sploseId, forUser: row.user_id, how }, organisationId: req.user.organisation_id || null,
+  }).catch(() => {});
+}
+
+/** Link and ignore change the queue; never while this user's run is writing it. */
+function runningRefusal(userId) {
+  return publisher().status(userId) ? refusal(409, 'sync_running', 'A sync is running — wait for it to finish') : null;
+}
+
+router.get('/api/splose-sync/matches', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  if (!sploseConnected()) return res.status(503).json({ error: 'Splose is not connected', code: 'splose_not_connected' });
+  const rows = await draftSync.listPending(db, userId);
+  let result;
+  try {
+    result = await sploseMatch.computeMatches({ db, sploseApi, userId, rows });
+  } catch (err) {
+    return res.status(502).json({ error: 'Could not read Splose to look for matches: ' + draftSync.summariseError(err), code: 'splose_read_failed' });
+  }
+  res.json({ userId, windowMinutes: sploseMatch.MATCH_WINDOW_MINUTES, checkedAt: new Date().toISOString(), matches: result.matches });
+}));
+
+router.post('/api/splose-sync/pending/:id/link', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  const sploseId = String((req.body && req.body.sploseAppointmentId) || '');
+  if (!SPLOSE_ID_RE.test(sploseId)) return res.status(400).json({ error: 'sploseAppointmentId must be a Splose appointment number' });
+  const busy = runningRefusal(userId);
+  if (busy) return res.status(busy.status).json(busy);
+  const row = await loadLiveCreate(req.params.id, userId);
+  if (!row) return res.status(404).json({ error: 'No such pending change', code: 'not_found' });
+  if (!sploseConnected()) return res.status(503).json({ error: 'Splose is not connected', code: 'splose_not_connected' });
+  let appt = null;
+  try {
+    appt = await sploseApi.getAppointment(sploseId);
+  } catch (err) {
+    const st = err.response && err.response.status;
+    if (st !== 404) return res.status(502).json({ error: 'Could not read Splose: ' + draftSync.summariseError(err), code: 'splose_read_failed' });
+  }
+  const practitionerId = (row.payload && row.payload.practitionerId) || await sploseMatch._practitionerFor(db, row.user_id);
+  const no = linkRefusal(row, appt, practitionerId) || await applyLink(row, sploseId, req.session.userId);
+  if (no) return res.status(no.status).json(no);
+  await auditLink(req, row, sploseId, 'single');
+  res.json({ ok: true, queueId: row.id, eventId: row.event_id, sploseAppointmentId: sploseId });
+}));
+
+router.post('/api/splose-sync/link-matches', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  const only = Array.isArray(req.body && req.body.queueIds) ? new Set(req.body.queueIds.map(String)) : null;
+  const busy = runningRefusal(userId);
+  if (busy) return res.status(busy.status).json(busy);
+  if (!sploseConnected()) return res.status(503).json({ error: 'Splose is not connected', code: 'splose_not_connected' });
+  const rows = (await draftSync.listPending(db, userId)).filter(r => !only || only.has(String(r.id)));
+  let result;
+  try {
+    // A fresh read: a bulk link must not trust a list cached before a change in Splose.
+    result = await sploseMatch.computeMatches({ db, sploseApi, userId, rows, fresh: true, withNames: false });
+  } catch (err) {
+    return res.status(502).json({ error: 'Could not read Splose to look for matches: ' + draftSync.summariseError(err), code: 'splose_read_failed' });
+  }
+  const plan = sploseMatch.planBulkLink(result.matches);
+  const byAppt = new Map(result.appointments.map(a => [String(a.id), a]));
+  const byRow = new Map(rows.map(r => [String(r.id), r]));
+  const linked = [], skipped = [];
+  for (const p of plan) {
+    const row = byRow.get(String(p.queueId));
+    const no = linkRefusal(row, byAppt.get(p.sploseAppointmentId), result.practitionerId)
+      || await applyLink(row, p.sploseAppointmentId, req.session.userId);
+    if (no) { skipped.push({ queueId: p.queueId, code: no.code }); continue; }
+    await auditLink(req, row, p.sploseAppointmentId, 'bulk_exact');
+    linked.push({ queueId: row.id, eventId: row.event_id, sploseAppointmentId: p.sploseAppointmentId });
+  }
+  const considered = Object.keys(result.matches).length;
+  res.json({ ok: true, linked, skipped, considered, notEligible: considered - plan.length });
+}));
+
+async function ignoreRow(req, row) {
+  const actor = req.session.userId;
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ev = await client.query(
+      `UPDATE events SET splose_sync_ignored_at = NOW(), splose_sync_ignored_by = $2, updated_at = NOW()
+        WHERE id = $1 AND splose_id IS NULL AND splose_sync_ignored_at IS NULL RETURNING id`,
+      [row.event_id, actor]
+    );
+    if (!ev.rows.length) { await client.query('ROLLBACK'); return refusal(409, 'event_changed', 'This booking can no longer be ignored — refresh and try again'); }
+    const q = await client.query(
+      `UPDATE splose_sync_queue SET status = 'discarded', resolution = 'ignored', updated_at = NOW()
+        WHERE id = $1 AND status IN ('pending', 'failed') RETURNING id`, [row.id]);
+    if (!q.rows.length) { await client.query('ROLLBACK'); return refusal(409, 'queue_changed', 'This change is no longer waiting — refresh and try again'); }
+    await client.query(
+      `UPDATE splose_change_alerts SET acknowledged_at = NOW(), acknowledged_by = $2, verdict = 'invalid', note = 'Ignored for Splose sync'
+        WHERE acknowledged_at IS NULL AND kind = 'unlinked' AND event_id = $1`, [row.event_id, actor]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  await db.logAuditEvent({
+    actorUserId: actor, action: 'splose_sync_ignored', targetType: 'events', targetId: row.event_id,
+    metadata: { queueId: row.id, forUser: row.user_id }, organisationId: req.user.organisation_id || null,
+  }).catch(() => {});
+  return null;
+}
+
+function ignoreRefusal(row) {
+  if (!row) return refusal(404, 'not_found', 'No such pending change');
+  if (row.action !== 'create' || row.splose_id) return refusal(409, 'not_a_create', 'Only a new appointment that is not in Splose can be ignored');
+  return null;
+}
+
+router.post('/api/splose-sync/pending/:id/ignore', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  const busy = runningRefusal(userId);
+  if (busy) return res.status(busy.status).json(busy);
+  const row = await loadLiveCreate(req.params.id, userId);
+  const no = ignoreRefusal(row) || await ignoreRow(req, row);
+  if (no) return res.status(no.status).json(no);
+  res.json({ ok: true, queueId: row.id, eventId: row.event_id });
+}));
+
+router.post('/api/splose-sync/ignore', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  const ids = Array.isArray(req.body && req.body.queueIds) ? req.body.queueIds.map(String).slice(0, 500) : [];
+  if (!ids.length) return res.status(400).json({ error: 'queueIds is required' });
+  const busy = runningRefusal(userId);
+  if (busy) return res.status(busy.status).json(busy);
+  const ignored = [], skipped = [];
+  for (const id of ids) {
+    const row = await loadLiveCreate(id, userId);
+    const no = ignoreRefusal(row) || await ignoreRow(req, row);
+    if (no) skipped.push({ queueId: id, code: no.code }); else ignored.push({ queueId: row.id, eventId: row.event_id });
+  }
+  res.json({ ok: true, ignored, skipped });
+}));
+
+router.get('/api/splose-sync/ignored', safe(async (req, res) => {
+  const userId = targetUserId(req);
+  const r = await db.pool.query(
+    `SELECT e.id, e.title, e.start_time, e.end_time, e.client_name, e.splose_sync_ignored_at
+       FROM events e
+      WHERE e.user_id = $1 AND e.splose_sync_ignored_at IS NOT NULL AND (e.is_deleted IS NULL OR e.is_deleted = FALSE)
+      ORDER BY e.start_time
+      LIMIT 500`,
+    [userId]
+  );
+  res.json({ userId, canUndo: isManager(req), count: r.rows.length, events: r.rows.map(e => ({
+    eventId: e.id, title: e.title, start: e.start_time, end: e.end_time, clientName: e.client_name || null,
+    ignoredAt: e.splose_sync_ignored_at,
+  })) });
+}));
+
+/** Owner/Admin: undo an ignore. The booking is queued for Splose again. */
+router.post('/api/splose-sync/ignored/:eventId/undo', safe(async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: 'Only an Owner or Admin can undo an ignore', code: 'splose_sync_denied' });
+  const userId = targetUserId(req);
+  if (!UUID_RE.test(String(req.params.eventId))) return res.status(404).json({ error: 'No such ignored booking' });
+  const r = await db.pool.query(
+    `UPDATE events SET splose_sync_ignored_at = NULL, splose_sync_ignored_by = NULL, updated_at = NOW()
+      WHERE id = $1 AND user_id = $2 AND splose_sync_ignored_at IS NOT NULL
+      RETURNING id, user_id, title, start_time, end_time, client_id, splose_id, is_deleted`,
+    [req.params.eventId, userId]
+  );
+  const e = r.rows[0];
+  if (!e) return res.status(404).json({ error: 'No such ignored booking' });
+  // The "unlinked" alert for it was closed on ignore and is keyed once per
+  // event, so the watcher would not offer it again: queue the create directly.
+  let queued = null;
+  if (!e.splose_id && e.client_id && !e.is_deleted) {
+    const last = await db.pool.query(
+      `SELECT payload FROM splose_sync_queue WHERE event_id = $1 AND action = 'create' ORDER BY created_at DESC LIMIT 1`, [e.id]);
+    const prev = (last.rows[0] && last.rows[0].payload) || {};
+    const qrow = await draftSync.enqueueChange(db, {
+      userId: e.user_id, createdBy: req.session.userId, eventId: e.id, action: 'create',
+      payload: { ...prev, start: new Date(e.start_time).toISOString(), end: new Date(e.end_time).toISOString(),
+        patientId: prev.patientId || (Number(e.client_id) || e.client_id), summary: prev.summary || e.title },
+    });
+    queued = qrow ? qrow.id : null;
+    if (qrow) notifyQueued(e.user_id);
+  }
+  await db.logAuditEvent({
+    actorUserId: req.session.userId, action: 'splose_sync_ignore_undone', targetType: 'events', targetId: e.id,
+    metadata: { forUser: e.user_id, requeued: !!queued }, organisationId: req.user.organisation_id || null,
+  }).catch(() => {});
+  res.json({ ok: true, eventId: e.id, queued });
 }));
 
 async function outlookTokenFor(userId) {
